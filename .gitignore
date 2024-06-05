@@ -1,0 +1,7 @@
+*.bin
+
+build/
+.venv/
+dist/
+firestarter.egg-info/
+firestarter/__pycache__/

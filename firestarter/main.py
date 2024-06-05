@@ -100,11 +100,13 @@ def write_feedback(msg):
     if verbose:
         print(msg)
 
+
 def print_progress(p, from_address, to_address):
     if verbose:
         print(f"{p}%, address: 0x{from_address:X} - 0x{to_address:X} ")
     else:
         print(f"\r{p}%, address: 0x{from_address:X} - 0x{to_address:X} ", end="")
+
 
 def read_filterd_bytes(byte_array):
 
@@ -193,7 +195,7 @@ def read_chip(eprom, force, output_file, port=None):
     if not output_file:
         output_file = f"{eprom}.bin"
     print(f"Output will be saved to: {output_file}")
-    bytes_read =0
+    bytes_read = 0
     try:
         ser.write("OK\n".encode("ascii"))
 
@@ -207,8 +209,8 @@ def read_chip(eprom, force, output_file, port=None):
                     serial_data = ser.read(256)
                     output_file.write(serial_data)
                     bytes_read += 256
-                    p =  int( bytes_read / mem_size *100)
-                    print_progress(p, bytes_read-256 ,bytes_read)
+                    p = int(bytes_read / mem_size * 100)
+                    print_progress(p, bytes_read - 256, bytes_read)
                     ser.write("OK\n".encode("ascii"))
                     ser.flush()
                 case "OK":
@@ -281,11 +283,11 @@ def write_chip(eprom, force, input_file, port=None):
             resp, info = wait_for_response(ser)
             if resp == "OK":
                 bytes_sent += sent
-                p =  int( bytes_sent / mem_size *100)
-                print_progress(p, bytes_sent-256, bytes_sent)
+                p = int(bytes_sent / mem_size * 100)
+                print_progress(p, bytes_sent - 256, bytes_sent)
             elif resp == "ERROR":
                 print()
-                print(f"Faild to send block {info}")
+                print(f"Error writing: {info}")
                 return
             if bytes_sent == mem_size:
                 break
