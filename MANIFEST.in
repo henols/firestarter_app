@@ -1,0 +1,3 @@
+include firestarter/config.json
+include README.md
+include LICENSE
