@@ -1,4 +1,11 @@
 #!/usr/bin/env python
+"""
+Project Name: Firestarter
+Copyright (c) 2024 Henrik Olsson
+
+Permission is hereby granted under MIT license.
+"""
+
 import sys
 import time
 import serial
@@ -41,7 +48,9 @@ def check_port(port, data):
 
 
 def find_programmer(data):
-    print(data)
+    if verbose:
+        print("Config data:")
+        print(data)
     # Check the hint file first
     if os.path.exists(HINT_FILE):
         with open(HINT_FILE, "r") as f:
@@ -126,10 +135,10 @@ def list_eproms(all):
 
 def search_eproms(text, all):
     print(f"Searching for: {text}")
-    if not all:
-        print("Verified EPROMS in the database.")
+    # if not all:
+    #     print("Verified EPROMS in the database.")
 
-    for ic in database.search_eprom(text, all):
+    for ic in database.search_eprom(text, True):
         print(ic)
 
 
@@ -177,9 +186,6 @@ def read_chip(eprom, force, output_file, port=None):
     data.pop("name")
     data.pop("manufacturer")
     data.pop("verified")
-    # data["bus-config"].pop("rw-pin")
-    # data["bus-config"].pop("address-bus")
-    # data.pop("bus-config")
     data["state"] = STATE_READ
     mem_size = data["memory-size"]
     data = json.dumps(data)

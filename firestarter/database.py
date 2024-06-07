@@ -1,3 +1,10 @@
+"""
+Project Name: Firestarter
+Copyright (c) 2024 Henrik Olsson
+
+Permission is hereby granted under MIT license.
+"""
+
 import sys
 import json
 
@@ -8,8 +15,6 @@ ROM_CE = 100
 # eprom pins to rurp conversion
 pin_conversions = {
     24: {
-        #         1: 15,
-        # 2: 12,
         1: 7,
         2: 6,
         3: 5,
