@@ -2,12 +2,13 @@ from setuptools import setup, find_packages
 
 setup(
     name="firestarter",
-    version="0.1",
-    packages=find_packages(),
+    version="0.5.18",
+    # packages=find_packages(),
+    packages=["firestarter"],
     include_package_data=True,
     install_requires=[
         "argparse",
-        # Add other dependencies here
+        "PySerial",
     ],
     entry_points={
         "console_scripts": [
@@ -22,7 +23,7 @@ setup(
     description="A brief description of your project",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    url="https://github.com/henols/firestarter",
+    url="https://github.com/henols/firestarter_app",
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",

@@ -1,4 +1,5 @@
 include firestarter/config.json
 include firestarter/pin-map.json
+include firestarter/database.py
 include README.md
 include LICENSE

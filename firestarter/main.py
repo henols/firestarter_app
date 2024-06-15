@@ -1,4 +1,4 @@
- #!/usr/bin/env python
+#!/usr/bin/env python
 """
 Project Name: Firestarter
 Copyright (c) 2024 Henrik Olsson
@@ -13,8 +13,11 @@ import serial.tools.list_ports
 import os
 import json
 import argparse
-import database
 
+try:
+    from . import database as db
+except ImportError:
+    import database as db
 
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 HINT_FILE = os.path.join(HOME_PATH, "programmer_hint")
@@ -35,8 +38,8 @@ STATE_CONFIG = 14
 def check_port(port, data):
     try:
         if verbose:
-          print(f"Check port: {port}")
-    
+            print(f"Check port: {port}")
+
         ser = serial.Serial(
             port,
             BAUD_RATE,
@@ -135,7 +138,7 @@ def read_filterd_bytes(byte_array):
 def list_eproms(all):
     if not all:
         print("Verified EPROMS in the database.")
-    for ic in database.get_eproms(all):
+    for ic in db.get_eproms(all):
         print(ic)
 
 
@@ -144,12 +147,12 @@ def search_eproms(text, all):
     # if not all:
     #     print("Verified EPROMS in the database.")
 
-    for ic in database.search_eprom(text, True):
+    for ic in db.search_eprom(text, True):
         print(ic)
 
 
 def eprom_info(name):
-    eprom = database.get_eprom(name)
+    eprom = db.get_eprom(name)
     verified = ""
 
     if not eprom["verified"]:
@@ -236,7 +239,7 @@ def config(vcc=None, r1=None, r2=None):
 
 
 def read_chip(eprom, force, output_file, port=None):
-    data = database.get_eprom(eprom)
+    data = db.get_eprom(eprom)
     data.pop("name")
     data.pop("manufacturer")
     data.pop("verified")
@@ -295,7 +298,7 @@ def read_chip(eprom, force, output_file, port=None):
 
 
 def write_chip(eprom, force, input_file, port=None, address=None):
-    data = database.get_eprom(eprom)  
+    data = db.get_eprom(eprom)
     if not data:
         print(f"Eprom {eprom} not found.")
         return
@@ -308,8 +311,8 @@ def write_chip(eprom, force, input_file, port=None, address=None):
     data.pop("verified")
     # data["has-chip-id"] = False
     # data["can-erase"] = False
-    if(address):
-        data["address"] = int(address,0) 
+    if address:
+        data["address"] = int(address, 0)
 
     data["state"] = STATE_WRITE
     json_data = json.dumps(data)
@@ -340,7 +343,7 @@ def write_chip(eprom, force, input_file, port=None, address=None):
                 print("End of file reached")
                 break
             # Send the data block
-            ser.write((len(data)-1).to_bytes(1))
+            ser.write((len(data) - 1).to_bytes(1))
             sent = ser.write(data)
             ser.flush()
             resp, info = wait_for_response(ser)
@@ -395,7 +398,7 @@ def main():
         "-f", "--force", action="store_true", help="Force the write operation"
     )
     write_parser.add_argument(
-        "-a", "--address", type=str,  help="Address in dec/hex to start to write at"
+        "-a", "--address", type=str, help="Address in dec/hex to start to write at"
     )
     write_parser.add_argument(
         "-p", "--port", type=str, help="Serial port name (optional)"
@@ -420,9 +423,7 @@ def main():
     search_parser.add_argument("text", type=str, help="Text to search for")
 
     # Info command
-    info_parser = subparsers.add_parser(
-        "info", help="EPROM info."
-    )
+    info_parser = subparsers.add_parser("info", help="EPROM info.")
     info_parser.add_argument("eprom", type=str, help="EPROM name.")
 
     vpe_parser = subparsers.add_parser("vpe", help="VPE voltage.")
@@ -430,18 +431,28 @@ def main():
     vcc_parser = subparsers.add_parser("vcc", help="VCC voltage.")
 
     fw_parser = subparsers.add_parser("fw", help="FIRMWARE version.")
-    config_parser = subparsers.add_parser("config", help="Handles CONFIGURATION values.")
-    config_parser.add_argument("-v", "--vcc", type=float, help="Set Arduino VCC voltage.")
-    config_parser.add_argument("-r1","--r16", type=int, help="Set R16 resistance, resistor connected to VPE")
-    config_parser.add_argument("-r2", "--r14r15", type=int, help="Set R14/R15 resistance, resistor connected to GND")
+    config_parser = subparsers.add_parser(
+        "config", help="Handles CONFIGURATION values."
+    )
+    config_parser.add_argument(
+        "-v", "--vcc", type=float, help="Set Arduino VCC voltage."
+    )
+    config_parser.add_argument(
+        "-r1", "--r16", type=int, help="Set R16 resistance, resistor connected to VPE"
+    )
+    config_parser.add_argument(
+        "-r2",
+        "--r14r15",
+        type=int,
+        help="Set R14/R15 resistance, resistor connected to GND",
+    )
     if len(sys.argv) == 1:
-        args = parser.parse_args(["search", "-a", "27SF"])
+        args = parser.parse_args([ "--help"])
     else:
         args = parser.parse_args()
 
     verbose = args.verbose
-
-    database.init()
+    db.init()
 
     if args.command == "list":
         list_eproms(args.all)
@@ -452,7 +463,9 @@ def main():
     elif args.command == "read":
         read_chip(args.eprom, args.force, args.output_file, port=None)
     elif args.command == "write":
-        write_chip(args.eprom, args.force, args.input_file, port=None, address=args.address)
+        write_chip(
+            args.eprom, args.force, args.input_file, port=None, address=args.address
+        )
     elif args.command == "vpe":
         read_voltage(STATE_READ_VPE)
     elif args.command == "vpp":
