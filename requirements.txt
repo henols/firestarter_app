@@ -1,2 +1,5 @@
 argparse
-# Add other dependencies here
+pyserial
+serial
+serial-tool
+  

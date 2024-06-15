@@ -5,3 +5,7 @@ build/
 dist/
 firestarter.egg-info/
 firestarter/__pycache__/
+
+l1.txt
+
+l2.txt

@@ -12,11 +12,10 @@ PIN_COUNT_MASK = 0x7F000000
 PLCC_MASK = 0xFF000000
 ADAPTER_MASK = 0x000000FF
 ICSP_MASK = 0x0000FF00
-PIN_COUNT_MASK = 0x7F000000
 SMD_MASK = 0x80000000
+
 PLCC32_ADAPTER = 0xFF000000
 PLCC44_ADAPTER = 0xFD000000
-
 
 HITACHI_MASK_PROM_MASK = 0x80
 
@@ -24,6 +23,44 @@ HITACHI_MASK_PROM_MASK = 0x80
 MP_ERASE_MASK = 0x00000010
 MP_ID_MASK = 0x00000020
 MP_SUPPORTED_PROGRAMMING = 0x00300000
+
+
+#  { { "9", 0x10 },    { "9.5", 0x20 },
+# 			     { "10", 0x30 },   { "11", 0x40 },
+# 			     { "11.5", 0x50 }, { "12", 0x00 },
+# 			     { "12.5", 0x60 }, { "13", 0x70 },
+# 			     { "13.5", 0x80 }, { "14", 0x90 },
+# 			     { "14.5", 0xa0 }, { "15.5", 0xb0 },
+# 			     { "16", 0xc0 },   { "16.5", 0xd0 },
+# 			     { "17", 0xe0 },   { "18", 0xf0 },
+
+vpp_voltages = {
+    16: "9",
+    32: "9.5",
+    48: "10",
+    64: "11",
+    80: "11.5",
+    0: "12",
+    96: "12.5",
+    112: "13",
+    128: "13.5",
+    144: "14",
+    160: "14.5",
+    176: "15.5",
+    192: "16",
+    208: "16.5",
+    224: "17",
+    240: "18",
+}
+
+vcc_voltages = {
+    0x01: "3.3",
+    0x02: "4",
+    0x03: "4.5",
+    0x00: "5",
+    0x04: "5.5",
+    0x05: "6.5",
+}
 
 
 def get_pin_count(package_details):
@@ -43,9 +80,10 @@ types = {
     #    0x06:"nand"
 }
 
+
 def read_verified(file_path):
     names = []
-    with open(file_path, 'r') as file:
+    with open(file_path, "r") as file:
         for line in file:
             # Remove any leading/trailing whitespace characters (like newlines)
             name = line.strip()
@@ -85,6 +123,11 @@ def parse_xml_and_extract(filename):
                 flags = int(ic.get("flags"), 16)
                 can_erase = (flags & MP_ERASE_MASK) == MP_ERASE_MASK
                 has_chip_id = (flags & MP_ID_MASK) == MP_ID_MASK
+                voltages = int(ic.get("voltages"), 16)
+                vdd = vcc_voltages.get((voltages >> 12) & 0x0F)
+                vcc = vcc_voltages.get((voltages >> 8) & 0x0F)
+                vpp_val=voltages & 0xFF
+                vpp = vpp_voltages.get(vpp_val)
                 verified = name in verified_list
                 if (
                     type
@@ -93,15 +136,16 @@ def parse_xml_and_extract(filename):
                     and identifier not in seen
                     and not ("(TEST" in name or "(RW)" in name)
                     # and identifier  in seen
-                    # and not variant & HITACHI_MASK_PROM_MASK
+                    and not variant & HITACHI_MASK_PROM_MASK
                     and not package_details & SMD_MASK == SMD_MASK
+                    and not icsp
+                    and not vpp == None
                 ):
                     seen.add(identifier)
                     nr_ics = nr_ics + 1
-                    voltages = int(ic.get("voltages"), 16)
-                    # print(ic.get("code_memory_size"))
+                    print(ic.get("code_memory_size"))
                     mem_size = int(ic.get("code_memory_size"), 16)
-
+# SST39VF040
                     if pin_count == 28:
                         if type == 1:
                             pin_map = 1
@@ -129,9 +173,10 @@ def parse_xml_and_extract(filename):
                         "type": type,
                         "voltages": {
                             # "raw": voltages,
-                            "vdd": (voltages >> 12) & 0x0F,
-                            "vcc": (voltages >> 8) & 0x0F,
-                            "vpp": voltages & 0xFF,
+                            "vdd": vdd,
+                            "vcc": vcc,
+                            "vpp": vpp,
+                            
                         },
                         "pulse-delay": ic.get("pulse_delay"),
                         "flags": ic.get("flags"),
@@ -157,8 +202,9 @@ def save_to_json(data, filename):
 
 
 def main():
-    xml_filename = "infoic.xml"
-    json_filename = "config.json"
+
+    xml_filename = "tools/infoic.xml"
+    json_filename = "firestarter/config.json"
     filtered_ics, nr_ics = parse_xml_and_extract(xml_filename)
     save_to_json(filtered_ics, json_filename)
     print(

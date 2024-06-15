@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+ #!/usr/bin/env python
 """
 Project Name: Firestarter
 Copyright (c) 2024 Henrik Olsson
@@ -25,11 +25,18 @@ STATE_READ = 1
 STATE_WRITE = 2
 STATE_ERASE = 3
 STATE_CHECK_BLANK = 4
-STATE_READ_VPP = 5
+STATE_READ_VPE = 10
+STATE_READ_VPP = 11
+STATE_READ_VCC = 12
+STATE_VERSION = 13
+STATE_CONFIG = 14
 
 
 def check_port(port, data):
     try:
+        if verbose:
+          print(f"Check port: {port}")
+    
         ser = serial.Serial(
             port,
             BAUD_RATE,
@@ -118,7 +125,6 @@ def print_progress(p, from_address, to_address):
 
 
 def read_filterd_bytes(byte_array):
-
     res = [b for b in byte_array if 32 <= b <= 126]
     if res:
         return "".join([chr(b) for b in res])
@@ -165,9 +171,9 @@ def eprom_info(name):
     print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
 
 
-def read_vpp(port=None):
+def read_voltage(state):
     data = {}
-    data["state"] = STATE_READ_VPP
+    data["state"] = state
     data = json.dumps(data)
     # print(data)
     ser = find_programmer(data)
@@ -175,10 +181,58 @@ def read_vpp(port=None):
         print("No programmer found")
         return
     ser.write("OK\n".encode("ascii"))
-    print("Reading VPP voltage")
+    type = "VPE"
+    if state == STATE_READ_VCC:
+        type = "VCC"
+    if state == STATE_READ_VPP:
+        type = "VPP"
+
+    print(f"Reading {type} voltage")
     while (t := wait_for_response(ser))[0] == "DATA":
         print(f"\r{t[1]}", end="")
         ser.write("OK\n".encode("ascii"))
+
+
+def firmware(file_name=None):
+    data = {}
+    data["state"] = STATE_VERSION
+    data = json.dumps(data)
+    # print(data)
+    ser = find_programmer(data)
+    if not ser:
+        print("No programmer found")
+        return
+    ser.write("OK\n".encode("ascii"))
+    print("Reading version")
+    r, version = wait_for_response(ser)
+    if r == "OK":
+        print(f"Firmware version: {version}")
+    else:
+        print(r)
+
+
+def config(vcc=None, r1=None, r2=None):
+    data = {}
+    data["state"] = STATE_CONFIG
+    if vcc:
+        data["vcc"] = vcc
+    if r1:
+        data["r1"] = r1
+    if r2:
+        data["r2"] = r2
+    data = json.dumps(data)
+    # print(data)
+    ser = find_programmer(data)
+    if not ser:
+        print("No programmer found")
+        return
+    ser.write("OK\n".encode("ascii"))
+    print("Reading configuration")
+    r, version = wait_for_response(ser)
+    if r == "OK":
+        print(f"Config: {version}")
+    else:
+        print(r)
 
 
 def read_chip(eprom, force, output_file, port=None):
@@ -240,8 +294,8 @@ def read_chip(eprom, force, output_file, port=None):
         ser.close()
 
 
-def write_chip(eprom, force, input_file, port=None):
-    data = database.get_eprom(eprom)
+def write_chip(eprom, force, input_file, port=None, address=None):
+    data = database.get_eprom(eprom)  
     if not data:
         print(f"Eprom {eprom} not found.")
         return
@@ -254,6 +308,8 @@ def write_chip(eprom, force, input_file, port=None):
     data.pop("verified")
     # data["has-chip-id"] = False
     # data["can-erase"] = False
+    if(address):
+        data["address"] = int(address,0) 
 
     data["state"] = STATE_WRITE
     json_data = json.dumps(data)
@@ -284,6 +340,7 @@ def write_chip(eprom, force, input_file, port=None):
                 print("End of file reached")
                 break
             # Send the data block
+            ser.write((len(data)-1).to_bytes(1))
             sent = ser.write(data)
             ser.flush()
             resp, info = wait_for_response(ser)
@@ -320,13 +377,13 @@ def main():
     read_parser = subparsers.add_parser("read", help="Reads the content from an EPROM.")
     read_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
     read_parser.add_argument(
-        "-p", "--port", type=str, help="Serial port name (optional)"
-    )
-    read_parser.add_argument(
         "-f", "--force", action="store_true", help="Force the read operation"
     )
     read_parser.add_argument(
         "output_file", nargs="?", type=str, help="Output file name (optional)"
+    )
+    read_parser.add_argument(
+        "-p", "--port", type=str, help="Serial port name (optional)"
     )
 
     # Write command
@@ -335,10 +392,13 @@ def main():
     )
     write_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
     write_parser.add_argument(
-        "-p", "--port", type=str, help="Serial port name (optional)"
+        "-f", "--force", action="store_true", help="Force the write operation"
     )
     write_parser.add_argument(
-        "-f", "--force", action="store_true", help="Force the write operation"
+        "-a", "--address", type=str,  help="Address in dec/hex to start to write at"
+    )
+    write_parser.add_argument(
+        "-p", "--port", type=str, help="Serial port name (optional)"
     )
     write_parser.add_argument("input_file", type=str, help="Input file name")
 
@@ -361,13 +421,19 @@ def main():
 
     # Info command
     info_parser = subparsers.add_parser(
-        "info", help="Displays the info about an EPROM."
+        "info", help="EPROM info."
     )
-    info_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    info_parser.add_argument("eprom", type=str, help="EPROM name.")
 
-    #
-    vpp_parser = subparsers.add_parser("vpp", help="Displays the VPP voltage.")
+    vpe_parser = subparsers.add_parser("vpe", help="VPE voltage.")
+    vpp_parser = subparsers.add_parser("vpp", help="VPP voltage.")
+    vcc_parser = subparsers.add_parser("vcc", help="VCC voltage.")
 
+    fw_parser = subparsers.add_parser("fw", help="FIRMWARE version.")
+    config_parser = subparsers.add_parser("config", help="Handles CONFIGURATION values.")
+    config_parser.add_argument("-v", "--vcc", type=float, help="Set Arduino VCC voltage.")
+    config_parser.add_argument("-r1","--r16", type=int, help="Set R16 resistance, resistor connected to VPE")
+    config_parser.add_argument("-r2", "--r14r15", type=int, help="Set R14/R15 resistance, resistor connected to GND")
     if len(sys.argv) == 1:
         args = parser.parse_args(["search", "-a", "27SF"])
     else:
@@ -386,9 +452,17 @@ def main():
     elif args.command == "read":
         read_chip(args.eprom, args.force, args.output_file, port=None)
     elif args.command == "write":
-        write_chip(args.eprom, args.force, args.input_file, port=None)
+        write_chip(args.eprom, args.force, args.input_file, port=None, address=args.address)
+    elif args.command == "vpe":
+        read_voltage(STATE_READ_VPE)
     elif args.command == "vpp":
-        read_vpp(port=None)
+        read_voltage(STATE_READ_VPP)
+    elif args.command == "vcc":
+        read_voltage(STATE_READ_VCC)
+    elif args.command == "fw":
+        firmware()
+    elif args.command == "config":
+        config(args.vcc, args.r16, args.r14r15)
 
 
 if __name__ == "__main__":
