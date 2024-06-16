@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="firestarter",
-    version="0.5.18",
+    # version="0.5.18",
     # packages=find_packages(),
     packages=["firestarter"],
     include_package_data=True,

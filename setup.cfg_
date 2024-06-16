@@ -1,0 +1,32 @@
+[metadata]
+name = firestarter
+author = Henrik Olsson
+author_email = henols@gmail.com
+description = 
+    EPROM burner software for the Relatively Universal ROM Programmer
+
+long_description = file: README.md
+long_description_content_type = text/markdown
+license_files = LICENSE
+url = https://github.com/henols/firestarter_app
+project_urls = 
+    Bug Tracker = https://github.com/henols/firestarter_app/issues
+    Source =  https://github.com/henols/firestarter_app
+classifiers =
+    Programming Language :: Python :: 3
+    License :: OSI Approved :: MIT License
+    Operating System :: OS Independent
+
+[options]
+packages = firestarter
+package_data = firestarter
+    database.json
+    pin-map.json
+include_package_data = True
+entry_points = 
+    [console_scripts]
+    firestarter = firestarter.__main__:main
+python_requires = >=3.6
+install_requires = 
+        argparse
+        PySerial
