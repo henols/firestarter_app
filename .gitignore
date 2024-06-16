@@ -11,3 +11,9 @@ l1.txt
 l2.txt
 
 test_env/**
+
+.secrets
+
+install.sh
+
+publish.sh
