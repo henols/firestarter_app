@@ -4,8 +4,8 @@ jobs:
   github:
     runs-on: ubuntu-latest
     steps:
-      - name: Install gh
-        run: apt update && apt install gh
+      # - name: Install gh
+      #   run: apt update && apt install gh
       - name: Checkout
         uses: actions/checkout@v4
       - name: Create new patch release
