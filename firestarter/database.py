@@ -81,7 +81,7 @@ def read_config(filename):
 def init():
     global proms
     global pin_maps
-    proms_filename = "./firestarter/config.json"
+    proms_filename = "./firestarter/database.json"
     proms = read_config(proms_filename)
     pin_maps_filename = "./firestarter/pin-map.json"
     pin_maps = read_config(pin_maps_filename)

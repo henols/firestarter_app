@@ -126,7 +126,7 @@ def parse_xml_and_extract(filename):
                 voltages = int(ic.get("voltages"), 16)
                 vdd = vcc_voltages.get((voltages >> 12) & 0x0F)
                 vcc = vcc_voltages.get((voltages >> 8) & 0x0F)
-                vpp_val=voltages & 0xFF
+                vpp_val = voltages & 0xFF
                 vpp = vpp_voltages.get(vpp_val)
                 verified = name in verified_list
                 if (
@@ -145,7 +145,7 @@ def parse_xml_and_extract(filename):
                     nr_ics = nr_ics + 1
                     print(ic.get("code_memory_size"))
                     mem_size = int(ic.get("code_memory_size"), 16)
-# SST39VF040
+                    # SST39VF040
                     if pin_count == 28:
                         if type == 1:
                             pin_map = 1
@@ -176,7 +176,6 @@ def parse_xml_and_extract(filename):
                             "vdd": vdd,
                             "vcc": vcc,
                             "vpp": vpp,
-                            
                         },
                         "pulse-delay": ic.get("pulse_delay"),
                         "flags": ic.get("flags"),
@@ -198,7 +197,7 @@ def parse_xml_and_extract(filename):
 
 def save_to_json(data, filename):
     with open(filename, "w") as file:
-        json.dump(data, file, indent=4)
+        json.dump(data, file)
 
 
 def main():

@@ -13,14 +13,15 @@ import serial.tools.list_ports
 import os
 import json
 import argparse
+import requests
 
 try:
     from . import database as db
+    from .avr_tool import Avrdude
 except ImportError:
     import database as db
+    from avr_tool import Avrdude
 
-HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
-HINT_FILE = os.path.join(HOME_PATH, "programmer_hint")
 
 BAUD_RATE = "115200"
 
@@ -34,6 +35,28 @@ STATE_READ_VCC = 12
 STATE_VERSION = 13
 STATE_CONFIG = 14
 
+FIRESTARTER_RELEASE_URL = (
+    "https://api.github.com/repos/henols/firestarter/releases/latest"
+)
+
+HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
+CONFIG_FILE = os.path.join(HOME_PATH, "config.json")
+
+
+def open_config():
+    global config
+    config = {}
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "r") as file:
+            config = json.load(file)
+
+
+def save_config():
+    if not os.path.exists(HOME_PATH):
+        os.makedirs(HOME_PATH)
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f)
+
 
 def check_port(port, data):
     try:
@@ -46,6 +69,7 @@ def check_port(port, data):
             timeout=1.0,
             # inter_byte_timeout=0.1,
         )
+        time.sleep(2)
         ser.write(data.encode("ascii"))
         ser.flush()
 
@@ -57,35 +81,35 @@ def check_port(port, data):
     return None
 
 
+def find_comports():
+    ports = []
+    if "port" in config.keys():
+        ports.append(config["port"] )
+
+    serial_ports = serial.tools.list_ports.comports()
+    for port in serial_ports:
+        if "Arduino" in port.manufacturer or "FTDI" in port.manufacturer:
+            ports.append(port.device)
+    return ports
+
+
 def find_programmer(data):
     if verbose:
         print("Config data:")
         print(data)
-    # Check the hint file first
-    if os.path.exists(HINT_FILE):
-        with open(HINT_FILE, "r") as f:
-            hinted_port = f.read().strip()
-            serial_port = check_port(hinted_port, data)
-            if serial_port:
-                return serial_port
 
-    # If the hinted port didn't work or wasn't available, search all ports
-    ports = serial.tools.list_ports.comports()
+    ports = find_comports()
     for port in ports:
-        if "Arduino" in port.manufacturer or "FTDI" in port.manufacturer:
-            serial_port = check_port(port.device, data)
-            if serial_port:
-                if not os.path.exists(HOME_PATH):
-                    # Directory does not exist, create it
-                    os.makedirs(HOME_PATH)
-                # Update the hint file with the working port
-                with open(HINT_FILE, "w") as f:
-                    f.write(port.device)
-                return serial_port
+        serial_port = check_port(port, data)
+        if serial_port:
+            config["port"] = port
+            save_config()
+            return serial_port
     return None
 
 
 def wait_for_response(ser):
+    timeout = time.time()
     while True:
         # time.sleep(1)
         byte_array = ser.readline()
@@ -111,8 +135,13 @@ def wait_for_response(ser):
                 write_feedback(res[res.rfind("INFO:") :])
             # else:
             #     print(res)
+            timeout = time.time()
+
         # elif len(byte_array) > 0:
         #     print(len(byte_array))
+        if timeout + 5 < time.time():
+            print("Timeout")
+            return "ERROR", "Timeout"
 
 
 def write_feedback(msg):
@@ -196,7 +225,16 @@ def read_voltage(state):
         ser.write("OK\n".encode("ascii"))
 
 
-def firmware(file_name=None):
+def firmware(install, avrdude_path):
+    latest, port, url = firmware_check()
+    if not latest and install:
+        if not url:
+            latest_version, url = latest_firmware()
+            print(f"Trying to install firmware version: {latest_version}")
+        install_firmware(url, avrdude_path, port)
+
+def firmware_check():
+    # if not install:
     data = {}
     data["state"] = STATE_VERSION
     data = json.dumps(data)
@@ -204,14 +242,106 @@ def firmware(file_name=None):
     ser = find_programmer(data)
     if not ser:
         print("No programmer found")
-        return
+        return False,  None, None
     ser.write("OK\n".encode("ascii"))
     print("Reading version")
     r, version = wait_for_response(ser)
+    ser.close()
+    
     if r == "OK":
         print(f"Firmware version: {version}")
     else:
         print(r)
+        return False, None, None
+    latest_version, url = latest_firmware()
+    major, minor, patch = version.split(".")
+
+    major_l, minor_l, patch_l = latest_version.split(".")
+
+    if (
+        int(major) < int(major_l)
+        or int(minor) < int(minor_l)
+        or int(patch) < int(patch_l)
+    ):
+        print(f"New version available: {latest_version}")
+        return False,ser.portstr, url
+    else:
+        print("You have the latest version")
+        return True, None, None
+
+def install_firmware(url, avrdude_path, port=None):
+
+    if port:
+        ports = [port]
+    else:
+        ports = find_comports()
+        if len(ports) == 0:
+            print("No Arduino found")
+            return
+
+    for port in ports:
+        try:
+            if not avrdude_path:
+                if "avrdude-path" in config.keys():
+                    avrdude_path = config["avrdude-path"]
+
+            a = Avrdude(
+                partno="ATmega328P",
+                programmer_id="arduino",
+                baud_rate="115200",
+                port=port,
+                avrdudePath=avrdude_path,
+            )
+        except FileNotFoundError:
+            print("Avrdude not found")
+            print("Full path to avrdude needs to be provided --avrdude-path")
+            return
+
+        output, error, returncode = a.testConnection()
+        if returncode == 0:
+            print(f"Found programmer at port: {port}")
+            print("Downloading firmware...")
+            response = requests.get(url)
+            if not response.status_code == 200:
+                print("Error downloading firmware")
+                return
+
+            firmware_path = os.path.join(HOME_PATH, "firmware.hex")
+            with open(firmware_path, "wb") as f:
+                f.write(response.content)
+            print("Firmware downloaded")
+            print("Installing firmware")
+            output, error, returncode = a.flashFirmware(firmware_path)
+            if returncode == 0:
+                print("Firmware updated")
+            else:
+                print("Error updating firmware")
+                print(str(error, "ascii"))
+                return
+            if avrdude_path:
+                config["avrdude-path"] = avrdude_path
+                save_config()
+            return
+        else:
+            print(f"Error connecting to programmer at port: {port}")
+            print(str(error, "ascii"))
+            continue
+        # if output:
+
+    print("Please reset the programmer to start the update")
+    return
+
+
+def latest_firmware():
+    response = requests.get(FIRESTARTER_RELEASE_URL)
+    if not response.status_code == 200:
+        return None, None
+    latest = response.json()
+    latest_version = latest["tag_name"]
+    for asset in latest["assets"]:
+        if "firmware.hex" in asset["name"]:
+            return latest_version, asset["browser_download_url"]
+    return None, None
 
 
 def config(vcc=None, r1=None, r2=None):
@@ -224,7 +354,6 @@ def config(vcc=None, r1=None, r2=None):
     if r2:
         data["r2"] = r2
     data = json.dumps(data)
-    # print(data)
     ser = find_programmer(data)
     if not ser:
         print("No programmer found")
@@ -431,6 +560,19 @@ def main():
     vcc_parser = subparsers.add_parser("vcc", help="VCC voltage.")
 
     fw_parser = subparsers.add_parser("fw", help="FIRMWARE version.")
+    fw_parser.add_argument(
+        "-i",
+        "--install",
+        action="store_true",
+        help="Try to install the latest firmware.",
+    )
+    fw_parser.add_argument(
+        "-p",
+        "--avrdude-path",
+        type=str,
+        help="Try to install the latest firmware.",
+    )
+
     config_parser = subparsers.add_parser(
         "config", help="Handles CONFIGURATION values."
     )
@@ -447,9 +589,11 @@ def main():
         help="Set R14/R15 resistance, resistor connected to GND",
     )
     if len(sys.argv) == 1:
-        args = parser.parse_args([ "--help"])
+        args = parser.parse_args(["--help"])
     else:
         args = parser.parse_args()
+
+    open_config()
 
     verbose = args.verbose
     db.init()
@@ -473,7 +617,7 @@ def main():
     elif args.command == "vcc":
         read_voltage(STATE_READ_VCC)
     elif args.command == "fw":
-        firmware()
+        firmware(args.install, args.avrdude_path)
     elif args.command == "config":
         config(args.vcc, args.r16, args.r14r15)
 

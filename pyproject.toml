@@ -15,7 +15,8 @@ dynamic = ["version"]
 
 dependencies = [
     "argparse",
-    "pyserial"
+    "pyserial",
+    "requests"
 ]
 
 [project.entry-points."console_scripts"]
@@ -33,7 +34,7 @@ toolbox = "firestarter"
 [tool.setuptools.package-data]
     "firestarter" = [
         "database.json",
-        "config.json",
+        "pin-map.json",
         ]
 
 [tool.setuptools.dynamic]
