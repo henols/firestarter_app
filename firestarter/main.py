@@ -522,7 +522,7 @@ def write_chip(eprom, input_file, port=None, address=None):
 def main():
     global verbose
 
-    parser = argparse.ArgumentParser(description="EPROM programer.")
+    parser = argparse.ArgumentParser(description="EPROM programer for Arduiono UNO and Relatively-Universal-ROM-Programmer sheild.")
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose mode"
     )
@@ -551,7 +551,7 @@ def main():
     #     "-f", "--force", action="store_true", help="Force the write operation"
     # )
     write_parser.add_argument(
-        "-a", "--address", type=str, help="Address in dec/hex to start to write at"
+        "-a", "--address", type=str, help="Write start address in dec/hex"
     )
     write_parser.add_argument(
         "-p", "--port", type=str, help="Serial port name (optional)"
@@ -560,7 +560,7 @@ def main():
 
     # List command
     list_parser = subparsers.add_parser(
-        "list", help="Lists all EPROMs in the database."
+        "list", help="List all EPROMs in the database."
     )
     list_parser.add_argument(
         "-v", "--verified", action="store_true", help="Only shows verifed EPROMS"
@@ -568,7 +568,7 @@ def main():
 
     # Search command
     search_parser = subparsers.add_parser(
-        "search", help="Searches EPROMs in the database."
+        "search", help="Search for EPROMs in the database."
     )
     search_parser.add_argument("text", type=str, help="Text to search for")
 
@@ -591,7 +591,7 @@ def main():
         "-p",
         "--avrdude-path",
         type=str,
-        help="Full path to avrdude (optional) only set if avrdude is not found.",
+        help="Full path to avrdude (optional), set if avrdude is not found.",
     )
     fw_parser.add_argument("--port", type=str, help="Serial port name (optional)")
 
@@ -609,7 +609,7 @@ def main():
         "-r2",
         "--r14r15",
         type=int,
-        help="Set R14/R15 resistance, resistor connected to GND",
+        help="Set R14/R15 resistance, resistors connected to GND",
     )
     config_parser.add_argument(
         "-p", "--port", type=str, help="Serial port name (optional)"
