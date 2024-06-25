@@ -73,8 +73,11 @@ def check_port(port, data):
         ser.write(data.encode("ascii"))
         ser.flush()
 
-        if wait_for_response(ser)[0] == "OK":
+        res, msg = wait_for_response(ser)
+        if res == "OK":
             return ser
+        else:
+            print(msg)
     except (OSError, serial.SerialException):
         pass
 
@@ -84,11 +87,13 @@ def check_port(port, data):
 def find_comports():
     ports = []
     if "port" in config.keys():
-        ports.append(config["port"] )
+        ports.append(config["port"])
 
     serial_ports = serial.tools.list_ports.comports()
     for port in serial_ports:
-        if "Arduino" in port.manufacturer or "FTDI" in port.manufacturer:
+        if (
+            "Arduino" in port.manufacturer or "FTDI" in port.manufacturer
+        ) and not port.device in ports:
             ports.append(port.device)
     return ports
 
@@ -140,7 +145,7 @@ def wait_for_response(ser):
         # elif len(byte_array) > 0:
         #     print(len(byte_array))
         if timeout + 5 < time.time():
-            print("Timeout")
+            print(" --  Timeout")
             return "ERROR", "Timeout"
 
 
@@ -164,14 +169,14 @@ def read_filterd_bytes(byte_array):
         return None
 
 
-def list_eproms(all):
+def list_eproms(verifed):
     if not all:
         print("Verified EPROMS in the database.")
-    for ic in db.get_eproms(all):
+    for ic in db.get_eproms(verifed):
         print(ic)
 
 
-def search_eproms(text, all):
+def search_eproms(text):
     print(f"Searching for: {text}")
     # if not all:
     #     print("Verified EPROMS in the database.")
@@ -182,8 +187,11 @@ def search_eproms(text, all):
 
 def eprom_info(name):
     eprom = db.get_eprom(name)
-    verified = ""
-
+    if not eprom:
+        print(f"Eprom {name} not found.")
+        return
+    
+    verified =""
     if not eprom["verified"]:
         verified = "\t-- NOT VERIFIED --"
 
@@ -212,7 +220,7 @@ def read_voltage(state):
     if not ser:
         print("No programmer found")
         return
-    ser.write("OK\n".encode("ascii"))
+    ser.write("OK".encode("ascii"))
     type = "VPE"
     if state == STATE_READ_VCC:
         type = "VCC"
@@ -222,7 +230,7 @@ def read_voltage(state):
     print(f"Reading {type} voltage")
     while (t := wait_for_response(ser))[0] == "DATA":
         print(f"\r{t[1]}", end="")
-        ser.write("OK\n".encode("ascii"))
+        ser.write("OK".encode("ascii"))
 
 
 def firmware(install, avrdude_path):
@@ -233,6 +241,7 @@ def firmware(install, avrdude_path):
             print(f"Trying to install firmware version: {latest_version}")
         install_firmware(url, avrdude_path, port)
 
+
 def firmware_check():
     # if not install:
     data = {}
@@ -242,12 +251,12 @@ def firmware_check():
     ser = find_programmer(data)
     if not ser:
         print("No programmer found")
-        return False,  None, None
-    ser.write("OK\n".encode("ascii"))
+        return False, None, None
+    ser.write("OK".encode("ascii"))
     print("Reading version")
     r, version = wait_for_response(ser)
     ser.close()
-    
+
     if r == "OK":
         print(f"Firmware version: {version}")
     else:
@@ -264,10 +273,11 @@ def firmware_check():
         or int(patch) < int(patch_l)
     ):
         print(f"New version available: {latest_version}")
-        return False,ser.portstr, url
+        return False, ser.portstr, url
     else:
         print("You have the latest version")
         return True, None, None
+
 
 def install_firmware(url, avrdude_path, port=None):
 
@@ -344,7 +354,7 @@ def latest_firmware():
     return None, None
 
 
-def config(vcc=None, r1=None, r2=None):
+def rurp_config(vcc=None, r1=None, r2=None):
     data = {}
     data["state"] = STATE_CONFIG
     if vcc:
@@ -367,30 +377,37 @@ def config(vcc=None, r1=None, r2=None):
         print(r)
 
 
-def read_chip(eprom, force, output_file, port=None):
+def read_chip(eprom, output_file, port=None):
     data = db.get_eprom(eprom)
-    data.pop("name")
+    if not data:
+        print(f"Eprom {eprom} not found.")
+        return
+    eprom = data.pop("name")
     data.pop("manufacturer")
     data.pop("verified")
-    data["state"] = STATE_READ
     mem_size = data["memory-size"]
+    # data.pop("memory-size")
+
+    # data.pop("has-chip-id")
+
+    # data.pop("bus-config")
+    # data["bus-config"].pop("bus")
+
+    data["state"] = STATE_READ
     data = json.dumps(data)
-    # print(data)
 
     ser = find_programmer(data)
     if not ser:
         print("No programmer found")
         return
     print(f"Reading chip: {eprom}")
-    if force:
-        print("Force option is enabled.")
     if not output_file:
         output_file = f"{eprom}.bin"
     print(f"Output will be saved to: {output_file}")
     bytes_read = 0
     try:
-        ser.write("OK\n".encode("ascii"))
-
+        ser.write("OK".encode("ascii"))
+        ser.flush()
         output_file = open(output_file, "wb")
         start_time = time.time()
 
@@ -426,7 +443,7 @@ def read_chip(eprom, force, output_file, port=None):
         ser.close()
 
 
-def write_chip(eprom, force, input_file, port=None, address=None):
+def write_chip(eprom, input_file, port=None, address=None):
     data = db.get_eprom(eprom)
     if not data:
         print(f"Eprom {eprom} not found.")
@@ -435,51 +452,59 @@ def write_chip(eprom, force, input_file, port=None, address=None):
         print(f"File {input_file} not found.")
         return
     file_size = os.path.getsize(input_file)
-    data.pop("name")
+    eprom = data.pop("name")
     data.pop("manufacturer")
     data.pop("verified")
     # data["has-chip-id"] = False
     # data["can-erase"] = False
     if address:
-        data["address"] = int(address, 0)
+        if "0x" in address:
+            data["address"] = int(address, 16)
+        else:
+            data["address"] = int(address)
 
     data["state"] = STATE_WRITE
     json_data = json.dumps(data)
     mem_size = data["memory-size"]
     if not mem_size == file_size:
         print(f"The file size dont match the memory size")
-
+    
+    start_time = time.time()
+    
     ser = find_programmer(json_data)
     if not ser:
         print("No programmer found")
         return
 
     print(f"Writing to chip: {eprom}")
-    if force:
-        print("Force option is enabled.")
     print(f"Reading from input file: {input_file}")
     bytes_sent = 0
     block_size = 256
+
     # Open the file to send
     with open(input_file, "rb") as f:
-        start_time = time.time()
-        print(f"Sending file {input_file} with block size {block_size} bytes")
+       
+        print(f"Sending file {input_file} in blocks of {block_size} bytes")
 
         # Read the file and send in blocks
         while True:
             data = f.read(block_size)
             if not data:
+                ser.write(int(0).to_bytes(2) )
+                ser.flush()
+                resp, info = wait_for_response(ser)
                 print("End of file reached")
-                break
-            # Send the data block
-            ser.write((len(data) - 1).to_bytes(1))
+                print(info)
+                return
+
+            ser.write(len(data).to_bytes(2) )
             sent = ser.write(data)
             ser.flush()
             resp, info = wait_for_response(ser)
             if resp == "OK":
                 bytes_sent += sent
-                p = int(bytes_sent / mem_size * 100)
-                print_progress(p, bytes_sent - 256, bytes_sent)
+                p = int(bytes_sent / file_size * 100)
+                print_progress(p, bytes_sent - block_size, bytes_sent)
             elif resp == "ERROR":
                 print()
                 print(f"Error writing: {info}")
@@ -487,12 +512,11 @@ def write_chip(eprom, force, input_file, port=None, address=None):
             if bytes_sent == mem_size:
                 break
 
-    end_time = time.time()
+    
     # Calculate total duration
-    total_duration = end_time - start_time
-    print(f"File sent in {total_duration:.2f} seconds")
-
-    print("\nFile sent successfully!")
+    total_duration = time.time() - start_time
+    print()
+    print(f"File sent successfully in {total_duration:.2f} seconds")
 
 
 def main():
@@ -509,10 +533,10 @@ def main():
     read_parser = subparsers.add_parser("read", help="Reads the content from an EPROM.")
     read_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
     read_parser.add_argument(
-        "-f", "--force", action="store_true", help="Force the read operation"
-    )
-    read_parser.add_argument(
-        "output_file", nargs="?", type=str, help="Output file name (optional)"
+        "output_file",
+        nargs="?",
+        type=str,
+        help="Output file name (optional), defaults to the EPROM_NAME.bin",
     )
     read_parser.add_argument(
         "-p", "--port", type=str, help="Serial port name (optional)"
@@ -523,9 +547,9 @@ def main():
         "write", help="Writes a binary file to an EPROM."
     )
     write_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
-    write_parser.add_argument(
-        "-f", "--force", action="store_true", help="Force the write operation"
-    )
+    # write_parser.add_argument(
+    #     "-f", "--force", action="store_true", help="Force the write operation"
+    # )
     write_parser.add_argument(
         "-a", "--address", type=str, help="Address in dec/hex to start to write at"
     )
@@ -539,15 +563,12 @@ def main():
         "list", help="Lists all EPROMs in the database."
     )
     list_parser.add_argument(
-        "-a", "--all", action="store_true", help="Includes non verifed EPROMS"
+        "-v", "--verified", action="store_true", help="Only shows verifed EPROMS"
     )
 
     # Search command
     search_parser = subparsers.add_parser(
         "search", help="Searches EPROMs in the database."
-    )
-    search_parser.add_argument(
-        "-a", "--all", action="store_true", help="Includes non verifed EPROMS"
     )
     search_parser.add_argument("text", type=str, help="Text to search for")
 
@@ -555,7 +576,7 @@ def main():
     info_parser = subparsers.add_parser("info", help="EPROM info.")
     info_parser.add_argument("eprom", type=str, help="EPROM name.")
 
-    vpe_parser = subparsers.add_parser("vpe", help="VPE voltage.")
+    # vpe_parser = subparsers.add_parser("vpe", help="VPE voltage.")
     vpp_parser = subparsers.add_parser("vpp", help="VPP voltage.")
     vcc_parser = subparsers.add_parser("vcc", help="VCC voltage.")
 
@@ -570,8 +591,9 @@ def main():
         "-p",
         "--avrdude-path",
         type=str,
-        help="Try to install the latest firmware.",
+        help="Full path to avrdude (optional) only set if avrdude is not found.",
     )
+    fw_parser.add_argument("--port", type=str, help="Serial port name (optional)")
 
     config_parser = subparsers.add_parser(
         "config", help="Handles CONFIGURATION values."
@@ -579,6 +601,7 @@ def main():
     config_parser.add_argument(
         "-v", "--vcc", type=float, help="Set Arduino VCC voltage."
     )
+
     config_parser.add_argument(
         "-r1", "--r16", type=int, help="Set R16 resistance, resistor connected to VPE"
     )
@@ -588,6 +611,10 @@ def main():
         type=int,
         help="Set R14/R15 resistance, resistor connected to GND",
     )
+    config_parser.add_argument(
+        "-p", "--port", type=str, help="Serial port name (optional)"
+    )
+
     if len(sys.argv) == 1:
         args = parser.parse_args(["--help"])
     else:
@@ -599,17 +626,15 @@ def main():
     db.init()
 
     if args.command == "list":
-        list_eproms(args.all)
+        list_eproms(args.verified)
     elif args.command == "info":
         eprom_info(args.eprom)
     elif args.command == "search":
-        search_eproms(args.text, args.all)
+        search_eproms(args.text)
     elif args.command == "read":
-        read_chip(args.eprom, args.force, args.output_file, port=None)
+        read_chip(args.eprom, args.output_file, port=None)
     elif args.command == "write":
-        write_chip(
-            args.eprom, args.force, args.input_file, port=None, address=args.address
-        )
+        write_chip(args.eprom, args.input_file, port=None, address=args.address)
     elif args.command == "vpe":
         read_voltage(STATE_READ_VPE)
     elif args.command == "vpp":
@@ -619,7 +644,7 @@ def main():
     elif args.command == "fw":
         firmware(args.install, args.avrdude_path)
     elif args.command == "config":
-        config(args.vcc, args.r16, args.r14r15)
+        rurp_config(args.vcc, args.r16, args.r14r15)
 
 
 if __name__ == "__main__":

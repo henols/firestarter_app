@@ -17,3 +17,5 @@ test_env/**
 install.sh
 
 publish.sh
+
+fires/

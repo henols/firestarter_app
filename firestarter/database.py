@@ -125,11 +125,11 @@ def map_data(ic, manufacturer):
     return data
 
 
-def get_eproms(all):
+def get_eproms(verified):
     selected_proms = []
     for manufacturer in proms:
         for ic in proms[manufacturer]:
-            if ("verified" in ic and ic["verified"]) or all:
+            if verified == None or not verified or (verified and "verified" in ic and ic["verified"]):
                 selected_proms.append(ic["name"])
     return selected_proms
 
