@@ -7,6 +7,12 @@ Permission is hereby granted under MIT license.
 
 import sys
 import json
+from importlib import resources as impresources
+
+try:
+    from . import data
+except ImportError:
+    import data
 
 
 types = {"memory": 0x01, "sram": 0x04}
@@ -28,7 +34,6 @@ pin_conversions = {
         21: 11,
         22: 9,
         23: 14,
-
     },
     28: {
         1: 15,
@@ -73,7 +78,8 @@ pin_conversions = {
 
 
 def read_config(filename):
-    with open(filename, "r") as file:
+    inp_file = impresources.files(data) / filename
+    with inp_file.open("rt") as file:
         config = json.load(file)
     return config
 
@@ -81,9 +87,9 @@ def read_config(filename):
 def init():
     global proms
     global pin_maps
-    proms_filename = "./firestarter/database.json"
+    proms_filename = "database.json"
     proms = read_config(proms_filename)
-    pin_maps_filename = "./firestarter/pin-map.json"
+    pin_maps_filename = "pin-map.json"
     pin_maps = read_config(pin_maps_filename)
 
 
@@ -129,7 +135,11 @@ def get_eproms(verified):
     selected_proms = []
     for manufacturer in proms:
         for ic in proms[manufacturer]:
-            if verified == None or not verified or (verified and "verified" in ic and ic["verified"]):
+            if (
+                verified == None
+                or not verified
+                or (verified and "verified" in ic and ic["verified"])
+            ):
                 selected_proms.append(ic["name"])
     return selected_proms
 
@@ -148,7 +158,13 @@ def search_eprom(chip_name, all):
         for ic in proms[manufacturer]:
             if chip_name.lower() in ic["name"].lower():
                 if ("verified" in ic and ic["verified"]) or all:
-                    selected_proms.append(ic["name"] + "\tfrom " + manufacturer + " pins: " + str(ic["pin-count"]))
+                    selected_proms.append(
+                        ic["name"]
+                        + "\tfrom "
+                        + manufacturer
+                        + " pins: "
+                        + str(ic["pin-count"])
+                    )
     return selected_proms
 
 

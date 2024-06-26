@@ -1,5 +1,9 @@
-include firestarter/database.json
-include firestarter/pin-map.json
+include firestarter/data/database.json
+include firestarter/data/pin-map.json
+include firestarter/data/avrdude.conf
 include firestarter/database.py
+include firestarter/avr_tool.py
+include firestarter/main.py
+include firestarter/__init__.py
 include README.md
 include LICENSE

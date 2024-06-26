@@ -33,10 +33,11 @@ toolbox = "firestarter"
 
 [tool.setuptools.package-data]
     "firestarter" = [
-        "database.json",
-        "pin-map.json",
+        "data/database.json",
+        "data/pin-map.json",
+        "data/avrdude.conf",
         ]
 
 [tool.setuptools.dynamic]
-#version = {attr = "firestarter.__version__"}
+version = {attr = "firestarter.__version__"}
 #readme = {file = "README.md", content-type = "text/markdown"}

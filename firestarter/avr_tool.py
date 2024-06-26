@@ -23,9 +23,12 @@ except:
         "shutil.which not found, location of avrdude needs to be ", "set manually "
     )
 
+
 class Avrdude:
-        
-    def __init__(self, partno, programmer_id, baud_rate, port, confpath=None, avrdudePath=None):
+
+    def __init__(
+        self, partno, programmer_id, baud_rate, port, confpath=None, avrdudePath=None
+    ):
         self.partno = partno
         self.programmer_id = programmer_id
         self.baud_rate = baud_rate
@@ -34,7 +37,7 @@ class Avrdude:
         if avrdudePath:
             path = which(avrdudePath)
             if path is None:
-                a =Path(avrdudePath) / Path(avrdude)
+                a = Path(avrdudePath) / Path(avrdude)
                 path = which(str(a))
 
         if path is None:
@@ -50,7 +53,7 @@ class Avrdude:
         else:
             self.avrconf = Path(confpath).abspath()
 
-        self.avrconf = self.avrconf / Path("avrdude.conf")
+        self.avrconf = self.avrconf / Path("data") / Path("avrdude.conf")
 
     def _executeCommand(self, options):
         cmd = [self.avrdudeCommand]
