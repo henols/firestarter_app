@@ -415,24 +415,23 @@ def read_chip(eprom, output_file, port=None):
 
         while True:
             resp, info = wait_for_response(ser)
-            match resp:
-                case "DATA":
-                    serial_data = ser.read(256)
-                    output_file.write(serial_data)
-                    bytes_read += 256
-                    p = int(bytes_read / mem_size * 100)
-                    print_progress(p, bytes_read - 256, bytes_read)
-                    ser.write("OK".encode("ascii"))
-                    ser.flush()
-                case "OK":
-                    print()
-                    print("Finished reading data")
-                    break
-                case _:
-                    print(f"Error reading data {info}")
-                    r, i = wait_for_response(ser)
-                    print(i)
-                    return
+            if resp == "DATA":
+                serial_data = ser.read(256)
+                output_file.write(serial_data)
+                bytes_read += 256
+                p = int(bytes_read / mem_size * 100)
+                print_progress(p, bytes_read - 256, bytes_read)
+                ser.write("OK".encode("ascii"))
+                ser.flush()
+            elif resp == "OK":
+                print()
+                print("Finished reading data")
+                break
+            else:
+                print(f"Error reading data {info}")
+                r, i = wait_for_response(ser)
+                print(i)
+                return
 
         end_time = time.time()
         # Calculate total duration
@@ -632,8 +631,6 @@ def main():
 
     verbose = args.verbose
     db.init()
-
-    print(version)
 
     if args.command == "list":
         list_eproms(args.verified)
