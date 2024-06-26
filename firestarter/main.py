@@ -370,7 +370,7 @@ def rurp_config(vcc=None, r1=None, r2=None):
     if not ser:
         print("No programmer found")
         return
-    ser.write("OK\n".encode("ascii"))
+    ser.write("OK".encode("ascii"))
     print("Reading configuration")
     r, version = wait_for_response(ser)
     if r == "OK":
@@ -414,29 +414,30 @@ def read_chip(eprom, output_file, port=None):
         start_time = time.time()
 
         while True:
-            match (t := wait_for_response(ser))[0]:
-
+            resp, info = wait_for_response(ser)
+            match resp:
                 case "DATA":
                     serial_data = ser.read(256)
                     output_file.write(serial_data)
                     bytes_read += 256
                     p = int(bytes_read / mem_size * 100)
                     print_progress(p, bytes_read - 256, bytes_read)
-                    ser.write("OK\n".encode("ascii"))
+                    ser.write("OK".encode("ascii"))
                     ser.flush()
                 case "OK":
                     print()
                     print("Finished reading data")
                     break
                 case _:
-                    print(f"Error reading data {t[1]}")
-                    print(wait_for_response(ser)[1])
+                    print(f"Error reading data {info}")
+                    r, i = wait_for_response(ser)
+                    print(i)
                     return
 
         end_time = time.time()
         # Calculate total duration
         total_duration = end_time - start_time
-        print(f"File recived in {total_duration:.2f} seconds")
+        print(f"Data recived in {total_duration:.2f} seconds")
 
     except Exception as e:
         print("Error:", e)
