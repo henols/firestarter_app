@@ -7,12 +7,26 @@ on:
 jobs:
   github:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       # - name: Install gh
       #   run: apt update && apt install gh
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Create new patch release
-        run: .github/scripts/release.py
-        env:
-          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        id: version
+        run: .github/scripts/update_version.py
+
+      - name: Commit updated version
+        uses: stefanzweifel/git-auto-commit-action@v5
+        # env:
+        #   GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          make_latest: true
