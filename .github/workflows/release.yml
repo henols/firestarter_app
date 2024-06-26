@@ -30,3 +30,6 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.version }}
           make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+  
