@@ -16,9 +16,11 @@ import argparse
 import requests
 
 try:
+    from .__init__ import __version__ as version
     from . import database as db
     from .avr_tool import Avrdude
 except ImportError:
+    from __init__ import __version__ as version
     import database as db
     from avr_tool import Avrdude
 
@@ -190,8 +192,8 @@ def eprom_info(name):
     if not eprom:
         print(f"Eprom {name} not found.")
         return
-    
-    verified =""
+
+    verified = ""
     if not eprom["verified"]:
         verified = "\t-- NOT VERIFIED --"
 
@@ -468,9 +470,9 @@ def write_chip(eprom, input_file, port=None, address=None):
     mem_size = data["memory-size"]
     if not mem_size == file_size:
         print(f"The file size dont match the memory size")
-    
+
     start_time = time.time()
-    
+
     ser = find_programmer(json_data)
     if not ser:
         print("No programmer found")
@@ -483,21 +485,21 @@ def write_chip(eprom, input_file, port=None, address=None):
 
     # Open the file to send
     with open(input_file, "rb") as f:
-       
+
         print(f"Sending file {input_file} in blocks of {block_size} bytes")
 
         # Read the file and send in blocks
         while True:
             data = f.read(block_size)
             if not data:
-                ser.write(int(0).to_bytes(2) )
+                ser.write(int(0).to_bytes(2))
                 ser.flush()
                 resp, info = wait_for_response(ser)
                 print("End of file reached")
                 print(info)
                 return
 
-            ser.write(len(data).to_bytes(2) )
+            ser.write(len(data).to_bytes(2))
             sent = ser.write(data)
             ser.flush()
             resp, info = wait_for_response(ser)
@@ -512,7 +514,6 @@ def write_chip(eprom, input_file, port=None, address=None):
             if bytes_sent == mem_size:
                 break
 
-    
     # Calculate total duration
     total_duration = time.time() - start_time
     print()
@@ -522,9 +523,17 @@ def write_chip(eprom, input_file, port=None, address=None):
 def main():
     global verbose
 
-    parser = argparse.ArgumentParser(description="EPROM programer for Arduiono UNO and Relatively-Universal-ROM-Programmer sheild.")
+    parser = argparse.ArgumentParser(
+        description="EPROM programer for Arduiono UNO and Relatively-Universal-ROM-Programmer sheild."
+    )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose mode"
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"Firestarter version: {version}",
+        help="Show the Firestarter version and exit.",
     )
 
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -559,9 +568,7 @@ def main():
     write_parser.add_argument("input_file", type=str, help="Input file name")
 
     # List command
-    list_parser = subparsers.add_parser(
-        "list", help="List all EPROMs in the database."
-    )
+    list_parser = subparsers.add_parser("list", help="List all EPROMs in the database.")
     list_parser.add_argument(
         "-v", "--verified", action="store_true", help="Only shows verifed EPROMS"
     )
@@ -624,6 +631,8 @@ def main():
 
     verbose = args.verbose
     db.init()
+
+    print(version)
 
     if args.command == "list":
         list_eproms(args.verified)
