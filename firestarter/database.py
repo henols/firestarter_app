@@ -5,15 +5,9 @@ Copyright (c) 2024 Henrik Olsson
 Permission is hereby granted under MIT license.
 """
 
-import sys
+import os
 import json
-from importlib import resources as impresources
-
-try:
-    from . import data
-except ImportError:
-    import data
-
+from pathlib import Path
 
 types = {"memory": 0x01, "sram": 0x04}
 ROM_CE = 100
@@ -78,8 +72,10 @@ pin_conversions = {
 
 
 def read_config(filename):
-    inp_file = impresources.files(data) / filename
-    with inp_file.open("rt") as file:
+    path = Path(os.path.dirname(__file__))
+    filepath = path / Path("data") / filename
+
+    with filepath.open("rt") as file:
         config = json.load(file)
     return config
 
