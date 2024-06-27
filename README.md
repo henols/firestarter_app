@@ -7,8 +7,6 @@ Arduino PlatformIO project is found here [Firestarter](https://github.com/henols
 
 ## Installation
 
-*not implemented yet* 
-
 Use the package manager [pip](https://pip.pypa.io/en/stable/) to install firestarter.
 
 ```bash
