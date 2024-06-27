@@ -5,6 +5,8 @@ Get one here [Relatively-Universal-ROM-Programmer](https://www.imania.dk/samlesa
 
 Arduino PlatformIO project is found here [Firestarter](https://github.com/henols/firestarter)
 
+Firestarter in action [watch the video]{https://youtu.be/JDHOKbyNnrE?si=0_iXKPZZwyyNGUTZ}
+
 ## Installation
 
 Use the package manager [pip](https://pip.pypa.io/en/stable/) to install firestarter.
