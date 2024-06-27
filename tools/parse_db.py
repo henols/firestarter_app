@@ -99,8 +99,9 @@ def parse_xml_and_extract(filename):
 
     all_data = {}  # Dictionary to store ICs grouped by manufacturer
 
-    verified_list = read_verified("verified.txt")
+    verified_list = read_verified("tools/verified.txt")
     seen = set()  # To track unique ICs by name and chip_id
+    variants = set()
     nr_ics = 0
     for database in root.findall(".//database"):
         for manufacturer in database.findall(".//manufacturer"):
@@ -139,12 +140,15 @@ def parse_xml_and_extract(filename):
                     and not variant & HITACHI_MASK_PROM_MASK
                     and not package_details & SMD_MASK == SMD_MASK
                     and not icsp
-                    and not vpp == None
+                    # and not vpp == None
                 ):
+                    variants.add(f"v: {variant}, pins: {pin_count}")
                     seen.add(identifier)
                     nr_ics = nr_ics + 1
-                    print(ic.get("code_memory_size"))
+                    # print(ic.get("code_memory_size"))
                     mem_size = int(ic.get("code_memory_size"), 16)
+                    if  vpp == None:
+                        print(f"{name} {variant} {pin_count} {mem_size}")
                     # SST39VF040
                     if pin_count == 28:
                         if type == 1:
@@ -153,7 +157,9 @@ def parse_xml_and_extract(filename):
                             pin_map = 1
                         elif "27" in name and "128" in name:
                             pin_map = 2
-                        elif "27" in name and ("256" in name or "512" in name):
+                        elif "27" in name and "256" in name :
+                            pin_map = 3
+                        elif "27" in name and "512" in name:
                             pin_map = 0
                         else:
                             pin_map = -1
@@ -191,7 +197,8 @@ def parse_xml_and_extract(filename):
 
             if ics_list:
                 all_data[manufacturer_name] = ics_list
-
+    for v in variants:
+        print(v)
     return all_data, nr_ics
 
 
@@ -203,7 +210,7 @@ def save_to_json(data, filename):
 def main():
 
     xml_filename = "tools/infoic.xml"
-    json_filename = "firestarter/config.json"
+    json_filename = "firestarter/data/config.json"
     filtered_ics, nr_ics = parse_xml_and_extract(xml_filename)
     save_to_json(filtered_ics, json_filename)
     print(

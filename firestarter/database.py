@@ -92,20 +92,29 @@ def init():
 def get_bus_config(pin_map_nr, pins):
     if str(pin_map_nr) in pin_maps:
         pin_map = pin_maps[str(pin_map_nr)]
-        bus = []
+        if pin_map_nr == 0:
+            return None, pin_map
         map = {}
+        bus = []
         for pin in pin_map["address-bus-pins"]:
             bus.append(pin_conversions[pins][pin])
         map["bus"] = bus
 
         if "rw-pin" in pin_map:
             map["rw-pin"] = pin_conversions[pins][pin_map["rw-pin"]]
-        return map
-    return None
+
+        if "vpp-pin" in pin_map:
+            map["vpp-pin"] = pin_conversions[pins][pin_map["vpp-pin"]]
+
+        return map, pin_map
+    return None, None
 
 
 def map_data(ic, manufacturer):
     pin_count = ic["pin-count"]
+    vpp = 0
+    if not ic["voltages"]["vpp"] == None:
+        vpp = int(ic["voltages"]["vpp"])
     data = {
         "name": ic["name"],
         "manufacturer": manufacturer,
@@ -115,15 +124,17 @@ def map_data(ic, manufacturer):
         "chip-id": int(ic["chip-id"], 16),
         "type": types[ic["type"]],
         "pin-count": pin_count,
-        "vpp": int(ic["voltages"]["vpp"]),
+        "vpp": vpp,
         "pulse-delay": int(ic["pulse-delay"], 16),
         "verified": ic["verified"],
     }
     # print(ic["pin-map"])
-    bus_config = get_bus_config(ic["pin-map"], pin_count)
+    bus_config, pin_map = get_bus_config(ic["pin-map"], pin_count)
+
     if bus_config:
         data["bus-config"] = bus_config
-
+    if pin_map:
+        data["pin-map"] = pin_map
     return data
 
 

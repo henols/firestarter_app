@@ -18,11 +18,13 @@ import requests
 try:
     from .__init__ import __version__ as version
     from . import database as db
+    from . import ic_layout as ic
     from .avr_tool import Avrdude
 except ImportError:
     from __init__ import __version__ as version
     import database as db
     from avr_tool import Avrdude
+    import ic_layout as ic
 
 
 BAUD_RATE = "115200"
@@ -102,12 +104,15 @@ def find_comports():
 
 def find_programmer(data):
     if verbose:
+        # data["verbose"] = True
         print("Config data:")
         print(data)
 
+    json_data = json.dumps(data)
+
     ports = find_comports()
     for port in ports:
-        serial_port = check_port(port, data)
+        serial_port = check_port(port, json_data)
         if serial_port:
             config["port"] = port
             save_config()
@@ -211,13 +216,13 @@ def eprom_info(name):
     elif eprom["type"] == 2:
         print(f"Type:\t\tSRAM")
     print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
+    ic.print_generic_eeprom(eprom)
 
 
 def read_voltage(state):
     data = {}
     data["state"] = state
-    data = json.dumps(data)
-    # print(data)
+    
     ser = find_programmer(data)
     if not ser:
         print("No programmer found")
@@ -248,8 +253,7 @@ def firmware_check():
     # if not install:
     data = {}
     data["state"] = STATE_VERSION
-    data = json.dumps(data)
-    # print(data)
+    
     ser = find_programmer(data)
     if not ser:
         print("No programmer found")
@@ -365,7 +369,7 @@ def rurp_config(vcc=None, r1=None, r2=None):
         data["r1"] = r1
     if r2:
         data["r2"] = r2
-    data = json.dumps(data)
+
     ser = find_programmer(data)
     if not ser:
         print("No programmer found")
@@ -387,21 +391,17 @@ def read_chip(eprom, output_file, port=None):
     eprom = data.pop("name")
     data.pop("manufacturer")
     data.pop("verified")
-    mem_size = data["memory-size"]
-    # data.pop("memory-size")
+    data.pop("pin-map")
 
-    # data.pop("has-chip-id")
-
-    # data.pop("bus-config")
-    # data["bus-config"].pop("bus")
 
     data["state"] = STATE_READ
-    data = json.dumps(data)
 
     ser = find_programmer(data)
     if not ser:
         print("No programmer found")
         return
+    
+    mem_size = data["memory-size"]
     print(f"Reading chip: {eprom}")
     if not output_file:
         output_file = f"{eprom}.bin"
@@ -457,8 +457,8 @@ def write_chip(eprom, input_file, port=None, address=None):
     eprom = data.pop("name")
     data.pop("manufacturer")
     data.pop("verified")
-    # data["has-chip-id"] = False
-    # data["can-erase"] = False
+    data.pop("pin-map")
+
     if address:
         if "0x" in address:
             data["address"] = int(address, 16)
@@ -466,17 +466,17 @@ def write_chip(eprom, input_file, port=None, address=None):
             data["address"] = int(address)
 
     data["state"] = STATE_WRITE
-    json_data = json.dumps(data)
-    mem_size = data["memory-size"]
-    if not mem_size == file_size:
-        print(f"The file size dont match the memory size")
 
     start_time = time.time()
 
-    ser = find_programmer(json_data)
+    ser = find_programmer(data)
     if not ser:
         print("No programmer found")
         return
+
+    mem_size = data["memory-size"]
+    if not mem_size == file_size:
+        print(f"The file size dont match the memory size")
 
     print(f"Writing to chip: {eprom}")
     print(f"Reading from input file: {input_file}")
