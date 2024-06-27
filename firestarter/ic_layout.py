@@ -44,10 +44,10 @@ def print_generic_eeprom(eprom):
     if pin_count not in generic_pin_names:
         print(f"No generic layout available for {pin_count}-pin EPROM.")
         return
-    
+    print()
     pin_names = generic_pin_names[pin_count]
     oe_pin = int(pin_count/2) + 8
-    if eprom["type"] == "sram":
+    if eprom["type"] == 4:
         pin_names[oe_pin-1] = "OE"
     if "pin-map"  in eprom:
         pin_map = eprom["pin-map"]
@@ -64,7 +64,7 @@ def print_generic_eeprom(eprom):
             for pin in pin_map["address-bus-pins"]:
                 pin_names[pin-1] = f"A{i}"
                 i += 1
-
-         
-    print(f"\n       {pin_count}-DIP package")
+    else:
+        print(f"No pin map available, layout is asumed.")         
+    print(f"       {pin_count}-DIP package")
     print_eeprom(pin_count, pin_names)

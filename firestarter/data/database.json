@@ -6049,29 +6049,6 @@
             "verified": false
         },
         {
-            "name": "DS1230W(RW3.3V)",
-            "pin-count": 28,
-            "adapter": 0,
-            "can-erase": false,
-            "has-chip-id": false,
-            "chip-id": "0x00000000",
-            "variant": 38,
-            "protocol-id": "0x07",
-            "memory-size": "0x8000",
-            "type": "sram",
-            "voltages": {
-                "vdd": "5",
-                "vcc": "3.3",
-                "vpp": null
-            },
-            "pulse-delay": "0x0001",
-            "flags": "0x00000080",
-            "chip-info": "0x0000",
-            "pin-map": -1,
-            "package-details": "0x1c000000",
-            "verified": false
-        },
-        {
             "name": "DS1230W",
             "pin-count": 28,
             "adapter": 0,
@@ -6132,29 +6109,6 @@
                 "vdd": "5",
                 "vcc": "5",
                 "vpp": "12"
-            },
-            "pulse-delay": "0x0000",
-            "flags": "0x00000080",
-            "chip-info": "0x0000",
-            "pin-map": -1,
-            "package-details": "0x20000000",
-            "verified": false
-        },
-        {
-            "name": "DS1245W(RW3.3V)",
-            "pin-count": 32,
-            "adapter": 0,
-            "can-erase": false,
-            "has-chip-id": false,
-            "chip-id": "0x00000000",
-            "variant": 0,
-            "protocol-id": "0x0e",
-            "memory-size": "0x20000",
-            "type": "sram",
-            "voltages": {
-                "vdd": "5",
-                "vcc": "5",
-                "vpp": null
             },
             "pulse-delay": "0x0000",
             "flags": "0x00000080",
@@ -6233,29 +6187,6 @@
             "verified": false
         },
         {
-            "name": "DS1249W(RW3.3V)",
-            "pin-count": 32,
-            "adapter": 0,
-            "can-erase": false,
-            "has-chip-id": false,
-            "chip-id": "0x00000000",
-            "variant": 1,
-            "protocol-id": "0x0e",
-            "memory-size": "0x40000",
-            "type": "sram",
-            "voltages": {
-                "vdd": "5",
-                "vcc": "5",
-                "vpp": null
-            },
-            "pulse-delay": "0x0000",
-            "flags": "0x00000080",
-            "chip-info": "0x0000",
-            "pin-map": -1,
-            "package-details": "0x20000000",
-            "verified": false
-        },
-        {
             "name": "DS1249W",
             "pin-count": 32,
             "adapter": 0,
@@ -6316,29 +6247,6 @@
                 "vdd": "5",
                 "vcc": "5",
                 "vpp": "12"
-            },
-            "pulse-delay": "0x0000",
-            "flags": "0x00000080",
-            "chip-info": "0x0000",
-            "pin-map": -1,
-            "package-details": "0x20000000",
-            "verified": false
-        },
-        {
-            "name": "DS1250W(RW3.3V)",
-            "pin-count": 32,
-            "adapter": 0,
-            "can-erase": false,
-            "has-chip-id": false,
-            "chip-id": "0x00000000",
-            "variant": 1,
-            "protocol-id": "0x0e",
-            "memory-size": "0x80000",
-            "type": "sram",
-            "voltages": {
-                "vdd": "5",
-                "vcc": "5",
-                "vpp": null
             },
             "pulse-delay": "0x0000",
             "flags": "0x00000080",
@@ -17546,29 +17454,6 @@
             "verified": false
         },
         {
-            "name": "BQ4011LYMA(RW3.3V)",
-            "pin-count": 28,
-            "adapter": 0,
-            "can-erase": false,
-            "has-chip-id": false,
-            "chip-id": "0x00000000",
-            "variant": 38,
-            "protocol-id": "0x07",
-            "memory-size": "0x8000",
-            "type": "sram",
-            "voltages": {
-                "vdd": "5",
-                "vcc": "3.3",
-                "vpp": null
-            },
-            "pulse-delay": "0x0001",
-            "flags": "0x00000080",
-            "chip-info": "0x0000",
-            "pin-map": -1,
-            "package-details": "0x1c000000",
-            "verified": false
-        },
-        {
             "name": "BQ4011LYMA",
             "pin-count": 28,
             "adapter": 0,
@@ -17606,29 +17491,6 @@
                 "vdd": "5",
                 "vcc": "5",
                 "vpp": "12"
-            },
-            "pulse-delay": "0x0000",
-            "flags": "0x00000080",
-            "chip-info": "0x0000",
-            "pin-map": -1,
-            "package-details": "0x20000000",
-            "verified": false
-        },
-        {
-            "name": "BQ4013LYMA(RW3.3V)",
-            "pin-count": 32,
-            "adapter": 0,
-            "can-erase": false,
-            "has-chip-id": false,
-            "chip-id": "0x00000000",
-            "variant": 0,
-            "protocol-id": "0x0e",
-            "memory-size": "0x20000",
-            "type": "sram",
-            "voltages": {
-                "vdd": "5",
-                "vcc": "5",
-                "vpp": null
             },
             "pulse-delay": "0x0000",
             "flags": "0x00000080",
@@ -17684,29 +17546,6 @@
             "verified": false
         },
         {
-            "name": "BQ4014LYMA(RW3.3V)",
-            "pin-count": 32,
-            "adapter": 0,
-            "can-erase": false,
-            "has-chip-id": false,
-            "chip-id": "0x00000000",
-            "variant": 1,
-            "protocol-id": "0x0e",
-            "memory-size": "0x40000",
-            "type": "sram",
-            "voltages": {
-                "vdd": "5",
-                "vcc": "5",
-                "vpp": null
-            },
-            "pulse-delay": "0x0000",
-            "flags": "0x00000080",
-            "chip-info": "0x0000",
-            "pin-map": -1,
-            "package-details": "0x20000000",
-            "verified": false
-        },
-        {
             "name": "BQ4014LYMA",
             "pin-count": 32,
             "adapter": 0,
@@ -17744,29 +17583,6 @@
                 "vdd": "5",
                 "vcc": "5",
                 "vpp": "12"
-            },
-            "pulse-delay": "0x0000",
-            "flags": "0x00000080",
-            "chip-info": "0x0000",
-            "pin-map": -1,
-            "package-details": "0x20000000",
-            "verified": false
-        },
-        {
-            "name": "BQ4015LYMA(RW3.3V)",
-            "pin-count": 32,
-            "adapter": 0,
-            "can-erase": false,
-            "has-chip-id": false,
-            "chip-id": "0x00000000",
-            "variant": 1,
-            "protocol-id": "0x0e",
-            "memory-size": "0x80000",
-            "type": "sram",
-            "voltages": {
-                "vdd": "5",
-                "vcc": "5",
-                "vpp": null
             },
             "pulse-delay": "0x0000",
             "flags": "0x00000080",

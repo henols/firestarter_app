@@ -85,28 +85,32 @@ def init():
     global pin_maps
     proms_filename = "database.json"
     proms = read_config(proms_filename)
-    pin_maps_filename = "pin-map.json"
-    pin_maps = read_config(pin_maps_filename)
+    pin_maps = read_config("pin-maps.json")
 
 
-def get_bus_config(pin_map_nr, pins):
-    if str(pin_map_nr) in pin_maps:
-        pin_map = pin_maps[str(pin_map_nr)]
-        if pin_map_nr == 0:
-            return None, pin_map
-        map = {}
-        bus = []
-        for pin in pin_map["address-bus-pins"]:
-            bus.append(pin_conversions[pins][pin])
-        map["bus"] = bus
+def get_bus_config( pins, variant):
+    pins_key = str(pins)
+    variant_key = str(variant)
+    if pins_key in pin_maps:
+        if variant_key in pin_maps[pins_key]:
+            pin_map = pin_maps[pins_key][variant_key]
+            if "holder" in pin_map:
+                return None, None
+            if pins == 28 and variant == 16:
+                return None, pin_map
+            map = {}
+            bus = []
+            for pin in pin_map["address-bus-pins"]:
+                bus.append(pin_conversions[pins][pin])
+            map["bus"] = bus
 
-        if "rw-pin" in pin_map:
-            map["rw-pin"] = pin_conversions[pins][pin_map["rw-pin"]]
+            if "rw-pin" in pin_map:
+                map["rw-pin"] = pin_conversions[pins][pin_map["rw-pin"]]
 
-        if "vpp-pin" in pin_map:
-            map["vpp-pin"] = pin_conversions[pins][pin_map["vpp-pin"]]
+            if "vpp-pin" in pin_map:
+                map["vpp-pin"] = pin_conversions[pins][pin_map["vpp-pin"]]
 
-        return map, pin_map
+            return map, pin_map
     return None, None
 
 
@@ -129,7 +133,7 @@ def map_data(ic, manufacturer):
         "verified": ic["verified"],
     }
     # print(ic["pin-map"])
-    bus_config, pin_map = get_bus_config(ic["pin-map"], pin_count)
+    bus_config, pin_map = get_bus_config(pin_count, ic["variant"])
 
     if bus_config:
         data["bus-config"] = bus_config

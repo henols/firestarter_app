@@ -34,7 +34,7 @@ toolbox = "firestarter"
 [tool.setuptools.package-data]
     "firestarter" = [
         "data/database.json",
-        "data/pin-map.json",
+        "data/pin-maps.json",
         "data/avrdude.conf",
         ]
 
