@@ -104,7 +104,7 @@ def find_comports():
 
 def find_programmer(data):
     if verbose:
-        # data["verbose"] = True
+        data["verbose"] = True
         print("Config data:")
         print(data)
 
