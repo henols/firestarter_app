@@ -81,7 +81,7 @@ def check_port(port, data):
         if res == "OK":
             return ser
         else:
-            print(msg)
+            print(f"{res} - {msg}")
     except (OSError, serial.SerialException):
         pass
 
@@ -96,8 +96,10 @@ def find_comports():
     serial_ports = serial.tools.list_ports.comports()
     for port in serial_ports:
         if (
-            "Arduino" in port.manufacturer or "FTDI" in port.manufacturer
-        ) and not port.device in ports:
+            port.manufacturer
+            and ("Arduino" in port.manufacturer or "FTDI" in port.manufacturer)
+            and not port.device in ports
+        ):
             ports.append(port.device)
     return ports
 
@@ -124,35 +126,35 @@ def wait_for_response(ser):
     timeout = time.time()
     while True:
         # time.sleep(1)
-        byte_array = ser.readline()
-        res = read_filterd_bytes(byte_array)
-        if res and len(res) > 0:
-            if "OK:" in res:
-                msg = res[res.rfind("OK:") :]
-                write_feedback(msg)
-                return "OK", msg[3:].strip()
-            elif "WARN:" in res:
-                msg = res[res.rfind("WARN:") :]
-                write_feedback(msg)
-                return "WARN", msg[5:].strip()
-            elif "ERROR:" in res:
-                msg = res[res.rfind("ERROR:") :]
-                write_feedback(msg)
-                return "ERROR", msg[6:].strip()
-            elif "DATA:" in res:
-                msg = res[res.rfind("DATA:") :]
-                write_feedback(msg)
-                return "DATA", msg[5:].strip()
-            elif "INFO:" in res:
-                write_feedback(res[res.rfind("INFO:") :])
-            # else:
-            #     print(res)
-            timeout = time.time()
+        if ser.in_waiting > 0:
+            byte_array = ser.readline()
+            res = read_filterd_bytes(byte_array)
+            if res and len(res) > 0:
+                if "OK:" in res:
+                    msg = res[res.rfind("OK:") :]
+                    write_feedback(msg)
+                    return "OK", msg[3:].strip()
+                elif "WARN:" in res:
+                    msg = res[res.rfind("WARN:") :]
+                    write_feedback(msg)
+                    return "WARN", msg[5:].strip()
+                elif "ERROR:" in res:
+                    msg = res[res.rfind("ERROR:") :]
+                    write_feedback(msg)
+                    return "ERROR", msg[6:].strip()
+                elif "DATA:" in res:
+                    msg = res[res.rfind("DATA:") :]
+                    write_feedback(msg)
+                    return "DATA", msg[5:].strip()
+                elif "INFO:" in res:
+                    write_feedback(res[res.rfind("INFO:") :])
+                # else:
+                #     print(res)
+                timeout = time.time()
 
         # elif len(byte_array) > 0:
         #     print(len(byte_array))
         if timeout + 5 < time.time():
-            print(" --  Timeout")
             return "ERROR", "Timeout"
 
 
@@ -222,7 +224,7 @@ def eprom_info(name):
 def read_voltage(state):
     data = {}
     data["state"] = state
-    
+
     ser = find_programmer(data)
     if not ser:
         print("No programmer found")
@@ -253,7 +255,7 @@ def firmware_check():
     # if not install:
     data = {}
     data["state"] = STATE_VERSION
-    
+
     ser = find_programmer(data)
     if not ser:
         print("No programmer found")
@@ -393,14 +395,13 @@ def read_chip(eprom, output_file, port=None):
     data.pop("verified")
     data.pop("pin-map")
 
-
     data["state"] = STATE_READ
 
     ser = find_programmer(data)
     if not ser:
         print("No programmer found")
         return
-    
+
     mem_size = data["memory-size"]
     print(f"Reading chip: {eprom}")
     if not output_file:
