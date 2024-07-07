@@ -70,7 +70,7 @@ def check_port(port, data):
         ser = serial.Serial(
             port,
             BAUD_RATE,
-            timeout=1.0,
+            timeout=3.0,
             # inter_byte_timeout=0.1,
         )
         time.sleep(2)
@@ -110,8 +110,9 @@ def find_programmer(data):
         print("Config data:")
         print(data)
 
-    json_data = json.dumps(data)
-
+    json_data = json.dumps(data, separators = (',', ':'))
+    print(json_data)
+    print(len(json_data))
     ports = find_comports()
     for port in ports:
         serial_port = check_port(port, json_data)
@@ -212,7 +213,7 @@ def eprom_info(name):
     if eprom["type"] == 1:
         print(f"Type:\t\tEPROM")
         print(f"Can be erased:\t{eprom['can-erase']}")
-        if eprom["has-chip-id"]:
+        if "chip-id" in eprom:
             print(f"Chip ID:\t{hex(eprom['chip-id'])}")
         print(f"VPP:\t\t{eprom['vpp']}")
     elif eprom["type"] == 2:
@@ -446,7 +447,7 @@ def read_chip(eprom, output_file, port=None):
         ser.close()
 
 
-def write_chip(eprom, input_file, port=None, address=None):
+def write_chip(eprom, input_file, port=None, address=None, skip_erase=False):
     data = db.get_eprom(eprom)
     if not data:
         print(f"Eprom {eprom} not found.")
@@ -459,6 +460,11 @@ def write_chip(eprom, input_file, port=None, address=None):
     data.pop("manufacturer")
     data.pop("verified")
     data.pop("pin-map")
+    if skip_erase:
+        if not data["can-erase"]:
+            print(f"{eprom} can't be erased, use ignore blank check instead.")
+            return
+        data["skip-erase"] = True
 
     if address:
         if "0x" in address:
@@ -557,9 +563,12 @@ def main():
         "write", help="Writes a binary file to an EPROM."
     )
     write_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
-    # write_parser.add_argument(
-    #     "-f", "--force", action="store_true", help="Force the write operation"
-    # )
+    write_parser.add_argument(
+        "-s", "--skip-erase", action="store_true", help="Skip erase before write"
+    )
+    write_parser.add_argument(
+        "-b", "--ignore-blank-check", action="store_true", help="Igonre blank check before write"
+    )
     write_parser.add_argument(
         "-a", "--address", type=str, help="Write start address in dec/hex"
     )
@@ -642,7 +651,13 @@ def main():
     elif args.command == "read":
         read_chip(args.eprom, args.output_file, port=None)
     elif args.command == "write":
-        write_chip(args.eprom, args.input_file, port=None, address=args.address)
+        write_chip(
+            args.eprom,
+            args.input_file,
+            port=None,
+            address=args.address,
+            skip_erase=args.skip_erase,
+        )
     elif args.command == "vpe":
         read_voltage(STATE_READ_VPE)
     elif args.command == "vpp":

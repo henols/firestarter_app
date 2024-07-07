@@ -124,14 +124,17 @@ def map_data(ic, manufacturer):
         "manufacturer": manufacturer,
         "memory-size": int(ic["memory-size"], 16),
         "can-erase": bool(ic["can-erase"]),
-        "has-chip-id": bool(ic["has-chip-id"]),
-        "chip-id": int(ic["chip-id"], 16),
+        
         "type": types[ic["type"]],
         "pin-count": pin_count,
         "vpp": vpp,
         "pulse-delay": int(ic["pulse-delay"], 16),
         "verified": ic["verified"],
     }
+    chip_id = int(ic["chip-id"], 16)
+    if chip_id != 0:
+        data["chip-id"] = chip_id
+   
     # print(ic["pin-map"])
     bus_config, pin_map = get_bus_config(pin_count, ic["variant"])
 
