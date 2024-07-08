@@ -46,6 +46,8 @@ FIRESTARTER_RELEASE_URL = (
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 CONFIG_FILE = os.path.join(HOME_PATH, "config.json")
 
+BUFFER_SIZE = 512
+
 
 def open_config():
     global config
@@ -70,8 +72,7 @@ def check_port(port, data):
         ser = serial.Serial(
             port,
             BAUD_RATE,
-            timeout=3.0,
-            # inter_byte_timeout=0.1,
+            timeout=1.0,
         )
         time.sleep(2)
         ser.write(data.encode("ascii"))
@@ -418,11 +419,11 @@ def read_chip(eprom, output_file, port=None):
         while True:
             resp, info = wait_for_response(ser)
             if resp == "DATA":
-                serial_data = ser.read(256)
+                serial_data = ser.read(BUFFER_SIZE)
                 output_file.write(serial_data)
-                bytes_read += 256
+                bytes_read += BUFFER_SIZE
                 p = int(bytes_read / mem_size * 100)
-                print_progress(p, bytes_read - 256, bytes_read)
+                print_progress(p, bytes_read - BUFFER_SIZE, bytes_read)
                 ser.write("OK".encode("ascii"))
                 ser.flush()
             elif resp == "OK":
@@ -488,16 +489,15 @@ def write_chip(eprom, input_file, port=None, address=None, skip_erase=False):
     print(f"Writing to chip: {eprom}")
     print(f"Reading from input file: {input_file}")
     bytes_sent = 0
-    block_size = 256
 
     # Open the file to send
     with open(input_file, "rb") as f:
 
-        print(f"Sending file {input_file} in blocks of {block_size} bytes")
+        print(f"Sending file {input_file} in blocks of {BUFFER_SIZE} bytes")
 
         # Read the file and send in blocks
         while True:
-            data = f.read(block_size)
+            data = f.read(BUFFER_SIZE)
             if not data:
                 ser.write(int(0).to_bytes(2))
                 ser.flush()
@@ -513,7 +513,7 @@ def write_chip(eprom, input_file, port=None, address=None, skip_erase=False):
             if resp == "OK":
                 bytes_sent += sent
                 p = int(bytes_sent / file_size * 100)
-                print_progress(p, bytes_sent - block_size, bytes_sent)
+                print_progress(p, bytes_sent - BUFFER_SIZE, bytes_sent)
             elif resp == "ERROR":
                 print()
                 print(f"Error writing: {info}")
