@@ -106,14 +106,24 @@ def find_comports():
 
 
 def find_programmer(data):
+    if "manufacturer" in data:
+        data.pop("manufacturer")
+    if "verified" in data:
+        data.pop("verified")
+    if "pin-map" in data:
+        data.pop("pin-map")
+    if "name" in data:
+        data.pop("name")
+    if "ic-type" in data:
+        data.pop("ic-type")
+        
     if verbose:
         data["verbose"] = True
         print("Config data:")
         print(data)
 
     json_data = json.dumps(data, separators = (',', ':'))
-    print(json_data)
-    print(len(json_data))
+    
     ports = find_comports()
     for port in ports:
         serial_port = check_port(port, json_data)
@@ -202,26 +212,7 @@ def eprom_info(name):
         print(f"Eprom {name} not found.")
         return
 
-    verified = ""
-    if not eprom["verified"]:
-        verified = "\t-- NOT VERIFIED --"
-
-    print(f"Eprom Info {verified}")
-    print(f"Name:\t\t{eprom['name']}")
-    print(f"Manufacturer:\t{eprom['manufacturer']}")
-    print(f"Number of pins:\t{eprom['pin-count']}")
-    print(f"Memory size:\t{hex(eprom['memory-size'])}")
-    if eprom["type"] == 1:
-        print(f"Type:\t\tEPROM")
-        print(f"Can be erased:\t{eprom['can-erase']}")
-        if "chip-id" in eprom:
-            print(f"Chip ID:\t{hex(eprom['chip-id'])}")
-        print(f"VPP:\t\t{eprom['vpp']}")
-    elif eprom["type"] == 2:
-        print(f"Type:\t\tSRAM")
-    print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
-    ic.print_generic_eeprom(eprom)
-
+    ic.print_chip_info(eprom)
 
 def read_voltage(state):
     data = {}
@@ -393,9 +384,6 @@ def read_chip(eprom, output_file, port=None):
         print(f"Eprom {eprom} not found.")
         return
     eprom = data.pop("name")
-    data.pop("manufacturer")
-    data.pop("verified")
-    data.pop("pin-map")
 
     data["state"] = STATE_READ
 
@@ -448,7 +436,7 @@ def read_chip(eprom, output_file, port=None):
         ser.close()
 
 
-def write_chip(eprom, input_file, port=None, address=None, skip_erase=False):
+def write_chip(eprom, input_file, port=None, address=None, skip_erase=False, ignore_blank_check=False):
     data = db.get_eprom(eprom)
     if not data:
         print(f"Eprom {eprom} not found.")
@@ -458,9 +446,6 @@ def write_chip(eprom, input_file, port=None, address=None, skip_erase=False):
         return
     file_size = os.path.getsize(input_file)
     eprom = data.pop("name")
-    data.pop("manufacturer")
-    data.pop("verified")
-    data.pop("pin-map")
     if skip_erase:
         if not data["can-erase"]:
             print(f"{eprom} can't be erased, use ignore blank check instead.")
@@ -472,7 +457,8 @@ def write_chip(eprom, input_file, port=None, address=None, skip_erase=False):
             data["address"] = int(address, 16)
         else:
             data["address"] = int(address)
-
+    if ignore_blank_check:
+        data["blank-check"] = False
     data["state"] = STATE_WRITE
 
     start_time = time.time()
@@ -526,6 +512,51 @@ def write_chip(eprom, input_file, port=None, address=None, skip_erase=False):
     print()
     print(f"File sent successfully in {total_duration:.2f} seconds")
 
+def erase(eprom):
+    data = db.get_eprom(eprom)
+    if not data:
+        print(f"Eprom {eprom} not found.")
+        return
+    eprom = data.pop("name")
+    if not data["can-erase"]:
+        print(f"{eprom} can't be erased.")
+        return
+    data["state"] = STATE_ERASE
+
+    ser = find_programmer(data)
+    if not ser:
+        print("No programmer found")
+        return
+
+    print(f"Erasing: {eprom}")
+    resp, info = wait_for_response(ser)
+    if resp == "OK":
+        print(f"{eprom} erased {info}")
+    elif resp == "ERROR":
+        print()
+        print(f"Error: {info}")
+
+def blank_check(eprom):
+    data = db.get_eprom(eprom)
+    if not data:
+        print(f"Eprom {eprom} not found.")
+        return
+    eprom = data.pop("name")
+    data["state"] = STATE_CHECK_BLANK
+
+    ser = find_programmer(data)
+    if not ser:
+        print("No programmer found")
+        return
+
+    print(f"Blank checking: {eprom}")
+    resp, info = wait_for_response(ser)
+    if resp == "OK":
+        print(f"{eprom} is blank {info}")
+    elif resp == "ERROR":
+        print()
+        print(f"Error: {info}")
+
 
 def main():
     global verbose
@@ -563,10 +594,13 @@ def main():
         "write", help="Writes a binary file to an EPROM."
     )
     write_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
-    write_parser.add_argument(
+
+    write_group = write_parser.add_mutually_exclusive_group()
+  
+    write_group.add_argument(
         "-s", "--skip-erase", action="store_true", help="Skip erase before write"
     )
-    write_parser.add_argument(
+    write_group.add_argument(
         "-b", "--ignore-blank-check", action="store_true", help="Igonre blank check before write"
     )
     write_parser.add_argument(
@@ -577,7 +611,13 @@ def main():
     )
     write_parser.add_argument("input_file", type=str, help="Input file name")
 
-    # List command
+    blank_check_parser = subparsers.add_parser("blank", help="Checks if a EPROM is blank.")
+    blank_check_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+
+    erase_parser = subparsers.add_parser("erase", help="Erase a EPROM, if supported.")
+    erase_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+
+    #  List command
     list_parser = subparsers.add_parser("list", help="List all EPROMs in the database.")
     list_parser.add_argument(
         "-v", "--verified", action="store_true", help="Only shows verifed EPROMS"
@@ -657,7 +697,12 @@ def main():
             port=None,
             address=args.address,
             skip_erase=args.skip_erase,
+            blank_check=args.ignore_blank_check
         )
+    elif args.command == "blank":
+        blank_check(args.eprom)
+    elif args.command == "erase":
+        erase(args.eprom)
     elif args.command == "vpe":
         read_voltage(STATE_READ_VPE)
     elif args.command == "vpp":

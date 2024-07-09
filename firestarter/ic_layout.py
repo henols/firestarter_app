@@ -128,6 +128,26 @@ def print_jumper_settings(jp1, jp2, jp3):
     print(f"JP2   A17 [{jumper[jp2]}] 5V    : {jp2_label}")
     print(f"JP3 32pin [{jumper[jp3]}] 28pin : {jp3_label}")
 
+def print_chip_info(eprom):
+    verified = ""
+    if not eprom["verified"]:
+        verified = "\t-- NOT VERIFIED --"
+
+    print(f"Eprom Info {verified}")
+    print(f"Name:\t\t{eprom['name']}")
+    print(f"Manufacturer:\t{eprom['manufacturer']}")
+    print(f"Number of pins:\t{eprom['pin-count']}")
+    print(f"Memory size:\t{hex(eprom['memory-size'])}")
+    if eprom["ic-type"] == 1:
+        print(f"Type:\t\tEPROM")
+        print(f"Can be erased:\t{eprom['can-erase']}")
+        if "chip-id" in eprom:
+            print(f"Chip ID:\t{hex(eprom['chip-id'])}")
+        print(f"VPP:\t\t{eprom['vpp']}")
+    elif eprom["ic-type"] == 4:
+        print(f"Type:\t\tSRAM")
+    print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
+    print_generic_eeprom(eprom)
 
 # Function to print generic EPROM layout
 def print_generic_eeprom(eprom):
@@ -140,7 +160,7 @@ def print_generic_eeprom(eprom):
     pin_names = generic_pin_names[pin_count]
     oe_pin = int(pin_count / 2) + 8
     vpp_pin = 0
-    if eprom["type"] == 4:
+    if eprom["ic-type"] == 4:
         pin_names[oe_pin - 1] = "OE"
     if "pin-map" in eprom:
         pin_map = eprom["pin-map"]

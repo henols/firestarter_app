@@ -119,13 +119,18 @@ def map_data(ic, manufacturer):
     vpp = 0
     if not ic["voltages"]["vpp"] == None:
         vpp = int(ic["voltages"]["vpp"])
+    variant = ic["variant"]
+    type = 4
+    if pin_count == 28 and variant in [ 16, 17,19]:
+        type = 1
+
     data = {
         "name": ic["name"],
         "manufacturer": manufacturer,
         "memory-size": int(ic["memory-size"], 16),
         "can-erase": bool(ic["can-erase"]),
-        
-        "type": types[ic["type"]],
+        "type": type,  
+        "ic-type": types[ic["type"]],
         "pin-count": pin_count,
         "vpp": vpp,
         "pulse-delay": int(ic["pulse-delay"], 16),
@@ -136,7 +141,7 @@ def map_data(ic, manufacturer):
         data["chip-id"] = chip_id
    
     # print(ic["pin-map"])
-    bus_config, pin_map = get_bus_config(pin_count, ic["variant"])
+    bus_config, pin_map = get_bus_config(pin_count, variant)
 
     if bus_config:
         data["bus-config"] = bus_config
