@@ -65,8 +65,9 @@ pin_conversions = {
         29: 14,
         3: 15,
         2: 16,
-        30: 17,
-        1: 18,
+        30: 20,
+        1: 21,
+        31: 22,
     },
 }
 
@@ -88,7 +89,7 @@ def init():
     pin_maps = read_config("pin-maps.json")
 
 
-def get_bus_config( pins, variant):
+def get_bus_config(pins, variant):
     pins_key = str(pins)
     variant_key = str(variant)
     if pins_key in pin_maps:
@@ -121,7 +122,7 @@ def map_data(ic, manufacturer):
         vpp = int(ic["voltages"]["vpp"])
     variant = ic["variant"]
     type = 4
-    if pin_count == 28 and variant in [ 16, 17,19]:
+    if pin_count == 28 and variant in [16, 17, 19]:
         type = 1
 
     data = {
@@ -129,7 +130,7 @@ def map_data(ic, manufacturer):
         "manufacturer": manufacturer,
         "memory-size": int(ic["memory-size"], 16),
         "can-erase": bool(ic["can-erase"]),
-        "type": type,  
+        "type": type,
         "ic-type": types[ic["type"]],
         "pin-count": pin_count,
         "vpp": vpp,
@@ -139,7 +140,7 @@ def map_data(ic, manufacturer):
     chip_id = int(ic["chip-id"], 16)
     if chip_id != 0:
         data["chip-id"] = chip_id
-   
+
     # print(ic["pin-map"])
     bus_config, pin_map = get_bus_config(pin_count, variant)
 

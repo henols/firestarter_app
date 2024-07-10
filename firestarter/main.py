@@ -116,14 +116,14 @@ def find_programmer(data):
         data.pop("name")
     if "ic-type" in data:
         data.pop("ic-type")
-        
+
     if verbose:
         data["verbose"] = True
         print("Config data:")
         print(data)
 
-    json_data = json.dumps(data, separators = (',', ':'))
-    
+    json_data = json.dumps(data, separators=(",", ":"))
+
     ports = find_comports()
     for port in ports:
         serial_port = check_port(port, json_data)
@@ -213,6 +213,7 @@ def eprom_info(name):
         return
 
     ic.print_chip_info(eprom)
+
 
 def read_voltage(state):
     data = {}
@@ -436,7 +437,14 @@ def read_chip(eprom, output_file, port=None):
         ser.close()
 
 
-def write_chip(eprom, input_file, port=None, address=None, skip_erase=False, ignore_blank_check=False):
+def write_chip(
+    eprom,
+    input_file,
+    port=None,
+    address=None,
+    skip_erase=False,
+    ignore_blank_check=False,
+):
     data = db.get_eprom(eprom)
     if not data:
         print(f"Eprom {eprom} not found.")
@@ -512,6 +520,7 @@ def write_chip(eprom, input_file, port=None, address=None, skip_erase=False, ign
     print()
     print(f"File sent successfully in {total_duration:.2f} seconds")
 
+
 def erase(eprom):
     data = db.get_eprom(eprom)
     if not data:
@@ -535,6 +544,7 @@ def erase(eprom):
     elif resp == "ERROR":
         print()
         print(f"Error: {info}")
+
 
 def blank_check(eprom):
     data = db.get_eprom(eprom)
@@ -596,12 +606,15 @@ def main():
     write_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
 
     write_group = write_parser.add_mutually_exclusive_group()
-  
+
     write_group.add_argument(
         "-s", "--skip-erase", action="store_true", help="Skip erase before write"
     )
     write_group.add_argument(
-        "-b", "--ignore-blank-check", action="store_true", help="Igonre blank check before write"
+        "-b",
+        "--ignore-blank-check",
+        action="store_true",
+        help="Igonre blank check before write",
     )
     write_parser.add_argument(
         "-a", "--address", type=str, help="Write start address in dec/hex"
@@ -611,7 +624,9 @@ def main():
     )
     write_parser.add_argument("input_file", type=str, help="Input file name")
 
-    blank_check_parser = subparsers.add_parser("blank", help="Checks if a EPROM is blank.")
+    blank_check_parser = subparsers.add_parser(
+        "blank", help="Checks if a EPROM is blank."
+    )
     blank_check_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
 
     erase_parser = subparsers.add_parser("erase", help="Erase a EPROM, if supported.")
@@ -697,7 +712,7 @@ def main():
             port=None,
             address=args.address,
             skip_erase=args.skip_erase,
-            blank_check=args.ignore_blank_check
+            ignore_blank_check=args.ignore_blank_check,
         )
     elif args.command == "blank":
         blank_check(args.eprom)
