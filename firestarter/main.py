@@ -443,6 +443,7 @@ def write_chip(
     port=None,
     address=None,
     ignore_blank_check=False,
+    force=False,
 ):
     data = db.get_eprom(eprom)
     if not data:
@@ -463,6 +464,10 @@ def write_chip(
     if ignore_blank_check:
         data["skip-erase"] = True
         data["blank-check"] = False
+
+    if force:
+        data["force"] = True
+    
     data["state"] = STATE_WRITE
 
     start_time = time.time()
@@ -608,6 +613,12 @@ def main():
         help="Igonre blank check before write (and skip erase).",
     )
     write_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force write, even if the VPP or chip id don't match.",
+    )
+    write_parser.add_argument(
         "-a", "--address", type=str, help="Write start address in dec/hex"
     )
     write_parser.add_argument(
@@ -703,6 +714,7 @@ def main():
             port=None,
             address=args.address,
             ignore_blank_check=args.ignore_blank_check,
+            force=args.force,
         )
     elif args.command == "blank":
         blank_check(args.eprom)
