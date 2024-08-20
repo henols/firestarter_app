@@ -124,7 +124,7 @@ def map_data(ic, manufacturer):
     type = 4
     if pin_count == 28 and variant in [16, 17, 19]:
         type = 1
-    if pin_count == 32 and variant in [0]:
+    if pin_count == 32 and variant in [0, 1, 2]:
         type = 1
 
     data = {
