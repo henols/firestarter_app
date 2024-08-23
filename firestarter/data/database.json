@@ -18124,7 +18124,7 @@
             "chip-info": "0x0000",
             "pin-map": -1,
             "package-details": "0x1c000000",
-            "verified": false
+            "verified": true
         },
         {
             "name": "W27E512",
