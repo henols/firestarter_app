@@ -122,9 +122,11 @@ def map_data(ic, manufacturer):
         vpp = int(ic["voltages"]["vpp"])
     variant = ic["variant"]
     type = 4
-    if pin_count == 28 and variant in [16, 17, 19]:
+    if pin_count == 24 and variant in [0, 1, 16]:
         type = 1
-    if pin_count == 32 and variant in [0, 1, 2]:
+    elif pin_count == 28 and variant in [16, 17, 19]:
+        type = 1
+    elif pin_count == 32 and variant in [0, 1, 2]:
         type = 1
 
     data = {
