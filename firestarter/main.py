@@ -190,17 +190,17 @@ def read_filterd_bytes(byte_array):
         return None
 
 
-def list_eproms(verifed):
+def list_eproms(verified):
     if not all:
-        print("Verified EPROMS in the database.")
-    for ic in db.get_eproms(verifed):
+        print("Verified EPROMs in the database.")
+    for ic in db.get_eproms(verified):
         print(ic)
 
 
 def search_eproms(text):
     print(f"Searching for: {text}")
     # if not all:
-    #     print("Verified EPROMS in the database.")
+    #     print("Verified EPROMs in the database.")
 
     for ic in db.search_eprom(text, True):
         print(ic)
@@ -428,7 +428,7 @@ def read_chip(eprom, output_file, port=None):
         end_time = time.time()
         # Calculate total duration
         total_duration = end_time - start_time
-        print(f"Data recived in {total_duration:.2f} seconds")
+        print(f"Data received in {total_duration:.2f} seconds")
 
     except Exception as e:
         print("Error:", e)
@@ -573,7 +573,7 @@ def main():
     global verbose
 
     parser = argparse.ArgumentParser(
-        description="EPROM programer for Arduiono UNO and Relatively-Universal-ROM-Programmer sheild."
+        description="EPROM programer for Arduino UNO and Relatively-Universal-ROM-Programmer shield."
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose mode"
@@ -637,7 +637,7 @@ def main():
     #  List command
     list_parser = subparsers.add_parser("list", help="List all EPROMs in the database.")
     list_parser.add_argument(
-        "-v", "--verified", action="store_true", help="Only shows verifed EPROMS"
+        "-v", "--verified", action="store_true", help="Only shows verified EPROMs"
     )
 
     # Search command

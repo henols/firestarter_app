@@ -179,7 +179,7 @@ def print_generic_eeprom(eprom):
                 pin_names[pin - 1] = f"A{i}"
                 i += 1
     else:
-        print(f"No pin map available, layout is asumed.")
+        print(f"No pin map available, layout is assumed.")
     print(f"       {pin_count}-DIP package")
     print_eeprom(pin_count, pin_names)
     jp1 = 0
