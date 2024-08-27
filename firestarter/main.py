@@ -89,8 +89,11 @@ def check_port(port, data):
     return None
 
 
-def find_comports():
+def find_comports(port=None):
     ports = []
+    if not port == None:
+        ports.append(port)
+        return ports
     if "port" in config.keys():
         ports.append(config["port"])
 
@@ -105,7 +108,7 @@ def find_comports():
     return ports
 
 
-def find_programmer(data):
+def find_programmer(data, port=None):
     if "manufacturer" in data:
         data.pop("manufacturer")
     if "verified" in data:
@@ -124,7 +127,7 @@ def find_programmer(data):
 
     json_data = json.dumps(data, separators=(",", ":"))
 
-    ports = find_comports()
+    ports = find_comports(port)
     for port in ports:
         serial_port = check_port(port, json_data)
         if serial_port:
@@ -236,21 +239,23 @@ def read_voltage(state):
         ser.write("OK".encode("ascii"))
 
 
-def firmware(install, avrdude_path):
-    latest, port, url = firmware_check()
+def firmware(install, avrdude_path, port):
+    latest, selected_port, url = firmware_check(port)
     if not latest and install:
         if not url:
             latest_version, url = latest_firmware()
             print(f"Trying to install firmware version: {latest_version}")
-        install_firmware(url, avrdude_path, port)
+        if not selected_port:
+            selected_port = port
+        install_firmware(url, avrdude_path, selected_port)
 
 
-def firmware_check():
+def firmware_check(port=None):
     # if not install:
     data = {}
     data["state"] = STATE_VERSION
 
-    ser = find_programmer(data)
+    ser = find_programmer(data, port)
     if not ser:
         print("No programmer found")
         return False, None, None
@@ -281,10 +286,10 @@ def firmware_check():
         return True, None, None
 
 
-def install_firmware(url, avrdude_path, port=None):
+def install_firmware(url, avrdude_path, preferred_port=None):
 
     if port:
-        ports = [port]
+        ports = [preferred_port]
     else:
         ports = find_comports()
         if len(ports) == 0:
@@ -333,12 +338,14 @@ def install_firmware(url, avrdude_path, port=None):
             if avrdude_path:
                 config["avrdude-path"] = avrdude_path
                 save_config()
+            if prefered_port:
+                config["port"] = preferred_port
+                save_config()
             return
         else:
             print(f"Error connecting to programmer at port: {port}")
             print(str(error, "ascii"))
             continue
-        # if output:
 
     print("Please reset the programmer to start the update")
     return
@@ -379,7 +386,7 @@ def rurp_config(vcc=None, r1=None, r2=None):
         print(r)
 
 
-def read_chip(eprom, output_file, port=None):
+def read_chip(eprom, output_file):
     data = db.get_eprom(eprom)
     if not data:
         print(f"Eprom {eprom} not found.")
@@ -440,7 +447,6 @@ def read_chip(eprom, output_file, port=None):
 def write_chip(
     eprom,
     input_file,
-    port=None,
     address=None,
     ignore_blank_check=False,
     force=False,
@@ -596,9 +602,6 @@ def main():
         type=str,
         help="Output file name (optional), defaults to the EPROM_NAME.bin",
     )
-    read_parser.add_argument(
-        "-p", "--port", type=str, help="Serial port name (optional)"
-    )
 
     # Write command
     write_parser = subparsers.add_parser(
@@ -620,9 +623,6 @@ def main():
     )
     write_parser.add_argument(
         "-a", "--address", type=str, help="Write start address in dec/hex"
-    )
-    write_parser.add_argument(
-        "-p", "--port", type=str, help="Serial port name (optional)"
     )
     write_parser.add_argument("input_file", type=str, help="Input file name")
 
@@ -685,9 +685,6 @@ def main():
         type=int,
         help="Set R14/R15 resistance, resistors connected to GND",
     )
-    config_parser.add_argument(
-        "-p", "--port", type=str, help="Serial port name (optional)"
-    )
 
     if len(sys.argv) == 1:
         args = parser.parse_args(["--help"])
@@ -706,12 +703,11 @@ def main():
     elif args.command == "search":
         search_eproms(args.text)
     elif args.command == "read":
-        read_chip(args.eprom, args.output_file, port=None)
+        read_chip(args.eprom, args.output_file)
     elif args.command == "write":
         write_chip(
             args.eprom,
             args.input_file,
-            port=None,
             address=args.address,
             ignore_blank_check=args.ignore_blank_check,
             force=args.force,
@@ -727,7 +723,7 @@ def main():
     elif args.command == "vcc":
         read_voltage(STATE_READ_VCC)
     elif args.command == "fw":
-        firmware(args.install, args.avrdude_path)
+        firmware(args.install, args.avrdude_path,args.port)
     elif args.command == "config":
         rurp_config(args.vcc, args.r16, args.r14r15)
 
