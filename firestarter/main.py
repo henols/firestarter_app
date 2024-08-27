@@ -288,7 +288,7 @@ def firmware_check(port=None):
 
 def install_firmware(url, avrdude_path, preferred_port=None):
 
-    if port:
+    if preferred_port:
         ports = [preferred_port]
     else:
         ports = find_comports()
@@ -338,7 +338,7 @@ def install_firmware(url, avrdude_path, preferred_port=None):
             if avrdude_path:
                 config["avrdude-path"] = avrdude_path
                 save_config()
-            if prefered_port:
+            if preferred_port:
                 config["port"] = preferred_port
                 save_config()
             return
@@ -473,7 +473,7 @@ def write_chip(
 
     if force:
         data["force"] = True
-    
+
     data["state"] = STATE_WRITE
 
     start_time = time.time()
@@ -500,14 +500,14 @@ def write_chip(
         while True:
             data = f.read(BUFFER_SIZE)
             if not data:
-                ser.write(int(0).to_bytes(2, byteorder='big'))
+                ser.write(int(0).to_bytes(2, byteorder="big"))
                 ser.flush()
                 resp, info = wait_for_response(ser)
                 print("End of file reached")
                 print(info)
                 return
 
-            ser.write(len(data).to_bytes(2, byteorder='big'))
+            ser.write(len(data).to_bytes(2, byteorder="big"))
             sent = ser.write(data)
             ser.flush()
             resp, info = wait_for_response(ser)
@@ -723,7 +723,7 @@ def main():
     elif args.command == "vcc":
         read_voltage(STATE_READ_VCC)
     elif args.command == "fw":
-        firmware(args.install, args.avrdude_path,args.port)
+        firmware(args.install, args.avrdude_path, args.port)
     elif args.command == "config":
         rurp_config(args.vcc, args.r16, args.r14r15)
 
