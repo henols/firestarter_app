@@ -442,8 +442,8 @@ def write_chip(
     input_file,
     port=None,
     address=None,
-    skip_erase=False,
     ignore_blank_check=False,
+    force=False,
 ):
     data = db.get_eprom(eprom)
     if not data:
@@ -454,19 +454,20 @@ def write_chip(
         return
     file_size = os.path.getsize(input_file)
     eprom = data.pop("name")
-    if skip_erase:
-        if not data["can-erase"]:
-            print(f"{eprom} can't be erased, use ignore blank check instead.")
-            return
-        data["skip-erase"] = True
 
     if address:
         if "0x" in address:
             data["address"] = int(address, 16)
         else:
             data["address"] = int(address)
+
     if ignore_blank_check:
+        data["skip-erase"] = True
         data["blank-check"] = False
+
+    if force:
+        data["force"] = True
+    
     data["state"] = STATE_WRITE
 
     start_time = time.time()
@@ -493,14 +494,14 @@ def write_chip(
         while True:
             data = f.read(BUFFER_SIZE)
             if not data:
-                ser.write(int(0).to_bytes(2))
+                ser.write(int(0).to_bytes(2, byteorder='big'))
                 ser.flush()
                 resp, info = wait_for_response(ser)
                 print("End of file reached")
                 print(info)
                 return
 
-            ser.write(len(data).to_bytes(2))
+            ser.write(len(data).to_bytes(2, byteorder='big'))
             sent = ser.write(data)
             ser.flush()
             resp, info = wait_for_response(ser)
@@ -605,16 +606,17 @@ def main():
     )
     write_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
 
-    write_group = write_parser.add_mutually_exclusive_group()
-
-    write_group.add_argument(
-        "-s", "--skip-erase", action="store_true", help="Skip erase before write"
-    )
-    write_group.add_argument(
+    write_parser.add_argument(
         "-b",
         "--ignore-blank-check",
         action="store_true",
-        help="Ignore blank check before write",
+        help="Igonre blank check before write (and skip erase).",
+    )
+    write_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force write, even if the VPP or chip id don't match.",
     )
     write_parser.add_argument(
         "-a", "--address", type=str, help="Write start address in dec/hex"
@@ -711,8 +713,8 @@ def main():
             args.input_file,
             port=None,
             address=args.address,
-            skip_erase=args.skip_erase,
             ignore_blank_check=args.ignore_blank_check,
+            force=args.force,
         )
     elif args.command == "blank":
         blank_check(args.eprom)

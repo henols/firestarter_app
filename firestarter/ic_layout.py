@@ -117,16 +117,16 @@ def select_label(jp,l1,l2):
     return "NA"
 
 def print_jumper_settings(jp1, jp2, jp3):
-    jumper = [" ● ● ● ","(● ●)● ", " ●(● ●)"]
+    jumper = [" ● ● ● ", " ●(● ●)", "(● ●)● "]
 
     jp1_label = select_label(jp1,"A13","VCC") 
     jp2_label = select_label(jp2,"A17","VCC") 
     jp3_label = select_label(jp3,"32pin","28pin") 
     print()
-    print("         Jumper config")
-    print(f"JP1   A13 [{jumper[jp1]}] 5V    : {jp1_label}")
-    print(f"JP2   A17 [{jumper[jp2]}] 5V    : {jp2_label}")
-    print(f"JP3 32pin [{jumper[jp3]}] 28pin : {jp3_label}")
+    print("        Jumper config")
+    print(f"JP1    5V [{jumper[jp1]}] A13   : {jp1_label}")
+    print(f"JP2    5V [{jumper[jp2]}] A17   : {jp2_label}")
+    print(f"JP3 28pin [{jumper[jp3]}] 32pin : {jp3_label}")
 
 def print_chip_info(eprom):
     verified = ""

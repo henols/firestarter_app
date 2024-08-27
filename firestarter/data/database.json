@@ -13418,7 +13418,7 @@
             "chip-info": "0x0006",
             "pin-map": 1,
             "package-details": "0x1c000000",
-            "verified": false
+            "verified": true
         },
         {
             "name": "M27C1001",
@@ -13533,7 +13533,7 @@
             "chip-info": "0x0006",
             "pin-map": 0,
             "package-details": "0x1c000000",
-            "verified": false
+            "verified": true
         },
         {
             "name": "M27C64A",
@@ -18124,7 +18124,7 @@
             "chip-info": "0x0000",
             "pin-map": -1,
             "package-details": "0x1c000000",
-            "verified": false
+            "verified": true
         },
         {
             "name": "W27E512",
