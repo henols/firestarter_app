@@ -322,7 +322,8 @@ def install_firmware(url, avrdude_path, preferred_port=None):
             if not response.status_code == 200:
                 print("Error downloading firmware")
                 return
-
+            if not os.path.exists(HOME_PATH):
+                os.makedirs(HOME_PATH)
             firmware_path = os.path.join(HOME_PATH, "firmware.hex")
             with open(firmware_path, "wb") as f:
                 f.write(response.content)
