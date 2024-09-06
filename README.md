@@ -7,8 +7,9 @@ Arduino PlatformIO project is found here [Firestarter](https://github.com/henols
 
 Firestarter in action [watch the video](https://youtu.be/JDHOKbyNnrE?si=0_iXKPZZwyyNGUTZ)
 
-## Installation
+Anders S Nielsen creator of the Relatively-Universal-ROM-Programmer talks about Firestarter [watch the video](https://youtu.be/SZQ50XZlk5o?si=IKOqQUeG4Rms1cUs)
 
+Support and discustions forum at [Discord](https://discord.com/invite/kmhbxAjQc3)
 
 ## Installation
 To install the Firestarter Python program and the firmware on the Arduino, follow the steps below:
@@ -37,14 +38,14 @@ The ```fw --install``` command installs the latest firmware on the Arduino. The 
 
 ### Example
 To install the firmware on the Arduino, you can run:
+``` bash
+firestarter fw --install
+```
 
 
 ## Usage
 Firestarter provides several commands to interact with EPROMs using the Relatively-Universal-ROM-Programmer.
 Available commands: read, write, blank, erase, list, search, info, vpp, vcc, fw, config
-``` bash
-firestarter fw --install
-```
 
 ### General Usage
 
