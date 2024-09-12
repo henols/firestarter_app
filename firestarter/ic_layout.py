@@ -109,24 +109,35 @@ def print_eeprom(pin_count, pin_names):
     # Print the bottom line
     print(" " * 8 + "-" * 11)
 
-def select_label(jp,l1,l2):
+
+def select_label(jp, l1, l2):
     if jp == 1:
         return l1
     if jp == 2:
         return l2
     return "NA"
 
+
 def print_jumper_settings(jp1, jp2, jp3):
     jumper = [" ● ● ● ", " ●(● ●)", "(● ●)● "]
 
-    jp1_label = select_label(jp1,"A13","VCC") 
-    jp2_label = select_label(jp2,"A17","VCC") 
-    jp3_label = select_label(jp3,"32pin","28pin") 
+    jp1_label = select_label(jp1, "A13", "VCC")
+    jp2_label = select_label(jp2, "A17", "VCC")
+    jp3_label = select_label(jp3, "32pin", "28pin")
     print()
     print("        Jumper config")
     print(f"JP1    5V [{jumper[jp1]}] A13   : {jp1_label}")
     print(f"JP2    5V [{jumper[jp2]}] A17   : {jp2_label}")
     print(f"JP3 28pin [{jumper[jp3]}] 32pin : {jp3_label}")
+
+
+def print_jumper_settings_jp3_mod(jp3):
+    jp3_label = select_label(jp3, "Open", "Closed")
+    jumper = [" N/A ", " ● ● ", "(● ●)"]
+    print()
+    print("    Jumper config (JP3 Mod)")
+    print(f"JP3 Mod    [{jumper[jp3]}] : {jp3_label}")
+
 
 def print_chip_info(eprom):
     verified = ""
@@ -148,6 +159,7 @@ def print_chip_info(eprom):
         print(f"Type:\t\tSRAM")
     print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
     print_generic_eeprom(eprom)
+
 
 # Function to print generic EPROM layout
 def print_generic_eeprom(eprom):
@@ -200,3 +212,4 @@ def print_generic_eeprom(eprom):
 
     print_jumper_settings(jp1, jp2, jp3)
     print()
+    print_jumper_settings_jp3_mod(jp3)
