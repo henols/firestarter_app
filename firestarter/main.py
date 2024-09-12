@@ -36,8 +36,9 @@ STATE_CHECK_BLANK = 4
 STATE_READ_VPE = 10
 STATE_READ_VPP = 11
 STATE_READ_VCC = 12
-STATE_VERSION = 13
+STATE_FW_VERSION = 13
 STATE_CONFIG = 14
+STATE_HW_VERSION = 15
 
 FIRESTARTER_RELEASE_URL = (
     "https://api.github.com/repos/henols/firestarter/releases/latest"
@@ -133,7 +134,12 @@ def find_programmer(data, port=None):
         if serial_port:
             config["port"] = port
             save_config()
+            if verbose:
+                print(f"Found programmer at port: {port}")
+            else:
+                print(f"Connected to programmer")
             return serial_port
+    print("No programmer found")
     return None
 
 
@@ -194,7 +200,7 @@ def read_filterd_bytes(byte_array):
 
 
 def list_eproms(verified):
-    if not all:
+    if not verified:
         print("Verified EPROMs in the database.")
     for ic in db.get_eproms(verified):
         print(ic)
@@ -222,9 +228,9 @@ def read_voltage(state):
     data = {}
     data["state"] = state
 
+    print(f"Reading {type} voltage")
     ser = find_programmer(data)
     if not ser:
-        print("No programmer found")
         return
     ser.write("OK".encode("ascii"))
     type = "VPE"
@@ -233,10 +239,29 @@ def read_voltage(state):
     if state == STATE_READ_VPP:
         type = "VPP"
 
-    print(f"Reading {type} voltage")
     while (t := wait_for_response(ser))[0] == "DATA":
         print(f"\r{t[1]}", end="")
         ser.write("OK".encode("ascii"))
+
+
+def hardware():
+    # if not install:
+    data = {}
+    data["state"] = STATE_HW_VERSION
+    print("Reading hardware revision")
+
+    ser = find_programmer(data)
+    if not ser:
+        return
+    ser.write("OK".encode("ascii"))
+    r, version = wait_for_response(ser)
+    ser.close()
+
+    if r == "OK":
+        print(f"Hardware revision: {version}")
+    else:
+        print(r)
+        return
 
 
 def firmware(install, avrdude_path, port):
@@ -253,14 +278,13 @@ def firmware(install, avrdude_path, port):
 def firmware_check(port=None):
     # if not install:
     data = {}
-    data["state"] = STATE_VERSION
+    data["state"] = STATE_FW_VERSION
+    print("Reading firmware version")
 
     ser = find_programmer(data, port)
     if not ser:
-        print("No programmer found")
         return False, None, None
     ser.write("OK".encode("ascii"))
-    print("Reading version")
     r, version = wait_for_response(ser)
     ser.close()
 
@@ -373,13 +397,12 @@ def rurp_config(vcc=None, r1=None, r2=None):
         data["r1"] = r1
     if r2:
         data["r2"] = r2
+    print("Reading configuration")
 
     ser = find_programmer(data)
     if not ser:
-        print("No programmer found")
         return
     ser.write("OK".encode("ascii"))
-    print("Reading configuration")
     r, version = wait_for_response(ser)
     if r == "OK":
         print(f"Config: {version}")
@@ -395,14 +418,13 @@ def read_chip(eprom, output_file):
     eprom = data.pop("name")
 
     data["state"] = STATE_READ
+    print(f"Reading chip: {eprom}")
 
     ser = find_programmer(data)
     if not ser:
-        print("No programmer found")
         return
 
     mem_size = data["memory-size"]
-    print(f"Reading chip: {eprom}")
     if not output_file:
         output_file = f"{eprom}.bin"
     print(f"Output will be saved to: {output_file}")
@@ -478,17 +500,16 @@ def write_chip(
     data["state"] = STATE_WRITE
 
     start_time = time.time()
+    print(f"Writing to chip: {eprom}")
 
     ser = find_programmer(data)
     if not ser:
-        print("No programmer found")
         return
 
     mem_size = data["memory-size"]
     if not mem_size == file_size:
         print(f"The file size dont match the memory size")
 
-    print(f"Writing to chip: {eprom}")
     print(f"Reading from input file: {input_file}")
     bytes_sent = 0
 
@@ -540,12 +561,11 @@ def erase(eprom):
         return
     data["state"] = STATE_ERASE
 
+    print(f"Erasing: {eprom}")
     ser = find_programmer(data)
     if not ser:
-        print("No programmer found")
         return
 
-    print(f"Erasing: {eprom}")
     resp, info = wait_for_response(ser)
     if resp == "OK":
         print(f"{eprom} erased {info}")
@@ -562,12 +582,11 @@ def blank_check(eprom):
     eprom = data.pop("name")
     data["state"] = STATE_CHECK_BLANK
 
+    print(f"Blank checking: {eprom}")
     ser = find_programmer(data)
     if not ser:
-        print("No programmer found")
         return
 
-    print(f"Blank checking: {eprom}")
     resp, info = wait_for_response(ser)
     if resp == "OK":
         print(f"{eprom} is blank {info}")
@@ -655,7 +674,9 @@ def main():
     vpp_parser = subparsers.add_parser("vpp", help="VPP voltage.")
     vcc_parser = subparsers.add_parser("vcc", help="VCC voltage.")
 
-    fw_parser = subparsers.add_parser("fw", help="FIRMWARE version.")
+    # hw_parser = subparsers.add_parser("hw", help="Hardware revision.")
+
+    fw_parser = subparsers.add_parser("fw", help="Firmware version.")
     fw_parser.add_argument(
         "-i",
         "--install",
@@ -725,6 +746,8 @@ def main():
         read_voltage(STATE_READ_VCC)
     elif args.command == "fw":
         firmware(args.install, args.avrdude_path, args.port)
+    elif args.command == "hw":
+        hardware()
     elif args.command == "config":
         rurp_config(args.vcc, args.r16, args.r14r15)
 
