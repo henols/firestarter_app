@@ -228,16 +228,16 @@ def read_voltage(state):
     data = {}
     data["state"] = state
 
-    print(f"Reading {type} voltage")
-    ser = find_programmer(data)
-    if not ser:
-        return
-    ser.write("OK".encode("ascii"))
     type = "VPE"
     if state == STATE_READ_VCC:
         type = "VCC"
     if state == STATE_READ_VPP:
         type = "VPP"
+    print(f"Reading {type} voltage")
+    ser = find_programmer(data)
+    if not ser:
+        return
+    ser.write("OK".encode("ascii"))
 
     while (t := wait_for_response(ser))[0] == "DATA":
         print(f"\r{t[1]}", end="")
