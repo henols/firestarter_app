@@ -14,6 +14,7 @@ import os
 import json
 import argparse
 import requests
+import signal
 
 try:
     from .__init__ import __version__ as version
@@ -35,7 +36,7 @@ STATE_ERASE = 3
 STATE_CHECK_BLANK = 4
 STATE_READ_VPE = 10
 STATE_READ_VPP = 11
-STATE_READ_VCC = 12
+STATE_READ_VPE = 12
 STATE_FW_VERSION = 13
 STATE_CONFIG = 14
 STATE_HW_VERSION = 15
@@ -176,7 +177,7 @@ def wait_for_response(ser):
         # elif len(byte_array) > 0:
         #     print(len(byte_array))
         if timeout + 5 < time.time():
-            return "ERROR", "Timeout"
+            return "ERROR", "Timeout (expecting response)"
 
 
 def write_feedback(msg):
@@ -229,19 +230,23 @@ def read_voltage(state):
     data["state"] = state
 
     type = "VPE"
-    if state == STATE_READ_VCC:
-        type = "VCC"
     if state == STATE_READ_VPP:
         type = "VPP"
     print(f"Reading {type} voltage")
     ser = find_programmer(data)
     if not ser:
         return
+    resp, info = wait_for_response(ser)
+    if not resp == "OK":
+        print()
+        print(f"Error reading {type} voltage: {info}")
+        return
     ser.write("OK".encode("ascii"))
 
     while (t := wait_for_response(ser))[0] == "DATA":
         print(f"\r{t[1]}", end="")
         ser.write("OK".encode("ascii"))
+    ser.close()
 
 
 def hardware():
@@ -450,6 +455,7 @@ def read_chip(eprom, output_file):
                 print("Finished reading data")
                 break
             else:
+                print()
                 print(f"Error reading data {info}")
                 r, i = wait_for_response(ser)
                 print(i)
@@ -530,6 +536,12 @@ def write_chip(
                 return
 
             ser.write(len(data).to_bytes(2, byteorder="big"))
+            ser.flush()
+            resp, info = wait_for_response(ser)
+            if resp == "ERROR":
+                print()
+                print(f"Error writing: {info}")
+                return
             sent = ser.write(data)
             ser.flush()
             resp, info = wait_for_response(ser)
@@ -672,7 +684,7 @@ def main():
 
     # vpe_parser = subparsers.add_parser("vpe", help="VPE voltage.")
     vpp_parser = subparsers.add_parser("vpp", help="VPP voltage.")
-    vcc_parser = subparsers.add_parser("vcc", help="VCC voltage.")
+    vpe_parser = subparsers.add_parser("vpe", help="VPE voltage.")
 
     # hw_parser = subparsers.add_parser("hw", help="Hardware revision.")
 
@@ -742,8 +754,8 @@ def main():
         read_voltage(STATE_READ_VPE)
     elif args.command == "vpp":
         read_voltage(STATE_READ_VPP)
-    elif args.command == "vcc":
-        read_voltage(STATE_READ_VCC)
+    elif args.command == "vpe":
+        read_voltage(STATE_READ_VPE)
     elif args.command == "fw":
         firmware(args.install, args.avrdude_path, args.port)
     elif args.command == "hw":
@@ -752,5 +764,16 @@ def main():
         rurp_config(args.vcc, args.r16, args.r14r15)
 
 
+def exit_gracefully(signum, frame):
+    # restore the original signal handler as otherwise evil things will happen
+    # in raw_input when CTRL+C is pressed, and our signal handler is not re-entrant
+    signal.signal(signal.SIGINT, original_sigint)
+
+    sys.exit(1)
+
+
 if __name__ == "__main__":
+    # store the original SIGINT handler
+    original_sigint = signal.getsignal(signal.SIGINT)
+    signal.signal(signal.SIGINT, exit_gracefully)
     main()
