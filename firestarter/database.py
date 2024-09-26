@@ -140,6 +140,7 @@ def map_data(ic, manufacturer):
         "vpp": vpp,
         "pulse-delay": int(ic["pulse-delay"], 16),
         "verified": ic["verified"],
+        "flags": int(ic["flags"], 16),
     }
     chip_id = int(ic["chip-id"], 16)
     if chip_id != 0:

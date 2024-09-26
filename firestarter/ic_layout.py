@@ -161,6 +161,66 @@ def print_chip_info(eprom):
     print_generic_eeprom(eprom)
 
 
+    # Interpret the flags
+    properties = interpret_flags(eprom["flags"])
+    # Output the results
+    print(f"Flags Value: 0x{eprom["flags"]:08X}")
+    if properties:
+        print("Interpreted IC Properties:")
+        for prop in properties:
+            print(f" - {prop}")
+
+
+
+def interpret_flags(flags):
+    """
+    Interpret the flags value and return a list of properties.
+
+    Args:
+        flags (int): The flags value as an integer.
+
+    Returns:
+        List[str]: A list of interpreted properties.
+    """
+    properties = []
+
+
+    # Define the bit masks and their meanings
+    flag_definitions = [
+        (0x00000008, "Requires VPP (High Programming Voltage)"),
+        (0x00000010, "Can be electrically erased"),
+        (0x00000020, "Has Readable Chip ID"),
+        (0x00000040, "Uses EPROM Programming Algorithm"),
+        (0x00000080, "Is Electrically Erasable or Writable (EEPROM/Flash/SRAM)"),
+        (0x00000200, "Supports Boot Block Features"),
+        (0x00004000, "Software Data Protection (SDP)"),
+        (0x00008000, "Requires Specific Write Sequence or Hardware Protection"),
+        (0x00400000, "Supports Block Locking or Sector Protection"),
+    ]
+
+    # Check each flag definition
+    for bitmask, description in flag_definitions:
+        if flags & bitmask:
+            properties.append(description)
+
+    # Handle combined flags for advanced features
+    if (flags & 0x0000C000) == 0x0000C000:
+        properties.append(" - Advanced Write Protection Mechanisms")
+
+    if (flags & 0x00000090) == 0x00000090:
+        properties.append(" - Electrically Erasable with Write Enable Sequence")
+
+    if (flags & 0x000000E8) == 0x000000E8:
+        properties.append(" - EEPROM with Special Programming Algorithm and Electrically Erasable")
+
+    if (flags & 0x00004278) == 0x00004278:
+        properties.append(" - Flash Memory with Advanced Protection Features (Block Locking, SDP, etc.)")
+
+    if (flags & 0x0040C078) == 0x0040C078:
+        properties.append(" - Flash Memory with Block Locking and Advanced Write Protection")
+
+    return properties
+
 # Function to print generic EPROM layout
 def print_generic_eeprom(eprom):
     pin_count = eprom["pin-count"]
@@ -213,3 +273,5 @@ def print_generic_eeprom(eprom):
     print_jumper_settings(jp1, jp2, jp3)
     print()
     print_jumper_settings_jp3_mod(jp3)
+    print()
+
