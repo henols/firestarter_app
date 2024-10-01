@@ -121,6 +121,8 @@ def find_programmer(data, port=None):
         data.pop("name")
     if "ic-type" in data:
         data.pop("ic-type")
+    if "flags" in data:
+        data.pop("flags")
 
     if verbose:
         data["verbose"] = True
