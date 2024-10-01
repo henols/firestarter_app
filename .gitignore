@@ -19,3 +19,5 @@ install.sh
 publish.sh
 
 fires/
+
+*.o64
