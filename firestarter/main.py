@@ -82,6 +82,8 @@ def check_port(port, data):
 
         res, msg = wait_for_response(ser)
         if res == "OK":
+            if verbose:
+                print(f"Programmer: {msg}")
             return ser
         else:
             print(f"{res} - {msg}")
@@ -306,9 +308,13 @@ def firmware_check(port=None):
     major_l, minor_l, patch_l = latest_version.split(".")
 
     if (
-        int(major) < int(major_l)
-        or int(minor) < int(minor_l)
-        or int(patch) < int(patch_l)
+        int(major_l) > int(major)
+        or (int(major_l) == int(major) and int(minor_l) > int(minor))
+        or (
+            int(major_l) == int(major)
+            and int(minor_l) == int(minor)
+            and int(patch_l) > int(patch)
+        )
     ):
         print(f"New version available: {latest_version}")
         return False, ser.portstr, url
@@ -688,7 +694,7 @@ def main():
     vpp_parser = subparsers.add_parser("vpp", help="VPP voltage.")
     vpe_parser = subparsers.add_parser("vpe", help="VPE voltage.")
 
-    # hw_parser = subparsers.add_parser("hw", help="Hardware revision.")
+    hw_parser = subparsers.add_parser("hw", help="Hardware revision.")
 
     fw_parser = subparsers.add_parser("fw", help="Firmware version.")
     fw_parser.add_argument(
