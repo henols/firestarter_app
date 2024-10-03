@@ -160,16 +160,14 @@ def print_chip_info(eprom):
     print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
     print_generic_eeprom(eprom)
 
-
     # Interpret the flags
     properties = interpret_flags(eprom["flags"])
     # Output the results
-    print(f"Flags Value: 0x{eprom["flags"]:08X}")
+    print(f"Flags Value: 0x{eprom['flags']:08X}")
     if properties:
         print("Interpreted IC Properties:")
         for prop in properties:
             print(f" - {prop}")
-
 
 
 def interpret_flags(flags):
@@ -183,7 +181,6 @@ def interpret_flags(flags):
         List[str]: A list of interpreted properties.
     """
     properties = []
-
 
     # Define the bit masks and their meanings
     flag_definitions = [
@@ -211,15 +208,22 @@ def interpret_flags(flags):
         properties.append(" - Electrically Erasable with Write Enable Sequence")
 
     if (flags & 0x000000E8) == 0x000000E8:
-        properties.append(" - EEPROM with Special Programming Algorithm and Electrically Erasable")
+        properties.append(
+            " - EEPROM with Special Programming Algorithm and Electrically Erasable"
+        )
 
     if (flags & 0x00004278) == 0x00004278:
-        properties.append(" - Flash Memory with Advanced Protection Features (Block Locking, SDP, etc.)")
+        properties.append(
+            " - Flash Memory with Advanced Protection Features (Block Locking, SDP, etc.)"
+        )
 
     if (flags & 0x0040C078) == 0x0040C078:
-        properties.append(" - Flash Memory with Block Locking and Advanced Write Protection")
+        properties.append(
+            " - Flash Memory with Block Locking and Advanced Write Protection"
+        )
 
     return properties
+
 
 # Function to print generic EPROM layout
 def print_generic_eeprom(eprom):
@@ -274,4 +278,3 @@ def print_generic_eeprom(eprom):
     print()
     print_jumper_settings_jp3_mod(jp3)
     print()
-
