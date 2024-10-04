@@ -34,7 +34,7 @@ STATE_READ = 1
 STATE_WRITE = 2
 STATE_ERASE = 3
 STATE_CHECK_BLANK = 4
-STATE_READ_VPE = 10
+
 STATE_READ_VPP = 11
 STATE_READ_VPE = 12
 STATE_FW_VERSION = 13
@@ -555,7 +555,11 @@ def write_chip(
                 return
             sent = ser.write(data)
             ser.flush()
-            resp, info = wait_for_response(ser)
+
+            while (t := wait_for_response(ser))[0] != "OK" and t[0] != "ERROR":
+                if t[0] == "WARN":
+                    print(f"Warning: {t[1]}")
+            resp, info = t
             if resp == "OK":
                 bytes_sent += sent
                 p = int(bytes_sent / file_size * 100)
@@ -693,7 +697,6 @@ def main():
     info_parser = subparsers.add_parser("info", help="EPROM info.")
     info_parser.add_argument("eprom", type=str, help="EPROM name.")
 
-    # vpe_parser = subparsers.add_parser("vpe", help="VPE voltage.")
     vpp_parser = subparsers.add_parser("vpp", help="VPP voltage.")
     vpe_parser = subparsers.add_parser("vpe", help="VPE voltage.")
 
