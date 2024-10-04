@@ -401,11 +401,14 @@ def latest_firmware():
     return None, None
 
 
-def rurp_config(vcc=None, r1=None, r2=None):
+def rurp_config(rev=None, r1=None, r2=None):
     data = {}
     data["state"] = STATE_CONFIG
-    if vcc:
-        data["vcc"] = vcc
+    if rev:
+        if rev == -1:
+            print("Disabling hardware revision override")
+            rev = 0
+        data["rev"] = rev
     if r1:
         data["r1"] = r1
     if r2:
@@ -715,7 +718,9 @@ def main():
         "config", help="Handles CONFIGURATION values."
     )
     config_parser.add_argument(
-        "-v", "--vcc", type=float, help="Set Arduino VCC voltage."
+        "--rev",
+        type=float,
+        help="WARNING Overrides hardware revision, only used with HW mods. -1 disables override.",
     )
 
     config_parser.add_argument(
@@ -769,7 +774,7 @@ def main():
     elif args.command == "hw":
         hardware()
     elif args.command == "config":
-        rurp_config(args.vcc, args.r16, args.r14r15)
+        rurp_config(args.rev, args.r16, args.r14r15)
 
 
 def exit_gracefully(signum, frame):
