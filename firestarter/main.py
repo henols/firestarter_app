@@ -274,7 +274,7 @@ def hardware():
 
 def firmware(install, avrdude_path, port):
     latest, selected_port, url = firmware_check(port)
-    if not latest and not install:
+    if not latest and not install and not url:
         return 1
     if not latest and install:
         if not url:
