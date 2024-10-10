@@ -238,12 +238,12 @@ def read_voltage(state):
     print(f"Reading {type} voltage")
     ser = find_programmer(data)
     if not ser:
-        return
+        return 1
     resp, info = wait_for_response(ser)
     if not resp == "OK":
         print()
         print(f"Error reading {type} voltage: {info}")
-        return
+        return 1
     ser.write("OK".encode("ascii"))
 
     while (t := wait_for_response(ser))[0] == "DATA":
@@ -260,7 +260,7 @@ def hardware():
 
     ser = find_programmer(data)
     if not ser:
-        return
+        return 1
 
     r, version = wait_for_response(ser)
     ser.close()
@@ -269,19 +269,21 @@ def hardware():
         print(f"Hardware revision: {version}")
     else:
         print(f"{r}: {version}")
-        return
-
+        return 1
+    return 0
 
 def firmware(install, avrdude_path, port):
     latest, selected_port, url = firmware_check(port)
+    if not latest and not install:
+        return 1
     if not latest and install:
         if not url:
             latest_version, url = latest_firmware()
             print(f"Trying to install firmware version: {latest_version}")
         if not selected_port:
             selected_port = port
-        install_firmware(url, avrdude_path, selected_port)
-
+        return install_firmware(url, avrdude_path, selected_port)
+    return 0
 
 def firmware_check(port=None):
     data = {}
@@ -329,7 +331,7 @@ def install_firmware(url, avrdude_path, preferred_port=None):
         ports = find_comports()
         if len(ports) == 0:
             print("No Arduino found")
-            return
+            return 1
 
     for port in ports:
         try:
@@ -347,7 +349,7 @@ def install_firmware(url, avrdude_path, preferred_port=None):
         except FileNotFoundError:
             print("Avrdude not found")
             print("Full path to avrdude needs to be provided --avrdude-path")
-            return
+            return 1
 
         output, error, returncode = a.testConnection()
         if returncode == 0:
@@ -370,21 +372,21 @@ def install_firmware(url, avrdude_path, preferred_port=None):
             else:
                 print("Error updating firmware")
                 print(str(error, "ascii"))
-                return
+                return 1
             if avrdude_path:
                 config["avrdude-path"] = avrdude_path
                 save_config()
             if preferred_port:
                 config["port"] = preferred_port
                 save_config()
-            return
+            return 0
         else:
             print(f"Error connecting to programmer at port: {port}")
             print(str(error, "ascii"))
             continue
 
     print("Please reset the programmer to start the update")
-    return
+    return 0
 
 
 def latest_firmware():
@@ -415,20 +417,21 @@ def rurp_config(rev=None, r1=None, r2=None):
 
     ser = find_programmer(data)
     if not ser:
-        return
+        return 1
     ser.write("OK".encode("ascii"))
     r, version = wait_for_response(ser)
     if r == "OK":
         print(f"Config: {version}")
     else:
         print(r)
-
+        return 1
+    return 0
 
 def read_chip(eprom, output_file):
     data = db.get_eprom(eprom)
     if not data:
         print(f"Eprom {eprom} not found.")
-        return
+        return 1
     eprom = data.pop("name")
 
     data["state"] = STATE_READ
@@ -436,7 +439,7 @@ def read_chip(eprom, output_file):
 
     ser = find_programmer(data)
     if not ser:
-        return
+        return 1
 
     mem_size = data["memory-size"]
     if not output_file:
@@ -468,7 +471,7 @@ def read_chip(eprom, output_file):
                 print(f"Error reading data {info}")
                 r, i = wait_for_response(ser)
                 print(i)
-                return
+                return 1
 
         end_time = time.time()
         # Calculate total duration
@@ -480,7 +483,7 @@ def read_chip(eprom, output_file):
     finally:
         output_file.close()
         ser.close()
-
+    return 0
 
 def write_chip(
     eprom,
@@ -492,10 +495,10 @@ def write_chip(
     data = db.get_eprom(eprom)
     if not data:
         print(f"Eprom {eprom} not found.")
-        return
+        return 1
     if not os.path.exists(input_file):
         print(f"File {input_file} not found.")
-        return
+        return 1
     file_size = os.path.getsize(input_file)
     eprom = data.pop("name")
 
@@ -519,7 +522,7 @@ def write_chip(
 
     ser = find_programmer(data)
     if not ser:
-        return
+        return 1
 
     mem_size = data["memory-size"]
     if not mem_size == file_size:
@@ -542,7 +545,7 @@ def write_chip(
                 resp, info = wait_for_response(ser)
                 print("End of file reached")
                 print(info)
-                return
+                return 0
 
             ser.write(len(data).to_bytes(2, byteorder="big"))
             ser.flush()
@@ -550,7 +553,7 @@ def write_chip(
             if resp == "ERROR":
                 print()
                 print(f"Error writing: {info}")
-                return
+                return 1
             sent = ser.write(data)
             ser.flush()
 
@@ -565,7 +568,7 @@ def write_chip(
             elif resp == "ERROR":
                 print()
                 print(f"Error writing: {info}")
-                return
+                return 1
             if bytes_sent == mem_size:
                 break
 
@@ -573,23 +576,23 @@ def write_chip(
     total_duration = time.time() - start_time
     print()
     print(f"File sent successfully in {total_duration:.2f} seconds")
-
+    return 0
 
 def erase(eprom):
     data = db.get_eprom(eprom)
     if not data:
         print(f"Eprom {eprom} not found.")
-        return
+        return 1
     eprom = data.pop("name")
     if not data["can-erase"]:
         print(f"{eprom} can't be erased.")
-        return
+        return 1
     data["state"] = STATE_ERASE
 
     print(f"Erasing: {eprom}")
     ser = find_programmer(data)
     if not ser:
-        return
+        return 1
 
     resp, info = wait_for_response(ser)
     if resp == "OK":
@@ -597,20 +600,21 @@ def erase(eprom):
     elif resp == "ERROR":
         print()
         print(f"Error: {info}")
-
+        return 1
+    return 0
 
 def blank_check(eprom):
     data = db.get_eprom(eprom)
     if not data:
         print(f"Eprom {eprom} not found.")
-        return
+        return 1
     eprom = data.pop("name")
     data["state"] = STATE_CHECK_BLANK
 
     print(f"Blank checking: {eprom}")
     ser = find_programmer(data)
     if not ser:
-        return
+        return 1
 
     resp, info = wait_for_response(ser)
     if resp == "OK":
@@ -618,7 +622,8 @@ def blank_check(eprom):
     elif resp == "ERROR":
         print()
         print(f"Error: {info}")
-
+        return 1
+    return 0
 
 def main():
     global verbose
@@ -746,15 +751,15 @@ def main():
     db.init()
 
     if args.command == "list":
-        list_eproms(args.verified)
+        res = list_eproms(args.verified)
     elif args.command == "info":
-        eprom_info(args.eprom)
+        res = eprom_info(args.eprom)
     elif args.command == "search":
-        search_eproms(args.text)
+        res = search_eproms(args.text)
     elif args.command == "read":
-        read_chip(args.eprom, args.output_file)
+        res = read_chip(args.eprom, args.output_file)
     elif args.command == "write":
-        write_chip(
+        res = write_chip(
             args.eprom,
             args.input_file,
             address=args.address,
@@ -762,22 +767,22 @@ def main():
             force=args.force,
         )
     elif args.command == "blank":
-        blank_check(args.eprom)
+        res = blank_check(args.eprom)
     elif args.command == "erase":
-        erase(args.eprom)
+        res = erase(args.eprom)
     elif args.command == "vpe":
-        read_voltage(STATE_READ_VPE)
+        res = read_voltage(STATE_READ_VPE)
     elif args.command == "vpp":
-        read_voltage(STATE_READ_VPP)
+        res = read_voltage(STATE_READ_VPP)
     elif args.command == "vpe":
-        read_voltage(STATE_READ_VPE)
+        res = read_voltage(STATE_READ_VPE)
     elif args.command == "fw":
-        firmware(args.install, args.avrdude_path, args.port)
+        res = firmware(args.install, args.avrdude_path, args.port)
     elif args.command == "hw":
-        hardware()
+        res = hardware()
     elif args.command == "config":
-        rurp_config(args.rev, args.r16, args.r14r15)
-
+        res = rurp_config(args.rev, args.r16, args.r14r15)
+    return res
 
 def exit_gracefully(signum, frame):
     # restore the original signal handler as otherwise evil things will happen
@@ -791,4 +796,4 @@ if __name__ == "__main__":
     # store the original SIGINT handler
     original_sigint = signal.getsignal(signal.SIGINT)
     signal.signal(signal.SIGINT, exit_gracefully)
-    main()
+    sys.exit(main())
