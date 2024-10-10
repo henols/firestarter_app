@@ -136,6 +136,7 @@ def find_programmer(data, port=None):
     ports = find_comports(port)
     for port in ports:
         serial_port = check_port(port, json_data)
+
         if serial_port:
             config["port"] = port
             save_config()
@@ -178,10 +179,8 @@ def wait_for_response(ser):
                 #     print(res)
                 timeout = time.time()
 
-        # elif len(byte_array) > 0:
-        #     print(len(byte_array))
-        if timeout + 5 < time.time():
-            return "ERROR", "Timeout (expecting response)"
+        if timeout + 2 < time.time():
+            return "TIMEOUT_ERROR", "Timeout (expecting response)"
 
 
 def write_feedback(msg):
@@ -262,14 +261,14 @@ def hardware():
     ser = find_programmer(data)
     if not ser:
         return
-    ser.write("OK".encode("ascii"))
+
     r, version = wait_for_response(ser)
     ser.close()
 
     if r == "OK":
         print(f"Hardware revision: {version}")
     else:
-        print(r)
+        print(f"{r}: {version}")
         return
 
 
@@ -285,7 +284,6 @@ def firmware(install, avrdude_path, port):
 
 
 def firmware_check(port=None):
-    # if not install:
     data = {}
     data["state"] = STATE_FW_VERSION
     print("Reading firmware version")
@@ -404,10 +402,10 @@ def latest_firmware():
 def rurp_config(rev=None, r1=None, r2=None):
     data = {}
     data["state"] = STATE_CONFIG
-    if rev:
+    if not rev == None:
         if rev == -1:
             print("Disabling hardware revision override")
-            rev = 0
+            rev = 0xFF
         data["rev"] = rev
     if r1:
         data["r1"] = r1
@@ -723,7 +721,7 @@ def main():
     config_parser.add_argument(
         "--rev",
         type=float,
-        help="WARNING Overrides hardware revision, only used with HW mods. -1 disables override.",
+        help="WARNING Overrides hardware revision (0-2), only use with HW mods. -1 disables override.",
     )
 
     config_parser.add_argument(
@@ -744,6 +742,7 @@ def main():
     open_config()
 
     verbose = args.verbose
+
     db.init()
 
     if args.command == "list":
