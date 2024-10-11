@@ -139,7 +139,7 @@ def print_jumper_settings_jp3_mod(jp3):
     print(f"JP3 Mod    [{jumper[jp3]}] : {jp3_label}")
 
 
-def print_chip_info(eprom):
+def print_chip_info(eprom, verbose=False):
     verified = ""
     if not eprom["verified"]:
         verified = "\t-- NOT VERIFIED --"
@@ -154,20 +154,22 @@ def print_chip_info(eprom):
         print(f"Can be erased:\t{eprom['can-erase']}")
         if "chip-id" in eprom:
             print(f"Chip ID:\t{hex(eprom['chip-id'])}")
-        print(f"VPP:\t\t{eprom['vpp']}")
     elif eprom["ic-type"] == 4:
         print(f"Type:\t\tSRAM")
+    if eprom['flags'] & 0x00000008:
+        print(f"VPP:\t\t{eprom['vpp']}")
     print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
     print_generic_eeprom(eprom)
 
-    # Interpret the flags
-    properties = interpret_flags(eprom["flags"])
-    # Output the results
-    print(f"Flags Value: 0x{eprom['flags']:08X}")
-    if properties:
-        print("Interpreted IC Properties:")
-        for prop in properties:
-            print(f" - {prop}")
+    if verbose:
+        # Interpret the flags
+        properties = interpret_flags(eprom["flags"])
+        # Output the results
+        print(f"Flags Value: 0x{eprom['flags']:08X}")
+        if properties:
+            print("Interpreted IC Properties:")
+            for prop in properties:
+                print(f" - {prop}")
 
 
 def interpret_flags(flags):
@@ -184,15 +186,15 @@ def interpret_flags(flags):
 
     # Define the bit masks and their meanings
     flag_definitions = [
-        (0x00000008, "Requires VPP (High Programming Voltage)"),
-        (0x00000010, "Can be electrically erased"),
-        (0x00000020, "Has Readable Chip ID"),
-        (0x00000040, "Uses EPROM Programming Algorithm"),
-        (0x00000080, "Is Electrically Erasable or Writable (EEPROM/Flash/SRAM)"),
-        (0x00000200, "Supports Boot Block Features"),
-        (0x00004000, "Software Data Protection (SDP)"),
-        (0x00008000, "Requires Specific Write Sequence or Hardware Protection"),
-        (0x00400000, "Supports Block Locking or Sector Protection"),
+        (0x00000008, "Requires VPP (High Programming Voltage) - 0x00000008"),
+        (0x00000010, "Can be electrically erased - 0x00000010"),
+        (0x00000020, "Has Readable Chip ID - 0x00000020"),
+        (0x00000040, "Uses EPROM Programming Algorithm - 0x00000040"),
+        (0x00000080, "Is Electrically Erasable or Writable (EEPROM/Flash/SRAM) - 0x00000080"),
+        (0x00000200, "Supports Boot Block Features - 0x00000200"),
+        (0x00004000, "Software Data Protection (SDP) - 0x00004000"),
+        (0x00008000, "Requires Specific Write Sequence or Hardware Protection - 0x00008000"),
+        (0x00400000, "Supports Block Locking or Sector Protection - 0x00400000"),
     ]
 
     # Check each flag definition
@@ -202,19 +204,19 @@ def interpret_flags(flags):
 
     # Handle combined flags for advanced features
     if (flags & 0x0000C000) == 0x0000C000:
-        properties.append(" - Advanced Write Protection Mechanisms")
+        properties.append(" -> Advanced Write Protection Mechanisms - 0x0000C000")
 
     if (flags & 0x00000090) == 0x00000090:
-        properties.append(" - Electrically Erasable with Write Enable Sequence")
+        properties.append(" -> Electrically Erasable with Write Enable Sequence - 0x00000090")
 
     if (flags & 0x000000E8) == 0x000000E8:
         properties.append(
-            " - EEPROM with Special Programming Algorithm and Electrically Erasable"
+            " -> EEPROM with Special Programming Algorithm and Electrically Erasable - 0x000000E8"
         )
 
     if (flags & 0x00004278) == 0x00004278:
         properties.append(
-            " - Flash Memory with Advanced Protection Features (Block Locking, SDP, etc.)"
+            " - Flash Memory with Advanced Protection Features (Block Locking, SDP, etc.) - 0x00004278"
         )
 
     if (flags & 0x0040C078) == 0x0040C078:

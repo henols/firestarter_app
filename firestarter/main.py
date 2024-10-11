@@ -225,7 +225,7 @@ def eprom_info(name):
         print(f"Eprom {name} not found.")
         return
 
-    ic.print_chip_info(eprom)
+    ic.print_chip_info(eprom, verbose)
 
 
 def read_voltage(state):
