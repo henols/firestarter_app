@@ -1,6 +1,6 @@
 ### **Updated Flag Bits and Inferred Meanings**
 
-| Hex Value   | Bit Position(s)  | Inferred Meaning                                                                 |
+| Hex Value   | Bit Position(s)  | Inferred Meaning                                                                  |
 |-------------|------------------|-----------------------------------------------------------------------------------|
 | 0x00000008  | Bit 3            | Requires VPP (High Programming Voltage)                                           |
 | 0x00000010  | Bit 4            | Requires Write Enable Sequence                                                    |
@@ -15,7 +15,7 @@
 | 0x00000090  | Bits 4,7         | Electrically Erasable with Write Enable Sequence                                  |
 | 0x000000E8  | Bits 3,5,6,7     | EEPROM with Special Programming Algorithm and Electrically Erasable               |
 | 0x00004278  | Bits 22,14,6,5,4,3 | Flash Memory with Advanced Protection Features (Block Locking, SDP, etc.)       |
-| 0x0040C078  | Bits 22,14,15,6,5,4,3 | Flash Memory with Block Locking and Advanced Write Protection              |
+| 0x0040C078  | Bits 22,14,15,6,5,4,3 | Flash Memory with Block Locking and Advanced Write Protection                |
 
 ---
 

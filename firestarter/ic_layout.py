@@ -156,12 +156,15 @@ def print_chip_info(eprom, verbose=False):
             print(f"Chip ID:\t{hex(eprom['chip-id'])}")
     elif eprom["ic-type"] == 4:
         print(f"Type:\t\tSRAM")
-    if eprom['flags'] & 0x00000008:
+    if eprom["flags"] & 0x00000008:
         print(f"VPP:\t\t{eprom['vpp']}")
     print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
     print_generic_eeprom(eprom)
 
     if verbose:
+        print(protocol_info(eprom['protocol-id']))
+        print()
+
         # Interpret the flags
         properties = interpret_flags(eprom["flags"])
         # Output the results
@@ -186,15 +189,15 @@ def interpret_flags(flags):
 
     # Define the bit masks and their meanings
     flag_definitions = [
-        (0x00000008, "Requires VPP (High Programming Voltage) - 0x00000008"),
-        (0x00000010, "Can be electrically erased - 0x00000010"),
-        (0x00000020, "Has Readable Chip ID - 0x00000020"),
-        (0x00000040, "Uses EPROM Programming Algorithm - 0x00000040"),
-        (0x00000080, "Is Electrically Erasable or Writable (EEPROM/Flash/SRAM) - 0x00000080"),
-        (0x00000200, "Supports Boot Block Features - 0x00000200"),
-        (0x00004000, "Software Data Protection (SDP) - 0x00004000"),
-        (0x00008000, "Requires Specific Write Sequence or Hardware Protection - 0x00008000"),
-        (0x00400000, "Supports Block Locking or Sector Protection - 0x00400000"),
+        (0x00000008, "Requires VPP (High Programming Voltage)"),
+        (0x00000010, "Can be electrically erased"),
+        (0x00000020, "Has Readable Chip ID"),
+        (0x00000040, "Uses EPROM Programming Algorithm"),
+        (0x00000080, "Is Electrically Erasable or Writable (EEPROM/Flash/SRAM)"),
+        (0x00000200, "Supports Boot Block Features"),
+        (0x00004000, "Software Data Protection (SDP)"),
+        (0x00008000, "Requires Specific Write Sequence or Hardware Protection"),
+        (0x00400000, "Supports Block Locking or Sector Protection"),
     ]
 
     # Check each flag definition
@@ -204,27 +207,199 @@ def interpret_flags(flags):
 
     # Handle combined flags for advanced features
     if (flags & 0x0000C000) == 0x0000C000:
-        properties.append(" -> Advanced Write Protection Mechanisms - 0x0000C000")
+        properties.append(" -> Advanced Write Protection Mechanisms")
 
     if (flags & 0x00000090) == 0x00000090:
-        properties.append(" -> Electrically Erasable with Write Enable Sequence - 0x00000090")
+        properties.append(" -> Electrically Erasable with Write Enable Sequence")
 
     if (flags & 0x000000E8) == 0x000000E8:
         properties.append(
-            " -> EEPROM with Special Programming Algorithm and Electrically Erasable - 0x000000E8"
+            " -> EEPROM with Special Programming Algorithm and Electrically Erasable"
         )
 
     if (flags & 0x00004278) == 0x00004278:
         properties.append(
-            " - Flash Memory with Advanced Protection Features (Block Locking, SDP, etc.) - 0x00004278"
+            " -> Flash Memory with Advanced Protection Features (Block Locking, SDP, etc.)"
         )
 
     if (flags & 0x0040C078) == 0x0040C078:
         properties.append(
-            " - Flash Memory with Block Locking and Advanced Write Protection"
+            " -> Flash Memory with Block Locking and Advanced Write Protection"
         )
 
     return properties
+
+
+def protocol_info(protocol_id):
+    protocol_info = [
+        (
+            0x05,
+            "EEPROM/Flash",
+            (
+                "EEPROM/Flash with write enable sequence, software commands",
+                "Requires specific software commands for programming/erasure",
+                "Operates at standard voltage levels",
+            ),
+        ),
+        (
+            0x06,
+            "Flash Memory",
+            (
+                "Standard Flash memory programming protocol",
+                "Uses command sequences for programming/erasure",
+                "Operates at standard voltage levels",
+            ),
+        ),
+        (
+            0x07,
+            "EEPROM",
+            (
+                "EEPROM programming protocol for 28-pin devices",
+                "Byte-wise programming, no high voltage required",
+                "May include software data protection",
+            ),
+        ),
+        (
+            0x08,
+            "EPROM",
+            (
+                "EPROM programming protocol requiring high programming voltage",
+                "Uses VPP (typically 12.5V or higher) for programming",
+                "Follows EPROM programming algorithms",
+            ),
+        ),
+        (
+            0x0B,
+            "EPROM/EEPROM",
+            (
+                "Programming protocol for older 24-pin devices",
+                "May require VPP for programming",
+                "Smaller capacity devices",
+            ),
+        ),
+        (
+            0x0D,
+            "EEPROM",
+            (
+                "Programming protocol for large EEPROMs",
+                "Supports byte-wise programming",
+                "May require specific write sequences",
+            ),
+        ),
+        (
+            0x0E,
+            "SRAM",
+            (
+                "SRAM with battery backup or additional features",
+                "Standard SRAM access protocols",
+                "32-pin devices",
+            ),
+        ),
+        (
+            0x10,
+            "Flash Memory",
+            (
+                "Intel-compatible Flash memory programming protocol",
+                "Requires specific command sequences",
+                "Operates at standard voltage levels",
+            ),
+        ),
+        (
+            0x11,
+            "Flash Memory",
+            (
+                "Firmware Hub (FWH) programming protocol",
+                "Used in BIOS chips",
+                "Requires specific interfaces and commands",
+            ),
+        ),
+        (
+            0x27,
+            "SRAM",
+            (
+                "Standard SRAM access protocol for 24-pin devices",
+                "2Kb SRAM devices",
+                "Simple read/write operations",
+            ),
+        ),
+        (
+            0x28,
+            "SRAM",
+            (
+                "Standard SRAM access protocol for 28-pin devices",
+                "8Kb SRAM devices",
+                "Simple read/write operations",
+            ),
+        ),
+        (
+            0x29,
+            "SRAM",
+            (
+                "Standard SRAM access protocol for 32-pin devices",
+                "512Kb to 1Mb SRAM devices",
+                "Simple read/write operations",
+            ),
+        ),
+        (
+            0x2A,
+            "NVRAM",
+            (
+                "Non-volatile SRAM with built-in battery",
+                "Requires special handling for battery-backed operation",
+                "32-pin devices",
+            ),
+        ),
+        (
+            0x2C,
+            "NVRAM",
+            (
+                "Non-volatile SRAM (Timekeeping RAM)",
+                "May include real-time clock features",
+                "Standard SRAM access protocol",
+            ),
+        ),
+        (
+            0x2E,
+            "NVRAM",
+            (
+                "High-capacity non-volatile SRAM",
+                "512Kb and larger sizes",
+                "Requires specific protocols for access",
+            ),
+        ),
+        (
+            0x35,
+            "Flash Memory",
+            (
+                "Flash memory with EEPROM-like interface",
+                "Requires specific write sequences",
+                "May include software data protection",
+            ),
+        ),
+        (
+            0x39,
+            "Flash Memory",
+            (
+                "Advanced Flash memory programming protocol",
+                "Uses command sequences similar to Intel algorithms",
+                "Operates at standard voltage levels",
+            ),
+        ),
+        (
+            0x3C,
+            "Flash Memory",
+            (
+                "Common Flash memory protocol for 4Mb devices",
+                "Uses standard command sequences for programming",
+                "May operate at lower voltages (3.3V)",
+            ),
+        ),
+    ]
+    for  id, type, description in protocol_info:
+        if id == protocol_id:
+            return f"Protocol: {type} (0x{id:02X})\nDescription:\n - {description[0]}\n - {description[1]}\n - {description[2]}"
+
+    return None
 
 
 # Function to print generic EPROM layout

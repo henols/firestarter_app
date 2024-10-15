@@ -125,6 +125,8 @@ def find_programmer(data, port=None):
         data.pop("ic-type")
     if "flags" in data:
         data.pop("flags")
+    if "protocol-id" in data:
+        data.pop("protocol-id")
 
     if verbose:
         data["verbose"] = True
@@ -543,9 +545,9 @@ def write_chip(
                 ser.write(int(0).to_bytes(2, byteorder="big"))
                 ser.flush()
                 resp, info = wait_for_response(ser)
-                print("End of file reached")
+                print("\nEnd of file reached")
                 print(info)
-                return 0
+                break
 
             ser.write(len(data).to_bytes(2, byteorder="big"))
             ser.flush()

@@ -356,7 +356,3 @@ The `protocol-id` is a critical field in the IC database that indicates the prog
 - **Programming Safety**: Ensure that programming equipment is configured correctly according to the `protocol-id` to prevent damage to devices.
 
 - **Further Analysis**: For devices not listed or for more specific protocols, additional analysis or consultation with manufacturers may be necessary.
-
----
-
-If you have any specific devices you'd like more detailed information on or need further assistance, feel free to ask!
