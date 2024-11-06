@@ -121,8 +121,6 @@ def find_programmer(data, port=None):
         data.pop("pin-map")
     if "name" in data:
         data.pop("name")
-    if "ic-type" in data:
-        data.pop("ic-type")
     if "flags" in data:
         data.pop("flags")
     if "protocol-id" in data:
@@ -228,7 +226,10 @@ def eprom_info(name):
         return
 
     ic.print_chip_info(eprom, verbose)
-
+    if verbose:
+        print()
+        print("Config:")
+        print(eprom)
 
 def read_voltage(state):
     data = {}
