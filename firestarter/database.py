@@ -123,13 +123,12 @@ def map_data(ic, manufacturer):
     variant = ic["variant"]
     ic_type = types.get( ic["type"])
     protocol_id = int(ic["protocol-id"], 16)
+    flags = int(ic["flags"], 16)
     type = 4
     if ic_type == 1:
         if protocol_id == 0x06:
             type = 3
-        elif protocol_id == 0x08:
-            type = 2
-        else:
+        elif flags & 0x08:
             type = 1
     # if pin_count == 24 and variant in [0, 1, 16]:
     #     type = 1
@@ -148,7 +147,7 @@ def map_data(ic, manufacturer):
         "vpp": vpp,
         "pulse-delay": int(ic["pulse-delay"], 16),
         "verified": ic["verified"],
-        "flags": int(ic["flags"], 16),
+        "flags": flags,
         "protocol-id": int(ic["protocol-id"], 16),
     }
     chip_id = int(ic["chip-id"], 16)
