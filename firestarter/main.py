@@ -275,6 +275,7 @@ def hardware():
         return 1
     return 0
 
+
 def firmware(install, avrdude_path, port):
     latest, selected_port, url = firmware_check(port)
     if not latest and not install and not url:
@@ -287,6 +288,7 @@ def firmware(install, avrdude_path, port):
             selected_port = port
         return install_firmware(url, avrdude_path, selected_port)
     return 0
+
 
 def firmware_check(port=None):
     data = {}
@@ -430,12 +432,20 @@ def rurp_config(rev=None, r1=None, r2=None):
         return 1
     return 0
 
-def read_chip(eprom, output_file):
+
+def read_chip(
+    eprom,
+    output_file,
+    force=False,
+):
     data = db.get_eprom(eprom)
     if not data:
         print(f"Eprom {eprom} not found.")
         return 1
     eprom = data.pop("name")
+
+    if force:
+        data["force"] = True
 
     data["state"] = STATE_READ
     print(f"Reading chip: {eprom}")
@@ -469,6 +479,8 @@ def read_chip(eprom, output_file):
                 print()
                 print("Finished reading data")
                 break
+            elif resp == "WARN":
+                print(f"Warning: {info}")
             else:
                 print()
                 print(f"Error reading data {info}")
@@ -487,6 +499,7 @@ def read_chip(eprom, output_file):
         output_file.close()
         ser.close()
     return 0
+
 
 def write_chip(
     eprom,
@@ -581,6 +594,7 @@ def write_chip(
     print(f"File sent successfully in {total_duration:.2f} seconds")
     return 0
 
+
 def erase(eprom):
     data = db.get_eprom(eprom)
     if not data:
@@ -606,6 +620,7 @@ def erase(eprom):
         return 1
     return 0
 
+
 def blank_check(eprom):
     data = db.get_eprom(eprom)
     if not data:
@@ -627,6 +642,7 @@ def blank_check(eprom):
         print(f"Error: {info}")
         return 1
     return 0
+
 
 def main():
     global verbose
@@ -654,6 +670,12 @@ def main():
         nargs="?",
         type=str,
         help="Output file name (optional), defaults to the EPROM_NAME.bin",
+    )
+    read_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force read, even if the chip id don't match.",
     )
 
     # Write command
@@ -760,7 +782,11 @@ def main():
     elif args.command == "search":
         res = search_eproms(args.text)
     elif args.command == "read":
-        res = read_chip(args.eprom, args.output_file)
+        res = read_chip(
+            args.eprom,
+            args.output_file,
+            force=args.force,
+        )
     elif args.command == "write":
         res = write_chip(
             args.eprom,
@@ -786,6 +812,7 @@ def main():
     elif args.command == "config":
         res = rurp_config(args.rev, args.r16, args.r14r15)
     return res
+
 
 def exit_gracefully(signum, frame):
     # restore the original signal handler as otherwise evil things will happen
