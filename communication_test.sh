@@ -11,11 +11,8 @@ if [ ! -d "$TEMP_DIR" ]; then
     echo "Temporary directory created: $TEMP_DIR"
 fi
 
-# Clean up any existing files in the temp directory from previous runs
-rm -f "$TEMP_DIR"/*
-
 # Trap to clean up the temporary files on exit or interrupt
-# trap "rm -rf $TEMP_DIR; echo 'Cleaned up temp files'; exit" EXIT
+trap "rm -rf $TEMP_DIR; echo 'Cleaned up temp files'; exit" EXIT
 
 # Convert TARGET_NAME to uppercase
 EPROM_NAME=$(echo "$EPROM_NAME" | tr '[:lower:]' '[:upper:]')
@@ -49,97 +46,6 @@ dd if=/dev/urandom of="$TEMP_DIR/high_data.bin" bs=1 count=$HALF_SIZE status=non
 # Concatenate the two files into one file
 cat "$TEMP_DIR/low_data.bin" "$TEMP_DIR/high_data.bin" > "$TEMP_DIR/full_data.bin"
 
-
-echo "---------------------------------"
-echo "Writing - $EPROM_NAME"
-echo "---------------------------------"
-firestarter write $EPROM_NAME "$TEMP_DIR/full_data.bin"
-if test $? -gt 0
-then
-	echo "Write failed"
-    exit 1
-fi
-echo
-sleep 3
-echo "---------------------------------"
-echo "Reading"
-echo "---------------------------------"
-firestarter read $EPROM_NAME "$TEMP_DIR/read_back.bin"
-if test $? -gt 0
-then
-	echo "Read failed"
-    exit 1
-fi
-echo
-colordiff --suppress-common-lines -y  <(xxd "$TEMP_DIR/full_data.bin") <(xxd "$TEMP_DIR/read_back.bin")
-if test $? -gt 0
-then
-	echo "Read back data does not match"
-    exit 1
-fi
-echo "Files are identical"
-echo
-sleep 3
-echo "---------------------------------"
-echo "Writing - parts"
-echo "---------------------------------"
-firestarter write $EPROM_NAME "$TEMP_DIR/low_data.bin"
-if test $? -gt 0
-then
-	echo "Write low_data.bin failed"
-    exit 1
-fi
-echo
-sleep 3
-firestarter write -b -a $HALF_SIZE $EPROM_NAME "$TEMP_DIR/high_data.bin"
-if test $? -gt 0
-then
-	echo "Write high_data.bin failed"
-    exit 1
-fi
-echo
-sleep 3
-echo "---------------------------------"
-echo "Reading"
-echo "---------------------------------"
-firestarter read $EPROM_NAME "$TEMP_DIR/read_back.bin"
-if test $? -gt 0
-then
-	echo "Read failed"
-    exit 1
-fi
-echo
-colordiff --suppress-common-lines -y  <(xxd "$TEMP_DIR/full_data.bin") <(xxd "$TEMP_DIR/read_back.bin")
-if test $? -gt 0
-then
-	echo "Read back data does not match"
-    exit 1
-fi
-echo "Files are identical"
-echo
-sleep 3
-echo "---------------------------------"
-echo "Erase"
-echo "---------------------------------"
-firestarter erase $EPROM_NAME
-if test $? -gt 0
-then
-	echo "Erase failed"
-    exit 1
-fi
-echo
-sleep 3
-echo "---------------------------------"
-echo "Blank Check"
-echo "---------------------------------"
-firestarter blank $EPROM_NAME
-if test $? -gt 0
-then
-	echo "Blank check failed"
-    exit 1
-fi
-echo
-sleep 3
 echo "---------------------------------"
 echo "Hardware Version"
 echo "---------------------------------"
@@ -150,7 +56,7 @@ then
     exit 1
 fi
 echo
-sleep 3
+sleep 0.5
 echo "---------------------------------"
 echo "Firmware Version"
 echo "---------------------------------"
@@ -161,7 +67,7 @@ then
     exit 1
 fi
 echo
-sleep 3
+sleep 0.5
 echo "---------------------------------"
 echo "Config"
 echo "---------------------------------"
@@ -169,6 +75,58 @@ firestarter config
 if test $? -gt 0
 then
 	echo "Config failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
+echo "Writing - $EPROM_NAME"
+echo "---------------------------------"
+firestarter write $EPROM_NAME "$TEMP_DIR/full_data.bin"
+if test $? -gt 0
+then
+	echo "Write failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
+echo "Reading"
+echo "---------------------------------"
+firestarter read $EPROM_NAME "$TEMP_DIR/read_back.bin"
+if test $? -gt 0
+then
+	echo "Read failed"
+    exit 1
+fi
+echo
+colordiff --suppress-common-lines -y  <(xxd "$TEMP_DIR/full_data.bin") <(xxd "$TEMP_DIR/read_back.bin")
+if test $? -gt 0
+then
+	echo "Read back data does not match"
+    exit 1
+fi
+echo "Files are identical"
+echo
+sleep 0.5
+echo "---------------------------------"
+echo "Erase"
+echo "---------------------------------"
+firestarter erase $EPROM_NAME
+if test $? -gt 0
+then
+	echo "Erase failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
+echo "Blank Check"
+echo "---------------------------------"
+firestarter blank $EPROM_NAME
+if test $? -gt 0
+then
+	echo "Blank check failed"
     exit 1
 fi
 echo
