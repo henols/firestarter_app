@@ -9,7 +9,7 @@ import os
 import json
 from pathlib import Path
 
-types = {"memory": 0x01, "sram": 0x04}
+types = {"memory": 0x01, "flash":0x03, "sram": 0x04}
 ROM_CE = 100
 
 # eprom pins to rurp conversion
@@ -121,13 +121,21 @@ def map_data(ic, manufacturer):
     if not ic["voltages"]["vpp"] == None:
         vpp = int(ic["voltages"]["vpp"])
     variant = ic["variant"]
+    ic_type = types.get( ic["type"])
+    protocol_id = int(ic["protocol-id"], 16)
+    flags = int(ic["flags"], 16)
     type = 4
-    if pin_count == 24 and variant in [0, 1, 16]:
-        type = 1
-    elif pin_count == 28 and variant in [16, 17, 19]:
-        type = 1
-    elif pin_count == 32 and variant in [0, 1, 2]:
-        type = 1
+    if ic_type == 1:
+        if protocol_id == 0x06:
+            type = 3
+        elif flags & 0x08:
+            type = 1
+    # if pin_count == 24 and variant in [0, 1, 16]:
+    #     type = 1
+    # elif pin_count == 28 and variant in [16, 17, 19]:
+    #     type = 1
+    # elif pin_count == 32 and variant in [0, 1, 2]:
+    #     type = 1
 
     data = {
         "name": ic["name"],
@@ -135,12 +143,11 @@ def map_data(ic, manufacturer):
         "memory-size": int(ic["memory-size"], 16),
         "can-erase": bool(ic["can-erase"]),
         "type": type,
-        "ic-type": types[ic["type"]],
         "pin-count": pin_count,
         "vpp": vpp,
         "pulse-delay": int(ic["pulse-delay"], 16),
         "verified": ic["verified"],
-        "flags": int(ic["flags"], 16),
+        "flags": flags,
         "protocol-id": int(ic["protocol-id"], 16),
     }
     chip_id = int(ic["chip-id"], 16)
