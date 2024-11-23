@@ -24,6 +24,14 @@ pip install firestarter
 This command installs the Firestarter application, which allows you to interact with EPROMs using the Relatively-Universal-ROM-Programmer.
 
 ### Installing the Firmware on the Arduino
+
+First, a few things to remember. 
+#1 Don't attach the Programmer shield while power is on.
+
+#2 Don't turn on power if the controller (Arduino) isn't programmed with appropriate firmware.
+
+#3 Don't insert a ROM in the socket until you're ready to write it. Don't leave a ROM in the socket during reset or programming.
+
 To install the firmware on the Arduino, use the **fw** command with the ```--install``` option. This command installs the latest firmware version on the Arduino.
 
 #### Options
@@ -157,7 +165,7 @@ Checks or installs the firmware version.
 firestarter fw [options]
 ```
 
-* ```-i, --install```: Try to install the latest firmware.
+* ```-i, --install```: Try to install the latest firmware. (Do this *without* a chip in the socket or without the shield attached)
 * ```-p, --avrdude-path <path>```: Full path to avrdude (optional), set if avrdude is not found.
 * ```--port <port>```: Serial port name (optional).
 
