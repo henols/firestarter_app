@@ -34,6 +34,7 @@ STATE_READ = 1
 STATE_WRITE = 2
 STATE_ERASE = 3
 STATE_CHECK_BLANK = 4
+STATE_CHECK_CHIP_ID = 5
 
 STATE_READ_VPP = 11
 STATE_READ_VPE = 12
@@ -230,6 +231,7 @@ def eprom_info(name):
         print()
         print("Config:")
         print(eprom)
+
 
 def read_voltage(state):
     data = {}
@@ -621,6 +623,43 @@ def erase(eprom):
     return 0
 
 
+def check_chip_id(eprom):
+    data = db.get_eprom(eprom)
+    if not data:
+        print(f"Eprom {eprom} not found.")
+        return 1
+    eprom = data.pop("name")
+
+    data["state"] = STATE_CHECK_CHIP_ID
+
+    print(f"Checking Chip ID: {eprom}")
+    if "chip-id" not in data:
+        print(f"{eprom} don't have chip id.")
+        return 1
+    
+    ser = find_programmer(data)
+    if not ser:
+        return 1
+
+    resp, info = wait_for_response(ser)
+    if resp == "OK":
+        print(f"{eprom} id ok {info}")
+    elif resp == "ERROR":
+        print()
+        print(f"Error: {info}")
+        
+        chip_id = int(info[7:info.index(" ",8)],16)
+        matching = db.search_chip_id(chip_id)
+        if matching:
+            print()
+            print(f"Matching ICs:")
+            for ic in matching:
+                print(ic)
+
+        return 1
+    return 0
+
+
 def blank_check(eprom):
     data = db.get_eprom(eprom)
     if not data:
@@ -702,12 +741,15 @@ def main():
     write_parser.add_argument("input_file", type=str, help="Input file name")
 
     blank_check_parser = subparsers.add_parser(
-        "blank", help="Checks if a EPROM is blank."
+        "blank", help="Checks if an EPROM is blank."
     )
     blank_check_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
 
-    erase_parser = subparsers.add_parser("erase", help="Erase a EPROM, if supported.")
+    erase_parser = subparsers.add_parser("erase", help="Erase an EPROM, if supported.")
     erase_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+
+    id_parser = subparsers.add_parser("id", help="Checks an EPROM, if supported.")
+    id_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
 
     #  List command
     list_parser = subparsers.add_parser("list", help="List all EPROMs in the database.")
@@ -799,6 +841,8 @@ def main():
         res = blank_check(args.eprom)
     elif args.command == "erase":
         res = erase(args.eprom)
+    elif args.command == "id":
+        res = check_chip_id(args.eprom)
     elif args.command == "vpe":
         res = read_voltage(STATE_READ_VPE)
     elif args.command == "vpp":

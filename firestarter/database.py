@@ -9,7 +9,7 @@ import os
 import json
 from pathlib import Path
 
-types = {"memory": 0x01, "flash":0x03, "sram": 0x04}
+types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
 ROM_CE = 100
 
 # eprom pins to rurp conversion
@@ -121,7 +121,7 @@ def map_data(ic, manufacturer):
     if not ic["voltages"]["vpp"] == None:
         vpp = int(ic["voltages"]["vpp"])
     variant = ic["variant"]
-    ic_type = types.get( ic["type"])
+    ic_type = types.get(ic["type"])
     protocol_id = int(ic["protocol-id"], 16)
     flags = int(ic["flags"], 16)
     type = 4
@@ -201,6 +201,21 @@ def search_eprom(chip_name, all):
     return selected_proms
 
 
+def search_chip_id(chip_id):
+    selected_proms = []
+    for manufacturer in proms:
+        for ic in proms[manufacturer]:
+            if ic["has-chip-id"] and int(ic["chip-id"], 16) == chip_id:
+                selected_proms.append(
+                    ic["name"]
+                    + "\tfrom "
+                    + manufacturer
+                    + " pins: "
+                    + str(ic["pin-count"])
+                )
+    return selected_proms
+
+ 
 def main():
     init()
     chip_name = "TMS2764"
