@@ -11,6 +11,7 @@ import time
 import serial
 import serial.tools.list_ports
 import os
+import re
 import json
 import argparse
 import requests
@@ -647,17 +648,27 @@ def check_chip_id(eprom):
     elif resp == "ERROR":
         print()
         print(f"Error: {info}")
-        
-        chip_id = int(info[7:info.index(" ",8)],16)
-        matching = db.search_chip_id(chip_id)
-        if matching:
-            print()
-            print(f"Matching ICs:")
-            for ic in matching:
-                print(ic)
+
+        chip_id = extract_hex_to_decimal(info)
+        if chip_id:
+            matching = db.search_chip_id(chip_id)
+            if matching:
+                print()
+                print(f"Matching ICs:")
+                for ic in matching:
+                    print(ic)
 
         return 1
     return 0
+
+
+def extract_hex_to_decimal(input_string):
+    # Regular expression to find hexadecimal numbers in the format 0x or 0X followed by hex digits
+    match = re.search(r"0[xX][0-9a-fA-F]+", input_string)
+    if match:
+        hex_number = match.group()  # Extract the matched hexadecimal number
+        return int(hex_number, 16)  # Convert to decimal
+    return None
 
 
 def blank_check(eprom):
