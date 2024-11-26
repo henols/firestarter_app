@@ -128,6 +128,8 @@ def map_data(ic, manufacturer):
     if ic_type == 1:
         if protocol_id == 0x06:
             type = 3
+        elif protocol_id == 0x05:
+            type = 2
         elif flags & 0x08:
             type = 1
     # if pin_count == 24 and variant in [0, 1, 16]:

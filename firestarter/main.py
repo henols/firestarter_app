@@ -84,12 +84,14 @@ def check_port(port, data, baud_rate=BAUD_RATE):
         ser.flush()
 
         res, msg = wait_for_response(ser)
-        if res == "OK":
-            if verbose:
-                print(f"Programmer: {msg}")
-            return ser
-        else:
+        while not res == "OK":
+            if res == "ERROR":
+                raise Exception(msg)
             print(f"{res} - {msg}")
+
+        if verbose:
+            print(f"Programmer: {msg}")
+        return ser
     except (OSError, serial.SerialException):
         pass
 
@@ -137,33 +139,36 @@ def find_programmer(data, port=None):
     json_data = json.dumps(data, separators=(",", ":"))
 
     ports = find_comports(port)
-    for port in ports:
-        serial_port = check_port(port, json_data)
+    try:
+        for port in ports:
+            serial_port = check_port(port, json_data)
 
-        if serial_port:
-            config["port"] = port
-            save_config()
-            if verbose:
-                print(f"Found programmer at port: {port}")
-            else:
-                print(f"Connected to programmer")
-            return serial_port
+            if serial_port:
+                config["port"] = port
+                save_config()
+                if verbose:
+                    print(f"Found programmer at port: {port}")
+                else:
+                    print(f"Connected to programmer")
+                return serial_port
 
-    for port in ports:
-        serial_port = check_port(port, json_data, FALLBACK_BAUD_RATE)
+        for port in ports:
+            serial_port = check_port(port, json_data, FALLBACK_BAUD_RATE)
 
-        if serial_port:
-            config["port"] = port
-            save_config()
-            if verbose:
-                print(f"Found programmer at port: {port}")
-            else:
-                print(f"Connected to programmer")
-            print(
-                f"Using fallback baud rate: {FALLBACK_BAUD_RATE} consider updating firmware!"
-            )
-            return serial_port
-    print("No programmer found")
+            if serial_port:
+                config["port"] = port
+                save_config()
+                if verbose:
+                    print(f"Found programmer at port: {port}")
+                else:
+                    print(f"Connected to programmer")
+                print(
+                    f"Using fallback baud rate: {FALLBACK_BAUD_RATE} consider updating firmware!"
+                )
+                return serial_port
+        print("No programmer found")
+    except Exception as e:
+        print("Error:", e)
     return None
 
 
@@ -198,7 +203,7 @@ def wait_for_response(ser):
                 timeout = time.time()
 
         if timeout + 2 < time.time():
-            return "TIMEOUT_ERROR", "Timeout (expecting response)"
+            return "ERROR", "Timeout (expecting response)"
 
 
 def write_feedback(msg):

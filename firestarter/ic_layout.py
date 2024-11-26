@@ -156,15 +156,17 @@ def print_chip_info(eprom, verbose=False):
             print(f"Chip ID:\t{hex(eprom['chip-id'])}")
     elif eprom["type"] == 4:
         print(f"Type:\t\tSRAM")
+    elif eprom["type"] == 2:
+        print(f"Type:\t\tFlash Memory type 2")
     elif eprom["type"] == 3:
-        print(f"Type:\t\tFlash Memory")
+        print(f"Type:\t\tFlash Memory type 3")
     if eprom["flags"] & 0x00000008:
         print(f"VPP:\t\t{eprom['vpp']}")
     print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
     print_generic_eeprom(eprom)
 
     if verbose:
-        print(protocol_info(eprom['protocol-id']))
+        print(protocol_info(eprom["protocol-id"]))
         print()
 
         # Interpret the flags
@@ -397,7 +399,7 @@ def protocol_info(protocol_id):
             ),
         ),
     ]
-    for  id, type, description in protocol_info:
+    for id, type, description in protocol_info:
         if id == protocol_id:
             return f"Protocol: {type} (0x{id:02X})\nDescription:\n - {description[0]}\n - {description[1]}\n - {description[2]}"
 
