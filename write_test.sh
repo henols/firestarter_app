@@ -55,10 +55,10 @@ dd if=/dev/zero    of="$TEMP_DIR/null_1k.bin"      bs=1024 count=1  status=none
 
 # Concatenate the two files into one file
 cat "$TEMP_DIR/low_data.bin" "$TEMP_DIR/high_data.bin" > "$TEMP_DIR/full_data.bin"
-cat "$TEMP_DIR/null_1k.bin" "$TEMP_DIR/0xFF_1k.bin" "$TEMP_DIR/null_1k.bin" "$TEMP_DIR/0xFF_1k.bin" "$TEMP_DIR/null_1k.bin" "$TEMP_DIR/0xFF_1k.bin" "$TEMP_DIR/null_1k.bin" "$TEMP_DIR/0xFF_1k.bin" > "$TEMP_DIR/mix_8k.bin"
 
 if 0
 then
+cat "$TEMP_DIR/null_1k.bin" "$TEMP_DIR/0xFF_1k.bin" "$TEMP_DIR/null_1k.bin" "$TEMP_DIR/0xFF_1k.bin" "$TEMP_DIR/null_1k.bin" "$TEMP_DIR/0xFF_1k.bin" "$TEMP_DIR/null_1k.bin" "$TEMP_DIR/0xFF_1k.bin" > "$TEMP_DIR/mix_8k.bin"
 echo "---------------------------------"
 echo "Writing mix 8k - $EPROM_NAME"
 echo "---------------------------------"
@@ -90,7 +90,6 @@ echo "Files are identical"
 echo
 sleep 0.5
 fi
-
 echo "---------------------------------"
 echo "Writing null - $EPROM_NAME"
 echo "---------------------------------"

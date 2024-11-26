@@ -80,6 +80,17 @@ fi
 echo
 sleep 0.5
 echo "---------------------------------"
+echo "Chip ID - $EPROM_NAME"
+echo "---------------------------------"
+firestarter id $EPROM_NAME
+if test $? -gt 0
+then
+	echo "Checking Chip ID failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
 echo "Writing - $EPROM_NAME"
 echo "---------------------------------"
 firestarter write $EPROM_NAME "$TEMP_DIR/full_data.bin"

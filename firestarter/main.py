@@ -29,7 +29,8 @@ except ImportError:
     import ic_layout as ic
 
 
-BAUD_RATE = "115200"
+BAUD_RATE = "250000"
+FALLBACK_BAUD_RATE = "115200"
 
 STATE_READ = 1
 STATE_WRITE = 2
@@ -68,14 +69,14 @@ def save_config():
         json.dump(config, f)
 
 
-def check_port(port, data):
+def check_port(port, data, baud_rate=BAUD_RATE):
     try:
         if verbose:
             print(f"Check port: {port}")
 
         ser = serial.Serial(
             port,
-            BAUD_RATE,
+            baud_rate,
             timeout=1.0,
         )
         time.sleep(2)
@@ -146,6 +147,21 @@ def find_programmer(data, port=None):
                 print(f"Found programmer at port: {port}")
             else:
                 print(f"Connected to programmer")
+            return serial_port
+
+    for port in ports:
+        serial_port = check_port(port, json_data, FALLBACK_BAUD_RATE)
+
+        if serial_port:
+            config["port"] = port
+            save_config()
+            if verbose:
+                print(f"Found programmer at port: {port}")
+            else:
+                print(f"Connected to programmer")
+            print(
+                f"Using fallback baud rate: {FALLBACK_BAUD_RATE} consider updating firmware!"
+            )
             return serial_port
     print("No programmer found")
     return None
@@ -637,7 +653,7 @@ def check_chip_id(eprom):
     if "chip-id" not in data:
         print(f"{eprom} don't have chip id.")
         return 1
-    
+
     ser = find_programmer(data)
     if not ser:
         return 1
