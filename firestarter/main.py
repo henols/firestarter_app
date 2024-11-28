@@ -88,6 +88,8 @@ def check_port(port, data, baud_rate=BAUD_RATE):
             if res == "ERROR":
                 raise Exception(msg)
             print(f"{res} - {msg}")
+            if res == "TIMEOUT_ERROR":
+                return None
 
         if verbose:
             print(f"Programmer: {msg}")
@@ -132,6 +134,7 @@ def find_programmer(data, port=None):
         data.pop("protocol-id")
 
     if verbose:
+        print(f"Firestarter version: {version}")
         data["verbose"] = True
         print("Config data:")
         print(data)
@@ -203,7 +206,7 @@ def wait_for_response(ser):
                 timeout = time.time()
 
         if timeout + 2 < time.time():
-            return "ERROR", "Timeout (expecting response)"
+            return "TIMEOUT_ERROR", "Timeout (expecting response)"
 
 
 def write_feedback(msg):
@@ -243,6 +246,9 @@ def search_eproms(text):
 
 
 def eprom_info(name):
+    if verbose:
+        print(f"Firestarter version: {version}")
+
     eprom = db.get_eprom(name)
     if not eprom:
         print(f"Eprom {name} not found.")
@@ -505,6 +511,8 @@ def read_chip(
                 break
             elif resp == "WARN":
                 print(f"Warning: {info}")
+            elif resp == "ERROR":
+                raise Exception(info)
             else:
                 print()
                 print(f"Error reading data {info}")
