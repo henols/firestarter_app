@@ -81,7 +81,7 @@ def read_config(filename):
     return config
 
 
-def init():
+def init_db():
     global proms
     global pin_maps
     proms_filename = "database.json"
