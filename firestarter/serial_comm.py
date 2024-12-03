@@ -12,13 +12,16 @@ import serial.tools.list_ports
 import time
 import json
 
-from .config import get_config_value, set_config_value
+try:
+    from .config import get_config_value, set_config_value
+except ImportError:
+    from config import get_config_value, set_config_value
 
 # Constants
 BAUD_RATE = "250000"
 FALLBACK_BAUD_RATE = "115200"
 BUFFER_SIZE = 512
- 
+
 
 def check_port(port, data, baud_rate=BAUD_RATE, verbose=False):
     """
@@ -108,6 +111,7 @@ def find_programmer(data, port=None, verbose=False):
     Returns:
         Serial: Serial connection to the programmer or None if not found.
     """
+
     if verbose:
         print(f"Firestarter data: {data}")
 
@@ -151,6 +155,7 @@ def wait_for_response(ser):
             byte_array = ser.readline()
             res = read_filtered_bytes(byte_array)
             if res:
+                write_feedback(res, verbose=True)
                 if "OK:" in res:
                     msg = res.split("OK:")[-1].strip()
                     return "OK", msg

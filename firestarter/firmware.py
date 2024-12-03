@@ -9,10 +9,15 @@ Firmware Management Module
 
 import os
 import requests
-import time
-from .serial_comm import find_programmer, wait_for_response
-from .config import get_config_value, set_config_value
-from .avr_tool import Avrdude
+
+try:
+    from .serial_comm import find_programmer, wait_for_response
+    from .config import get_config_value, set_config_value
+    from .avr_tool import Avrdude
+except ImportError:
+    from serial_comm import find_programmer, wait_for_response
+    from config import get_config_value, set_config_value
+    from avr_tool import Avrdude
 
 # Constants
 FIRESTARTER_RELEASE_URL = (
@@ -54,6 +59,7 @@ def hardware(verbose=False):
         ser.close()
     return 0
 
+
 def rurp_config(rev=None, r1=None, r2=None):
     data = {}
     data["state"] = STATE_CONFIG
@@ -79,6 +85,7 @@ def rurp_config(rev=None, r1=None, r2=None):
         print(r)
         return 1
     return 0
+
 
 def firmware(install, avrdude_path, port, verbose=False):
     """

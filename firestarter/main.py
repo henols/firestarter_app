@@ -14,41 +14,40 @@ import sys
 import argparse
 import signal
 
-# try:
-#     from .fs_config import open_config, save_config
-#     from .__init__ import __version__ as version
-#     from .eprom_ops import (
-#         list_eproms,
-#         search_eproms,
-#         eprom_info,
-#         read_chip,
-#         write_chip,
-#         erase,
-#         check_chip_id,
-#         blank_check,
-#     )
-#     from .serial_comm import read_voltage
-#     from .firmware import firmware, hardware, rurp_config
-#     from . import database as db
-#     from . import ic_layout as ic
-#     from .avr_tool import Avrdude
-# except ImportError:
-from .config import open_config
-from .__init__ import __version__ as version
-from .eprom_ops import (
-    list_eproms,
-    search_eproms,
-    eprom_info,
-    read_chip,
-    write_chip,
-    erase,
-    check_chip_id,
-    blank_check,
-    read_vpe_voltage,
-    read_vpp_voltage,
-)
-from .database import init_db
-from .firmware import firmware, hardware, rurp_config
+try:
+    from .config import open_config
+    from .__init__ import __version__ as version
+    from .eprom_ops import (
+        list_eproms,
+        search_eproms,
+        eprom_info,
+        read_chip,
+        write_chip,
+        erase,
+        check_chip_id,
+        blank_check,
+        read_vpe_voltage,
+        read_vpp_voltage,
+    )
+    from .database import init_db
+    from .firmware import firmware, hardware, rurp_config
+except ImportError:
+    from config import open_config
+    from __init__ import __version__ as version
+    from eprom_ops import (
+        list_eproms,
+        search_eproms,
+        eprom_info,
+        read_chip,
+        write_chip,
+        erase,
+        check_chip_id,
+        blank_check,
+        read_vpe_voltage,
+        read_vpp_voltage,
+    )
+    from database import init_db
+    from firmware import firmware, hardware, rurp_config
 
 
 def main():

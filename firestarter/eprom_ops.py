@@ -13,11 +13,16 @@ import time
 # from config import get_config_value
 # from database import get_eprom, search_eprom, get_eproms
 # from utils import extract_hex_to_decimal
-
-from .serial_comm import find_programmer, wait_for_response, print_progress
-from .config import get_config_value
-from .database import get_eprom, search_eprom, get_eproms
-from .utils import extract_hex_to_decimal
+try:
+    from .serial_comm import find_programmer, wait_for_response, print_progress
+    from .config import get_config_value
+    from .database import get_eprom, search_eprom, get_eproms
+    from .utils import extract_hex_to_decimal
+except ImportError:
+    from serial_comm import find_programmer, wait_for_response, print_progress
+    from config import get_config_value
+    from database import get_eprom, search_eprom, get_eproms
+    from utils import extract_hex_to_decimal
 
 # Constants
 BUFFER_SIZE = 512
@@ -71,7 +76,7 @@ def eprom_info(eprom_name):
     Args:
         eprom_name (str): Name of the EPROM.
     """
-    eprom = get_eprom(eprom_name)
+    eprom = get_eprom(eprom_name, True)
     if not eprom:
         print(f"EPROM {eprom_name} not found.")
         return
@@ -80,7 +85,7 @@ def eprom_info(eprom_name):
         print(f"{key}: {value}")
 
 
-def read_chip(eprom_name, output_file=None, force=False):
+def read_chip(eprom_name, output_file=None, force=False, verbose=False):
     """
     Reads data from an EPROM.
 
@@ -94,7 +99,6 @@ def read_chip(eprom_name, output_file=None, force=False):
         print(f"EPROM {eprom_name} not found.")
         return 1
 
-    eprom_name = eprom.pop("name")
     eprom["state"] = STATE_READ
     if force:
         eprom["force"] = True
@@ -103,7 +107,7 @@ def read_chip(eprom_name, output_file=None, force=False):
         output_file = f"{eprom_name}.bin"
     print(f"Reading EPROM {eprom_name}, saving to {output_file}")
 
-    ser = find_programmer(eprom)
+    ser = find_programmer(eprom, verbose=verbose)
     if not ser:
         return 1
 
@@ -143,7 +147,7 @@ def read_chip(eprom_name, output_file=None, force=False):
         ser.close()
 
 
-def write_chip(eprom_name, input_file, address=None, ignore_blank_check=False, force=False):
+def write_chip(eprom_name, input_file, address=None, ignore_blank_check=False, force=False, verbose=False):
     """
     Writes data to an EPROM.
 
@@ -162,7 +166,6 @@ def write_chip(eprom_name, input_file, address=None, ignore_blank_check=False, f
         print(f"Input file {input_file} not found.")
         return 1
 
-    eprom_name = eprom.pop("name")
     eprom["state"] = STATE_WRITE
     if address:
         eprom["address"] = int(address, 16) if "0x" in address else int(address)
@@ -172,7 +175,7 @@ def write_chip(eprom_name, input_file, address=None, ignore_blank_check=False, f
     if force:
         eprom["force"] = True
 
-    ser = find_programmer(eprom)
+    ser = find_programmer(eprom, verbose=verbose)
     if not ser:
         return 1
 
@@ -215,7 +218,7 @@ def write_chip(eprom_name, input_file, address=None, ignore_blank_check=False, f
         ser.close()
 
 
-def erase(eprom_name):
+def erase(eprom_name, verbose=False):
     """
     Erases an EPROM.
 
@@ -228,7 +231,7 @@ def erase(eprom_name):
         return 1
 
     eprom["state"] = STATE_ERASE
-    ser = find_programmer(eprom)
+    ser = find_programmer(eprom, verbose=verbose)
     if not ser:
         return 1
 
@@ -239,7 +242,7 @@ def erase(eprom_name):
         print(f"Error erasing EPROM {eprom_name}: {info}")
 
 
-def check_chip_id(eprom_name):
+def check_chip_id(eprom_name, verbose=False):
     """
     Checks the chip ID of an EPROM.
 
@@ -252,7 +255,7 @@ def check_chip_id(eprom_name):
         return 1
 
     eprom["state"] = STATE_CHECK_CHIP_ID
-    ser = find_programmer(eprom)
+    ser = find_programmer(eprom, verbose=verbose)
     if not ser:
         return 1
 
@@ -265,7 +268,7 @@ def check_chip_id(eprom_name):
         print(f"Extracted chip ID: {chip_id}" if chip_id else "Failed to extract chip ID.")
 
 
-def blank_check(eprom_name):
+def blank_check(eprom_name, verbose=False):
     """
     Performs a blank check on an EPROM.
 
@@ -278,7 +281,7 @@ def blank_check(eprom_name):
         return 1
 
     eprom["state"] = STATE_CHECK_BLANK
-    ser = find_programmer(eprom)
+    ser = find_programmer(eprom, verbose=verbose)
     if not ser:
         return 1
 
