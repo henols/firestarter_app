@@ -81,7 +81,7 @@ def read_config(filename):
     return config
 
 
-def init():
+def init_db():
     global proms
     global pin_maps
     proms_filename = "database.json"
@@ -179,11 +179,25 @@ def get_eproms(verified):
     return selected_proms
 
 
-def get_eprom(chip_name):
+def get_eprom(chip_name, full=False):
     for manufacturer in proms:
         for ic in proms[manufacturer]:
             if chip_name.lower() == ic["name"].lower():
-                return map_data(ic, manufacturer)
+                data = map_data(ic, manufacturer)
+                if not full:
+                    if "manufacturer" in data:
+                        data.pop("manufacturer")
+                    if "verified" in data:
+                        data.pop("verified")
+                    if "pin-map" in data:
+                        data.pop("pin-map")
+                    if "name" in data:
+                        data.pop("name")
+                    if "flags" in data:
+                        data.pop("flags")
+                    if "protocol-id" in data:
+                        data.pop("protocol-id")
+                return data
     return None
 
 
@@ -219,7 +233,7 @@ def search_chip_id(chip_id):
 
  
 def main():
-    init()
+    init_db()
     chip_name = "TMS2764"
 
     prom = get_eprom(chip_name)
