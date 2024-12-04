@@ -46,6 +46,43 @@ dd if=/dev/urandom of="$TEMP_DIR/high_data.bin" bs=1 count=$HALF_SIZE status=non
 # Concatenate the two files into one file
 cat "$TEMP_DIR/low_data.bin" "$TEMP_DIR/high_data.bin" > "$TEMP_DIR/full_data.bin"
 
+# ------------------------------ EPROM INFO TESTS -------------------------
+echo "---------------------------------"
+echo "Listing all EPROMs"
+echo "---------------------------------"
+firestarter list
+if test $? -gt 0
+then
+	echo "Search failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
+echo "Searching for $EPROM_NAME"
+echo "---------------------------------"
+firestarter search $EPROM_NAME
+if test $? -gt 0
+then
+	echo "Search failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
+echo "Info for $EPROM_NAME"
+echo "---------------------------------"
+firestarter info $EPROM_NAME
+if test $? -gt 0
+then
+	echo "Info failed"
+    exit 1
+fi
+echo
+sleep 0.5
+
+# ------------------------------ HARDWARE TESTS ------------------------------
+
 echo "---------------------------------"
 echo "Hardware Version"
 echo "---------------------------------"
@@ -53,17 +90,6 @@ firestarter hw
 if test $? -gt 0
 then
 	echo "Hardware version failed"
-    exit 1
-fi
-echo
-sleep 0.5
-echo "---------------------------------"
-echo "Firmware Version"
-echo "---------------------------------"
-firestarter fw
-if test $? -gt 0
-then
-	echo "Firmware version failed"
     exit 1
 fi
 echo
@@ -79,6 +105,45 @@ then
 fi
 echo
 sleep 0.5
+echo "---------------------------------"
+echo "VPP"
+echo "---------------------------------"
+firestarter vpp -t 5
+if test $? -gt 0
+then
+	echo "VPP failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
+echo "VPE"
+echo "---------------------------------"
+firestarter vpe -t 5
+if test $? -gt 0
+then
+	echo "VPE failed"
+    exit 1
+fi
+echo
+sleep 0.5
+
+# ------------------------------ FIRMWARE TESTS ------------------------------
+
+echo "---------------------------------"
+echo "Firmware Version"
+echo "---------------------------------"
+firestarter fw
+if test $? -gt 0
+then
+	echo "Firmware version failed"
+    exit 1
+fi
+echo
+sleep 0.5
+
+# ------------------------------ EPROM TESTS ------------------------------
+
 echo "---------------------------------"
 echo "Chip ID - $EPROM_NAME"
 echo "---------------------------------"

@@ -14,10 +14,12 @@ try:
     from .serial_comm import find_programmer, wait_for_response
     from .config import get_config_value, set_config_value
     from .avr_tool import Avrdude
+    from .utils import verbose
 except ImportError:
     from serial_comm import find_programmer, wait_for_response
     from config import get_config_value, set_config_value
     from avr_tool import Avrdude
+    from utils import verbose
 
 # Constants
 FIRESTARTER_RELEASE_URL = (
@@ -31,63 +33,7 @@ STATE_CONFIG = 14
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 
 
-def hardware(verbose=False):
-    """
-    Reads the hardware revision of the programmer.
-
-    Args:
-        verbose (bool): Enables verbose output.
-
-    Returns:
-        int: 0 if successful, 1 otherwise.
-    """
-    print("Reading hardware revision...")
-    data = {"state": STATE_HW_VERSION}
-
-    ser = find_programmer(data, verbose=verbose)
-    if not ser:
-        return 1
-
-    try:
-        resp, version = wait_for_response(ser)
-        if resp == "OK":
-            print(f"Hardware revision: {version}")
-        else:
-            print(f"Failed to read hardware revision. {resp}: {version}")
-            return 1
-    finally:
-        ser.close()
-    return 0
-
-
-def rurp_config(rev=None, r1=None, r2=None):
-    data = {}
-    data["state"] = STATE_CONFIG
-    if not rev == None:
-        if rev == -1:
-            print("Disabling hardware revision override")
-            rev = 0xFF
-        data["rev"] = rev
-    if r1:
-        data["r1"] = r1
-    if r2:
-        data["r2"] = r2
-    print("Reading configuration")
-
-    ser = find_programmer(data)
-    if not ser:
-        return 1
-    ser.write("OK".encode("ascii"))
-    r, version = wait_for_response(ser)
-    if r == "OK":
-        print(f"Config: {version}")
-    else:
-        print(r)
-        return 1
-    return 0
-
-
-def firmware(install, avrdude_path, port, verbose=False):
+def firmware(install, avrdude_path, port):
     """
     Handles firmware-related operations, including version check and installation.
 
@@ -95,33 +41,31 @@ def firmware(install, avrdude_path, port, verbose=False):
         install (bool): If True, installs the latest firmware.
         avrdude_path (str): Path to the avrdude tool (optional).
         port (str): Specific port to use (optional).
-        verbose (bool): Enables verbose output.
 
     Returns:
         int: 0 if successful, 1 otherwise.
     """
-    latest, selected_port, url = firmware_check(port, verbose=verbose)
+    latest, selected_port, url = firmware_check(port)
     if not latest and not install and not url:
         return 1
 
     if install:
         if not url:
-            version, url = latest_firmware(verbose=verbose)
+            version, url = latest_firmware()
             print(f"Trying to install firmware version: {version}")
         if not selected_port:
             selected_port = port
-        return install_firmware(url, avrdude_path, selected_port, verbose=verbose)
+        return install_firmware(url, avrdude_path, selected_port)
 
     return 0
 
 
-def firmware_check(port=None, verbose=False):
+def firmware_check(port=None):
     """
     Checks the firmware version of the connected programmer.
 
     Args:
         port (str): Specific port to check (optional).
-        verbose (bool): Enables verbose output.
 
     Returns:
         tuple: (bool: up-to-date, str: port, str: firmware URL)
@@ -129,7 +73,7 @@ def firmware_check(port=None, verbose=False):
     print("Reading firmware version...")
     data = {"state": STATE_FW_VERSION}
 
-    ser = find_programmer(data, port, verbose=verbose)
+    ser = find_programmer(data, port)
     if not ser:
         return False, None, None
 
@@ -141,7 +85,7 @@ def firmware_check(port=None, verbose=False):
             return False, None, None
 
         print(f"Current firmware version: {version}")
-        latest_version, url = latest_firmware(verbose=verbose)
+        latest_version, url = latest_firmware()
 
         if compare_versions(version, latest_version):
             print(f"You have the latest firmware version: {latest_version}")
@@ -153,7 +97,7 @@ def firmware_check(port=None, verbose=False):
         ser.close()
 
 
-def install_firmware(url, avrdude_path, port=None, verbose=False):
+def install_firmware(url, avrdude_path, port=None):
     """
     Installs the latest firmware on the programmer.
 
@@ -161,7 +105,6 @@ def install_firmware(url, avrdude_path, port=None, verbose=False):
         url (str): URL to the firmware binary.
         avrdude_path (str): Path to avrdude tool.
         port (str): Specific port to use (optional).
-        verbose (bool): Enables verbose output.
 
     Returns:
         int: 0 if successful, 1 otherwise.
@@ -213,17 +156,14 @@ def install_firmware(url, avrdude_path, port=None, verbose=False):
     return 1
 
 
-def latest_firmware(verbose=False):
+def latest_firmware():
     """
     Fetches the latest firmware version and download URL.
-
-    Args:
-        verbose (bool): Enables verbose output.
 
     Returns:
         tuple: (str: latest version, str: firmware URL)
     """
-    if verbose:
+    if verbose():
         print("Fetching latest firmware release...")
 
     response = requests.get(FIRESTARTER_RELEASE_URL)
@@ -246,7 +186,7 @@ def latest_firmware(verbose=False):
         print("Firmware binary not found in the latest release.")
         return None, None
 
-    if verbose:
+    if verbose():
         print(f"Latest firmware version: {version}, URL: {url}")
 
     return version, url

@@ -1,3 +1,9 @@
+try:
+    from .utils import verbose
+except ImportError:
+    from utils import verbose
+
+
 # Generic pin names for 24-pin, 28-pin, and 32-pin EPROMs
 generic_pin_names = {
     24: [
@@ -139,7 +145,7 @@ def print_jumper_settings_jp3_mod(jp3):
     print(f"JP4 (Rev 2)    [{jumper[jp3]}] : {jp3_label}")
 
 
-def print_chip_info(eprom, verbose=False):
+def print_chip_info(eprom):
     verified = ""
     if not eprom["verified"]:
         verified = "\t-- NOT VERIFIED --"
@@ -165,7 +171,7 @@ def print_chip_info(eprom, verbose=False):
     print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
     print_generic_eeprom(eprom)
 
-    if verbose:
+    if verbose():
         print(protocol_info(eprom["protocol-id"]))
         print()
 

@@ -9,6 +9,9 @@ Utility Functions Module
 
 import re
 
+# Global verbose flag
+_verbose = False
+
 
 def extract_hex_to_decimal(input_string):
     """
@@ -101,6 +104,15 @@ def time_formatter(seconds):
     m, s = divmod(int(seconds), 60)
     h, m = divmod(m, 60)
     return f"{h}h {m}m {s}s" if h else f"{m}m {s}s" if m else f"{s}s"
+
+
+def set_verbose(value):
+    global _verbose
+    _verbose = value
+
+
+def verbose():
+    return _verbose
 
 
 # For testing or standalone execution

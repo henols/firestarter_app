@@ -16,43 +16,25 @@ import signal
 
 try:
     from .config import open_config
+    from .utils import set_verbose
     from .__init__ import __version__ as version
-    from .eprom_ops import (
-        list_eproms,
-        search_eproms,
-        eprom_info,
-        read_chip,
-        write_chip,
-        erase,
-        check_chip_id,
-        blank_check,
-        read_vpe_voltage,
-        read_vpp_voltage,
-    )
+    from .eprom_operations import read, write, erase, check_chip_id, blank_check
+    from .eprom_info import list_eproms, search_eproms, eprom_info
     from .database import init_db
-    from .firmware import firmware, hardware, rurp_config
+    from .firmware import firmware
+    from .hardware import hardware, config, read_vpe, read_vpp
 except ImportError:
     from config import open_config
+    from utils import set_verbose
     from __init__ import __version__ as version
-    from eprom_ops import (
-        list_eproms,
-        search_eproms,
-        eprom_info,
-        read_chip,
-        write_chip,
-        erase,
-        check_chip_id,
-        blank_check,
-        read_vpe_voltage,
-        read_vpp_voltage,
-    )
+    from eprom_operations import read, write, erase, check_chip_id, blank_check
+    from eprom_info import list_eproms, search_eproms, eprom_info
     from database import init_db
-    from firmware import firmware, hardware, rurp_config
+    from firmware import firmware
+    from hardware import hardware, config, read_vpe, read_vpp
 
 
 def main():
-    global verbose
-
     parser = argparse.ArgumentParser(
         description="EPROM programmer for Arduino UNO and Relatively-Universal-ROM-Programmer shield."
     )
@@ -135,7 +117,9 @@ def main():
 
     # Voltage commands
     vpp_parser = subparsers.add_parser("vpp", help="VPP voltage.")
+    vpp_parser.add_argument("-t","--timeout", type=int, help=argparse.SUPPRESS)
     vpe_parser = subparsers.add_parser("vpe", help="VPE voltage.")
+    vpe_parser.add_argument("-t","--timeout", type=int, help=argparse.SUPPRESS)
 
     # Hardware command
     hw_parser = subparsers.add_parser("hw", help="Hardware revision.")
@@ -181,21 +165,19 @@ def main():
     args = parser.parse_args()
 
     init_db()
-    # Configuration and Verbose
     open_config()
-    verbose = args.verbose
-
+    set_verbose(args.verbose)
     # Command dispatch
     if args.command == "list":
-        list_eproms(args.verified)
+        return list_eproms(args.verified)
     elif args.command == "info":
-        eprom_info(args.eprom)
+        return eprom_info(args.eprom)
     elif args.command == "search":
-        search_eproms(args.text)
+        return search_eproms(args.text)
     elif args.command == "read":
-        read_chip(args.eprom, args.output_file, force=args.force)
+        return read(args.eprom, args.output_file, force=args.force)
     elif args.command == "write":
-        write_chip(
+        return write(
             args.eprom,
             args.input_file,
             address=args.address,
@@ -203,21 +185,21 @@ def main():
             force=args.force,
         )
     elif args.command == "blank":
-        blank_check(args.eprom)
+        return blank_check(args.eprom)
     elif args.command == "erase":
-        erase(args.eprom)
+        return erase(args.eprom)
     elif args.command == "id":
-        check_chip_id(args.eprom)
+        return check_chip_id(args.eprom)
     elif args.command == "vpe":
-        read_vpe_voltage()
+        return read_vpe(args.timeout)
     elif args.command == "vpp":
-        read_vpp_voltage()
+        return read_vpp(args.timeout)
     elif args.command == "fw":
-        firmware(args.install, args.avrdude_path, args.port)
+        return firmware(args.install, args.avrdude_path, args.port)
     elif args.command == "hw":
-        hardware()
+        return hardware()
     elif args.command == "config":
-        rurp_config(args.rev, args.r16, args.r14r15)
+        return config(args.rev, args.r16, args.r14r15)
     return 0
 
 
