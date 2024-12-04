@@ -30,10 +30,6 @@ STATE_CHECK_BLANK = 4
 STATE_CHECK_CHIP_ID = 5
 
 
-
-
-
-
 def read(eprom_name, output_file=None, force=False):
     """
     Reads data from an EPROM.
@@ -43,6 +39,7 @@ def read(eprom_name, output_file=None, force=False):
         output_file (str): File to save the data (optional).
         force (bool): Force reading even if chip ID mismatches.
     """
+    start_time = time.time()
     eprom = get_eprom(eprom_name)
     if not eprom:
         print(f"EPROM {eprom_name} not found.")
@@ -66,7 +63,6 @@ def read(eprom_name, output_file=None, force=False):
         with open(output_file, "wb") as file:
             bytes_read = 0
             mem_size = eprom["memory-size"]
-            start_time = time.time()
 
             while True:
                 resp, info = wait_for_response(ser)
@@ -79,7 +75,6 @@ def read(eprom_name, output_file=None, force=False):
                     ser.write("OK".encode("ascii"))
                     ser.flush()
                 elif resp == "OK":
-                    print("\nRead complete.")
                     break
                 elif resp == "ERROR":
                     print(f"\nError: {info}")
@@ -88,8 +83,8 @@ def read(eprom_name, output_file=None, force=False):
                     print(f"\nUnexpected response: {info}")
                     return 1
 
+            print(f"\nRead complete in: {time.time() - start_time:.2f}s")
             print(f"Data saved to {output_file}")
-            print(f"Time taken: {time.time() - start_time:.2f}s")
     except Exception as e:
         print(f"Error while reading: {e}")
     finally:
@@ -109,6 +104,7 @@ def write(
         ignore_blank_check (bool): If True, skip blank check and erase steps.
         force (bool): Force writing even if chip ID mismatches.
     """
+    start_time = time.time()
     eprom = get_eprom(eprom_name)
     if not eprom:
         print(f"EPROM {eprom_name} not found.")
@@ -130,17 +126,17 @@ def write(
     if not ser:
         return 1
 
+
     try:
         with open(input_file, "rb") as file:
-            bytes_written = 0
             mem_size = eprom["memory-size"]
             file_size = os.path.getsize(input_file)
 
             if file_size != mem_size:
                 print("Warning: File size does not match memory size.")
+            bytes_written = 0
 
-            start_time = time.time()
-            print(f"Writing {input_file} to {eprom_name}...")
+            print(f"Writing {input_file} to {eprom_name}")
 
             while True:
                 data = file.read(BUFFER_SIZE)
@@ -158,13 +154,12 @@ def write(
                 if resp == "ERROR":
                     print(f"\nError writing: {info}")
                     return 1
-                ser.write(data)
+                bytes_written += ser.write(data)
                 ser.flush()
 
                 while True:
                     resp, info = wait_for_response(ser)
                     if resp == "OK":
-                        bytes_written += len(data)
                         percent = int(bytes_written / file_size * 100)
                         print_progress(
                             percent, bytes_written - BUFFER_SIZE, bytes_written
@@ -175,9 +170,10 @@ def write(
                         return 1
                     else:
                         print(f"Warning: {info}")
+                if bytes_written == mem_size:
+                    break
 
-            print("\nWrite complete.")
-            print(f"Time taken: {time.time() - start_time:.2f}s")
+            print(f"\nWrite complete in: {time.time() - start_time:.2f}s")
     except Exception as e:
         print(f"Error while writing: {e}")
     finally:

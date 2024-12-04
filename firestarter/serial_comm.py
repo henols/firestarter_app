@@ -176,11 +176,11 @@ def wait_for_response(ser):
                         msg = res.split("DATA:")[-1].strip()
                         type = "DATA"
                         return 
+                    timeout = time.time() + 2  # Reset timeout
             finally:
                 write_feedback(type, msg)
                 if type:
                     return type, msg
-        time.sleep(0.1)
 
     return "TIMEOUT_ERROR", "Timeout waiting for response"
 

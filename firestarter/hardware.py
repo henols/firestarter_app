@@ -99,9 +99,10 @@ def read_voltage(state, timeout=None):
             start = time.time()
 
         while (t := wait_for_response(ser))[0] == "DATA":
-            if timeout and time.time() > start + timeout:
-                return 0
             print(f"\r{t[1]}", end="")
+            if timeout and time.time() > start + timeout:
+                print()
+                return 0
             ser.write("OK".encode("ascii"))
     finally:
         ser.close()
