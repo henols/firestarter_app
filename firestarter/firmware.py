@@ -93,7 +93,7 @@ def firmware_check(port=None):
 
         if compare_versions(version, latest_version):
             print(f"You have the latest firmware version: {latest_version}, for controller: {board}")
-            return True, None, None
+            return True, ser.portstr, url
 
         print(f"New firmware version available: {latest_version}, for controller: {board}")
         return False, ser.portstr, url
@@ -148,13 +148,15 @@ def install_firmware(url, avrdude_path, port=None):
             return 1
 
         print("Flashing firmware...")
-        if avrdude.flashFirmware(firmware_path) == 0:
+        output, error, return_code = avrdude.flashFirmware(firmware_path)
+        if return_code == 0:
             print("Firmware successfully updated.")
             set_config_value("port", port)
             set_config_value("avrdude-path", avrdude_path)
             return 0
         else:
             print("Firmware update failed.")
+            print(str(error, "ascii"))
 
     print("No compatible programmer found. Please reset the device and try again.")
     return 1
@@ -253,5 +255,6 @@ def test_avrdude_connection(avrdude):
         return True
     else:
         print("Failed to connect to programmer.")
-        print(error.decode("ascii"))
+        # if error:
+        #     print(error.decode("ascii"))
         return False
