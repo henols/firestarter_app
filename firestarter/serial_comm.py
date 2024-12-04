@@ -196,20 +196,6 @@ def write_feedback(type, msg):
         print(f"{type}: {msg}")
 
 
-def print_progress(percent, from_address, to_address):
-    """
-    Displays progress of operations.
-
-    Args:
-        percent (int): Progress percentage.
-        from_address (int): Starting address.
-        to_address (int): Ending address.
-    """
-    if verbose():
-        print(f"{percent}%, address: 0x{from_address:X} - 0x{to_address:X}")
-    else:
-        print(f"\r{percent}%, address: 0x{from_address:X} - 0x{to_address:X} ", end="")
-
 
 def read_filtered_bytes(byte_array):
     """

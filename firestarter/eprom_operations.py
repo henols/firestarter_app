@@ -11,15 +11,13 @@ import os
 import time
 
 try:
-    from .serial_comm import find_programmer, wait_for_response, print_progress
-    from .config import get_config_value
-    from .database import get_eprom, search_eprom, get_eproms
-    from .utils import extract_hex_to_decimal, verbose
+    from .serial_comm import find_programmer, wait_for_response
+    from .database import get_eprom
+    from .utils import extract_hex_to_decimal, print_progress
 except ImportError:
-    from serial_comm import find_programmer, wait_for_response, print_progress
-    from config import get_config_value
-    from database import get_eprom, search_eprom, get_eproms
-    from utils import extract_hex_to_decimal, verbose
+    from serial_comm import find_programmer, wait_for_response
+    from database import get_eprom
+    from utils import extract_hex_to_decimal, print_progress
 
 # Constants
 BUFFER_SIZE = 512
@@ -91,9 +89,7 @@ def read(eprom_name, output_file=None, force=False):
         ser.close()
 
 
-def write(
-    eprom_name, input_file, address=None, ignore_blank_check=False, force=False
-):
+def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=False):
     """
     Writes data to an EPROM.
 
@@ -112,10 +108,11 @@ def write(
     if not os.path.exists(input_file):
         print(f"Input file {input_file} not found.")
         return 1
-
+    write_address = 0
     eprom["state"] = STATE_WRITE
     if address:
-        eprom["address"] = int(address, 16) if "0x" in address else int(address)
+        write_address = int(address, 16) if "0x" in address else int(address)
+        eprom["address"] = write_address
     if ignore_blank_check:
         eprom["skip-erase"] = True
         eprom["blank-check"] = False
@@ -125,7 +122,6 @@ def write(
     ser = find_programmer(eprom)
     if not ser:
         return 1
-
 
     try:
         with open(input_file, "rb") as file:
@@ -154,7 +150,8 @@ def write(
                 if resp == "ERROR":
                     print(f"\nError writing: {info}")
                     return 1
-                bytes_written += ser.write(data)
+                nr_bytes = ser.write(data)
+                bytes_written += nr_bytes
                 ser.flush()
 
                 while True:
@@ -162,7 +159,9 @@ def write(
                     if resp == "OK":
                         percent = int(bytes_written / file_size * 100)
                         print_progress(
-                            percent, bytes_written - BUFFER_SIZE, bytes_written
+                            percent,
+                            bytes_written - nr_bytes + write_address,
+                            bytes_written + write_address,
                         )
                         break
                     elif resp == "ERROR":
@@ -176,8 +175,10 @@ def write(
             print(f"\nWrite complete in: {time.time() - start_time:.2f}s")
     except Exception as e:
         print(f"Error while writing: {e}")
+        return 1
     finally:
         ser.close()
+    return 0
 
 
 def erase(eprom_name):
@@ -254,5 +255,3 @@ def blank_check(eprom_name):
         print(f"EPROM {eprom_name} is blank.")
     elif resp == "ERROR":
         print(f"Blank check failed for {eprom_name}: {info}")
-
-
