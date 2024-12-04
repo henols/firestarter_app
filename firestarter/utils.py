@@ -49,7 +49,7 @@ def print_progress_bar(
     prefix="",
     suffix="",
     decimals=1,
-    length=50,
+    length=60,
     fill="█",
     print_end="\r",
 ):
@@ -69,10 +69,13 @@ def print_progress_bar(
     percent = f"{100 * (iteration / float(total)):.{decimals}f}"
     filled_length = int(length * iteration // total)
     bar = fill * filled_length + "-" * (length - filled_length)
-    print(f"\r{prefix} |{bar}| {percent}% {suffix}", end=print_end)
-    # Print New Line on Complete
-    if iteration == total:
-        print()
+    if verbose():     
+        print(f"{prefix} |{bar}| {percent}% {suffix}")
+    else:
+        print(f"\r{prefix} |{bar}| {percent}% {suffix}", end=print_end)
+        # Print New Line on Complete
+        if iteration == total:
+            print()
 
 
 def is_valid_hex_string(hex_string):
