@@ -80,18 +80,22 @@ def firmware_check(port=None):
     try:
         ser.write("OK".encode("ascii"))
         resp, version = wait_for_response(ser)
+        board = "uno"
+        if ":" in version:
+            version, board = version.split(":")
+
         if resp != "OK":
             print(f"Failed to read firmware version. {resp}: {version}")
             return False, None, None
 
-        print(f"Current firmware version: {version}")
+        print(f"Current firmware version: {version}, for controller: {board}")
         latest_version, url = latest_firmware()
 
         if compare_versions(version, latest_version):
-            print(f"You have the latest firmware version: {latest_version}")
+            print(f"You have the latest firmware version: {latest_version}, for controller: {board}")
             return True, None, None
 
-        print(f"New firmware version available: {latest_version}")
+        print(f"New firmware version available: {latest_version}, for controller: {board}")
         return False, ser.portstr, url
     finally:
         ser.close()
