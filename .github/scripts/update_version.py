@@ -40,7 +40,12 @@ def calculate_version():
 
     major, minor, patch = get_version()
 
-    patch = int(patch) + 1
+    pattern = re.compile("[0-9]+")
+    if pattern.match(patch):
+        patch = int(patch) + 1
+    else:
+        patch = 0
+    
     update_version(major, minor, patch)
 
     print(f"New versin created: {major}.{minor}.{patch}")
