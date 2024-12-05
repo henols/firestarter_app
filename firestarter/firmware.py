@@ -89,13 +89,17 @@ def firmware_check(port=None):
             return False, None, None
 
         print(f"Current firmware version: {version}, for controller: {board}")
-        latest_version, url = latest_firmware()
+        latest_version, url = latest_firmware(board)
 
         if compare_versions(version, latest_version):
-            print(f"You have the latest firmware version: {latest_version}, for controller: {board}")
+            print(
+                f"You have the latest firmware version: {latest_version}, for controller: {board}"
+            )
             return True, ser.portstr, url
 
-        print(f"New firmware version available: {latest_version}, for controller: {board}")
+        print(
+            f"New firmware version available: {latest_version}, for controller: {board}"
+        )
         return False, ser.portstr, url
     finally:
         ser.close()
@@ -162,7 +166,7 @@ def install_firmware(url, avrdude_path, port=None):
     return 1
 
 
-def latest_firmware():
+def latest_firmware(board="uno"):
     """
     Fetches the latest firmware version and download URL.
 
@@ -183,13 +187,13 @@ def latest_firmware():
         (
             asset["browser_download_url"]
             for asset in release["assets"]
-            if "firmware.hex" in asset["name"]
+            if f"firestarter_{board}.hex" in asset["name"]
         ),
         None,
     )
 
     if not url:
-        print("Firmware binary not found in the latest release.")
+        print(f"Firmware binary not found in the latest release, version: {version}.")
         return None, None
 
     if verbose():
@@ -232,7 +236,7 @@ def download_firmware(url):
     if not os.path.exists(HOME_PATH):
         os.makedirs(HOME_PATH)
 
-    firmware_path = os.path.join(HOME_PATH, "firmware.hex")
+    firmware_path = os.path.join(HOME_PATH, "firestarter.hex")
     with open(firmware_path, "wb") as file:
         file.write(response.content)
 
@@ -258,3 +262,11 @@ def test_avrdude_connection(avrdude):
         # if error:
         #     print(error.decode("ascii"))
         return False
+
+
+if __name__ == "__main__":
+    version, url = latest_firmware("leonardo")
+    print(f"URL: {url}")
+    print(f"Version: {version}")
+    resp = download_firmware(url)
+    print(f"Response: {resp}")
