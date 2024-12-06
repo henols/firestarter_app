@@ -11,12 +11,12 @@ import os
 import requests
 
 try:
-    from .serial_comm import find_programmer, wait_for_response
+    from .serial_comm import find_programmer, wait_for_response, find_comports
     from .config import get_config_value, set_config_value
     from .avr_tool import Avrdude
     from .utils import verbose
 except ImportError:
-    from serial_comm import find_programmer, wait_for_response
+    from serial_comm import find_programmer, wait_for_response, find_comports
     from config import get_config_value, set_config_value
     from avr_tool import Avrdude
     from utils import verbose
@@ -33,7 +33,7 @@ STATE_CONFIG = 14
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 
 
-def firmware(install, avrdude_path, port):
+def firmware(install, avrdude_path, port, board="uno"):
     """
     Handles firmware-related operations, including version check and installation.
 
@@ -51,7 +51,7 @@ def firmware(install, avrdude_path, port):
 
     if install:
         if not url:
-            version, url = latest_firmware()
+            version, url = latest_firmware(board)
             print(f"Trying to install firmware version: {version}")
         if not selected_port:
             selected_port = port
@@ -80,13 +80,14 @@ def firmware_check(port=None):
     try:
         ser.write("OK".encode("ascii"))
         resp, version = wait_for_response(ser)
+
+        if not resp == "OK":
+            print(f"Failed to read firmware version. {resp}: {version}")
+            return False, None, None
+
         board = "uno"
         if ":" in version:
             version, board = version.split(":")
-
-        if resp != "OK":
-            print(f"Failed to read firmware version. {resp}: {version}")
-            return False, None, None
 
         print(f"Current firmware version: {version}, for controller: {board}")
         latest_version, url = latest_firmware(board)
@@ -121,16 +122,16 @@ def install_firmware(url, avrdude_path, port=None):
     if port:
         ports = [port]
     else:
-        ports = find_programmer(data={"state": STATE_FW_VERSION})
+        ports = find_comports()
         if not ports:
-            print("No Arduino found.")
+            print("No programmer found.")
             return 1
 
     for port in ports:
         try:
             avrdude_path = avrdude_path or get_config_value("avrdude-path")
             avrdude = Avrdude(
-                partno="ATmega328P",
+                partno="ATmega328Pb",
                 programmer_id="arduino",
                 baud_rate="115200",
                 port=port,
@@ -258,7 +259,7 @@ def test_avrdude_connection(avrdude):
         print("Programmer connected successfully.")
         return True
     else:
-        print("Failed to connect to programmer.")
+        print(f"Failed to connect to programmer. {error.decode('ascii')}")
         # if error:
         #     print(error.decode("ascii"))
         return False

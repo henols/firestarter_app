@@ -63,6 +63,7 @@ def check_port(port, data, baud_rate=BAUD_RATE):
             print(f"Programmer: {msg}")
         return ser
     except (OSError, serial.SerialException):
+        print(f"Failed to open port: {port}")
         pass
 
     return None
@@ -90,7 +91,12 @@ def find_comports(port=None):
     for port in serial_ports:
         if (
             port.manufacturer
-            and ("Arduino" in port.manufacturer or "FTDI" in port.manufacturer)
+            and (
+                "Arduino" in port.manufacturer
+                or "FTDI" in port.manufacturer
+                or "CH340" in port.manufacturer
+                or "USB Serial" in port.description
+            )
             and port.device not in ports
         ):
             ports.append(port.device)
@@ -159,30 +165,30 @@ def wait_for_response(ser):
                     if "OK:" in res:
                         msg = res.split("OK:")[-1].strip()
                         type = "OK"
-                        return 
+                        return
                     elif "INFO:" in res:
                         msg = res.split("INFO:")[-1].strip()
-                        write_feedback("INFO",msg)
+                        write_feedback("INFO", msg)
                         # return "INFO", msg
                     elif "ERROR:" in res:
                         msg = res.split("ERROR:")[-1].strip()
-                        type ="ERROR"
-                        return 
+                        type = "ERROR"
+                        return
                     elif "WARN:" in res:
                         msg = res.split("WARN:")[-1].strip()
                         type = "WARN"
-                        return 
+                        return
                     elif "DATA:" in res:
                         msg = res.split("DATA:")[-1].strip()
                         type = "DATA"
-                        return 
+                        return
                     timeout = time.time() + 2  # Reset timeout
             finally:
                 write_feedback(type, msg)
                 if type:
                     return type, msg
 
-    return "TIMEOUT_ERROR", "Timeout waiting for response"
+    return "TIMEOUT_ERROR", f"Timeout, no response on {ser.portstr}"
 
 
 def write_feedback(type, msg):
@@ -192,9 +198,8 @@ def write_feedback(type, msg):
     Args:
         msg (str): The feedback message.
     """
-    if msg and verbose():
+    if msg and (verbose() or type == "ERROR" or type == "WARN"):
         print(f"{type}: {msg}")
-
 
 
 def read_filtered_bytes(byte_array):

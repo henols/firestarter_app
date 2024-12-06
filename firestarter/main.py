@@ -133,6 +133,13 @@ def main():
         help="Try to install the latest firmware.",
     )
     fw_parser.add_argument(
+        "-b",
+        "--board",
+        type=str,
+        default="uno",
+        help="Microcontroller board (optional), defaults to 'uno'."
+    )
+    fw_parser.add_argument(
         "-p",
         "--avrdude-path",
         type=str,
@@ -195,7 +202,7 @@ def main():
     elif args.command == "vpp":
         return read_vpp(args.timeout)
     elif args.command == "fw":
-        return firmware(args.install, args.avrdude_path, args.port)
+        return firmware(args.install, args.avrdude_path, args.port, args.board)
     elif args.command == "hw":
         return hardware()
     elif args.command == "config":
