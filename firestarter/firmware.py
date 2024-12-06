@@ -131,7 +131,7 @@ def install_firmware(url, avrdude_path, port=None):
         try:
             avrdude_path = avrdude_path or get_config_value("avrdude-path")
             avrdude = Avrdude(
-                partno="ATmega328Pb",
+                partno="ATmega328P",
                 programmer_id="arduino",
                 baud_rate="115200",
                 port=port,

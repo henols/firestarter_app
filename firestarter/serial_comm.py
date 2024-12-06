@@ -55,15 +55,16 @@ def check_port(port, data, baud_rate=BAUD_RATE):
         while res != "OK":
             if res == "ERROR":
                 raise Exception(msg)
-            print(f"{res} - {msg}")
             if res == "TIMEOUT_ERROR":
                 return None
+            print(f"{res} - {msg}")
 
         if verbose():
             print(f"Programmer: {msg}")
         return ser
     except (OSError, serial.SerialException):
-        print(f"Failed to open port: {port}")
+        if verbose():
+            print(f"Failed to open port: {port}")
         pass
 
     return None
@@ -95,10 +96,9 @@ def find_comports(port=None):
                 "Arduino" in port.manufacturer
                 or "FTDI" in port.manufacturer
                 or "CH340" in port.manufacturer
-                or "USB Serial" in port.description
             )
-            and port.device not in ports
-        ):
+            or "USB Serial" in port.description
+        ) and port.device not in ports:
             ports.append(port.device)
 
     if verbose():
@@ -187,8 +187,9 @@ def wait_for_response(ser):
                 write_feedback(type, msg)
                 if type:
                     return type, msg
-
-    return "TIMEOUT_ERROR", f"Timeout, no response on {ser.portstr}"
+    msg = f"Timeout, no response on {ser.portstr}"
+    write_feedback("ERROR", msg)
+    return "TIMEOUT_ERROR", msg
 
 
 def write_feedback(type, msg):
