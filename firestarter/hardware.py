@@ -1,8 +1,9 @@
 import time
+
 try:
-    from .serial_comm import find_programmer, wait_for_response
+    from .serial_comm import find_programmer, wait_for_response, consume_response
 except ImportError:
-    from serial_comm import find_programmer, wait_for_response
+    from serial_comm import find_programmer, wait_for_response, consume_response
 
 STATE_READ_VPP = 11
 STATE_READ_VPE = 12
@@ -32,6 +33,7 @@ def hardware():
             print(f"Failed to read hardware revision. {resp}: {version}")
             return 1
     finally:
+        consume_response(ser)
         ser.close()
     return 0
 
@@ -53,14 +55,19 @@ def config(rev=None, r1=None, r2=None):
     ser = find_programmer(data)
     if not ser:
         return 1
-    ser.write("OK".encode("ascii"))
-    r, version = wait_for_response(ser)
-    if r == "OK":
-        print(f"Config: {version}")
-    else:
-        print(r)
-        return 1
+    try:
+        # ser.write("OK".encode("ascii"))
+        r, version = wait_for_response(ser)
+        if r == "OK":
+            print(f"Config: {version}")
+        else:
+            # print(r)
+            return 1
+    finally:
+        consume_response(ser)
+        ser.close()
     return 0
+
 
 def read_vpp(timeout=None):
     """
@@ -94,6 +101,7 @@ def read_voltage(state, timeout=None):
             print(f"Error reading {type} voltage: {info}")
             return 1
         ser.write("OK".encode("ascii"))
+        ser.flush()
 
         if timeout:
             start = time.time()
@@ -104,5 +112,10 @@ def read_voltage(state, timeout=None):
                 print()
                 return 0
             ser.write("OK".encode("ascii"))
+            ser.flush()
+    except Exception as e:
+        print(f"Error while reading {type} voltage: {e}")
     finally:
+        consume_response(ser)
         ser.close()
+    return 1

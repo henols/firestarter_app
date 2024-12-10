@@ -12,7 +12,7 @@ if [ ! -d "$TEMP_DIR" ]; then
 fi
 
 # Trap to clean up the temporary files on exit or interrupt
-trap "rm -rf $TEMP_DIR; echo 'Cleaned up temp files'; exit" EXIT
+# trap "rm -rf $TEMP_DIR; echo 'Cleaned up temp files'; exit" EXIT
 
 # Convert TARGET_NAME to uppercase
 EPROM_NAME=$(echo "$EPROM_NAME" | tr '[:lower:]' '[:upper:]')
@@ -104,7 +104,7 @@ then
     exit 1
 fi
 echo
-sleep 0.5
+sleep 1
 echo "---------------------------------"
 echo "VPP"
 echo "---------------------------------"
@@ -115,7 +115,7 @@ then
     exit 1
 fi
 echo
-sleep 0.5
+sleep 1
 echo "---------------------------------"
 echo "VPE"
 echo "---------------------------------"
@@ -126,7 +126,7 @@ then
     exit 1
 fi
 echo
-sleep 0.5
+sleep 1
 
 # ------------------------------ FIRMWARE TESTS ------------------------------
 
