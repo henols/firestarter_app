@@ -11,13 +11,13 @@ import os
 import time
 
 try:
-    from .serial_comm import find_programmer, wait_for_response
-    from .database import get_eprom
-    from .utils import extract_hex_to_decimal, print_progress, print_progress_bar
+    from .serial_comm import find_programmer, wait_for_response, consume_response
+    from .database import get_eprom, search_chip_id
+    from .utils import extract_hex_to_decimal, print_progress_bar
 except ImportError:
-    from serial_comm import find_programmer, wait_for_response
-    from database import get_eprom
-    from utils import extract_hex_to_decimal, print_progress, print_progress_bar
+    from serial_comm import find_programmer, wait_for_response, consume_response
+    from database import get_eprom, search_chip_id
+    from utils import extract_hex_to_decimal, print_progress_bar
 
 # Constants
 BUFFER_SIZE = 512
@@ -48,7 +48,7 @@ def read(eprom_name, output_file=None, force=False):
         eprom["force"] = True
 
     if not output_file:
-        output_file = f"{eprom_name}.bin"
+        output_file = f"{eprom_name.upper()}.bin"
     print(f"Reading EPROM {eprom_name}, saving to {output_file}")
 
     ser = find_programmer(eprom)
@@ -78,24 +78,26 @@ def read(eprom_name, output_file=None, force=False):
                         prefix=f"Address: 0x{from_address:X} - 0x{to_address:X}",
                         suffix=f"- {time.time() - start_time:.2f}s",
                     )
+
                     ser.write("OK".encode("ascii"))
                     ser.flush()
                 elif resp == "OK":
                     break
                 elif resp == "ERROR":
-                    print(f"\nError: {info}")
+                    # print(f"\nError: {info}")
                     return 1
-                else:
-                    print(f"\nUnexpected response: {info}")
-                    return 1
+                # else:
+                #     print(f"\nUnexpected response: {info}")
+                #     return 1
 
             print(f"\nRead complete in: {time.time() - start_time:.2f} seconds")
             print(f"Data saved to {output_file}")
     except Exception as e:
         print(f"Error while reading: {e}")
     finally:
+        consume_response(ser)
         ser.close()
-
+    return 0
 
 def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=False):
     """
@@ -146,46 +148,42 @@ def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=
             while True:
                 data = file.read(BUFFER_SIZE)
                 if not data:
+                    print("\nEnd of file reached")
                     ser.write(int(0).to_bytes(2, byteorder="big"))
                     ser.flush()
                     resp, info = wait_for_response(ser)
-                    print("\nEnd of file reached")
-                    print(info)
+                    while resp != "OK":
+                        if resp == "ERROR":
+                            return 1
+                        resp, info = wait_for_response(ser)
                     break
 
                 ser.write(len(data).to_bytes(2, byteorder="big"))
                 ser.flush()
                 resp, info = wait_for_response(ser)
-                if resp == "ERROR":
-                    print(f"\nError writing: {info}")
-                    return 1
+                while resp != "OK":
+                    if resp == "ERROR":
+                        return 1
+                    resp, info = wait_for_response(ser)
+
                 nr_bytes = ser.write(data)
                 bytes_written += nr_bytes
                 ser.flush()
-
-                while True:
-                    resp, info = wait_for_response(ser)
-                    if resp == "OK":
-                        # percent = int(bytes_written / file_size * 100)
-                        # print_progress(
-                        #     percent,
-                        #     bytes_written - nr_bytes + write_address,
-                        #     bytes_written + write_address,
-                        # )
-                        from_address = bytes_written - nr_bytes + write_address
-                        to_address = bytes_written + write_address
-                        print_progress_bar(
-                            bytes_written / BUFFER_SIZE,
-                            total_iterations,
-                            prefix=f"Address: 0x{from_address:X} - 0x{to_address:X}",
-                            suffix=f"- {time.time() - start_time:.2f}s",
-                        )
-                        break
-                    elif resp == "ERROR":
-                        print(f"\nError: {info}")
+                # print(f"Bytes written: {bytes_written}")
+                resp, info = wait_for_response(ser)
+                while resp != "OK":
+                    if resp == "ERROR":
                         return 1
-                    else:
-                        print(f"Warning: {info}")
+                    resp, info = wait_for_response(ser)
+
+                from_address = bytes_written - nr_bytes + write_address
+                to_address = bytes_written + write_address
+                print_progress_bar(
+                    bytes_written / BUFFER_SIZE,
+                    total_iterations,
+                    prefix=f"Address: 0x{from_address:X} - 0x{to_address:X}",
+                    suffix=f"- {time.time() - start_time:.2f}s",
+                )
                 if bytes_written == mem_size:
                     break
 
@@ -194,6 +192,7 @@ def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=
         print(f"Error while writing: {e}")
         return 1
     finally:
+        consume_response(ser)
         ser.close()
     return 0
 
@@ -211,15 +210,21 @@ def erase(eprom_name):
         return 1
 
     eprom["state"] = STATE_ERASE
-    ser = find_programmer(eprom)
-    if not ser:
-        return 1
+    try:
+        ser = find_programmer(eprom)
+        if not ser:
+            return 1
 
-    resp, info = wait_for_response(ser)
-    if resp == "OK":
-        print(f"EPROM {eprom_name} erased successfully.")
-    elif resp == "ERROR":
-        print(f"Error erasing EPROM {eprom_name}: {info}")
+        resp, info = wait_for_response(ser)
+        if resp == "OK":
+            print(f"EPROM {eprom_name} erased successfully.")
+            return 0
+        elif resp == "ERROR":
+            print(f"Error erasing EPROM {eprom_name}")
+            return 1
+    finally:
+        consume_response(ser)
+        ser.close()
 
 
 def check_chip_id(eprom_name):
@@ -238,17 +243,26 @@ def check_chip_id(eprom_name):
     ser = find_programmer(eprom)
     if not ser:
         return 1
-
-    resp, info = wait_for_response(ser)
-    if resp == "OK":
-        print(f"Chip ID check passed for {eprom_name}: {info}")
-    elif resp == "ERROR":
-        print(f"Chip ID check failed for {eprom_name}: {info}")
+    try:
+        resp, info = wait_for_response(ser)
+        if resp == "OK":
+            print(f"Chip ID check passed for {eprom_name}: {info}")
+            return 0
         chip_id = extract_hex_to_decimal(info)
-        print(
-            f"Extracted chip ID: {chip_id}" if chip_id else "Failed to extract chip ID."
-        )
-
+        if not chip_id:
+            print(f"Failed to extract chip ID.")
+        else:
+            eproms = search_chip_id(chip_id)
+            if not eproms:
+                print(f"Chip ID 0x{chip_id:x} not found in the database.")
+            else:
+                print(f"Chip ID 0x{chip_id:x} found in the database:")
+            for eprom in eproms:
+                print(eprom)
+        return 1
+    finally:
+        consume_response(ser)
+        ser.close()
 
 def blank_check(eprom_name):
     """
@@ -263,12 +277,16 @@ def blank_check(eprom_name):
         return 1
 
     eprom["state"] = STATE_CHECK_BLANK
-    ser = find_programmer(eprom)
-    if not ser:
-        return 1
+    try:
+        ser = find_programmer(eprom)
+        if not ser:
+            return 1
 
-    resp, info = wait_for_response(ser)
-    if resp == "OK":
-        print(f"EPROM {eprom_name} is blank.")
-    elif resp == "ERROR":
-        print(f"Blank check failed for {eprom_name}: {info}")
+        resp, info = wait_for_response(ser)
+        if resp == "OK":
+            print(f"EPROM {eprom_name} is blank.")
+        elif resp == "ERROR":
+            print(f"Blank check failed for {eprom_name}")
+    finally:
+        consume_response(ser)
+        ser.close()

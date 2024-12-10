@@ -54,10 +54,8 @@ def check_port(port, data, baud_rate=BAUD_RATE):
         res, msg = wait_for_response(ser)
         while res != "OK":
             if res == "ERROR":
-                raise Exception(msg)
-            if res == "TIMEOUT_ERROR":
                 return None
-            print(f"{res} - {msg}")
+            res, msg = wait_for_response(ser)
 
         if verbose():
             print(f"Programmer: {msg}")
@@ -143,6 +141,54 @@ def find_programmer(data, port=None):
     return None
 
 
+def read_response(ser):
+    while ser.in_waiting > 0:
+        byte_array = ser.readline()
+        res = read_filtered_bytes(byte_array)
+        type = None
+        msg = None
+        try:
+            if res:
+                if "OK:" in res:
+                    msg = res.split("OK:")[-1].strip()
+                    type = "OK"
+                    return
+                elif "INFO:" in res:
+                    msg = res.split("INFO:")[-1].strip()
+                    type = "INFO"
+                    return
+                elif "DEBUG:" in res:
+                    msg = res.split("DEBUG:")[-1].strip()
+                    type = "DEBUG"
+                    return
+                elif "ERROR:" in res:
+                    msg = res.split("ERROR:")[-1].strip()
+                    type = "ERROR"
+                    return
+                elif "WARN:" in res:
+                    msg = res.split("WARN:")[-1].strip()
+                    type = "WARN"
+                    return
+                elif "DATA:" in res:
+                    msg = res.split("DATA:")[-1].strip()
+                    type = "DATA"
+                    return
+                else:
+                    return
+        finally:
+            write_feedback(type, msg)
+            # if type == "ERROR":
+            #     raise Exception(msg)
+            return type, msg
+    return None, None
+
+
+def consume_response(ser):
+    time.sleep(0.1)
+    while read_response(ser)[0] != None:
+        time.sleep(0.3)
+
+
 def wait_for_response(ser):
     """
     Waits for a response from the serial connection.
@@ -155,41 +201,13 @@ def wait_for_response(ser):
     """
     timeout = time.time() + 2  # Set timeout period
     while time.time() < timeout:
-        if ser.in_waiting > 0:
-            byte_array = ser.readline()
-            res = read_filtered_bytes(byte_array)
-            msg = None
-            type = None
-            try:
-                if res:
-                    if "OK:" in res:
-                        msg = res.split("OK:")[-1].strip()
-                        type = "OK"
-                        return
-                    elif "INFO:" in res:
-                        msg = res.split("INFO:")[-1].strip()
-                        write_feedback("INFO", msg)
-                        # return "INFO", msg
-                    elif "ERROR:" in res:
-                        msg = res.split("ERROR:")[-1].strip()
-                        type = "ERROR"
-                        return
-                    elif "WARN:" in res:
-                        msg = res.split("WARN:")[-1].strip()
-                        type = "WARN"
-                        return
-                    elif "DATA:" in res:
-                        msg = res.split("DATA:")[-1].strip()
-                        type = "DATA"
-                        return
-                    timeout = time.time() + 2  # Reset timeout
-            finally:
-                write_feedback(type, msg)
-                if type:
-                    return type, msg
+        type, msg = read_response(ser)
+        if type and type != "INFO" and type != "DEBUG" and type != "WARN":
+            return type, msg
+        # time.sleep(0.1)
     msg = f"Timeout, no response on {ser.portstr}"
-    write_feedback("ERROR", msg)
-    return "TIMEOUT_ERROR", msg
+    write_feedback("Error", msg)
+    raise Exception(msg)
 
 
 def write_feedback(type, msg):
@@ -199,7 +217,7 @@ def write_feedback(type, msg):
     Args:
         msg (str): The feedback message.
     """
-    if msg and (verbose() or type == "ERROR" or type == "WARN"):
+    if msg and (verbose() or (type.upper() == "ERROR" or type == "WARN")):
         print(f"{type}: {msg}")
 
 

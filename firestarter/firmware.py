@@ -11,12 +11,12 @@ import os
 import requests
 
 try:
-    from .serial_comm import find_programmer, wait_for_response, find_comports
+    from .serial_comm import find_programmer, wait_for_response, find_comports, consume_response
     from .config import get_config_value, set_config_value
     from .avr_tool import Avrdude
     from .utils import verbose
 except ImportError:
-    from serial_comm import find_programmer, wait_for_response, find_comports
+    from serial_comm import find_programmer, wait_for_response, find_comports, consume_response
     from config import get_config_value, set_config_value
     from avr_tool import Avrdude
     from utils import verbose
@@ -103,6 +103,7 @@ def firmware_check(port=None):
         )
         return False, ser.portstr, url
     finally:
+        consume_response(ser)
         ser.close()
 
 
