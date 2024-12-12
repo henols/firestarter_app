@@ -35,6 +35,8 @@ except ImportError:
 
 
 def main():
+    signal.signal(signal.SIGINT, exit_gracefully)
+
     parser = argparse.ArgumentParser(
         description="EPROM programmer for Arduino UNO and Relatively-Universal-ROM-Programmer shield."
     )
@@ -174,6 +176,7 @@ def main():
     init_db()
     open_config()
     set_verbose(args.verbose)
+
     # Command dispatch
     if args.command == "list":
         return list_eproms(args.verified)
@@ -211,9 +214,10 @@ def main():
 
 
 def exit_gracefully(signum, frame):
+    print("\n")
+    print("Prosess interrupted.")
     sys.exit(1)
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, exit_gracefully)
     sys.exit(main())

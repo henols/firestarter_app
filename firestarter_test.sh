@@ -12,7 +12,7 @@ if [ ! -d "$TEMP_DIR" ]; then
 fi
 
 # Trap to clean up the temporary files on exit or interrupt
-# trap "rm -rf $TEMP_DIR; echo 'Cleaned up temp files'; exit" EXIT
+trap "rm -rf $TEMP_DIR; echo 'Cleaned up temp files'; exit" EXIT
 
 # Convert TARGET_NAME to uppercase
 EPROM_NAME=$(echo "$EPROM_NAME" | tr '[:lower:]' '[:upper:]')
@@ -46,36 +46,15 @@ dd if=/dev/urandom of="$TEMP_DIR/high_data.bin" bs=1 count=$HALF_SIZE status=non
 # Concatenate the two files into one file
 cat "$TEMP_DIR/low_data.bin" "$TEMP_DIR/high_data.bin" > "$TEMP_DIR/full_data.bin"
 
-# ------------------------------ EPROM INFO TESTS -------------------------
+# ------------------------------ FIRMWARE TESTS ------------------------------
+
 echo "---------------------------------"
-echo "Listing all EPROMs"
+echo "Firmware Version"
 echo "---------------------------------"
-firestarter list
+firestarter fw
 if test $? -gt 0
 then
-	echo "Search failed"
-    exit 1
-fi
-echo
-sleep 0.5
-echo "---------------------------------"
-echo "Searching for $EPROM_NAME"
-echo "---------------------------------"
-firestarter search $EPROM_NAME
-if test $? -gt 0
-then
-	echo "Search failed"
-    exit 1
-fi
-echo
-sleep 0.5
-echo "---------------------------------"
-echo "Info for $EPROM_NAME"
-echo "---------------------------------"
-firestarter info $EPROM_NAME
-if test $? -gt 0
-then
-	echo "Info failed"
+	echo "Firmware version failed"
     exit 1
 fi
 echo
@@ -127,20 +106,6 @@ then
 fi
 echo
 sleep 1
-
-# ------------------------------ FIRMWARE TESTS ------------------------------
-
-echo "---------------------------------"
-echo "Firmware Version"
-echo "---------------------------------"
-firestarter fw
-if test $? -gt 0
-then
-	echo "Firmware version failed"
-    exit 1
-fi
-echo
-sleep 0.5
 
 # ------------------------------ EPROM TESTS ------------------------------
 
@@ -203,6 +168,39 @@ firestarter blank $EPROM_NAME
 if test $? -gt 0
 then
 	echo "Blank check failed"
+    exit 1
+fi
+echo
+# ------------------------------ EPROM INFO TESTS -------------------------
+echo "---------------------------------"
+echo "Listing all EPROMs"
+echo "---------------------------------"
+firestarter list
+if test $? -gt 0
+then
+	echo "Search failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
+echo "Searching for $EPROM_NAME"
+echo "---------------------------------"
+firestarter search $EPROM_NAME
+if test $? -gt 0
+then
+	echo "Search failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
+echo "Info for $EPROM_NAME"
+echo "---------------------------------"
+firestarter info $EPROM_NAME
+if test $? -gt 0
+then
+	echo "Info failed"
     exit 1
 fi
 echo

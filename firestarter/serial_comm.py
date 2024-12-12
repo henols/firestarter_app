@@ -202,7 +202,7 @@ def wait_for_response(ser):
     timeout = time.time() + 2  # Set timeout period
     while time.time() < timeout:
         type, msg = read_response(ser)
-        if type and type != "INFO" and type != "DEBUG" and type != "WARN":
+        if type and type != "INFO" and type != "DEBUG":
             return type, msg
         # time.sleep(0.1)
     msg = f"Timeout, no response on {ser.portstr}"

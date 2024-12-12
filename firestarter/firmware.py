@@ -78,7 +78,6 @@ def firmware_check(port=None):
         return False, None, None
 
     try:
-        ser.write("OK".encode("ascii"))
         resp, version = wait_for_response(ser)
 
         if not resp == "OK":

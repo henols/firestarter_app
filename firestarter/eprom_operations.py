@@ -62,6 +62,8 @@ def read(eprom_name, output_file=None, force=False):
             bytes_read = 0
             mem_size = eprom["memory-size"]
             total_iterations = mem_size / BUFFER_SIZE
+            print_progress_bar(0, total_iterations, prefix=f"Address: 0x0000 -       ")
+
             while True:
                 resp, info = wait_for_response(ser)
                 if resp == "DATA":
@@ -75,7 +77,7 @@ def read(eprom_name, output_file=None, force=False):
                     print_progress_bar(
                         bytes_read / BUFFER_SIZE,
                         total_iterations,
-                        prefix=f"Address: 0x{from_address:X} - 0x{to_address:X}",
+                        prefix=f"Address: 0x{from_address:04X} - 0x{to_address:04X}",
                         suffix=f"- {time.time() - start_time:.2f}s",
                     )
 
@@ -98,6 +100,7 @@ def read(eprom_name, output_file=None, force=False):
         consume_response(ser)
         ser.close()
     return 0
+
 
 def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=False):
     """
@@ -144,6 +147,7 @@ def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=
             bytes_written = 0
 
             print(f"Writing {input_file} to {eprom_name}")
+            print_progress_bar(0, total_iterations, prefix=f"Address: 0x0000 -       ")
 
             while True:
                 data = file.read(BUFFER_SIZE)
@@ -174,6 +178,8 @@ def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=
                 while resp != "OK":
                     if resp == "ERROR":
                         return 1
+                    elif resp == "WARN":
+                        print(f"Warning: {info}")
                     resp, info = wait_for_response(ser)
 
                 from_address = bytes_written - nr_bytes + write_address
@@ -181,7 +187,7 @@ def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=
                 print_progress_bar(
                     bytes_written / BUFFER_SIZE,
                     total_iterations,
-                    prefix=f"Address: 0x{from_address:X} - 0x{to_address:X}",
+                    prefix=f"Address: 0x{from_address:04X} - 0x{to_address:04X}",
                     suffix=f"- {time.time() - start_time:.2f}s",
                 )
                 if bytes_written == mem_size:
@@ -263,6 +269,7 @@ def check_chip_id(eprom_name):
     finally:
         consume_response(ser)
         ser.close()
+
 
 def blank_check(eprom_name):
     """
