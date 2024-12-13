@@ -35,7 +35,6 @@ toolbox = "firestarter"
     "firestarter" = [
         "data/database.json",
         "data/pin-maps.json",
-        "data/avrdude.conf",
         ]
 
 [tool.setuptools.dynamic]
