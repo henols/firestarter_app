@@ -147,6 +147,12 @@ def main():
         type=str,
         help="Full path to avrdude (optional), set if avrdude is not found.",
     )
+    fw_parser.add_argument(
+        "-c",
+        "--avrdude-config-path",
+        type=str,
+        help="Full path to avrdude config (optional), set if avrdude version is 6.3 or not found.",
+    )
     fw_parser.add_argument("--port", type=str, help="Serial port name (optional)")
 
     config_parser = subparsers.add_parser(
@@ -205,7 +211,8 @@ def main():
     elif args.command == "vpp":
         return read_vpp(args.timeout)
     elif args.command == "fw":
-        return firmware(args.install, args.avrdude_path, args.port, args.board)
+        return firmware(args.install, avrdude_path=args.avrdude_path, avrdude_config_path=args.avrdude_config_path,
+                          port=args.port, board=args.board)
     elif args.command == "hw":
         return hardware()
     elif args.command == "config":

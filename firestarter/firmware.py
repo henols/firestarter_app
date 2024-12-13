@@ -11,14 +11,24 @@ import os
 import requests
 
 try:
-    from .serial_comm import find_programmer, wait_for_response, find_comports, consume_response
+    from .serial_comm import (
+        find_programmer,
+        wait_for_response,
+        find_comports,
+        consume_response,
+    )
     from .config import get_config_value, set_config_value
-    from .avr_tool import Avrdude
+    from .avr_tool import Avrdude, AvrdudeNotFoundError, AvrdudeConfigNotFoundError
     from .utils import verbose
 except ImportError:
-    from serial_comm import find_programmer, wait_for_response, find_comports, consume_response
+    from serial_comm import (
+        find_programmer,
+        wait_for_response,
+        find_comports,
+        consume_response,
+    )
     from config import get_config_value, set_config_value
-    from avr_tool import Avrdude
+    from avr_tool import Avrdude, AvrdudeNotFoundError, AvrdudeConfigNotFoundError
     from utils import verbose
 
 # Constants
@@ -33,7 +43,9 @@ STATE_CONFIG = 14
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 
 
-def firmware(install, avrdude_path, port, board="uno"):
+def firmware(
+    install, avrdude_path=None, avrdude_config_path=None, port=None, board="uno"
+):
     """
     Handles firmware-related operations, including version check and installation.
 
@@ -45,17 +57,25 @@ def firmware(install, avrdude_path, port, board="uno"):
     Returns:
         int: 0 if successful, 1 otherwise.
     """
-    latest, selected_port, url = firmware_check(port)
-    if not latest and not install and not url:
+    selected_port, url, board_name = firmware_check(port)
+    if not install and not url:
         return 1
 
     if install:
         if not url:
             version, url = latest_firmware(board)
             print(f"Trying to install firmware version: {version}")
-        if not selected_port:
-            selected_port = port
-        return install_firmware(url, avrdude_path, selected_port)
+        else:
+            board = board_name
+        if  selected_port:
+                port=selected_port
+        return install_firmware(
+            url,
+            avrdude_path=avrdude_path,
+            avrdude_config_path=avrdude_config_path,
+            port=port,
+            board=board,
+        )
 
     return 0
 
@@ -75,14 +95,14 @@ def firmware_check(port=None):
 
     ser = find_programmer(data, port)
     if not ser:
-        return False, None, None
+        return None, None, None
 
     try:
         resp, version = wait_for_response(ser)
 
         if not resp == "OK":
             print(f"Failed to read firmware version. {resp}: {version}")
-            return False, None, None
+            return None, None, None
 
         board = "uno"
         if ":" in version:
@@ -95,18 +115,20 @@ def firmware_check(port=None):
             print(
                 f"You have the latest firmware version: {latest_version}, for controller: {board}"
             )
-            return True, ser.portstr, url
+            return ser.portstr, url, board
 
         print(
             f"New firmware version available: {latest_version}, for controller: {board}"
         )
-        return False, ser.portstr, url
+        return ser.portstr, url, board
     finally:
         consume_response(ser)
         ser.close()
 
 
-def install_firmware(url, avrdude_path, port=None):
+def install_firmware(
+    url, avrdude_path=None, avrdude_config_path=None, port=None, board="uno"
+):
     """
     Installs the latest firmware on the programmer.
 
@@ -127,41 +149,65 @@ def install_firmware(url, avrdude_path, port=None):
             print("No programmer found.")
             return 1
 
+    partno = "atmega328p"
+    programmer_id = "arduino"
+    baud_rate = 115200
+    if board == "leonardo":
+        partno = "atmega32u4"
+        programmer_id = "avr109"
+        baud_rate = 57600
+
+    print("Downloading firmware...")
+    firmware_path = download_firmware(url)
+    if not firmware_path:
+        print("Error downloading firmware.")
+        return 1
+
     for port in ports:
         try:
             avrdude_path = avrdude_path or get_config_value("avrdude-path")
-            avrdude = Avrdude(
-                partno="ATmega328P",
-                programmer_id="arduino",
-                baud_rate="115200",
-                port=port,
-                avrdudePath=avrdude_path,
+            avrdude_config_path = avrdude_config_path or get_config_value(
+                "avrdude-config-path"
             )
-        except FileNotFoundError:
+            avrdude = Avrdude(
+                partno=partno,
+                programmer_id=programmer_id,
+                baud_rate=baud_rate,
+                port=port,
+                avrdude_path=avrdude_path,
+                avrdude_config_path=avrdude_config_path,
+            )
+
+        except AvrdudeNotFoundError as e:
             print(
                 "Error: avrdude not found. Provide the full path with --avrdude-path."
             )
             return 1
-
-        if not test_avrdude_connection(avrdude):
-            continue
-
-        print("Downloading firmware...")
-        firmware_path = download_firmware(url)
-        if not firmware_path:
-            print("Error downloading firmware.")
+        except AvrdudeConfigNotFoundError as e:
+            print(
+                "Error: avrdude.conf not found. Provide the full path with --avrdude-config-path."
+            )
             return 1
 
-        print("Flashing firmware...")
-        output, error, return_code = avrdude.flashFirmware(firmware_path)
+        # if not test_avrdude_connection(avrdude):
+        #     continue
+
+        if verbose():
+            print(f"Flashing firmware to port: {port}")
+
+        else:
+            print("Flashing firmware...")
+        error, return_code = avrdude.flash_firmware(firmware_path)
         if return_code == 0:
             print("Firmware successfully updated.")
             set_config_value("port", port)
-            set_config_value("avrdude-path", avrdude_path)
+            set_config_value("avrdude-path", avrdude.command)
+            set_config_value("avrdude-config-path", avrdude.config)
             return 0
         else:
-            print("Firmware update failed.")
-            print(str(error, "ascii"))
+            print(f"Firmware update failed on port: {port}") 
+            if verbose():
+                print(error)
 
     print("No compatible programmer found. Please reset the device and try again.")
     return 1

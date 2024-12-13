@@ -60,7 +60,7 @@ def check_port(port, data, baud_rate=BAUD_RATE):
         if verbose():
             print(f"Programmer: {msg}")
         return ser
-    except (OSError, serial.SerialException):
+    except (OSError, serial.SerialException, Exception):
         if verbose():
             print(f"Failed to open port: {port}")
         pass
@@ -120,21 +120,15 @@ def find_programmer(data, port=None):
         print(f"Firestarter data: {data}")
 
     json_data = json.dumps(data, separators=(",", ":"))
-    ports = find_comports(port)
+    if port:
+        ports = [port]
+    else:
+        ports = find_comports(port)
 
     for port in ports:
         serial_port = check_port(port, json_data)
         if serial_port:
             set_config_value("port", port)
-            return serial_port
-
-    for port in ports:
-        serial_port = check_port(port, json_data, baud_rate=FALLBACK_BAUD_RATE)
-        if serial_port:
-            set_config_value("port", port)
-            print(
-                f"Using fallback baud rate: {FALLBACK_BAUD_RATE}. Consider updating firmware."
-            )
             return serial_port
 
     print("No programmer found.")

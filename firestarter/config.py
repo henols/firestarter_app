@@ -73,6 +73,9 @@ def set_config_value(key, value):
         key (str): The configuration key to set.
         value: The value to associate with the key.
     """
+    if value is None:
+        remove_config_key(key)
+        return
     config[key] = value
     save_config()
 
