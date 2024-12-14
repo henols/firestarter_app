@@ -155,11 +155,11 @@ def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=
                     print("\nEnd of file reached")
                     ser.write(int(0).to_bytes(2, byteorder="big"))
                     ser.flush()
-                    resp, info = wait_for_response(ser)
+                    resp, info = wait_for_response(ser,timeout=10)
                     while resp != "OK":
                         if resp == "ERROR":
                             return 1
-                        resp, info = wait_for_response(ser)
+                        resp, info = wait_for_response(ser, timeout=10)
                     break
 
                 ser.write(len(data).to_bytes(2, byteorder="big"))
@@ -289,7 +289,7 @@ def blank_check(eprom_name):
         if not ser:
             return 1
 
-        resp, info = wait_for_response(ser)
+        resp, info = wait_for_response(ser, timeout=10)
         if resp == "OK":
             print(f"EPROM {eprom_name} is blank.")
         elif resp == "ERROR":

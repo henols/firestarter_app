@@ -183,7 +183,7 @@ def consume_response(ser):
         time.sleep(0.3)
 
 
-def wait_for_response(ser):
+def wait_for_response(ser, timeout=2):
     """
     Waits for a response from the serial connection.
 
@@ -193,15 +193,14 @@ def wait_for_response(ser):
     Returns:
         tuple: Response type (e.g., "OK") and message.
     """
-    timeout = time.time() + 2  # Set timeout period
-    while time.time() < timeout:
+    _timeout = time.time() + timeout  # Set timeout period
+    while time.time() < _timeout:
         type, msg = read_response(ser)
         if type and type != "INFO" and type != "DEBUG":
             return type, msg
-        # time.sleep(0.1)
-    msg = f"Timeout, no response on {ser.portstr}"
-    write_feedback("Error", msg)
-    raise Exception(msg)
+        _timeout = time.time() + timeout
+        
+    raise Exception(f"Timeout, no response on {ser.portstr}")
 
 
 def write_feedback(type, msg):

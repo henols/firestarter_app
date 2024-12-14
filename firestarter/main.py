@@ -182,7 +182,8 @@ def main():
     init_db()
     open_config()
     set_verbose(args.verbose)
-
+    if args.verbose:
+        print(f"Firestarter version: {version}")
     # Command dispatch
     if args.command == "list":
         return list_eproms(args.verified)
