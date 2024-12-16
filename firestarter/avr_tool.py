@@ -89,7 +89,7 @@ class Avrdude:
         logger.info(f"Executing command: {' '.join(cmd)}")
         process = Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE)
         try:
-            stdout, stderr = process.communicate(timeout=15)
+            stdout, stderr = process.communicate(timeout=30)
             returncode = process.returncode
         except TimeoutExpired as e:
             stderr = e.stderr
