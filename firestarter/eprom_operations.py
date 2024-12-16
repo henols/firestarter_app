@@ -190,7 +190,7 @@ def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=
                     prefix=f"Address: 0x{from_address:04X} - 0x{to_address:04X}",
                     suffix=f"- {time.time() - start_time:.2f}s",
                 )
-                if bytes_written == mem_size:
+                if write_address + bytes_written == mem_size:
                     break
 
             print(f"\nWrite complete in: {time.time() - start_time:.2f} seconds")
