@@ -9,7 +9,7 @@ authors = [
     { name = "Henrik Olsson", email = "henols@gmail.com" },
 ]
 name = "firestarter"
-description = "EPROM burner software for the Relatively Universal ROM Programmer"
+description = "EPROM programmer software for the Relatively Universal ROM Programmer"
 readme = {file = "README.md", content-type = "text/markdown"}
 dynamic = ["version"]
 
