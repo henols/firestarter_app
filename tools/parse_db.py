@@ -101,7 +101,6 @@ def parse_xml_and_extract(filename):
 
     verified_list = read_verified("tools/verified.txt")
     seen = set()  # To track unique ICs by name and chip_id
-    variants = {}
     nr_ics = 0
     for database in root.findall(".//database"):
         for manufacturer in database.findall(".//manufacturer"):
@@ -115,6 +114,7 @@ def parse_xml_and_extract(filename):
                 elif "(TEST" in name or "(RW)" in name:
                     name = name[: name.index("(")]
                 variant = int(ic.get("variant"), 16) & 0xFF
+                pin_map = int(ic.get("pin_map"), 16)
                 package_details = int(ic.get("package_details"), 16)
                 pin_count = get_pin_count(package_details)
                 adapter = package_details & ADAPTER_MASK
@@ -143,6 +143,7 @@ def parse_xml_and_extract(filename):
                     and not icsp
                     # and not vpp == None
                 ):
+
                     mem_size = int(ic.get("code_memory_size"), 16)
                     # p_id=ic.get("protocol_id")
                     # if not pin_count in variants:
@@ -159,21 +160,21 @@ def parse_xml_and_extract(filename):
                     # if  vpp == None:
                     #     print(f"{name} {variant} {pin_count} {mem_size}")
                     # SST39VF040
-                    if pin_count == 28:
-                        if type == 1:
-                            pin_map = 1
-                        elif "27" in name and "64" in name:
-                            pin_map = 1
-                        elif "27" in name and "128" in name:
-                            pin_map = 2
-                        elif "27" in name and "256" in name:
-                            pin_map = 3
-                        elif "27" in name and "512" in name:
-                            pin_map = 0
-                        else:
-                            pin_map = -1
-                    else:
-                        pin_map = -1
+                    # if pin_count == 28:
+                    #     if type == 1:
+                    #         pin_map = 1
+                    #     elif "27" in name and "64" in name:
+                    #         pin_map = 1
+                    #     elif "27" in name and "128" in name:
+                    #         pin_map = 2
+                    #     elif "27" in name and "256" in name:
+                    #         pin_map = 3
+                    #     elif "27" in name and "512" in name:
+                    #         pin_map = 0
+                    #     else:
+                    #         pin_map = -1
+                    # else:
+                    #     pin_map = -1
                     ic_data = {
                         "name": name,
                         "pin-count": pin_count,
@@ -195,12 +196,13 @@ def parse_xml_and_extract(filename):
                         "pulse-delay": ic.get("pulse_delay"),
                         "flags": ic.get("flags"),
                         "chip-info": ic.get("chip_info"),
-                        "pin-map": pin_map,
+                        # "pin-map": pin_map,
                         "package-details": ic.get("package_details"),
                         "verified": verified,
                         # "config": ic.get("config"),
                     }
                     ics_list.append(ic_data)
+
                 else:
                     seen.add(identifier)
 
@@ -208,7 +210,9 @@ def parse_xml_and_extract(filename):
                 all_data[manufacturer_name] = ics_list
     # for v in variants:
     #     print(v)
-    # save_to_json(variants, "variants.json")
+    # save_to_json(pin_maps, "pin_maps.json")
+    # save_to_json(pin_maps_2, "pin_maps_2.json")
+    # print(pin_maps)
     return all_data, nr_ics
 
 
@@ -220,11 +224,11 @@ def save_to_json(data, filename):
 def main():
 
     xml_filename = "tools/infoic.xml"
-    json_filename = "firestarter/data/config.json"
+    json_filename = "firestarter/data/database_generated.json"
     filtered_ics, nr_ics = parse_xml_and_extract(xml_filename)
     save_to_json(filtered_ics, json_filename)
     print(
-        f"Data saved to {json_filename} with {len(filtered_ics)} manuf  (s) having 24 or more pins. {nr_ics}"
+        f"Data saved to {json_filename} with {len(filtered_ics)} manufacturer(s) having 24 or more pins. {nr_ics}"
     )
 
 

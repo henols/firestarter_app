@@ -33,7 +33,8 @@ toolbox = "firestarter"
 
 [tool.setuptools.package-data]
     "firestarter" = [
-        "data/database.json",
+        "data/database_generated.json",
+        "data/database_overrides.json",
         "data/pin-maps.json",
         ]
 
