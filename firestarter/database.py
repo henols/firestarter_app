@@ -9,6 +9,11 @@ import os
 import json
 from pathlib import Path
 
+try:
+    from config import get_local_database, get_local_pin_maps
+except ImportError:
+    from .config import get_local_database, get_local_pin_maps
+
 types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
 ROM_CE = 100
 
@@ -84,35 +89,78 @@ def read_config(filename):
 def init_db():
     global proms
     global pin_maps
-    proms_filename = "database.json"
-    proms = read_config(proms_filename)
+    proms = read_config("database_generated.json")
+    proms_man = read_config("database_overrides.json")
+    proms = merge_databases(proms, proms_man)
+    local_db = get_local_database()
+    if local_db:
+        proms = merge_databases(proms, local_db)
     pin_maps = read_config("pin-maps.json")
+    local_pin_maps = get_local_pin_maps()
+    if local_pin_maps:
+        pin_maps = merge_pin_maps(pin_maps, local_pin_maps)
+
+
+def merge_databases(db, manual_db):
+    for key, manual_items in manual_db.items():
+        if key in db:
+            # Update or add items for an existing key
+            existing_names = {item["name"]: item for item in db[key]}
+            for manual_item in manual_items:
+                if manual_item["name"] in existing_names:
+                    # Replace existing item
+                    existing_names[manual_item["name"]].update(manual_item)
+                else:
+                    # Add new item
+                    db[key].append(manual_item)
+        else:
+            # Add entirely new key
+            db[key] = manual_items
+    return db
+
+
+def merge_pin_maps(pin_maps, manual_pin_map):
+    for key, sub_map in manual_pin_map.items():
+        if key not in pin_maps:
+            # Add new top-level key entirely if it doesn't exist
+            pin_maps[key] = sub_map
+        else:
+            # Replace sub-objects in the existing key
+            for sub_key, sub_value in sub_map.items():
+                pin_maps[key][sub_key] = sub_value  # Replace existing or add new
+    return pin_maps
+
+
+def get_pin_map(pins, pin_map):
+    pins_key = str(pins)
+    pin_map_key = str(pin_map)
+    if pins_key in pin_maps:
+        if pin_map_key in pin_maps[pins_key]:
+            pin_map = pin_maps[pins_key][pin_map_key]
+            return pin_map if not "holder" in pin_map else None
+
+    return None
 
 
 def get_bus_config(pins, variant):
-    pins_key = str(pins)
-    variant_key = str(variant)
-    if pins_key in pin_maps:
-        if variant_key in pin_maps[pins_key]:
-            pin_map = pin_maps[pins_key][variant_key]
-            if "holder" in pin_map:
-                return None, None
-            if pins == 28 and variant == 16:
-                return None, pin_map
-            map = {}
-            bus = []
-            for pin in pin_map["address-bus-pins"]:
-                bus.append(pin_conversions[pins][pin])
-            map["bus"] = bus
+    if pins == 28 and variant == 16:
+        return None
+    pin_map = get_pin_map(pins, variant)
+    if not pin_map:
+        return None
+    map = {}
+    bus = []
+    for pin in pin_map["address-bus-pins"]:
+        bus.append(pin_conversions[pins][pin])
+    map["bus"] = bus
 
-            if "rw-pin" in pin_map:
-                map["rw-pin"] = pin_conversions[pins][pin_map["rw-pin"]]
+    if "rw-pin" in pin_map:
+        map["rw-pin"] = pin_conversions[pins][pin_map["rw-pin"]]
 
-            if "vpp-pin" in pin_map:
-                map["vpp-pin"] = pin_conversions[pins][pin_map["vpp-pin"]]
+    if "vpp-pin" in pin_map:
+        map["vpp-pin"] = pin_conversions[pins][pin_map["vpp-pin"]]
 
-            return map, pin_map
-    return None, None
+    return map
 
 
 def map_data(ic, manufacturer):
@@ -120,10 +168,10 @@ def map_data(ic, manufacturer):
     vpp = 0
     if not ic["voltages"]["vpp"] == None:
         vpp = int(ic["voltages"]["vpp"])
-    variant = ic["variant"]
+    pin_map = ic["pin-map"] if "pin-map" in ic else ic["variant"]
     ic_type = types.get(ic["type"])
     protocol_id = int(ic["protocol-id"], 16)
-    flags = int(ic["flags"], 16)
+    flags = int(ic["flags"], 16) if "flags" in ic else 0
     type = 4
     if ic_type == 1:
         if protocol_id == 0x06:
@@ -148,21 +196,20 @@ def map_data(ic, manufacturer):
         "pin-count": pin_count,
         "vpp": vpp,
         "pulse-delay": int(ic["pulse-delay"], 16),
-        "verified": ic["verified"],
+        "verified": ic["verified"] if "verified" in ic else False,
         "flags": flags,
         "protocol-id": int(ic["protocol-id"], 16),
+        "pin-map": pin_map,
     }
     chip_id = int(ic["chip-id"], 16)
     if chip_id != 0:
         data["chip-id"] = chip_id
 
     # print(ic["pin-map"])
-    bus_config, pin_map = get_bus_config(pin_count, variant)
+    bus_config = get_bus_config(pin_count, pin_map)
 
     if bus_config:
         data["bus-config"] = bus_config
-    if pin_map:
-        data["pin-map"] = pin_map
     return data
 
 
@@ -179,25 +226,36 @@ def get_eproms(verified):
     return selected_proms
 
 
-def get_eprom(chip_name, full=False):
+def get_eprom_config(chip_name):
     for manufacturer in proms:
         for ic in proms[manufacturer]:
             if chip_name.lower() == ic["name"].lower():
-                data = map_data(ic, manufacturer)
-                if not full:
-                    if "manufacturer" in data:
-                        data.pop("manufacturer")
-                    if "verified" in data:
-                        data.pop("verified")
-                    if "pin-map" in data:
-                        data.pop("pin-map")
-                    if "name" in data:
-                        data.pop("name")
-                    if "flags" in data:
-                        data.pop("flags")
-                    if "protocol-id" in data:
-                        data.pop("protocol-id")
-                return data
+                return ic, manufacturer
+    return None, None
+
+
+def get_eprom(chip_name, full=False):
+    config, manufacturer = get_eprom_config(chip_name)
+    if config:
+        data = map_data(config, manufacturer)
+        if not full:
+            if "manufacturer" in data:
+                data.pop("manufacturer")
+            if "verified" in data:
+                data.pop("verified")
+            if "pin-map" in data:
+                data.pop("pin-map")
+            if "name" in data:
+                data.pop("name")
+            if "flags" in data:
+                data.pop("flags")
+            if "protocol-id" in data:
+                data.pop("protocol-id")
+            if "variant" in data:
+                data.pop("variant")
+            if "pin-map" in data:
+                data.pop("pin-map")
+        return data
     return None
 
 
@@ -231,18 +289,27 @@ def search_chip_id(chip_id):
                 )
     return selected_proms
 
- 
+
 def main():
     init_db()
     chip_name = "TMS2764"
 
-    prom = get_eprom(chip_name)
-    if prom == None:
+    config, manufacturer = get_eprom_config(chip_name)
+    if config == None:
         print(f"Prom {chip_name} not found")
         return
     # manufacturer = ""
-    print(f"Found {prom['name']} from {prom['manufacturer']}")
-    print(prom)
+    print(f"Found {config['name']} from {manufacturer}")
+    print(config)
+
+    pin_count = config["pin-count"]
+    variant = config["pin-map"]
+
+    print("--------------------")
+    print(get_pin_map(pin_count, variant))
+    bus = get_bus_config(pin_count, variant)
+    print("---------- bus map ----------")
+    print(bus)
 
 
 if __name__ == "__main__":

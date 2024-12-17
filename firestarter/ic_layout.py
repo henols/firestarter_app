@@ -1,7 +1,9 @@
 try:
     from .utils import verbose
+    from .database import get_pin_map
 except ImportError:
     from utils import verbose
+    from database import get_pin_map
 
 
 # Generic pin names for 24-pin, 28-pin, and 32-pin EPROMs
@@ -166,8 +168,9 @@ def print_chip_info(eprom):
         print(f"Type:\t\tFlash Memory type 2")
     elif eprom["type"] == 3:
         print(f"Type:\t\tFlash Memory type 3")
-    if eprom["flags"] & 0x00000008:
-        print(f"VPP:\t\t{eprom['vpp']}")
+    if "flags" in eprom:
+        if eprom["flags"] & 0x00000008:
+            print(f"VPP:\t\t{eprom['vpp']}")
     print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
     print_generic_eeprom(eprom)
 
@@ -176,13 +179,14 @@ def print_chip_info(eprom):
         print()
 
         # Interpret the flags
-        properties = interpret_flags(eprom["flags"])
-        # Output the results
-        print(f"Flags Value: 0x{eprom['flags']:08X}")
-        if properties:
-            print("Interpreted IC Properties:")
-            for prop in properties:
-                print(f" - {prop}")
+        if "flags" in eprom:
+            properties = interpret_flags(eprom["flags"])
+            # Output the results
+            print(f"Flags Value: 0x{eprom['flags']:08X}")
+            if properties:
+                print("Interpreted IC Properties:")
+                for prop in properties:
+                    print(f" - {prop}")
 
 
 def interpret_flags(flags):
@@ -425,9 +429,9 @@ def print_generic_eeprom(eprom):
     vpp_pin = 0
     if eprom["type"] == 4:
         pin_names[oe_pin - 1] = "OE"
-    if "pin-map" in eprom:
-        pin_map = eprom["pin-map"]
-
+        
+    pin_map = get_pin_map(pin_count, eprom["pin-map"])
+    if pin_map:
         if "rw-pin" in pin_map:
             pin_names[pin_map["rw-pin"] - 1] = "R/W"
         if "vpp-pin" in pin_map:

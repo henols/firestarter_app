@@ -13,6 +13,8 @@ import json
 # Define the home path and configuration file path
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 CONFIG_FILE = os.path.join(HOME_PATH, "config.json")
+DATABASE_FILE = os.path.join(HOME_PATH, "database.json")
+PIN_MAP_FILE = os.path.join(HOME_PATH, "pin-maps.json")
 
 # Global configuration dictionary
 config = {}
@@ -53,6 +55,27 @@ def save_config():
     except IOError as e:
         print(f"Error: Unable to save configuration to {CONFIG_FILE}: {e}")
 
+def get_local_database():
+    if os.path.exists(DATABASE_FILE):
+        try:
+            with open(DATABASE_FILE, "rt") as file:
+                return json.load(file)
+        except json.JSONDecodeError:
+            print(
+                f"Warning: Database file {DATABASE_FILE} is not a valid JSON."
+            )
+    return None
+
+def get_local_pin_maps():
+    if os.path.exists(PIN_MAP_FILE):
+        try:
+            with open(PIN_MAP_FILE, "rt") as file:
+                return json.load(file)
+        except json.JSONDecodeError:
+            print(
+                f"Warning: Pin map file {PIN_MAP_FILE} is not a valid JSON."
+            )
+    return None
 
 def get_config_value(key, default=None):
     """

@@ -116,7 +116,7 @@ def main():
     # Info command
     info_parser = subparsers.add_parser("info", help="EPROM info.")
     info_parser.add_argument("eprom", type=str, help="EPROM name.")
-
+    info_parser.add_argument("-c", "--config", action="store_true", help="Show EPROM config.")
     # Voltage commands
     vpp_parser = subparsers.add_parser("vpp", help="VPP voltage.")
     vpp_parser.add_argument("-t","--timeout", type=int, help=argparse.SUPPRESS)
@@ -184,11 +184,12 @@ def main():
     set_verbose(args.verbose)
     if args.verbose:
         print(f"Firestarter version: {version}")
+
     # Command dispatch
     if args.command == "list":
         return list_eproms(args.verified)
     elif args.command == "info":
-        return eprom_info(args.eprom)
+        return eprom_info(args.eprom, args.config)
     elif args.command == "search":
         return search_eproms(args.text)
     elif args.command == "read":

@@ -1,0 +1,142 @@
+{
+    "ATMEL": [
+        {
+            "pin-map": 20,
+            "name": "AT29C010A"
+        },
+        {
+            "pin-map": 20,
+            "name": "AT29C020"
+        },
+        {
+            "pin-map": 20,
+            "name": "AT29C040"
+        },
+        {
+            "pin-map": 20,
+            "name": "AT29C040A"
+        }
+    ],
+    "CHINGIS": [
+        {
+            "pin-map": 20,
+            "name": "PM39F010"
+        },
+        {
+            "pin-map": 20,
+            "name": "PM39F020"
+        },
+        {
+            "pin-map": 20,
+            "name": "PM39F040"
+        }
+    ],
+    "SST": [
+        {
+            "pin-map": 20,
+            "name": "SST29EE010"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39LH010"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39LH020"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39LH040"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39LH512"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39SF010"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39SF010A"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39SF020"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39SF020A"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39SF040"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39SF512"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39SF512A"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39VF010"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39VF020"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39VF040"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39VF040A"
+        },
+        {
+            "pin-map": 20,
+            "name": "SST39VF512"
+        }
+    ],
+    "WINBOND": [
+        {
+            "pin-map": 20,
+            "name": "W29C010"
+        },
+        {
+            "pin-map": 20,
+            "name": "W29C011"
+        },
+        {
+            "pin-map": 20,
+            "name": "W29C020"
+        },
+        {
+            "pin-map": 20,
+            "name": "W29C020C"
+        },
+        {
+            "pin-map": 20,
+            "name": "W29C022"
+        },
+        {
+            "pin-map": 20,
+            "name": "W29C040"
+        },
+        {
+            "pin-map": 20,
+            "name": "W29C042"
+        },
+        {
+            "pin-map": 20,
+            "name": "W39F010"
+        },
+        {
+            "pin-map": 20,
+            "name": "W39L040A"
+        }
+    ]
+}
