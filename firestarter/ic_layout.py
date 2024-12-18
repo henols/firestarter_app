@@ -171,6 +171,8 @@ def print_chip_info(eprom):
     if "flags" in eprom:
         if eprom["flags"] & 0x00000008:
             print(f"VPP:\t\t{eprom['vpp']}")
+    if "chip-id" in eprom:  
+        print(f"Chip ID:\t{hex(eprom['chip-id'])}")
     print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
     print_generic_eeprom(eprom)
 
@@ -203,15 +205,22 @@ def interpret_flags(flags):
 
     # Define the bit masks and their meanings
     flag_definitions = [
-        (0x00000008, "Requires VPP (High Programming Voltage)"),
+        (0x00000008, "Requires VPP (High Programming Voltage) ?"),
         (0x00000010, "Can be electrically erased"),
         (0x00000020, "Has Readable Chip ID"),
-        (0x00000040, "Uses EPROM Programming Algorithm"),
+        (0x00000040, "Uses EPROM Programming Algorithm ?"),
         (0x00000080, "Is Electrically Erasable or Writable (EEPROM/Flash/SRAM)"),
         (0x00000200, "Supports Boot Block Features"),
-        (0x00004000, "Software Data Protection (SDP)"),
-        (0x00008000, "Requires Specific Write Sequence or Hardware Protection"),
-        (0x00400000, "Supports Block Locking or Sector Protection"),
+        (0x00000400, "Supports OTP (One-Time Programmable) Memory ?"),
+        (0x00000800, "Supports Data Memory Addressing ?"),
+        (0x00001000, "Data Memory Addressing"),
+        (0x00002000, "Data Bus Width"),
+        (0x00004000, "Software Data Protection (SDP) before Erase/Program"),
+        (0x00008000, "Software Data Protection (SDP) after Erase/Program"),
+        (0x00008000, "Requires Specific Write Sequence or Hardware Protection ?"),
+        (0x00400000, "Supports Block Locking or Sector Protection ?"),
+        (0x00300000, "Supported Programming Modes"),
+        (0x03000000, "Data Organization"),
     ]
 
     # Check each flag definition
@@ -278,7 +287,7 @@ def protocol_info(protocol_id):
             "EPROM",
             (
                 "EPROM programming protocol requiring high programming voltage",
-                "Uses VPP (typically 12.5V or higher) for programming",
+                "Uses VPP (typically 12.5V or higher) for programming", 
                 "Follows EPROM programming algorithms",
             ),
         ),
