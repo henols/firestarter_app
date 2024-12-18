@@ -177,7 +177,9 @@ def print_chip_info(eprom):
     print_generic_eeprom(eprom)
 
     if verbose():
-        print(protocol_info(eprom["protocol-id"]))
+        # print(protocol_info(eprom["protocol-id"]))
+        # print()
+        print(f"Protocol: {hex(eprom['protocol-id'])}")
         print()
 
         # Interpret the flags
@@ -205,20 +207,20 @@ def interpret_flags(flags):
 
     # Define the bit masks and their meanings
     flag_definitions = [
-        (0x00000008, "Requires VPP (High Programming Voltage) ?"),
+        # (0x00000008, "Requires VPP (High Programming Voltage) ?"),
         (0x00000010, "Can be electrically erased"),
         (0x00000020, "Has Readable Chip ID"),
-        (0x00000040, "Uses EPROM Programming Algorithm ?"),
+        # (0x00000040, "Uses EPROM Programming Algorithm ?"),
         (0x00000080, "Is Electrically Erasable or Writable (EEPROM/Flash/SRAM)"),
         (0x00000200, "Supports Boot Block Features"),
-        (0x00000400, "Supports OTP (One-Time Programmable) Memory ?"),
-        (0x00000800, "Supports Data Memory Addressing ?"),
+        # (0x00000400, "Supports OTP (One-Time Programmable) Memory ?"),
+        # (0x00000800, "Supports Data Memory Addressing ?"),
         (0x00001000, "Data Memory Addressing"),
         (0x00002000, "Data Bus Width"),
         (0x00004000, "Software Data Protection (SDP) before Erase/Program"),
         (0x00008000, "Software Data Protection (SDP) after Erase/Program"),
-        (0x00008000, "Requires Specific Write Sequence or Hardware Protection ?"),
-        (0x00400000, "Supports Block Locking or Sector Protection ?"),
+        # (0x00008000, "Requires Specific Write Sequence or Hardware Protection ?"),
+        # (0x00400000, "Supports Block Locking or Sector Protection ?"),
         (0x00300000, "Supported Programming Modes"),
         (0x03000000, "Data Organization"),
     ]
@@ -228,27 +230,27 @@ def interpret_flags(flags):
         if flags & bitmask:
             properties.append(description)
 
-    # Handle combined flags for advanced features
-    if (flags & 0x0000C000) == 0x0000C000:
-        properties.append(" -> Advanced Write Protection Mechanisms")
+    # # Handle combined flags for advanced features
+    # if (flags & 0x0000C000) == 0x0000C000:
+    #     properties.append(" -> Advanced Write Protection Mechanisms")
 
-    if (flags & 0x00000090) == 0x00000090:
-        properties.append(" -> Electrically Erasable with Write Enable Sequence")
+    # if (flags & 0x00000090) == 0x00000090:
+    #     properties.append(" -> Electrically Erasable with Write Enable Sequence")
 
-    if (flags & 0x000000E8) == 0x000000E8:
-        properties.append(
-            " -> EEPROM with Special Programming Algorithm and Electrically Erasable"
-        )
+    # if (flags & 0x000000E8) == 0x000000E8:
+    #     properties.append(
+    #         " -> EEPROM with Special Programming Algorithm and Electrically Erasable"
+    #     )
 
-    if (flags & 0x00004278) == 0x00004278:
-        properties.append(
-            " -> Flash Memory with Advanced Protection Features (Block Locking, SDP, etc.)"
-        )
+    # if (flags & 0x00004278) == 0x00004278:
+    #     properties.append(
+    #         " -> Flash Memory with Advanced Protection Features (Block Locking, SDP, etc.)"
+    #     )
 
-    if (flags & 0x0040C078) == 0x0040C078:
-        properties.append(
-            " -> Flash Memory with Block Locking and Advanced Write Protection"
-        )
+    # if (flags & 0x0040C078) == 0x0040C078:
+    #     properties.append(
+    #         " -> Flash Memory with Block Locking and Advanced Write Protection"
+    #     )
 
     return properties
 
