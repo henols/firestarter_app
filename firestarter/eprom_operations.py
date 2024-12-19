@@ -12,11 +12,13 @@ import time
 
 try:
     from .serial_comm import find_programmer, wait_for_response, consume_response
-    from .database import get_eprom, search_chip_id
+    from .database import get_eprom as db_get_eprom
+    from .database import search_chip_id
     from .utils import extract_hex_to_decimal, print_progress_bar
 except ImportError:
     from serial_comm import find_programmer, wait_for_response, consume_response
-    from database import get_eprom, search_chip_id
+    from database import get_eprom as db_get_eprom
+    from database import search_chip_id
     from utils import extract_hex_to_decimal, print_progress_bar
 
 # Constants
@@ -26,6 +28,12 @@ STATE_WRITE = 2
 STATE_ERASE = 3
 STATE_CHECK_BLANK = 4
 STATE_CHECK_CHIP_ID = 5
+
+
+FLAG_FORCE = 0x01
+FLAG_CAN_ERASE = 0x02
+FLAG_SKIP_ERASE = 0x04
+FLAG_SKIP_BLANK_CHECK = 0x08
 
 
 def read(eprom_name, output_file=None, force=False):
@@ -44,16 +52,17 @@ def read(eprom_name, output_file=None, force=False):
         return 1
 
     eprom["state"] = STATE_READ
-    if force:
-        eprom["force"] = True
 
-    if not output_file:
-        output_file = f"{eprom_name.upper()}.bin"
-    print(f"Reading EPROM {eprom_name}, saving to {output_file}")
+    if force:
+        set_eprom_flag(eprom, FLAG_FORCE)
 
     ser = find_programmer(eprom)
     if not ser:
         return 1
+
+    if not output_file:
+        output_file = f"{eprom_name.upper()}.bin"
+    print(f"Reading EPROM {eprom_name}, saving to {output_file}")
 
     try:
         ser.write("OK".encode("ascii"))
@@ -126,11 +135,13 @@ def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=
     if address:
         write_address = int(address, 16) if "0x" in address else int(address)
         eprom["address"] = write_address
+
+
     if ignore_blank_check:
-        eprom["skip-erase"] = True
-        eprom["blank-check"] = False
+        set_eprom_flag(eprom, FLAG_SKIP_ERASE)
+        set_eprom_flag(eprom, FLAG_SKIP_BLANK_CHECK)
     if force:
-        eprom["force"] = True
+        set_eprom_flag(eprom, FLAG_FORCE)
 
     ser = find_programmer(eprom)
     if not ser:
@@ -155,7 +166,7 @@ def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=
                     print("\nEnd of file reached")
                     ser.write(int(0).to_bytes(2, byteorder="big"))
                     ser.flush()
-                    resp, info = wait_for_response(ser,timeout=10)
+                    resp, info = wait_for_response(ser, timeout=10)
                     while resp != "OK":
                         if resp == "ERROR":
                             return 1
@@ -279,6 +290,7 @@ def blank_check(eprom_name):
         eprom_name (str): Name of the EPROM.
     """
     eprom = get_eprom(eprom_name)
+
     if not eprom:
         print(f"EPROM {eprom_name} not found.")
         return 1
@@ -297,3 +309,20 @@ def blank_check(eprom_name):
     finally:
         consume_response(ser)
         ser.close()
+
+
+def set_eprom_flag(eprom, flag):
+    eprom["flags"] |= flag
+
+
+def get_eprom(eprom_name):
+    eprom = db_get_eprom(eprom_name)
+    if not eprom:
+        return None
+    
+    eprom["flags"] = 0
+    if "can-erase" in eprom :
+        ce = eprom.pop("can-erase")
+        if ce:
+            set_eprom_flag(eprom,FLAG_CAN_ERASE)
+    return eprom
