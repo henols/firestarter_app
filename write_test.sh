@@ -102,6 +102,17 @@ fi
 echo
 sleep 0.5
 echo "---------------------------------"
+echo "Verifying"
+echo "---------------------------------"
+firestarter verify $EPROM_NAME "$TEMP_DIR/null.bin"
+if test $? -gt 0
+then
+	echo "Verify failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
 echo "Reading"
 echo "---------------------------------"
 firestarter read $EPROM_NAME "$TEMP_DIR/read_back.bin"
@@ -120,7 +131,6 @@ fi
 echo "Files are identical"
 echo
 sleep 0.5
-
 echo "---------------------------------"
 echo "Writing 0xFF - $EPROM_NAME"
 echo "---------------------------------"
@@ -128,6 +138,17 @@ firestarter write $EPROM_NAME "$TEMP_DIR/0xFF.bin"
 if test $? -gt 0 
 then
 	echo "Write failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
+echo "Verifying"
+echo "---------------------------------"
+firestarter verify $EPROM_NAME "$TEMP_DIR/0xFF.bin"
+if test $? -gt 0
+then
+	echo "Verify failed"
     exit 1
 fi
 echo
@@ -158,6 +179,17 @@ firestarter write $EPROM_NAME "$TEMP_DIR/full_data.bin"
 if test $? -gt 0
 then
 	echo "Write failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
+echo "Verifying"
+echo "---------------------------------"
+firestarter verify $EPROM_NAME "$TEMP_DIR/full_data.bin"
+if test $? -gt 0
+then
+	echo "Verify failed"
     exit 1
 fi
 echo
@@ -195,6 +227,25 @@ firestarter write -b -a $HALF_SIZE $EPROM_NAME "$TEMP_DIR/high_data.bin"
 if test $? -gt 0
 then
 	echo "Write high_data.bin failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
+echo "Verifying - parts"
+echo "---------------------------------"
+firestarter verify $EPROM_NAME "$TEMP_DIR/low_data.bin"
+if test $? -gt 0
+then
+	echo "Verify low_data.bin failed"
+    exit 1
+fi
+echo
+sleep 0.5
+firestarter verify $EPROM_NAME -a $HALF_SIZE "$TEMP_DIR/high_data.bin" 
+if test $? -gt 0
+then
+	echo "Verify high_data.bin failed"
     exit 1
 fi
 echo

@@ -23,20 +23,23 @@ except ImportError:
 
 # Constants
 BUFFER_SIZE = 512
+
 STATE_READ = 1
 STATE_WRITE = 2
 STATE_ERASE = 3
 STATE_CHECK_BLANK = 4
 STATE_CHECK_CHIP_ID = 5
+STATE_VERIFY = 6
 
-
+# Control Flags
 FLAG_FORCE = 0x01
 FLAG_CAN_ERASE = 0x02
 FLAG_SKIP_ERASE = 0x04
 FLAG_SKIP_BLANK_CHECK = 0x08
+FLAG_VPE_AS_VPP = 0x10
 
 
-def read(eprom_name, output_file=None, force=False):
+def read(eprom_name, output_file=None, force=False, address=None, size=None):
     """
     Reads data from an EPROM.
 
@@ -52,6 +55,16 @@ def read(eprom_name, output_file=None, force=False):
         return 1
 
     eprom["state"] = STATE_READ
+
+    read_address = 0
+    if address:
+        read_address = int(address, 16) if "0x" in address else int(address)
+        eprom["address"] = read_address
+
+    if size:
+        eprom["memory-size"] = (
+            int(size, 16) if "0x" in size else int(size)
+        ) + read_address
 
     if force:
         set_eprom_flag(eprom, FLAG_FORCE)
@@ -70,8 +83,8 @@ def read(eprom_name, output_file=None, force=False):
         with open(output_file, "wb") as file:
             bytes_read = 0
             mem_size = eprom["memory-size"]
-            total_iterations = mem_size / BUFFER_SIZE
-            print_progress_bar(0, total_iterations, prefix=f"Address: 0x0000 -       ")
+            total_iterations = (mem_size-read_address) / BUFFER_SIZE
+            print_progress_bar(0, total_iterations, prefix=f"Address:        -       ")
 
             while True:
                 resp, info = wait_for_response(ser)
@@ -81,8 +94,8 @@ def read(eprom_name, output_file=None, force=False):
                     bytes_read += len(data)
                     # percent = int(bytes_read / mem_size * 100)
                     # print_progress(percent, bytes_read - BUFFER_SIZE, bytes_read)
-                    from_address = bytes_read - len(data)
-                    to_address = bytes_read
+                    from_address = bytes_read - len(data) + read_address
+                    to_address = bytes_read + read_address
                     print_progress_bar(
                         bytes_read / BUFFER_SIZE,
                         total_iterations,
@@ -111,7 +124,14 @@ def read(eprom_name, output_file=None, force=False):
     return 0
 
 
-def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=False):
+def write(
+    eprom_name,
+    input_file,
+    address=None,
+    ignore_blank_check=False,
+    force=False,
+    vpe_as_vpp=False,
+):
     """
     Writes data to an EPROM.
 
@@ -136,13 +156,13 @@ def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=
         write_address = int(address, 16) if "0x" in address else int(address)
         eprom["address"] = write_address
 
-
     if ignore_blank_check:
         set_eprom_flag(eprom, FLAG_SKIP_ERASE)
         set_eprom_flag(eprom, FLAG_SKIP_BLANK_CHECK)
     if force:
         set_eprom_flag(eprom, FLAG_FORCE)
-
+    if vpe_as_vpp:
+        set_eprom_flag(eprom, FLAG_VPE_AS_VPP)
     ser = find_programmer(eprom)
     if not ser:
         return 1
@@ -158,7 +178,7 @@ def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=
             bytes_written = 0
 
             print(f"Writing {input_file} to {eprom_name}")
-            print_progress_bar(0, total_iterations, prefix=f"Address: 0x0000 -       ")
+            print_progress_bar(0, total_iterations, prefix=f"Address:        -       ")
 
             while True:
                 data = file.read(BUFFER_SIZE)
@@ -213,6 +233,89 @@ def write(eprom_name, input_file, address=None, ignore_blank_check=False, force=
         ser.close()
     return 0
 
+def verify(eprom_name, input_file, address=None):
+    start_time = time.time()
+    eprom = get_eprom(eprom_name)
+    if not eprom:
+        print(f"EPROM {eprom_name} not found.")
+        return 1
+    if not os.path.exists(input_file):
+        print(f"Input file {input_file} not found.")
+        return 1
+    verify_address = 0
+    eprom["state"] = STATE_VERIFY
+    if address:
+        verify_address = int(address, 16) if "0x" in address else int(address)
+        eprom["address"] = verify_address
+
+    ser = find_programmer(eprom)
+    if not ser:
+        return 1
+
+    try:
+        with open(input_file, "rb") as file:
+            mem_size = eprom["memory-size"]
+            file_size = os.path.getsize(input_file)
+            total_iterations = file_size / BUFFER_SIZE
+
+            if file_size != mem_size:
+                print("Warning: File size does not match memory size.")
+            bytes_written = 0
+
+            print(f"Verifying {input_file} to {eprom_name}")
+            print_progress_bar(0, total_iterations, prefix=f"Address:        -       ")
+
+            while True:
+                data = file.read(BUFFER_SIZE)
+                if not data:
+                    print("\nEnd of file reached")
+                    ser.write(int(0).to_bytes(2, byteorder="big"))
+                    ser.flush()
+                    resp, info = wait_for_response(ser, timeout=10)
+                    while resp != "OK":
+                        if resp == "ERROR":
+                            return 1
+                        resp, info = wait_for_response(ser, timeout=10)
+                    break
+
+                ser.write(len(data).to_bytes(2, byteorder="big"))
+                ser.flush()
+                resp, info = wait_for_response(ser)
+                while resp != "OK":
+                    if resp == "ERROR":
+                        return 1
+                    resp, info = wait_for_response(ser)
+
+                nr_bytes = ser.write(data)
+                bytes_written += nr_bytes
+                ser.flush()
+                resp, info = wait_for_response(ser)
+                while resp != "OK":
+                    if resp == "ERROR":
+                        return 1
+                    elif resp == "WARN":
+                        print(f"Warning: {info}")
+                    resp, info = wait_for_response(ser)
+
+                from_address = bytes_written - nr_bytes + verify_address
+                to_address = bytes_written + verify_address
+                print_progress_bar(
+                    bytes_written / BUFFER_SIZE,
+                    total_iterations,
+                    prefix=f"Address: 0x{from_address:04X} - 0x{to_address:04X}",
+                    suffix=f"- {time.time() - start_time:.2f}s",
+                )
+                if verify_address + bytes_written == mem_size:
+                    break
+
+            print(f"\nVerify complete in: {time.time() - start_time:.2f} seconds")
+    except Exception as e:
+        print(f"Error while verifying: {e}")
+        return 1
+    finally:
+        consume_response(ser)
+        ser.close()
+    return 0
 
 def erase(eprom_name):
     """
@@ -319,10 +422,10 @@ def get_eprom(eprom_name):
     eprom = db_get_eprom(eprom_name)
     if not eprom:
         return None
-    
+
     eprom["flags"] = 0
-    if "can-erase" in eprom :
+    if "can-erase" in eprom:
         ce = eprom.pop("can-erase")
         if ce:
-            set_eprom_flag(eprom,FLAG_CAN_ERASE)
+            set_eprom_flag(eprom, FLAG_CAN_ERASE)
     return eprom

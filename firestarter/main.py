@@ -18,7 +18,7 @@ try:
     from .config import open_config
     from .utils import set_verbose
     from .__init__ import __version__ as version
-    from .eprom_operations import read, write, erase, check_chip_id, blank_check
+    from .eprom_operations import read, write, erase, check_chip_id, blank_check, verify
     from .eprom_info import list_eproms, search_eproms, eprom_info
     from .database import init_db
     from .firmware import firmware
@@ -27,7 +27,7 @@ except ImportError:
     from config import open_config
     from utils import set_verbose
     from __init__ import __version__ as version
-    from eprom_operations import read, write, erase, check_chip_id, blank_check
+    from eprom_operations import read, write, erase, check_chip_id, blank_check, verify
     from eprom_info import list_eproms, search_eproms, eprom_info
     from database import init_db
     from firmware import firmware
@@ -67,7 +67,12 @@ def main():
         action="store_true",
         help="Force read, even if the chip id doesn't match.",
     )
-
+    read_parser.add_argument(
+        "-a", "--address", type=str, help="Read start address in dec/hex"
+    )
+    read_parser.add_argument(
+        "-s", "--size", type=str, help="Size of the data to read in dec/hex"
+    )
     # Write command
     write_parser = subparsers.add_parser(
         "write", help="Writes a binary file to an EPROM."
@@ -88,7 +93,20 @@ def main():
     write_parser.add_argument(
         "-a", "--address", type=str, help="Write start address in dec/hex"
     )
+    write_parser.add_argument(
+        "-v", "--vpe-as-vpp", action="store_true", help="Use VPE as VPP voltage"
+    )
     write_parser.add_argument("input_file", type=str, help="Input file name")
+
+    # Verify command
+    verify_parser = subparsers.add_parser(
+        "verify", help="Verifies the content of an EPROM."
+    )
+    verify_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    verify_parser.add_argument(
+        "-a", "--address", type=str, help="Verify start address in dec/hex"
+    )
+    verify_parser.add_argument("input_file", type=str, help="Input file name")
 
     blank_check_parser = subparsers.add_parser(
         "blank", help="Checks if an EPROM is blank."
@@ -116,12 +134,14 @@ def main():
     # Info command
     info_parser = subparsers.add_parser("info", help="EPROM info.")
     info_parser.add_argument("eprom", type=str, help="EPROM name.")
-    info_parser.add_argument("-c", "--config", action="store_true", help="Show EPROM config.")
+    info_parser.add_argument(
+        "-c", "--config", action="store_true", help="Show EPROM config."
+    )
     # Voltage commands
     vpp_parser = subparsers.add_parser("vpp", help="VPP voltage.")
-    vpp_parser.add_argument("-t","--timeout", type=int, help=argparse.SUPPRESS)
+    vpp_parser.add_argument("-t", "--timeout", type=int, help=argparse.SUPPRESS)
     vpe_parser = subparsers.add_parser("vpe", help="VPE voltage.")
-    vpe_parser.add_argument("-t","--timeout", type=int, help=argparse.SUPPRESS)
+    vpe_parser.add_argument("-t", "--timeout", type=int, help=argparse.SUPPRESS)
 
     # Hardware command
     hw_parser = subparsers.add_parser("hw", help="Hardware revision.")
@@ -139,7 +159,7 @@ def main():
         "--board",
         type=str,
         default="uno",
-        help="Microcontroller board (optional), defaults to 'uno'."
+        help="Microcontroller board (optional), defaults to 'uno'.",
     )
     fw_parser.add_argument(
         "-p",
@@ -193,7 +213,13 @@ def main():
     elif args.command == "search":
         return search_eproms(args.text)
     elif args.command == "read":
-        return read(args.eprom, args.output_file, force=args.force)
+        return read(
+            args.eprom,
+            args.output_file,
+            force=args.force,
+            address=args.address,
+            size=args.size,
+        )
     elif args.command == "write":
         return write(
             args.eprom,
@@ -201,6 +227,13 @@ def main():
             address=args.address,
             ignore_blank_check=args.ignore_blank_check,
             force=args.force,
+            vpe_as_vpp=args.vpe_as_vpp,
+        )
+    elif args.command == "verify":
+        return verify(
+            args.eprom,
+            args.input_file,
+            address=args.address,
         )
     elif args.command == "blank":
         return blank_check(args.eprom)
@@ -213,8 +246,13 @@ def main():
     elif args.command == "vpp":
         return read_vpp(args.timeout)
     elif args.command == "fw":
-        return firmware(args.install, avrdude_path=args.avrdude_path, avrdude_config_path=args.avrdude_config_path,
-                          port=args.port, board=args.board)
+        return firmware(
+            args.install,
+            avrdude_path=args.avrdude_path,
+            avrdude_config_path=args.avrdude_config_path,
+            port=args.port,
+            board=args.board,
+        )
     elif args.command == "hw":
         return hardware()
     elif args.command == "config":

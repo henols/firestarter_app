@@ -180,7 +180,7 @@ def read_response(ser):
 def consume_response(ser):
     time.sleep(0.1)
     while read_response(ser)[0] != None:
-        time.sleep(0.3)
+        time.sleep(0.1)
 
 
 def wait_for_response(ser, timeout=2):
@@ -196,6 +196,8 @@ def wait_for_response(ser, timeout=2):
     _timeout = time.time() + timeout  # Set timeout period
     while time.time() < _timeout:
         type, msg = read_response(ser)
+        if not type:
+            continue
         if type and type != "INFO" and type != "DEBUG":
             return type, msg
         _timeout = time.time() + timeout
@@ -210,7 +212,7 @@ def write_feedback(type, msg):
     Args:
         msg (str): The feedback message.
     """
-    if msg and (verbose() or (type.upper() == "ERROR" or type == "WARN")):
+    if type and msg and (verbose() or (type.upper() == "ERROR" or type == "WARN")):
         print(f"{type}: {msg}")
 
 

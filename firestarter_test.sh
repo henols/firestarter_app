@@ -132,6 +132,17 @@ fi
 echo
 sleep 0.5
 echo "---------------------------------"
+echo "Verifying"
+echo "---------------------------------"
+firestarter verify $EPROM_NAME "$TEMP_DIR/full_data.bin"
+if test $? -gt 0
+then
+	echo "Write failed"
+    exit 1
+fi
+echo
+sleep 0.5
+echo "---------------------------------"
 echo "Reading"
 echo "---------------------------------"
 firestarter read $EPROM_NAME "$TEMP_DIR/read_back.bin"
