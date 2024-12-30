@@ -92,10 +92,8 @@ def read(eprom_name, output_file=None, force=False, address=None, size=None):
                     data = ser.read(BUFFER_SIZE)
                     file.write(data)
                     bytes_read += len(data)
-                    # percent = int(bytes_read / mem_size * 100)
-                    # print_progress(percent, bytes_read - BUFFER_SIZE, bytes_read)
                     from_address = bytes_read - len(data) + read_address
-                    to_address = bytes_read + read_address
+                    to_address = bytes_read + read_address - 1
                     print_progress_bar(
                         bytes_read / BUFFER_SIZE,
                         total_iterations,
@@ -214,7 +212,7 @@ def write(
                     resp, info = wait_for_response(ser)
 
                 from_address = bytes_written - nr_bytes + write_address
-                to_address = bytes_written + write_address
+                to_address = bytes_written + write_address -1
                 print_progress_bar(
                     bytes_written / BUFFER_SIZE,
                     total_iterations,
@@ -298,7 +296,7 @@ def verify(eprom_name, input_file, address=None):
                     resp, info = wait_for_response(ser)
 
                 from_address = bytes_written - nr_bytes + verify_address
-                to_address = bytes_written + verify_address
+                to_address = bytes_written + verify_address - 1
                 print_progress_bar(
                     bytes_written / BUFFER_SIZE,
                     total_iterations,
