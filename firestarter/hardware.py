@@ -119,3 +119,15 @@ def read_voltage(state, timeout=None):
         consume_response(ser)
         ser.close()
     return 1
+
+def dev_registers(msb, lsb, ctrl_reg):
+    print(f"Setting registers: {lsb} {msb} {ctrl_reg}")
+    return 0
+
+def dev_address(eprom, address, ctrl_reg, read):
+    print(f"Setting address: {eprom} {address} {ctrl_reg}")
+    if read:
+        print("Write flag set")
+    else:
+        print("Read flag set")
+    return 0
