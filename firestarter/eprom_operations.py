@@ -39,7 +39,7 @@ FLAG_SKIP_BLANK_CHECK = 0x08
 FLAG_VPE_AS_VPP = 0x10
 
 
-def read(eprom_name, output_file=None, force=False, address=None, size=None):
+def read(eprom_name, output_file=None, flags=0, address=None, size=None):
     """
     Reads data from an EPROM.
 
@@ -49,7 +49,7 @@ def read(eprom_name, output_file=None, force=False, address=None, size=None):
         force (bool): Force reading even if chip ID mismatches.
     """
     start_time = time.time()
-    eprom = setup_read(eprom_name, force, address, size)
+    eprom = setup_read(eprom_name, flags, address, size)
     if not eprom:
         return 1
 
@@ -98,7 +98,7 @@ def read(eprom_name, output_file=None, force=False, address=None, size=None):
     return 0
 
 
-def setup_read(eprom_name, force=False, address=None, size=None):
+def setup_read(eprom_name, flags=0, address=None, size=None):
     eprom = get_eprom(eprom_name)
     if not eprom:
         print(f"EPROM {eprom_name} not found.")
@@ -116,9 +116,7 @@ def setup_read(eprom_name, force=False, address=None, size=None):
             int(size, 16) if "0x" in size else int(size)
         ) + read_address
 
-    if force:
-        set_eprom_flag(eprom, FLAG_FORCE)
-
+    eprom["flags"] |= flags
     return eprom
 
 
@@ -140,10 +138,7 @@ def write(
     eprom_name,
     input_file,
     address=None,
-    ignore_blank_check=False,
-    force=False,
-    vpe_as_vpp=False,
-):
+flags=0,):
     """
     Writes data to an EPROM.
 
@@ -168,13 +163,8 @@ def write(
         write_address = int(address, 16) if "0x" in address else int(address)
         eprom["address"] = write_address
 
-    if ignore_blank_check:
-        set_eprom_flag(eprom, FLAG_SKIP_ERASE)
-        set_eprom_flag(eprom, FLAG_SKIP_BLANK_CHECK)
-    if force:
-        set_eprom_flag(eprom, FLAG_FORCE)
-    if vpe_as_vpp:
-        set_eprom_flag(eprom, FLAG_VPE_AS_VPP)
+    eprom["flags"] |= flags
+
     ser = find_programmer(eprom)
     if not ser:
         return 1
@@ -246,7 +236,7 @@ def write(
     return 0
 
 
-def verify(eprom_name, input_file, address=None):
+def verify(eprom_name, input_file, address=None, flags=0):
     start_time = time.time()
     eprom = get_eprom(eprom_name)
     if not eprom:
@@ -257,6 +247,8 @@ def verify(eprom_name, input_file, address=None):
         return 1
     verify_address = 0
     eprom["state"] = STATE_VERIFY
+    eprom["flags"] |= flags
+
     if address:
         verify_address = int(address, 16) if "0x" in address else int(address)
         eprom["address"] = verify_address
@@ -331,7 +323,7 @@ def verify(eprom_name, input_file, address=None):
     return 0
 
 
-def erase(eprom_name):
+def erase(eprom_name, flags=0):
     """
     Erases an EPROM.
 
@@ -344,6 +336,8 @@ def erase(eprom_name):
         return 1
 
     eprom["state"] = STATE_ERASE
+    eprom["flags"] |= flags
+
     try:
         ser = find_programmer(eprom)
         if not ser:
@@ -361,7 +355,7 @@ def erase(eprom_name):
         ser.close()
 
 
-def check_chip_id(eprom_name):
+def check_chip_id(eprom_name, flags=0):
     """
     Checks the chip ID of an EPROM.
 
@@ -374,6 +368,8 @@ def check_chip_id(eprom_name):
         return 1
 
     eprom["state"] = STATE_CHECK_CHIP_ID
+    eprom["flags"] |= flags
+
     ser = find_programmer(eprom)
     if not ser:
         return 1
@@ -399,7 +395,7 @@ def check_chip_id(eprom_name):
         ser.close()
 
 
-def blank_check(eprom_name):
+def blank_check(eprom_name, flags=0):
     """
     Performs a blank check on an EPROM.
 
@@ -413,6 +409,7 @@ def blank_check(eprom_name):
         return 1
 
     eprom["state"] = STATE_CHECK_BLANK
+    eprom["flags"] |= flags
     try:
         ser = find_programmer(eprom)
         if not ser:
@@ -492,3 +489,15 @@ def hexdump(address, data, width=16):
             (chr(byte) if 32 <= byte <= 126 else ".") for byte in chunk
         )
         print(f"{address+i:08x}: {hex_part:<{width * 3}} {ascii_part}")
+
+def build_flags(ignore_blank_check=False, force=False, vpe_as_vpp=False):
+    flags = 0
+    if ignore_blank_check:
+        flags |= FLAG_SKIP_ERASE
+        flags |= FLAG_SKIP_BLANK_CHECK
+    if force:
+        flags |=FLAG_FORCE
+    if vpe_as_vpp:
+        flags |=FLAG_VPE_AS_VPP
+    return flags
+

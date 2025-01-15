@@ -26,6 +26,7 @@ try:
         blank_check,
         verify,
         dev_read,
+        build_flags,
     )
     from .eprom_info import list_eproms, search_eproms, eprom_info
     from .database import init_db
@@ -36,7 +37,7 @@ try:
         read_vpe,
         read_vpp,
         dev_address,
-        dev_registers
+        dev_registers,
     )
 except ImportError:
     from config import open_config
@@ -50,6 +51,7 @@ except ImportError:
         blank_check,
         verify,
         dev_read,
+        build_flags,
     )
 
     from eprom_info import list_eproms, search_eproms, eprom_info
@@ -61,7 +63,7 @@ except ImportError:
         read_vpe,
         read_vpp,
         dev_address,
-        dev_registers
+        dev_registers,
     )
 
 
@@ -78,7 +80,7 @@ def create_read_args(parser):
         "-f",
         "--force",
         action="store_true",
-        help="Force read, even if the chip id doesn't match.",
+        help="Force, even if the chip id doesn't match.",
     )
     read_parser.add_argument(
         "-a", "--address", type=str, help="Read start address in dec/hex"
@@ -101,7 +103,7 @@ def create_write_args(parser):
         "-f",
         "--force",
         action="store_true",
-        help="Force write, even if the VPP or chip id doesn't match.",
+        help="Force, even if the VPP or chip id doesn't match.",
     )
     write_parser.add_argument(
         "-a", "--address", type=str, help="Write start address in dec/hex"
@@ -120,17 +122,46 @@ def create_verify_args(parser):
     verify_parser.add_argument(
         "-a", "--address", type=str, help="Verify start address in dec/hex"
     )
+    verify_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force, even if the VPP or chip id doesn't match.",
+    )
     verify_parser.add_argument("input_file", type=str, help="Input file name")
 
 
 def create_blank_check_args(parser):
     blank_check_parser = parser.add_parser("blank", help="Checks if an EPROM is blank.")
     blank_check_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    blank_check_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force, even if the VPP or chip id doesn't match.",
+    )
 
 
 def create_erase_parser(parser):
     erase_parser = parser.add_parser("erase", help="Erase an EPROM, if supported.")
     erase_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    erase_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force, even if the VPP or chip id doesn't match.",
+    )
+
+
+def create_id_args(parser):
+    id_parser = parser.add_parser("id", help="Checks an EPROM, if supported.")
+    id_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    id_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force, even if the VPP is not correct.",
+    )
 
 
 def create_voltage_args(parser):
@@ -177,11 +208,6 @@ def create_info_args(parser):
     info_parser.add_argument(
         "-c", "--config", action="store_true", help="Show EPROM config."
     )
-
-
-def create_id_args(parser):
-    id_parser = parser.add_parser("id", help="Checks an EPROM, if supported.")
-    id_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
 
 
 def create_list_args(parser):
@@ -247,6 +273,15 @@ def create_dev_args(parser):
     )
 
 
+def build_arg_flags(args):
+    ignore_blank_check = (
+        args.ignore_blank_check if "ignore_blank_check" in args else False
+    )
+    force = args.force if "force" in args else False
+    vpe_as_vpp = args.vpe_as_vpp if "vpe_as_vpp" in args else False
+    return build_flags(ignore_blank_check, force, vpe_as_vpp)
+
+
 def main():
     signal.signal(signal.SIGINT, exit_gracefully)
 
@@ -302,10 +337,11 @@ def main():
     elif args.command == "search":
         return search_eproms(args.text)
     elif args.command == "read":
+
         return read(
             args.eprom,
             args.output_file,
-            force=args.force,
+            flags=build_arg_flags(args),
             address=args.address,
             size=args.size,
         )
@@ -314,22 +350,21 @@ def main():
             args.eprom,
             args.input_file,
             address=args.address,
-            ignore_blank_check=args.ignore_blank_check,
-            force=args.force,
-            vpe_as_vpp=args.vpe_as_vpp,
+            flags=build_arg_flags(args),
         )
     elif args.command == "verify":
         return verify(
             args.eprom,
             args.input_file,
             address=args.address,
+            flags=build_arg_flags(args),
         )
     elif args.command == "blank":
-        return blank_check(args.eprom)
+        return blank_check(args.eprom, flags=build_arg_flags(args))
     elif args.command == "erase":
-        return erase(args.eprom)
+        return erase(args.eprom, flags=build_arg_flags(args))
     elif args.command == "id":
-        return check_chip_id(args.eprom)
+        return check_chip_id(args.eprom, flags=build_arg_flags(args))
     elif args.command == "vpe":
         return read_vpe(args.timeout)
     elif args.command == "vpp":
@@ -355,17 +390,12 @@ def main():
                 force=args.force,
             )
         elif args.dev_command == "reg":
-            return dev_registers(
-                args.msb, args.lsb, args.ctrl_reg
-            )
+            return dev_registers(args.msb, args.lsb, args.ctrl_reg)
         elif args.dev_command == "addr":
             if args.write != args.read:
                 print("Specify either read or write flag")
                 return 0
-            return dev_address(
-                args.eprom,
-                args.address, args.ctrl_reg,  args.read
-            )
+            return dev_address(args.eprom, args.address, args.ctrl_reg, args.read)
     return 0
 
 
