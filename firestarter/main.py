@@ -268,6 +268,7 @@ def main():
     create_read_args(subparsers)
     create_write_args(subparsers)
     create_verify_args(subparsers)
+    create_erase_parser(subparsers)
     create_blank_check_args(subparsers)
     create_id_args(subparsers)
 
