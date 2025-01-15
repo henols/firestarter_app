@@ -343,7 +343,10 @@ def erase(eprom_name, flags=0):
         if not ser:
             return 1
 
-        resp, info = wait_for_response(ser)
+        ser.write("OK".encode("ascii"))
+        ser.flush()
+
+        resp, info = wait_for_response(ser,10)
         if resp == "OK":
             print(f"EPROM {eprom_name} erased successfully.")
             return 0
@@ -373,7 +376,11 @@ def check_chip_id(eprom_name, flags=0):
     ser = find_programmer(eprom)
     if not ser:
         return 1
+    
     try:
+        ser.write("OK".encode("ascii"))
+        ser.flush()
+
         resp, info = wait_for_response(ser)
         if resp == "OK":
             print(f"Chip ID check passed for {eprom_name}: {info}")
@@ -410,10 +417,14 @@ def blank_check(eprom_name, flags=0):
 
     eprom["state"] = STATE_CHECK_BLANK
     eprom["flags"] |= flags
+    
     try:
         ser = find_programmer(eprom)
         if not ser:
             return 1
+        
+        ser.write("OK".encode("ascii"))
+        ser.flush()
 
         resp, info = wait_for_response(ser, timeout=10)
         if resp == "OK":
