@@ -49,10 +49,60 @@ def read(eprom_name, output_file=None, force=False, address=None, size=None):
         force (bool): Force reading even if chip ID mismatches.
     """
     start_time = time.time()
+    eprom = setup_read(eprom_name, force, address, size)
+    if not eprom:
+        return 1
+
+    ser = find_programmer(eprom)
+    if not ser:
+        return 1
+
+    if not output_file:
+        output_file = f"{eprom_name.upper()}.bin"
+    print(f"Reading EPROM {eprom_name}, saving to {output_file}")
+
+    try:
+        with open(output_file, "wb") as file:
+            read_address = eprom["address"] if "address" in eprom else 0
+            bytes_read = 0
+            mem_size = eprom["memory-size"]
+            total_iterations = (mem_size - read_address) / BUFFER_SIZE
+            print_progress_bar(0, total_iterations, prefix=f"Address:        -       ")
+
+            ser.write("OK".encode("ascii"))
+            ser.flush()
+
+            while True:
+                data = read_data(ser)
+                if not data:
+                    break
+                file.write(data)
+                bytes_read += len(data)
+                from_address = bytes_read - len(data) + read_address
+                to_address = bytes_read + read_address
+                print_progress_bar(
+                    bytes_read / BUFFER_SIZE,
+                    total_iterations,
+                    prefix=f"Address: 0x{from_address:04X} - 0x{to_address:04X}",
+                    suffix=f"- {time.time() - start_time:.2f}s",
+                )
+
+            print(f"\nRead complete in: {time.time() - start_time:.2f} seconds")
+            print(f"Data saved to {output_file}")
+    except Exception as e:
+        print(f"Error while reading: {e}")
+        return 1
+    finally:
+        consume_response(ser)
+        ser.close()
+    return 0
+
+
+def setup_read(eprom_name, force=False, address=None, size=None):
     eprom = get_eprom(eprom_name)
     if not eprom:
         print(f"EPROM {eprom_name} not found.")
-        return 1
+        return None
 
     eprom["state"] = STATE_READ
 
@@ -69,57 +119,21 @@ def read(eprom_name, output_file=None, force=False, address=None, size=None):
     if force:
         set_eprom_flag(eprom, FLAG_FORCE)
 
-    ser = find_programmer(eprom)
-    if not ser:
-        return 1
+    return eprom
 
-    if not output_file:
-        output_file = f"{eprom_name.upper()}.bin"
-    print(f"Reading EPROM {eprom_name}, saving to {output_file}")
 
-    try:
+def read_data(ser):
+    resp, info = wait_for_response(ser)
+    if resp == "DATA":
+        data = ser.read(BUFFER_SIZE)
+
         ser.write("OK".encode("ascii"))
         ser.flush()
-        with open(output_file, "wb") as file:
-            bytes_read = 0
-            mem_size = eprom["memory-size"]
-            total_iterations = (mem_size-read_address) / BUFFER_SIZE
-            print_progress_bar(0, total_iterations, prefix=f"Address:        -       ")
-
-            while True:
-                resp, info = wait_for_response(ser)
-                if resp == "DATA":
-                    data = ser.read(BUFFER_SIZE)
-                    file.write(data)
-                    bytes_read += len(data)
-                    from_address = bytes_read - len(data) + read_address
-                    to_address = bytes_read + read_address - 1
-                    print_progress_bar(
-                        bytes_read / BUFFER_SIZE,
-                        total_iterations,
-                        prefix=f"Address: 0x{from_address:04X} - 0x{to_address:04X}",
-                        suffix=f"- {time.time() - start_time:.2f}s",
-                    )
-
-                    ser.write("OK".encode("ascii"))
-                    ser.flush()
-                elif resp == "OK":
-                    break
-                elif resp == "ERROR":
-                    # print(f"\nError: {info}")
-                    return 1
-                # else:
-                #     print(f"\nUnexpected response: {info}")
-                #     return 1
-
-            print(f"\nRead complete in: {time.time() - start_time:.2f} seconds")
-            print(f"Data saved to {output_file}")
-    except Exception as e:
-        print(f"Error while reading: {e}")
-    finally:
-        consume_response(ser)
-        ser.close()
-    return 0
+        return data
+    elif resp == "OK":
+        return None
+    elif resp == "ERROR":
+        raise Exception(info)
 
 
 def write(
@@ -231,6 +245,7 @@ def write(
         ser.close()
     return 0
 
+
 def verify(eprom_name, input_file, address=None):
     start_time = time.time()
     eprom = get_eprom(eprom_name)
@@ -314,6 +329,7 @@ def verify(eprom_name, input_file, address=None):
         consume_response(ser)
         ser.close()
     return 0
+
 
 def erase(eprom_name):
     """
@@ -427,3 +443,52 @@ def get_eprom(eprom_name):
         if ce:
             set_eprom_flag(eprom, FLAG_CAN_ERASE)
     return eprom
+
+
+def dev_read(eprom_name, address=None, size="256", force=False):
+    if not size:
+        size = "256"
+    eprom = setup_read(eprom_name, force, address, size)
+    if not eprom:
+        return 1
+
+    ser = find_programmer(eprom)
+    if not ser:
+        return 1
+
+    try:
+        read_address = eprom["address"] if "address" in eprom else 0
+        bytes_read = 0
+
+        ser.write("OK".encode("ascii"))
+        ser.flush()
+
+        while True:
+            data = read_data(ser)
+            if not data:
+                return 0
+            address = bytes_read + read_address
+            bytes_read += len(data)
+            hexdump(address, data)
+
+    except Exception as e:
+        print(f"Error while reading: {e}")
+        return 1
+    finally:
+        consume_response(ser)
+        ser.close()
+
+
+def hexdump(address, data, width=16):
+    """
+    Prints a hexdump similar to xxd.
+    :param data: The data to be printed (bytes).
+    :param width: Number of bytes per line.
+    """
+    for i in range(0, len(data), width):
+        chunk = data[i : i + width]
+        hex_part = " ".join(f"{byte:02x}" for byte in chunk)
+        ascii_part = "".join(
+            (chr(byte) if 32 <= byte <= 126 else ".") for byte in chunk
+        )
+        print(f"{address+i:08x}: {hex_part:<{width * 3}} {ascii_part}")
