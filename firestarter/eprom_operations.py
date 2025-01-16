@@ -39,7 +39,7 @@ FLAG_SKIP_BLANK_CHECK = 0x08
 FLAG_VPE_AS_VPP = 0x10
 
 
-def read(eprom_name, output_file=None, force=False, address=None, size=None):
+def read(eprom_name, output_file=None, flags=0, address=None, size=None):
     """
     Reads data from an EPROM.
 
@@ -49,10 +49,60 @@ def read(eprom_name, output_file=None, force=False, address=None, size=None):
         force (bool): Force reading even if chip ID mismatches.
     """
     start_time = time.time()
+    eprom = setup_read(eprom_name, flags, address, size)
+    if not eprom:
+        return 1
+
+    ser = find_programmer(eprom)
+    if not ser:
+        return 1
+
+    if not output_file:
+        output_file = f"{eprom_name.upper()}.bin"
+    print(f"Reading EPROM {eprom_name}, saving to {output_file}")
+
+    try:
+        with open(output_file, "wb") as file:
+            read_address = eprom["address"] if "address" in eprom else 0
+            bytes_read = 0
+            mem_size = eprom["memory-size"]
+            total_iterations = (mem_size - read_address) / BUFFER_SIZE
+            print_progress_bar(0, total_iterations, prefix=f"Address:        -       ")
+
+            ser.write("OK".encode("ascii"))
+            ser.flush()
+
+            while True:
+                data = read_data(ser)
+                if not data:
+                    break
+                file.write(data)
+                bytes_read += len(data)
+                from_address = bytes_read - len(data) + read_address
+                to_address = bytes_read + read_address
+                print_progress_bar(
+                    bytes_read / BUFFER_SIZE,
+                    total_iterations,
+                    prefix=f"Address: 0x{from_address:04X} - 0x{to_address:04X}",
+                    suffix=f"- {time.time() - start_time:.2f}s",
+                )
+
+            print(f"\nRead complete in: {time.time() - start_time:.2f} seconds")
+            print(f"Data saved to {output_file}")
+    except Exception as e:
+        print(f"Error while reading: {e}")
+        return 1
+    finally:
+        consume_response(ser)
+        ser.close()
+    return 0
+
+
+def setup_read(eprom_name, flags=0, address=None, size=None):
     eprom = get_eprom(eprom_name)
     if not eprom:
         print(f"EPROM {eprom_name} not found.")
-        return 1
+        return None
 
     eprom["state"] = STATE_READ
 
@@ -66,70 +116,29 @@ def read(eprom_name, output_file=None, force=False, address=None, size=None):
             int(size, 16) if "0x" in size else int(size)
         ) + read_address
 
-    if force:
-        set_eprom_flag(eprom, FLAG_FORCE)
+    eprom["flags"] |= flags
+    return eprom
 
-    ser = find_programmer(eprom)
-    if not ser:
-        return 1
 
-    if not output_file:
-        output_file = f"{eprom_name.upper()}.bin"
-    print(f"Reading EPROM {eprom_name}, saving to {output_file}")
+def read_data(ser):
+    resp, info = wait_for_response(ser)
+    if resp == "DATA":
+        data = ser.read(BUFFER_SIZE)
 
-    try:
         ser.write("OK".encode("ascii"))
         ser.flush()
-        with open(output_file, "wb") as file:
-            bytes_read = 0
-            mem_size = eprom["memory-size"]
-            total_iterations = (mem_size-read_address) / BUFFER_SIZE
-            print_progress_bar(0, total_iterations, prefix=f"Address:        -       ")
-
-            while True:
-                resp, info = wait_for_response(ser)
-                if resp == "DATA":
-                    data = ser.read(BUFFER_SIZE)
-                    file.write(data)
-                    bytes_read += len(data)
-                    from_address = bytes_read - len(data) + read_address
-                    to_address = bytes_read + read_address - 1
-                    print_progress_bar(
-                        bytes_read / BUFFER_SIZE,
-                        total_iterations,
-                        prefix=f"Address: 0x{from_address:04X} - 0x{to_address:04X}",
-                        suffix=f"- {time.time() - start_time:.2f}s",
-                    )
-
-                    ser.write("OK".encode("ascii"))
-                    ser.flush()
-                elif resp == "OK":
-                    break
-                elif resp == "ERROR":
-                    # print(f"\nError: {info}")
-                    return 1
-                # else:
-                #     print(f"\nUnexpected response: {info}")
-                #     return 1
-
-            print(f"\nRead complete in: {time.time() - start_time:.2f} seconds")
-            print(f"Data saved to {output_file}")
-    except Exception as e:
-        print(f"Error while reading: {e}")
-    finally:
-        consume_response(ser)
-        ser.close()
-    return 0
+        return data
+    elif resp == "OK":
+        return None
+    elif resp == "ERROR":
+        raise Exception(info)
 
 
 def write(
     eprom_name,
     input_file,
     address=None,
-    ignore_blank_check=False,
-    force=False,
-    vpe_as_vpp=False,
-):
+flags=0,):
     """
     Writes data to an EPROM.
 
@@ -154,13 +163,8 @@ def write(
         write_address = int(address, 16) if "0x" in address else int(address)
         eprom["address"] = write_address
 
-    if ignore_blank_check:
-        set_eprom_flag(eprom, FLAG_SKIP_ERASE)
-        set_eprom_flag(eprom, FLAG_SKIP_BLANK_CHECK)
-    if force:
-        set_eprom_flag(eprom, FLAG_FORCE)
-    if vpe_as_vpp:
-        set_eprom_flag(eprom, FLAG_VPE_AS_VPP)
+    eprom["flags"] |= flags
+
     ser = find_programmer(eprom)
     if not ser:
         return 1
@@ -231,7 +235,8 @@ def write(
         ser.close()
     return 0
 
-def verify(eprom_name, input_file, address=None):
+
+def verify(eprom_name, input_file, address=None, flags=0):
     start_time = time.time()
     eprom = get_eprom(eprom_name)
     if not eprom:
@@ -242,6 +247,8 @@ def verify(eprom_name, input_file, address=None):
         return 1
     verify_address = 0
     eprom["state"] = STATE_VERIFY
+    eprom["flags"] |= flags
+
     if address:
         verify_address = int(address, 16) if "0x" in address else int(address)
         eprom["address"] = verify_address
@@ -315,7 +322,8 @@ def verify(eprom_name, input_file, address=None):
         ser.close()
     return 0
 
-def erase(eprom_name):
+
+def erase(eprom_name, flags=0):
     """
     Erases an EPROM.
 
@@ -328,12 +336,17 @@ def erase(eprom_name):
         return 1
 
     eprom["state"] = STATE_ERASE
+    eprom["flags"] |= flags
+
     try:
         ser = find_programmer(eprom)
         if not ser:
             return 1
 
-        resp, info = wait_for_response(ser)
+        ser.write("OK".encode("ascii"))
+        ser.flush()
+
+        resp, info = wait_for_response(ser,10)
         if resp == "OK":
             print(f"EPROM {eprom_name} erased successfully.")
             return 0
@@ -345,7 +358,7 @@ def erase(eprom_name):
         ser.close()
 
 
-def check_chip_id(eprom_name):
+def check_chip_id(eprom_name, flags=0):
     """
     Checks the chip ID of an EPROM.
 
@@ -358,10 +371,16 @@ def check_chip_id(eprom_name):
         return 1
 
     eprom["state"] = STATE_CHECK_CHIP_ID
+    eprom["flags"] |= flags
+
     ser = find_programmer(eprom)
     if not ser:
         return 1
+    
     try:
+        ser.write("OK".encode("ascii"))
+        ser.flush()
+
         resp, info = wait_for_response(ser)
         if resp == "OK":
             print(f"Chip ID check passed for {eprom_name}: {info}")
@@ -383,7 +402,7 @@ def check_chip_id(eprom_name):
         ser.close()
 
 
-def blank_check(eprom_name):
+def blank_check(eprom_name, flags=0):
     """
     Performs a blank check on an EPROM.
 
@@ -397,10 +416,15 @@ def blank_check(eprom_name):
         return 1
 
     eprom["state"] = STATE_CHECK_BLANK
+    eprom["flags"] |= flags
+    
     try:
         ser = find_programmer(eprom)
         if not ser:
             return 1
+        
+        ser.write("OK".encode("ascii"))
+        ser.flush()
 
         resp, info = wait_for_response(ser, timeout=10)
         if resp == "OK":
@@ -427,3 +451,64 @@ def get_eprom(eprom_name):
         if ce:
             set_eprom_flag(eprom, FLAG_CAN_ERASE)
     return eprom
+
+
+def dev_read(eprom_name, address=None, size="256", force=False):
+    if not size:
+        size = "256"
+    eprom = setup_read(eprom_name, force, address, size)
+    if not eprom:
+        return 1
+
+    ser = find_programmer(eprom)
+    if not ser:
+        return 1
+
+    try:
+        read_address = eprom["address"] if "address" in eprom else 0
+        bytes_read = 0
+
+        ser.write("OK".encode("ascii"))
+        ser.flush()
+
+        while True:
+            data = read_data(ser)
+            if not data:
+                return 0
+            address = bytes_read + read_address
+            bytes_read += len(data)
+            hexdump(address, data)
+
+    except Exception as e:
+        print(f"Error while reading: {e}")
+        return 1
+    finally:
+        consume_response(ser)
+        ser.close()
+
+
+def hexdump(address, data, width=16):
+    """
+    Prints a hexdump similar to xxd.
+    :param data: The data to be printed (bytes).
+    :param width: Number of bytes per line.
+    """
+    for i in range(0, len(data), width):
+        chunk = data[i : i + width]
+        hex_part = " ".join(f"{byte:02x}" for byte in chunk)
+        ascii_part = "".join(
+            (chr(byte) if 32 <= byte <= 126 else ".") for byte in chunk
+        )
+        print(f"{address+i:08x}: {hex_part:<{width * 3}} {ascii_part}")
+
+def build_flags(ignore_blank_check=False, force=False, vpe_as_vpp=False):
+    flags = 0
+    if ignore_blank_check:
+        flags |= FLAG_SKIP_ERASE
+        flags |= FLAG_SKIP_BLANK_CHECK
+    if force:
+        flags |=FLAG_FORCE
+    if vpe_as_vpp:
+        flags |=FLAG_VPE_AS_VPP
+    return flags
+
