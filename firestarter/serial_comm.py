@@ -183,7 +183,7 @@ def consume_response(ser):
         time.sleep(0.1)
 
 
-def wait_for_response(ser, timeout=2):
+def wait_for_response(ser, timeout=10):
     """
     Waits for a response from the serial connection.
 
