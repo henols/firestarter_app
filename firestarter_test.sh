@@ -1,5 +1,16 @@
 #!/bin/bash
-
+#
+# ----------------------------------------------------------
+# 
+# Project Name: Firestarter
+# Copyright (c) 2025 Henrik Olsson
+# 
+# Permission is hereby granted under MIT license.
+# 
+# Configuration Management Module
+# 
+# ----------------------------------------------------------
+# 
 # Usage: ./script.sh <json-file> <name>
 JSON_FILE='./firestarter/data/database.json'
 EPROM_NAME=${1:-W27C512}

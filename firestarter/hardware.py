@@ -1,14 +1,20 @@
+"""
+Project Name: Firestarter
+Copyright (c) 2025 Henrik Olsson
+
+Permission is hereby granted under MIT license.
+
+Configuration Management Module
+"""
+
 import time
 
 try:
-    from .serial_comm import find_programmer, wait_for_response, consume_response
+    from .constants import *
+    from .serial_comm import find_programmer, wait_for_response, clean_up
 except ImportError:
-    from serial_comm import find_programmer, wait_for_response, consume_response
-
-STATE_READ_VPP = 11
-STATE_READ_VPE = 12
-STATE_CONFIG = 14
-STATE_HW_VERSION = 15
+    from constants import *
+    from serial_comm import find_programmer, wait_for_response, clean_up
 
 
 def hardware():
@@ -33,8 +39,7 @@ def hardware():
             print(f"Failed to read hardware revision. {resp}: {version}")
             return 1
     finally:
-        consume_response(ser)
-        ser.close()
+        clean_up(ser)
     return 0
 
 
@@ -55,6 +60,7 @@ def config(rev=None, r1=None, r2=None):
     ser = find_programmer(data)
     if not ser:
         return 1
+    
     try:
         # ser.write("OK".encode("ascii"))
         r, version = wait_for_response(ser)
@@ -64,8 +70,7 @@ def config(rev=None, r1=None, r2=None):
             # print(r)
             return 1
     finally:
-        consume_response(ser)
-        ser.close()
+        clean_up(ser)
     return 0
 
 
@@ -115,9 +120,8 @@ def read_voltage(state, timeout=None):
             ser.flush()
     except Exception as e:
         print(f"Error while reading {type} voltage: {e}")
-    finally:
-        consume_response(ser)
-        ser.close()
+    # finally:
+        # clean_up(ser)
     return 1
 
 def dev_registers(msb, lsb, ctrl_reg):

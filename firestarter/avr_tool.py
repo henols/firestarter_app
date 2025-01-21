@@ -1,3 +1,11 @@
+"""
+Project Name: Firestarter
+Copyright (c) 2025 Henrik Olsson
+
+Permission is hereby granted under MIT license.
+
+Configuration Management Module
+"""
 import os
 import re
 import time

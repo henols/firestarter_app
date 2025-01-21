@@ -13,17 +13,15 @@ import time
 import json
 
 try:
+    from .constants import *
+
     from .config import get_config_value, set_config_value
     from .utils import verbose
 
 except ImportError:
+    from constants import *
     from config import get_config_value, set_config_value
     from utils import verbose
-
-# Constants
-BAUD_RATE = "250000"
-FALLBACK_BAUD_RATE = "115200"
-BUFFER_SIZE = 512
 
 
 def check_port(port, data, baud_rate=BAUD_RATE):
@@ -118,6 +116,20 @@ def find_programmer(data, port=None):
 
     if verbose():
         print(f"Firestarter data: {data}")
+        flags = data.get("flags", 0)
+        if flags:
+            print("Flags set:")
+            if flags & FLAG_FORCE:
+                print(" - Force")
+            if flags & FLAG_CAN_ERASE:
+                print(" - Can be erased")
+            if flags & FLAG_SKIP_ERASE:
+                print(" - Skip erase")
+            if flags & FLAG_SKIP_BLANK_CHECK:
+                print(" - Skip blank check")
+            if flags & FLAG_VPE_AS_VPP:
+                print(" - Set VPE as VPP")
+           
 
     json_data = json.dumps(data, separators=(",", ":"))
     if port:
@@ -182,6 +194,17 @@ def consume_response(ser):
     while read_response(ser)[0] != None:
         time.sleep(0.1)
 
+def clean_up(ser):
+    """
+    Closes the serial connection and cleans up resources.
+
+    Args:
+        ser (Serial): The serial connection.
+    """
+    if ser:
+        consume_response(ser)
+        ser.close()
+    
 
 def wait_for_response(ser, timeout=10):
     """

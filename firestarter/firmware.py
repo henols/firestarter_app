@@ -11,34 +11,29 @@ import os
 import requests
 
 try:
+
+    from .constants import *
     from .serial_comm import (
         find_programmer,
         wait_for_response,
         find_comports,
-        consume_response,
+        clean_up,
     )
     from .config import get_config_value, set_config_value
     from .avr_tool import Avrdude, AvrdudeNotFoundError, AvrdudeConfigNotFoundError
     from .utils import verbose
 except ImportError:
+    from constants import *
     from serial_comm import (
         find_programmer,
         wait_for_response,
         find_comports,
-        consume_response,
+        clean_up,
     )
     from config import get_config_value, set_config_value
     from avr_tool import Avrdude, AvrdudeNotFoundError, AvrdudeConfigNotFoundError
     from utils import verbose
 
-# Constants
-FIRESTARTER_RELEASE_URL = (
-    "https://api.github.com/repos/henols/firestarter/releases/latest"
-)
-STATE_FW_VERSION = 13
-STATE_HW_VERSION = 15
-
-STATE_CONFIG = 14
 
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 
@@ -67,8 +62,8 @@ def firmware(
             print(f"Trying to install firmware version: {version}")
         else:
             board = board_name
-        if  selected_port:
-                port=selected_port
+        if selected_port:
+            port = selected_port
         return install_firmware(
             url,
             avrdude_path=avrdude_path,
@@ -122,8 +117,7 @@ def firmware_check(port=None):
         )
         return ser.portstr, url, board
     finally:
-        consume_response(ser)
-        ser.close()
+        clean_up(ser)
 
 
 def install_firmware(
@@ -205,7 +199,7 @@ def install_firmware(
             set_config_value("avrdude-config-path", avrdude.config)
             return 0
         else:
-            print(f"Firmware update failed on port: {port}") 
+            print(f"Firmware update failed on port: {port}")
             if verbose():
                 print(error)
 
