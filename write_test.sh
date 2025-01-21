@@ -7,8 +7,6 @@
 # 
 # Permission is hereby granted under MIT license.
 # 
-# Configuration Management Module
-# 
 # ----------------------------------------------------------
 #
 # Usage: ./script.sh <json-file> <name>

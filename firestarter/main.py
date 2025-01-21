@@ -4,9 +4,7 @@ Project Name: Firestarter
 Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
-"""
 
-"""
 Main CLI Handler for Firestarter Project
 """
 
