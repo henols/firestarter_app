@@ -205,7 +205,6 @@ def map_data(ic, manufacturer):
     if chip_id != 0:
         data["chip-id"] = chip_id
 
-    # print(ic["pin-map"])
     bus_config = get_bus_config(pin_count, pin_map)
 
     if bus_config:

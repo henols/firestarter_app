@@ -7,13 +7,16 @@ Permission is hereby granted under MIT license.
 Configuration Management Module
 """
 
+import logging
+
 try:
-    from .utils import verbose
+
     from .database import get_pin_map
 except ImportError:
-    from utils import verbose
+
     from database import get_pin_map
 
+logger = logging.getLogger("EPROMInfo")
 
 # Generic pin names for 24-pin, 28-pin, and 32-pin EPROMs
 generic_pin_names = {
@@ -114,17 +117,19 @@ def print_eeprom(pin_count, pin_names):
     half = int(pin_count / 2)
 
     # Print top line with a dent in the middle
-    print(" " * 8 + "-" * 5 + "v" + "-" * 5)
+    logger.info(" " * 8 + "-" * 5 + "v" + "-" * 5)
 
     # Print pins and labels
     for i in range(half):
         pin_left = pin_names[i]
         pin_right = pin_names[pin_count - i - 1]
-        print(f"  {pin_left:<3} -| {i + 1:2}     {pin_count - i:2} |- {pin_right:<6}")
-        # print(f"{i + 1:2} | {pin_left:<6}     {pin_right:<6} | {pin_count - i}")
+        logger.info(
+            f"  {pin_left:<3} -| {i + 1:2}     {pin_count - i:2} |- {pin_right:<6}"
+        )
+        # logger.info(f"{i + 1:2} | {pin_left:<6}     {pin_right:<6} | {pin_count - i}")
 
     # Print the bottom line
-    print(" " * 8 + "-" * 11)
+    logger.info(" " * 8 + "-" * 11)
 
 
 def select_label(jp, l1, l2):
@@ -141,19 +146,19 @@ def print_jumper_settings(jp1, jp2, jp3):
     jp1_label = select_label(jp1, "A13", "VCC")
     jp2_label = select_label(jp2, "A17", "VCC")
     jp3_label = select_label(jp3, "32pin", "28pin")
-    print()
-    print("    Jumper config (Rev 0 & 1 only)")
-    print(f"JP1    5V [{jumper[jp1]}] A13   : {jp1_label}")
-    print(f"JP2    5V [{jumper[jp2]}] A17   : {jp2_label}")
-    print(f"JP3 28pin [{jumper[jp3]}] 32pin : {jp3_label}")
+    logger.info("")
+    logger.info("    Jumper config (Rev 0 & 1 only)")
+    logger.info(f"JP1    5V [{jumper[jp1]}] A13   : {jp1_label}")
+    logger.info(f"JP2    5V [{jumper[jp2]}] A17   : {jp2_label}")
+    logger.info(f"JP3 28pin [{jumper[jp3]}] 32pin : {jp3_label}")
 
 
 def print_jumper_settings_jp3_mod(jp3):
     jp3_label = select_label(jp3, "Open", "Closed")
     jumper = [" N/A ", " ● ● ", "(● ●)"]
-    print()
-    print("    Jumper config (JP4 on Rev 2)")
-    print(f"JP4 (Rev 2)    [{jumper[jp3]}] : {jp3_label}")
+    logger.info("")
+    logger.info("    Jumper config (JP4 on Rev 2)")
+    logger.info(f"JP4 (Rev 2)    [{jumper[jp3]}] : {jp3_label}")
 
 
 def print_chip_info(eprom):
@@ -161,45 +166,40 @@ def print_chip_info(eprom):
     if not eprom["verified"]:
         verified = "\t-- NOT VERIFIED --"
 
-    print(f"Eprom Info {verified}")
-    print(f"Name:\t\t{eprom['name']}")
-    print(f"Manufacturer:\t{eprom['manufacturer']}")
-    print(f"Number of pins:\t{eprom['pin-count']}")
-    print(f"Memory size:\t{hex(eprom['memory-size'])}")
+    logger.info(f"Eprom Info {verified}")
+    logger.info(f"Name:\t\t{eprom['name']}")
+    logger.info(f"Manufacturer:\t{eprom['manufacturer']}")
+    logger.info(f"Number of pins:\t{eprom['pin-count']}")
+    logger.info(f"Memory size:\t{hex(eprom['memory-size'])}")
     if eprom["type"] == 1:
-        print(f"Type:\t\tEPROM")
-        print(f"Can be erased:\t{eprom['can-erase']}")
-        if "chip-id" in eprom:
-            print(f"Chip ID:\t{hex(eprom['chip-id'])}")
+        logger.info(f"Type:\t\tEPROM")
+        logger.info(f"Can be erased:\t{eprom['can-erase']}")
     elif eprom["type"] == 4:
-        print(f"Type:\t\tSRAM")
+        logger.info(f"Type:\t\tSRAM")
     elif eprom["type"] == 2:
-        print(f"Type:\t\tFlash Memory type 2")
+        logger.info(f"Type:\t\tFlash Memory type 2")
     elif eprom["type"] == 3:
-        print(f"Type:\t\tFlash Memory type 3")
+        logger.info(f"Type:\t\tFlash Memory type 3")
     if "flags" in eprom:
         if eprom["flags"] & 0x00000008:
-            print(f"VPP:\t\t{eprom['vpp']}")
-    if "chip-id" in eprom:  
-        print(f"Chip ID:\t{hex(eprom['chip-id'])}")
-    print(f"Pulse delay:\t{eprom['pulse-delay']}µS")
+            logger.info(f"VPP:\t\t{eprom['vpp']}")
+    if "chip-id" in eprom:
+        logger.info(f"Chip ID:\t{hex(eprom['chip-id'])}")
+    logger.info(f"Pulse delay:\t{eprom['pulse-delay']}µS")
     print_generic_eeprom(eprom)
 
-    if verbose():
-        # print(protocol_info(eprom["protocol-id"]))
-        # print()
-        print(f"Protocol: {hex(eprom['protocol-id'])}")
-        print()
+    logger.debug(f"Protocol: {hex(eprom['protocol-id'])}")
 
-        # Interpret the flags
-        if "flags" in eprom:
-            properties = interpret_flags(eprom["flags"])
-            # Output the results
-            print(f"Flags Value: 0x{eprom['flags']:08X}")
-            if properties:
-                print("Interpreted IC Properties:")
-                for prop in properties:
-                    print(f" - {prop}")
+    # Interpret the flags
+    if "flags" in eprom:
+        logger.debug("")
+        properties = interpret_flags(eprom["flags"])
+        # Output the results
+        logger.debug(f"Flags Value: 0x{eprom['flags']:08X}")
+        if properties:
+            logger.debug("Interpreted IC Properties:")
+            for prop in properties:
+                logger.debug(f" - {prop}")
 
 
 def interpret_flags(flags):
@@ -298,7 +298,7 @@ def protocol_info(protocol_id):
             "EPROM",
             (
                 "EPROM programming protocol requiring high programming voltage",
-                "Uses VPP (typically 12.5V or higher) for programming", 
+                "Uses VPP (typically 12.5V or higher) for programming",
                 "Follows EPROM programming algorithms",
             ),
         ),
@@ -440,16 +440,16 @@ def protocol_info(protocol_id):
 def print_generic_eeprom(eprom):
     pin_count = eprom["pin-count"]
     if pin_count not in generic_pin_names:
-        print(f"No generic layout available for {pin_count}-pin EPROM.")
+        logger.error(f"No generic layout available for {pin_count}-pin EPROM.")
         return
-    print()
+    logger.info("")
 
     pin_names = generic_pin_names[pin_count]
     oe_pin = int(pin_count / 2) + 8
     vpp_pin = 0
     if eprom["type"] == 4:
         pin_names[oe_pin - 1] = "OE"
-        
+
     pin_map = get_pin_map(pin_count, eprom["pin-map"])
     if pin_map:
         if "rw-pin" in pin_map:
@@ -466,8 +466,8 @@ def print_generic_eeprom(eprom):
                 pin_names[pin - 1] = f"A{i}"
                 i += 1
     else:
-        print(f"No pin map available, layout is assumed.")
-    print(f"       {pin_count}-DIP package")
+        logger.warning(f"No pin map available, layout is assumed.")
+    logger.info(f"       {pin_count}-DIP package")
     print_eeprom(pin_count, pin_names)
     jp1 = 0
     jp2 = 0
@@ -486,6 +486,6 @@ def print_generic_eeprom(eprom):
             jp3 = 1
 
     print_jumper_settings(jp1, jp2, jp3)
-    print()
+    logger.info("")
     print_jumper_settings_jp3_mod(jp3)
-    print()
+    logger.info("")

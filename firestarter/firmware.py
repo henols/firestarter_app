@@ -9,6 +9,7 @@ Firmware Management Module
 
 import os
 import requests
+import logging
 
 try:
 
@@ -21,7 +22,7 @@ try:
     )
     from .config import get_config_value, set_config_value
     from .avr_tool import Avrdude, AvrdudeNotFoundError, AvrdudeConfigNotFoundError
-    from .utils import verbose
+
 except ImportError:
     from constants import *
     from serial_comm import (
@@ -32,8 +33,9 @@ except ImportError:
     )
     from config import get_config_value, set_config_value
     from avr_tool import Avrdude, AvrdudeNotFoundError, AvrdudeConfigNotFoundError
-    from utils import verbose
 
+
+logger = logging.getLogger("Firmware")
 
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 
@@ -59,7 +61,7 @@ def firmware(
     if install:
         if not url:
             version, url = latest_firmware(board)
-            print(f"Trying to install firmware version: {version}")
+            logger.info(f"Trying to install firmware version: {version}")
         else:
             board = board_name
         if selected_port:
@@ -85,7 +87,7 @@ def firmware_check(port=None):
     Returns:
         tuple: (bool: up-to-date, str: port, str: firmware URL)
     """
-    print("Reading firmware version...")
+    logger.info("Reading firmware version...")
     data = {"state": STATE_FW_VERSION}
 
     ser = find_programmer(data, port)
@@ -96,23 +98,23 @@ def firmware_check(port=None):
         resp, version = wait_for_response(ser)
 
         if not resp == "OK":
-            print(f"Failed to read firmware version. {resp}: {version}")
+            logging.error(f"Failed to read firmware version. {resp}: {version}")
             return None, None, None
 
         board = "uno"
         if ":" in version:
             version, board = version.split(":")
 
-        print(f"Current firmware version: {version}, for controller: {board}")
+        logger.info(f"Current firmware version: {version}, for controller: {board}")
         latest_version, url = latest_firmware(board)
 
         if compare_versions(version, latest_version):
-            print(
+            logger.info(
                 f"You have the latest firmware version: {latest_version}, for controller: {board}"
             )
             return ser.portstr, url, board
 
-        print(
+        logger.info(
             f"New firmware version available: {latest_version}, for controller: {board}"
         )
         return ser.portstr, url, board
@@ -134,13 +136,13 @@ def install_firmware(
     Returns:
         int: 0 if successful, 1 otherwise.
     """
-    print("Installing firmware...")
+    logger.info("Installing firmware...")
     if port:
         ports = [port]
     else:
         ports = find_comports()
         if not ports:
-            print("No programmer found.")
+            logger.error("No programmer found.")
             return 1
 
     partno = "atmega328p"
@@ -151,10 +153,10 @@ def install_firmware(
         programmer_id = "avr109"
         baud_rate = 57600
 
-    print("Downloading firmware...")
+    logger.info("Downloading firmware...")
     firmware_path = download_firmware(url)
     if not firmware_path:
-        print("Error downloading firmware.")
+        logger.error("Error downloading firmware.")
         return 1
 
     for port in ports:
@@ -173,12 +175,12 @@ def install_firmware(
             )
 
         except AvrdudeNotFoundError as e:
-            print(
+            logger.error(
                 "Error: avrdude not found. Provide the full path with --avrdude-path."
             )
             return 1
         except AvrdudeConfigNotFoundError as e:
-            print(
+            logger.error(
                 "Error: avrdude.conf not found. Provide the full path with --avrdude-config-path."
             )
             return 1
@@ -186,24 +188,25 @@ def install_firmware(
         # if not test_avrdude_connection(avrdude):
         #     continue
 
-        if verbose():
-            print(f"Flashing firmware to port: {port}")
+        if logger.level == logging.INFO:
+            logger.info("Flashing firmware...")
+        logger.debug(f"Flashing firmware to port: {port}")
 
-        else:
-            print("Flashing firmware...")
         error, return_code = avrdude.flash_firmware(firmware_path)
         if return_code == 0:
-            print("Firmware successfully updated.")
+            logger.info("Firmware successfully updated.")
             set_config_value("port", port)
             set_config_value("avrdude-path", avrdude.command)
             set_config_value("avrdude-config-path", avrdude.config)
             return 0
         else:
-            print(f"Firmware update failed on port: {port}")
-            if verbose():
-                print(error)
+            logger.error(f"Firmware update failed on port: {port}")
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.error(error)
 
-    print("No compatible programmer found. Please reset the device and try again.")
+    logger.error(
+        "No compatible programmer found. Please reset the device and try again."
+    )
     return 1
 
 
@@ -214,12 +217,11 @@ def latest_firmware(board="uno"):
     Returns:
         tuple: (str: latest version, str: firmware URL)
     """
-    if verbose():
-        print("Fetching latest firmware release...")
+    logger.debug("Fetching latest firmware release...")
 
     response = requests.get(FIRESTARTER_RELEASE_URL)
     if response.status_code != 200:
-        print("Failed to fetch latest firmware release.")
+        logger.error("Failed to fetch latest firmware release.")
         return None, None
 
     release = response.json()
@@ -234,11 +236,12 @@ def latest_firmware(board="uno"):
     )
 
     if not url:
-        print(f"Firmware binary not found in the latest release, version: {version}.")
+        logger.error(
+            f"Firmware binary not found in the latest release, version: {version}."
+        )
         return None, None
 
-    if verbose():
-        print(f"Latest firmware version: {version}, URL: {url}")
+    logger.debug(f"Latest firmware version: {version}, URL: {url}")
 
     return version, url
 
@@ -296,12 +299,10 @@ def test_avrdude_connection(avrdude):
     """
     output, error, returncode = avrdude.testConnection()
     if returncode == 0:
-        print("Programmer connected successfully.")
+        logger.info("Programmer connected successfully.")
         return True
     else:
-        print(f"Failed to connect to programmer. {error.decode('ascii')}")
-        # if error:
-        #     print(error.decode("ascii"))
+        logger.error(f"Failed to connect to programmer. {error.decode('ascii')}")
         return False
 
 

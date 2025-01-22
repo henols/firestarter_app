@@ -9,6 +9,7 @@ EPROM Information Module
 
 import json
 import re
+import logging
 
 try:
     from .database import (
@@ -20,7 +21,7 @@ try:
         init_db,
     )
     from .ic_layout import print_chip_info
-    from .utils import verbose
+
     from .__init__ import __version__ as version
 
 except ImportError:
@@ -33,8 +34,10 @@ except ImportError:
         init_db,
     )
     from ic_layout import print_chip_info
-    from utils import verbose
+
     from __init__ import __version__ as version
+
+logger = logging.getLogger("EPROMInfo")
 
 
 def list_eproms(verified=False):
@@ -44,12 +47,12 @@ def list_eproms(verified=False):
     Args:
         verified (bool): If True, only lists verified EPROMs.
     """
-    print("Listing EPROMs in the database:")
+    logger.info("Listing EPROMs in the database:")
     eproms = get_eproms(verified)
     if not eproms:
-        print("No EPROMs found.")
+        logger.error("No EPROMs found.")
     for eprom in eproms:
-        print(eprom)
+        logger.info(eprom)
     return 0
 
 
@@ -60,13 +63,13 @@ def search_eproms(query):
     Args:
         query (str): Search text.
     """
-    print(f"Searching for EPROMs with query: {query}")
+    logger.info(f"Searching for EPROMs with query: {query}")
     results = search_eprom(query, True)
     if not results:
-        print("No matching EPROMs found.")
+        logger.error("No matching EPROMs found.")
         return 1
     for result in results:
-        print(result)
+        logger.info(result)
     return 0
 
 
@@ -80,36 +83,33 @@ def eprom_info(eprom_name, export=False):
 
     eprom = get_eprom(eprom_name, True)
     if not eprom:
-        print(f"EPROM {eprom_name} not found.")
+        logger.error(f"EPROM {eprom_name} not found.")
         return 1
 
     print_chip_info(eprom)
 
-    if verbose():
-        print()
-        print("Config sent to Firestarter:")
-        print(json_output(get_eprom(eprom_name)))
+    logger.debug("")
+    logger.debug("Config sent to Firestarter:")
+    logger.debug(json_output(get_eprom(eprom_name)))
 
     if export:
-        if verbose():
-            print()
 
         config, manufacturer = get_eprom_config(eprom_name)
         #  clean config
         config = clean_config(config)
-        print(f"{config['name']} config:")
+        logger.info(f"{config['name']} config:")
         root = {manufacturer: [config]}
-        print(json_output(root))
+        logger.info(json_output(root))
 
         pin_map = get_pin_map(config["pin-count"], config["pin-map"])
         if pin_map:
             root = {config["pin-count"]: {config["pin-map"]: pin_map}}
 
-            print()
-            print(f"{eprom_name} pin map:")
-            print(json_output(root))
+            logger.info("")
+            logger.info(f"{eprom_name} pin map:")
+            logger.info(json_output(root))
         else:
-            print(f"Pin map for {eprom_name} not found.")
+            logger.error(f"Pin map for {eprom_name} not found.")
             return 1
 
     return 0
@@ -140,8 +140,10 @@ def clean_config(config):
         config["has-chip-id"] if "has-chip-id" in config else "bad value"
     )
     if config["has-chip-id"]:
-        new_config["chip-id"] = config["chip-id"] if "chip-id" in config else "bad value"
-        
+        new_config["chip-id"] = (
+            config["chip-id"] if "chip-id" in config else "bad value"
+        )
+
     if "pin-map" in config:
         new_config["pin-map"] = config["pin-map"]
     else:

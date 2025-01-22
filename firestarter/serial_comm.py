@@ -11,17 +11,20 @@ import serial
 import serial.tools.list_ports
 import time
 import json
+import logging
 
 try:
     from .constants import *
 
     from .config import get_config_value, set_config_value
-    from .utils import verbose
+
 
 except ImportError:
     from constants import *
     from config import get_config_value, set_config_value
-    from utils import verbose
+
+
+logger = logging.getLogger("SerialComm")
 
 
 def check_port(port, data, baud_rate=BAUD_RATE):
@@ -37,8 +40,7 @@ def check_port(port, data, baud_rate=BAUD_RATE):
         Serial: Open serial connection or None if unsuccessful.
     """
     try:
-        if verbose():
-            print(f"Checking port: {port}")
+        logger.debug(f"Checking port: {port}")
 
         ser = serial.Serial(
             port=port,
@@ -55,12 +57,10 @@ def check_port(port, data, baud_rate=BAUD_RATE):
                 return None
             res, msg = wait_for_response(ser)
 
-        if verbose():
-            print(f"Programmer: {msg}")
+        logger.debug(f"Programmer: {msg}")
         return ser
     except (OSError, serial.SerialException, Exception):
-        if verbose():
-            print(f"Failed to open port: {port}")
+        logger.debug(f"Failed to open port: {port}")
         pass
 
     return None
@@ -97,8 +97,7 @@ def find_comports(port=None):
         ) and port.device not in ports:
             ports.append(port.device)
 
-    if verbose():
-        print(f"Found ports: {ports}")
+    logger.debug(f"Found ports: {ports}")
     return ports
 
 
@@ -114,22 +113,20 @@ def find_programmer(data, port=None):
         Serial: Serial connection to the programmer or None if not found.
     """
 
-    if verbose():
-        print(f"Firestarter data: {data}")
-        flags = data.get("flags", 0)
-        if flags:
-            print("Flags set:")
-            if flags & FLAG_FORCE:
-                print(" - Force")
-            if flags & FLAG_CAN_ERASE:
-                print(" - Can be erased")
-            if flags & FLAG_SKIP_ERASE:
-                print(" - Skip erase")
-            if flags & FLAG_SKIP_BLANK_CHECK:
-                print(" - Skip blank check")
-            if flags & FLAG_VPE_AS_VPP:
-                print(" - Set VPE as VPP")
-           
+    logger.debug(f"Firestarter data: {data}")
+    flags = data.get("flags", 0)
+    if flags:
+        logger.debug("Flags set:")
+        if flags & FLAG_FORCE:
+            logger.debug(" - Force")
+        if flags & FLAG_CAN_ERASE:
+            logger.debug(" - Can be erased")
+        if flags & FLAG_SKIP_ERASE:
+            logger.debug(" - Skip erase")
+        if flags & FLAG_SKIP_BLANK_CHECK:
+            logger.debug(" - Skip blank check")
+        if flags & FLAG_VPE_AS_VPP:
+            logger.debug(" - Set VPE as VPP")
 
     json_data = json.dumps(data, separators=(",", ":"))
     if port:
@@ -143,7 +140,7 @@ def find_programmer(data, port=None):
             set_config_value("port", port)
             return serial_port
 
-    print("No programmer found.")
+    logger.error("No programmer found.")
     return None
 
 
@@ -194,6 +191,7 @@ def consume_response(ser):
     while read_response(ser)[0] != None:
         time.sleep(0.1)
 
+
 def clean_up(ser):
     """
     Closes the serial connection and cleans up resources.
@@ -204,7 +202,7 @@ def clean_up(ser):
     if ser:
         consume_response(ser)
         ser.close()
-    
+
 
 def wait_for_response(ser, timeout=10):
     """
@@ -224,7 +222,7 @@ def wait_for_response(ser, timeout=10):
         if type and type != "INFO" and type != "DEBUG":
             return type, msg
         _timeout = time.time() + timeout
-        
+
     raise Exception(f"Timeout, no response on {ser.portstr}")
 
 
@@ -235,8 +233,14 @@ def write_feedback(type, msg):
     Args:
         msg (str): The feedback message.
     """
-    if type and msg and (verbose() or (type.upper() == "ERROR" or type == "WARN")):
-        print(f"{type}: {msg}")
+    if type and msg:
+        if type.upper() == "ERROR":
+            logger.error(msg)
+        elif type.upper() == "WARN":
+            logger.warning(msg)
+        else:
+            # print(f"{type}: {msg}")
+            logger.debug(f"{type}: {msg}")
 
 
 def read_filtered_bytes(byte_array):

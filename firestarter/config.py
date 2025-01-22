@@ -9,12 +9,15 @@ Configuration Management Module
 
 import os
 import json
+import logging
 
 # Define the home path and configuration file path
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 CONFIG_FILE = os.path.join(HOME_PATH, "config.json")
 DATABASE_FILE = os.path.join(HOME_PATH, "database.json")
 PIN_MAP_FILE = os.path.join(HOME_PATH, "pin-maps.json")
+
+logger = logging.getLogger("Config")
 
 # Global configuration dictionary
 config = {}
@@ -32,7 +35,7 @@ def open_config():
             with open(CONFIG_FILE, "r") as file:
                 config = json.load(file)
         except json.JSONDecodeError:
-            print(
+            logger.error(
                 f"Error: Configuration file {CONFIG_FILE} is not a valid JSON. Resetting configuration."
             )
             config = {}
@@ -47,13 +50,13 @@ def save_config():
         try:
             os.makedirs(HOME_PATH)
         except OSError as e:
-            print(f"Error: Unable to create configuration directory {HOME_PATH}: {e}")
+            logger.error(f"Error: Unable to create configuration directory {HOME_PATH}: {e}")
             return
     try:
         with open(CONFIG_FILE, "w") as f:
             json.dump(config, f, indent=4)
     except IOError as e:
-        print(f"Error: Unable to save configuration to {CONFIG_FILE}: {e}")
+        logger.error(f"Error: Unable to save configuration to {CONFIG_FILE}: {e}")
 
 def get_local_database():
     if os.path.exists(DATABASE_FILE):
@@ -61,7 +64,7 @@ def get_local_database():
             with open(DATABASE_FILE, "rt") as file:
                 return json.load(file)
         except json.JSONDecodeError:
-            print(
+            logger.error(
                 f"Warning: Database file {DATABASE_FILE} is not a valid JSON."
             )
     return None
@@ -72,7 +75,7 @@ def get_local_pin_maps():
             with open(PIN_MAP_FILE, "rt") as file:
                 return json.load(file)
         except json.JSONDecodeError:
-            print(
+            logger.error(
                 f"Warning: Pin map file {PIN_MAP_FILE} is not a valid JSON."
             )
     return None

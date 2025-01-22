@@ -16,7 +16,8 @@ dynamic = ["version"]
 dependencies = [
     "argparse",
     "pyserial",
-    "requests"
+    "requests",
+    "tqdm"
 ]
 
 [project.entry-points."console_scripts"]

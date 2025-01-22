@@ -11,10 +11,10 @@ Main CLI Handler for Firestarter Project
 import sys
 import argparse
 import signal
+import logging
 
 try:
     from .config import open_config
-    from .utils import set_verbose
     from .__init__ import __version__ as version
     from .eprom_operations import (
         read,
@@ -39,7 +39,6 @@ try:
     )
 except ImportError:
     from config import open_config
-    from utils import set_verbose
     from __init__ import __version__ as version
     from eprom_operations import (
         read,
@@ -63,6 +62,8 @@ except ImportError:
         dev_address,
         dev_registers,
     )
+
+logger = logging.getLogger("Firestarter")
 
 
 def create_read_args(parser):
@@ -320,12 +321,15 @@ def main():
         return 1
 
     args = parser.parse_args()
-
     init_db()
     open_config()
-    set_verbose(args.verbose)
+
     if args.verbose:
-        print(f"Firestarter version: {version}")
+        logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s")
+    else:
+        logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    logger.debug(f"Firestarter version: {version}")
 
     # Command dispatch
     if args.command == "list":
@@ -385,21 +389,20 @@ def main():
                 args.eprom,
                 address=args.address,
                 size=args.size,
-                force=args.force,
+                flags=build_arg_flags(args),
             )
         elif args.dev_command == "reg":
             return dev_registers(args.msb, args.lsb, args.ctrl_reg)
         elif args.dev_command == "addr":
             if args.write != args.read:
-                print("Specify either read or write flag")
+                logger.warning("Specify either read or write flag")
                 return 0
             return dev_address(args.eprom, args.address, args.ctrl_reg, args.read)
     return 0
 
 
 def exit_gracefully(signum, frame):
-    print("\n")
-    print("Prosess interrupted.")
+    logger.warning("Prosess interrupted.")
     sys.exit(1)
 
 

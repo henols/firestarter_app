@@ -13,7 +13,7 @@ from subprocess import Popen, PIPE, CalledProcessError, TimeoutExpired
 from pathlib import Path
 from shutil import which
 
-logger = logging.getLogger()
+logger = logging.getLogger("Avrdude")
 
 
 class AvrdudeNotFoundError(FileNotFoundError): ...
@@ -42,7 +42,7 @@ class Avrdude:
             self.config = self._configure_avrconf(avrdude_config_path)
         else:
             self.config = None
-        logger.info(f"Initialized Avrdude on port: {self.port}")
+        logger.debug(f"Initialized Avrdude on port: {self.port}")
 
     def _find_avrdude_path(self, avrdude_path):
         """Find the avrdude executable path."""
@@ -79,7 +79,7 @@ class Avrdude:
         )
         if match:
             version = match.group(1)
-            logger.info(f"avrdude version: {version}")
+            logger.debug(f"avrdude version: {version}")
             return float(version)
         logger.warning("Could not determine avrdude version.")
         return None
@@ -92,7 +92,7 @@ class Avrdude:
             if not self._trigger_reset():
                 return f"Failed to open port {self.port}.", -1
 
-        logger.info(f"Executing command: {' '.join(cmd)}")
+        logger.debug(f"Executing command: {' '.join(cmd)}")
         process = Popen(cmd, stdout=PIPE, stderr=PIPE, stdin=PIPE)
         try:
             stdout, stderr = process.communicate(timeout=30)
