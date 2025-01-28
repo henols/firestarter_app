@@ -15,6 +15,7 @@ import logging
 
 try:
     from .config import open_config
+    from .constants import *
     from .__init__ import __version__ as version
     from .eprom_operations import (
         read,
@@ -34,11 +35,12 @@ try:
         config,
         read_vpe,
         read_vpp,
-        dev_address,
-        dev_registers,
     )
+    from .dev_tools import dev_address, dev_registers
+    from .serial_comm import rurp_logger
 except ImportError:
     from config import open_config
+    from constants import *
     from __init__ import __version__ as version
     from eprom_operations import (
         read,
@@ -59,9 +61,10 @@ except ImportError:
         config,
         read_vpe,
         read_vpp,
-        dev_address,
-        dev_registers,
     )
+    from dev_tools import dev_address, dev_registers
+    from serial_comm import rurp_logger
+
 
 logger = logging.getLogger("Firestarter")
 
@@ -267,8 +270,40 @@ def create_dev_args(parser):
     reg_parser = subparsers.add_parser(
         "reg", help="Direct access to registers: MSB, LSB and control register."
     )
+    reg_parser.add_argument("msb", type=str, help="MSB in dec/hex")
+    reg_parser.add_argument("lsb", type=str, help="LSB in dec/hex")
+    reg_parser.add_argument("ctrl", type=str, help="Control register in dec/hex")
+    create_oe_ce_args(reg_parser)
+
     addr_parser = subparsers.add_parser(
         "addr", help="Direct access to address lines and control register."
+    )
+    addr_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    addr_parser.add_argument("address", type=str, help="Address in dec/hex")
+    create_oe_ce_args(addr_parser)
+
+
+def create_oe_ce_args(parser):
+    oe_group = parser.add_argument_group(
+        "Output enable", description="Controls OE pin, defaults to output enable."
+    ).add_mutually_exclusive_group()
+    # oe_group.add_argument(
+    #     "-o", "--output-enable", action="store_true", help="Output, pulls OE pin low."
+    # )
+
+    oe_group.add_argument(
+        "-i", "--input-enable", action="store_true", help="Input, pulls OE pin high."
+    )
+
+    ce_group = parser.add_argument_group(
+        "Chip enable", description="Controls CE pin, defaults to chip enable."
+    ).add_mutually_exclusive_group()
+    # ce_group.add_argument(
+    #     "-e", "--chip-enable", action="store_true", help="Enable, pulls CE pin low."
+    # )
+
+    ce_group.add_argument(
+        "-d", "--chip-disable", action="store_true", help="Disable, pulls CE pin high."
     )
 
 
@@ -278,7 +313,14 @@ def build_arg_flags(args):
     )
     force = args.force if "force" in args else False
     vpe_as_vpp = args.vpe_as_vpp if "vpe_as_vpp" in args else False
-    return build_flags(ignore_blank_check, force, vpe_as_vpp)
+    flags = build_flags(ignore_blank_check, force, vpe_as_vpp)
+
+    if "input_enable" in args:
+        flags |= 0 if args.input_enable else FLAG_OUTPUT_ENABLE
+    if "chip_disable" in args:
+        flags |= 0 if args.chip_disable else FLAG_CHIP_ENABLE
+
+    return flags
 
 
 def main():
@@ -325,7 +367,11 @@ def main():
     open_config()
 
     if args.verbose:
-        logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s")
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format = "[%(levelname)s:%(name)s:%(lineno)d] %(message)s"
+        )
+
     else:
         logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -392,12 +438,9 @@ def main():
                 flags=build_arg_flags(args),
             )
         elif args.dev_command == "reg":
-            return dev_registers(args.msb, args.lsb, args.ctrl_reg)
+            return dev_registers(args.msb, args.lsb, args.ctrl, flags=build_arg_flags(args))
         elif args.dev_command == "addr":
-            if args.write != args.read:
-                logger.warning("Specify either read or write flag")
-                return 0
-            return dev_address(args.eprom, args.address, args.ctrl_reg, args.read)
+            return dev_address(args.eprom, args.address, flags=build_arg_flags(args))
     return 0
 
 
