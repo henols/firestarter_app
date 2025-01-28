@@ -78,14 +78,14 @@ def read_vpp(timeout=None):
     """
     Reads the VPP voltage from the programmer.
     """
-    read_voltage(STATE_READ_VPP, timeout)
+    return read_voltage(STATE_READ_VPP, timeout)
 
 
 def read_vpe(timeout=None):
     """
     Reads the VPE voltage from the programmer.
     """
-    read_voltage(STATE_READ_VPE, timeout)
+    return read_voltage(STATE_READ_VPE, timeout)
 
 
 def read_voltage(state, timeout=None):
@@ -100,12 +100,13 @@ def read_voltage(state, timeout=None):
     if not ser:
         return 1
     try:
+        ser.write("OK".encode("ascii"))
+        ser.flush()
+
         resp, info = wait_for_response(ser)
         if not resp == "OK":
             logger.error(f"Error reading {type} voltage: {info}")
             return 1
-        ser.write("OK".encode("ascii"))
-        ser.flush()
 
         if timeout:
             start = time.time()
@@ -117,7 +118,6 @@ def read_voltage(state, timeout=None):
                 print(f"\r{t[1]}", end="")
                 
             if timeout and time.time() > start + timeout:
-                logger.info("")
                 return 0
             ser.write("OK".encode("ascii"))
             ser.flush()
@@ -127,14 +127,3 @@ def read_voltage(state, timeout=None):
         clean_up(ser)
     return 1
 
-def dev_registers(msb, lsb, ctrl_reg):
-    logger.warning(f"Setting registers: {lsb} {msb} {ctrl_reg}")
-    return 0
-
-def dev_address(eprom, address, ctrl_reg, read):
-    logger.warning(f"Setting address: {eprom} {address} {ctrl_reg}")
-    if read:
-        logger.warning("Write flag set")
-    else:
-        logger.warning("Read flag set")
-    return 0

@@ -15,9 +15,7 @@ import logging
 
 try:
     from .constants import *
-
     from .config import get_config_value, set_config_value
-
 
 except ImportError:
     from constants import *
@@ -25,6 +23,9 @@ except ImportError:
 
 
 logger = logging.getLogger("SerialComm")
+
+
+rurp_logger = logging.getLogger("RURP")
 
 
 def check_port(port, data, baud_rate=BAUD_RATE):
@@ -127,6 +128,10 @@ def find_programmer(data, port=None):
             logger.debug(" - Skip blank check")
         if flags & FLAG_VPE_AS_VPP:
             logger.debug(" - Set VPE as VPP")
+        if flags & FLAG_CHIP_ENABLE:
+            logger.debug(" - Set chip enable")
+        if flags & FLAG_OUTPUT_ENABLE:
+            logger.debug(" - Set output enable")
 
     json_data = json.dumps(data, separators=(",", ":"))
     if port:
@@ -144,7 +149,7 @@ def find_programmer(data, port=None):
     return None
 
 
-def read_response(ser):
+def read_response(ser, feedback=True):
     while ser.in_waiting > 0:
         byte_array = ser.readline()
         res = read_filtered_bytes(byte_array)
@@ -179,16 +184,38 @@ def read_response(ser):
                 else:
                     return
         finally:
-            write_feedback(type, msg)
+            if feedback:
+                write_feedback(type, msg)
             # if type == "ERROR":
             #     raise Exception(msg)
             return type, msg
     return None, None
 
 
+def write_feedback(type, msg):
+    """
+    Writes feedback messages to the console if verbose mode is enabled.
+
+    Args:
+        msg (str): The feedback message.
+    """
+    if type and msg:
+        if type.upper() == "ERROR":
+            level = logging.ERROR
+        elif type.upper() == "WARN":
+            level = logging.WARNING
+        else:
+            level = logging.DEBUG
+
+        rurp_logger.log(
+            level, f"{type[:1]}: {msg}" if logger.isEnabledFor(logging.DEBUG) else msg
+        )
+
+
 def consume_response(ser):
     time.sleep(0.1)
-    while read_response(ser)[0] != None:
+    debug =logger.isEnabledFor(logging.DEBUG)
+    while read_response(ser, feedback=debug)[0] != None:
         time.sleep(0.1)
 
 
@@ -224,23 +251,6 @@ def wait_for_response(ser, timeout=10):
         _timeout = time.time() + timeout
 
     raise Exception(f"Timeout, no response on {ser.portstr}")
-
-
-def write_feedback(type, msg):
-    """
-    Writes feedback messages to the console if verbose mode is enabled.
-
-    Args:
-        msg (str): The feedback message.
-    """
-    if type and msg:
-        if type.upper() == "ERROR":
-            logger.error(msg)
-        elif type.upper() == "WARN":
-            logger.warning(msg)
-        else:
-            # print(f"{type}: {msg}")
-            logger.debug(f"{type}: {msg}")
 
 
 def read_filtered_bytes(byte_array):
