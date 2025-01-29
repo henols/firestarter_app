@@ -214,7 +214,7 @@ def write_feedback(type, msg):
 
 def consume_response(ser):
     time.sleep(0.1)
-    debug =logger.isEnabledFor(logging.DEBUG)
+    debug = logger.isEnabledFor(logging.DEBUG)
     while read_response(ser, feedback=debug)[0] != None:
         time.sleep(0.1)
 

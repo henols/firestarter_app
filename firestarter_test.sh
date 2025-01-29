@@ -11,6 +11,8 @@
 # 
 EPROM_NAME=${1:-W27C512}
 
+VERBOSE=0
+
 JSON_FILE='./firestarter/data/database.json'
 TEMP_DIR="./test_data"
 
@@ -67,7 +69,10 @@ exec_firestarter() {
         FILE_NAME=$TEMP_DIR/$4
     fi
     CMD_ARGS=${5:-}
-    firestarter_cmd="firestarter $CMD_NAME $CMD_ARGS $EPROM $FILE_NAME"
+    if test $VERBOSE -eq 1; then
+        VERBOSE_FLAG="-v"
+    fi
+    firestarter_cmd="firestarter $VERBOSE_FLAG $CMD_NAME $CMD_ARGS $EPROM $FILE_NAME"
     echo "---------------------------------"
     echo Test: $TEST_NAME
     echo Cmd: $firestarter_cmd
@@ -80,7 +85,6 @@ exec_firestarter() {
     fi
     echo
     sleep 0.5
-
 }
 # exec_firestarter "Dev read" "dev read" $EPROM_NAME
 

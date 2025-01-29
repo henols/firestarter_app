@@ -188,9 +188,10 @@ def install_firmware(
         # if not test_avrdude_connection(avrdude):
         #     continue
 
-        if logger.level == logging.INFO:
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Flashing firmware to port: {port}")
+        else:    
             logger.info("Flashing firmware...")
-        logger.debug(f"Flashing firmware to port: {port}")
 
         error, return_code = avrdude.flash_firmware(firmware_path)
         if return_code == 0:
