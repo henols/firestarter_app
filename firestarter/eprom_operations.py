@@ -229,7 +229,7 @@ def blank_check(eprom_name, flags=0):
                 return 1
     finally:
         clean_up(ser)
-    return 1
+    return 0
 
 
 def dev_read(eprom_name, address=None, size="256", flags=0):
