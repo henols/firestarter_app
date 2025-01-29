@@ -19,12 +19,14 @@ try:
     from .database import get_eprom as db_get_eprom
     from .database import search_chip_id
     from .utils import extract_hex_to_decimal
+    from .eprom_info import format_eproms
 except ImportError:
     from constants import *
     from serial_comm import find_programmer, wait_for_response, clean_up
     from database import get_eprom as db_get_eprom
     from database import search_chip_id
     from utils import extract_hex_to_decimal
+    from eprom_info import format_eproms
 
 logger = logging.getLogger("EPROM")
 
@@ -52,8 +54,8 @@ def read(eprom_name, output_file=None, flags=0, address=None, size=None):
             read_address = eprom["address"] if "address" in eprom else 0
             bytes_read = 0
 
-            ser.write("OK".encode("ascii"))
-            ser.flush()
+            write_ok(ser)
+
             with logging_redirect_tqdm(), tqdm.tqdm(
                 total=mem_size - read_address,
                 bar_format=bar_format,
@@ -138,8 +140,7 @@ def erase(eprom_name, flags=0):
         if not ser:
             return 1
 
-        ser.write("OK".encode("ascii"))
-        ser.flush()
+        write_ok(ser)
 
         resp, info = wait_for_response(ser)
         if resp == "OK":
@@ -173,25 +174,25 @@ def check_chip_id(eprom_name, flags=0):
         return 1
 
     try:
-        ser.write("OK".encode("ascii"))
-        ser.flush()
-
-        resp, info = wait_for_response(ser)
-        if resp == "OK":
-            logger.info(f"Chip ID check passed for {eprom_name}: {info}")
-            return 0
-        chip_id = extract_hex_to_decimal(info)
-        if not chip_id:
-            logger.error("Failed to extract chip ID.")
-        else:
-            eproms = search_chip_id(chip_id)
-            if not eproms:
-                logger.warning(f"Chip ID 0x{chip_id:x} not found in the database.")
+        write_ok(ser)
+        while True:
+            resp, info = wait_for_response(ser)
+            if resp == "OK":
+                logger.info(f"Chip ID check passed for {eprom_name}: {info}")
+                return 0
+            elif resp == "WARN":
+                continue
+            chip_id = extract_hex_to_decimal(info)
+            if not chip_id:
+                logger.error("Failed to extract chip ID.")
             else:
-                logger.info(f"Chip ID 0x{chip_id:x} found in the database:")
-            for eprom in eproms:
-                logger.info(eprom)
-        return 1
+                eproms = search_chip_id(chip_id)
+                if not eproms:
+                    logger.warning(f"Chip ID 0x{chip_id:x} not found in the database.")
+                else:
+                    logger.info(f"Chip ID 0x{chip_id:x} found in the database:")
+                    format_eproms(eproms)
+            return 0 if flags & FLAG_FORCE == FLAG_FORCE else 1
     finally:
         clean_up(ser)
 
@@ -217,15 +218,15 @@ def blank_check(eprom_name, flags=0):
         if not ser:
             return 1
 
-        ser.write("OK".encode("ascii"))
-        ser.flush()
-
-        resp, info = wait_for_response(ser, timeout=10)
-        if resp == "OK":
-            logger.info(f"EPROM {eprom_name} is blank.")
-            return 0
-        elif resp == "ERROR":
-            logger.error(f"Blank check failed for {eprom_name}")
+        write_ok(ser)
+        while True:
+            resp, info = wait_for_response(ser, timeout=10)
+            if resp == "OK":
+                logger.info(f"EPROM {eprom_name} is blank.")
+                break
+            elif resp == "ERROR":
+                logger.error(f"Blank check failed for {eprom_name}")
+                return 1
     finally:
         clean_up(ser)
     return 1
@@ -248,8 +249,7 @@ def dev_read(eprom_name, address=None, size="256", flags=0):
         read_address = eprom["address"] if "address" in eprom else 0
         bytes_read = 0
 
-        ser.write("OK".encode("ascii"))
-        ser.flush()
+        write_ok(ser)
 
         while True:
             data = read_data(ser)
@@ -305,17 +305,18 @@ def setup_read(eprom_name, flags=0, address=None, size=None):
 
 
 def read_data(ser):
-    resp, info = wait_for_response(ser)
-    if resp == "DATA":
-        data = ser.read(BUFFER_SIZE)
+    while True:
+        resp, info = wait_for_response(ser)
+        if resp == "DATA":
+            data = ser.read(BUFFER_SIZE)
 
-        ser.write("OK".encode("ascii"))
-        ser.flush()
-        return data
-    elif resp == "OK":
-        return None
-    elif resp == "ERROR":
-        raise Exception(info)
+            write_ok(ser)
+
+            return data
+        elif resp == "OK":
+            return None
+        elif resp == "ERROR":
+            raise Exception(info)
 
 
 def send_file(eprom, input_file):
@@ -347,8 +348,8 @@ def send_file(eprom, input_file):
                     data = file.read(BUFFER_SIZE)
                     if not data:
                         logger.info("End of file reached")
-                        ser.write(int(0).to_bytes(2, byteorder="big"))
-                        ser.flush()
+                        write_data(ser, int(0).to_bytes(2, byteorder="big"))
+                        
                         resp, info = wait_for_response(ser, timeout=10)
                         while resp != "OK":
                             if resp == "ERROR":
@@ -356,16 +357,16 @@ def send_file(eprom, input_file):
                             resp, info = wait_for_response(ser, timeout=10)
                         break
 
-                    ser.write(len(data).to_bytes(2, byteorder="big"))
-                    ser.flush()
+                    write_data(ser, len(data).to_bytes(2, byteorder="big"))
+                    
                     resp, info = wait_for_response(ser)
                     while resp != "OK":
                         if resp == "ERROR":
                             return 1
                         resp, info = wait_for_response(ser)
 
-                    nr_bytes = ser.write(data)
-                    ser.flush()
+                    nr_bytes = write_data(ser, data)
+                    
                     bytes_written += nr_bytes
                     resp, info = wait_for_response(ser)
                     while resp != "OK":
@@ -409,3 +410,13 @@ def build_flags(ignore_blank_check=False, force=False, vpe_as_vpp=False):
     if vpe_as_vpp:
         flags |= FLAG_VPE_AS_VPP
     return flags
+
+def write_ok(ser):
+    # time.sleep(0.1)
+    ser.write("OK".encode("ascii"))
+    ser.flush()
+
+def write_data(ser, data):
+    len = ser.write(data)
+    ser.flush()
+    return len

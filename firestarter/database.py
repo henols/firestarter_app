@@ -275,13 +275,8 @@ def search_chip_id(chip_id):
     for manufacturer in proms:
         for ic in proms[manufacturer]:
             if ic["has-chip-id"] and int(ic["chip-id"], 16) == chip_id:
-                selected_proms.append(
-                    ic["name"]
-                    + "\tfrom "
-                    + manufacturer
-                    + " pins: "
-                    + str(ic["pin-count"])
-                )
+                ic["manufacturer"] = manufacturer
+                selected_proms.append(ic)
     return selected_proms
 
 

@@ -11,7 +11,7 @@
 #
 EPROM_NAME=${1:-W27C512}
 
-DEFAULT_ARGS="-f"
+# DEFAULT_ARGS="-f"
 VERBOSE=0
 
 JSON_FILE='./firestarter/data/database.json'
