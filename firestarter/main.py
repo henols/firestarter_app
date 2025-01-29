@@ -371,7 +371,6 @@ def main():
             level=logging.DEBUG,
             format = "[%(levelname)s:%(name)s:%(lineno)d] %(message)s"
         )
-
     else:
         logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -445,7 +444,7 @@ def main():
 
 
 def exit_gracefully(signum, frame):
-    logger.warning("Prosess interrupted.")
+    logger.warning("\nProsess interrupted.")
     sys.exit(1)
 
 

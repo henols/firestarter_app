@@ -221,7 +221,8 @@ def get_eproms(verified):
                 or not verified
                 or (verified and "verified" in ic and ic["verified"])
             ):
-                selected_proms.append(ic["name"])
+                ic["manufacturer"] = manufacturer
+                selected_proms.append(ic)
     return selected_proms
 
 
@@ -264,15 +265,8 @@ def search_eprom(chip_name, all):
         for ic in proms[manufacturer]:
             if chip_name.lower() in ic["name"].lower():
                 if ("verified" in ic and ic["verified"]) or all:
-                    chip_id = f" chip-id: {ic['chip-id']}" if not ic['chip-id'] == '0x00000000' else ""
-                    selected_proms.append(f"{manufacturer: <14} {ic['name']: <10} pins: {ic['pin-count']} {chip_id}")
-                    #     ic["name"]
-                    #     + "\tfrom "
-                    #     + manufacturer
-                    #     + " pins: "
-                    #     + str(ic["pin-count"])
-                    #     + chip_id
-                    # )
+                    ic["manufacturer"] = manufacturer
+                    selected_proms.append(ic)
     return selected_proms
 
 

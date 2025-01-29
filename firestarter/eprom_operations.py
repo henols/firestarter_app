@@ -319,17 +319,17 @@ def read_data(ser):
 
 
 def send_file(eprom, input_file):
+    if not os.path.exists(input_file):
+        logger.error(f"Input file {input_file} not found.")
+        return 1
+
+    ser = find_programmer(eprom)
+    if not ser:
+        return 1
+
+    mem_size = eprom["memory-size"]
+    address = eprom["address"] if "address" in eprom else 0
     try:
-        if not os.path.exists(input_file):
-            logger.error(f"Input file {input_file} not found.")
-            return 1
-
-        ser = find_programmer(eprom)
-        if not ser:
-            return 1
-
-        mem_size = eprom["memory-size"]
-        address = eprom["address"] if "address" in eprom else 0
         with open(input_file, "rb") as file:
 
             file_size = os.path.getsize(input_file)

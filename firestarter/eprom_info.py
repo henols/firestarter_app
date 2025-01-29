@@ -51,8 +51,7 @@ def list_eproms(verified=False):
     eproms = get_eproms(verified)
     if not eproms:
         logger.error("No EPROMs found.")
-    for eprom in eproms:
-        logger.info(eprom)
+    format_eproms(eproms)
     return 0
 
 
@@ -68,10 +67,17 @@ def search_eproms(query):
     if not results:
         logger.error("No matching EPROMs found.")
         return 1
-    for result in results:
-        logger.info(result)
+    format_eproms(results)
     return 0
 
+def format_eproms(eproms):
+    logger.info(f"+{'':-<14}+{'':-<18}+{'':-<6}+{'':-<12}+")
+    logger.info(f"| {'Name': <13}| {'Manufacturer': <17}| {'Pins': <5}| {'Chip ID': <11}|")
+    logger.info(f"+{'':-<14}+{'':-<18}+{'':-<6}+{'':-<12}+")
+    for ic in eproms:
+        chip_id = f"{ic['chip-id']}" if not ic['chip-id'] == '0x00000000' else ""
+        logger.info(f"| {ic['name']: <13}| {ic["manufacturer"]: <17}|{ic['pin-count']: >5} | {chip_id: <10} |")
+    logger.info(f"+{'':-<14}+{'':-<18}+{'':-<6}+{'':-<12}+")
 
 def eprom_info(eprom_name, export=False):
     """

@@ -9,9 +9,9 @@
 # 
 # ----------------------------------------------------------
 # 
-# Usage: ./script.sh <json-file> <name>
-JSON_FILE='./firestarter/data/database.json'
 EPROM_NAME=${1:-W27C512}
+
+JSON_FILE='./firestarter/data/database.json'
 TEMP_DIR="./test_data"
 
 # Ensure the temp directory exists, if not create it
@@ -55,112 +55,47 @@ dd if=/dev/urandom of="$TEMP_DIR/high_data.bin" bs=1 count=$HALF_SIZE status=non
 # Concatenate the two files into one file
 cat "$TEMP_DIR/low_data.bin" "$TEMP_DIR/high_data.bin" > "$TEMP_DIR/full_data.bin"
 
+exec_firestarter() {
+    TEST_NAME=$1
+    CMD_NAME=$2
+    EPROM=${3:-}
+    if [ -n "$3" ]; then
+        EPROM="$3"
+    fi
+    FILE_NAME=${4:-}
+    if [ -n "$4" ]; then
+        FILE_NAME=$TEMP_DIR/$4
+    fi
+    CMD_ARGS=${5:-}
+    firestarter_cmd="firestarter $CMD_NAME $CMD_ARGS $EPROM $FILE_NAME"
+    echo "---------------------------------"
+    echo Test: $TEST_NAME
+    echo Cmd: $firestarter_cmd
+    echo "---------------------------------"
+    echo
+    $firestarter_cmd
+    if test $? -gt 0; then
+        echo "$TEST_NAME failed"
+        exit 1
+    fi
+    echo
+    sleep 0.5
+
+}
+# exec_firestarter "Dev read" "dev read" $EPROM_NAME
+
 # ------------------------------ FIRMWARE TESTS ------------------------------
-
-echo "---------------------------------"
-echo "Firmware Version"
-echo "---------------------------------"
-firestarter fw
-if test $? -gt 0
-then
-	echo "Firmware version failed"
-    exit 1
-fi
-echo
-sleep 0.5
-
+exec_firestarter "Firmware Version" "fw"
 # ------------------------------ HARDWARE TESTS ------------------------------
-
-echo "---------------------------------"
-echo "Hardware Version"
-echo "---------------------------------"
-firestarter hw
-if test $? -gt 0
-then
-	echo "Hardware version failed"
-    exit 1
-fi
-echo
-sleep 0.5
-echo "---------------------------------"
-echo "Config"
-echo "---------------------------------"
-firestarter config
-if test $? -gt 0
-then
-	echo "Config failed"
-    exit 1
-fi
-echo
-sleep 1
-echo "---------------------------------"
-echo "VPP"
-echo "---------------------------------"
-firestarter vpp -t 5
-if test $? -gt 0
-then
-	echo "VPP failed"
-    exit 1
-fi
-echo
-sleep 1
-echo "---------------------------------"
-echo "VPE"
-echo "---------------------------------"
-firestarter vpe -t 5
-if test $? -gt 0
-then
-	echo "VPE failed"
-    exit 1
-fi
-echo
-sleep 1
-
+exec_firestarter "Hardware Version" "hw"
+exec_firestarter "Config" "config"
+exec_firestarter "VPP" "vpp" "" "" "-t 5"
+exec_firestarter "VPE" "vpe" "" "" "-t 5"
 # ------------------------------ EPROM TESTS ------------------------------
-
-echo "---------------------------------"
-echo "Chip ID - $EPROM_NAME"
-echo "---------------------------------"
-firestarter id $EPROM_NAME
-if test $? -gt 0
-then
-	echo "Checking Chip ID failed"
-    exit 1
-fi
-echo
-sleep 0.5
-echo "---------------------------------"
-echo "Writing - $EPROM_NAME"
-echo "---------------------------------"
-firestarter write $EPROM_NAME "$TEMP_DIR/full_data.bin"
-if test $? -gt 0
-then
-	echo "Write failed"
-    exit 1
-fi
-echo
-sleep 0.5
-echo "---------------------------------"
-echo "Verifying"
-echo "---------------------------------"
-firestarter verify $EPROM_NAME "$TEMP_DIR/full_data.bin"
-if test $? -gt 0
-then
-	echo "Write failed"
-    exit 1
-fi
-echo
-sleep 0.5
-echo "---------------------------------"
-echo "Reading"
-echo "---------------------------------"
-firestarter read $EPROM_NAME "$TEMP_DIR/read_back.bin"
-if test $? -gt 0
-then
-	echo "Read failed"
-    exit 1
-fi
-echo
+exec_firestarter "$EPROM_NAME Chip ID" "id" $EPROM_NAME
+exec_firestarter "Writing to $EPROM_NAME" write $EPROM_NAME "full_data.bin"
+exec_firestarter "Verifying data in $EPROM_NAME" verify $EPROM_NAME full_data.bin
+exec_firestarter "Reading from $EPROM_NAME" read $EPROM_NAME "read_back.bin"
 colordiff --suppress-common-lines -y  <(xxd "$TEMP_DIR/full_data.bin") <(xxd "$TEMP_DIR/read_back.bin")
 if test $? -gt 0
 then
@@ -168,60 +103,11 @@ then
     exit 1
 fi
 echo "Files are identical"
-echo
-sleep 0.5
-echo "---------------------------------"
-echo "Erase"
-echo "---------------------------------"
-firestarter erase $EPROM_NAME
-if test $? -gt 0
-then
-	echo "Erase failed"
-    exit 1
-fi
-echo
-sleep 0.5
-echo "---------------------------------"
-echo "Blank Check"
-echo "---------------------------------"
-firestarter blank $EPROM_NAME
-if test $? -gt 0
-then
-	echo "Blank check failed"
-    exit 1
-fi
-echo
+exec_firestarter "Erasing $EPROM_NAME" erase $EPROM_NAME
+exec_firestarter "Blank checking $EPROM_NAME" blank $EPROM_NAME
 # ------------------------------ EPROM INFO TESTS -------------------------
-echo "---------------------------------"
-echo "Listing all EPROMs"
-echo "---------------------------------"
-firestarter list
-if test $? -gt 0
-then
-	echo "Search failed"
-    exit 1
-fi
-echo
-sleep 0.5
-echo "---------------------------------"
-echo "Searching for $EPROM_NAME"
-echo "---------------------------------"
-firestarter search $EPROM_NAME
-if test $? -gt 0
-then
-	echo "Search failed"
-    exit 1
-fi
-echo
-sleep 0.5
-echo "---------------------------------"
-echo "Info for $EPROM_NAME"
-echo "---------------------------------"
-firestarter info $EPROM_NAME
-if test $? -gt 0
-then
-	echo "Info failed"
-    exit 1
-fi
-echo
+exec_firestarter "Listing all EPROMs" list
+exec_firestarter "Searching for $EPROM_NAME" search $EPROM_NAME
+exec_firestarter "Info for $EPROM_NAME" info $EPROM_NAME
+
 echo "All tests passed"

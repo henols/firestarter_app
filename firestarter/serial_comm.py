@@ -208,7 +208,7 @@ def write_feedback(type, msg):
             level = logging.DEBUG
 
         rurp_logger.log(
-            level, f"{type[:1]}: {msg}" if logger.isEnabledFor(logging.DEBUG) else msg
+            level, f"{type[:1]}: {msg}" if rurp_logger.isEnabledFor(logging.DEBUG) else msg
         )
 
 
