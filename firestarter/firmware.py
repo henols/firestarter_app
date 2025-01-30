@@ -8,6 +8,7 @@ Firmware Management Module
 """
 
 import os
+import time
 import requests
 import logging
 
@@ -41,7 +42,7 @@ HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 
 
 def firmware(
-    install, avrdude_path=None, avrdude_config_path=None, port=None, board="uno"
+    install, avrdude_path=None, avrdude_config_path=None, port=None, board="uno", force=False
 ):
     """
     Handles firmware-related operations, including version check and installation.
@@ -54,18 +55,34 @@ def firmware(
     Returns:
         int: 0 if successful, 1 otherwise.
     """
-    selected_port, url, board_name = firmware_check(port)
-    if not install and not url:
+    selected_port, version, board_name = firmware_check(port)
+    if not install and not version:
         return 1
 
-    if install:
+    if version:
+        board = board_name
+        latest_version, url = latest_firmware(board)
+        latest = compare_versions(version, latest_version)
+        if latest:
+            logger.info(
+                f"You have the latest firmware version: {latest_version}, for controller: {board}"
+            )
+        else:
+            logger.info(
+                f"New firmware version available: {latest_version}, for controller: {board}"
+            )
+
+
+    if (install and not latest) or force:
         if not url:
             version, url = latest_firmware(board)
-            logger.info(f"Trying to install firmware version: {version}")
-        else:
-            board = board_name
+            if not url:
+                logger.error("Failed to fetch firmware, , for controller: {board}")
+                return 1
         if selected_port:
             port = selected_port
+        if force:
+            logger.info("Force flashing firmware...")
         return install_firmware(
             url,
             avrdude_path=avrdude_path,
@@ -78,15 +95,6 @@ def firmware(
 
 
 def firmware_check(port=None):
-    """
-    Checks the firmware version of the connected programmer.
-
-    Args:
-        port (str): Specific port to check (optional).
-
-    Returns:
-        tuple: (bool: up-to-date, str: port, str: firmware URL)
-    """
     logger.info("Reading firmware version...")
     data = {"state": STATE_FW_VERSION}
 
@@ -98,28 +106,16 @@ def firmware_check(port=None):
         resp, version = wait_for_ok(connection)
 
         if not resp:
-            logging.error(f"Failed to read firmware version. {resp}: {version}")
+            logging.error(f"Failed to read firmware version")
             return None, None, None
 
-        board = "uno"
-        if ":" in version:
-            version, board = version.split(":")
-
-        logger.info(f"Current firmware version: {version}, for controller: {board}")
-        latest_version, url = latest_firmware(board)
-
-        if compare_versions(version, latest_version):
-            logger.info(
-                f"You have the latest firmware version: {latest_version}, for controller: {board}"
-            )
-            return connection.portstr, url, board
-
-        logger.info(
-            f"New firmware version available: {latest_version}, for controller: {board}"
-        )
-        return connection.portstr, url, board
     finally:
         clean_up(connection)
+    board = "uno"
+    if ":" in version:
+        version, board = version.split(":")
+    logger.info(f"Current firmware version: {version}, for controller: {board}")
+    return connection.portstr, version, board
 
 
 def install_firmware(
@@ -136,6 +132,7 @@ def install_firmware(
     Returns:
         int: 0 if successful, 1 otherwise.
     """
+    start_time = time.time()   
     logger.info("Installing firmware...")
     if port:
         ports = [port]
@@ -195,7 +192,7 @@ def install_firmware(
 
         error, return_code = avrdude.flash_firmware(firmware_path)
         if return_code == 0:
-            logger.info("Firmware successfully updated.")
+            logger.info(f"Firmware successfully updated ({time.time() - start_time:.2f}s)")
             set_config_value("port", port)
             set_config_value("avrdude-path", avrdude.command)
             set_config_value("avrdude-config-path", avrdude.config)
@@ -274,6 +271,7 @@ def download_firmware(url):
     Returns:
         str: Path to the downloaded firmware file.
     """
+    start_time = time.time()    
     response = requests.get(url)
     if response.status_code != 200:
         return None
@@ -284,7 +282,7 @@ def download_firmware(url):
     firmware_path = os.path.join(HOME_PATH, "firestarter.hex")
     with open(firmware_path, "wb") as file:
         file.write(response.content)
-
+    logger.debug(f"Firmware downloaded to: {firmware_path} ({time.time() - start_time:.2f}s)")
     return firmware_path
 
 

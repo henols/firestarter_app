@@ -202,6 +202,12 @@ def create_firnware_args(parser):
         help="Full path to avrdude config (optional), set if avrdude version is 6.3 or not found.",
     )
     fw_parser.add_argument("--port", type=str, help="Serial port name (optional)")
+    fw_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Will install firmware even if the version is the same.",
+    )
 
 
 def create_info_args(parser):
@@ -423,6 +429,7 @@ def main():
             avrdude_config_path=args.avrdude_config_path,
             port=args.port,
             board=args.board,
+            force=args.force,
         )
     elif args.command == "hw":
         return hardware()
