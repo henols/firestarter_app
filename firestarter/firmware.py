@@ -16,7 +16,7 @@ try:
     from .constants import *
     from .serial_comm import (
         find_programmer,
-        wait_for_response,
+        wait_for_ok,
         find_comports,
         clean_up,
     )
@@ -27,7 +27,7 @@ except ImportError:
     from constants import *
     from serial_comm import (
         find_programmer,
-        wait_for_response,
+        wait_for_ok,
         find_comports,
         clean_up,
     )
@@ -90,14 +90,14 @@ def firmware_check(port=None):
     logger.info("Reading firmware version...")
     data = {"state": STATE_FW_VERSION}
 
-    ser = find_programmer(data, port)
-    if not ser:
+    connection = find_programmer(data, port)
+    if not connection:
         return None, None, None
 
     try:
-        resp, version = wait_for_response(ser)
+        resp, version = wait_for_ok(connection)
 
-        if not resp == "OK":
+        if not resp:
             logging.error(f"Failed to read firmware version. {resp}: {version}")
             return None, None, None
 
@@ -112,14 +112,14 @@ def firmware_check(port=None):
             logger.info(
                 f"You have the latest firmware version: {latest_version}, for controller: {board}"
             )
-            return ser.portstr, url, board
+            return connection.portstr, url, board
 
         logger.info(
             f"New firmware version available: {latest_version}, for controller: {board}"
         )
-        return ser.portstr, url, board
+        return connection.portstr, url, board
     finally:
-        clean_up(ser)
+        clean_up(connection)
 
 
 def install_firmware(

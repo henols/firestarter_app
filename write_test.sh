@@ -76,8 +76,8 @@ exec_firestarter() {
     fi
     firestarter_cmd="firestarter $VERBOSE_FLAG $CMD_NAME $DEFAULT_ARGS $CMD_ARGS $EPROM_NAME $TEMP_DIR/$4"
     echo "---------------------------------"
-    echo "$TEST_NAME - $EPROM_NAME"
-    echo Cmd: $firestarter_cmd
+    echo "Test: $TEST_NAME - $EPROM_NAME"
+    echo "Cmd: $firestarter_cmd"
     echo "---------------------------------"
     $firestarter_cmd
     if test $? -gt 0; then

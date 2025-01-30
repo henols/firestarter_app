@@ -40,26 +40,25 @@ def check_port(port, data, baud_rate=BAUD_RATE):
     Returns:
         Serial: Open serial connection or None if unsuccessful.
     """
+    start_time = time.time()
     try:
         logger.debug(f"Checking port: {port}")
 
-        ser = serial.Serial(
+        connection = serial.Serial(
             port=port,
             baudrate=baud_rate,
             timeout=1.0,
         )
         time.sleep(2)  # Allow port to stabilize
-        ser.write(data.encode("ascii"))
-        ser.flush()
+        write_data(connection, data.encode("ascii"))
 
-        res, msg = wait_for_response(ser)
-        while res != "OK":
-            if res == "ERROR":
-                return None
-            res, msg = wait_for_response(ser)
+        res, msg = wait_for_ok(connection)
+        if not res:
+            return None
 
-        logger.debug(f"Programmer: {msg}")
-        return ser
+        logger.debug(f"Port found ({time.time() - start_time:.2f}s)")
+        logger.debug(f"Programmer: {msg} ")
+        return connection
     except (OSError, serial.SerialException, Exception):
         logger.debug(f"Failed to open port: {port}")
         pass
@@ -98,7 +97,9 @@ def find_comports(port=None):
         ) and port.device not in ports:
             ports.append(port.device)
 
-    logger.debug(f"Found ports: {ports}")
+    logger.debug(f"Found ports:")
+    for port in ports:
+        logger.debug(f" - {port}")
     return ports
 
 
@@ -113,7 +114,7 @@ def find_programmer(data, port=None):
     Returns:
         Serial: Serial connection to the programmer or None if not found.
     """
-
+    start_time = time.time()
     logger.debug(f"Firestarter data: {data}")
     flags = data.get("flags", 0)
     if flags:
@@ -143,6 +144,9 @@ def find_programmer(data, port=None):
         serial_port = check_port(port, json_data)
         if serial_port:
             set_config_value("port", port)
+            logger.debug(
+                f"Found programmer on port: {port} ({time.time() - start_time:.2f}s)"
+            )
             return serial_port
 
     logger.error("No programmer found.")
@@ -208,49 +212,71 @@ def write_feedback(type, msg):
             level = logging.DEBUG
 
         rurp_logger.log(
-            level, f"{type[:1]}: {msg}" if rurp_logger.isEnabledFor(logging.DEBUG) else msg
+            level,
+            f"{type[:1]}: {msg}" if rurp_logger.isEnabledFor(logging.DEBUG) else msg,
         )
 
 
-def consume_response(ser):
+def write_ok(connection):
+    # time.sleep(0.1)
+    connection.write("OK".encode("ascii"))
+    connection.flush()
+
+
+def write_data(ser, data):
+    len = ser.write(data)
+    ser.flush()
+    return len
+
+
+def consume_response(connection):
     time.sleep(0.1)
     debug = logger.isEnabledFor(logging.DEBUG)
-    while read_response(ser, feedback=debug)[0] != None:
+    while read_response(connection, feedback=debug)[0] != None:
         time.sleep(0.1)
 
 
-def clean_up(ser):
+def clean_up(connection):
     """
     Closes the serial connection and cleans up resources.
 
     Args:
-        ser (Serial): The serial connection.
+        connection (Serial): The serial connection.
     """
-    if ser:
-        consume_response(ser)
-        ser.close()
+    if connection:
+        consume_response(connection)
+        connection.close()
 
 
-def wait_for_response(ser, timeout=10):
+def wait_for_ok(connection):
+    while True:
+        resp, info = wait_for_response(connection)
+        if resp == "OK":
+            return True, info
+        elif resp == "ERROR":
+            return False, info
+
+
+def wait_for_response(connection, timeout=10):
     """
     Waits for a response from the serial connection.
 
     Args:
-        ser (Serial): The serial connection.
+        connection (Serial): The serial connection.
 
     Returns:
         tuple: Response type (e.g., "OK") and message.
     """
     _timeout = time.time() + timeout  # Set timeout period
     while time.time() < _timeout:
-        type, msg = read_response(ser)
+        type, msg = read_response(connection)
         if not type:
             continue
         if type and type != "INFO" and type != "DEBUG":
             return type, msg
         _timeout = time.time() + timeout
 
-    raise Exception(f"Timeout, no response on {ser.portstr}")
+    raise Exception(f"Timeout, no response on {connection.portstr}")
 
 
 def read_filtered_bytes(byte_array):
