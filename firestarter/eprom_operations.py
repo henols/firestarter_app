@@ -133,7 +133,8 @@ def erase(eprom_name, flags=0):
     start_time = time.time()
     try:
         write_ok(connection)
-        if not wait_for_ok(connection):
+        resp, msg = wait_for_ok(connection)
+        if not resp:
             logger.error(f"Failed to erase EPROM {eprom_name}")
             return 1
     finally:
@@ -195,7 +196,7 @@ def blank_check(eprom_name, flags=0):
     start_time = time.time()
     try:
         write_ok(connection)
-        resp = wait_for_ok(connection)
+        resp, msg = wait_for_ok(connection)
         if not resp:
             logger.error(f"Blank check failed for {eprom_name.upper()}")
             return 1
@@ -336,18 +337,21 @@ def send_file(eprom, input_file, connection):
                     if not data:
                         logger.info("End of file reached")
                         write_data(connection, int(0).to_bytes(2, byteorder="big"))
-                        return wait_for_ok(connection)
+                        resp, msg = wait_for_ok(connection)
+                        return resp
 
                     write_data(connection, len(data).to_bytes(2, byteorder="big"))
-
-                    if not wait_for_ok(connection):
+                    
+                    resp, msg = wait_for_ok(connection)
+                    if not resp:
                         return False
 
                     nr_bytes = write_data(connection, data)
 
                     bytes_written += nr_bytes
-
-                    if not wait_for_ok(connection):
+            
+                    resp, msg = wait_for_ok(connection)
+                    if not resp:
                         return False
 
                     pbar.update(nr_bytes)

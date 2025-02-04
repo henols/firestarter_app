@@ -76,7 +76,7 @@ def format_eproms(eproms):
     logger.info(f"+{'':-<14}+{'':-<18}+{'':-<6}+{'':-<12}+")
     for ic in eproms:
         chip_id = f"{ic['chip-id']}" if not ic['chip-id'] == '0x00000000' else ""
-        logger.info(f"| {ic['name']: <13}| {ic["manufacturer"]: <17}|{ic['pin-count']: >5} | {chip_id: <10} |")
+        logger.info(f"| {ic['name']: <13}| {ic['manufacturer']: <17}|{ic['pin-count']: >5} | {chip_id: <10} |")
     logger.info(f"+{'':-<14}+{'':-<18}+{'':-<6}+{'':-<12}+")
 
 def eprom_info(eprom_name, export=False):

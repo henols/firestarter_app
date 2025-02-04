@@ -114,10 +114,10 @@ def read_voltage(state, timeout=None):
     try:
         write_ok(connection)
 
-        resp, info = wait_for_ok(connection)
-        if not resp:
-            logger.error(f"Error reading {type} voltage: {info}")
-            return 1
+        # resp, info = wait_for_ok(connection)
+        # if not resp:
+        #     logger.error(f"Error reading {type} voltage: {info}")
+        #     return 1
 
         if timeout:
             start = time.time()
