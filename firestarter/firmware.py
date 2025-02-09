@@ -58,7 +58,8 @@ def firmware(
     selected_port, version, board_name = firmware_check(port)
     if not install and not version:
         return 1
-
+        
+    latest = True 
     if version:
         board = board_name
         latest_version, url = latest_firmware(board)
