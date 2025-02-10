@@ -59,7 +59,8 @@ def firmware(
     if not install and not version:
         return 1
         
-    latest = True 
+    latest = False
+    url = None
     if version:
         board = board_name
         latest_version, url = latest_firmware(board)
