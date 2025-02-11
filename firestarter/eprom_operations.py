@@ -210,7 +210,7 @@ def blank_check(eprom_name, flags=0):
 def dev_read(eprom_name, address=None, size="256", flags=0):
     if not size:
         size = "256"
-    eprom, connection = setup_read(eprom_name, flags, address, size)
+    eprom, connection, buffer_size = setup_read(eprom_name, flags, address, size)
     if not eprom or not connection:
         return 1
 
@@ -225,7 +225,7 @@ def dev_read(eprom_name, address=None, size="256", flags=0):
         write_ok(connection)
 
         while True:
-            data = read_data(connection)
+            data = read_data(connection, buffer_size)
             if not data:
                 break
             address = bytes_read + read_address
