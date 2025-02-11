@@ -54,16 +54,16 @@ def check_port(port, data, baud_rate=BAUD_RATE):
 
         res, msg = wait_for_ok(connection)
         if not res:
-            return None
+            return None, None
 
         logger.debug(f"Port found ({time.time() - start_time:.2f}s)")
         logger.debug(f"Programmer: {msg} ")
-        return connection
+        return connection, msg
     except (OSError, serial.SerialException, Exception):
         logger.debug(f"Failed to open port: {port}")
         pass
 
-    return None
+    return None, None
 
 
 def find_comports(port=None):
@@ -141,16 +141,16 @@ def find_programmer(data, port=None):
         ports = find_comports(port)
 
     for port in ports:
-        serial_port = check_port(port, json_data)
+        serial_port, msg = check_port(port, json_data)
         if serial_port:
             set_config_value("port", port)
             logger.debug(
                 f"Found programmer on port: {port} ({time.time() - start_time:.2f}s)"
             )
-            return serial_port
+            return serial_port, msg
 
     logger.error("No programmer found.")
-    return None
+    return None, None
 
 
 def read_response(ser, feedback=True):
@@ -230,7 +230,7 @@ def write_data(ser, data):
 
 
 def consume_response(connection):
-    time.sleep(0.1)
+    time.sleep(0.5)
     debug = logger.isEnabledFor(logging.DEBUG)
     while read_response(connection, feedback=debug)[0] != None:
         time.sleep(0.1)

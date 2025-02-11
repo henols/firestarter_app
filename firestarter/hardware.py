@@ -42,7 +42,7 @@ def hardware():
     logger.info("Reading hardware revision...")
     data = {"state": STATE_HW_VERSION}
 
-    connection = find_programmer(data)
+    connection, msg = find_programmer(data)
     if not connection:
         return 1
 
@@ -71,7 +71,7 @@ def config(rev=None, r1=None, r2=None):
         data["r2"] = r2
     logger.info("Reading configuration")
 
-    connection = find_programmer(data)
+    connection, msg = find_programmer(data)
     if not connection:
         return 1
 
@@ -107,17 +107,12 @@ def read_voltage(state, timeout=None):
     logger.info(f"Reading {type} voltage")
 
     data = {"state": state}
-    connection = find_programmer(data)
+    connection, msg = find_programmer(data)
     if not connection:
         return 1
 
     try:
         write_ok(connection)
-
-        # resp, info = wait_for_ok(connection)
-        # if not resp:
-        #     logger.error(f"Error reading {type} voltage: {info}")
-        #     return 1
 
         if timeout:
             start = time.time()

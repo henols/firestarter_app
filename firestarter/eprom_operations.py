@@ -49,7 +49,7 @@ bar_format = "{l_bar}{bar}| {n:#06x}/{total:#06x} bytes "
 
 def read(eprom_name, output_file=None, flags=0, address=None, size=None):
 
-    eprom, connection = setup_read(eprom_name, flags, address, size)
+    eprom, connection, buffer_size = setup_read(eprom_name, flags, address, size)
     if not eprom:
         return 1
 
@@ -72,7 +72,7 @@ def read(eprom_name, output_file=None, flags=0, address=None, size=None):
                 bar_format=bar_format,
             ) as pbar:
                 while True:
-                    data = read_data(connection)
+                    data = read_data(connection, buffer_size)
                     if not data:
                         break
                     file.write(data)
@@ -90,14 +90,14 @@ def read(eprom_name, output_file=None, flags=0, address=None, size=None):
 
 
 def write(eprom_name, input_file, flags=0, address=None):
-    eprom, ser = setup_command(eprom_name, STATE_WRITE, flags, address)
+    eprom, ser, buffer_size = setup_command(eprom_name, STATE_WRITE, flags, address)
     if not eprom or not ser:
         return 1
 
     logger.info(f"Writing {input_file} to {eprom_name.upper()}")
 
     start_time = time.time()
-    if not send_file(eprom, input_file, ser):
+    if not send_file(eprom, input_file, ser, buffer_size):
         return 1
 
     logger.info(f"Write complete ({time.time() - start_time:.2f}s)")
@@ -106,13 +106,13 @@ def write(eprom_name, input_file, flags=0, address=None):
 
 def verify(eprom_name, input_file, flags=0, address=None):
 
-    eprom, ser = setup_command(eprom_name, STATE_VERIFY, flags, address)
+    eprom, ser, buffer_size = setup_command(eprom_name, STATE_VERIFY, flags, address)
     if not eprom or not ser:
         return 1
 
     start_time = time.time()
     logger.info(f"Verifying {input_file} to {eprom_name.upper()}")
-    if not send_file(eprom, input_file, ser):
+    if not send_file(eprom, input_file, ser, buffer_size):
         return 1
 
     logger.info(f"Verify complete ({time.time() - start_time:.2f}s)")
@@ -126,7 +126,7 @@ def erase(eprom_name, flags=0):
     Args:
         eprom_name (str): Name of the EPROM.
     """
-    eprom, connection = setup_command(eprom_name, STATE_ERASE, flags)
+    eprom, connection, buffer_size = setup_command(eprom_name, STATE_ERASE, flags)
     if not eprom or not connection:
         return 1
     logger.info(f"Erasing EPROM {eprom_name.upper()}")
@@ -151,7 +151,7 @@ def check_chip_id(eprom_name, flags=0):
     Args:
         eprom_name (str): Name of the EPROM.
     """
-    eprom, connection = setup_command(eprom_name, STATE_CHECK_CHIP_ID, flags)
+    eprom, connection, buffer_size = setup_command(eprom_name, STATE_CHECK_CHIP_ID, flags)
     if not eprom or not connection:
         return 1
     logger.info(f"Checking chip ID for {eprom_name.upper()}")
@@ -188,7 +188,7 @@ def blank_check(eprom_name, flags=0):
     Args:
         eprom_name (str): Name of the EPROM.
     """
-    eprom, connection = setup_command(eprom_name, STATE_CHECK_BLANK, flags)
+    eprom, connection, buffer_size = setup_command(eprom_name, STATE_CHECK_BLANK, flags)
 
     if not eprom or not connection:
         return 1
@@ -260,15 +260,15 @@ def get_eprom(eprom_name):
 def setup_command(eprom_name, state, flags=0, address=None):
     eprom = get_eprom(eprom_name)
     if not eprom:
-        return None, None
+        return None, None, None
 
     eprom["state"] = state
     eprom["flags"] |= flags
 
     if address:
         eprom["address"] = int(address, 16) if "0x" in address else int(address)
-
-    return eprom, find_programmer(eprom)
+    connection, msg = find_programmer(eprom)
+    return eprom, connection, LEONARDO_BUFFER_SIZE if "leonardo" in msg else BUFFER_SIZE
 
 
 def setup_read(eprom_name, flags=0, address=None, size=None):
@@ -276,7 +276,7 @@ def setup_read(eprom_name, flags=0, address=None, size=None):
     try:
         eprom = get_eprom(eprom_name)
         if not eprom:
-            return None, None
+            return None, None, None
 
         eprom["state"] = STATE_READ
 
@@ -291,16 +291,17 @@ def setup_read(eprom_name, flags=0, address=None, size=None):
             ) + read_address
 
         eprom["flags"] |= flags
-        return eprom, find_programmer(eprom)
+        connection, msg = find_programmer(eprom)
+        return eprom, connection, LEONARDO_BUFFER_SIZE if "leonardo" in msg else BUFFER_SIZE
     finally:
         logger.debug(f"Setup complete ({time.time() - start_time:.2f}s)")
 
 
-def read_data(connection):
+def read_data(connection, buffer_size=BUFFER_SIZE):
     while True:
         resp, info = wait_for_response(connection)
         if resp == "DATA":
-            data = connection.read(BUFFER_SIZE)
+            data = connection.read(buffer_size)
 
             write_ok(connection)
 
@@ -311,7 +312,7 @@ def read_data(connection):
             raise Exception(info)
 
 
-def send_file(eprom, input_file, connection):
+def send_file(eprom, input_file, connection, buffer_size=BUFFER_SIZE):
     if not os.path.exists(input_file):
         logger.error(f"Input file {input_file} not found.")
         return 1
@@ -333,7 +334,7 @@ def send_file(eprom, input_file, connection):
                 while True:
                     if address + bytes_written == mem_size:
                         break
-                    data = file.read(BUFFER_SIZE)
+                    data = file.read(buffer_size)
                     if not data:
                         logger.info("End of file reached")
                         write_data(connection, int(0).to_bytes(2, byteorder="big"))

@@ -100,7 +100,7 @@ def firmware_check(port=None):
     logger.info("Reading firmware version...")
     data = {"state": STATE_FW_VERSION}
 
-    connection = find_programmer(data, port)
+    connection, msg = find_programmer(data, port)
     if not connection:
         return None, None, None
 

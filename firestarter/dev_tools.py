@@ -37,9 +37,10 @@ def dev_registers(msb, lsb, ctrl_reg, flags=0):
         return 1
 
     data = {"state": STATE_DEV_REGISTERS, "flags": flags}
-    connection = find_programmer(data)
+    connection, msg = find_programmer(data)
     if not connection:
         return 1
+    
     logger.info(
         f"Setting registers: MSB: 0x{lsb:02x}, LSB: 0x{msb:02x}, CTRL: 0x{ctrl_reg:02x}"
     )
@@ -57,7 +58,7 @@ def dev_registers(msb, lsb, ctrl_reg, flags=0):
 
 
 def dev_address(eprom_name, address, flags=0):
-    eprom, connection = setup_command(eprom_name, STATE_DEV_ADDRESS, flags, address)
+    eprom, connection, buffer_size = setup_command(eprom_name, STATE_DEV_ADDRESS, flags, address)
     if not eprom or not connection:
         return 1
 
