@@ -62,7 +62,7 @@ def dev_address(eprom_name, address, flags=0):
     if not eprom or not connection:
         return 1
 
-    logger.info(f"Setting address to RURP: 0x{eprom["address"]:06x}")
+    logger.info(f"Setting address to RURP: 0x{eprom['address']:06x}")
     logger.info(f"Using {eprom_name.upper()}'s pin map")
     clean_up(connection)
     return 0
