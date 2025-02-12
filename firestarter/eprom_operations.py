@@ -256,6 +256,8 @@ def get_eprom(eprom_name):
 
     return eprom
 
+def calculate_buffer_size(msg):
+    return LEONARDO_BUFFER_SIZE if msg and "leonardo" in msg else BUFFER_SIZE
 
 def setup_command(eprom_name, state, flags=0, address=None):
     eprom = get_eprom(eprom_name)
@@ -268,7 +270,7 @@ def setup_command(eprom_name, state, flags=0, address=None):
     if address:
         eprom["address"] = int(address, 16) if "0x" in address else int(address)
     connection, msg = find_programmer(eprom)
-    return eprom, connection, LEONARDO_BUFFER_SIZE if "leonardo" in msg else BUFFER_SIZE
+    return eprom, connection, calculate_buffer_size(msg)
 
 
 def setup_read(eprom_name, flags=0, address=None, size=None):
@@ -292,7 +294,7 @@ def setup_read(eprom_name, flags=0, address=None, size=None):
 
         eprom["flags"] |= flags
         connection, msg = find_programmer(eprom)
-        return eprom, connection, LEONARDO_BUFFER_SIZE if not msg and "leonardo" in msg else BUFFER_SIZE
+        return eprom, connection, calculate_buffer_size(msg)
     finally:
         logger.debug(f"Setup complete ({time.time() - start_time:.2f}s)")
 
