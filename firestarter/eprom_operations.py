@@ -292,7 +292,7 @@ def setup_read(eprom_name, flags=0, address=None, size=None):
 
         eprom["flags"] |= flags
         connection, msg = find_programmer(eprom)
-        return eprom, connection, LEONARDO_BUFFER_SIZE if "leonardo" in msg else BUFFER_SIZE
+        return eprom, connection, LEONARDO_BUFFER_SIZE if not msg and "leonardo" in msg else BUFFER_SIZE
     finally:
         logger.debug(f"Setup complete ({time.time() - start_time:.2f}s)")
 
