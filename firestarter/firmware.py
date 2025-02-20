@@ -64,6 +64,9 @@ def firmware(
     if version:
         board = board_name
         latest_version, url = latest_firmware(board)
+        if not latest_version:
+            logger.error("No firmware found for board {board}.")
+            return 1
         latest = compare_versions(version, latest_version)
         if latest:
             logger.info(
