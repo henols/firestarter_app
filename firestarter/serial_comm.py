@@ -13,13 +13,9 @@ import time
 import json
 import logging
 
-try:
-    from .constants import *
-    from .config import get_config_value, set_config_value
+from firestarter.constants import *
+from firestarter.config import get_config_value, set_config_value
 
-except ImportError:
-    from constants import *
-    from config import get_config_value, set_config_value
 
 
 logger = logging.getLogger("SerialComm")

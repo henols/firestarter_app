@@ -13,58 +13,29 @@ import argparse
 import signal
 import logging
 
-try:
-    from .config import open_config
-    from .constants import *
-    from .__init__ import __version__ as version
-    from .eprom_operations import (
-        read,
-        write,
-        erase,
-        check_chip_id,
-        blank_check,
-        verify,
-        dev_read,
-        build_flags,
-    )
-    from .eprom_info import list_eproms, search_eproms, eprom_info
-    from .database import init_db
-    from .firmware import firmware
-    from .hardware import (
-        hardware,
-        config,
-        read_vpe,
-        read_vpp,
-    )
-    from .dev_tools import dev_address, dev_registers
-    from .serial_comm import rurp_logger
-except ImportError:
-    from config import open_config
-    from constants import *
-    from __init__ import __version__ as version
-    from eprom_operations import (
-        read,
-        write,
-        erase,
-        check_chip_id,
-        blank_check,
-        verify,
-        dev_read,
-        build_flags,
-    )
-
-    from eprom_info import list_eproms, search_eproms, eprom_info
-    from database import init_db
-    from firmware import firmware
-    from hardware import (
-        hardware,
-        config,
-        read_vpe,
-        read_vpp,
-    )
-    from dev_tools import dev_address, dev_registers
-    from serial_comm import rurp_logger
-
+from firestarter.config import open_config
+from firestarter.constants import *
+from firestarter.__init__ import __version__ as version
+from firestarter.eprom_operations import (
+    read,
+    write,
+    erase,
+    check_chip_id,
+    blank_check,
+    verify,
+    dev_read,
+    build_flags,
+)
+from firestarter.eprom_info import list_eproms, search_eproms, eprom_info
+from firestarter.database import init_db
+from firestarter.firmware import firmware
+from firestarter.hardware import (
+    hardware,
+    config,
+    read_vpe,
+    read_vpp,
+)
+from firestarter.dev_tools import dev_address, dev_registers
 
 logger = logging.getLogger("Firestarter")
 
@@ -375,7 +346,7 @@ def main():
     if args.verbose:
         logging.basicConfig(
             level=logging.DEBUG,
-            format = "[%(levelname)s:%(name)s:%(lineno)d] %(message)s"
+            format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s",
         )
     else:
         logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -444,7 +415,9 @@ def main():
                 flags=build_arg_flags(args),
             )
         elif args.dev_command == "reg":
-            return dev_registers(args.msb, args.lsb, args.ctrl, flags=build_arg_flags(args))
+            return dev_registers(
+                args.msb, args.lsb, args.ctrl, flags=build_arg_flags(args)
+            )
         elif args.dev_command == "addr":
             return dev_address(args.eprom, args.address, flags=build_arg_flags(args))
     return 0

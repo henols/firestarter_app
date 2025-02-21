@@ -100,6 +100,27 @@
             "pin-map": 20,
             "name": "SST39VF512"
         }
+
+    ],
+    "INTEL": [
+        {
+            "name": "M2716",
+            "voltages": {
+                "vpp": "25"
+            }
+        },
+        {
+            "name": "M2732",
+            "voltages": {
+                "vpp": "25"
+            }
+        },
+        {
+            "name": "M2732A",
+            "voltages": {
+                "vpp": "21"
+            }
+        }
     ],
     "WINBOND": [
         {

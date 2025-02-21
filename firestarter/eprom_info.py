@@ -11,31 +11,8 @@ import json
 import re
 import logging
 
-try:
-    from .database import (
-        get_eprom,
-        search_eprom,
-        get_eproms,
-        get_eprom_config,
-        get_pin_map,
-        init_db,
-    )
-    from .ic_layout import print_chip_info
-
-    from .__init__ import __version__ as version
-
-except ImportError:
-    from database import (
-        get_eprom,
-        search_eprom,
-        get_eproms,
-        get_eprom_config,
-        get_pin_map,
-        init_db,
-    )
-    from ic_layout import print_chip_info
-
-    from __init__ import __version__ as version
+import firestarter.database as db
+from firestarter.ic_layout import print_chip_info, get_chip_type
 
 logger = logging.getLogger("EPROMInfo")
 
@@ -48,7 +25,7 @@ def list_eproms(verified=False):
         verified (bool): If True, only lists verified EPROMs.
     """
     logger.info("Listing EPROMs in the database:")
-    eproms = get_eproms(verified)
+    eproms = db.get_eproms(verified)
     if not eproms:
         logger.error("No EPROMs found.")
     format_eproms(eproms)
@@ -63,21 +40,33 @@ def search_eproms(query):
         query (str): Search text.
     """
     logger.info(f"Searching for EPROMs with query: {query}")
-    results = search_eprom(query, True)
+    results = db.search_eprom(query, True)
     if not results:
         logger.error("No matching EPROMs found.")
         return 1
     format_eproms(results)
     return 0
 
+
 def format_eproms(eproms):
-    logger.info(f"+{'':-<14}+{'':-<18}+{'':-<6}+{'':-<12}+")
-    logger.info(f"| {'Name': <13}| {'Manufacturer': <17}| {'Pins': <5}| {'Chip ID': <11}|")
-    logger.info(f"+{'':-<14}+{'':-<18}+{'':-<6}+{'':-<12}+")
+    divider = f"+{'':-<14}+{'':-<18}+{'':-<6}+{'':-<12}+{'':-<14}+{'':-<5}+"
+    logger.info(divider)
+    logger.info(
+        f"| {'Name': <13}| {'Manufacturer': <17}| {'Pins': <5}| {'Chip ID': <11}| {'Type': <13}| {'VPP': <4}|"
+    )
+    logger.info(divider)
     for ic in eproms:
-        chip_id = f"{ic['chip-id']}" if not ic['chip-id'] == '0x00000000' else ""
-        logger.info(f"| {ic['name']: <13}| {ic['manufacturer']: <17}|{ic['pin-count']: >5} | {chip_id: <10} |")
-    logger.info(f"+{'':-<14}+{'':-<18}+{'':-<6}+{'':-<12}+")
+        
+        chip_id = f"{ic['chip-id']:}" if "chip-id" in ic and not ic["chip-id"] == "0x00000000" else ""
+        vpp = "- "
+        if ic["type"] == 1 :
+            vpp = f"{ic['vpp']}v" if "vpp" in ic else "- "
+        type = get_chip_type(ic["type"])
+        logger.info(
+            f"| {ic['name']: <13}| {ic['manufacturer']: <17}|{ic['pin-count']: >5} | {chip_id: <10} | {type: <12} | {vpp: >3} |"
+        )
+    logger.info(divider)
+
 
 def eprom_info(eprom_name, export=False):
     """
@@ -87,7 +76,7 @@ def eprom_info(eprom_name, export=False):
         eprom_name (str): Name of the EPROM.
     """
 
-    eprom = get_eprom(eprom_name, True)
+    eprom = db.get_eprom(eprom_name, True)
     if not eprom:
         logger.error(f"EPROM {eprom_name} not found.")
         return 1
@@ -96,18 +85,18 @@ def eprom_info(eprom_name, export=False):
 
     logger.debug("")
     logger.debug("Config sent to Firestarter:")
-    logger.debug(json_output(get_eprom(eprom_name)))
+    logger.debug(json_output(db.get_eprom(eprom_name)))
 
     if export:
 
-        config, manufacturer = get_eprom_config(eprom_name)
+        config, manufacturer = db.get_eprom_config(eprom_name)
         #  clean config
         config = clean_config(config)
         logger.info(f"{config['name']} config:")
         root = {manufacturer: [config]}
         logger.info(json_output(root))
 
-        pin_map = get_pin_map(config["pin-count"], config["pin-map"])
+        pin_map = db.get_pin_map(config["pin-count"], config["pin-map"])
         if pin_map:
             root = {config["pin-count"]: {config["pin-map"]: pin_map}}
 
@@ -178,9 +167,11 @@ def clean_config(config):
 
 
 def main():
-    init_db()
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    db.init_db()
     chip_name = "test"
-    eprom_info(chip_name, export=True)
+    search_eproms(chip_name)
 
 
 if __name__ == "__main__":

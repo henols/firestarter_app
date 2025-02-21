@@ -9,15 +9,10 @@ EPROM Operations Module
 
 import logging
 
-try:
-    from .constants import *
-    from .serial_comm import find_programmer, write_ok, write_data, clean_up
-    from .eprom_operations import setup_command
+from firestarter.constants import *
+from firestarter.serial_comm import find_programmer, write_ok, write_data, clean_up
+from firestarter.eprom_operations import setup_command
 
-except ImportError:
-    from constants import *
-    from serial_comm import find_programmer, write_ok, write_data, clean_up
-    from eprom_operations import setup_command
 
 logger = logging.getLogger("Dev")
 

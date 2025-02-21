@@ -8,13 +8,7 @@ Configuration Management Module
 """
 
 import logging
-
-try:
-
-    from .database import get_pin_map
-except ImportError:
-
-    from database import get_pin_map
+import firestarter.database as db
 
 logger = logging.getLogger("EPROMInfo")
 
@@ -161,41 +155,51 @@ def print_jumper_settings_jp3_mod(jp3):
     logger.info(f"JP4 (Rev 2)    [{jumper[jp3]}] : {jp3_label}")
 
 
+def get_chip_type(type):
+    if type == 1:
+        return "EPROM"
+    if type == 2:
+        return "Flash type 2"
+    if type == 3:
+        return "Flash type 3"
+    if type == 4:
+        return "SRAM"
+    return f"Unknown {type}"
+
+
 def print_chip_info(eprom):
     verified = ""
-    if not eprom["verified"]:
-        verified = "\t-- NOT VERIFIED --"
-
-    logger.info(f"Eprom Info {verified}")
-    logger.info(f"Name:\t\t{eprom['name']}")
-    logger.info(f"Manufacturer:\t{eprom['manufacturer']}")
-    logger.info(f"Number of pins:\t{eprom['pin-count']}")
-    logger.info(f"Memory size:\t{hex(eprom['memory-size'])}")
+    if not "verifed" in eprom:
+        verified = "-- NOT VERIFIED --"
+    pos = 20
+    logger.info(f"{'Eprom Info': <{pos}}{verified}")
+    logger.info(f"{'Name:': <{pos}}{eprom['name']}")
+    logger.info(f"{'Manufacturer:': <{pos}}{eprom['manufacturer']}")
+    logger.info(f"{'Number of pins:': <{pos}}{eprom['pin-count']}")
+    logger.info(f"{'Memory size': <{pos}}{hex(eprom['memory-size'])}")
+    
+    logger.info(f"{'Type:': <{pos}}{get_chip_type(eprom["type"])}")
     if eprom["type"] == 1:
-        logger.info(f"Type:\t\tEPROM")
-        logger.info(f"Can be erased:\t{eprom['can-erase']}")
-    elif eprom["type"] == 4:
-        logger.info(f"Type:\t\tSRAM")
-    elif eprom["type"] == 2:
-        logger.info(f"Type:\t\tFlash Memory type 2")
-    elif eprom["type"] == 3:
-        logger.info(f"Type:\t\tFlash Memory type 3")
+        logger.info(f"{'Can be erased:': <{pos}}{eprom['can-erase']}")
+
+    logger.info(f"{'VCC:': <{pos}}{eprom['vcc']}v")
     if "flags" in eprom:
         if eprom["flags"] & 0x00000008:
-            logger.info(f"VPP:\t\t{eprom['vpp']}v")
+            logger.info(f"{'VPP:': <{pos}}{eprom['vpp']}v")
+
     if "chip-id" in eprom:
-        logger.info(f"Chip ID:\t{hex(eprom['chip-id'])}")
-    logger.info(f"Pulse delay:\t{eprom['pulse-delay']}µS")
+        logger.info(f"{'Chip ID:': <{pos}}{hex(eprom['chip-id'])}")
+    logger.info(f"{'Pulse delay:': <{pos}}{eprom['pulse-delay']}µS")
     print_generic_eeprom(eprom)
 
-    logger.debug(f"Protocol: {hex(eprom['protocol-id'])}")
+    logger.debug(f"{'Protocol:': <{pos}}{hex(eprom['protocol-id'])}")
 
     # Interpret the flags
     if "flags" in eprom:
         logger.debug("")
         properties = interpret_flags(eprom["flags"])
         # Output the results
-        logger.debug(f"Flags Value: 0x{eprom['flags']:08X}")
+        logger.debug(f"{'Flags Value:': <{pos}}0x{eprom['flags']:08X}")
         if properties:
             logger.debug("Interpreted IC Properties:")
             for prop in properties:
@@ -450,7 +454,7 @@ def print_generic_eeprom(eprom):
     if eprom["type"] == 4:
         pin_names[oe_pin - 1] = "OE"
 
-    pin_map = get_pin_map(pin_count, eprom["pin-map"])
+    pin_map = db.get_pin_map(pin_count, eprom["pin-map"])
     if pin_map:
         if "rw-pin" in pin_map:
             pin_names[pin_map["rw-pin"] - 1] = "R/W"
@@ -489,3 +493,18 @@ def print_generic_eeprom(eprom):
     logger.info("")
     print_jumper_settings_jp3_mod(jp3)
     logger.info("")
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    db.init_db()
+    chip_name = "w27c512"
+    eprom  = db.get_eprom(chip_name, True)
+    if not eprom:
+        logger.error(f"EPROM {chip_name} not found in the database.")
+        return 1
+    print_chip_info(eprom)
+
+
+if __name__ == "__main__":
+    main()

@@ -10,24 +10,14 @@ Configuration Management Module
 import time
 import logging
 
-try:
-    from .constants import *
-    from .serial_comm import (
-        find_programmer,
-        wait_for_ok,
-        wait_for_response,
-        write_ok,
-        clean_up,
-    )
-except ImportError:
-    from constants import *
-    from serial_comm import (
-        find_programmer,
-        wait_for_ok,
-        wait_for_response,
-        write_ok,
-        clean_up,
-    )
+from firestarter.constants import *
+from firestarter.serial_comm import (
+    find_programmer,
+    wait_for_ok,
+    wait_for_response,
+    write_ok,
+    clean_up,
+)
 
 logger = logging.getLogger("Hardware")
 

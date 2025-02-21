@@ -235,7 +235,7 @@ Memory size:    0x10000
 Type:           EPROM
 Can be erased:  True
 Chip ID:        0xda08
-VPP:            12
+VPP:            12v
 Pulse delay:    100µS
 
        28-DIP package

@@ -5,6 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         
+        
         {
             "name": "Python Debugger: Current File with Arguments",
             "type": "debugpy",
@@ -14,6 +15,27 @@
             "args": [
                 "${command:pickArgs}"
             ]
-        }
+        },
+        {
+            "name": "Write ",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "-v","write","W27C512","test_data/full_data.bin"
+            ]
+        },
+        {
+            "name": "Install FW ",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "-v","fw","-i"
+            ]
+        },
+
     ]
 }

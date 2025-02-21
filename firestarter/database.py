@@ -9,10 +9,7 @@ import os
 import json
 from pathlib import Path
 
-try:
-    from config import get_local_database, get_local_pin_maps
-except ImportError:
-    from .config import get_local_database, get_local_pin_maps
+from firestarter.config import get_local_database, get_local_pin_maps
 
 types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
 ROM_CE = 100
@@ -166,8 +163,14 @@ def get_bus_config(pins, variant):
 def map_data(ic, manufacturer):
     pin_count = ic["pin-count"]
     vpp = 0
-    if not ic["voltages"]["vpp"] == None:
-        vpp = int(ic["voltages"]["vpp"])
+    vcc = 0
+    if "voltages" in ic:
+        voltages = ic["voltages"]
+        if "vpp" in voltages and  voltages["vpp"] :
+            
+            vpp = int(voltages["vpp"])
+        if "vcc" in voltages and  voltages["vcc"]:
+            vcc = float(voltages["vcc"])
     pin_map = ic["pin-map"] if "pin-map" in ic else ic["variant"]
     ic_type = types.get(ic["type"])
     protocol_id = int(ic["protocol-id"], 16)
@@ -180,12 +183,6 @@ def map_data(ic, manufacturer):
             type = 2
         elif flags & 0x08:
             type = 1
-    # if pin_count == 24 and variant in [0, 1, 16]:
-    #     type = 1
-    # elif pin_count == 28 and variant in [16, 17, 19]:
-    #     type = 1
-    # elif pin_count == 32 and variant in [0, 1, 2]:
-    #     type = 1
 
     data = {
         "name": ic["name"],
@@ -195,6 +192,7 @@ def map_data(ic, manufacturer):
         "type": type,
         "pin-count": pin_count,
         "vpp": vpp,
+        "vcc": vcc,
         "pulse-delay": int(ic["pulse-delay"], 16),
         "verified": ic["verified"] if "verified" in ic else False,
         "flags": flags,
@@ -221,8 +219,8 @@ def get_eproms(verified):
                 or not verified
                 or (verified and "verified" in ic and ic["verified"])
             ):
-                ic["manufacturer"] = manufacturer
-                selected_proms.append(ic)
+                # ic["manufacturer"] = manufacturer
+                selected_proms.append(map_data(ic, manufacturer))
     return selected_proms
 
 
@@ -255,6 +253,8 @@ def get_eprom(chip_name, full=False):
                 data.pop("variant")
             if "pin-map" in data:
                 data.pop("pin-map")
+            if "vcc" in data:
+                data.pop("vcc")
         return data
     return None
 
@@ -265,8 +265,9 @@ def search_eprom(chip_name, all):
         for ic in proms[manufacturer]:
             if chip_name.lower() in ic["name"].lower():
                 if ("verified" in ic and ic["verified"]) or all:
-                    ic["manufacturer"] = manufacturer
-                    selected_proms.append(ic)
+                    
+                    # ic["manufacturer"] = manufacturer
+                    selected_proms.append(map_data(ic, manufacturer))
     return selected_proms
 
 

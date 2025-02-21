@@ -12,28 +12,16 @@ import time
 import requests
 import logging
 
-try:
+from firestarter.constants import *
+from firestarter.serial_comm import (
+    find_programmer,
+    wait_for_ok,
+    find_comports,
+    clean_up,
+)
+from firestarter.config import get_config_value, set_config_value
+from firestarter.avr_tool import Avrdude, AvrdudeNotFoundError, AvrdudeConfigNotFoundError
 
-    from .constants import *
-    from .serial_comm import (
-        find_programmer,
-        wait_for_ok,
-        find_comports,
-        clean_up,
-    )
-    from .config import get_config_value, set_config_value
-    from .avr_tool import Avrdude, AvrdudeNotFoundError, AvrdudeConfigNotFoundError
-
-except ImportError:
-    from constants import *
-    from serial_comm import (
-        find_programmer,
-        wait_for_ok,
-        find_comports,
-        clean_up,
-    )
-    from config import get_config_value, set_config_value
-    from avr_tool import Avrdude, AvrdudeNotFoundError, AvrdudeConfigNotFoundError
 
 
 logger = logging.getLogger("Firmware")
@@ -65,7 +53,7 @@ def firmware(
         board = board_name
         latest_version, url = latest_firmware(board)
         if not latest_version:
-            logger.error("No firmware found for board {board}.")
+            logger.warning(f"No firmware found for board {board}.")
             return 1
         latest = compare_versions(version, latest_version)
         if latest:
