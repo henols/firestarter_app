@@ -182,7 +182,7 @@ def print_chip_info(eprom):
         logger.info(f"Type:\t\tFlash Memory type 3")
     if "flags" in eprom:
         if eprom["flags"] & 0x00000008:
-            logger.info(f"VPP:\t\t{eprom['vpp']}")
+            logger.info(f"VPP:\t\t{eprom['vpp']}v")
     if "chip-id" in eprom:
         logger.info(f"Chip ID:\t{hex(eprom['chip-id'])}")
     logger.info(f"Pulse delay:\t{eprom['pulse-delay']}µS")
