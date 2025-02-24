@@ -178,7 +178,7 @@ def print_chip_info(eprom):
     logger.info(f"{'Number of pins:': <{pos}}{eprom['pin-count']}")
     logger.info(f"{'Memory size': <{pos}}{hex(eprom['memory-size'])}")
     
-    logger.info(f"{'Type:': <{pos}}{get_chip_type(eprom["type"])}")
+    logger.info(f"{'Type:': <{pos}}{get_chip_type(eprom['type'])}")
     if eprom["type"] == 1:
         logger.info(f"{'Can be erased:': <{pos}}{eprom['can-erase']}")
 
