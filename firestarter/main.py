@@ -12,7 +12,7 @@ import sys
 import argparse
 import signal
 import logging
-
+import platform
 from firestarter.config import open_config
 from firestarter.constants import *
 from firestarter.__init__ import __version__ as version
@@ -334,7 +334,7 @@ def main():
     create_firnware_args(subparsers)
     create_config_args(subparsers)
     create_dev_args(subparsers)
-
+    
     if len(sys.argv) == 1:
         parser.print_help()
         return 1
@@ -352,6 +352,10 @@ def main():
         logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     logger.debug(f"Firestarter version: {version}")
+    logger.debug(f"Running on Python: { platform.python_version()}")
+    logger.debug(f"Platform: {platform.system()} {platform.release()}")
+    logger.debug(f"Architecture: {platform.architecture()[0]}")
+    logger.debug(f"OS: {platform.platform()}")
 
     # Command dispatch
     if args.command == "list":
@@ -429,4 +433,7 @@ def exit_gracefully(signum, frame):
 
 
 if __name__ == "__main__":
+    if sys.version_info < (3, 9) :
+        sys.exit("Error: Firestarter requires Python 3.9 or higher. Please update your Python version.")
+
     sys.exit(main())
