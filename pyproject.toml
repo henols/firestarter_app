@@ -14,11 +14,11 @@ readme = {file = "README.md", content-type = "text/markdown"}
 dynamic = ["version"]
 requires-python = ">=3.9"
 dependencies = [
-    "argparse",
     "pyserial",
     "requests",
     "tqdm"
 ]
+urls = { "Homepage" = "https://github.com/henols/firestarter_app" }
 
 [project.entry-points."console_scripts"]
 firestarter="firestarter.main:main"
@@ -41,4 +41,3 @@ toolbox = "firestarter"
 
 [tool.setuptools.dynamic]
 version = {attr = "firestarter.__version__"}
-#readme = {file = "README.md", content-type = "text/markdown"}
