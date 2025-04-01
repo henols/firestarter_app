@@ -13,6 +13,7 @@ import argparse
 import signal
 import logging
 import platform
+import argcomplete
 from firestarter.config import open_config
 from firestarter.constants import *
 from firestarter.__init__ import __version__ as version
@@ -335,6 +336,8 @@ def main():
     create_config_args(subparsers)
     create_dev_args(subparsers)
     
+    argcomplete.autocomplete(parser)
+
     if len(sys.argv) == 1:
         parser.print_help()
         return 1
