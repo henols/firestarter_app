@@ -51,6 +51,9 @@ pip install firestarter
 
 This command installs the Firestarter application, which allows you to interact with EPROMs using the Relatively-Universal-ROM-Programmer.
 
+#### Auto complete
+How to enable auto complete for firestarter, see: [auto complete](autocomplete.md)
+
 ### Installing the Firmware on the Arduino
 
 First, a few things to remember. 
@@ -58,26 +61,33 @@ First, a few things to remember.
 2. Don't turn on power if the controller (Arduino) isn't programmed with appropriate firmware.
 3. Don't insert a ROM in the socket until you're ready to write it. Don't leave a ROM in the socket during reset or programming.
 
-To install the firmware on the Arduino, use the **fw** command with the ```--install``` option. This command installs the latest firmware version on the Arduino.
+To install the firmware on the Arduino, use the **fw** command with the `--install` option. This command installs the latest firmware version on the Arduino.
 
 Firestarter is using **avrdude** to install the firmware.
 **avrdude** is avalible as a separate [installer](https://github.com/avrdudes/avrdude) or via Arduino IDE.
 
 #### Options
-* ```-p, --avrdude-path <path>```: Full path to avrdude (optional), set if avrdude is not found.
-* ```-c, --avrdude-config-path <path>```: Full path to avrdude config (optional), set if avrdude version is 6.3 or not found.
-* ```--port <port>```: Serial port name (optional), set if the Arduino is not found.
+* `-p, --avrdude-path <path>`: Full path to avrdude (optional), set if avrdude is not found.
+* `-c, --avrdude-config-path <path>`: Full path to avrdude config (optional), set if avrdude version is 6.3 or not found.
+* `--port <port>`: Serial port name (optional), set if the Arduino is not found.
+* `-b, --board <board>`: Microcontroller board (optional), defaults to *uno*, other supported boards *leonardo*.
+* `-f, --force`: Will install firmware even if the version is the same.
 ### Description
-The ```fw --install``` command installs the latest firmware on the Arduino. The process typically involves the following steps:
+The `fw --install` command installs the latest firmware on the Arduino. The process typically involves the following steps:
 
-1. **Locate avrdude**: The command locates the avrdude tool, which is used to upload the firmware to the Arduino. You can specify the path to ```avrdude``` using the ```--avrdude-path``` option if it is not found automatically.
-2. **Identify Serial Port**: The command identifies the serial port to which the Arduino is connected. You can specify the port using the ```--port``` option.
-3. **Upload Firmware**: The command uploads the latest firmware to the Arduino using ```avrdude```.
+1. **Locate avrdude**: The command locates the avrdude tool, which is used to upload the firmware to the Arduino. You can specify the path to `avrdude` using the `--avrdude-path` option if it is not found automatically.
+2. **Identify Serial Port**: The command identifies the serial port to which the Arduino is connected. You can specify the port using the `--port` option.
+3. **Upload Firmware**: The command uploads the latest firmware to the Arduino using `avrdude`.
 
 ### Example
-To install the firmware on the Arduino, you can run:
+To install the firmware on the **Arduino UNO**, you can run:
 ``` bash
 firestarter fw --install
+```
+
+To install the firmware on the **Arduino Leonardo**, you can run:
+``` bash
+firestarter fw --install --board leonardo
 ```
 
 
