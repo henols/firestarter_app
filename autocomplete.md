@@ -66,10 +66,3 @@ The procedure for enabling autocompletion remains the same whether you install v
 ```bash
 pipx list
 ```
-
-## Installing the Firmware on the Arduino
-
-Refer to the firmware installation instructions provided in the main documentation. Key points include:
-- Do not attach the Programmer shield while power is on.
-- Only install firmware when the Arduino is prepared and powered correctly.
-- Follow the specific firmware installation options as described in the Firestarter documentation.
