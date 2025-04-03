@@ -14,6 +14,7 @@ import signal
 import logging
 import platform
 import argcomplete
+from argcomplete.completers import BaseCompleter
 from firestarter.config import open_config
 from firestarter.constants import *
 from firestarter.__init__ import __version__ as version
@@ -28,7 +29,7 @@ from firestarter.eprom_operations import (
     build_flags,
 )
 from firestarter.eprom_info import list_eproms, search_eproms, eprom_info
-from firestarter.database import init_db
+from firestarter.database import init_db, get_eproms
 from firestarter.firmware import firmware
 from firestarter.hardware import (
     hardware,
@@ -41,9 +42,41 @@ from firestarter.dev_tools import dev_address, dev_registers
 logger = logging.getLogger("Firestarter")
 
 
+class EpromCompleter(BaseCompleter):
+    def __init__(self):
+        init_db()
+        self.allowed_eproms = allowed_eproms()
+
+    def __call__(self, prefix, **kwargs):
+        return [c for c in self.allowed_eproms]
+
+
+def allowed_eproms():
+    # Load or define your allowed eprom list (cache if necessary)
+    allowed_eproms = get_eproms(False)  # e.g., from a file or constant
+    names = []
+    for eprom in allowed_eproms:
+        names.append(eprom["name"])
+    return names
+
+
+def eprom_validator(eprom, prefix):
+    return eprom.lower().startswith(prefix.lower())
+
+
+def add_eprom_completer(parser):
+    # Add the completer to the parser
+    eprom = parser.add_argument(
+        "eprom",
+        type=str,
+        help="The name of the EPROM.",
+    )
+    eprom.completer = EpromCompleter()
+
+
 def create_read_args(parser):
     read_parser = parser.add_parser("read", help="Reads the content from an EPROM.")
-    read_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    add_eprom_completer(read_parser)
     read_parser.add_argument(
         "output_file",
         nargs="?",
@@ -66,7 +99,7 @@ def create_read_args(parser):
 
 def create_write_args(parser):
     write_parser = parser.add_parser("write", help="Writes a binary file to an EPROM.")
-    write_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    add_eprom_completer(write_parser)
     write_parser.add_argument(
         "-b",
         "--ignore-blank-check",
@@ -92,7 +125,7 @@ def create_verify_args(parser):
     verify_parser = parser.add_parser(
         "verify", help="Verifies the content of an EPROM."
     )
-    verify_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    add_eprom_completer(verify_parser)
     verify_parser.add_argument(
         "-a", "--address", type=str, help="Verify start address in dec/hex"
     )
@@ -107,7 +140,7 @@ def create_verify_args(parser):
 
 def create_blank_check_args(parser):
     blank_check_parser = parser.add_parser("blank", help="Checks if an EPROM is blank.")
-    blank_check_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    add_eprom_completer(blank_check_parser)
     blank_check_parser.add_argument(
         "-f",
         "--force",
@@ -118,7 +151,7 @@ def create_blank_check_args(parser):
 
 def create_erase_parser(parser):
     erase_parser = parser.add_parser("erase", help="Erase an EPROM, if supported.")
-    erase_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    add_eprom_completer(erase_parser)
     erase_parser.add_argument(
         "-f",
         "--force",
@@ -129,7 +162,7 @@ def create_erase_parser(parser):
 
 def create_id_args(parser):
     id_parser = parser.add_parser("id", help="Checks an EPROM, if supported.")
-    id_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    add_eprom_completer(id_parser)
     id_parser.add_argument(
         "-f",
         "--force",
@@ -184,7 +217,7 @@ def create_firnware_args(parser):
 
 def create_info_args(parser):
     info_parser = parser.add_parser("info", help="EPROM info.")
-    info_parser.add_argument("eprom", type=str, help="EPROM name.")
+    add_eprom_completer(info_parser)
     info_parser.add_argument(
         "-c", "--config", action="store_true", help="Show EPROM config."
     )
@@ -232,7 +265,7 @@ def create_dev_args(parser):
     read_parser = subparsers.add_parser(
         "read", help="Reads the content from an EPROM and prints data to console."
     )
-    read_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    add_eprom_completer(read_parser)
     read_parser.add_argument(
         "-a", "--address", type=str, help="Read start address in dec/hex"
     )
@@ -256,7 +289,7 @@ def create_dev_args(parser):
     addr_parser = subparsers.add_parser(
         "addr", help="Direct access to address lines and control register."
     )
-    addr_parser.add_argument("eprom", type=str, help="The name of the EPROM.")
+    add_eprom_completer(addr_parser)
     addr_parser.add_argument("address", type=str, help="Address in dec/hex")
     create_oe_ce_args(addr_parser)
 
@@ -335,15 +368,14 @@ def main():
     create_firnware_args(subparsers)
     create_config_args(subparsers)
     create_dev_args(subparsers)
-    
-    argcomplete.autocomplete(parser)
+
+    argcomplete.autocomplete(parser, validator=eprom_validator)
 
     if len(sys.argv) == 1:
         parser.print_help()
         return 1
 
     args = parser.parse_args()
-    init_db()
     open_config()
 
     if args.verbose:
@@ -353,6 +385,8 @@ def main():
         )
     else:
         logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    init_db()
 
     logger.debug(f"Firestarter version: {version}")
     logger.debug(f"Running on Python: { platform.python_version()}")
@@ -368,7 +402,6 @@ def main():
     elif args.command == "search":
         return search_eproms(args.text)
     elif args.command == "read":
-
         return read(
             args.eprom,
             args.output_file,
@@ -436,7 +469,9 @@ def exit_gracefully(signum, frame):
 
 
 if __name__ == "__main__":
-    if sys.version_info < (3, 9) :
-        sys.exit("Error: Firestarter requires Python 3.9 or higher. Please update your Python version.")
+    if sys.version_info < (3, 9):
+        sys.exit(
+            "Error: Firestarter requires Python 3.9 or higher. Please update your Python version."
+        )
 
     sys.exit(main())

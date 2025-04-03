@@ -7,6 +7,8 @@ Permission is hereby granted under MIT license.
 
 import os
 import json
+import logging
+
 from pathlib import Path
 
 from firestarter.config import get_local_database, get_local_pin_maps
@@ -73,6 +75,8 @@ pin_conversions = {
     },
 }
 
+logger = logging.getLogger("Database")
+
 
 def read_config(filename):
     path = Path(os.path.dirname(__file__))
@@ -81,9 +85,13 @@ def read_config(filename):
     with filepath.open("rt") as file:
         config = json.load(file)
     return config
-
+inited = False
 
 def init_db():
+    global inited
+    if inited:
+        return
+    inited = True
     global proms
     global pin_maps
     proms = read_config("database_generated.json")
@@ -210,7 +218,7 @@ def map_data(ic, manufacturer):
     return data
 
 
-def get_eproms(verified):
+def get_eproms(verified=None):
     selected_proms = []
     for manufacturer in proms:
         for ic in proms[manufacturer]:

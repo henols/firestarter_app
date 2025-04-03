@@ -50,7 +50,7 @@ bar_format = "{l_bar}{bar}| {n:#06x}/{total:#06x} bytes "
 def read(eprom_name, output_file=None, flags=0, address=None, size=None):
 
     eprom, connection, buffer_size = setup_read(eprom_name, flags, address, size)
-    if not eprom:
+    if not eprom or not connection:
         return 1
 
     if not output_file:
@@ -296,7 +296,8 @@ def setup_read(eprom_name, flags=0, address=None, size=None):
         connection, msg = find_programmer(eprom)
         return eprom, connection, calculate_buffer_size(msg)
     finally:
-        logger.debug(f"Setup complete ({time.time() - start_time:.2f}s)")
+        if eprom and connection:
+            logger.debug(f"Setup complete ({time.time() - start_time:.2f}s)")
 
 
 def read_data(connection, buffer_size=BUFFER_SIZE):
