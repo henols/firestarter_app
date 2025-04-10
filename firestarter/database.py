@@ -207,9 +207,8 @@ def map_data(ic, manufacturer):
         "protocol-id": int(ic["protocol-id"], 16),
         "pin-map": pin_map,
     }
-    chip_id = int(ic["chip-id"], 16)
-    if chip_id != 0:
-        data["chip-id"] = chip_id
+    if "chip-id" in ic:
+        data["chip-id"]  = int(ic["chip-id"], 16)
 
     bus_config = get_bus_config(pin_count, pin_map)
 
