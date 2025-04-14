@@ -159,11 +159,29 @@ def get_bus_config(pins, variant):
         bus.append(pin_conversions[pins][pin])
     map["bus"] = bus
 
-    if "rw-pin" in pin_map:
-        map["rw-pin"] = pin_conversions[pins][pin_map["rw-pin"]]
+    if "rw-pin" in pin_map : 
+        if pin_map["rw-pin"] in pin_conversions[pins]:
+            map["rw-pin"] = pin_conversions[pins][pin_map["rw-pin"]]
+        # else:
+        #     logger.info(
+        #         f"RW pin {pin_map['rw-pin']} not found in pin conversion for {pins} pins EPROMs"
+        #     )
+            
+    if "oe-pin" in pin_map:
+        if pin_map["oe-pin"] in pin_conversions[pins]:
+            map["oe-pin"] = pin_conversions[pins][pin_map["oe-pin"]]
+        # else:
+        #     logger.info(
+        #         f"OE pin {pin_map['oe-pin']} not found in pin conversion for {pins} pins EPROMs"
+        #     )
 
     if "vpp-pin" in pin_map:
-        map["vpp-pin"] = pin_conversions[pins][pin_map["vpp-pin"]]
+        if pin_map["vpp-pin"] in pin_conversions[pins]:
+            map["vpp-pin"] = pin_conversions[pins][pin_map["vpp-pin"]]
+        # else:
+        #     logger.info(
+        #         f"Vpp pin {pin_map['vpp-pin']} not found in pin conversion for {pins} pins EPROMs"
+        #     )
 
     return map
 

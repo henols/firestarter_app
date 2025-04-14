@@ -100,7 +100,6 @@
             "pin-map": 20,
             "name": "SST39VF512"
         }
-
     ],
     "INTEL": [
         {
@@ -158,6 +157,20 @@
         {
             "pin-map": 20,
             "name": "W39L040A"
+        }
+    ],
+    "DALLAS": [
+        {
+            "name": "DS1245W",
+            "pin-map": 5
+        },
+        {
+            "name": "DS1245Y",
+            "pin-map": 5
+        },
+        {
+            "name": "DS1249AB",
+            "pin-map": 5
         }
     ]
 }
