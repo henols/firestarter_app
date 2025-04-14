@@ -33,11 +33,11 @@ generic_pin_names = {
         "D6",
         "D7",
         "CE",
-        "A10",
+        "NC",
         "OE",
-        "A11",
-        "A9",
-        "A8",
+        "NC",
+        "NC",
+        "NC",
         "VCC",
     ],
     28: [
@@ -61,20 +61,20 @@ generic_pin_names = {
         "D6",
         "D7",
         "CE",
-        "A10",
-        "OE/Vpp",
         "NC",
-        "A9",
-        "A8",
+        "OE/VPP",
+        "NC",
+        "NC",
+        "NC",
         "NC",
         "NC",
         "VCC",
     ],
     32: [
-        "A18",
-        "A16",
-        "A15",
-        "A12",
+        "NC",
+        "NC",
+        "NC",
+        "NC",
         "A7",
         "A6",
         "A5",
@@ -93,15 +93,15 @@ generic_pin_names = {
         "D6",
         "D7",
         "CE",
-        "A10",
+        "NC",
         "OE",
-        "A11",
-        "A9",
-        "A8",
-        "A13",
-        "A14",
-        "A17",
-        "R/W",
+        "NC",
+        "NC",
+        "NC",
+        "NC",
+        "NC",
+        "NC",
+        "R/W(WE)",
         "VCC",
     ],
 }
@@ -457,13 +457,12 @@ def print_generic_eeprom(eprom):
     pin_map = db.get_pin_map(pin_count, eprom["pin-map"])
     if pin_map:
         if "rw-pin" in pin_map:
-            pin_names[pin_map["rw-pin"] - 1] = "R/W"
+            pin_names[pin_map["rw-pin"] - 1] = "R/W(WE)"
         if "vpp-pin" in pin_map:
             if not oe_pin == pin_map["vpp-pin"]:
                 vpp_pin = pin_map["vpp-pin"]
-                pin_names[pin_map["vpp-pin"] - 1] = "Vpp"
+                pin_names[pin_map["vpp-pin"] - 1] = "VPP"
                 pin_names[oe_pin - 1] = "OE"
-
         if "address-bus-pins" in pin_map:
             i = 0
             for pin in pin_map["address-bus-pins"]:
