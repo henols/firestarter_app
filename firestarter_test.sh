@@ -19,7 +19,7 @@ HARDWARE_TESTS=1
 EPROM_TESTS=1
 INFO_TESTS=1
 
-JSON_FILE='./firestarter/data/database.json'
+JSON_FILE='./firestarter/data/database_generated.json'
 TEMP_DIR="./test_data"
 
 if test $EPROM_TESTS -eq 1; then

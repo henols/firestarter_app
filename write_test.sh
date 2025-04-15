@@ -14,7 +14,7 @@ EPROM_NAME=${1:-W27C512}
 # DEFAULT_ARGS="-f"
 VERBOSE=0
 
-JSON_FILE='./firestarter/data/database.json'
+JSON_FILE='./firestarter/data/database_generated.json'
 TEMP_DIR="./test_data"
 
 # Ensure the temp directory exists, if not create it

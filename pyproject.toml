@@ -22,7 +22,7 @@ dependencies = [
 ]
 urls = { "Homepage" = "https://github.com/henols/firestarter_app" }
 
-[project.entry-points."console_scripts"]
+[project.scripts]
 firestarter="firestarter.main:main"
 
 [tool.setuptools]
