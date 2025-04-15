@@ -14,12 +14,32 @@ description = "EPROM programmer software for the Relatively Universal ROM Progra
 readme = {file = "README.md", content-type = "text/markdown"}
 dynamic = ["version"]
 requires-python = ">=3.9"
-dependencies = [
-    "pyserial",
-    "requests",
-    "tqdm",
-    "argcomplete"
+keywords = ["eprom", "programmer", "arduino", "electronics", "retrocomputing"] # Example keywords
+classifiers = [
+    "Development Status :: 4 - Beta", # Or appropriate status
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Embedded Systems",
+    "Topic :: System :: Hardware :: Hardware Drivers",
 ]
+
+dependencies = [
+    "pyserial>=3.5",
+    "requests>=2.20",
+    "tqdm>=4.60",
+    "argcomplete>=3.6.2",
+    "rich>=14.0"
+]
+
 urls = { "Homepage" = "https://github.com/henols/firestarter_app" }
 
 [project.scripts]
@@ -30,9 +50,6 @@ include-package-data = true
 packages = [
     "firestarter",
 ]
-
-[tool.setuptools.package-dir]
-toolbox = "firestarter"
 
 [tool.setuptools.package-data]
     "firestarter" = [

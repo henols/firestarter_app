@@ -11,8 +11,11 @@ import os
 import time
 import requests
 import logging
+# Add this line with the other imports
+from rich.prompt import Confirm
 
 from firestarter.constants import *
+
 from firestarter.serial_comm import (
     find_programmer,
     wait_for_ok,
@@ -43,20 +46,20 @@ def firmware(
     Returns:
         int: 0 if successful, 1 otherwise.
     """
-    selected_port, version, board_name = firmware_check(port)
-    if not install and not version:
+    selected_port, current_version, board_name = firmware_check(port)
+    if not install and not current_version:
         return 1
         
-    latest = False
+    is_latest = False
     url = None
-    if version:
+    if current_version:
         board = board_name
         latest_version, url = latest_firmware(board)
         if not latest_version:
             logger.warning(f"No firmware found for board {board}.")
             return 1
-        latest = compare_versions(version, latest_version)
-        if latest:
+        is_latest = compare_versions(current_version, latest_version)
+        if is_latest:
             logger.info(
                 f"You have the latest firmware version: {latest_version}, for controller: {board}"
             )
@@ -66,24 +69,32 @@ def firmware(
             )
 
 
-    if (install and not latest) or force:
-        if not url:
-            version, url = latest_firmware(board)
-            if not url:
-                logger.error("Failed to fetch firmware, , for controller: {board}")
-                return 1
-        if selected_port:
-            port = selected_port
-        if force:
-            logger.info("Force flashing firmware...")
-        return install_firmware(
-            url,
-            avrdude_path=avrdude_path,
-            avrdude_config_path=avrdude_config_path,
-            port=port,
-            board=board,
-        )
+    # --- Decision Logic ---
+    should_install = False
+    if force:
+        # Handles 'fw --force' and 'fw --install --force'
+        logger.info("Forcing firmware installation...")
+        should_install = True
+    elif install:
+        # Handles 'fw --install' (without --force)
+        if not is_latest:
+            should_install = True # Install automatically if newer
+        else:
+            logger.info("Firmware is already up to date. Use --force to reinstall.")
+    elif not is_latest and current_version:
+        # Handles 'fw' (no flags) when update is available
+        # THIS is the part that asks the user
+        proceed = Confirm.ask("Update firmware now?", default=False)
+        if proceed:
+            should_install = True # Install only if user confirms
+        else:
+            logger.info("Update cancelled by user.")
 
+    # --- Perform Installation if Decided ---
+    if should_install:
+        # ... (rest of the installation call) ...
+        return install_firmware(url, avrdude_path, avrdude_config_path, port, board)
+        
     return 0
 
 
