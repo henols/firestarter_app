@@ -116,7 +116,7 @@ def create_write_args(parser):
         "-a", "--address", type=str, help="Write start address in dec/hex"
     )
     write_parser.add_argument(
-        "-v", "--vpe-as-vpp", action="store_true", help="Use VPE as VPP voltage"
+        "--vpe-as-vpp", action="store_true", help="Use VPE as VPP voltage"
     )
     write_parser.add_argument("input_file", type=str, help="Input file name")
 
@@ -157,6 +157,14 @@ def create_erase_parser(parser):
         "--force",
         action="store_true",
         help="Force, even if the VPP or chip id doesn't match.",
+    )
+    erase_parser.add_argument(
+        "-b",
+        "--blank-check",
+        action="store_false",
+        default=True,
+        dest="ignore_blank_check",
+        help="Do a blank check after erase.",
     )
 
 
@@ -320,9 +328,8 @@ def create_oe_ce_args(parser):
 
 
 def build_arg_flags(args):
-    ignore_blank_check = (
-        args.ignore_blank_check if "ignore_blank_check" in args else False
-    )
+    ignore_blank_check = args.ignore_blank_check if "ignore_blank_check" in args else False
+
     force = args.force if "force" in args else False
     vpe_as_vpp = args.vpe_as_vpp if "vpe_as_vpp" in args else False
     flags = build_flags(ignore_blank_check, force, vpe_as_vpp)
