@@ -1,13 +1,10 @@
 *.bin
 build/
 .venv/
+.github/
+.vscode/
 dist/
 firestarter.egg-info/
 firestarter/__pycache__/
 test_env/**
 .secrets
-install.sh
-publish.sh
-fires/
-
-*.o64

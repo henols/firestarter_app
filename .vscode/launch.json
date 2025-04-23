@@ -27,6 +27,16 @@
             ]
         },
         {
+            "name": "Erase",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "-v","erase","W27C512"
+            ]
+        },
+        {
             "name": "Install FW ",
             "type": "debugpy",
             "request": "launch",
