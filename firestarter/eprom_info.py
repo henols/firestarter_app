@@ -14,7 +14,7 @@ import logging
 import firestarter.database as db
 from firestarter.ic_layout import print_chip_info, get_chip_type
 
-logger = logging.getLogger("EPROMInfo")
+logger = logging.getLogger("EPROM-info")
 
 
 def list_eproms(verified=False):

@@ -10,7 +10,7 @@ Configuration Management Module
 import logging
 import firestarter.database as db
 
-logger = logging.getLogger("EPROMInfo")
+logger = logging.getLogger("EPROM-layout")
 
 # Generic pin names for 24-pin, 28-pin, and 32-pin EPROMs
 generic_pin_names = {
@@ -188,12 +188,12 @@ def print_chip_info(eprom):
             logger.info(f"{'VPP:': <{pos}}{eprom['vpp']}v")
 
     if "chip-id" in eprom:
-        logger.info(f"{'Chip ID:': <{pos}}{hex(eprom['chip-id'])}")
+        logger.info(f"{'Chip ID:': <{pos}}0x{eprom['chip-id']:02X}")
     logger.info(f"{'Pulse delay:': <{pos}}{eprom['pulse-delay']}µS")
-    print_generic_eeprom(eprom)
+    print_generic_eprom(eprom)
 
-    logger.debug(f"{'Protocol:': <{pos}}{hex(eprom['protocol-id'])}")
-
+    logger.debug(f"{'Protocol:': <{pos}}0x{eprom['protocol-id']:02X}")
+    
     # Interpret the flags
     if "flags" in eprom:
         logger.debug("")
@@ -441,7 +441,7 @@ def protocol_info(protocol_id):
 
 
 # Function to print generic EPROM layout
-def print_generic_eeprom(eprom):
+def print_generic_eprom(eprom):
     pin_count = eprom["pin-count"]
     if pin_count not in generic_pin_names:
         logger.error(f"No generic layout available for {pin_count}-pin EPROM.")
