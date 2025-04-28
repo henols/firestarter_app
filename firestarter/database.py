@@ -11,6 +11,7 @@ import logging
 
 from pathlib import Path
 
+from firestarter.constants import *
 from firestarter.config import get_local_database, get_local_pin_maps
 
 types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
@@ -201,14 +202,16 @@ def map_data(ic, manufacturer):
     ic_type = types.get(ic["type"])
     protocol_id = int(ic["protocol-id"], 16)
     flags = int(ic["flags"], 16) if "flags" in ic else 0
-    type = 4
+    type = TYPE_SRAM
     if ic_type == 1:
         if protocol_id == 0x06:
-            type = 3
+            type = TYPE_FLASH_TYPE_3
         elif protocol_id == 0x05:
-            type = 2
+            type = TYPE_FLASH_TYPE_2
+        elif protocol_id == 0x0B:
+            type = TYPE_EPROM_CE_PGM
         elif flags & 0x08:
-            type = 1
+            type = TYPE_EPROM
 
     data = {
         "name": ic["name"],
@@ -280,6 +283,12 @@ def get_eprom(chip_name, full=False):
                 data.pop("pin-map")
             if "vcc" in data:
                 data.pop("vcc")
+            data["flags"] = 0
+            if "can-erase" in data:
+                ce = data.pop("can-erase")
+                if ce:
+                    data["flags"] |= FLAG_CAN_ERASE
+
         return data
     return None
 
