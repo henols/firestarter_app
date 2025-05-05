@@ -85,7 +85,10 @@ def read_config(filename):
     with filepath.open("rt") as file:
         config = json.load(file)
     return config
+
+
 inited = False
+
 
 def init_db():
     global inited
@@ -159,14 +162,14 @@ def get_bus_config(pins, variant):
         bus.append(pin_conversions[pins][pin])
     map["bus"] = bus
 
-    if "rw-pin" in pin_map : 
+    if "rw-pin" in pin_map:
         if pin_map["rw-pin"] in pin_conversions[pins]:
             map["rw-pin"] = pin_conversions[pins][pin_map["rw-pin"]]
         # else:
         #     logger.info(
         #         f"RW pin {pin_map['rw-pin']} not found in pin conversion for {pins} pins EPROMs"
         #     )
-            
+
     if "oe-pin" in pin_map:
         if pin_map["oe-pin"] in pin_conversions[pins]:
             map["oe-pin"] = pin_conversions[pins][pin_map["oe-pin"]]
@@ -187,19 +190,28 @@ def get_bus_config(pins, variant):
 
 
 def map_data(ic, manufacturer):
-    pin_count = ic["pin-count"]
+    try:
+        pin_count = ic["pin-count"]
+    except:
+        # print(ic)
+        return None
     vpp = 0
     vcc = 0
     if "voltages" in ic:
         voltages = ic["voltages"]
-        if "vpp" in voltages and  voltages["vpp"] :
-            
-            vpp = int(voltages["vpp"])
-        if "vcc" in voltages and  voltages["vcc"]:
+        if "vpp" in voltages and voltages["vpp"]:
+            vpp = float(voltages["vpp"])
+        if "vcc" in voltages and voltages["vcc"]:
             vcc = float(voltages["vcc"])
-    pin_map = ic["pin-map"] if "pin-map" in ic else ic["variant"]
+
+    # choose pin-map over variant
+    pin_map = ic["pin-map"] if "pin-map" in ic else ic["variant"] 
+    if isinstance(pin_map, str) and "0x" in pin_map:
+        pin_map = int(pin_map, 16)
+
     ic_type = types.get(ic["type"])
     protocol_id = int(ic["protocol-id"], 16)
+
     flags = int(ic["flags"], 16) if "flags" in ic else 0
     type = 4
     if ic_type == 1:
@@ -210,6 +222,10 @@ def map_data(ic, manufacturer):
         elif flags & 0x08:
             type = 1
 
+    pulse_delay = ic["pulse-delay"]
+    if isinstance(pulse_delay, str) and "0x" in pulse_delay:
+        pulse_delay = int(pulse_delay, 16)
+
     data = {
         "name": ic["name"],
         "manufacturer": manufacturer,
@@ -219,14 +235,14 @@ def map_data(ic, manufacturer):
         "pin-count": pin_count,
         "vpp": vpp,
         "vcc": vcc,
-        "pulse-delay": int(ic["pulse-delay"], 16),
+        "pulse-delay": pulse_delay,
         "verified": ic["verified"] if "verified" in ic else False,
         "flags": flags,
         "protocol-id": int(ic["protocol-id"], 16),
         "pin-map": pin_map,
     }
     if "chip-id" in ic:
-        data["chip-id"]  = int(ic["chip-id"], 16)
+        data["chip-id"] = int(ic["chip-id"], 16)
 
     bus_config = get_bus_config(pin_count, pin_map)
 
@@ -245,7 +261,9 @@ def get_eproms(verified=None):
                 or (verified and "verified" in ic and ic["verified"])
             ):
                 # ic["manufacturer"] = manufacturer
-                selected_proms.append(map_data(ic, manufacturer))
+                eprom = map_data(ic, manufacturer)
+                if eprom:
+                    selected_proms.append(eprom)
     return selected_proms
 
 
@@ -261,6 +279,9 @@ def get_eprom(chip_name, full=False):
     config, manufacturer = get_eprom_config(chip_name)
     if config:
         data = map_data(config, manufacturer)
+        if not data:
+            return None
+
         if not full:
             if "manufacturer" in data:
                 data.pop("manufacturer")
@@ -290,7 +311,7 @@ def search_eprom(chip_name, all):
         for ic in proms[manufacturer]:
             if chip_name.lower() in ic["name"].lower():
                 if ("verified" in ic and ic["verified"]) or all:
-                    
+
                     # ic["manufacturer"] = manufacturer
                     selected_proms.append(map_data(ic, manufacturer))
     return selected_proms

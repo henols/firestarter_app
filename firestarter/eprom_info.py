@@ -161,7 +161,6 @@ def clean_config(config):
     new_config["verified"] = config["verified"] if "verified" in config else False
 
     if "voltages" in new_config:
-        config["voltages"].pop("vdd") if "vdd" in config["voltages"] else "bad value"
         config["voltages"].pop("vcc") if "vcc" in config["voltages"] else "bad value"
     return new_config
 

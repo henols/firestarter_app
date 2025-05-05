@@ -33,7 +33,17 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "-v","fw","-i"
+                "-v","fw","-i", "-b", "leonardo"
+            ]
+        },
+        {
+            "name": "Info  DS1245W",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "-v","info","DS1245W", "-c"
             ]
         },
 
