@@ -85,7 +85,10 @@ def read_config(filename):
     with filepath.open("rt") as file:
         config = json.load(file)
     return config
+
+
 inited = False
+
 
 def init_db():
     global inited
@@ -159,14 +162,14 @@ def get_bus_config(pins, variant):
         bus.append(pin_conversions[pins][pin])
     map["bus"] = bus
 
-    if "rw-pin" in pin_map : 
+    if "rw-pin" in pin_map:
         if pin_map["rw-pin"] in pin_conversions[pins]:
             map["rw-pin"] = pin_conversions[pins][pin_map["rw-pin"]]
         # else:
         #     logger.info(
         #         f"RW pin {pin_map['rw-pin']} not found in pin conversion for {pins} pins EPROMs"
         #     )
-            
+
     if "oe-pin" in pin_map:
         if pin_map["oe-pin"] in pin_conversions[pins]:
             map["oe-pin"] = pin_conversions[pins][pin_map["oe-pin"]]
@@ -192,10 +195,10 @@ def map_data(ic, manufacturer):
     vcc = 0
     if "voltages" in ic:
         voltages = ic["voltages"]
-        if "vpp" in voltages and  voltages["vpp"] :
-            
+        if "vpp" in voltages and voltages["vpp"]:
+
             vpp = int(voltages["vpp"])
-        if "vcc" in voltages and  voltages["vcc"]:
+        if "vcc" in voltages and voltages["vcc"]:
             vcc = float(voltages["vcc"])
     pin_map = ic["pin-map"] if "pin-map" in ic else ic["variant"]
     ic_type = types.get(ic["type"])
@@ -226,7 +229,7 @@ def map_data(ic, manufacturer):
         "pin-map": pin_map,
     }
     if "chip-id" in ic:
-        data["chip-id"]  = int(ic["chip-id"], 16)
+        data["chip-id"] = int(ic["chip-id"], 16)
 
     bus_config = get_bus_config(pin_count, pin_map)
 
@@ -284,13 +287,13 @@ def get_eprom(chip_name, full=False):
     return None
 
 
-def search_eprom(chip_name, all):
+def search_eprom(chip_name, all=True):
     selected_proms = []
     for manufacturer in proms:
         for ic in proms[manufacturer]:
             if chip_name.lower() in ic["name"].lower():
                 if ("verified" in ic and ic["verified"]) or all:
-                    
+
                     # ic["manufacturer"] = manufacturer
                     selected_proms.append(map_data(ic, manufacturer))
     return selected_proms

@@ -21,3 +21,5 @@ publish.sh
 fires/
 
 *.o64
+
+tools/__pycache__/
