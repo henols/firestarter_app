@@ -293,7 +293,7 @@ def get_eprom(chip_name, full=False):
     return None
 
 
-def search_eprom(chip_name, all):
+def search_eprom(chip_name, all=True):
     selected_proms = []
     for manufacturer in proms:
         for ic in proms[manufacturer]:
