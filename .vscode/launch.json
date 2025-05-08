@@ -36,6 +36,16 @@
                 "-v","fw","-i"
             ]
         },
+        {
+            "name": "Info",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "-v","info","w27c512"
+            ]
+        },
 
     ]
 }

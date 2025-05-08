@@ -3,6 +3,7 @@ Project Name: Firestarter
 Copyright (c) 2025 Henrik Olsson
 
 Permission is hereby granted under MIT license.
+AVRdude Tool Wrapper Module
 """
 import os
 import re
@@ -23,6 +24,12 @@ class AvrdudeConfigNotFoundError(FileNotFoundError): ...
 
 
 class Avrdude:
+    """
+    A wrapper class for interacting with the Avrdude command-line utility.
+    It helps in finding the Avrdude executable, managing its configuration file,
+    retrieving its version, and executing commands for flashing firmware
+    or testing connections to AVR microcontrollers.
+    """
     def __init__(
         self,
         partno,

@@ -15,36 +15,25 @@ import logging
 import platform
 import argcomplete
 from argcomplete.completers import BaseCompleter
-from firestarter.config import open_config
+
+from firestarter.config import ConfigManager  # Refactored
 from firestarter.constants import *
-from firestarter.__init__ import __version__ as version
-from firestarter.eprom_operations import (
-    read,
-    write,
-    erase,
-    check_chip_id,
-    blank_check,
-    verify,
-    dev_read,
-    build_flags,
-)
-from firestarter.eprom_info import list_eproms, search_eproms, eprom_info
-from firestarter.database import init_db, get_eproms
-from firestarter.firmware import firmware
-from firestarter.hardware import (
-    hardware,
-    config,
-    read_vpe,
-    read_vpp,
-)
-from firestarter.dev_tools import dev_address, dev_registers
+from firestarter import __version__ as version
+from firestarter.eprom_operations import EpromOperator, build_flags 
+from firestarter.eprom_info import EpromConsolePresenter # Refactored
+from firestarter.database import EpromDatabase  # Refactored
+from firestarter.firmware import FirmwareManager  # Refactored
+from firestarter.hardware import HardwareManager  # Refactored
 
 logger = logging.getLogger("Firestarter")
+
+# Import helper printing functions that would ideally be in a dedicated cli_display module
+from firestarter.eprom_info import print_eprom_list_table
 
 
 class EpromCompleter(BaseCompleter):
     def __init__(self):
-        init_db()
+        db_instance = EpromDatabase()  # Initialize/get instance
         self.allowed_eproms = allowed_eproms()
 
     def __call__(self, prefix, **kwargs):
@@ -53,9 +42,10 @@ class EpromCompleter(BaseCompleter):
 
 def allowed_eproms():
     # Load or define your allowed eprom list (cache if necessary)
-    allowed_eproms = get_eproms(False)  # e.g., from a file or constant
+    db_instance = EpromDatabase()
+    allowed_eproms_data = db_instance.get_eproms(False)  # e.g., from a file or constant
     names = []
-    for eprom in allowed_eproms:
+    for eprom in allowed_eproms_data:
         names.append(eprom["name"])
     return names
 
@@ -200,7 +190,10 @@ def create_firnware_args(parser):
         "--board",
         type=str,
         default="uno",
-        choices=["uno", "leoanardo", ],
+        choices=[
+            "uno",
+            "leoanardo",
+        ],
         help="Microcontroller board (optional), defaults to 'uno'.",
     )
     fw_parser.add_argument(
@@ -328,7 +321,9 @@ def create_oe_ce_args(parser):
 
 
 def build_arg_flags(args):
-    ignore_blank_check = args.ignore_blank_check if "ignore_blank_check" in args else False
+    ignore_blank_check = (
+        args.ignore_blank_check if "ignore_blank_check" in args else False
+    )
 
     force = args.force if "force" in args else False
     vpe_as_vpp = args.vpe_as_vpp if "vpe_as_vpp" in args else False
@@ -384,8 +379,11 @@ def main():
         return 1
 
     args = parser.parse_args()
-    open_config()
 
+    # Initialize ConfigManager (Singleton)
+    config_manager = ConfigManager()
+
+    # Setup logging based on verbosity
     if args.verbose:
         logging.basicConfig(
             level=logging.DEBUG,
@@ -394,7 +392,16 @@ def main():
     else:
         logging.basicConfig(level=logging.INFO, format="%(message)s")
 
-    init_db()
+    # Initialize EpromDatabase (Singleton)
+    db_instance = EpromDatabase()
+    # Initialize EpromOperator
+    eprom_operator = EpromOperator(db_instance)
+    # Initialize HardwareManager
+    hardware_manager = HardwareManager()
+    # Initialize FirmwareManager
+    firmware_manager = FirmwareManager(config_manager)
+    # Initialize EpromInfoProvider
+    eprom_presenter = EpromConsolePresenter(db_instance)
 
     logger.debug(f"Firestarter version: {version}")
     logger.debug(f"Running on Python: { platform.python_version()}")
@@ -404,70 +411,139 @@ def main():
 
     # Command dispatch
     if args.command == "list":
-        return list_eproms(args.verified)
+        eprom_data_list = eprom_presenter.get_all_eproms_data(args.verified)
+        if eprom_data_list:
+            print_eprom_list_table(
+                eprom_data_list, eprom_presenter.spec_builder
+            )
+            return 0
+        return 1
     elif args.command == "info":
-        return eprom_info(args.eprom, args.config)
+        details = eprom_presenter.prepare_detailed_eprom_data(
+            args.eprom, include_export_config=args.config
+        )
+        if details:
+            # EpromInfoProvider now handles displaying, including the export config if requested by args.config
+            eprom_presenter.present_eprom_details(details, show_export_config=args.config)
+            return 0
+        return 1
     elif args.command == "search":
-        return search_eproms(args.text)
+        search_results = eprom_presenter.search_eproms_by_name(args.text)
+        if search_results:
+            print_eprom_list_table(search_results, eprom_presenter.spec_builder)
+            return 0
+        return 1
     elif args.command == "read":
-        return read(
-            args.eprom,
-            args.output_file,
-            flags=build_arg_flags(args),
-            address=args.address,
-            size=args.size,
+        return (
+            1
+            if not eprom_operator.read_eprom(
+                args.eprom,
+                args.output_file,
+                operation_flags=build_arg_flags(args),
+                address_str=args.address,
+                size_str=args.size,
+            )
+            else 0
         )
     elif args.command == "write":
-        return write(
-            args.eprom,
-            args.input_file,
-            address=args.address,
-            flags=build_arg_flags(args),
+        return (
+            1
+            if not eprom_operator.write_eprom(
+                args.eprom,
+                args.input_file,
+                address_str=args.address,
+                operation_flags=build_arg_flags(args),
+            )
+            else 0
         )
     elif args.command == "verify":
-        return verify(
-            args.eprom,
-            args.input_file,
-            address=args.address,
-            flags=build_arg_flags(args),
+        return (
+            1
+            if not eprom_operator.verify_eprom(
+                args.eprom,
+                args.input_file,
+                address_str=args.address,
+                operation_flags=build_arg_flags(args),
+            )
+            else 0
         )
     elif args.command == "blank":
-        return blank_check(args.eprom, flags=build_arg_flags(args))
+        return (
+            1
+            if not eprom_operator.check_eprom_blank(
+                args.eprom, operation_flags=build_arg_flags(args)
+            )
+            else 0
+        )
     elif args.command == "erase":
-        return erase(args.eprom, flags=build_arg_flags(args))
+        return (
+            1
+            if not eprom_operator.erase_eprom(
+                args.eprom, operation_flags=build_arg_flags(args)
+            )
+            else 0
+        )
     elif args.command == "id":
-        return check_chip_id(args.eprom, flags=build_arg_flags(args))
+        return (
+            1
+            if not eprom_operator.check_eprom_id(
+                args.eprom, operation_flags=build_arg_flags(args)
+            )
+            else 0
+        )
     elif args.command == "vpe":
-        return read_vpe(args.timeout)
+        return 1 if not hardware_manager.read_vpe_voltage(args.timeout) else 0
     elif args.command == "vpp":
-        return read_vpp(args.timeout)
+        return 1 if not hardware_manager.read_vpp_voltage(args.timeout) else 0
     elif args.command == "fw":
-        return firmware(
-            args.install,
-            avrdude_path=args.avrdude_path,
-            avrdude_config_path=args.avrdude_config_path,
-            port=args.port,
-            board=args.board,
-            force=args.force,
+        return (
+            1
+            if not firmware_manager.manage_firmware_update(
+                install_flag=args.install,
+                avrdude_path_override=args.avrdude_path,
+                avrdude_config_override=args.avrdude_config_path,
+                cli_port_override=args.port,
+                cli_board_override=args.board,
+                force_install=args.force,
+            )
+            else 0
         )
     elif args.command == "hw":
-        return hardware()
+        return 1 if not hardware_manager.get_hardware_revision() else 0
     elif args.command == "config":
-        return config(args.rev, args.r16, args.r14r15)
+        return (
+            1
+            if not hardware_manager.set_hardware_config(args.rev, args.r16, args.r14r15)
+            else 0
+        )
     elif args.command == "dev":
         if args.dev_command == "read":
-            return dev_read(
-                args.eprom,
-                address=args.address,
-                size=args.size,
-                flags=build_arg_flags(args),
+            return (
+                1
+                if not eprom_operator.dev_read_eprom(
+                    args.eprom,
+                    address_str=args.address,
+                    size_str=args.size,
+                    operation_flags=build_arg_flags(args),
+                )
+                else 0
             )
         elif args.dev_command == "reg":
-            return dev_registers(
-                args.msb, args.lsb, args.ctrl, flags=build_arg_flags(args)
+            return (
+                1
+                if not eprom_operator.dev_set_registers(
+                    args.msb, args.lsb, args.ctrl, flags=build_arg_flags(args)
+                )
+                else 0
             )
         elif args.dev_command == "addr":
-            return dev_address(args.eprom, args.address, flags=build_arg_flags(args))
+            return (
+                1
+                if not eprom_operator.dev_set_address_mode(
+                    args.eprom, args.address, operation_flags=build_arg_flags(args)
+                )
+                else 0
+            )
     return 0
 
 
