@@ -248,7 +248,6 @@ def latest_firmware(board="uno"):
 
     return version, url
 
-[{'url': 'https://api.github.com/repos/henols/firestarter/releases/assets/248395322', 'id': 248395322, 'node_id': 'RA_kwDOMEvXzM4OzjY6', 'name': 'firestarter_leonardo.hex', 'label': '', 'uploader': {...}, 'content_type': 'application/octet-stream', 'state': 'uploaded', 'size': 73036, 'download_count': 6, 'created_at': '2025-04-22T09:57:59Z', 'updated_at': '2025-04-22T09:57:59Z', 'browser_download_url': 'https://github.com/henols/firestarter/releases/download/1.4.1/firestarter_leonardo.hex'}, {'url': 'https://api.github.com/repos/henols/firestarter/releases/assets/248395323', 'id': 248395323, 'node_id': 'RA_kwDOMEvXzM4OzjY7', 'name': 'firestarter_uno.hex', 'label': '', 'uploader': {...}, 'content_type': 'application/octet-stream', 'state': 'uploaded', 'size': 66225, 'download_count': 4, 'created_at': '2025-04-22T09:57:59Z', 'updated_at': '2025-04-22T09:57:59Z', 'browser_download_url': 'https://github.com/henols/firestarter/releases/download/1.4.1/firestarter_uno.hex'}]
 def compare_versions(current_version, latest_version):
     """
     Compares the current firmware version with the latest version.
