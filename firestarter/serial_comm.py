@@ -44,6 +44,7 @@ def check_port(port, data, baud_rate=BAUD_RATE):
             port=port,
             baudrate=baud_rate,
             timeout=1.0,
+            write_timeout=1.0,
         )
         time.sleep(2)  # Allow port to stabilize
         write_data(connection, data.encode("ascii"))

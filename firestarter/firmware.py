@@ -67,6 +67,8 @@ def firmware(
             logger.info(
                 f"New firmware version available: {latest_version}, for controller: {board}"
             )
+    else:
+        latest_version, url = latest_firmware(board)
 
 
     # --- Decision Logic ---
@@ -92,7 +94,6 @@ def firmware(
 
     # --- Perform Installation if Decided ---
     if should_install:
-        # ... (rest of the installation call) ...
         return install_firmware(url, avrdude_path, avrdude_config_path, port, board)
         
     return 0
@@ -154,7 +155,7 @@ def install_firmware(
         programmer_id = "avr109"
         baud_rate = 57600
 
-    logger.info("Downloading firmware...")
+    logger.info(f"Downloading firmware...")
     firmware_path = download_firmware(url)
     if not firmware_path:
         logger.error("Error downloading firmware.")
@@ -246,7 +247,6 @@ def latest_firmware(board="uno"):
     logger.debug(f"Latest firmware version: {version}, URL: {url}")
 
     return version, url
-
 
 def compare_versions(current_version, latest_version):
     """
