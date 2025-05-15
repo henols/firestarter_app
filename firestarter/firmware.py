@@ -11,6 +11,7 @@ import os
 import time
 import requests
 import logging
+import re
 # Add this line with the other imports
 from rich.prompt import Confirm
 
@@ -50,9 +51,11 @@ class FirmwareManager:
             comm = SerialCommunicator.find_and_connect(command_dict, preferred_port=preferred_port)
             # The programmer_info from find_and_connect will contain "version:board"
             if comm.programmer_info:
-                version_info_parts = comm.programmer_info.split(":", 1)
-                current_version = version_info_parts[0]
-                board_name = version_info_parts[1] if len(version_info_parts) > 1 else "uno" # Default to uno
+                # Split by colon or comma
+                version_info_parts = re.split(r'[:,]', comm.programmer_info)
+                current_version = version_info_parts[1].strip()
+                board_name = version_info_parts[2].strip()
+                
                 logger.info(f"Current firmware version: {current_version}, for controller: {board_name} on port {comm.port_name}")
                 return comm.port_name, current_version, board_name
             else:
@@ -207,17 +210,23 @@ class FirmwareManager:
     def manage_firmware_update(self, install_flag: bool = False, 
                                avrdude_path_override: str | None = None, 
                                avrdude_config_override: str | None = None, 
-                               cli_port_override: str | None = None, 
-                               cli_board_override: str | None = "uno", 
+                               port_override: str | None = None, 
+                               board_override: str | None = "uno", 
                                force_install: bool = False) -> bool:
         """
         Manages the firmware update process: checks version, prompts user, and installs if needed.
         Returns True if an operation (check or install) was successful in some sense, False on major failure.
         """
-        connected_port, current_version, current_board = self.check_current_firmware(preferred_port=cli_port_override)
+        connected_port, current_version, current_board = self.check_current_firmware(preferred_port=port_override)
+
+        # Use the port where firmware was checked, or CLI override for flashing
+        port_to_use = port_override or connected_port
+        if not port_to_use:
+            logger.error("Cannot determine port for programmer. Please specify with --port.")
+            return False
 
         # Use board detected from firmware if available, else use CLI override or default
-        board_to_use = current_board or cli_board_override or "uno"
+        board_to_use = current_board or board_override
         
         latest_version, download_url = self.fetch_latest_release_info(board=board_to_use)
 
@@ -264,17 +273,12 @@ class FirmwareManager:
                 logger.error("Firmware download failed. Installation aborted.")
                 return False
             
-            # Use the port where firmware was checked, or CLI override for flashing
-            port_for_flashing = cli_port_override or connected_port
-            if not port_for_flashing:
-                logger.error("Cannot determine port for flashing. Please specify with --port or ensure programmer is connected.")
-                return False
 
             install_success = self._install_with_avrdude(
                 hex_file_path=hex_file, board=board_to_use,
                 avrdude_path_override=avrdude_path_override,
                 avrdude_config_override=avrdude_config_override,
-                target_port=port_for_flashing
+                target_port=port_to_use
             )
             # Clean up downloaded file
             if os.path.exists(hex_file):

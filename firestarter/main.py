@@ -19,8 +19,8 @@ from argcomplete.completers import BaseCompleter
 from firestarter.config import ConfigManager  # Refactored
 from firestarter.constants import *
 from firestarter import __version__ as version
-from firestarter.eprom_operations import EpromOperator, build_flags 
-from firestarter.eprom_info import EpromConsolePresenter # Refactored
+from firestarter.eprom_operations import EpromOperator, build_flags
+from firestarter.eprom_info import EpromConsolePresenter  # Refactored
 from firestarter.database import EpromDatabase  # Refactored
 from firestarter.firmware import FirmwareManager  # Refactored
 from firestarter.hardware import HardwareManager  # Refactored
@@ -190,11 +190,13 @@ def create_firnware_args(parser):
         "--board",
         type=str,
         default="uno",
-        choices=["uno", "leonardo", ],
+        choices=[
+            "uno",
+            "leonardo",
+        ],
         help="Microcontroller board (optional), defaults to 'uno'.",
     )
     fw_parser.add_argument(
-        "-p",
         "--avrdude-path",
         type=str,
         help="Full path to avrdude (optional), set if avrdude is not found.",
@@ -205,7 +207,7 @@ def create_firnware_args(parser):
         type=str,
         help="Full path to avrdude config (optional), set if avrdude version is 6.3 or not found.",
     )
-    fw_parser.add_argument("--port", type=str, help="Serial port name (optional)")
+    fw_parser.add_argument("-p", "--port", type=str, help="Serial port name (optional)")
     fw_parser.add_argument(
         "-f",
         "--force",
@@ -410,9 +412,7 @@ def main():
     if args.command == "list":
         eprom_data_list = eprom_presenter.get_all_eproms_data(args.verified)
         if eprom_data_list:
-            print_eprom_list_table(
-                eprom_data_list, eprom_presenter.spec_builder
-            )
+            print_eprom_list_table(eprom_data_list, eprom_presenter.spec_builder)
             return 0
         return 1
     elif args.command == "info":
@@ -421,7 +421,9 @@ def main():
         )
         if details:
             # EpromInfoProvider now handles displaying, including the export config if requested by args.config
-            eprom_presenter.present_eprom_details(details, show_export_config=args.config)
+            eprom_presenter.present_eprom_details(
+                details, show_export_config=args.config
+            )
             return 0
         return 1
     elif args.command == "search":
@@ -499,8 +501,8 @@ def main():
                 install_flag=args.install,
                 avrdude_path_override=args.avrdude_path,
                 avrdude_config_override=args.avrdude_config_path,
-                cli_port_override=args.port,
-                cli_board_override=args.board,
+                port_override=args.port,
+                board_override=args.board,
                 force_install=args.force,
             )
             else 0
