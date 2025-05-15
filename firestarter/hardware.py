@@ -10,13 +10,21 @@ import time
 import logging
 
 from firestarter.constants import *
-from firestarter.serial_comm import SerialCommunicator, ProgrammerNotFoundError, SerialError, SerialTimeoutError
+from firestarter.serial_comm import (
+    SerialCommunicator,
+    ProgrammerNotFoundError,
+    SerialError,
+    SerialTimeoutError,
+)
 
 logger = logging.getLogger("Hardware")
 
+
 class HardwareOperationError(Exception):
     """Custom exception for hardware operation failures."""
+
     pass
+
 
 class HardwareManager:
     """
@@ -25,12 +33,15 @@ class HardwareManager:
     hardware configurations (like resistor values for voltage dividers),
     and reading VPP/VPE voltages.
     """
+
     def __init__(self):
         # No persistent state needed in constructor for now,
         # SerialCommunicator is established per operation.
         pass
 
-    def _execute_simple_command(self, command_dict: dict, operation_name: str) -> tuple[bool, str | None]:
+    def _execute_simple_command(
+        self, command_dict: dict, operation_name: str
+    ) -> tuple[bool, str | None]:
         """
         Connects, sends a command, expects an OK, and disconnects.
         Returns (success_status, message_from_programmer).
@@ -42,14 +53,14 @@ class HardwareManager:
             # If find_and_connect succeeds, it means the programmer acknowledged the command.
             # The 'msg' from find_and_connect's expect_ok is the programmer_info.
             # For simple state commands, the programmer_info IS the response.
-            
+
             # If the command sent by find_and_connect was just to establish connection,
             # and the actual data command needs to be sent *after* connection,
             # then we'd do:
             # comm.send_json_command(actual_data_command_dict)
             # is_ok, msg = comm.expect_ok()
             # For HW_VERSION, FW_VERSION, CONFIG, the initial command IS the data command.
-            
+
             # The `find_and_connect` already sends `command_dict` and expects an OK.
             # The `comm.programmer_info` holds the message part of that OK response.
             if comm.programmer_info is not None:
@@ -72,21 +83,26 @@ class HardwareManager:
         Returns True if successful, False otherwise.
         """
         logger.info("Reading hardware revision...")
-        command = {"state": STATE_HW_VERSION}
+        command = {"state": COMMAND_HW_VERSION}
         success, _ = self._execute_simple_command(command, "Hardware revision")
         return success
 
-    def set_hardware_config(self, rev: int | None = None, r1_val: int | None = None, r2_val: int | None = None) -> bool:
+    def set_hardware_config(
+        self,
+        rev: int | None = None,
+        r1_val: int | None = None,
+        r2_val: int | None = None,
+    ) -> bool:
         """
         Sets hardware configuration parameters on the programmer.
         Returns True if successful, False otherwise.
         """
-        command = {"state": STATE_CONFIG}
+        command = {"state": COMMAND_CONFIG}
         log_parts = []
         if rev is not None:
-            if rev == -1: # Special value to disable override
+            if rev == -1:  # Special value to disable override
                 logger.info("Disabling hardware revision override.")
-                command["rev"] = 0xFF 
+                command["rev"] = 0xFF
             else:
                 command["rev"] = rev
             log_parts.append(f"RevOverride={command['rev']}")
@@ -101,11 +117,16 @@ class HardwareManager:
             logger.info("Reading current hardware configuration...")
         else:
             logger.info(f"Setting hardware configuration: {', '.join(log_parts)}")
-        
+
         success, _ = self._execute_simple_command(command, "Hardware configuration")
         return success
 
-    def _read_voltage_loop(self, state_to_set: int, voltage_type_str: str, timeout_seconds: int | None = None) -> bool:
+    def _read_voltage_loop(
+        self,
+        state_to_set: int,
+        voltage_type_str: str,
+        timeout_seconds: int | None = None,
+    ) -> bool:
         """
         Continuously reads and prints voltage from the programmer.
         """
@@ -121,32 +142,43 @@ class HardwareManager:
 
             start_time = time.time()
             while True:
-                response_type, message = comm.get_response() # Wait for DATA: or OK:
+                response_type, message = comm.get_response()  # Wait for DATA: or OK:
                 if response_type == "DATA":
                     if logger.isEnabledFor(logging.DEBUG):
-                        logger.info(message) # Full log for debug
+                        logger.info(message)  # Full log for debug
                     else:
-                        print(f"\r{message}    ", end="") # Overwrite line for INFO
-                    
+                        print(f"\r{message}    ", end="")  # Overwrite line for INFO
+
                     if timeout_seconds and (time.time() - start_time > timeout_seconds):
-                        print() # Newline after continuous printing
-                        logger.info(f"{voltage_type_str} reading timed out after {timeout_seconds}s.")
-                        return True # Or False if timeout should be an error
-                    
-                    comm.send_ack() # Acknowledge data and request next
+                        print()  # Newline after continuous printing
+                        logger.info(
+                            f"{voltage_type_str} reading timed out after {timeout_seconds}s."
+                        )
+                        return True  # Or False if timeout should be an error
+
+                    comm.send_ack()  # Acknowledge data and request next
                 elif response_type == "OK":
-                    print() # Newline after continuous printing
-                    logger.info(f"{voltage_type_str} reading finished by programmer: {message or 'OK'}")
+                    print()  # Newline after continuous printing
+                    logger.info(
+                        f"{voltage_type_str} reading finished by programmer: {message or 'OK'}"
+                    )
                     return True
                 elif response_type == "ERROR":
                     print()
                     logger.error(f"Error reading {voltage_type_str}: {message}")
                     return False
-                else: # Timeout or unexpected
+                else:  # Timeout or unexpected
                     print()
-                    logger.error(f"Unexpected response or timeout reading {voltage_type_str}: {response_type} - {message}")
+                    logger.error(
+                        f"Unexpected response or timeout reading {voltage_type_str}: {response_type} - {message}"
+                    )
                     return False
-        except (ProgrammerNotFoundError, SerialError, SerialTimeoutError, HardwareOperationError) as e:
+        except (
+            ProgrammerNotFoundError,
+            SerialError,
+            SerialTimeoutError,
+            HardwareOperationError,
+        ) as e:
             print()
             logger.error(f"Failed to read {voltage_type_str} voltage: {e}")
             return False
@@ -156,8 +188,8 @@ class HardwareManager:
 
     def read_vpp_voltage(self, timeout_seconds: int | None = None) -> bool:
         """Reads the VPP voltage from the programmer."""
-        return self._read_voltage_loop(STATE_READ_VPP, "VPP", timeout_seconds)
+        return self._read_voltage_loop(COMMAND_READ_VPP, "VPP", timeout_seconds)
 
     def read_vpe_voltage(self, timeout_seconds: int | None = None) -> bool:
         """Reads the VPE voltage from the programmer."""
-        return self._read_voltage_loop(STATE_READ_VPE, "VPE", timeout_seconds)
+        return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds)

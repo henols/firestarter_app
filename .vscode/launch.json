@@ -17,13 +17,23 @@
             ]
         },
         {
-            "name": "Write ",
+            "name": "Write",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
                 "-v","write","W27C512","test_data/full_data.bin"
+            ]
+        },
+        {
+            "name": "Read",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "-v","read","W27C512","test_data/full_data.bin"
             ]
         },
         {

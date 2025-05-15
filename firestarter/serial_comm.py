@@ -23,6 +23,7 @@ DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
 
+EXPECTED_PREFIXES = ["OK:", "INFO:", "DEBUG:", "ERROR:", "WARN:", "DATA:"]
 
 class SerialError(Exception):
     """Custom exception for serial communication errors."""
@@ -86,7 +87,6 @@ class SerialCommunicator:
         if not self.is_connected():
             raise SerialError("Not connected.")
         try:
-            logger.debug(f"Sending data to {self.port_name}: {data_bytes}")
             written_bytes = self.connection.write(data_bytes)
             self.connection.flush()
             return written_bytes
@@ -114,28 +114,29 @@ class SerialCommunicator:
         except serial.SerialException as e:
             raise SerialError(f"Serial error reading from {self.port_name}: {e}") from e
 
-    def _read_filtered_bytes(self, byte_array: bytes) -> str | None:
-        res = [b for b in byte_array if 32 <= b <= 126]
-        return "".join(map(chr, res)) if res else None
-
+    
     def _parse_response_line(self, line_bytes: bytes) -> tuple[str | None, str | None]:
         if not line_bytes:
             return None, None
-
         # Filters a byte array to extract readable characters.
-        # res_bytes = bytes(b for b in line_bytes if 32 <= b <= 126)
-        # line_str = res_bytes.decode('ascii', errors='ignore') if res_bytes else ""
-        line_str = self._read_filtered_bytes(line_bytes)
+        res_bytes = bytes(b for b in line_bytes if 32 <= b <= 126)
+        line_str = res_bytes.decode("ascii", errors="ignore") if res_bytes else ""
+
         if not line_str:
             return None, None
 
-        for prefix in ["OK:", "INFO:", "DEBUG:", "ERROR:", "WARN:", "DATA:"]:
-            if line_str.startswith(prefix):
-                return prefix[:-1], line_str[len(prefix) :].strip()
-        return (
-            "UNKNOWN",
-            line_str,
-        )  # Should ideally not happen with well-behaved firmware
+        for prefix in EXPECTED_PREFIXES:
+            idx = line_str.find(prefix)
+            if idx != -1:  # Prefix found in the line
+                # The "effective" line starts from the found prefix
+                effective_line_str = line_str[idx:]
+                # The type is the prefix itself (minus the colon)
+                response_type = prefix[:-1]
+                # The message is everything after the prefix in the effective line
+                message_content = effective_line_str[len(prefix):].strip()
+                return response_type, message_content
+        return "Unknown", line_str
+        
 
     def _log_rurp_feedback(self, response_type: str | None, message: str | None):
         if response_type and message:
@@ -363,7 +364,7 @@ if __name__ == "__main__":
     )
 
     # Test data for finding programmer
-    test_command = {"state": STATE_FW_VERSION}
+    test_command = {"state": COMMAND_FW_VERSION}
 
     comm = None
     try:
@@ -392,14 +393,4 @@ if __name__ == "__main__":
     finally:
         if comm and comm.is_connected():
             comm.disconnect()
-    """
-    Filters a byte array to extract readable characters.
-
-    Args:
-        byte_array (bytes): Byte array to filter.
-
-    Returns:
-        str: Filtered and decoded string or None if no valid characters.
-    """
-    res = [b for b in byte_array if 32 <= b <= 126]
-    # return "".join(map(chr, res)) if res else None
+    

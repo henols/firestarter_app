@@ -28,6 +28,8 @@ import json
 import logging
 from pathlib import Path
 from firestarter.config import get_local_database, get_local_pin_maps
+from firestarter.constants import *
+
 
 # Module-level constants
 types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
@@ -296,7 +298,7 @@ class EpromDatabase:
             "name": ic.get("name"),
             "manufacturer": manufacturer,
             "memory-size": int(ic.get("memory-size", "0x0"), 16),
-            "can-erase": bool(ic.get("can-erase", False)),
+            # "can-erase": bool(ic.get("can-erase", False)),
             "type": determined_type,
             "pin-count": pin_count,
             "vpp": vpp,
@@ -310,6 +312,9 @@ class EpromDatabase:
 
         if "chip-id" in ic and ic["chip-id"] is not None:
             data["chip-id"] = int(ic["chip-id"], 16)
+
+        if ic.get("can-erase", False):
+            data["flags"] |= FLAG_CAN_ERASE
 
         if pin_count and pin_map_id:
             bus_config = self.get_bus_config(pin_count, pin_map_id)

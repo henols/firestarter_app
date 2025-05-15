@@ -190,7 +190,7 @@ class EpromSpecBuilder:
         output_data["type_str"] = chip_type_str
 
         if eprom_data.get("type") == 1: # EPROM
-            output_data["can_erase_str"] = str(eprom_data.get('can-erase', False))
+            output_data["can_erase_str"] = "true" if eprom_data.get('flags', 0) & 0x00000010 else "false"
 
         if eprom_data.get("flags", 0) & 0x00000008: # Assumes this flag means VPP is relevant
             output_data["vpp_str"] = f"{eprom_data.get('vpp', 'N/A')}v"
