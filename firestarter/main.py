@@ -190,10 +190,7 @@ def create_firnware_args(parser):
         "--board",
         type=str,
         default="uno",
-        choices=[
-            "uno",
-            "leoanardo",
-        ],
+        choices=["uno", "leonardo", ],
         help="Microcontroller board (optional), defaults to 'uno'.",
     )
     fw_parser.add_argument(
