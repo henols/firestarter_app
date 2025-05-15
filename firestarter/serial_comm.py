@@ -14,26 +14,33 @@ import json
 import logging
 
 from firestarter.constants import *
-from firestarter.config import ConfigManager # Assuming ConfigManager is refactored
+from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
 
 logger = logging.getLogger("SerialComm")
 rurp_logger = logging.getLogger("RURP")
 
 DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
-DEFAULT_RESPONSE_TIMEOUT = 10 # seconds for waiting for a specific response
-CONNECTION_STABILIZE_DELAY = 2.0 # seconds after opening port
+DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
+CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
+
 
 class SerialError(Exception):
     """Custom exception for serial communication errors."""
+
     pass
+
 
 class SerialTimeoutError(SerialError):
     """Custom exception for serial timeouts."""
+
     pass
+
 
 class ProgrammerNotFoundError(SerialError):
     """Custom exception when no programmer is found."""
+
     pass
+
 
 class SerialCommunicator:
     """
@@ -43,7 +50,13 @@ class SerialCommunicator:
     Includes a class method to find and connect to a compatible programmer
     across available serial ports.
     """
-    def __init__(self, port: str, baud_rate: int = int(BAUD_RATE), timeout: float = DEFAULT_SERIAL_TIMEOUT):
+
+    def __init__(
+        self,
+        port: str,
+        baud_rate: int = int(BAUD_RATE),
+        timeout: float = DEFAULT_SERIAL_TIMEOUT,
+    ):
         self.port_name = port
         self.baud_rate = baud_rate
         self.timeout = timeout
@@ -51,13 +64,15 @@ class SerialCommunicator:
         self.programmer_info: str | None = None
 
         try:
-            logger.debug(f"Attempting to connect to {self.port_name} at {self.baud_rate} baud.")
+            logger.debug(
+                f"Attempting to connect to {self.port_name} at {self.baud_rate} baud."
+            )
             self.connection = serial.Serial(
                 port=self.port_name,
                 baudrate=self.baud_rate,
                 timeout=self.timeout,
             )
-            time.sleep(CONNECTION_STABILIZE_DELAY) # Allow port to stabilize
+            time.sleep(CONNECTION_STABILIZE_DELAY)  # Allow port to stabilize
             logger.info(f"Successfully connected to {self.port_name}.")
         except (OSError, serial.SerialException) as e:
             logger.error(f"Failed to open serial port {self.port_name}: {e}")
@@ -71,6 +86,7 @@ class SerialCommunicator:
         if not self.is_connected():
             raise SerialError("Not connected.")
         try:
+            logger.debug(f"Sending data to {self.port_name}: {data_bytes}")
             written_bytes = self.connection.write(data_bytes)
             self.connection.flush()
             return written_bytes
@@ -85,6 +101,7 @@ class SerialCommunicator:
     def send_json_command(self, command_dict: dict) -> int:
         self._log_command_details(command_dict)
         json_data = json.dumps(command_dict, separators=(",", ":"))
+        # json_data = json.dumps(command_dict)
         return self.send_string(json_data)
 
     def read_line_bytes(self) -> bytes | None:
@@ -97,53 +114,78 @@ class SerialCommunicator:
         except serial.SerialException as e:
             raise SerialError(f"Serial error reading from {self.port_name}: {e}") from e
 
+    def _read_filtered_bytes(self, byte_array: bytes) -> str | None:
+        res = [b for b in byte_array if 32 <= b <= 126]
+        return "".join(map(chr, res)) if res else None
+
     def _parse_response_line(self, line_bytes: bytes) -> tuple[str | None, str | None]:
         if not line_bytes:
             return None, None
-        
-        # Filters a byte array to extract readable characters.
-        res_bytes = bytes(b for b in line_bytes if 32 <= b <= 126)
-        line_str = res_bytes.decode('ascii', errors='ignore') if res_bytes else ""
 
+        # Filters a byte array to extract readable characters.
+        # res_bytes = bytes(b for b in line_bytes if 32 <= b <= 126)
+        # line_str = res_bytes.decode('ascii', errors='ignore') if res_bytes else ""
+        line_str = self._read_filtered_bytes(line_bytes)
         if not line_str:
             return None, None
 
         for prefix in ["OK:", "INFO:", "DEBUG:", "ERROR:", "WARN:", "DATA:"]:
             if line_str.startswith(prefix):
-                return prefix[:-1], line_str[len(prefix):].strip()
-        return "UNKNOWN", line_str # Should ideally not happen with well-behaved firmware
+                return prefix[:-1], line_str[len(prefix) :].strip()
+        return (
+            "UNKNOWN",
+            line_str,
+        )  # Should ideally not happen with well-behaved firmware
 
     def _log_rurp_feedback(self, response_type: str | None, message: str | None):
         if response_type and message:
             level = logging.DEBUG
-            if response_type == "ERROR": level = logging.ERROR
-            elif response_type == "WARN": level = logging.WARNING
-            
+            if response_type == "ERROR":
+                level = logging.ERROR
+            elif response_type == "WARN":
+                level = logging.WARNING
+
             # Shorten prefix for debug, full for others
-            log_prefix = response_type[:1] if rurp_logger.isEnabledFor(logging.DEBUG) and response_type not in ["ERROR", "WARN"] else response_type
+            log_prefix = (
+                response_type[:1]
+                if rurp_logger.isEnabledFor(logging.DEBUG)
+                and response_type not in ["OK", "ERROR", "WARN"]
+                else response_type
+            )
             rurp_logger.log(level, f"{log_prefix}: {message}")
 
-    def get_response(self, timeout: float = DEFAULT_RESPONSE_TIMEOUT) -> tuple[str | None, str | None]:
+    def get_response(
+        self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
+    ) -> tuple[str | None, str | None]:
         if not self.is_connected():
             raise SerialError("Not connected.")
-        
+
         start_time = time.time()
         while time.time() - start_time < timeout:
             line_bytes = self.read_line_bytes()
             if line_bytes:
                 response_type, message = self._parse_response_line(line_bytes)
                 self._log_rurp_feedback(response_type, message)
-                if response_type and response_type not in ["INFO", "DEBUG"]: # Return significant responses
+                if response_type and response_type not in [
+                    "INFO",
+                    "DEBUG",
+                ]:  # Return significant responses
                     return response_type, message
-            time.sleep(0.01) # Small delay to prevent busy-waiting
+            time.sleep(0.01)  # Small delay to prevent busy-waiting
+        logger.warning(f"Timeout waiting for a response from {self.port_name}.")
+        raise SerialTimeoutError(
+            f"Timeout waiting for a significant response from {self.port_name}."
+        )
 
-        raise SerialTimeoutError(f"Timeout waiting for a significant response from {self.port_name}.")
-
-    def expect_ok(self, timeout: float = DEFAULT_RESPONSE_TIMEOUT) -> tuple[bool, str | None]:
-        response_type, message = self.get_response(timeout)
-        if response_type == "OK":
-            return True, message
-        return False, message # Message will contain error or other non-OK info
+    def expect_ok(
+        self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
+    ) -> tuple[bool, str | None]:
+        while True:
+            response_type, message = self.get_response(timeout)
+            if response_type == "OK":
+                return True, message
+            elif response_type == "ERROR":
+                return False, message
 
     def send_ack(self):
         self.send_string("OK")
@@ -151,25 +193,29 @@ class SerialCommunicator:
     def consume_remaining_input(self, timeout: float = 0.5):
         if not self.is_connected():
             return
-        
+
         start_time = time.time()
         # Temporarily set a short timeout for consuming
         original_timeout = self.connection.timeout
-        self.connection.timeout = 0.05 
+        self.connection.timeout = 0.05
         try:
             while time.time() - start_time < timeout:
                 if self.connection.in_waiting > 0:
                     line_bytes = self.read_line_bytes()
                     if line_bytes:
                         response_type, message = self._parse_response_line(line_bytes)
-                        self._log_rurp_feedback(response_type, message) # Log what's being consumed
-                        start_time = time.time() # Reset timeout if we are still getting data
-                    else: # No more data in buffer or partial line
-                        break 
-                else: # No data in waiting
+                        self._log_rurp_feedback(
+                            response_type, message
+                        )  # Log what's being consumed
+                        start_time = (
+                            time.time()
+                        )  # Reset timeout if we are still getting data
+                    else:  # No more data in buffer or partial line
+                        break
+                else:  # No data in waiting
                     break
         finally:
-            self.connection.timeout = original_timeout # Restore original timeout
+            self.connection.timeout = original_timeout  # Restore original timeout
 
     def disconnect(self):
         if self.is_connected():
@@ -188,18 +234,27 @@ class SerialCommunicator:
         flags = command_dict.get("flags", 0)
         if flags:
             flag_details = []
-            if flags & FLAG_FORCE: flag_details.append("Force")
-            if flags & FLAG_CAN_ERASE: flag_details.append("CanErase")
-            if flags & FLAG_SKIP_ERASE: flag_details.append("SkipErase")
-            if flags & FLAG_SKIP_BLANK_CHECK: flag_details.append("SkipBlankCheck")
-            if flags & FLAG_VPE_AS_VPP: flag_details.append("VPEasVPP")
-            if flags & FLAG_CHIP_ENABLE: flag_details.append("ChipEnable")
-            if flags & FLAG_OUTPUT_ENABLE: flag_details.append("OutputEnable")
+            if flags & FLAG_FORCE:
+                flag_details.append("Force")
+            if flags & FLAG_CAN_ERASE:
+                flag_details.append("CanErase")
+            if flags & FLAG_SKIP_ERASE:
+                flag_details.append("SkipErase")
+            if flags & FLAG_SKIP_BLANK_CHECK:
+                flag_details.append("SkipBlankCheck")
+            if flags & FLAG_VPE_AS_VPP:
+                flag_details.append("VPEasVPP")
+            if flags & FLAG_CHIP_ENABLE:
+                flag_details.append("ChipEnable")
+            if flags & FLAG_OUTPUT_ENABLE:
+                flag_details.append("OutputEnable")
             if flag_details:
                 logger.debug(f"  Flags set: {', '.join(flag_details)} (0x{flags:02X})")
 
     @staticmethod
-    def _list_potential_ports(preferred_port: str | None = None, config_manager: ConfigManager | None = None) -> list[str]:
+    def _list_potential_ports(
+        preferred_port: str | None = None, config_manager: ConfigManager | None = None
+    ) -> list[str]:
         ports = []
         # 1. Add preferred_port if specified
         if preferred_port:
@@ -214,19 +269,30 @@ class SerialCommunicator:
         # 3. Scan system ports
         system_ports = serial.tools.list_ports.comports()
         for p in system_ports:
-            if p.device not in ports: # Avoid duplicates
+            if p.device not in ports:  # Avoid duplicates
                 # Common keywords for Arduino, FTDI, CH340, etc.
-                if (p.manufacturer and ("Arduino" in p.manufacturer or "FTDI" in p.manufacturer or "CH340" in p.manufacturer)) or \
-                   (p.description and "USB Serial" in p.description):
+                if (
+                    p.manufacturer
+                    and (
+                        "Arduino" in p.manufacturer
+                        or "FTDI" in p.manufacturer
+                        or "CH340" in p.manufacturer
+                    )
+                ) or (p.description and "USB Serial" in p.description):
                     ports.append(p.device)
-        
+
         logger.debug(f"Potential programmer ports found: {ports}")
         return ports
 
     @classmethod
-    def find_and_connect(cls, command_to_send: dict, preferred_port: str | None = None, baud_rate: int = int(BAUD_RATE)) -> "SerialCommunicator":
-        config_manager = ConfigManager() # Get singleton instance
-        
+    def find_and_connect(
+        cls,
+        command_to_send: dict,
+        preferred_port: str | None = None,
+        baud_rate: int = int(BAUD_RATE),
+    ) -> "SerialCommunicator":
+        config_manager = ConfigManager()  # Get singleton instance
+
         potential_ports = cls._list_potential_ports(preferred_port, config_manager)
         if not potential_ports:
             raise ProgrammerNotFoundError("No potential serial ports found.")
@@ -235,9 +301,11 @@ class SerialCommunicator:
             communicator = None
             try:
                 logger.info(f"Attempting to connect to programmer on {port_name}...")
-                communicator = cls(port=port_name, baud_rate=baud_rate) # This tries to open the port
+                communicator = cls(
+                    port=port_name, baud_rate=baud_rate
+                )  # This tries to open the port
                 if not communicator.is_connected():
-                    continue # Try next port
+                    continue  # Try next port
 
                 communicator.send_json_command(command_to_send)
                 is_ok, msg = communicator.expect_ok()
@@ -246,17 +314,21 @@ class SerialCommunicator:
                     communicator.programmer_info = msg
                     logger.info(f"Programmer found on {port_name}: {msg}")
                     if config_manager:
-                        config_manager.set_value("port", port_name) # Save successful port
+                        config_manager.set_value(
+                            "port", port_name
+                        )  # Save successful port
                     return communicator
                 else:
                     logger.warning(f"Port {port_name} responded but not with OK: {msg}")
-                    communicator.disconnect() # Clean up before trying next port
+                    communicator.disconnect()  # Clean up before trying next port
 
-            except SerialError as e: # Includes SerialTimeoutError from expect_ok
-                logger.debug(f"Failed to establish valid communication with {port_name}: {e}")
+            except SerialError as e:  # Includes SerialTimeoutError from expect_ok
+                logger.debug(
+                    f"Failed to establish valid communication with {port_name}: {e}"
+                )
                 if communicator:
                     communicator.disconnect()
-            except Exception as e: # Catch any other unexpected errors during probing
+            except Exception as e:  # Catch any other unexpected errors during probing
                 logger.error(f"Unexpected error while probing {port_name}: {e}")
                 if communicator:
                     communicator.disconnect()
@@ -270,29 +342,39 @@ class SerialCommunicator:
         try:
             data = self.connection.read(num_bytes)
             if len(data) < num_bytes:
-                logger.warning(f"Expected {num_bytes} bytes, but received {len(data)} from {self.port_name}")
+                logger.warning(
+                    f"Expected {num_bytes} bytes, but received {len(data)} from {self.port_name}"
+                )
             return data
         except serial.SerialTimeoutException as e:
-            raise SerialTimeoutError(f"Timeout reading data block from {self.port_name}: {e}") from e
+            raise SerialTimeoutError(
+                f"Timeout reading data block from {self.port_name}: {e}"
+            ) from e
         except serial.SerialException as e:
-            raise SerialError(f"Serial error reading data block from {self.port_name}: {e}") from e
+            raise SerialError(
+                f"Serial error reading data block from {self.port_name}: {e}"
+            ) from e
 
 
 # Example usage (for testing this module directly)
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s")
-    
+    logging.basicConfig(
+        level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s"
+    )
+
     # Test data for finding programmer
-    test_command = {"state": STATE_FW_VERSION} 
-    
+    test_command = {"state": STATE_FW_VERSION}
+
     comm = None
     try:
         # To test, you might need to specify a port if auto-detection is tricky
         # comm = SerialCommunicator.find_and_connect(test_command, preferred_port="/dev/ttyACM0")
         comm = SerialCommunicator.find_and_connect(test_command)
-        
-        logger.info(f"Successfully connected to programmer: {comm.programmer_info} on {comm.port_name}")
-        
+
+        logger.info(
+            f"Successfully connected to programmer: {comm.programmer_info} on {comm.port_name}"
+        )
+
         # Example: Send another command after connection
         # comm.send_json_command({"state": STATE_HW_VERSION})
         # ok, msg = comm.expect_ok()
