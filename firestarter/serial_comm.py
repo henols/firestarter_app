@@ -89,6 +89,7 @@ class SerialCommunicator:
         try:
             written_bytes = self.connection.write(data_bytes)
             self.connection.flush()
+            logger.debug(f"Sent {written_bytes} bytes to {self.port_name}.")
             return written_bytes
         except serial.SerialTimeoutException as e:
             raise SerialTimeoutError(f"Timeout writing to {self.port_name}: {e}") from e
@@ -96,6 +97,7 @@ class SerialCommunicator:
             raise SerialError(f"Serial error writing to {self.port_name}: {e}") from e
 
     def send_string(self, data_string: str, encoding: str = "ascii") -> int:
+        logger.debug(f"Sending string: {data_string}")
         return self.send_bytes(data_string.encode(encoding))
 
     def send_json_command(self, command_dict: dict) -> int:
@@ -121,7 +123,8 @@ class SerialCommunicator:
         # Filters a byte array to extract readable characters.
         res_bytes = bytes(b for b in line_bytes if 32 <= b <= 126)
         line_str = res_bytes.decode("ascii", errors="ignore") if res_bytes else ""
-
+        logger.debug(f"Received bytes: {line_bytes}")
+        logger.debug(f"Received line: {line_str}")
         if not line_str:
             return None, None
 
@@ -135,7 +138,7 @@ class SerialCommunicator:
                 # The message is everything after the prefix in the effective line
                 message_content = effective_line_str[len(prefix):].strip()
                 return response_type, message_content
-        return "Unknown", line_str
+        return None, line_str
         
 
     def _log_rurp_feedback(self, response_type: str | None, message: str | None):
@@ -307,7 +310,7 @@ class SerialCommunicator:
                 )  # This tries to open the port
                 if not communicator.is_connected():
                     continue  # Try next port
-
+                communicator.                consume_remaining_input()
                 communicator.send_json_command(command_to_send)
                 is_ok, msg = communicator.expect_ok()
 
@@ -378,11 +381,11 @@ if __name__ == "__main__":
 
         # Example: Send another command after connection
         # comm.send_json_command({"state": STATE_HW_VERSION})
-        # ok, msg = comm.expect_ok()
-        # if ok:
-        #    logger.info(f"Hardware version: {msg}")
-        # else:
-        #    logger.error(f"Failed to get hardware version: {msg}")
+        ok, msg = comm.expect_ok()
+        if ok:
+           logger.info(f"Hardware version: {msg}")
+        else:
+           logger.error(f"Failed to get hardware version: {msg}")
 
     except ProgrammerNotFoundError:
         logger.error("Test failed: Could not find the programmer.")

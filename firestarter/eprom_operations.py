@@ -116,7 +116,7 @@ class EpromOperator:
         eprom_data = self._get_eprom_data_for_operation(eprom_name)
         if not eprom_data:
             return None, 0
-
+        logger.debug(eprom_data)
         command_dict = eprom_data.copy()  # Work with a copy for the command
         command_dict["state"] = cmd
         # Combine base flags from EPROM data with operation-specific flags

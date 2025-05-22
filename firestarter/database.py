@@ -305,7 +305,8 @@ class EpromDatabase:
             "vcc": vcc,
             "pulse-delay": int(ic.get("pulse-delay", "0x0"), 16),
             "verified": bool(ic.get("verified", False)),
-            "flags": flags,
+            "info-flags": flags,
+            "flags": 0,
             "protocol-id": protocol_id,
             "pin-map": pin_map_id,
         }
@@ -362,7 +363,7 @@ class EpromDatabase:
             data = self._map_data(config, manufacturer)
             if not full:
                 # Prune fields for concise output
-                keys_to_pop = ["manufacturer", "verified", "pin-map", "name", "flags", "protocol-id", "vcc"]
+                keys_to_pop = ["manufacturer", "verified", "pin-map", "name",  "protocol-id", "vcc"]
                 for key in keys_to_pop:
                     if key in data:
                         data.pop(key)
