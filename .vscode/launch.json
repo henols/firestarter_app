@@ -33,7 +33,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "-v","read","W27C512","test_data/full_data.bin"
+                "-v","read","W27C512","full_data.bin"
             ]
         },
         {
