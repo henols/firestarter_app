@@ -176,8 +176,8 @@ class EpromOperator:
 
         start_time = time.time()
         operation_name = [k for k, v in globals().items() if v == cmd][0].replace(
-            "STATE_", ""
-        )  # Get state name
+            "COMMAND_", ""
+        )  # Get command name
         logger.info(
             f"{success_log_msg or f'Performing {operation_name} for {eprom_name.upper()}'}"
         )
@@ -692,7 +692,7 @@ class EpromOperator:
 
         command_eprom_data, buffer_size = self._setup_operation(
             eprom_name,
-            COMMAND_READ,  # Dev read uses normal read state
+            COMMAND_READ,  # Dev read uses normal read command
             operation_flags,
             address_str,
             size_to_read_str,
@@ -741,3 +741,64 @@ class EpromOperator:
             return False
         finally:
             self._disconnect_programmer()
+
+
+# Example usage (for testing this module directly)
+if __name__ == "__main__":
+    # Setup basic logging to see output from the EpromOperator and other modules
+    logging.basicConfig(
+        level=logging.DEBUG,  # Use logging.INFO for less verbose output
+        format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s",
+    )
+
+    logger.info("Starting EPROM operation test...")
+
+    # Initialize the EPROM database (it's a singleton)
+    try:
+        db = EpromDatabase()
+        logger.debug("EpromDatabase initialized.")
+    except Exception as e:
+        logger.error(f"Failed to initialize EpromDatabase: {e}")
+        exit(1)
+
+    # Create an instance of the EpromOperator
+    eprom_op = EpromOperator(db)
+    logger.debug("EpromOperator initialized.")
+
+    # Define the EPROM to read and the output file
+    eprom_name_to_read = "W27C512"
+    # You can specify an output file, or let it default (e.g., "W27C512.bin")
+    custom_output_file = f"{eprom_name_to_read}_test_read.bin"
+
+    logger.info(f"Attempting to read EPROM '{eprom_name_to_read}' to '{custom_output_file}'...")
+
+    # Perform the read operation
+    # We'll use default flags, read the entire EPROM from the beginning.
+    try:
+        success = eprom_op.read_eprom(
+            eprom_name=eprom_name_to_read,
+            output_file=custom_output_file,
+            # operation_flags=0, # Default
+            # address_str=None,  # Default (start of EPROM)
+            # size_str=None      # Default (full size of EPROM)
+        )
+
+        if success:
+            logger.info(
+                f"Successfully read '{eprom_name_to_read}' and saved to '{custom_output_file}'."
+            )
+        else:
+            logger.error(f"Failed to read EPROM '{eprom_name_to_read}'.")
+
+    except ProgrammerNotFoundError:
+        logger.error(
+            "Programmer not found. Please ensure it's connected and drivers are installed."
+        )
+    except SerialError as se:
+        logger.error(f"A serial communication error occurred: {se}")
+    except EpromOperationError as eoe:
+        logger.error(f"An EPROM operation error occurred: {eoe}")
+    except Exception as e:
+        logger.error(f"An unexpected error occurred during the read operation: {e}")
+    finally:
+        logger.info("EPROM operation test finished.")

@@ -25,6 +25,7 @@ CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
 
 EXPECTED_PREFIXES = ["OK:", "INFO:", "DEBUG:", "ERROR:", "WARN:", "DATA:"]
 
+
 class SerialError(Exception):
     """Custom exception for serial communication errors."""
 
@@ -116,15 +117,14 @@ class SerialCommunicator:
         except serial.SerialException as e:
             raise SerialError(f"Serial error reading from {self.port_name}: {e}") from e
 
-    
     def _parse_response_line(self, line_bytes: bytes) -> tuple[str | None, str | None]:
         if not line_bytes:
             return None, None
         # Filters a byte array to extract readable characters.
         res_bytes = bytes(b for b in line_bytes if 32 <= b <= 126)
         line_str = res_bytes.decode("ascii", errors="ignore") if res_bytes else ""
-        logger.debug(f"Received bytes: {line_bytes}")
-        logger.debug(f"Received line: {line_str}")
+        # logger.debug(f"Received bytes: {line_bytes}")
+        # logger.debug(f"Received line: {line_str}")
         if not line_str:
             return None, None
 
@@ -136,10 +136,9 @@ class SerialCommunicator:
                 # The type is the prefix itself (minus the colon)
                 response_type = prefix[:-1]
                 # The message is everything after the prefix in the effective line
-                message_content = effective_line_str[len(prefix):].strip()
+                message_content = effective_line_str[len(prefix) :].strip()
                 return response_type, message_content
         return None, line_str
-        
 
     def _log_rurp_feedback(self, response_type: str | None, message: str | None):
         if response_type and message:
@@ -175,6 +174,7 @@ class SerialCommunicator:
                     "DEBUG",
                 ]:  # Return significant responses
                     return response_type, message
+                start_time = time.time()
             time.sleep(0.01)  # Small delay to prevent busy-waiting
         logger.warning(f"Timeout waiting for a response from {self.port_name}.")
         raise SerialTimeoutError(
@@ -310,7 +310,7 @@ class SerialCommunicator:
                 )  # This tries to open the port
                 if not communicator.is_connected():
                     continue  # Try next port
-                communicator.                consume_remaining_input()
+                communicator.consume_remaining_input()
                 communicator.send_json_command(command_to_send)
                 is_ok, msg = communicator.expect_ok()
 
@@ -383,9 +383,9 @@ if __name__ == "__main__":
         # comm.send_json_command({"state": STATE_HW_VERSION})
         ok, msg = comm.expect_ok()
         if ok:
-           logger.info(f"Hardware version: {msg}")
+            logger.info(f"Hardware version: {msg}")
         else:
-           logger.error(f"Failed to get hardware version: {msg}")
+            logger.error(f"Failed to get hardware version: {msg}")
 
     except ProgrammerNotFoundError:
         logger.error("Test failed: Could not find the programmer.")
@@ -396,4 +396,3 @@ if __name__ == "__main__":
     finally:
         if comm and comm.is_connected():
             comm.disconnect()
-    

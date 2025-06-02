@@ -234,7 +234,7 @@ class EpromSpecBuilder:
         if protocol_id is not None:
             output_data["protocol_info"] = self._get_protocol_info_structured(protocol_id)
 
-        flags = eprom_data.get("flags")
+        flags = eprom_data.get("info-flags")
         if flags is not None:
             properties = self._interpret_flags(flags)
             output_data["flags_info"] = {

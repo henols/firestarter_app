@@ -363,10 +363,13 @@ class EpromDatabase:
             data = self._map_data(config, manufacturer)
             if not full:
                 # Prune fields for concise output
-                keys_to_pop = ["manufacturer", "verified", "pin-map", "name",  "protocol-id", "vcc"]
+                keys_to_pop = ["manufacturer", "verified", "pin-map", "name",  "protocol-id", "vcc", "info-flags"]
                 for key in keys_to_pop:
                     if key in data:
                         data.pop(key)
+            else:
+                if "flags" in data:
+                        data.pop("flags")
             return data
         return None
 
