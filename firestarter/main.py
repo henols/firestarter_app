@@ -301,7 +301,9 @@ def create_dev_args(parser):
     create_oe_ce_args(reg_parser)
     reg_parser.add_argument(
         "-f", "--firestarter", action="store_true", help="""Using Firestarter register definition.
-By using the firestarter argumet the control register will be remaped to match the hardware revision of the RURP board.
+By using the firestarter argumet, 
+the control register will be remaped to match 
+the hardware revision of the RURP sheild.
 0x100 - VPE_TO_VPP
 0x080 - REGULATOR
 0x040 - READ_WRITE
