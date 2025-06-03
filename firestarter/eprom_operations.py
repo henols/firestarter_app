@@ -264,7 +264,7 @@ def setup_command(eprom_name, state, flags=0, address=None):
     if not eprom:
         return None, None, None
 
-    eprom["state"] = state
+    eprom["cmd"] = state
     eprom["flags"] |= flags
 
     if address:
@@ -280,7 +280,7 @@ def setup_read(eprom_name, flags=0, address=None, size=None):
         if not eprom:
             return None, None, None
 
-        eprom["state"] = STATE_READ
+        eprom["cmd"] = STATE_READ
 
         read_address = 0
         if address:

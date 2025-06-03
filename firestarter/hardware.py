@@ -30,7 +30,7 @@ def hardware():
         int: 0 if successful, 1 otherwise.
     """
     logger.info("Reading hardware revision...")
-    data = {"state": STATE_HW_VERSION}
+    data = {"cmd": STATE_HW_VERSION}
 
     connection, msg = find_programmer(data)
     if not connection:
@@ -49,7 +49,7 @@ def hardware():
 
 
 def config(rev=None, r1=None, r2=None):
-    data = {"state": STATE_CONFIG}
+    data = {"cmd": STATE_CONFIG}
     if not rev == None:
         if rev == -1:
             logger.info("Disabling hardware revision override")
@@ -96,7 +96,7 @@ def read_voltage(state, timeout=None):
         type = "VPP"
     logger.info(f"Reading {type} voltage")
 
-    data = {"state": state}
+    data = {"cmd": state}
     connection, msg = find_programmer(data)
     if not connection:
         return 1
