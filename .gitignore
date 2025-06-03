@@ -23,3 +23,5 @@ fires/
 *.o64
 
 tools/__pycache__/
+
+anything.txt

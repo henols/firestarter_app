@@ -17,7 +17,7 @@
             ]
         },
         {
-            "name": "Write ",
+            "name": "Write",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
@@ -27,13 +27,33 @@
             ]
         },
         {
+            "name": "Read",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "-v","read","W27C512","full_data.bin"
+            ]
+        },
+        {
             "name": "Install FW ",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "-v","fw","-i"
+                "-v","fw","-i", "-p","/dev/ttyACM0"
+            ]
+        },
+        {
+            "name": "Info",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "-v","info","w27c512"
             ]
         },
 
