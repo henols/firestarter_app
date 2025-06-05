@@ -10,6 +10,8 @@ Main CLI Handler for Firestarter Project
 
 import sys
 import argparse
+from  argparse import RawTextHelpFormatter
+
 import signal
 import logging
 import platform
@@ -255,10 +257,11 @@ def create_config_args(parser):
         help="Set R14/R15 resistance, resistors connected to GND",
     )
 
-
+dev_epilog="USR button will break command and return."
 def create_dev_args(parser):
     dev_parser = parser.add_parser(
         "dev", help="Debug command for development purposes."
+        
     )
 
     subparsers = dev_parser.add_subparsers(dest="dev_command", required=True)
@@ -279,16 +282,34 @@ def create_dev_args(parser):
         action="store_true",
         help="Force read, even if the chip id doesn't match.",
     )
+     
     reg_parser = subparsers.add_parser(
-        "reg", help="Direct access to registers: MSB, LSB and control register."
+        "reg", help="Direct access to registers: MSB, LSB and control register.",  formatter_class=RawTextHelpFormatter
+        , epilog=dev_epilog
     )
     reg_parser.add_argument("msb", type=str, help="MSB in dec/hex")
     reg_parser.add_argument("lsb", type=str, help="LSB in dec/hex")
     reg_parser.add_argument("ctrl", type=str, help="Control register in dec/hex")
     create_oe_ce_args(reg_parser)
+    reg_parser.add_argument(
+        "-f", "--firestarter", action="store_true", help="""Using Firestarter register definition.
+By using the firestarter argumet, 
+the control register will be remaped to match 
+the hardware revision of the RURP sheild.
+0x100 - VPE_TO_VPP
+0x080 - REGULATOR
+0x040 - READ_WRITE
+0x020 - ADDRESS_LINE_18
+0x010 - ADDRESS_LINE_17
+0x008 - P1_VPP_ENABLE
+0x004 - VPE_ENABLE
+0x002 - A9_VPP_ENABLE
+0x001 - ADDRESS_LINE_16"""
+    )
 
     addr_parser = subparsers.add_parser(
-        "addr", help="Direct access to address lines and control register."
+        "addr", help="Direct access to address lines and control register."        , epilog=dev_epilog
+
     )
     add_eprom_completer(addr_parser)
     addr_parser.add_argument("address", type=str, help="Address in dec/hex")
@@ -296,25 +317,19 @@ def create_dev_args(parser):
 
 
 def create_oe_ce_args(parser):
-    oe_group = parser.add_argument_group(
-        "Output enable", description="Controls OE pin, defaults to output enable."
-    ).add_mutually_exclusive_group()
-    # oe_group.add_argument(
-    #     "-o", "--output-enable", action="store_true", help="Output, pulls OE pin low."
-    # )
+    # oe_group = parser.add_argument_group(
+    #     "Output enable", description="Controls OE pin, defaults to output enable."
+    # ).add_mutually_exclusive_group()
 
-    oe_group.add_argument(
+    parser.add_argument(
         "-i", "--input-enable", action="store_true", help="Input, pulls OE pin high."
     )
 
-    ce_group = parser.add_argument_group(
-        "Chip enable", description="Controls CE pin, defaults to chip enable."
-    ).add_mutually_exclusive_group()
-    # ce_group.add_argument(
-    #     "-e", "--chip-enable", action="store_true", help="Enable, pulls CE pin low."
-    # )
+    # ce_group = parser.add_argument_group(
+    #     "Chip enable", description="Controls CE pin, defaults to chip enable."
+    # ).add_mutually_exclusive_group()
 
-    ce_group.add_argument(
+    parser.add_argument(
         "-d", "--chip-disable", action="store_true", help="Disable, pulls CE pin high."
     )
 
