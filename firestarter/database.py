@@ -1,23 +1,42 @@
 """
 Project Name: Firestarter
 Copyright (c) 2024 Henrik Olsson
-
 Permission is hereby granted under MIT license.
-"""
 
+This module handles the EPROM and pin map database for the Firestarter application.
+It is responsible for:
+- Loading EPROM definitions from JSON files (a base set and user overrides).
+- Loading pin map configurations from JSON files (base and user overrides).
+- Merging these data sources.
+- Providing functions to query EPROM information, search for EPROMs,
+  and retrieve specific configurations.
+- Translating generic EPROM pinouts to the RURP (Relatively Universal ROM Programmer) hardware-specific bus configuration.
+
+The database is initialized once when the EpromDatabase class is first instantiated.
+Subsequent instantiations will return the same initialized instance.
+
+Key data structures:
+- `self.proms`: A dictionary storing EPROM data, keyed by manufacturer.
+- `self.pin_maps`: A dictionary storing pin map configurations, keyed by pin count and then by pin map variant/name.
+
+Module-level constants:
+- `pin_conversions`: A hardcoded dictionary mapping standard EPROM pin numbers
+  (for 24, 28, 32-pin DIP packages) to the RURP's internal address/control lines.
+"""
 import os
 import json
 import logging
-
 from pathlib import Path
-
 from firestarter.config import get_local_database, get_local_pin_maps
+from firestarter.constants import *
 
+
+# Module-level constants
 types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
 ROM_CE = 100
-
 # eprom pins to rurp conversion
 pin_conversions = {
+    # Maps EPROM pin number to RURP hardware line number
     24: {
         1: 7,
         2: 6,
@@ -78,258 +97,369 @@ pin_conversions = {
 logger = logging.getLogger("Database")
 
 
-def read_config(filename):
+def _read_config_file(filename: str) -> dict:
+    """
+    Reads a JSON configuration file from the 'data' subdirectory.
+    Helper function for use within this module.
+    """
     path = Path(os.path.dirname(__file__))
-    filepath = path / Path("data") / filename
-
-    with filepath.open("rt") as file:
-        config = json.load(file)
-    return config
-
-
-inited = False
-
-
-def init_db():
-    global inited
-    if inited:
-        return
-    inited = True
-    global proms
-    global pin_maps
-    proms = read_config("database_generated.json")
-    proms_man = read_config("database_overrides.json")
-    proms = merge_databases(proms, proms_man)
-    local_db = get_local_database()
-    if local_db:
-        proms = merge_databases(proms, local_db)
-    pin_maps = read_config("pin-maps.json")
-    local_pin_maps = get_local_pin_maps()
-    if local_pin_maps:
-        pin_maps = merge_pin_maps(pin_maps, local_pin_maps)
+    filepath = path / "data" / filename
+    try:
+        with filepath.open("rt") as file:
+            config = json.load(file)
+        return config
+    except FileNotFoundError:
+        logger.error(f"Configuration file not found: {filepath}")
+        return {}
+    except json.JSONDecodeError:
+        logger.error(f"Error decoding JSON from file: {filepath}")
+        return {}
 
 
-def merge_databases(db, manual_db):
-    for key, manual_items in manual_db.items():
-        if key in db:
-            # Update or add items for an existing key
-            existing_names = {item["name"]: item for item in db[key]}
-            for manual_item in manual_items:
-                if manual_item["name"] in existing_names:
-                    # Replace existing item
-                    existing_names[manual_item["name"]].update(manual_item)
+class EpromDatabase:
+    """
+    Manages the EPROM and pin map database for the Firestarter application.
+    It loads, merges, and provides access to EPROM definitions and pin map
+    configurations. Implemented as a singleton to ensure a single, consistent
+    database instance throughout the application.
+    """
+    _instance = None
+    _initialized = False
+
+    def __new__(cls, *args, **kwargs):
+        if not cls._instance:
+            cls._instance = super(EpromDatabase, cls).__new__(cls, *args, **kwargs)
+        return cls._instance
+
+    def __init__(self):
+        if EpromDatabase._initialized:
+            return
+
+        self.proms = {}
+        self.pin_maps = {}
+        self._initialize_database_core()
+        EpromDatabase._initialized = True
+        logger.debug("EpromDatabase initialized.")
+
+    def _initialize_database_core(self):
+        """
+        Loads and merges EPROM and pin map data.
+        """
+        # Load base EPROMs and overrides
+        base_proms = _read_config_file("database_generated.json")
+        override_proms = _read_config_file("database_overrides.json")
+        self.proms = self._merge_databases(base_proms, override_proms)
+
+        # Load and merge local user EPROM database
+        local_db = get_local_database()
+        if local_db:
+            self.proms = self._merge_databases(self.proms, local_db)
+
+        # Load base pin maps
+        self.pin_maps = _read_config_file("pin-maps.json")
+
+        # Load and merge local user pin maps
+        local_pin_maps = get_local_pin_maps()
+        if local_pin_maps:
+            self.pin_maps = self._merge_pin_maps(self.pin_maps, local_pin_maps)
+
+    def _merge_databases(self, db: dict, manual_db: dict) -> dict:
+        """
+        Merges two EPROM database dictionaries. `manual_db` takes precedence.
+        Modifies and returns the `db` dictionary.
+        """
+        for key, manual_items in manual_db.items():
+            if key in db:
+                # Update or add items for an existing key
+                existing_names = {item["name"]: item for item in db[key]}
+                for manual_item in manual_items:
+                    if manual_item["name"] in existing_names:
+                        # Replace existing item
+                        existing_names[manual_item["name"]].update(manual_item)
+                    else:
+                        # Add new item
+                        db[key].append(manual_item)
+            else:
+                # Add entirely new key
+                db[key] = manual_items
+        return db
+
+    def _merge_pin_maps(self, pin_maps_base: dict, manual_pin_map: dict) -> dict:
+        """
+        Merges two pin map configuration dictionaries. `manual_pin_map` takes precedence.
+        Modifies and returns the `pin_maps_base` dictionary.
+        """
+        for key, sub_map in manual_pin_map.items():
+            if key not in pin_maps_base:
+                # Add new top-level key entirely if it doesn't exist
+                pin_maps_base[key] = sub_map
+            else:
+                # Replace sub-objects in the existing key
+                for sub_key, sub_value in sub_map.items():
+                    pin_maps_base[key][sub_key] = sub_value  # Replace existing or add new
+        return pin_maps_base
+
+    def get_pin_map(self, pins: int, pin_map_id: str):
+        """
+        Retrieves a specific pin map configuration.
+        """
+        pins_key = str(pins)
+        pin_map_key = str(pin_map_id)
+        if pins_key in self.pin_maps and pin_map_key in self.pin_maps[pins_key]:
+            pin_map_data = self.pin_maps[pins_key][pin_map_key]
+            return pin_map_data if "holder" not in pin_map_data else None
+        return None
+
+    def get_bus_config(self, pins: int, variant: str):
+        """
+        Generates the RURP-specific bus configuration from a generic pin map.
+        """
+        # This specific condition was in the original code.
+        if pins == 28 and str(variant) == "16":
+            return None
+
+        pin_map_data = self.get_pin_map(pins, variant)
+        if not pin_map_data:
+            return None
+
+        map_config = {}
+        bus = []
+        if "address-bus-pins" in pin_map_data and pins in pin_conversions:
+            for pin in pin_map_data["address-bus-pins"]:
+                if pin in pin_conversions[pins]:
+                    bus.append(pin_conversions[pins][pin])
                 else:
-                    # Add new item
-                    db[key].append(manual_item)
+                    logger.warning(f"Pin {pin} not in pin_conversions for {pins}-pin EPROM during bus config.")
+            map_config["bus"] = bus
         else:
-            # Add entirely new key
-            db[key] = manual_items
-    return db
+            logger.warning(f"Missing 'address-bus-pins' or pin_conversions for {pins}-pin EPROM.")
+            return None # Cannot form bus without address pins
+
+        if "rw-pin" in pin_map_data and pin_map_data["rw-pin"] in pin_conversions.get(pins, {}):
+            map_config["rw-pin"] = pin_conversions[pins][pin_map_data["rw-pin"]]
+        if "oe-pin" in pin_map_data and pin_map_data["oe-pin"] in pin_conversions.get(pins, {}):
+            map_config["oe-pin"] = pin_conversions[pins][pin_map_data["oe-pin"]]
+        if "vpp-pin" in pin_map_data and pin_map_data["vpp-pin"] in pin_conversions.get(pins, {}):
+            map_config["vpp-pin"] = pin_conversions[pins][pin_map_data["vpp-pin"]]
+        
+        return map_config
+
+    def _map_data(self, ic: dict, manufacturer: str) -> dict:
+        """
+        Transforms raw EPROM data from the JSON structure into a more processed
+        and usable dictionary format for the application.
+
+        This includes converting string hex values to integers, determining EPROM type,
+        extracting voltages, and attaching the RURP-specific bus configuration.
+
+        """
+        pin_count = ic.get("pin-count")
+        vpp = 0
+        vcc = 0
+        if "voltages" in ic:
+            voltages = ic["voltages"]
+            if "vpp" in voltages and voltages["vpp"] is not None:
+                try:
+                    vpp = int(voltages["vpp"])
+                except ValueError:
+                    logger.warning(f"Invalid VPP value for {ic.get('name')}: {voltages['vpp']}")
+            if "vcc" in voltages and voltages["vcc"] is not None:
+                try:
+                    vcc = float(voltages["vcc"])
+                except ValueError:
+                    logger.warning(f"Invalid VCC value for {ic.get('name')}: {voltages['vcc']}")
 
 
-def merge_pin_maps(pin_maps, manual_pin_map):
-    for key, sub_map in manual_pin_map.items():
-        if key not in pin_maps:
-            # Add new top-level key entirely if it doesn't exist
-            pin_maps[key] = sub_map
-        else:
-            # Replace sub-objects in the existing key
-            for sub_key, sub_value in sub_map.items():
-                pin_maps[key][sub_key] = sub_value  # Replace existing or add new
-    return pin_maps
+        pin_map_id = ic.get("pin-map", ic.get("variant"))
+        ic_type_key = ic.get("type") # e.g., "memory", "flash"
+        ic_type_val = types.get(ic_type_key) # e.g., 0x01, 0x03
+        
+        protocol_id = int(ic.get("protocol-id", "0x0"), 16)
+        flags = int(ic.get("flags", "0x0"), 16)
+
+        # Determine integer 'type' for application use
+        determined_type = 4  # Default to SRAM or unknown
+        if ic_type_val == types.get("memory"): # 0x01
+            if protocol_id == 0x06:  # Flash type 3
+                determined_type = 3
+            elif protocol_id == 0x05:  # Flash type 2
+                determined_type = 2
+            elif flags & 0x08:  # EPROM
+                determined_type = 1
+        elif ic_type_val == types.get("flash"): # 0x03 - Could be Flash Type 2 or 3 based on protocol
+            if protocol_id == 0x06: determined_type = 3
+            elif protocol_id == 0x05: determined_type = 2
+            else: determined_type = 2 # Default flash type if protocol doesn't specify
+        elif ic_type_val == types.get("sram"): # 0x04
+            determined_type = 4
 
 
-def get_pin_map(pins, pin_map):
-    pins_key = str(pins)
-    pin_map_key = str(pin_map)
-    if pins_key in pin_maps:
-        if pin_map_key in pin_maps[pins_key]:
-            pin_map = pin_maps[pins_key][pin_map_key]
-            return pin_map if not "holder" in pin_map else None
+        data = {
+            "name": ic.get("name"),
+            "manufacturer": manufacturer,
+            "memory-size": int(ic.get("memory-size", "0x0"), 16),
+            # "can-erase": bool(ic.get("can-erase", False)),
+            "type": determined_type,
+            "pin-count": pin_count,
+            "vpp": vpp,
+            "vcc": vcc,
+            "pulse-delay": int(ic.get("pulse-delay", "0x0"), 16),
+            "verified": bool(ic.get("verified", False)),
+            "info-flags": flags,
+            "flags": 0,
+            "protocol-id": protocol_id,
+            "pin-map": pin_map_id,
+        }
 
-    return None
+        if "chip-id" in ic and ic["chip-id"] is not None:
+            data["chip-id"] = int(ic["chip-id"], 16)
 
+        if ic.get("can-erase", False):
+            data["flags"] |= FLAG_CAN_ERASE
 
-def get_bus_config(pins, variant):
-    if pins == 28 and variant == 16:
-        return None
-    pin_map = get_pin_map(pins, variant)
-    if not pin_map:
-        return None
-    map = {}
-    bus = []
-    for pin in pin_map["address-bus-pins"]:
-        bus.append(pin_conversions[pins][pin])
-    map["bus"] = bus
-
-    if "rw-pin" in pin_map:
-        if pin_map["rw-pin"] in pin_conversions[pins]:
-            map["rw-pin"] = pin_conversions[pins][pin_map["rw-pin"]]
-        # else:
-        #     logger.info(
-        #         f"RW pin {pin_map['rw-pin']} not found in pin conversion for {pins} pins EPROMs"
-        #     )
-
-    if "oe-pin" in pin_map:
-        if pin_map["oe-pin"] in pin_conversions[pins]:
-            map["oe-pin"] = pin_conversions[pins][pin_map["oe-pin"]]
-        # else:
-        #     logger.info(
-        #         f"OE pin {pin_map['oe-pin']} not found in pin conversion for {pins} pins EPROMs"
-        #     )
-
-    if "vpp-pin" in pin_map:
-        if pin_map["vpp-pin"] in pin_conversions[pins]:
-            map["vpp-pin"] = pin_conversions[pins][pin_map["vpp-pin"]]
-        # else:
-        #     logger.info(
-        #         f"Vpp pin {pin_map['vpp-pin']} not found in pin conversion for {pins} pins EPROMs"
-        #     )
-
-    return map
-
-
-def map_data(ic, manufacturer):
-    pin_count = ic["pin-count"]
-    vpp = 0
-    vcc = 0
-    if "voltages" in ic:
-        voltages = ic["voltages"]
-        if "vpp" in voltages and voltages["vpp"]:
-
-            vpp = int(voltages["vpp"])
-        if "vcc" in voltages and voltages["vcc"]:
-            vcc = float(voltages["vcc"])
-    pin_map = ic["pin-map"] if "pin-map" in ic else ic["variant"]
-    ic_type = types.get(ic["type"])
-    protocol_id = int(ic["protocol-id"], 16)
-    flags = int(ic["flags"], 16) if "flags" in ic else 0
-    type = 4
-    if ic_type == 1:
-        if protocol_id == 0x06:
-            type = 3
-        elif protocol_id == 0x05:
-            type = 2
-        elif flags & 0x08:
-            type = 1
-
-    data = {
-        "name": ic["name"],
-        "manufacturer": manufacturer,
-        "memory-size": int(ic["memory-size"], 16),
-        "can-erase": bool(ic["can-erase"]),
-        "type": type,
-        "pin-count": pin_count,
-        "vpp": vpp,
-        "vcc": vcc,
-        "pulse-delay": int(ic["pulse-delay"], 16),
-        "verified": ic["verified"] if "verified" in ic else False,
-        "flags": flags,
-        "protocol-id": int(ic["protocol-id"], 16),
-        "pin-map": pin_map,
-    }
-    if "chip-id" in ic:
-        data["chip-id"] = int(ic["chip-id"], 16)
-
-    bus_config = get_bus_config(pin_count, pin_map)
-
-    if bus_config:
-        data["bus-config"] = bus_config
-    return data
-
-
-def get_eproms(verified=None):
-    selected_proms = []
-    for manufacturer in proms:
-        for ic in proms[manufacturer]:
-            if (
-                verified == None
-                or not verified
-                or (verified and "verified" in ic and ic["verified"])
-            ):
-                # ic["manufacturer"] = manufacturer
-                selected_proms.append(map_data(ic, manufacturer))
-    return selected_proms
-
-
-def get_eprom_config(chip_name):
-    for manufacturer in proms:
-        for ic in proms[manufacturer]:
-            if chip_name.lower() == ic["name"].lower():
-                return ic, manufacturer
-    return None, None
-
-
-def get_eprom(chip_name, full=False):
-    config, manufacturer = get_eprom_config(chip_name)
-    if config:
-        data = map_data(config, manufacturer)
-        if not full:
-            if "manufacturer" in data:
-                data.pop("manufacturer")
-            if "verified" in data:
-                data.pop("verified")
-            if "pin-map" in data:
-                data.pop("pin-map")
-            if "name" in data:
-                data.pop("name")
-            if "flags" in data:
-                data.pop("flags")
-            if "protocol-id" in data:
-                data.pop("protocol-id")
-            if "variant" in data:
-                data.pop("variant")
-            if "pin-map" in data:
-                data.pop("pin-map")
-            if "vcc" in data:
-                data.pop("vcc")
+        if pin_count and pin_map_id:
+            bus_config = self.get_bus_config(pin_count, pin_map_id)
+            if bus_config:
+                data["bus-config"] = bus_config
         return data
-    return None
+
+    def get_eproms(self, verified=None) -> list:
+        """
+        Retrieves a list of all EPROMs from the database.
+
+        Args:
+            verified (bool, optional): If True, only returns EPROMs marked as "verified".
+                                    If False or None, returns all EPROMs. Defaults to None.
+
+        Returns:
+            list: A list of dictionaries, where each dictionary represents an EPROM's data.
+        """
+        selected_proms = []
+        for manufacturer, ics in self.proms.items():
+            for ic_config in ics:
+                is_verified_in_db = bool(ic_config.get("verified", False))
+                if verified is None or (verified and is_verified_in_db) or (not verified): # Corrected logic for verified filter
+                    selected_proms.append(self._map_data(ic_config, manufacturer))
+        return selected_proms
+
+    def get_eprom_config(self, chip_name: str):
+        """
+        Retrieves the raw configuration data for a specific EPROM by its name.
+            Returns (config_dict, manufacturer_str) or (None, None).
+        """
+        for manufacturer, ics in self.proms.items():
+            for ic_config in ics:
+                if chip_name.lower() == ic_config.get("name", "").lower():
+                    return ic_config, manufacturer
+        return None, None
+
+    def get_eprom(self, chip_name: str, full: bool = False):
+        """
+        Retrieves processed data for a specific EPROM.
+        If `full` is False, a concise set of fields is returned.
+        """
+        config, manufacturer = self.get_eprom_config(chip_name)
+        if config:
+            data = self._map_data(config, manufacturer)
+            if not full:
+                # Prune fields for concise output
+                keys_to_pop = ["manufacturer", "verified", "pin-map", "name",  "protocol-id", "vcc", "info-flags"]
+                for key in keys_to_pop:
+                    if key in data:
+                        data.pop(key)
+            else:
+                if "flags" in data:
+                        data.pop("flags")
+            return data
+        return None
+
+    def search_eprom(self, chip_name_query: str, include_unverified: bool = True) -> list:
+        """
+        Searches for EPROMs where `chip_name_query` is part of the EPROM's name.
+        `include_unverified`: If True, includes all text matches.
+                              If False, includes only verified text matches.
+        """
+        selected_proms = []
+        for manufacturer, ics in self.proms.items():
+            for ic_config in ics:
+                if chip_name_query.lower() in ic_config.get("name", "").lower():
+                    is_verified_in_db = bool(ic_config.get("verified", False))
+                    if include_unverified or is_verified_in_db:
+                        selected_proms.append(self._map_data(ic_config, manufacturer))
+        return selected_proms
+
+    def search_chip_id(self, chip_id_val: int) -> list:
+        """
+        Searches for EPROMs that match a given chip ID.
+        Returns a list of raw EPROM data dictionaries with 'manufacturer' added.
+        """
+        selected_proms = []
+        for manufacturer, ics in self.proms.items():
+            for ic_config in ics:
+                if ic_config.get("has-chip-id") and \
+                   ic_config.get("chip-id") is not None:
+                    try:
+                        if int(ic_config.get("chip-id"), 16) == chip_id_val:
+                            # Return a copy of the raw config with manufacturer added
+                            ic_copy = ic_config.copy()
+                            ic_copy["manufacturer"] = manufacturer
+                            selected_proms.append(ic_copy)
+                    except ValueError:
+                        logger.warning(f"Invalid chip-id format for {ic_config.get('name', 'Unknown EPROM')}: {ic_config.get('chip-id')}")
+        return selected_proms
 
 
-def search_eprom(chip_name, all=True):
-    selected_proms = []
-    for manufacturer in proms:
-        for ic in proms[manufacturer]:
-            if chip_name.lower() in ic["name"].lower():
-                if ("verified" in ic and ic["verified"]) or all:
+def main(): # Test function
+    """
+    Main function for standalone testing or demonstration of the database module.
+    """
+    logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s")
+    db = EpromDatabase() # Initializes the database
 
-                    # ic["manufacturer"] = manufacturer
-                    selected_proms.append(map_data(ic, manufacturer))
-    return selected_proms
-
-
-def search_chip_id(chip_id):
-    selected_proms = []
-    for manufacturer in proms:
-        for ic in proms[manufacturer]:
-            if ic["has-chip-id"] and int(ic["chip-id"], 16) == chip_id:
-                ic["manufacturer"] = manufacturer
-                selected_proms.append(ic)
-    return selected_proms
-
-
-def main():
-    init_db()
     chip_name = "TMS2764"
-
-    config, manufacturer = get_eprom_config(chip_name)
-    if config == None:
+    print(f"\n--- Getting EPROM config for: {chip_name} ---")
+    config, manufacturer = db.get_eprom_config(chip_name)
+    if config is None:
         print(f"Prom {chip_name} not found")
-        return
-    # manufacturer = ""
-    print(f"Found {config['name']} from {manufacturer}")
-    print(config)
+    else:
+        print(f"Found {config.get('name')} from {manufacturer}")
+        print(json.dumps(config, indent=2))
 
-    pin_count = config["pin-count"]
-    variant = config["pin-map"]
+    print(f"\n--- Getting full EPROM data for: {chip_name} ---")
+    full_data = db.get_eprom(chip_name, full=True)
+    if full_data:
+        print(json.dumps(full_data, indent=2))
+    else:
+        print(f"EPROM {chip_name} not found.")
 
-    print("--------------------")
-    print(get_pin_map(pin_count, variant))
-    bus = get_bus_config(pin_count, variant)
-    print("---------- bus map ----------")
-    print(bus)
+    print(f"\n--- Getting concise EPROM data for: {chip_name} ---")
+    concise_data = db.get_eprom(chip_name, full=False)
+    if concise_data:
+        print(json.dumps(concise_data, indent=2))
+    else:
+        print(f"EPROM {chip_name} not found.")
 
+    print("\n--- Listing all EPROMs (first 5) ---")
+    all_eproms = db.get_eproms()
+    for eprom_data in all_eproms[:5]:
+        print(f"  - {eprom_data['name']} by {eprom_data['manufacturer']}")
+
+    print("\n--- Searching for '27C256' ---")
+    search_results = db.search_eprom("27C256")
+    for res in search_results:
+        print(f"  - {res['name']} by {res['manufacturer']}")
+
+    # Example: Test get_pin_map and get_bus_config if config was found
+    if config:
+        pin_count = config.get("pin-count")
+        variant = config.get("pin-map", config.get("variant"))
+        if pin_count and variant:
+            print("\n--- Pin Map ---")
+            pin_map_details = db.get_pin_map(pin_count, variant)
+            print(json.dumps(pin_map_details, indent=2))
+            print("\n--- Bus Config ---")
+            bus_config_details = db.get_bus_config(pin_count, variant)
+            print(json.dumps(bus_config_details, indent=2))
 
 if __name__ == "__main__":
     main()
