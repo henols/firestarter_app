@@ -225,10 +225,8 @@ class EpromSpecBuilder:
                     if has_vpp_pin_on_map: jp3_rev01 = 1 # 32pin
                     jp4_rev2 = 2 if has_vpp_pin_on_map else 1
                 output_data["jumpers"].update( self._get_rev1_jumper_settings_data(jp1, jp2, jp3_rev01))
-                # output_data["jumpers"]["2.0 & 2.1"] = self._get_rev2_jumper_settings_data(jp4_rev2)
-                # output_data["jumpers"]["2.2"] = self._get_rev2_2_jumper_settings_data(jp4_rev2)
                 output_data["jumpers"].update( self._get_rev2_jumper_settings_data(jp4_rev2))
-                output_data["jumpers"].update( self._get_rev2_2_jumper_settings_data(jp4_rev2))
+                # output_data["jumpers"].update( self._get_rev2_2_jumper_settings_data(jp4_rev2))
 
         protocol_id = eprom_data.get("protocol-id")
         if protocol_id is not None:

@@ -118,7 +118,7 @@ class EpromOperator:
             return None, 0
         logger.debug(eprom_data)
         command_dict = eprom_data.copy()  # Work with a copy for the command
-        command_dict["state"] = cmd
+        command_dict["cmd"] = cmd
         # Combine base flags from EPROM data with operation-specific flags
         command_dict["flags"] = eprom_data.get("flags", 0) | operation_flags
 
@@ -460,39 +460,27 @@ class EpromOperator:
             self._disconnect_programmer()
 
     def dev_set_registers(
-        self, msb_str: str, lsb_str: str, ctrl_reg_str: str, operation_flags: int = 0
+        self, msb_str: str, lsb_str: str, ctrl_reg_str: str, firestarter =False,flags: int = 0
     ) -> bool:
-        try:
-            msb = int(msb_str, 16) if "0x" in msb_str.lower() else int(msb_str)
-            lsb = int(lsb_str, 16) if "0x" in lsb_str.lower() else int(lsb_str)
-            ctrl_reg = (
-                int(ctrl_reg_str, 16)
-                if "0x" in ctrl_reg_str.lower()
-                else int(ctrl_reg_str)
-            )
-        except ValueError:
-            logger.error(
-                "Invalid register value format. Must be decimal or hex (e.g., 0xFF)."
-            )
+        msb = int(msb_str, 16) if "0x" in msb_str else int(msb_str)
+        lsb = int(lsb_str, 16) if "0x" in lsb_str else int(lsb_str)
+        ctrl_reg = int(ctrl_reg_str, 16) if "0x" in ctrl_reg_str else int(ctrl_reg_str)
+        if msb < 0 or msb > 0xFF:
+            logger.error(f"Invalid MSB value: 0x{msb:02x} {msb}")
             return False
-
-        if not (0 <= msb <= 0xFF and 0 <= lsb <= 0xFF and 0 <= ctrl_reg <= 0xFF):
-            logger.error("Register values must be between 0 and 255 (0x00-0xFF).")
+        if lsb < 0 or lsb > 0xFF:
+            logger.error(f"Invalid LSB value: 0x{lsb:02x} {lsb}")
             return False
-
-        # For dev_registers, eprom_name is not strictly needed for EPROM data,
-        # but _setup_operation expects it to form the initial command for find_and_connect.
-        # We can use a placeholder or a generic EPROM name if one isn't relevant.
-        # However, the RURP might expect some EPROM context.
-        # Let's assume for now that a generic command is sufficient.
-        # The original dev_tools.py `dev_registers` didn't use an eprom_name.
-        # It directly called `find_programmer` with a minimal data dict.
-        # We'll adapt _setup_operation or create a more direct connection method if needed.
-        # For now, let's try with a minimal command_dict for find_and_connect.
-
+        if (
+            ctrl_reg < 0
+            or (ctrl_reg > 0x1FF and firestarter)
+            or (ctrl_reg > 0xFF and not firestarter)
+        ):
+            logger.error(f"Invalid Control Register value: 0x{ctrl_reg:02x} {ctrl_reg}")
+            return False
         command_dict_for_connect = {
-            "state": COMMAND_DEV_REGISTERS,
-            "flags": operation_flags,
+            "cmd": COMMAND_DEV_REGISTERS,
+            "flags": flags,
         }
         try:
             self.comm = SerialCommunicator.find_and_connect(command_dict_for_connect)
@@ -510,13 +498,10 @@ class EpromOperator:
         )
         try:
             self.comm.send_ack()  # Tell programmer to expect register data
-            self.comm.send_bytes(bytes([msb, lsb, ctrl_reg]))
-            # RURP protocol for this state might just take the bytes and not send an OK.
-            # Or it might. Assuming it doesn't send an OK for this specific dev command.
-            # If it does, an expect_ok() would be needed here.
-            # The original code just sent and cleaned up.
+            self.comm.send_bytes(bytes([msb, lsb, (0x80 if firestarter else 0x00) | (ctrl_reg >> 8 & 0x01), ctrl_reg & 0xFF]))
             logger.info("Register data sent.")
-            return True
+            is_ok, _ = self.comm.expect_ok()
+            return is_ok  # True if RURP acknowledged end, False otherwise
         except (SerialError, SerialTimeoutError) as e:
             logger.error(f"Error during dev_set_registers: {e}")
             return False
@@ -524,25 +509,31 @@ class EpromOperator:
             self._disconnect_programmer()
 
     def dev_set_address_mode(
-        self, eprom_name: str, address_str: str, operation_flags: int = 0
+        self, eprom_name: str, address_str: str, flags: int = 0
     ) -> bool:
-        # This command sets the RURP into a mode where it holds a specific address
-        # based on the EPROM's pin map.
-        command_eprom_data, _ = self._setup_operation(
-            eprom_name, COMMAND_DEV_ADDRESS, operation_flags, address_str
-        )
-        if not command_eprom_data or not self.comm:
-            return False  # Setup failed, error already logged by _setup_operation
+        try:
+            # This command sets the RURP into a mode where it holds a specific address
+            # based on the EPROM's pin map.
+            command_eprom_data, _ = self._setup_operation(
+                eprom_name, COMMAND_DEV_ADDRESS, flags, address_str
+            )
+            if not command_eprom_data or not self.comm:
+                return False  # Setup failed, error already logged by _setup_operation
 
-        # The _setup_operation already sent the command with the address.
-        # The RURP is now (presumably) holding this address.
-        # The original dev_address function just did setup and cleanup.
-        logger.info(
-            f"Developer Mode: RURP address set to 0x{command_eprom_data.get('address', 0):06X} using {eprom_name.upper()}'s pin map."
-        )
-        self._disconnect_programmer()  # Disconnect after setting the mode.
-        return True
+            # The _setup_operation already sent the command with the address.
+            # The RURP is now (presumably) holding this address.
+            # The original dev_address function just did setup and cleanup.
+            logger.info(f"Setting address to RURP: 0x{command_eprom_data['address']:06x}")
+            logger.info(f"Using {eprom_name.upper()}'s pin map")
+            is_ok, _ = self.comm.expect_ok()
+            return  is_ok  # True if RURP acknowledged end, False otherwise
+        except (SerialError, SerialTimeoutError) as e:
+            logger.error(f"Error during dev_set_address_mode: {e}")
+            return False
+        finally:
+            self._disconnect_programmer()
 
+        
     def write_eprom(
         self,
         eprom_name: str,
