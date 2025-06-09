@@ -269,7 +269,7 @@ class EpromDatabase:
                 except ValueError:
                     logger.warning(f"Invalid VCC value for {ic.get('name')}: {voltages['vcc']}")
 
-
+        pin_map_id = None
         pin_map_id = ic.get("pin-map", ic.get("variant"))
         ic_type_key = ic.get("type") # e.g., "memory", "flash"
         ic_type_val = types.get(ic_type_key) # e.g., 0x01, 0x03
@@ -317,7 +317,7 @@ class EpromDatabase:
         if ic.get("can-erase", False):
             data["flags"] |= FLAG_CAN_ERASE
 
-        if pin_count and pin_map_id:
+        if pin_count and not pin_map_id is None:
             bus_config = self.get_bus_config(pin_count, pin_map_id)
             if bus_config:
                 data["bus-config"] = bus_config
@@ -416,7 +416,7 @@ def main(): # Test function
     logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s")
     db = EpromDatabase() # Initializes the database
 
-    chip_name = "TMS2764"
+    chip_name = "m27c1001"
     print(f"\n--- Getting EPROM config for: {chip_name} ---")
     config, manufacturer = db.get_eprom_config(chip_name)
     if config is None:
@@ -439,21 +439,22 @@ def main(): # Test function
     else:
         print(f"EPROM {chip_name} not found.")
 
-    print("\n--- Listing all EPROMs (first 5) ---")
-    all_eproms = db.get_eproms()
-    for eprom_data in all_eproms[:5]:
-        print(f"  - {eprom_data['name']} by {eprom_data['manufacturer']}")
+    # print("\n--- Listing all EPROMs (first 5) ---")
+    # all_eproms = db.get_eproms()
+    # for eprom_data in all_eproms[:5]:
+    #     print(f"  - {eprom_data['name']} by {eprom_data['manufacturer']}")
 
-    print("\n--- Searching for '27C256' ---")
-    search_results = db.search_eprom("27C256")
-    for res in search_results:
-        print(f"  - {res['name']} by {res['manufacturer']}")
+    # print("\n--- Searching for '27C256' ---")
+    # search_results = db.search_eprom("27C256")
+    # for res in search_results:
+    #     print(f"  - {res['name']} by {res['manufacturer']}")
 
     # Example: Test get_pin_map and get_bus_config if config was found
     if config:
+        variant = None
         pin_count = config.get("pin-count")
         variant = config.get("pin-map", config.get("variant"))
-        if pin_count and variant:
+        if pin_count and not variant is None:
             print("\n--- Pin Map ---")
             pin_map_details = db.get_pin_map(pin_count, variant)
             print(json.dumps(pin_map_details, indent=2))

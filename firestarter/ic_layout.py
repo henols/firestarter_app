@@ -138,7 +138,7 @@ class EpromSpecBuilder:
         # For simplicity, we'll rely on the pin_map to override.
 
         pin_map_id = eprom_data.get("pin-map")
-        pin_map_details = self.db.get_pin_map(pin_count, pin_map_id) if pin_map_id else None
+        pin_map_details = self.db.get_pin_map(pin_count, pin_map_id) if not pin_map_id is None else None
 
         if pin_map_details:
             if "rw-pin" in pin_map_details and pin_map_details["rw-pin"] <= pin_count:
