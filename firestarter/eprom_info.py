@@ -126,20 +126,27 @@ class EpromConsolePresenter:
             return []
         return results
 
-    def prepare_detailed_eprom_data(self, eprom_name: str, include_export_config: bool = False) -> dict | None:
+    def prepare_detailed_eprom_data(
+        self,
+        eprom_name: str, # For logging and titles
+        eprom_details_full: dict | None, # Pre-fetched from db.get_eprom(name, full=True)
+        eprom_data_for_programmer: dict | None, # Pre-fetched from db.get_eprom(name, full=False)
+        raw_config_data: dict | None, # Pre-fetched from db.get_eprom_config()
+        manufacturer: str | None, # Pre-fetched from db.get_eprom_config()
+        include_export_config: bool = False
+    ) -> dict | None:
         """
         Prepares a comprehensive data structure for a specific EPROM,
         ready for presentation. It fetches raw specifications, constructs
         display elements like the DIP layout, and optionally includes
         export or programmer-specific configurations.
         """
-        # Get full, mapped data for display
-        eprom_details_full = self.db.get_eprom(eprom_name, full=True)
         if not eprom_details_full:
             logger.error(f"EPROM '{eprom_name}' not found in the database.")
             return None
 
         # Get base specifications from EpromSpecBuilder
+        # eprom_details_full is the fully mapped data expected by build_specifications
         eprom_specifications = self.spec_builder.build_specifications(eprom_details_full)
         if not eprom_specifications:
             logger.error(f"Could not generate layout data for {eprom_name}.")
@@ -159,14 +166,11 @@ class EpromConsolePresenter:
         # We can optionally remove "layout_pin_names" if it's not needed in the final output structure
         # combined_data.pop("layout_pin_names", None)
 
-        # Get concise data for programmer command (for debug logging)
-        eprom_data_for_programmer = self.db.get_eprom(eprom_name, full=False)
         if eprom_data_for_programmer:
             combined_data["programmer_config_json_str"] = self._json_output_formatted(eprom_data_for_programmer)
 
         if include_export_config:
-            # Get raw config for export
-            raw_config_data, manufacturer = self.db.get_eprom_config(eprom_name)
+            # raw_config_data and manufacturer are now passed in
             if raw_config_data and manufacturer:
                 cleaned_raw_config = self._clean_config_for_export(raw_config_data)
                 
@@ -300,9 +304,16 @@ def main():
     #     print_eprom_list_table(all_eproms[:10], presenter.spec_builder) # Print first 10
 
     logger.info("\n--- Info for 27C256 (with export) ---")
-    details = presenter.prepare_detailed_eprom_data("27C256", include_export_config=True)
-    if details:
-        presenter.present_eprom_details(details, show_export_config=True)
+    eprom_name_test = "27C256"
+    details_full = db_instance.get_eprom(eprom_name_test, full=True)
+    data_prog = db_instance.get_eprom(eprom_name_test, full=False)
+    raw_conf, manuf = db_instance.get_eprom_config(eprom_name_test)
+
+    if details_full and data_prog and raw_conf:
+        structured_details = presenter.prepare_detailed_eprom_data(eprom_name_test, details_full, data_prog, raw_conf, manuf, include_export_config=True)
+        if structured_details:
+            presenter.present_eprom_details(structured_details, show_export_config=True)
+
 
 if __name__ == "__main__":
     main()

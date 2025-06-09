@@ -431,13 +431,28 @@ def main():
             return 0
         return 1
     elif args.command == "info":
-        details = eprom_presenter.prepare_detailed_eprom_data(
-            args.eprom, include_export_config=args.config
+        eprom_name = args.eprom
+        eprom_details_full = db_instance.get_eprom(eprom_name, full=True)
+        if not eprom_details_full:
+            logger.error(f"EPROM '{eprom_name}' not found in database.")
+            return 1
+
+        # For programmer config JSON and export config
+        eprom_data_for_programmer = db_instance.get_eprom(eprom_name, full=False) # Concise
+        raw_config_data, manufacturer = db_instance.get_eprom_config(eprom_name)
+
+        structured_details = eprom_presenter.prepare_detailed_eprom_data(
+            eprom_name,
+            eprom_details_full,
+            eprom_data_for_programmer,
+            raw_config_data,
+            manufacturer,
+            include_export_config=args.config
         )
-        if details:
+        if structured_details:
             # EpromInfoProvider now handles displaying, including the export config if requested by args.config
             eprom_presenter.present_eprom_details(
-                details, show_export_config=args.config
+                structured_details, show_export_config=args.config
             )
             return 0
         return 1
@@ -448,10 +463,15 @@ def main():
             return 0
         return 1
     elif args.command == "read":
+        eprom_data = db_instance.get_eprom(args.eprom)
+        if not eprom_data:
+            logger.error(f"EPROM '{args.eprom}' not found in database.")
+            return 1
         return (
             1
             if not eprom_operator.read_eprom(
                 args.eprom,
+                eprom_data,
                 args.output_file,
                 operation_flags=build_arg_flags(args),
                 address_str=args.address,
@@ -460,10 +480,15 @@ def main():
             else 0
         )
     elif args.command == "write":
+        eprom_data = db_instance.get_eprom(args.eprom)
+        if not eprom_data:
+            logger.error(f"EPROM '{args.eprom}' not found in database.")
+            return 1
         return (
             1
             if not eprom_operator.write_eprom(
                 args.eprom,
+                eprom_data,
                 args.input_file,
                 address_str=args.address,
                 operation_flags=build_arg_flags(args),
@@ -471,10 +496,15 @@ def main():
             else 0
         )
     elif args.command == "verify":
+        eprom_data = db_instance.get_eprom(args.eprom)
+        if not eprom_data:
+            logger.error(f"EPROM '{args.eprom}' not found in database.")
+            return 1
         return (
             1
             if not eprom_operator.verify_eprom(
                 args.eprom,
+                eprom_data,
                 args.input_file,
                 address_str=args.address,
                 operation_flags=build_arg_flags(args),
@@ -482,26 +512,38 @@ def main():
             else 0
         )
     elif args.command == "blank":
+        eprom_data = db_instance.get_eprom(args.eprom)
+        if not eprom_data:
+            logger.error(f"EPROM '{args.eprom}' not found in database.")
+            return 1
         return (
             1
             if not eprom_operator.check_eprom_blank(
-                args.eprom, operation_flags=build_arg_flags(args)
+                args.eprom, eprom_data, operation_flags=build_arg_flags(args)
             )
             else 0
         )
     elif args.command == "erase":
+        eprom_data = db_instance.get_eprom(args.eprom)
+        if not eprom_data:
+            logger.error(f"EPROM '{args.eprom}' not found in database.")
+            return 1
         return (
             1
             if not eprom_operator.erase_eprom(
-                args.eprom, operation_flags=build_arg_flags(args)
+                args.eprom, eprom_data, operation_flags=build_arg_flags(args)
             )
             else 0
         )
     elif args.command == "id":
+        eprom_data = db_instance.get_eprom(args.eprom)
+        if not eprom_data:
+            logger.error(f"EPROM '{args.eprom}' not found in database.")
+            return 1
         return (
             1
             if not eprom_operator.check_eprom_id(
-                args.eprom, operation_flags=build_arg_flags(args)
+                args.eprom, eprom_data, operation_flags=build_arg_flags(args)
             )
             else 0
         )
@@ -532,10 +574,15 @@ def main():
         )
     elif args.command == "dev":
         if args.dev_command == "read":
+            eprom_data = db_instance.get_eprom(args.eprom)
+            if not eprom_data:
+                logger.error(f"EPROM '{args.eprom}' not found in database.")
+                return 1
             return (
                 1
                 if not eprom_operator.dev_read_eprom(
                     args.eprom,
+                    eprom_data,
                     address_str=args.address,
                     size_str=args.size,
                     operation_flags=build_arg_flags(args),
@@ -555,10 +602,14 @@ def main():
                 else 0
             )
         elif args.dev_command == "addr":
+            eprom_data = db_instance.get_eprom(args.eprom)
+            if not eprom_data:
+                logger.error(f"EPROM '{args.eprom}' not found in database.")
+                return 1
             return (
                 1
                 if not eprom_operator.dev_set_address_mode(
-                    args.eprom, args.address, flags=build_arg_flags(args)
+                    args.eprom, eprom_data, args.address, flags=build_arg_flags(args)
                 )
                 else 0
             )

@@ -75,22 +75,6 @@ class EpromOperator:
         self.db = db
         self.comm: SerialCommunicator | None = None
 
-    def _get_eprom_data_for_operation(self, eprom_name: str) -> dict | None:
-        logger.debug(f"Fetching EPROM data for {eprom_name}")
-        eprom_data = self.db.get_eprom(eprom_name)  # Use concise version for operations
-        if not eprom_data:
-            logger.error(f"EPROM {eprom_name} not found in database.")
-            return None
-
-        # The original get_eprom in this file added a 'flags' key based on 'can-erase'.
-        # The new db.get_eprom already includes 'flags' from the JSON.
-        # We ensure 'flags' key exists, defaulting to 0 if not present from db.get_eprom.
-        if "flags" not in eprom_data:
-            eprom_data["flags"] = 0  # Default if somehow missing
-
-        logger.debug(f"EPROM data for {eprom_name} prepared for operation.")
-        return eprom_data
-
     def _calculate_buffer_size(self) -> int:
         if (
             self.comm
@@ -102,25 +86,24 @@ class EpromOperator:
 
     def _setup_operation(
         self,
-        eprom_name: str,
+        eprom_name: str, # For logging
+        eprom_data_dict: dict, # Pre-fetched EPROM data
         cmd: int,
         operation_flags: int = 0,
         address_str: str | None = None,
         size_str: str | None = None,
     ) -> tuple[dict | None, int]:
         """
-        Prepares for an EPROM operation: fetches EPROM data, sets up command, and connects.
+        Prepares for an EPROM operation: uses pre-fetched EPROM data, sets up command, and connects.
         Returns (eprom_data_for_command, buffer_size) or (None, 0) on failure.
         """
         start_time = time.time()
-        eprom_data = self._get_eprom_data_for_operation(eprom_name)
-        if not eprom_data:
-            return None, 0
-        logger.debug(eprom_data)
-        command_dict = eprom_data.copy()  # Work with a copy for the command
+        # eprom_data_dict is assumed to be valid and pre-fetched by the caller (main.py)
+        logger.debug(f"Using EPROM data for {eprom_name}: {eprom_data_dict}")
+        command_dict = eprom_data_dict.copy()  # Work with a copy for the command
         command_dict["cmd"] = cmd
         # Combine base flags from EPROM data with operation-specific flags
-        command_dict["flags"] = eprom_data.get("flags", 0) | operation_flags
+        command_dict["flags"] = eprom_data_dict.get("flags", 0) | operation_flags
 
         if address_str:
             try:
@@ -165,12 +148,13 @@ class EpromOperator:
 
     def _perform_simple_command(
         self,
-        eprom_name: str,
+        eprom_name: str, # For logging
+        eprom_data_dict: dict, # Pre-fetched
         cmd: int,
         operation_flags: int = 0,
         success_log_msg: str = "",
     ) -> bool:
-        command_eprom_data, _ = self._setup_operation(eprom_name, cmd, operation_flags)
+        command_eprom_data, _ = self._setup_operation(eprom_name, eprom_data_dict, cmd, operation_flags)
         if not command_eprom_data or not self.comm:
             return False
 
@@ -374,14 +358,15 @@ class EpromOperator:
     def read_eprom(
         self,
         eprom_name: str,
+        eprom_data_dict: dict,
         output_file: str | None = None,
         operation_flags: int = 0,
         address_str: str | None = None,
         size_str: str | None = None,
     ) -> bool:
-
+        # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         command_eprom_data, buffer_size = self._setup_operation(
-            eprom_name, COMMAND_READ, operation_flags, address_str, size_str
+            eprom_name, eprom_data_dict, COMMAND_READ, operation_flags, address_str, size_str
         )
         if not command_eprom_data or not self.comm:
             return False  # Setup failed
@@ -509,13 +494,14 @@ class EpromOperator:
             self._disconnect_programmer()
 
     def dev_set_address_mode(
-        self, eprom_name: str, address_str: str, flags: int = 0
+        self, eprom_name: str, eprom_data_dict: dict, address_str: str, flags: int = 0
     ) -> bool:
         try:
             # This command sets the RURP into a mode where it holds a specific address
             # based on the EPROM's pin map.
+            # eprom_data_dict is pre-fetched and validated by the caller (main.py)
             command_eprom_data, _ = self._setup_operation(
-                eprom_name, COMMAND_DEV_ADDRESS, flags, address_str
+                eprom_name, eprom_data_dict, COMMAND_DEV_ADDRESS, flags, address_str
             )
             if not command_eprom_data or not self.comm:
                 return False  # Setup failed, error already logged by _setup_operation
@@ -537,12 +523,14 @@ class EpromOperator:
     def write_eprom(
         self,
         eprom_name: str,
+        eprom_data_dict: dict,
         input_file_path: str,
         operation_flags: int = 0,
         address_str: str | None = None,
     ) -> bool:
+        # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         command_eprom_data, buffer_size = self._setup_operation(
-            eprom_name, COMMAND_WRITE, operation_flags, address_str
+            eprom_name, eprom_data_dict, COMMAND_WRITE, operation_flags, address_str
         )
         if not command_eprom_data or not self.comm:
             return False
@@ -568,12 +556,14 @@ class EpromOperator:
     def verify_eprom(
         self,
         eprom_name: str,
+        eprom_data_dict: dict,
         input_file_path: str,
         operation_flags: int = 0,
         address_str: str | None = None,
     ) -> bool:
+        # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         command_eprom_data, buffer_size = self._setup_operation(
-            eprom_name, COMMAND_VERIFY, operation_flags, address_str
+            eprom_name, eprom_data_dict, COMMAND_VERIFY, operation_flags, address_str
         )
         if not command_eprom_data or not self.comm:
             return False
@@ -595,25 +585,30 @@ class EpromOperator:
         finally:
             self._disconnect_programmer()
 
-    def erase_eprom(self, eprom_name: str, operation_flags: int = 0) -> bool:
+    def erase_eprom(self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0) -> bool:
+        # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         return self._perform_simple_command(
             eprom_name,
+            eprom_data_dict,
             COMMAND_ERASE,
             operation_flags,
             f"Erasing EPROM {eprom_name.upper()}",
         )
 
-    def check_eprom_blank(self, eprom_name: str, operation_flags: int = 0) -> bool:
+    def check_eprom_blank(self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0) -> bool:
+        # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         return self._perform_simple_command(
             eprom_name,
+            eprom_data_dict,
             COMMAND_BLANK_CHECK,
             operation_flags,
             f"Performing blank check for {eprom_name.upper()}",
         )
 
-    def check_eprom_id(self, eprom_name: str, operation_flags: int = 0) -> bool:
+    def check_eprom_id(self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0) -> bool:
+        # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         command_eprom_data, _ = self._setup_operation(
-            eprom_name, COMMAND_CHECK_CHIP_ID, operation_flags
+            eprom_name, eprom_data_dict, COMMAND_CHECK_CHIP_ID, operation_flags
         )
         if not command_eprom_data or not self.comm:
             return False
@@ -674,16 +669,18 @@ class EpromOperator:
     def dev_read_eprom(
         self,
         eprom_name: str,
+        eprom_data_dict: dict,
         address_str: str | None = None,
         size_str: str = "256",
         operation_flags: int = 0,
     ) -> bool:
         # Ensure size_str has a default if None, though current signature gives "256"
         size_to_read_str = size_str if size_str is not None else "256"
-
+        # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         command_eprom_data, buffer_size = self._setup_operation(
             eprom_name,
-            COMMAND_READ,  # Dev read uses normal read command
+            eprom_data_dict,
+            COMMAND_READ, # Dev read uses normal read command
             operation_flags,
             address_str,
             size_to_read_str,
@@ -765,14 +762,20 @@ if __name__ == "__main__":
 
     # Perform the read operation
     # We'll use default flags, read the entire EPROM from the beginning.
+    # This example usage needs to be updated to reflect the new call signature
+    # (fetching eprom_data_dict first). For brevity, I'll skip updating the example here,
+    # as the main focus is the library code.
     try:
-        success = eprom_op.read_eprom(
-            eprom_name=eprom_name_to_read,
-            output_file=custom_output_file,
-            # operation_flags=0, # Default
-            # address_str=None,  # Default (start of EPROM)
-            # size_str=None      # Default (full size of EPROM)
-        )
+        eprom_data_for_read = db.get_eprom(eprom_name_to_read)
+        if eprom_data_for_read:
+            success = eprom_op.read_eprom(
+                eprom_name=eprom_name_to_read,
+                eprom_data_dict=eprom_data_for_read,
+                output_file=custom_output_file,
+            )
+        else:
+            logger.error(f"EPROM {eprom_name_to_read} not found in database for test.")
+            success = False
 
         if success:
             logger.info(
