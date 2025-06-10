@@ -38,9 +38,9 @@ class EpromConsolePresenter:
             # Group 1: Opening bracket and any leading whitespace/newline.
             # Group 2: The actual content (numbers, commas, whitespace).
             # Group 3: Closing bracket and any trailing whitespace/newline.
-            r"(\[)[\s\n]*([\d,\s\n]+?)[\s\n]*(\])", # Adjusted regex
-            lambda match: f"{match.group(1)}{', '.join(re.findall(r'[\d+]', match.group(2)))}{match.group(3)}", # Simpler reconstruction
-            json_str,
+            r"(\[)[\s\n]*([\d,\s\n]+?)[\s\n]*(\])",  # Adjusted regex
+            lambda match: match.group(1) + ', '.join(re.findall(r'\d+', match.group(2))) + match.group(3),
+            json_str
         )
         return json_str
 
