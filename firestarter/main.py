@@ -179,7 +179,7 @@ def create_voltage_args(parser):
     vpe_parser.add_argument("-t", "--timeout", type=int, help=argparse.SUPPRESS)
 
 
-def create_firnware_args(parser):
+def create_firmware_args(parser):
     fw_parser = parser.add_parser("fw", help="Firmware version.")
     fw_parser.add_argument(
         "-i",
@@ -382,7 +382,7 @@ def main():
 
     create_voltage_args(subparsers)
     hw_parser = subparsers.add_parser("hw", help="Hardware revision.")
-    create_firnware_args(subparsers)
+    create_firmware_args(subparsers)
     create_config_args(subparsers)
     create_dev_args(subparsers)
 
