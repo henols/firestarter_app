@@ -70,9 +70,10 @@ class EpromOperator:
     for interacting with the EPROM programmer hardware.
     """
 
-    def __init__(self, config: ConfigManager):
+    def __init__(self, config: ConfigManager, progress_callback=None):
         self.comm: SerialCommunicator | None = None
         self.config = config
+        self.progress_callback = progress_callback
 
     def _calculate_buffer_size(self) -> int:
         if (
@@ -223,45 +224,29 @@ class EpromOperator:
             logger.error(f"Input file {input_file_path} not found.")
             return False
 
-        target_mem_size = eprom_data_for_command.get("memory-size", 0)
-        # Address for write is part of the initial command setup via `eprom_data_for_command['address']`
-        # The programmer handles writing from that offset.
-
         try:
             with open(input_file_path, "rb") as file_handle:
                 file_size = os.path.getsize(input_file_path)
 
-                # The original code had a warning if file_size != target_mem_size.
-                # This might be too strict if only a partial write from an offset is intended.
-                # The programmer should handle writing up to the EPROM's actual capacity
-                # or the amount of data sent.
-                # For now, we'll send the whole file.
-                # The RURP protocol: Host sends length (2 bytes), RURP sends OK. Host sends data, RURP sends OK.
-
                 bytes_sent_total = 0
-                with (
-                    logging_redirect_tqdm(),
-                    tqdm.tqdm(total=file_size, bar_format=bar_format) as pbar,
-                ):
+
+                def _send_and_update_progress(pbar=None):
+                    nonlocal bytes_sent_total
                     while True:
                         data_chunk = file_handle.read(buffer_size)
                         if not data_chunk:
                             # End of file. Signal RURP with a zero-length chunk.
                             self.comm.send_bytes(int(0).to_bytes(2, byteorder="big"))
                             is_ok, _ = self.comm.expect_ok()
-                            return (
-                                is_ok  # True if RURP acknowledged end, False otherwise
-                            )
+                            if is_ok and self.progress_callback:
+                                self.progress_callback(bytes_sent_total, file_size)
+                            return is_ok
 
                         # Send length of the upcoming data chunk
-                        self.comm.send_bytes(
-                            len(data_chunk).to_bytes(2, byteorder="big")
-                        )
+                        self.comm.send_bytes(len(data_chunk).to_bytes(2, byteorder="big"))
                         is_ok, msg = self.comm.expect_ok()
                         if not is_ok:
-                            logger.error(
-                                f"Programmer did not ACK data chunk length: {msg}"
-                            )
+                            logger.error(f"Programmer did not ACK data chunk length: {msg}")
                             return False
 
                         # Send the actual data chunk
@@ -272,7 +257,17 @@ class EpromOperator:
                             return False
 
                         bytes_sent_total += len(data_chunk)
-                        pbar.update(len(data_chunk))
+                        if pbar:
+                            pbar.update(len(data_chunk))
+                        elif self.progress_callback:
+                            self.progress_callback(bytes_sent_total, file_size)
+
+                if self.progress_callback:
+                    self.progress_callback(0, file_size)
+                    return _send_and_update_progress()
+                else:
+                    with logging_redirect_tqdm(), tqdm.tqdm(total=file_size, bar_format=bar_format) as pbar:
+                        return _send_and_update_progress(pbar)
 
         except (SerialError, SerialTimeoutError, EpromOperationError) as e:
             logger.error(f"Error sending file {input_file_path}: {e}")
@@ -281,10 +276,6 @@ class EpromOperator:
             logger.error(f"File I/O error with {input_file_path}: {e}")
             return False
         # `finally` block for disconnect is handled by the calling public method.
-        # This method should return True if all data is sent and ACKed.
-        # The loop termination with zero-length chunk handles the final success.
-
-    # --- Public Operation Methods ---
 
     def read_eprom(
         self,
@@ -331,42 +322,43 @@ class EpromOperator:
                 self.comm.send_ack()  # Tell programmer to start sending data
 
                 bytes_read_total = 0
-                with (
-                    logging_redirect_tqdm(),
-                    tqdm.tqdm(total=total_bytes_to_read, bar_format=bar_format) as pbar,
-                ):
+
+                def _read_and_update_progress(pbar=None):
+                    nonlocal bytes_read_total
                     while bytes_read_total < total_bytes_to_read:
-                        # Check for initial "DATA:" or "OK:" (if done) or "ERROR:"
                         response_type, message = self.comm.get_response()
 
                         if response_type == "DATA":
-                            # Programmer is ready to send a chunk.
-                            # The size of this chunk is implicitly buffer_size by RURP protocol.
                             data_chunk = self.comm.read_data_block(buffer_size)
-                            if not data_chunk:  # Should not happen if DATA was signaled
-                                logger.warning(
-                                    "Received DATA signal but no data followed."
-                                )
+                            if not data_chunk:
+                                logger.warning("Received DATA signal but no data followed.")
                                 break
                             file_handle.write(data_chunk)
-                            self.comm.send_ack()  # Acknowledge receipt of the chunk
+                            self.comm.send_ack()
                             bytes_read_total += len(data_chunk)
-                            pbar.update(len(data_chunk))
+                            if pbar:
+                                pbar.update(len(data_chunk))
+                            elif self.progress_callback:
+                                self.progress_callback(bytes_read_total, total_bytes_to_read)
                         elif response_type == "OK":
                             logger.info("Programmer indicated end of data.")
-                            break  # Successfully finished
+                            break
                         elif response_type == "WARN":
                             logger.warning(f"Programmer warning during read: {message}")
                         elif response_type == "ERROR":
                             logger.error(f"Programmer error during read: {message}")
                             raise EpromOperationError(f"Programmer error: {message}")
-                        else:  # Timeout or unexpected
-                            logger.error(
-                                f"Unexpected response or timeout during read: {response_type} - {message}"
-                            )
-                            raise EpromOperationError(
-                                "Timeout or unexpected response during read."
-                            )
+                        else:
+                            logger.error(f"Unexpected response or timeout during read: {response_type} - {message}")
+                            raise EpromOperationError("Timeout or unexpected response during read.")
+
+                if self.progress_callback:
+                    self.progress_callback(0, total_bytes_to_read)
+                    _read_and_update_progress()
+                    self.progress_callback(bytes_read_total, total_bytes_to_read) # Final update
+                else:
+                    with logging_redirect_tqdm(), tqdm.tqdm(total=total_bytes_to_read, bar_format=bar_format) as pbar:
+                        _read_and_update_progress(pbar)
 
             logger.info(
                 f"Read complete ({time.time() - start_time:.2f}s). Data saved to {actual_output_file}"
@@ -381,6 +373,8 @@ class EpromOperator:
             return False
         finally:
             self._disconnect_programmer()
+
+    # --- Public Operation Methods ---
 
     def dev_read_eprom(
         self,
@@ -619,14 +613,61 @@ class EpromOperator:
     def check_eprom_blank(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
     ) -> bool:
-        # eprom_data_dict is pre-fetched and validated by the caller (main.py)
-        return self._perform_simple_command(
-            eprom_name,
-            eprom_data_dict,
-            COMMAND_BLANK_CHECK,
-            operation_flags,
-            f"Performing blank check for {eprom_name.upper()}",
+        command_eprom_data, _ = self._setup_operation(
+            eprom_name, eprom_data_dict, COMMAND_BLANK_CHECK, operation_flags
         )
+        if not command_eprom_data or not self.comm:
+            return False
+
+        logger.info(f"Performing blank check for {eprom_name.upper()}")
+        start_time = time.time()
+
+        total_size = command_eprom_data.get("memory-size", 0)
+
+        pbar = None
+        if self.progress_callback:
+            self.progress_callback(0, total_size)
+        else:
+            pbar = tqdm.tqdm(total=total_size, bar_format=bar_format)
+
+        try:
+            # Start the operation on the device
+            self.comm.send_ack()
+
+            while True:
+                response_type, message = self.comm.get_response()
+
+                if response_type == "DATA":
+                    try:
+                        current_bytes = int(message)
+                        if self.progress_callback:
+                            self.progress_callback(current_bytes, total_size)
+                        if pbar:
+                            pbar.update(current_bytes - pbar.n)
+                        self.comm.send_ack()
+                    except (ValueError, TypeError):
+                        logger.error(f"Invalid progress data from device: {message}")
+                        return False
+                elif response_type == "OK":
+                    if self.progress_callback:
+                        self.progress_callback(total_size, total_size)
+                    if pbar:
+                        pbar.update(total_size - pbar.n)
+                    logger.info(f"Blank check successful: {message} ({time.time() - start_time:.2f}s)")
+                    return True
+                elif response_type == "ERROR":
+                    logger.error(f"Blank check failed: {message}")
+                    return False
+                else:
+                    logger.error(f"Unexpected response or timeout during blank check: {response_type} - {message}")
+                    return False
+        except (SerialError, SerialTimeoutError, EpromOperationError) as e:
+            logger.error(f"Error during blank check for {eprom_name.upper()}: {e}")
+            return False
+        finally:
+            self._disconnect_programmer()
+            if pbar:
+                pbar.disable = True
 
     def check_eprom_id(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
