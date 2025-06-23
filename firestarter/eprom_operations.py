@@ -190,84 +190,14 @@ class EpromOperator:
                 self.comm.get_response()
             )  # Wait for DATA: or OK: or ERROR:
             if response_type == "DATA":
-                # The number of bytes to read should ideally be sent by the programmer
-                # or known. Assuming buffer_size is the max chunk.
-                # The original code read `buffer_size` bytes directly after DATA.
-                # Let's assume the programmer sends data in chunks up to buffer_size.
-                # For now, we'll rely on the programmer sending data and then an OK when done.
-                # This part might need refinement based on exact RURP protocol for DATA.
-                # A simple approach: read what's available up to buffer_size.
-                data = self.comm.read_data_block(buffer_size)  # This needs num_bytes
-                # This is problematic if programmer doesn't say how much.
-                # Let's assume DATA: means a fixed block of buffer_size is coming.
-                # Or, DATA: <num_bytes_to_follow>
-                # The old code just did connection.read(buffer_size)
-                # This implies the programmer sends buffer_size chunks.
-
-                # The original code read `buffer_size` bytes. If the RURP sends exactly `buffer_size`
-                # or less followed by OK, this is fine. If it sends more, this needs adjustment.
-                # Let's assume for now `read_data_block` is appropriate if the programmer sends fixed chunks.
-                # The RURP protocol seems to be: Host sends OK, RURP sends DATA:, Host reads, Host sends OK.
-
-                # The RURP protocol is:
-                # Host: OK (to start read)
-                # RURP: DATA: (signals data coming)
-                # RURP: <sends data bytes>
-                # Host: OK (acknowledge receipt of data chunk)
-                # ... repeat until RURP sends OK: (signals end of data)
-
-                # This means after RURP sends "DATA:", it will send bytes.
-                # The host needs to know how many bytes to expect in this chunk.
-                # The original `read_data` function read `buffer_size` bytes.
-                # This implies the programmer sends data in chunks of `buffer_size`.
-
-                # Let's refine: `get_response` gets "DATA:". Then we read.
-                # The `read_data_block` in SerialCommunicator is designed for this.
-                # The number of bytes for `read_data_block` must be known.
-                # The original code just did `connection.read(buffer_size)`.
-
-                # For now, let's assume the programmer sends `buffer_size` chunks.
-                # This part is tricky without exact protocol spec for DATA transfer size.
-                # The original `read_data` function implies the host reads `buffer_size` bytes
-                # after receiving "DATA:", then sends "OK".
-
-                # Let's assume the programmer sends data and then waits for an ACK.
-                # The amount of data sent per "DATA:" message needs to be defined by the protocol.
-                # The original code implies it's `buffer_size`.
-
-                # Re-evaluating: The loop in original `read` implies `read_data` gets one chunk.
-                # `read_data` waits for "DATA:", reads `buffer_size`, sends "OK".
-                # This seems to be the flow.
-
-                # The `SerialCommunicator.read_data_block(num_bytes)` is the tool.
-                # The question is, what is `num_bytes`?
-                # If RURP sends "DATA:", then `buffer_size` bytes, then waits for "OK", then this is it.
-
-                # Let's simplify: if `get_response` returns "DATA", we then read `buffer_size` bytes.
-                # This matches the old logic.
-
-                # The `read_data_block` in SerialCommunicator is fine if we pass `buffer_size` to it.
-                # However, the `get_response` in SerialCommunicator already consumes the "DATA:" line.
-                # So, if `get_response` returns "DATA", the next call should be to read the actual binary data.
-
-                # Let's adjust `SerialCommunicator` or how we use it.
-                # For now, assume `read_data_block` is called after "DATA:" is confirmed.
-                # The `get_response` should probably not consume the DATA: line if we want to handle it here.
-                # Or, `get_response` returns "DATA" and the message part is the data itself (if small).
-
-                # Sticking to the original flow: `wait_for_response` (now `self.comm.get_response`)
-                # gets "DATA". Then `connection.read(buffer_size)` (now `self.comm.read_data_block(buffer_size)`).
-                # Then `write_ok` (now `self.comm.send_ack()`).
-
-                # This means `_read_data_from_programmer` should be called *after* "DATA:" is received.
-                # The loop in `read_eprom` will handle this.
-                # This method is then just:
                 data_bytes = self.comm.read_data_block(buffer_size)
                 self.comm.send_ack()
                 return data_bytes
 
             elif response_type == "OK":
                 return None  # End of data
+            elif response_type == "WARN":
+                return None
             elif response_type == "ERROR":
                 logger.error(f"Programmer error during data read: {message}")
                 raise EpromOperationError(f"Programmer error: {message}")
@@ -403,6 +333,10 @@ class EpromOperator:
                         # Check for initial "DATA:" or "OK:" (if done) or "ERROR:"
                         response_type, message = self.comm.get_response()
 
+                        self._read_data_from_programmer(buffer_size)
+
+
+
                         if response_type == "DATA":
                             # Programmer is ready to send a chunk.
                             # The size of this chunk is implicitly buffer_size by RURP protocol.
@@ -419,6 +353,8 @@ class EpromOperator:
                         elif response_type == "OK":
                             logger.info("Programmer indicated end of data.")
                             break  # Successfully finished
+                        elif response_type == "WARN":
+                            logger.warning(f"Programmer warning during read: {message}")
                         elif response_type == "ERROR":
                             logger.error(f"Programmer error during read: {message}")
                             raise EpromOperationError(f"Programmer error: {message}")
@@ -440,6 +376,70 @@ class EpromOperator:
             return False
         except IOError as e:
             logger.error(f"File I/O error with {actual_output_file}: {e}")
+            return False
+        finally:
+            self._disconnect_programmer()
+
+    def dev_read_eprom(
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        address_str: str | None = None,
+        size_str: str = "256",
+        operation_flags: int = 0,
+    ) -> bool:
+        # Ensure size_str has a default if None, though current signature gives "256"
+        size_to_read_str = size_str if size_str is not None else "256"
+        # eprom_data_dict is pre-fetched and validated by the caller (main.py)
+        command_eprom_data, buffer_size = self._setup_operation(
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_READ, # Dev read uses normal read command
+            operation_flags,
+            address_str,
+            size_to_read_str,
+        )
+        if not command_eprom_data or not self.comm:
+            return False
+
+        start_addr = command_eprom_data.get("address", 0)
+        # memory-size in command_eprom_data is now the end_address for the read
+        end_addr = command_eprom_data.get("memory-size", start_addr)
+        num_bytes_to_read = end_addr - start_addr
+
+        logger.info(
+            f"Developer Read: Reading {num_bytes_to_read} bytes from address 0x{start_addr:04X} of {eprom_name.upper()}"
+        )
+        start_time = time.time()
+
+        try:
+            self.comm.send_ack()  # Tell programmer to start sending data
+            bytes_read_total = 0
+
+            while bytes_read_total < num_bytes_to_read:
+                response_type, message = self.comm.get_response()
+                if response_type == "DATA":
+                    data_chunk = self.comm.read_data_block(
+                        buffer_size
+                    )  # RURP sends buffer_size chunks
+                    if not data_chunk:
+                        break
+
+                    current_dump_address = start_addr + bytes_read_total
+                    hexdump(current_dump_address, data_chunk)  # Log hexdump
+                    self.comm.send_ack()  # Acknowledge chunk
+                    bytes_read_total += len(data_chunk)
+                elif response_type == "OK":
+                    break  # End of data
+                elif response_type == "ERROR":
+                    raise EpromOperationError(f"Programmer error: {message}")
+                else:
+                    raise EpromOperationError("Timeout or unexpected response.")
+
+            logger.info(f"Developer Read complete ({time.time() - start_time:.2f}s)")
+            return True
+        except (EpromOperationError, SerialError, SerialTimeoutError) as e:
+            logger.error(f"Error during developer read: {e}")
             return False
         finally:
             self._disconnect_programmer()
@@ -666,69 +666,6 @@ class EpromOperator:
         finally:
             self._disconnect_programmer()
 
-    def dev_read_eprom(
-        self,
-        eprom_name: str,
-        eprom_data_dict: dict,
-        address_str: str | None = None,
-        size_str: str = "256",
-        operation_flags: int = 0,
-    ) -> bool:
-        # Ensure size_str has a default if None, though current signature gives "256"
-        size_to_read_str = size_str if size_str is not None else "256"
-        # eprom_data_dict is pre-fetched and validated by the caller (main.py)
-        command_eprom_data, buffer_size = self._setup_operation(
-            eprom_name,
-            eprom_data_dict,
-            COMMAND_READ, # Dev read uses normal read command
-            operation_flags,
-            address_str,
-            size_to_read_str,
-        )
-        if not command_eprom_data or not self.comm:
-            return False
-
-        start_addr_for_read = command_eprom_data.get("address", 0)
-        # memory-size in command_eprom_data is now the end_address for the read
-        end_addr_for_read = command_eprom_data.get("memory-size", start_addr_for_read)
-        num_bytes_to_dev_read = end_addr_for_read - start_addr_for_read
-
-        logger.info(
-            f"Developer Read: Reading {num_bytes_to_dev_read} bytes from address 0x{start_addr_for_read:04X} of {eprom_name.upper()}"
-        )
-        start_time = time.time()
-
-        try:
-            self.comm.send_ack()  # Tell programmer to start sending data
-            bytes_read_total = 0
-
-            while bytes_read_total < num_bytes_to_dev_read:
-                response_type, message = self.comm.get_response()
-                if response_type == "DATA":
-                    data_chunk = self.comm.read_data_block(
-                        buffer_size
-                    )  # RURP sends buffer_size chunks
-                    if not data_chunk:
-                        break
-
-                    current_dump_address = start_addr_for_read + bytes_read_total
-                    hexdump(current_dump_address, data_chunk)  # Log hexdump
-                    self.comm.send_ack()  # Acknowledge chunk
-                    bytes_read_total += len(data_chunk)
-                elif response_type == "OK":
-                    break  # End of data
-                elif response_type == "ERROR":
-                    raise EpromOperationError(f"Programmer error: {message}")
-                else:
-                    raise EpromOperationError("Timeout or unexpected response.")
-
-            logger.info(f"Developer Read complete ({time.time() - start_time:.2f}s)")
-            return True
-        except (EpromOperationError, SerialError, SerialTimeoutError) as e:
-            logger.error(f"Error during developer read: {e}")
-            return False
-        finally:
-            self._disconnect_programmer()
 
 
 # Example usage (for testing this module directly)
@@ -755,6 +692,7 @@ if __name__ == "__main__":
 
     # Define the EPROM to read and the output file
     eprom_name_to_read = "W27C512"
+    eprom_name_to_read = "SST27SF512"
     # You can specify an output file, or let it default (e.g., "W27C512.bin")
     custom_output_file = f"{eprom_name_to_read}_test_read.bin"
 
@@ -772,6 +710,7 @@ if __name__ == "__main__":
                 eprom_name=eprom_name_to_read,
                 eprom_data_dict=eprom_data_for_read,
                 output_file=custom_output_file,
+                operation_flags=FLAG_FORCE,
             )
         else:
             logger.error(f"EPROM {eprom_name_to_read} not found in database for test.")
