@@ -333,10 +333,6 @@ class EpromOperator:
                         # Check for initial "DATA:" or "OK:" (if done) or "ERROR:"
                         response_type, message = self.comm.get_response()
 
-                        self._read_data_from_programmer(buffer_size)
-
-
-
                         if response_type == "DATA":
                             # Programmer is ready to send a chunk.
                             # The size of this chunk is implicitly buffer_size by RURP protocol.
