@@ -64,7 +64,7 @@ class FirmwareManager:
         comm = None
         try:
             comm = SerialCommunicator.find_and_connect(
-                command_dict, preferred_port=preferred_port
+                command_dict, self.config_manager, preferred_port=preferred_port
             )
             # The programmer_info from find_and_connect will contain "version:board"
             if comm.programmer_info:

@@ -314,9 +314,6 @@ class EpromDatabase:
         if "chip-id" in ic and ic["chip-id"] is not None:
             data["chip-id"] = int(ic["chip-id"], 16)
 
-        if ic.get("can-erase", False):
-            data["flags"] |= FLAG_CAN_ERASE
-
         if pin_count and not pin_map_id is None:
             bus_config = self.get_bus_config(pin_count, pin_map_id)
             if bus_config:
@@ -353,25 +350,51 @@ class EpromDatabase:
                     return ic_config, manufacturer
         return None, None
 
-    def get_eprom(self, chip_name: str, full: bool = False):
+    def get_eprom(self, chip_name: str):
         """
         Retrieves processed data for a specific EPROM.
-        If `full` is False, a concise set of fields is returned.
+        This version always returns the "full" data, which includes detailed information
+        but removes the simple 'flags' key (used for programmer communication).
         """
         config, manufacturer = self.get_eprom_config(chip_name)
         if config:
             data = self._map_data(config, manufacturer)
-            if not full:
-                # Prune fields for concise output
-                keys_to_pop = ["manufacturer", "verified", "pin-map", "name",  "protocol-id", "vcc", "info-flags"]
-                for key in keys_to_pop:
-                    if key in data:
-                        data.pop(key)
-            else:
-                if "flags" in data:
-                        data.pop("flags")
             return data
         return None
+    
+    def convert_to_programmer(self, full_eprom_data: dict) -> dict:
+        """
+        Converts the full EPROM data structure (from get_eprom)
+        into the concise format suitable for sending to the programmer.
+        """
+        if not full_eprom_data:
+            return {}
+
+        # Keys to keep from the full data
+        programmer_data = {
+            "memory-size": full_eprom_data.get("memory-size", 0),
+            "type": full_eprom_data.get("type", 0),
+            "pin-count": full_eprom_data.get("pin-count", 0),
+            "vpp": full_eprom_data.get("vpp", 0),
+            "pulse-delay": full_eprom_data.get("pulse-delay", 0),
+            # 'chip-id' is optional
+        }
+
+        if "chip-id" in full_eprom_data:
+            programmer_data["chip-id"] = full_eprom_data["chip-id"]
+
+        if "bus-config" in full_eprom_data:
+            programmer_data["bus-config"] = full_eprom_data["bus-config"]
+
+        # Calculate the simple 'flags' key for the programmer
+        # Inferring from mapped 'type': Type 2 (Flash 2) and Type 3 (Flash 3) are electrically erasable.
+        # New requirement: FLAG_CAN_ERASE should be set if info-flags has the 0x00000010 bit.
+        simple_flags = 0
+        if full_eprom_data.get("info-flags", 0) & 0x00000010: # Check for "Can be electrically erased" bit
+            simple_flags |= FLAG_CAN_ERASE # FLAG_CAN_ERASE is 0x02
+        programmer_data["flags"] = simple_flags
+
+        return programmer_data
 
     def search_eprom(self, chip_name_query: str, include_unverified: bool = True) -> list:
         """
@@ -426,14 +449,17 @@ def main(): # Test function
         print(json.dumps(config, indent=2))
 
     print(f"\n--- Getting full EPROM data for: {chip_name} ---")
-    full_data = db.get_eprom(chip_name, full=True)
+    full_data = db.get_eprom(chip_name)
     if full_data:
         print(json.dumps(full_data, indent=2))
     else:
         print(f"EPROM {chip_name} not found.")
 
     print(f"\n--- Getting concise EPROM data for: {chip_name} ---")
-    concise_data = db.get_eprom(chip_name, full=False)
+    full_data_for_conversion = db.get_eprom(chip_name)
+    concise_data = None
+    if full_data_for_conversion:
+        concise_data = db.convert_to_programmer(full_data_for_conversion)
     if concise_data:
         print(json.dumps(concise_data, indent=2))
     else:

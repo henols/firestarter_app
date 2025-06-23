@@ -16,6 +16,8 @@ from firestarter.serial_comm import (
     SerialError,
     SerialTimeoutError,
 )
+from firestarter.config import ConfigManager
+
 
 logger = logging.getLogger("Hardware")
 
@@ -34,10 +36,8 @@ class HardwareManager:
     and reading VPP/VPE voltages.
     """
 
-    def __init__(self):
-        # No persistent state needed in constructor for now,
-        # SerialCommunicator is established per operation.
-        pass
+    def __init__(self, config_manager: ConfigManager):
+        self.config = config_manager
 
     def _execute_simple_command(
         self, command_dict: dict, operation_name: str
@@ -48,7 +48,7 @@ class HardwareManager:
         """
         comm = None
         try:
-            comm = SerialCommunicator.find_and_connect(command_dict)
+            comm = SerialCommunicator.find_and_connect(command_dict, self.config)
             # The command_dict itself is the initial command sent by find_and_connect.
             # If find_and_connect succeeds, it means the programmer acknowledged the command.
             # The 'msg' from find_and_connect's expect_ok is the programmer_info.
@@ -135,7 +135,7 @@ class HardwareManager:
         comm = None
 
         try:
-            comm = SerialCommunicator.find_and_connect(command_for_connect)
+            comm = SerialCommunicator.find_and_connect(command_for_connect, self.config)
             # After find_and_connect, the programmer is in the specified state.
             # Now, tell it to start sending data by sending an ACK.
             comm.send_ack()

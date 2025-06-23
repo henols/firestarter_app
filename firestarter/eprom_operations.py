@@ -20,8 +20,7 @@ from firestarter.serial_comm import (
     SerialError,
     SerialTimeoutError,
 )
-from firestarter.database import EpromDatabase
-from firestarter.ic_layout import EpromSpecBuilder
+from firestarter.config import ConfigManager
 from firestarter.utils import extract_hex_to_decimal
 from firestarter.eprom_info import print_eprom_list_table  # Changed import
 
@@ -71,9 +70,9 @@ class EpromOperator:
     for interacting with the EPROM programmer hardware.
     """
 
-    def __init__(self, db: EpromDatabase):
-        self.db = db
+    def __init__(self, config: ConfigManager):
         self.comm: SerialCommunicator | None = None
+        self.config = config
 
     def _calculate_buffer_size(self) -> int:
         if (
@@ -86,8 +85,8 @@ class EpromOperator:
 
     def _setup_operation(
         self,
-        eprom_name: str, # For logging
-        eprom_data_dict: dict, # Pre-fetched EPROM data
+        eprom_name: str,  # For logging
+        eprom_data_dict: dict,  # Pre-fetched EPROM data
         cmd: int,
         operation_flags: int = 0,
         address_str: str | None = None,
@@ -130,7 +129,7 @@ class EpromOperator:
                 return None, 0
 
         try:
-            self.comm = SerialCommunicator.find_and_connect(command_dict)
+            self.comm = SerialCommunicator.find_and_connect(command_dict, self.config)
             buffer_size = self._calculate_buffer_size()
             logger.debug(
                 f"Operation setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s). Buffer size: {buffer_size}"
@@ -148,13 +147,15 @@ class EpromOperator:
 
     def _perform_simple_command(
         self,
-        eprom_name: str, # For logging
-        eprom_data_dict: dict, # Pre-fetched
+        eprom_name: str,  # For logging
+        eprom_data_dict: dict,  # Pre-fetched
         cmd: int,
         operation_flags: int = 0,
         success_log_msg: str = "",
     ) -> bool:
-        command_eprom_data, _ = self._setup_operation(eprom_name, eprom_data_dict, cmd, operation_flags)
+        command_eprom_data, _ = self._setup_operation(
+            eprom_name, eprom_data_dict, cmd, operation_flags
+        )
         if not command_eprom_data or not self.comm:
             return False
 
@@ -190,78 +191,7 @@ class EpromOperator:
                 self.comm.get_response()
             )  # Wait for DATA: or OK: or ERROR:
             if response_type == "DATA":
-                # The number of bytes to read should ideally be sent by the programmer
-                # or known. Assuming buffer_size is the max chunk.
-                # The original code read `buffer_size` bytes directly after DATA.
-                # Let's assume the programmer sends data in chunks up to buffer_size.
-                # For now, we'll rely on the programmer sending data and then an OK when done.
-                # This part might need refinement based on exact RURP protocol for DATA.
-                # A simple approach: read what's available up to buffer_size.
-                data = self.comm.read_data_block(buffer_size)  # This needs num_bytes
-                # This is problematic if programmer doesn't say how much.
-                # Let's assume DATA: means a fixed block of buffer_size is coming.
-                # Or, DATA: <num_bytes_to_follow>
-                # The old code just did connection.read(buffer_size)
-                # This implies the programmer sends buffer_size chunks.
 
-                # The original code read `buffer_size` bytes. If the RURP sends exactly `buffer_size`
-                # or less followed by OK, this is fine. If it sends more, this needs adjustment.
-                # Let's assume for now `read_data_block` is appropriate if the programmer sends fixed chunks.
-                # The RURP protocol seems to be: Host sends OK, RURP sends DATA:, Host reads, Host sends OK.
-
-                # The RURP protocol is:
-                # Host: OK (to start read)
-                # RURP: DATA: (signals data coming)
-                # RURP: <sends data bytes>
-                # Host: OK (acknowledge receipt of data chunk)
-                # ... repeat until RURP sends OK: (signals end of data)
-
-                # This means after RURP sends "DATA:", it will send bytes.
-                # The host needs to know how many bytes to expect in this chunk.
-                # The original `read_data` function read `buffer_size` bytes.
-                # This implies the programmer sends data in chunks of `buffer_size`.
-
-                # Let's refine: `get_response` gets "DATA:". Then we read.
-                # The `read_data_block` in SerialCommunicator is designed for this.
-                # The number of bytes for `read_data_block` must be known.
-                # The original code just did `connection.read(buffer_size)`.
-
-                # For now, let's assume the programmer sends `buffer_size` chunks.
-                # This part is tricky without exact protocol spec for DATA transfer size.
-                # The original `read_data` function implies the host reads `buffer_size` bytes
-                # after receiving "DATA:", then sends "OK".
-
-                # Let's assume the programmer sends data and then waits for an ACK.
-                # The amount of data sent per "DATA:" message needs to be defined by the protocol.
-                # The original code implies it's `buffer_size`.
-
-                # Re-evaluating: The loop in original `read` implies `read_data` gets one chunk.
-                # `read_data` waits for "DATA:", reads `buffer_size`, sends "OK".
-                # This seems to be the flow.
-
-                # The `SerialCommunicator.read_data_block(num_bytes)` is the tool.
-                # The question is, what is `num_bytes`?
-                # If RURP sends "DATA:", then `buffer_size` bytes, then waits for "OK", then this is it.
-
-                # Let's simplify: if `get_response` returns "DATA", we then read `buffer_size` bytes.
-                # This matches the old logic.
-
-                # The `read_data_block` in SerialCommunicator is fine if we pass `buffer_size` to it.
-                # However, the `get_response` in SerialCommunicator already consumes the "DATA:" line.
-                # So, if `get_response` returns "DATA", the next call should be to read the actual binary data.
-
-                # Let's adjust `SerialCommunicator` or how we use it.
-                # For now, assume `read_data_block` is called after "DATA:" is confirmed.
-                # The `get_response` should probably not consume the DATA: line if we want to handle it here.
-                # Or, `get_response` returns "DATA" and the message part is the data itself (if small).
-
-                # Sticking to the original flow: `wait_for_response` (now `self.comm.get_response`)
-                # gets "DATA". Then `connection.read(buffer_size)` (now `self.comm.read_data_block(buffer_size)`).
-                # Then `write_ok` (now `self.comm.send_ack()`).
-
-                # This means `_read_data_from_programmer` should be called *after* "DATA:" is received.
-                # The loop in `read_eprom` will handle this.
-                # This method is then just:
                 data_bytes = self.comm.read_data_block(buffer_size)
                 self.comm.send_ack()
                 return data_bytes
@@ -366,7 +296,12 @@ class EpromOperator:
     ) -> bool:
         # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         command_eprom_data, buffer_size = self._setup_operation(
-            eprom_name, eprom_data_dict, COMMAND_READ, operation_flags, address_str, size_str
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_READ,
+            operation_flags,
+            address_str,
+            size_str,
         )
         if not command_eprom_data or not self.comm:
             return False  # Setup failed
@@ -445,7 +380,12 @@ class EpromOperator:
             self._disconnect_programmer()
 
     def dev_set_registers(
-        self, msb_str: str, lsb_str: str, ctrl_reg_str: str, firestarter =False,flags: int = 0
+        self,
+        msb_str: str,
+        lsb_str: str,
+        ctrl_reg_str: str,
+        firestarter=False,
+        flags: int = 0,
     ) -> bool:
         msb = int(msb_str, 16) if "0x" in msb_str else int(msb_str)
         lsb = int(lsb_str, 16) if "0x" in lsb_str else int(lsb_str)
@@ -468,7 +408,9 @@ class EpromOperator:
             "flags": flags,
         }
         try:
-            self.comm = SerialCommunicator.find_and_connect(command_dict_for_connect)
+            self.comm = SerialCommunicator.find_and_connect(
+                command_dict_for_connect, self.config
+            )
             # No EPROM data needed from DB for this specific command after connection.
         except (ProgrammerNotFoundError, SerialError) as e:
             logger.error(f"Failed to connect for dev_set_registers: {e}")
@@ -483,7 +425,16 @@ class EpromOperator:
         )
         try:
             self.comm.send_ack()  # Tell programmer to expect register data
-            self.comm.send_bytes(bytes([msb, lsb, (0x80 if firestarter else 0x00) | (ctrl_reg >> 8 & 0x01), ctrl_reg & 0xFF]))
+            self.comm.send_bytes(
+                bytes(
+                    [
+                        msb,
+                        lsb,
+                        (0x80 if firestarter else 0x00) | (ctrl_reg >> 8 & 0x01),
+                        ctrl_reg & 0xFF,
+                    ]
+                )
+            )
             logger.info("Register data sent.")
             is_ok, _ = self.comm.expect_ok()
             return is_ok  # True if RURP acknowledged end, False otherwise
@@ -509,17 +460,18 @@ class EpromOperator:
             # The _setup_operation already sent the command with the address.
             # The RURP is now (presumably) holding this address.
             # The original dev_address function just did setup and cleanup.
-            logger.info(f"Setting address to RURP: 0x{command_eprom_data['address']:06x}")
+            logger.info(
+                f"Setting address to RURP: 0x{command_eprom_data['address']:06x}"
+            )
             logger.info(f"Using {eprom_name.upper()}'s pin map")
             is_ok, _ = self.comm.expect_ok()
-            return  is_ok  # True if RURP acknowledged end, False otherwise
+            return is_ok  # True if RURP acknowledged end, False otherwise
         except (SerialError, SerialTimeoutError) as e:
             logger.error(f"Error during dev_set_address_mode: {e}")
             return False
         finally:
             self._disconnect_programmer()
 
-        
     def write_eprom(
         self,
         eprom_name: str,
@@ -585,7 +537,9 @@ class EpromOperator:
         finally:
             self._disconnect_programmer()
 
-    def erase_eprom(self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0) -> bool:
+    def erase_eprom(
+        self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
+    ) -> bool:
         # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         return self._perform_simple_command(
             eprom_name,
@@ -595,7 +549,9 @@ class EpromOperator:
             f"Erasing EPROM {eprom_name.upper()}",
         )
 
-    def check_eprom_blank(self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0) -> bool:
+    def check_eprom_blank(
+        self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
+    ) -> bool:
         # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         return self._perform_simple_command(
             eprom_name,
@@ -605,13 +561,17 @@ class EpromOperator:
             f"Performing blank check for {eprom_name.upper()}",
         )
 
-    def check_eprom_id(self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0) -> bool:
+    def check_eprom_id(
+        self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
+    ) -> tuple[bool, int | None]:
         # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         command_eprom_data, _ = self._setup_operation(
             eprom_name, eprom_data_dict, COMMAND_CHECK_CHIP_ID, operation_flags
         )
         if not command_eprom_data or not self.comm:
-            return False
+            return False, None
+
+        detected_chip_id_value: int | None = None
 
         logger.info(f"Checking chip ID for {eprom_name.upper()}")
         start_time = time.time()
@@ -621,48 +581,35 @@ class EpromOperator:
                 self.comm.expect_ok()
             )  # Message contains chip ID if OK, or error
 
-            if is_ok:
+            if is_ok_response:
                 logger.info(
                     f"Chip ID check passed for {eprom_name.upper()}: {message} ({time.time() - start_time:.2f}s)"
                 )
-                return True
+                # If response is OK, the ID matched the one sent in command_eprom_data
+                detected_chip_id_value = command_eprom_data.get("chip-id")
+                return True, detected_chip_id_value
             else:
                 # If not OK, the message might be an error or a different detected ID
                 logger.warning(
                     f"Chip ID check for {eprom_name.upper()} did not return OK. Programmer response: {message}"
                 )
-                chip_id_decimal = extract_hex_to_decimal(message or "")
-                if chip_id_decimal is not None:
-                    logger.info(f"Programmer reported chip ID: 0x{chip_id_decimal:X}")
-                    # Search database for this reported ID
-                    found_eproms = self.db.search_chip_id(chip_id_decimal)
-                    if found_eproms:
-                        logger.info(
-                            f"The reported Chip ID 0x{chip_id_decimal:X} matches the following EPROMs in the database:"
-                        )
-                        # Map raw data from search_chip_id to the format expected by print_eprom_list_table
-                        mapped_found_eproms = [
-                            self.db._map_data(ic, ic.get("manufacturer", "Unknown"))
-                            for ic in found_eproms
-                        ]
-                        # Create an EpromSpecBuilder instance for the print function
-                        spec_builder = EpromSpecBuilder(self.db)
-                        print_eprom_list_table(mapped_found_eproms, spec_builder)
-                    else:
-                        logger.warning(
-                            f"Reported Chip ID 0x{chip_id_decimal:X} not found in the database."
-                        )
+                detected_chip_id_value = extract_hex_to_decimal(message or "")
+                if detected_chip_id_value is not None:
+                    logger.info(
+                        f"Programmer reported chip ID: 0x{detected_chip_id_value:X}"
+                    )
                 else:
                     logger.error(
                         f"Failed to extract a valid chip ID from programmer response: {message}"
                     )
 
                 # Return True if FLAG_FORCE is set, otherwise False because ID didn't match expected
-                return bool(command_eprom_data.get("flags", 0) & FLAG_FORCE)
+                operation_forced = bool(command_eprom_data.get("flags", 0) & FLAG_FORCE)
+                return operation_forced, detected_chip_id_value
 
         except (SerialError, SerialTimeoutError) as e:
             logger.error(f"Error during chip ID check for {eprom_name.upper()}: {e}")
-            return False
+            return False, None
         finally:
             self._disconnect_programmer()
 
@@ -680,7 +627,7 @@ class EpromOperator:
         command_eprom_data, buffer_size = self._setup_operation(
             eprom_name,
             eprom_data_dict,
-            COMMAND_READ, # Dev read uses normal read command
+            COMMAND_READ,  # Dev read uses normal read command
             operation_flags,
             address_str,
             size_to_read_str,
@@ -758,7 +705,9 @@ if __name__ == "__main__":
     # You can specify an output file, or let it default (e.g., "W27C512.bin")
     custom_output_file = f"{eprom_name_to_read}_test_read.bin"
 
-    logger.info(f"Attempting to read EPROM '{eprom_name_to_read}' to '{custom_output_file}'...")
+    logger.info(
+        f"Attempting to read EPROM '{eprom_name_to_read}' to '{custom_output_file}'..."
+    )
 
     # Perform the read operation
     # We'll use default flags, read the entire EPROM from the beginning.
@@ -766,7 +715,12 @@ if __name__ == "__main__":
     # (fetching eprom_data_dict first). For brevity, I'll skip updating the example here,
     # as the main focus is the library code.
     try:
-        eprom_data_for_read = db.get_eprom(eprom_name_to_read)
+        full_eprom_data_for_test = db.get_eprom(eprom_name_to_read)
+        eprom_data_for_read = None
+        if full_eprom_data_for_test:
+            eprom_data_for_read = db.convert_full_eprom_to_programmer_data(
+                full_eprom_data_for_test
+            )
         if eprom_data_for_read:
             success = eprom_op.read_eprom(
                 eprom_name=eprom_name_to_read,

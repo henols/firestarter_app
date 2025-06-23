@@ -260,17 +260,9 @@ class SerialCommunicator:
         preferred_port: str | None = None, config_manager: ConfigManager | None = None
     ) -> list[str]:
         ports = []
-        # 1. Add preferred_port if specified
         if preferred_port:
             ports.append(preferred_port)
 
-        # 2. Add port from config if ConfigManager is available
-        if config_manager:
-            saved_port = config_manager.get_value("port")
-            if saved_port and saved_port not in ports:
-                ports.append(saved_port)
-
-        # 3. Scan system ports
         system_ports = serial.tools.list_ports.comports()
         for p in system_ports:
             if p.device not in ports:  # Avoid duplicates
@@ -289,55 +281,68 @@ class SerialCommunicator:
         return ports
 
     @classmethod
+    def create_connection(
+        cls,
+        command_to_send: dict,
+        port_name: str,
+        baud_rate: int = int(BAUD_RATE),
+    )-> "SerialCommunicator":
+        try:
+            logger.info(f"Attempting to connect to programmer on {port_name}...")
+            communicator = cls(
+                port=port_name, baud_rate=baud_rate
+            )  # This tries to open the port
+            if not communicator.is_connected():
+                return None
+
+            # Try next port
+            communicator.consume_remaining_input()
+            communicator.send_json_command(command_to_send)
+            is_ok, msg = communicator.expect_ok()
+
+            if is_ok:
+                communicator.programmer_info = msg
+                logger.info(f"Programmer found on {port_name}: {msg}")
+                return communicator
+            else:
+                logger.warning(f"Port {port_name} responded but not with OK: {msg}")
+                communicator.disconnect()  # Clean up before trying next port
+
+        except SerialError as e:  # Includes SerialTimeoutError from expect_ok
+            logger.debug(
+                f"Failed to establish valid communication with {port_name}: {e}"
+            )
+            if communicator:
+                communicator.disconnect()
+        except Exception as e:  # Catch any other unexpected errors during probing
+            logger.error(f"Unexpected error while probing {port_name}: {e}")
+            if communicator:
+                communicator.disconnect()
+        return None
+
+    @classmethod
     def find_and_connect(
         cls,
         command_to_send: dict,
+        config_manager: ConfigManager,
         preferred_port: str | None = None,
         baud_rate: int = int(BAUD_RATE),
     ) -> "SerialCommunicator":
-        config_manager = ConfigManager()  # Get singleton instance
+        if not preferred_port:
+            preferred_port = config_manager.get_value("port")
 
-        potential_ports = cls._list_potential_ports(preferred_port, config_manager)
+        potential_ports = cls._list_potential_ports(preferred_port)
         if not potential_ports:
             raise ProgrammerNotFoundError("No potential serial ports found.")
 
         for port_name in potential_ports:
-            communicator = None
-            try:
-                logger.info(f"Attempting to connect to programmer on {port_name}...")
-                communicator = cls(
-                    port=port_name, baud_rate=baud_rate
-                )  # This tries to open the port
-                if not communicator.is_connected():
-                    continue  # Try next port
-                communicator.consume_remaining_input()
-                communicator.send_json_command(command_to_send)
-                is_ok, msg = communicator.expect_ok()
-
-                if is_ok:
-                    communicator.programmer_info = msg
-                    logger.info(f"Programmer found on {port_name}: {msg}")
-                    if config_manager:
-                        config_manager.set_value(
-                            "port", port_name
-                        )  # Save successful port
-                    return communicator
-                else:
-                    logger.warning(f"Port {port_name} responded but not with OK: {msg}")
-                    communicator.disconnect()  # Clean up before trying next port
-
-            except SerialError as e:  # Includes SerialTimeoutError from expect_ok
-                logger.debug(
-                    f"Failed to establish valid communication with {port_name}: {e}"
-                )
-                if communicator:
-                    communicator.disconnect()
-            except Exception as e:  # Catch any other unexpected errors during probing
-                logger.error(f"Unexpected error while probing {port_name}: {e}")
-                if communicator:
-                    communicator.disconnect()
+            communicator = cls.create_connection(command_to_send, port_name, baud_rate)
+            if communicator:
+                config_manager.set_value("port", port_name)  # Save successful port
+                return communicator
 
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
+
 
     def read_data_block(self, num_bytes: int) -> bytes:
         """Reads a specific number of bytes, typically after a DATA: response."""

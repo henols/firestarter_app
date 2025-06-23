@@ -56,6 +56,16 @@
                 "-v","info","w27c512"
             ]
         },
+        {
+            "name": "Dev",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": [
+                "-v","dev","addr", "w27c512", "0x1ff" 
+            ]
+        },
 
     ]
 }
