@@ -49,11 +49,22 @@ def hexdump(address, data, width=16):
     """
     for i in range(0, len(data), width):
         chunk = data[i : i + width]
-        hex_part = " ".join(f"{byte:02x}" for byte in chunk)
-        ascii_part = "".join(
-            (chr(byte) if 32 <= byte <= 126 else ".") for byte in chunk
-        )
-        logger.info(f"{address+i:08x}: {hex_part:<{width * 3}} {ascii_part}")
+        mid = width // 2
+
+        hex_parts = []
+        ascii_parts = []
+        for j, byte in enumerate(chunk):
+            if j == mid:
+                hex_parts.append("")  # Creates the double space with ' '.join()
+                ascii_parts.append(" ")
+
+            hex_parts.append(f"{byte:02x}")
+            ascii_parts.append(chr(byte) if 32 <= byte <= 126 else ".")
+
+        hex_str = " ".join(hex_parts)
+        ascii_str = "".join(ascii_parts)
+
+        logger.info(f"{address+i:08x}: {hex_str:<{width * 3}} {ascii_str}")
 
 
 class EpromOperationError(Exception):
@@ -404,7 +415,7 @@ class EpromOperator:
         num_bytes_to_read = end_addr - start_addr
 
         logger.info(
-            f"Developer Read: Reading {num_bytes_to_read} bytes from address 0x{start_addr:04X} of {eprom_name.upper()}"
+            f"Reading {num_bytes_to_read} bytes from address 0x{start_addr:04X} of {eprom_name.upper()}"
         )
         start_time = time.time()
 
@@ -427,15 +438,15 @@ class EpromOperator:
                     bytes_read_total += len(data_chunk)
                 elif response_type == "OK":
                     break  # End of data
-                elif response_type == "ERROR":
-                    raise EpromOperationError(f"Programmer error: {message}")
+                elif response_type == "WARN":
+                    continue
                 else:
-                    raise EpromOperationError("Timeout or unexpected response.")
+                    raise EpromOperationError(f"Programmer error: {message}")
 
-            logger.info(f"Developer Read complete ({time.time() - start_time:.2f}s)")
+            logger.info(f"Read complete ({time.time() - start_time:.2f}s)")
             return True
         except (EpromOperationError, SerialError, SerialTimeoutError) as e:
-            logger.error(f"Error during developer read: {e}")
+            logger.error(f"Error during read: {e}")
             return False
         finally:
             self._disconnect_programmer()
@@ -689,7 +700,7 @@ class EpromOperator:
                 self.comm.expect_ok()
             )  # Message contains chip ID if OK, or error
 
-            if is_ok_response:
+            if is_ok:
                 logger.info(
                     f"Chip ID check passed for {eprom_name.upper()}: {message} ({time.time() - start_time:.2f}s)"
                 )

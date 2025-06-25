@@ -401,7 +401,7 @@ def main():
     if args.verbose:
         logging.basicConfig(
             level=logging.DEBUG,
-            format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s",
+            format="%(levelname)-7s:%(name)-13s:%(lineno)4d: %(message)s",
         )
     else:
         logging.basicConfig(level=logging.INFO, format="%(message)s")
