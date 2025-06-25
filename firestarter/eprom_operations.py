@@ -24,7 +24,7 @@ from firestarter.config import ConfigManager
 from firestarter.utils import extract_hex_to_decimal
 from firestarter.eprom_info import print_eprom_list_table  # Changed import
 
-logger = logging.getLogger("EPROM")
+logger = logging.getLogger("EpromOperator")
 
 bar_format = "{l_bar}{bar}| {n:#06x}/{total:#06x} bytes "
 

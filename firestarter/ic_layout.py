@@ -263,11 +263,13 @@ class EpromSpecBuilder:
 
 
 def main(): # Test function
+    import json
     logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s")
     db_instance = EpromDatabase()
     spec_builder = EpromSpecBuilder(db_instance)
 
     chip_name = "AT28C256" # A chip with a known pin map
+    chip_name = "2732" # A chip with a known pin map
     eprom_details = db_instance.get_eprom(chip_name, full=True)
     if not eprom_details:
         logger.error(f"EPROM {chip_name} not found in the database.")

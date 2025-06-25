@@ -263,11 +263,9 @@ def main():
     #     print_eprom_list_table(all_eproms[:10], presenter.spec_builder) # Print first 10
 
     logger.info("\n--- Info for 27C256 (with export) ---")
-    eprom_name_test = "27C256"
-    details_full = db_instance.get_eprom(eprom_name_test)
-    data_prog = None
-    if details_full:
-        data_prog = db_instance.convert_to_programmer(details_full)
+    eprom_name_test = "2732"
+    details_full = db_instance.get_eprom(eprom_name_test, full=True)
+    data_prog = db_instance.get_eprom(eprom_name_test, full=False)
     raw_conf, manuf = db_instance.get_eprom_config(eprom_name_test)
 
     if details_full and data_prog and raw_conf:
