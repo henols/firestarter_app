@@ -18,14 +18,14 @@ import platform
 import argcomplete
 from argcomplete.completers import BaseCompleter
 
-from firestarter.config import ConfigManager  # Refactored
+from firestarter.config import ConfigManager  
 from firestarter.constants import *
 from firestarter import __version__ as version
 from firestarter.eprom_operations import EpromOperator, build_flags
-from firestarter.eprom_info import EpromConsolePresenter  # Refactored
-from firestarter.database import EpromDatabase  # Refactored
-from firestarter.firmware import FirmwareManager  # Refactored
-from firestarter.hardware import HardwareManager  # Refactored
+from firestarter.eprom_info import EpromConsolePresenter
+from firestarter.database import EpromDatabase  
+from firestarter.firmware import FirmwareManager
+from firestarter.hardware import HardwareManager
 
 logger = logging.getLogger("Firestarter")
 
@@ -340,8 +340,9 @@ def build_arg_flags(args):
     )
 
     force = args.force if "force" in args else False
+    verbose = args.verbose if "verbose" in args else False
     vpe_as_vpp = args.vpe_as_vpp if "vpe_as_vpp" in args else False
-    flags = build_flags(ignore_blank_check, force, vpe_as_vpp)
+    flags = build_flags(ignore_blank_check, force, vpe_as_vpp, verbose)
 
     if "input_enable" in args:
         flags |= 0 if args.input_enable else FLAG_OUTPUT_ENABLE
@@ -563,14 +564,11 @@ def main():
             logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
         
-        op_successful, detected_id_value = eprom_operator.check_eprom_id(
+        res, detected_id_value = eprom_operator.check_eprom_id(
             args.eprom, eprom_data, operation_flags=build_arg_flags(args)
         )
 
-        if detected_id_value is not None:
-            # This block executes if an ID was read from the device,
-            # regardless of whether it matched or if the operation was forced.
-            # We always want to show what the database says about the detected ID.
+        if not res and detected_id_value:
             logger.info(f"Looking up detected Chip ID 0x{detected_id_value:X} in the database...")
             found_eproms_for_detected_id = db_instance.search_chip_id(detected_id_value)
             if found_eproms_for_detected_id:
@@ -587,7 +585,7 @@ def main():
                     f"Detected Chip ID 0x{detected_id_value:X} not found in the database."
                 )
         
-        return 0 if op_successful else 1
+        return 0 if res else 1
 
     elif args.command == "vpe":
         return 1 if not hardware_manager.read_vpe_voltage(args.timeout) else 0

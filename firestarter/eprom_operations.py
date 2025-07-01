@@ -29,7 +29,7 @@ logger = logging.getLogger("EpromOperator")
 bar_format = "{l_bar}{bar}| {n:#06x}/{total:#06x} bytes "
 
 
-def build_flags(ignore_blank_check=False, force=False, vpe_as_vpp=False):
+def build_flags(ignore_blank_check=False, force=False, vpe_as_vpp=False, verbose=False):
     flags = 0
     if ignore_blank_check:
         flags |= FLAG_SKIP_ERASE
@@ -38,6 +38,10 @@ def build_flags(ignore_blank_check=False, force=False, vpe_as_vpp=False):
         flags |= FLAG_FORCE
     if vpe_as_vpp:
         flags |= FLAG_VPE_AS_VPP
+    if verbose:
+        flags |= FLAG_VERBOSE
+
+
     return flags
 
 
@@ -647,7 +651,6 @@ class EpromOperator:
 
             while True:
                 response_type, message = self.comm.get_response()
-
                 if response_type == "DATA":
                     try:
                         current_bytes = int(message)
@@ -722,9 +725,7 @@ class EpromOperator:
                         f"Failed to extract a valid chip ID from programmer response: {message}"
                     )
 
-                # Return True if FLAG_FORCE is set, otherwise False because ID didn't match expected
-                operation_forced = bool(command_eprom_data.get("flags", 0) & FLAG_FORCE)
-                return operation_forced, detected_chip_id_value
+                return False, detected_chip_id_value
 
         except (SerialError, SerialTimeoutError) as e:
             logger.error(f"Error during chip ID check for {eprom_name.upper()}: {e}")
@@ -746,6 +747,9 @@ if __name__ == "__main__":
 
     # Initialize the EPROM database (it's a singleton)
     try:
+        
+        from firestarter.database import EpromDatabase  
+
         db = EpromDatabase()
         logger.debug("EpromDatabase initialized.")
     except Exception as e:

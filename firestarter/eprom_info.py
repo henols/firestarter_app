@@ -231,7 +231,7 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
     )
     logger.info(divider)
     for ic in eproms_data:
-        chip_id_str = f"0x{ic.get('chip-id', 0):X}" if ic.get('chip-id') else ""
+        chip_id_str = f"0x{ic.get('chip-id', 0):04X}" if ic.get('chip-id') else ""
         vpp_str = f"{ic.get('vpp', '-')}v" if ic.get("type") == 1 else "- " # EPROM type
         type_str = spec_builder.get_chip_type_string(ic.get("type", 0))
         logger.info(
