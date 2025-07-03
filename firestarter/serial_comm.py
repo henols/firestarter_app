@@ -9,6 +9,7 @@ Serial Communication Module
 
 import serial
 import serial.tools.list_ports
+import serial.serialutil
 import time
 import json
 import logging
@@ -23,7 +24,7 @@ DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
 
-EXPECTED_PREFIXES = ["OK:", "INFO:", "DEBUG:", "ERROR:", "WARN:", "DATA:"]
+EXPECTED_PREFIXES = ["OK:", "INFO:", "DEBUG:", "ERROR:", "WARN:", "DATA:", "DONE:", "INIT:", "END:"]
 
 
 class SerialError(Exception):
@@ -76,7 +77,7 @@ class SerialCommunicator:
             )
             time.sleep(CONNECTION_STABILIZE_DELAY)  # Allow port to stabilize
             logger.info(f"Successfully connected to {self.port_name}.")
-        except (OSError, serial.SerialException) as e:
+        except (OSError, serial.SerialException,serial.serialutil.SerialException) as e:
             logger.error(f"Failed to open serial port {self.port_name}: {e}")
             self.connection = None
             raise SerialError(f"Could not connect to {self.port_name}: {e}") from e
@@ -141,18 +142,23 @@ class SerialCommunicator:
         return None, line_str
 
     def _log_rurp_feedback(self, response_type: str | None, message: str | None):
-        if response_type and message:
+        if (response_type and message) or response_type in ["INIT", "DONE", "END"]:
             level = logging.DEBUG
             if response_type == "ERROR":
                 level = logging.ERROR
             elif response_type == "WARN":
                 level = logging.WARNING
 
+            if response_type in ["INIT", "DONE", "END"]:
+                message = "Done"
+                if response_type == "DONE":
+                    response_type = "OPERATION"
+
             # Shorten prefix for debug, full for others
             log_prefix = (
                 response_type[:1]
                 if rurp_logger.isEnabledFor(logging.DEBUG)
-                and response_type not in ["OK", "ERROR", "WARN"]
+                and response_type not in ["OK", "ERROR", "WARN","INIT","END","OPERATION"]
                 else response_type
             )
             rurp_logger.log(level, f"{log_prefix}: {message}")
@@ -194,6 +200,9 @@ class SerialCommunicator:
     def send_ack(self):
         self.send_string("OK")
 
+    def send_done(self):
+        self.send_string("DONE")
+
     def consume_remaining_input(self, timeout: float = 0.5):
         if not self.is_connected():
             return
@@ -234,26 +243,27 @@ class SerialCommunicator:
                 self.programmer_info = None
 
     def _log_command_details(self, command_dict: dict):
-        logger.debug(f"Sending command to programmer: {command_dict}")
-        flags = command_dict.get("flags", 0)
-        if flags:
-            flag_details = []
-            if flags & FLAG_FORCE:
-                flag_details.append("Force")
-            if flags & FLAG_CAN_ERASE:
-                flag_details.append("CanErase")
-            if flags & FLAG_SKIP_ERASE:
-                flag_details.append("SkipErase")
-            if flags & FLAG_SKIP_BLANK_CHECK:
-                flag_details.append("SkipBlankCheck")
-            if flags & FLAG_VPE_AS_VPP:
-                flag_details.append("VPEasVPP")
-            if flags & FLAG_CHIP_ENABLE:
-                flag_details.append("ChipEnable")
-            if flags & FLAG_OUTPUT_ENABLE:
-                flag_details.append("OutputEnable")
-            if flag_details:
-                logger.debug(f"  Flags set: {', '.join(flag_details)} (0x{flags:02X})")
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(f"Sending command to programmer: {command_dict}")
+            flags = command_dict.get("flags", 0)
+            if flags:
+                flag_details = []
+                if flags & FLAG_FORCE:
+                    flag_details.append("Force")
+                if flags & FLAG_CAN_ERASE:
+                    flag_details.append("CanErase")
+                if flags & FLAG_SKIP_ERASE:
+                    flag_details.append("SkipErase")
+                if flags & FLAG_SKIP_BLANK_CHECK:
+                    flag_details.append("SkipBlankCheck")
+                if flags & FLAG_VPE_AS_VPP:
+                    flag_details.append("VPEasVPP")
+                if flags & FLAG_CHIP_ENABLE:
+                    flag_details.append("ChipEnable")
+                if flags & FLAG_OUTPUT_ENABLE:
+                    flag_details.append("OutputEnable")
+                if flag_details:
+                    logger.debug(f"  Flags set: {', '.join(flag_details)} (0x{flags:02X})")
 
     @staticmethod
     def _list_potential_ports(
@@ -286,9 +296,12 @@ class SerialCommunicator:
         command_to_send: dict,
         port_name: str,
         baud_rate: int = int(BAUD_RATE),
-    )-> "SerialCommunicator":
+    ) -> "SerialCommunicator":
+        global communicator
+        communicator = None
         try:
-            logger.info(f"Attempting to connect to programmer on {port_name}...")
+            if not logger.isEnabledFor(logging.DEBUG):
+               logger.info(f"Attempting to connect to programmer on {port_name}...")
             communicator = cls(
                 port=port_name, baud_rate=baud_rate
             )  # This tries to open the port
@@ -343,12 +356,12 @@ class SerialCommunicator:
 
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
 
-
-    def read_data_block(self, num_bytes: int) -> bytes:
+    def read_data_block(self) -> bytes:
         """Reads a specific number of bytes, typically after a DATA: response."""
         if not self.is_connected():
             raise SerialError("Not connected.")
         try:
+            num_bytes=  int.from_bytes(self.connection.read(2), "big" )
             data = self.connection.read(num_bytes)
             if len(data) < num_bytes:
                 logger.warning(

@@ -18,12 +18,12 @@ import platform
 import argcomplete
 from argcomplete.completers import BaseCompleter
 
-from firestarter.config import ConfigManager  
+from firestarter.config import ConfigManager
 from firestarter.constants import *
 from firestarter import __version__ as version
 from firestarter.eprom_operations import EpromOperator, build_flags
 from firestarter.eprom_info import EpromConsolePresenter
-from firestarter.database import EpromDatabase  
+from firestarter.database import EpromDatabase
 from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
 
@@ -441,7 +441,7 @@ def main():
 
         # For programmer config JSON and export config
         eprom_data_for_programmer = None
-        if eprom_details: # eprom_details_full is already fetched
+        if eprom_details:  # eprom_details_full is already fetched
             eprom_data_for_programmer = db_instance.convert_to_programmer(eprom_details)
         raw_config_data, manufacturer = db_instance.get_eprom_config(eprom_name)
 
@@ -451,7 +451,7 @@ def main():
             eprom_data_for_programmer,
             raw_config_data,
             manufacturer,
-            include_export_config=args.config
+            include_export_config=args.config,
         )
         if structured_details:
             # EpromInfoProvider now handles displaying, including the export config if requested by args.config
@@ -563,13 +563,15 @@ def main():
         if not eprom_data:
             logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
-        
+
         res, detected_id_value = eprom_operator.check_eprom_id(
             args.eprom, eprom_data, operation_flags=build_arg_flags(args)
         )
 
         if not res and detected_id_value:
-            logger.info(f"Looking up detected Chip ID 0x{detected_id_value:X} in the database...")
+            logger.info(
+                f"Looking up detected Chip ID 0x{detected_id_value:X} in the database..."
+            )
             found_eproms_for_detected_id = db_instance.search_chip_id(detected_id_value)
             if found_eproms_for_detected_id:
                 logger.info(
@@ -579,18 +581,32 @@ def main():
                     db_instance._map_data(ic, ic.get("manufacturer", "Unknown"))
                     for ic in found_eproms_for_detected_id
                 ]
-                print_eprom_list_table(mapped_found_eproms, eprom_presenter.spec_builder)
+                print_eprom_list_table(
+                    mapped_found_eproms, eprom_presenter.spec_builder
+                )
             else:
                 logger.warning(
                     f"Detected Chip ID 0x{detected_id_value:X} not found in the database."
                 )
-        
+
         return 0 if res else 1
 
     elif args.command == "vpe":
-        return 1 if not hardware_manager.read_vpe_voltage(args.timeout) else 0
+        return (
+            1
+            if not hardware_manager.read_vpe_voltage(
+                args.timeout, flags=build_arg_flags(args)
+            )
+            else 0
+        )
     elif args.command == "vpp":
-        return 1 if not hardware_manager.read_vpp_voltage(args.timeout) else 0
+        return (
+            1
+            if not hardware_manager.read_vpp_voltage(
+                args.timeout, flags=build_arg_flags(args)
+            )
+            else 0
+        )
     elif args.command == "fw":
         return (
             1
@@ -600,16 +616,22 @@ def main():
                 avrdude_config_override=args.avrdude_config_path,
                 port_override=args.port,
                 board_override=args.board,
-                force_install=args.force,
+                flags=build_arg_flags(args)
             )
             else 0
         )
     elif args.command == "hw":
-        return 1 if not hardware_manager.get_hardware_revision() else 0
+        return (
+            1
+            if not hardware_manager.get_hardware_revision(flags=build_arg_flags(args))
+            else 0
+        )
     elif args.command == "config":
         return (
             1
-            if not hardware_manager.set_hardware_config(args.rev, args.r16, args.r14r15)
+            if not hardware_manager.set_hardware_config(
+                args.rev, args.r16, args.r14r15, flags=build_arg_flags(args)
+            )
             else 0
         )
     elif args.command == "dev":

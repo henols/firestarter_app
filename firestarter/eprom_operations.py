@@ -41,7 +41,6 @@ def build_flags(ignore_blank_check=False, force=False, vpe_as_vpp=False, verbose
     if verbose:
         flags |= FLAG_VERBOSE
 
-
     return flags
 
 
@@ -77,6 +76,34 @@ class EpromOperationError(Exception):
     pass
 
 
+class ClassProgressHandler:
+    def __init__(self, progress_callback = None):
+        self.progress_callback = progress_callback
+        self.pbar = None
+        self.current_step = 0
+
+
+    def start(self, total_steps: int):
+        self.total_steps = total_steps
+        self.current_step = 0
+        if self.progress_callback:
+            self.progress_callback(self.current_step, total_steps)
+        else:
+            logging_redirect_tqdm()
+            self.pbar = tqdm.tqdm(total=total_steps, bar_format=bar_format) 
+
+    def update(self, completed_steps: int):
+        self.total_steps += completed_steps
+        if self.progress_callback:
+            self.progress_callback(self.current_step,self.total_steps)
+        if self.pbar:
+            self.pbar.update(completed_steps )
+
+    def close(self):
+        if self.pbar:
+            self.pbar.close()
+
+
 class EpromOperator:
     """
     Handles various operations on EPROMs, such as reading, writing, verifying,
@@ -105,54 +132,54 @@ class EpromOperator:
         eprom_data_dict: dict,  # Pre-fetched EPROM data
         cmd: int,
         operation_flags: int = 0,
-        address_str: str | None = None,
-        size_str: str | None = None,
+        address: str | None = None,
+        size: str | None = None,
     ) -> tuple[dict | None, int]:
         """
         Prepares for an EPROM operation: uses pre-fetched EPROM data, sets up command, and connects.
         Returns (eprom_data_for_command, buffer_size) or (None, 0) on failure.
         """
+        operation = [k for k, v in globals().items() if v == cmd][0].replace(
+            "COMMAND_", ""
+        )  # Get command name
+        logger.debug(f"Performing {operation} for {eprom_name.upper()}")
+
         start_time = time.time()
         # eprom_data_dict is assumed to be valid and pre-fetched by the caller (main.py)
-        logger.debug(f"Using EPROM data for {eprom_name}: {eprom_data_dict}")
+        logger.debug(f"EPROM data: {eprom_data_dict}")
         command_dict = eprom_data_dict.copy()  # Work with a copy for the command
         command_dict["cmd"] = cmd
         # Combine base flags from EPROM data with operation-specific flags
         command_dict["flags"] = eprom_data_dict.get("flags", 0) | operation_flags
-
-        if address_str:
+        addr = 0
+        if address:
             try:
-                command_dict["address"] = (
-                    int(address_str, 16)
-                    if "0x" in address_str.lower()
-                    else int(address_str)
-                )
+                addr = int(address, 16) if "0x" in address.lower() else int(address)
+                command_dict["address"] = addr
             except ValueError:
-                logger.error(f"Invalid address format: {address_str}")
+                logger.error(f"Invalid address format: {address}")
                 return None, 0
 
         # Special handling for read operation size
-        if cmd == COMMAND_READ and size_str:
+        if cmd == COMMAND_READ and size:
             try:
-                read_size = (
-                    int(size_str, 16) if "0x" in size_str.lower() else int(size_str)
-                )
+                read_size = int(size, 16) if "0x" in size.lower() else int(size)
                 # 'memory-size' in command_dict will define the end address for read
-                current_start_address = command_dict.get("address", 0)
-                command_dict["memory-size"] = current_start_address + read_size
+
+                command_dict["memory-size"] = addr + read_size
             except ValueError:
-                logger.error(f"Invalid size format: {size_str}")
+                logger.error(f"Invalid size format: {size}")
                 return None, 0
 
         try:
             self.comm = SerialCommunicator.find_and_connect(command_dict, self.config)
             buffer_size = self._calculate_buffer_size()
             logger.debug(
-                f"Operation setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s). Buffer size: {buffer_size}"
+                f"Operation {operation} setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s). Buffer size: {buffer_size}"
             )
             return command_dict, buffer_size
         except (ProgrammerNotFoundError, SerialError) as e:
-            logger.error(f"Failed to setup operation for {eprom_name}: {e}")
+            logger.error(f"Failed to setup operation {operation} for {eprom_name}: {e}")
             self._disconnect_programmer()  # Ensure comm is None if setup fails
             return None, 0
 
@@ -199,37 +226,28 @@ class EpromOperator:
         finally:
             self._disconnect_programmer()
 
-    def _read_data_from_programmer(self, buffer_size: int) -> bytes | None:
+    def _process_pre_post(self, type: str, progress: ClassProgressHandler) -> bool:
         if not self.comm:
-            return None
-        try:
-            response_type, message = (
-                self.comm.get_response()
-            )  # Wait for DATA: or OK: or ERROR:
-            if response_type == "DATA":
-                data_bytes = self.comm.read_data_block(buffer_size)
-                self.comm.send_ack()
-                return data_bytes
+            return False
 
-            elif response_type == "OK":
-                return None  # End of data
-            elif response_type == "WARN":
-                return None
-            elif response_type == "ERROR":
-                logger.error(f"Programmer error during data read: {message}")
-                raise EpromOperationError(f"Programmer error: {message}")
-            else:  # Timeout or unexpected
-                logger.error(
-                    f"Unexpected response or timeout during data read: {response_type} - {message}"
-                )
-                raise EpromOperationError(
-                    "Timeout or unexpected response during data read."
-                )
-        except (SerialError, SerialTimeoutError) as e:
-            logger.error(f"Serial communication error during data read: {e}")
-            raise EpromOperationError(f"Serial error: {e}") from e
+        self.comm.send_ack()  # Tell programmer to start sending data
+        while True:
+            res, message = self.comm.get_response()
+            if res == "ERROR":
+                logger.error(f"Programmer error during {type.lower()}: {message}")
+                return False
+            elif res == type:
+                break
+            elif res == "WARN":
+                logger.warning(f"Programmer warning during {type.lower()}: {message}")
+                
+        logger.debug(f"{type.lower()} complete.")
+        return True
 
-    def _send_file_to_programmer(
+
+
+
+    def _send_data_core(
         self, eprom_data_for_command: dict, input_file_path: str, buffer_size: int
     ) -> bool:
         if not self.comm:
@@ -239,50 +257,37 @@ class EpromOperator:
             logger.error(f"Input file {input_file_path} not found.")
             return False
 
+        progress = ClassProgressHandler(self.progress_callback)
         try:
+            if not self._process_pre_post("INIT", progress):
+                return False
+
             with open(input_file_path, "rb") as file_handle:
                 file_size = os.path.getsize(input_file_path)
+                progress.start(file_size)
 
-                bytes_sent_total = 0
+                while True:
+                    data_chunk: bytes = file_handle.read(buffer_size)
+                    if not data_chunk or len(data_chunk) == 0:
+                        self.comm.send_done()
+                        break
 
-                def _send_and_update_progress(pbar=None):
-                    nonlocal bytes_sent_total
-                    while True:
-                        data_chunk = file_handle.read(buffer_size)
-                        if not data_chunk:
-                            # End of file. Signal RURP with a zero-length chunk.
-                            self.comm.send_bytes(int(0).to_bytes(2, byteorder="big"))
-                            is_ok, _ = self.comm.expect_ok()
-                            if is_ok and self.progress_callback:
-                                self.progress_callback(bytes_sent_total, file_size)
-                            return is_ok
+                    # Send length of the upcoming data chunk
+                    self.comm.send_bytes(
+                        len(data_chunk).to_bytes(2, byteorder="big")
+                    )
+                    # Send the actual data chunk
+                    self.comm.send_bytes(data_chunk)
+                    is_ok, msg = self.comm.expect_ok()
+                    if not is_ok:
+                        logger.error(f"Programmer did not ACK data chunk: {msg}")
+                        return False
 
-                        # Send length of the upcoming data chunk
-                        self.comm.send_bytes(len(data_chunk).to_bytes(2, byteorder="big"))
-                        is_ok, msg = self.comm.expect_ok()
-                        if not is_ok:
-                            logger.error(f"Programmer did not ACK data chunk length: {msg}")
-                            return False
+                    if progress:
+                        progress.update(len(data_chunk))
 
-                        # Send the actual data chunk
-                        self.comm.send_bytes(data_chunk)
-                        is_ok, msg = self.comm.expect_ok()
-                        if not is_ok:
-                            logger.error(f"Programmer did not ACK data chunk: {msg}")
-                            return False
-
-                        bytes_sent_total += len(data_chunk)
-                        if pbar:
-                            pbar.update(len(data_chunk))
-                        elif self.progress_callback:
-                            self.progress_callback(bytes_sent_total, file_size)
-
-                if self.progress_callback:
-                    self.progress_callback(0, file_size)
-                    return _send_and_update_progress()
-                else:
-                    with logging_redirect_tqdm(), tqdm.tqdm(total=file_size, bar_format=bar_format) as pbar:
-                        return _send_and_update_progress(pbar)
+            if not self._process_pre_post("END", progress):
+                return False
 
         except (SerialError, SerialTimeoutError, EpromOperationError) as e:
             logger.error(f"Error sending file {input_file_path}: {e}")
@@ -290,7 +295,63 @@ class EpromOperator:
         except IOError as e:
             logger.error(f"File I/O error with {input_file_path}: {e}")
             return False
-        # `finally` block for disconnect is handled by the calling public method.
+
+        return True
+
+    def _read_data_core(
+        self,
+        start_addr: int,
+        end_addr: int,
+        process_data_chunk_callback,  # New callback
+    ):
+        if not self.comm:
+            return False
+        data_size = end_addr - start_addr
+
+        progress = ClassProgressHandler(self.progress_callback)
+        try:
+            if not self._process_pre_post("INIT", progress):
+                return False
+
+            progress.start(data_size)
+            while True:
+                response_type, message = self.comm.get_response()
+                if response_type == "DATA":
+                    data_chunk = self.comm.read_data_block()
+                    if not data_chunk:
+                        logger.warning("Received DATA signal but no data followed.")
+                        break
+                    process_data_chunk_callback(
+                        start_addr, data_chunk
+                    )  # Call callback for processing
+                    self.comm.send_ack()
+                    if progress:
+                        progress.update(len(data_chunk))
+
+                elif response_type == "DONE":
+                    progress.close()
+                    logger.info("EPROM read complete.")
+                    break
+                elif response_type == "WARN":
+                    logger.warning(f"Programmer warning during read: {message}")
+                elif response_type == "ERROR":
+                    logger.error(f"Programmer error during read: {message}")
+                    raise EpromOperationError(f"Programmer error: {message}")
+                else:
+                    message = f"Unexpected response during read: {response_type} - {message}"
+                    logger.error(message)
+                    raise EpromOperationError(message)
+
+            if not self._process_pre_post("END", progress):
+                return False
+
+        except (SerialError, SerialTimeoutError, EpromOperationError) as e:
+            logger.error(f"Error during read: {e}")
+            return False
+        finally:
+            self._disconnect_programmer()
+            progress.close()
+        return True
 
     def read_eprom(
         self,
@@ -301,8 +362,8 @@ class EpromOperator:
         address_str: str | None = None,
         size_str: str | None = None,
     ) -> bool:
-        # eprom_data_dict is pre-fetched and validated by the caller (main.py)
-        command_eprom_data, buffer_size = self._setup_operation(
+        # Existing setup, validation, logging...
+        command_eprom_data, _ = self._setup_operation(
             eprom_name,
             eprom_data_dict,
             COMMAND_READ,
@@ -311,85 +372,31 @@ class EpromOperator:
             size_str,
         )
         if not command_eprom_data or not self.comm:
-            return False  # Setup failed
+            return False
 
         actual_output_file = output_file or f"{eprom_name.upper()}.bin"
         logger.info(
             f"Reading EPROM {eprom_name.upper()}, saving to {actual_output_file}"
         )
+        start_addr = command_eprom_data.get("address", 0)
+        end_addr = command_eprom_data.get("memory-size", 0)
         start_time = time.time()
+
+        def _write_to_file(address, data_chunk):
+            file_handle.seek(address)
+            file_handle.write(data_chunk)
 
         try:
             with open(actual_output_file, "wb") as file_handle:
-                # Determine total bytes to read based on EPROM data used for the command
-                # (which might have been adjusted by address_str and size_str)
-                start_addr = command_eprom_data.get("address", 0)
-                end_addr = command_eprom_data.get(
-                    "memory-size", 0
-                )  # This is end-address for read
-                total_bytes_to_read = end_addr - start_addr
-                if total_bytes_to_read <= 0:
-                    logger.error(
-                        f"Invalid read range: start {start_addr}, end {end_addr}"
-                    )
+                if not self._read_data_core(start_addr, end_addr, _write_to_file):
                     return False
-
-                self.comm.send_ack()  # Tell programmer to start sending data
-
-                bytes_read_total = 0
-
-                def _read_and_update_progress(pbar=None):
-                    nonlocal bytes_read_total
-                    while bytes_read_total < total_bytes_to_read:
-                        response_type, message = self.comm.get_response()
-
-                        if response_type == "DATA":
-                            data_chunk = self.comm.read_data_block(buffer_size)
-                            if not data_chunk:
-                                logger.warning("Received DATA signal but no data followed.")
-                                break
-                            file_handle.write(data_chunk)
-                            self.comm.send_ack()
-                            bytes_read_total += len(data_chunk)
-                            if pbar:
-                                pbar.update(len(data_chunk))
-                            elif self.progress_callback:
-                                self.progress_callback(bytes_read_total, total_bytes_to_read)
-                        elif response_type == "OK":
-                            logger.info("Programmer indicated end of data.")
-                            break
-                        elif response_type == "WARN":
-                            logger.warning(f"Programmer warning during read: {message}")
-                        elif response_type == "ERROR":
-                            logger.error(f"Programmer error during read: {message}")
-                            raise EpromOperationError(f"Programmer error: {message}")
-                        else:
-                            logger.error(f"Unexpected response or timeout during read: {response_type} - {message}")
-                            raise EpromOperationError("Timeout or unexpected response during read.")
-
-                if self.progress_callback:
-                    self.progress_callback(0, total_bytes_to_read)
-                    _read_and_update_progress()
-                    self.progress_callback(bytes_read_total, total_bytes_to_read) # Final update
-                else:
-                    with logging_redirect_tqdm(), tqdm.tqdm(total=total_bytes_to_read, bar_format=bar_format) as pbar:
-                        _read_and_update_progress(pbar)
-
             logger.info(
                 f"Read complete ({time.time() - start_time:.2f}s). Data saved to {actual_output_file}"
             )
             return True
-
-        except (EpromOperationError, SerialError, SerialTimeoutError) as e:
-            logger.error(f"Error during EPROM read: {e}")
-            return False
         except IOError as e:
             logger.error(f"File I/O error with {actual_output_file}: {e}")
             return False
-        finally:
-            self._disconnect_programmer()
-
-    # --- Public Operation Methods ---
 
     def dev_read_eprom(
         self,
@@ -399,61 +406,36 @@ class EpromOperator:
         size_str: str = "256",
         operation_flags: int = 0,
     ) -> bool:
-        # Ensure size_str has a default if None, though current signature gives "256"
-        size_to_read_str = size_str if size_str is not None else "256"
-        # eprom_data_dict is pre-fetched and validated by the caller (main.py)
-        command_eprom_data, buffer_size = self._setup_operation(
+        if not size_str:
+            size_str = "256"
+
+        command_eprom_data, _ = self._setup_operation(
             eprom_name,
             eprom_data_dict,
-            COMMAND_READ, # Dev read uses normal read command
+            COMMAND_READ,
             operation_flags,
             address_str,
-            size_to_read_str,
+            size_str,
         )
         if not command_eprom_data or not self.comm:
             return False
 
         start_addr = command_eprom_data.get("address", 0)
-        # memory-size in command_eprom_data is now the end_address for the read
         end_addr = command_eprom_data.get("memory-size", start_addr)
-        num_bytes_to_read = end_addr - start_addr
-
+        data_size = end_addr - start_addr
         logger.info(
-            f"Reading {num_bytes_to_read} bytes from address 0x{start_addr:04X} of {eprom_name.upper()}"
+            f"Reading {data_size} bytes from address 0x{start_addr:04X} of {eprom_name.upper()}"
         )
         start_time = time.time()
 
-        try:
-            self.comm.send_ack()  # Tell programmer to start sending data
-            bytes_read_total = 0
+        def _log_hexdump(address, data_chunk):
+            hexdump(address, data_chunk)  # Log hexdump
 
-            while bytes_read_total < num_bytes_to_read:
-                response_type, message = self.comm.get_response()
-                if response_type == "DATA":
-                    data_chunk = self.comm.read_data_block(
-                        buffer_size
-                    )  # RURP sends buffer_size chunks
-                    if not data_chunk:
-                        break
-
-                    current_dump_address = start_addr + bytes_read_total
-                    hexdump(current_dump_address, data_chunk)  # Log hexdump
-                    self.comm.send_ack()  # Acknowledge chunk
-                    bytes_read_total += len(data_chunk)
-                elif response_type == "OK":
-                    break  # End of data
-                elif response_type == "WARN":
-                    continue
-                else:
-                    raise EpromOperationError(f"Programmer error: {message}")
-
-            logger.info(f"Read complete ({time.time() - start_time:.2f}s)")
-            return True
-        except (EpromOperationError, SerialError, SerialTimeoutError) as e:
-            logger.error(f"Error during read: {e}")
+        if not self._read_data_core(start_addr, end_addr, _log_hexdump):
             return False
-        finally:
-            self._disconnect_programmer()
+
+        logger.info(f"Read complete ({time.time() - start_time:.2f}s)")
+        return True
 
     def dev_set_registers(
         self,
@@ -539,7 +521,7 @@ class EpromOperator:
             logger.info(
                 f"Setting address to RURP: 0x{command_eprom_data['address']:06x}"
             )
-            logger.info(f"Using {eprom_name.upper()}'s pin map")
+            logger.debug(f"Using {eprom_name.upper()}'s pin map")
             is_ok, _ = self.comm.expect_ok()
             return is_ok  # True if RURP acknowledged end, False otherwise
         except (SerialError, SerialTimeoutError) as e:
@@ -568,7 +550,7 @@ class EpromOperator:
         success = False
         try:
             # Programmer is now configured. It waits for data transfer protocol.
-            success = self._send_file_to_programmer(
+            success = self._send_data_core(
                 command_eprom_data, input_file_path, buffer_size
             )
             if success:
@@ -600,7 +582,7 @@ class EpromOperator:
         start_time = time.time()
         success = False
         try:
-            success = self._send_file_to_programmer(
+            success = self._send_data_core(
                 command_eprom_data, input_file_path, buffer_size
             )
             if success:
@@ -667,13 +649,17 @@ class EpromOperator:
                         self.progress_callback(total_size, total_size)
                     if pbar:
                         pbar.update(total_size - pbar.n)
-                    logger.info(f"Blank check successful: {message} ({time.time() - start_time:.2f}s)")
+                    logger.info(
+                        f"Blank check successful: {message} ({time.time() - start_time:.2f}s)"
+                    )
                     return True
                 elif response_type == "ERROR":
                     logger.error(f"Blank check failed: {message}")
                     return False
                 else:
-                    logger.error(f"Unexpected response or timeout during blank check: {response_type} - {message}")
+                    logger.error(
+                        f"Unexpected response or timeout during blank check: {response_type} - {message}"
+                    )
                     return False
         except (SerialError, SerialTimeoutError, EpromOperationError) as e:
             logger.error(f"Error during blank check for {eprom_name.upper()}: {e}")
@@ -734,7 +720,6 @@ class EpromOperator:
             self._disconnect_programmer()
 
 
-
 # Example usage (for testing this module directly)
 if __name__ == "__main__":
     # Setup basic logging to see output from the EpromOperator and other modules
@@ -747,8 +732,8 @@ if __name__ == "__main__":
 
     # Initialize the EPROM database (it's a singleton)
     try:
-        
-        from firestarter.database import EpromDatabase  
+
+        from firestarter.database import EpromDatabase
 
         db = EpromDatabase()
         logger.debug("EpromDatabase initialized.")

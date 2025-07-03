@@ -77,13 +77,16 @@ class HardwareManager:
             if comm:
                 comm.disconnect()
 
-    def get_hardware_revision(self) -> bool:
+    def get_hardware_revision(self, flags: int = 0) -> bool:
         """
         Reads the hardware revision of the programmer.
         Returns True if successful, False otherwise.
         """
         logger.info("Reading hardware revision...")
         command = {"state": COMMAND_HW_VERSION}
+        if flags:
+            command["flags"] = flags
+
         success, _ = self._execute_simple_command(command, "Hardware revision")
         return success
 
@@ -92,12 +95,16 @@ class HardwareManager:
         rev: int | None = None,
         r1_val: int | None = None,
         r2_val: int | None = None,
+        flags: int = 0,
+
     ) -> bool:
         """
         Sets hardware configuration parameters on the programmer.
         Returns True if successful, False otherwise.
         """
         command = {"state": COMMAND_CONFIG}
+        if flags:
+            command["flags"] = flags
         log_parts = []
         if rev is not None:
             if rev == -1:  # Special value to disable override
@@ -126,12 +133,15 @@ class HardwareManager:
         state_to_set: int,
         voltage_type_str: str,
         timeout_seconds: int | None = None,
+        flags: int = 0,
     ) -> bool:
         """
         Continuously reads and prints voltage from the programmer.
         """
         logger.info(f"Reading {voltage_type_str} voltage...")
         command_for_connect = {"state": state_to_set}
+        if flags:
+            command_for_connect["flags"] = flags
         comm = None
 
         try:
@@ -186,10 +196,10 @@ class HardwareManager:
             if comm:
                 comm.disconnect()
 
-    def read_vpp_voltage(self, timeout_seconds: int | None = None) -> bool:
+    def read_vpp_voltage(self, timeout_seconds: int | None = None, flags: int = 0) -> bool:
         """Reads the VPP voltage from the programmer."""
-        return self._read_voltage_loop(COMMAND_READ_VPP, "VPP", timeout_seconds)
+        return self._read_voltage_loop(COMMAND_READ_VPP, "VPP", timeout_seconds,flags)
 
-    def read_vpe_voltage(self, timeout_seconds: int | None = None) -> bool:
+    def read_vpe_voltage(self, timeout_seconds: int | None = None, flags: int = 0) -> bool:
         """Reads the VPE voltage from the programmer."""
-        return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds)
+        return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds, flags)

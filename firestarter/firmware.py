@@ -53,7 +53,8 @@ class FirmwareManager:
         self.config_manager = config_manager
 
     def check_current_firmware(
-        self, preferred_port: str | None = None
+        self, preferred_port: str | None = None,
+        flags: int = 0,
     ) -> tuple[str | None, str | None, str | None]:
         """
         Checks the currently installed firmware version on the programmer.
@@ -61,6 +62,8 @@ class FirmwareManager:
         """
         logger.info("Reading current firmware version...")
         command_dict = {"state": COMMAND_FW_VERSION}
+        if flags:
+            command_dict["flags"] = flags
         comm = None
         try:
             comm = SerialCommunicator.find_and_connect(
@@ -289,14 +292,14 @@ class FirmwareManager:
         avrdude_config_override: str | None = None,
         port_override: str | None = None,
         board_override: str | None = "uno",
-        force_install: bool = False,
-    ) -> bool:
+        flags: int = 0,
+        ) -> bool:
         """
         Manages the firmware update process: checks version, prompts user, and installs if needed.
         Returns True if an operation (check or install) was successful in some sense, False on major failure.
         """
         connected_port, current_version, current_board = self.check_current_firmware(
-            preferred_port=port_override
+            preferred_port=port_override,flags=flags
         )
 
         # Use the port where firmware was checked, or CLI override for flashing
@@ -314,6 +317,7 @@ class FirmwareManager:
             board=board_to_use
         )
 
+        force_install = flags & FLAG_FORCE
         if not current_version and not install_flag and not force_install:
             logger.error(
                 "Could not determine current firmware version. Use --install or --force to proceed with installation."
