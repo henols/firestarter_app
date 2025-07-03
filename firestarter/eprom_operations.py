@@ -273,6 +273,7 @@ class EpromOperator:
                         break
 
                     # Send length of the upcoming data chunk
+                    self.comm.send_bytes(b'#')
                     self.comm.send_bytes(
                         len(data_chunk).to_bytes(2, byteorder="big")
                     )
@@ -324,6 +325,7 @@ class EpromOperator:
                     process_data_chunk_callback(
                         start_addr, data_chunk
                     )  # Call callback for processing
+                    start_addr += len(data_chunk)
                     self.comm.send_ack()
                     if progress:
                         progress.update(len(data_chunk))
@@ -610,64 +612,14 @@ class EpromOperator:
     def check_eprom_blank(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
     ) -> bool:
-        command_eprom_data, _ = self._setup_operation(
-            eprom_name, eprom_data_dict, COMMAND_BLANK_CHECK, operation_flags
+        return self._perform_simple_command(
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_BLANK_CHECK,
+            operation_flags,
+            f"Blank checking EPROM {eprom_name.upper()}",
         )
-        if not command_eprom_data or not self.comm:
-            return False
 
-        logger.info(f"Performing blank check for {eprom_name.upper()}")
-        start_time = time.time()
-
-        total_size = command_eprom_data.get("memory-size", 0)
-
-        pbar = None
-        if self.progress_callback:
-            self.progress_callback(0, total_size)
-        else:
-            pbar = tqdm.tqdm(total=total_size, bar_format=bar_format)
-
-        try:
-            # Start the operation on the device
-            self.comm.send_ack()
-
-            while True:
-                response_type, message = self.comm.get_response()
-                if response_type == "DATA":
-                    try:
-                        current_bytes = int(message)
-                        if self.progress_callback:
-                            self.progress_callback(current_bytes, total_size)
-                        if pbar:
-                            pbar.update(current_bytes - pbar.n)
-                        self.comm.send_ack()
-                    except (ValueError, TypeError):
-                        logger.error(f"Invalid progress data from device: {message}")
-                        return False
-                elif response_type == "OK":
-                    if self.progress_callback:
-                        self.progress_callback(total_size, total_size)
-                    if pbar:
-                        pbar.update(total_size - pbar.n)
-                    logger.info(
-                        f"Blank check successful: {message} ({time.time() - start_time:.2f}s)"
-                    )
-                    return True
-                elif response_type == "ERROR":
-                    logger.error(f"Blank check failed: {message}")
-                    return False
-                else:
-                    logger.error(
-                        f"Unexpected response or timeout during blank check: {response_type} - {message}"
-                    )
-                    return False
-        except (SerialError, SerialTimeoutError, EpromOperationError) as e:
-            logger.error(f"Error during blank check for {eprom_name.upper()}: {e}")
-            return False
-        finally:
-            self._disconnect_programmer()
-            if pbar:
-                pbar.disable = True
 
     def check_eprom_id(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0

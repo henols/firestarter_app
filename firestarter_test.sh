@@ -19,6 +19,8 @@ HARDWARE_TESTS=1
 EPROM_TESTS=1
 INFO_TESTS=1
 
+CLEAN_UP=1
+
 JSON_FILE='./firestarter/data/database_generated.json'
 TEMP_DIR="./test_data"
 
@@ -29,9 +31,10 @@ if test $EPROM_TESTS -eq 1; then
         # echo "Temporary directory created: $TEMP_DIR"
     fi
 
-    # Trap to clean up the temporary files on exit or interrupt
-    trap "rm -rf $TEMP_DIR; echo 'Cleaned up temp files'; exit" EXIT
-
+    if test $CLEAN_UP -eq 1; then
+        # Trap to clean up the temporary files on exit or interrupt
+        trap "rm -rf $TEMP_DIR; echo 'Cleaned up temp files'; exit" EXIT
+    fi
     # Convert TARGET_NAME to uppercase
     EPROM_NAME=$(echo "$EPROM_NAME" | tr '[:lower:]' '[:upper:]')
 
@@ -109,7 +112,7 @@ exec_firestarter() {
 echo "Firestarter Python Application"
 firestarter --version
 echo "Eprom: $EPROM_NAME, memory size: $MEMORY_SIZE_HEX"
-echo 
+echo
 
 # ------------------------------ FIRMWARE TESTS ------------------------------
 if test $FIRMWARE_TESTS -eq 1; then
