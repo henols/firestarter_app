@@ -51,14 +51,14 @@ class HardwareManager:
             comm = SerialCommunicator.find_and_connect(command_dict, self.config)
             # The command_dict itself is the initial command sent by find_and_connect.
             # If find_and_connect succeeds, it means the programmer acknowledged the command.
-            # The 'msg' from find_and_connect's expect_ok is the programmer_info.
+            # The 'msg' from find_and_connect's expect_ack is the programmer_info.
             # For simple state commands, the programmer_info IS the response.
 
             # If the command sent by find_and_connect was just to establish connection,
             # and the actual data command needs to be sent *after* connection,
             # then we'd do:
             # comm.send_json_command(actual_data_command_dict)
-            # is_ok, msg = comm.expect_ok()
+            # is_ok, msg = comm.expect_ack()
             # For HW_VERSION, FW_VERSION, CONFIG, the initial command IS the data command.
 
             # The `find_and_connect` already sends `command_dict` and expects an OK.
@@ -67,7 +67,7 @@ class HardwareManager:
                 logger.info(f"{operation_name}: {comm.programmer_info}")
                 return True, comm.programmer_info
             else:
-                # This case should ideally be caught by find_and_connect if expect_ok fails.
+                # This case should ideally be caught by find_and_connect if expect_ack fails.
                 logger.error(f"Failed to {operation_name.lower()}. No valid response.")
                 return False, None
         except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
@@ -96,7 +96,6 @@ class HardwareManager:
         r1_val: int | None = None,
         r2_val: int | None = None,
         flags: int = 0,
-
     ) -> bool:
         """
         Sets hardware configuration parameters on the programmer.
@@ -196,10 +195,14 @@ class HardwareManager:
             if comm:
                 comm.disconnect()
 
-    def read_vpp_voltage(self, timeout_seconds: int | None = None, flags: int = 0) -> bool:
+    def read_vpp_voltage(
+        self, timeout_seconds: int | None = None, flags: int = 0
+    ) -> bool:
         """Reads the VPP voltage from the programmer."""
-        return self._read_voltage_loop(COMMAND_READ_VPP, "VPP", timeout_seconds,flags)
+        return self._read_voltage_loop(COMMAND_READ_VPP, "VPP", timeout_seconds, flags)
 
-    def read_vpe_voltage(self, timeout_seconds: int | None = None, flags: int = 0) -> bool:
+    def read_vpe_voltage(
+        self, timeout_seconds: int | None = None, flags: int = 0
+    ) -> bool:
         """Reads the VPE voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds, flags)

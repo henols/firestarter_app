@@ -26,7 +26,17 @@ DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
 
-EXPECTED_PREFIXES = ["OK:", "INFO:", "DEBUG:", "ERROR:", "WARN:", "DATA:", "DONE:", "INIT:", "END:"]
+EXPECTED_PREFIXES = [
+    "OK:",
+    "INFO:",
+    "DEBUG:",
+    "ERROR:",
+    "WARN:",
+    "DATA:",
+    "DONE:",
+    "INIT:",
+    "END:",
+]
 
 
 class SerialError(Exception):
@@ -79,7 +89,11 @@ class SerialCommunicator:
             )
             time.sleep(CONNECTION_STABILIZE_DELAY)  # Allow port to stabilize
             logger.info(f"Successfully connected to {self.port_name}.")
-        except (OSError, serial.SerialException,serial.serialutil.SerialException) as e:
+        except (
+            OSError,
+            serial.SerialException,
+            serial.serialutil.SerialException,
+        ) as e:
             logger.error(f"Failed to open serial port {self.port_name}: {e}")
             self.connection = None
             raise SerialError(f"Could not connect to {self.port_name}: {e}") from e
@@ -160,7 +174,8 @@ class SerialCommunicator:
             log_prefix = (
                 response_type[:1]
                 if rurp_logger.isEnabledFor(logging.DEBUG)
-                and response_type not in ["OK", "ERROR", "WARN","INIT","END","OPERATION"]
+                and response_type
+                not in ["OK", "ERROR", "WARN", "INIT", "END", "OPERATION"]
                 else response_type
             )
             rurp_logger.log(level, f"{log_prefix}: {message}")
@@ -189,7 +204,7 @@ class SerialCommunicator:
             f"Timeout waiting for a significant response from {self.port_name}."
         )
 
-    def expect_ok(
+    def expect_ack(
         self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
     ) -> tuple[bool, str | None]:
         while True:
@@ -265,7 +280,9 @@ class SerialCommunicator:
                 if flags & FLAG_OUTPUT_ENABLE:
                     flag_details.append("OutputEnable")
                 if flag_details:
-                    logger.debug(f"  Flags set: {', '.join(flag_details)} (0x{flags:02X})")
+                    logger.debug(
+                        f"  Flags set: {', '.join(flag_details)} (0x{flags:02X})"
+                    )
 
     @staticmethod
     def _list_potential_ports(
@@ -303,7 +320,7 @@ class SerialCommunicator:
         communicator = None
         try:
             if not logger.isEnabledFor(logging.DEBUG):
-               logger.info(f"Attempting to connect to programmer on {port_name}...")
+                logger.info(f"Attempting to connect to programmer on {port_name}...")
             communicator = cls(
                 port=port_name, baud_rate=baud_rate
             )  # This tries to open the port
@@ -313,7 +330,7 @@ class SerialCommunicator:
             # Try next port
             communicator.consume_remaining_input()
             communicator.send_json_command(command_to_send)
-            is_ok, msg = communicator.expect_ok()
+            is_ok, msg = communicator.expect_ack()
 
             if is_ok:
                 communicator.programmer_info = msg
@@ -323,7 +340,7 @@ class SerialCommunicator:
                 logger.warning(f"Port {port_name} responded but not with OK: {msg}")
                 communicator.disconnect()  # Clean up before trying next port
 
-        except SerialError as e:  # Includes SerialTimeoutError from expect_ok
+        except SerialError as e:  # Includes SerialTimeoutError from expect_ack
             logger.debug(
                 f"Failed to establish valid communication with {port_name}: {e}"
             )
@@ -363,14 +380,14 @@ class SerialCommunicator:
         if not self.is_connected():
             raise SerialError("Not connected.")
         try:
-            num_bytes =  int.from_bytes(self.connection.read(2), "big" )
+            num_bytes = int.from_bytes(self.connection.read(2), "big")
             checksum_rcvd = self.connection.read(1)
             data = self.connection.read(num_bytes)
             # Calculate an 8-bit XOR checksum to match the firmware.
             checksum = functools.reduce(operator.xor, data, 0)
             if checksum_rcvd[0] != checksum:
                 raise SerialError("Data corruption detected (checksum mismatch).")
-            
+
             if len(data) < num_bytes:
                 logger.warning(
                     f"Expected {num_bytes} bytes, but received {len(data)} from {self.port_name}"
@@ -407,7 +424,7 @@ if __name__ == "__main__":
 
         # Example: Send another command after connection
         # comm.send_json_command({"state": STATE_HW_VERSION})
-        ok, msg = comm.expect_ok()
+        ok, msg = comm.expect_ack()
         if ok:
             logger.info(f"Hardware version: {msg}")
         else:

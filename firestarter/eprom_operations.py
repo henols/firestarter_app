@@ -213,7 +213,7 @@ class EpromOperator:
 
         try:
             self.comm.send_ack()  # Tell programmer to proceed
-            is_ok, msg = self.comm.expect_ok()
+            is_ok, msg = self.comm.expect_ack()
             if not is_ok:
                 logger.error(f"{operation_name} failed for {eprom_name.upper()}: {msg}")
                 return False
@@ -278,7 +278,7 @@ class EpromOperator:
                         + checksum.to_bytes(1)
                     )
                     self.comm.send_bytes(data + data_chunk)
-                    is_ok, msg = self.comm.expect_ok()
+                    is_ok, msg = self.comm.expect_ack()
                     if not is_ok:
                         logger.error(f"Programmer did not ACK data chunk: {msg}")
                         return False
@@ -498,7 +498,7 @@ class EpromOperator:
                 )
             )
             logger.info("Register data sent.")
-            is_ok, _ = self.comm.expect_ok()
+            is_ok, _ = self.comm.expect_ack()
             return is_ok  # True if RURP acknowledged end, False otherwise
         except (SerialError, SerialTimeoutError) as e:
             logger.error(f"Error during dev_set_registers: {e}")
@@ -526,7 +526,7 @@ class EpromOperator:
                 f"Setting address to RURP: 0x{command_eprom_data['address']:06x}"
             )
             logger.debug(f"Using {eprom_name.upper()}'s pin map")
-            is_ok, _ = self.comm.expect_ok()
+            is_ok, _ = self.comm.expect_ack()
             return is_ok  # True if RURP acknowledged end, False otherwise
         except (SerialError, SerialTimeoutError) as e:
             logger.error(f"Error during dev_set_address_mode: {e}")
@@ -639,7 +639,7 @@ class EpromOperator:
         try:
             self.comm.send_ack()  # Tell programmer to proceed
             is_ok, message = (
-                self.comm.expect_ok()
+                self.comm.expect_ack()
             )  # Message contains chip ID if OK, or error
 
             if is_ok:
