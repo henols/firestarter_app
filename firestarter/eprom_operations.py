@@ -9,6 +9,8 @@ EPROM Operations Module
 
 import os
 import time
+import functools
+import operator
 import logging
 import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -77,11 +79,10 @@ class EpromOperationError(Exception):
 
 
 class ClassProgressHandler:
-    def __init__(self, progress_callback = None):
+    def __init__(self, progress_callback=None):
         self.progress_callback = progress_callback
         self.pbar = None
         self.current_step = 0
-
 
     def start(self, total_steps: int):
         self.total_steps = total_steps
@@ -90,14 +91,14 @@ class ClassProgressHandler:
             self.progress_callback(self.current_step, total_steps)
         else:
             logging_redirect_tqdm()
-            self.pbar = tqdm.tqdm(total=total_steps, bar_format=bar_format) 
+            self.pbar = tqdm.tqdm(total=total_steps, bar_format=bar_format)
 
     def update(self, completed_steps: int):
         self.total_steps += completed_steps
         if self.progress_callback:
-            self.progress_callback(self.current_step,self.total_steps)
+            self.progress_callback(self.current_step, self.total_steps)
         if self.pbar:
-            self.pbar.update(completed_steps )
+            self.pbar.update(completed_steps)
 
     def close(self):
         if self.pbar:
@@ -240,12 +241,9 @@ class EpromOperator:
                 break
             elif res == "WARN":
                 logger.warning(f"Programmer warning during {type.lower()}: {message}")
-                
+
         logger.debug(f"{type.lower()} complete.")
         return True
-
-
-
 
     def _send_data_core(
         self, eprom_data_for_command: dict, input_file_path: str, buffer_size: int
@@ -272,13 +270,15 @@ class EpromOperator:
                         self.comm.send_done()
                         break
 
-                    # Send length of the upcoming data chunk
-                    self.comm.send_bytes(b'#')
+                    # Calculate an 8-bit XOR checksum to match the firmware.
+                    checksum = functools.reduce(operator.xor, data_chunk, 0)
                     self.comm.send_bytes(
-                        len(data_chunk).to_bytes(2, byteorder="big")
+                    data = (
+                        b"#"
+                        + (len(data_chunk)).to_bytes(2, byteorder="big")
+                        + checksum.to_bytes(1)
                     )
-                    # Send the actual data chunk
-                    self.comm.send_bytes(data_chunk)
+                    self.comm.send_bytes(data + data_chunk)
                     is_ok, msg = self.comm.expect_ok()
                     if not is_ok:
                         logger.error(f"Programmer did not ACK data chunk: {msg}")
@@ -318,17 +318,18 @@ class EpromOperator:
             while True:
                 response_type, message = self.comm.get_response()
                 if response_type == "DATA":
-                    data_chunk = self.comm.read_data_block()
-                    if not data_chunk:
+                    payload = self.comm.read_data_block()
+                    if not payload:
                         logger.warning("Received DATA signal but no data followed.")
                         break
+
                     process_data_chunk_callback(
-                        start_addr, data_chunk
+                        start_addr, payload
                     )  # Call callback for processing
-                    start_addr += len(data_chunk)
+                    start_addr += len(payload)
                     self.comm.send_ack()
                     if progress:
-                        progress.update(len(data_chunk))
+                        progress.update(len(payload))
 
                 elif response_type == "DONE":
                     progress.close()
@@ -340,7 +341,9 @@ class EpromOperator:
                     logger.error(f"Programmer error during read: {message}")
                     raise EpromOperationError(f"Programmer error: {message}")
                 else:
-                    message = f"Unexpected response during read: {response_type} - {message}"
+                    message = (
+                        f"Unexpected response during read: {response_type} - {message}"
+                    )
                     logger.error(message)
                     raise EpromOperationError(message)
 
@@ -619,7 +622,6 @@ class EpromOperator:
             operation_flags,
             f"Blank checking EPROM {eprom_name.upper()}",
         )
-
 
     def check_eprom_id(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0

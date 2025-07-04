@@ -11,6 +11,8 @@ import serial
 import serial.tools.list_ports
 import serial.serialutil
 import time
+import functools
+import operator
 import json
 import logging
 
@@ -361,8 +363,14 @@ class SerialCommunicator:
         if not self.is_connected():
             raise SerialError("Not connected.")
         try:
-            num_bytes=  int.from_bytes(self.connection.read(2), "big" )
+            num_bytes =  int.from_bytes(self.connection.read(2), "big" )
+            checksum_rcvd = self.connection.read(1)
             data = self.connection.read(num_bytes)
+            # Calculate an 8-bit XOR checksum to match the firmware.
+            checksum = functools.reduce(operator.xor, data, 0)
+            if checksum_rcvd[0] != checksum:
+                raise SerialError("Data corruption detected (checksum mismatch).")
+            
             if len(data) < num_bytes:
                 logger.warning(
                     f"Expected {num_bytes} bytes, but received {len(data)} from {self.port_name}"
