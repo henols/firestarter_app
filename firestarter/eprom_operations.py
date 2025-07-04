@@ -272,7 +272,6 @@ class EpromOperator:
 
                     # Calculate an 8-bit XOR checksum to match the firmware.
                     checksum = functools.reduce(operator.xor, data_chunk, 0)
-                    self.comm.send_bytes(
                     data = (
                         b"#"
                         + (len(data_chunk)).to_bytes(2, byteorder="big")
