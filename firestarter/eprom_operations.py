@@ -83,6 +83,7 @@ class ClassProgressHandler:
         self.progress_callback = progress_callback
         self.pbar = None
         self.current_step = 0
+        self.total_steps = 0
 
     def start(self, total_steps: int):
         self.total_steps = total_steps
@@ -90,19 +91,38 @@ class ClassProgressHandler:
         if self.progress_callback:
             self.progress_callback(self.current_step, total_steps)
         else:
+            if self.pbar:
+                self.pbar.close()  # Close old one if any
             logging_redirect_tqdm()
             self.pbar = tqdm.tqdm(total=total_steps, bar_format=bar_format)
 
     def update(self, completed_steps: int):
-        self.total_steps += completed_steps
+        self.current_step += completed_steps
         if self.progress_callback:
             self.progress_callback(self.current_step, self.total_steps)
         if self.pbar:
             self.pbar.update(completed_steps)
+        else:
+            # If no progress bar, we can't do much with incremental updates without a total.
+            logger.info(f"Progress: +{completed_steps} steps")
+
+    def set_progress(self, current, total):
+        if self.total_steps != total or (
+            not self.pbar and not self.progress_callback
+        ):
+            self.start(total)
+
+        self.current_step = current
+        if self.progress_callback:
+            self.progress_callback(current, total)
+        if self.pbar:
+            self.pbar.n = current
+            self.pbar.refresh()
 
     def close(self):
         if self.pbar:
             self.pbar.close()
+            self.pbar = None
 
 
 class EpromOperator:
@@ -189,6 +209,60 @@ class EpromOperator:
             self.comm.disconnect()
             self.comm = None
 
+    def _execute_state_machine(
+        self, operation_name: str, progress: ClassProgressHandler | None = None
+    ) -> tuple[bool, str | None]:
+        """
+        Drives the firmware state machine for simple commands by sending ACKs and
+        processing responses until the operation is complete.
+        Handles various message types like WARN, ERROR, and DATA for progress.
+        """
+        if not self.comm:
+            return False, "Not connected"
+
+        final_msg = None
+        try:
+            for phase in ["INIT", "MAIN", "END"]:
+                self.comm.send_ack()
+                while True:
+                    res, msg = self.comm.get_response()
+                    if res == phase:
+                        logger.debug(f"{phase} phase complete.")
+                        break
+                    elif res == "OK":
+                        logger.debug(f"Got OK from {phase}: {msg}")
+                        if phase == "MAIN":
+                            final_msg = msg
+                    elif res == "WARN":
+                        logger.warning(f"Programmer warning during {phase}: {msg}")
+                    elif res == "ERROR":
+                        logger.error(f"Programmer error during {phase}: {msg}")
+                        return False, msg
+                    elif res == "DATA":
+                        # For simple commands, DATA is likely a progress update string.
+                        # The message is already logged by serial_comm's rurp_logger.
+                        try:
+                            if "/" in msg:
+                                current, total = map(int, msg.split("/"))
+                                progress.set_progress(current, total)
+                            else:
+                                progress.update(int(msg))
+                        except (ValueError, TypeError):
+                            # Not a progress update we can parse.
+                            pass
+                    elif res is None:  # Timeout
+                        return False, "Timeout waiting for {phase}."
+
+
+            # Final ACK to finish the transaction
+            self.comm.send_ack()
+
+            return True, final_msg
+
+        except (SerialError, SerialTimeoutError) as e:
+            logger.error(f"Communication error during {operation_name}: {e}")
+            return False, str(e)
+
     def _perform_simple_command(
         self,
         eprom_name: str,  # For logging
@@ -211,27 +285,30 @@ class EpromOperator:
             f"{success_log_msg or f'Performing {operation_name} for {eprom_name.upper()}'}"
         )
 
+        progress = ClassProgressHandler(self.progress_callback)
         try:
-            self.comm.send_ack()  # Tell programmer to proceed
-            is_ok, msg = self.comm.expect_ack()
+            is_ok, final_msg = self._execute_state_machine(operation_name, progress)
             if not is_ok:
-                logger.error(f"{operation_name} failed for {eprom_name.upper()}: {msg}")
+                logger.error(f"{operation_name} failed for {eprom_name.upper()}: {final_msg}")
                 return False
             logger.info(
-                f"{operation_name} for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {msg or ''}"
+                f"{operation_name} for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {final_msg or ''}"
             )
             return True
         except (SerialError, SerialTimeoutError) as e:
             logger.error(f"Error during {operation_name} for {eprom_name.upper()}: {e}")
             return False
         finally:
+            progress.close()
             self._disconnect_programmer()
 
     def _process_pre_post(self, type: str, progress: ClassProgressHandler) -> bool:
         if not self.comm:
             return False
 
-        self.comm.send_ack()  # Tell programmer to start sending data
+        # Tell the programmer to proceed with the next state (INIT or END)
+        self.comm.send_ack()
+
         while True:
             res, message = self.comm.get_response()
             if res == "ERROR":
@@ -259,6 +336,9 @@ class EpromOperator:
         try:
             if not self._process_pre_post("INIT", progress):
                 return False
+
+            # Tell the programmer to start the main operation (and expect data)
+            self.comm.send_ack()
 
             with open(input_file_path, "rb") as file_handle:
                 file_size = os.path.getsize(input_file_path)
@@ -289,6 +369,9 @@ class EpromOperator:
             if not self._process_pre_post("END", progress):
                 return False
 
+            # Send final ACK to complete the command
+            self.comm.send_ack()
+
         except (SerialError, SerialTimeoutError, EpromOperationError) as e:
             logger.error(f"Error sending file {input_file_path}: {e}")
             return False
@@ -313,6 +396,9 @@ class EpromOperator:
             if not self._process_pre_post("INIT", progress):
                 return False
 
+            # Tell the programmer to start the main operation
+            self.comm.send_ack()
+
             progress.start(data_size)
             while True:
                 response_type, message = self.comm.get_response()
@@ -330,7 +416,7 @@ class EpromOperator:
                     if progress:
                         progress.update(len(payload))
 
-                elif response_type == "DONE":
+                elif response_type == "MAIN":
                     progress.close()
                     logger.info("EPROM read complete.")
                     break
@@ -348,6 +434,9 @@ class EpromOperator:
 
             if not self._process_pre_post("END", progress):
                 return False
+
+            # Send final ACK to complete the command
+            self.comm.send_ack()
 
         except (SerialError, SerialTimeoutError, EpromOperationError) as e:
             logger.error(f"Error during read: {e}")
@@ -636,32 +725,26 @@ class EpromOperator:
 
         logger.info(f"Checking chip ID for {eprom_name.upper()}")
         start_time = time.time()
+
         try:
-            self.comm.send_ack()  # Tell programmer to proceed
-            is_ok, message = (
-                self.comm.expect_ack()
-            )  # Message contains chip ID if OK, or error
+            is_ok, final_msg = self._execute_state_machine("ID_CHECK")
 
             if is_ok:
                 logger.info(
-                    f"Chip ID check passed for {eprom_name.upper()}: {message} ({time.time() - start_time:.2f}s)"
+                    f"Chip ID check passed for {eprom_name.upper()}: {final_msg} ({time.time() - start_time:.2f}s)"
                 )
                 # If response is OK, the ID matched the one sent in command_eprom_data
                 detected_chip_id_value = command_eprom_data.get("chip-id")
                 return True, detected_chip_id_value
             else:
                 # If not OK, the message might be an error or a different detected ID
-                logger.warning(
-                    f"Chip ID check for {eprom_name.upper()} did not return OK. Programmer response: {message}"
-                )
-                detected_chip_id_value = extract_hex_to_decimal(message or "")
+                logger.warning(f"Chip ID check for {eprom_name.upper()} did not return OK. Programmer response: {final_msg}")
+                detected_chip_id_value = extract_hex_to_decimal(final_msg or "")
                 if detected_chip_id_value is not None:
-                    logger.info(
-                        f"Programmer reported chip ID: 0x{detected_chip_id_value:X}"
-                    )
+                    logger.info(f"Programmer reported chip ID: 0x{detected_chip_id_value:X}")
                 else:
                     logger.error(
-                        f"Failed to extract a valid chip ID from programmer response: {message}"
+                        f"Failed to extract a valid chip ID from programmer response: {final_msg}"
                     )
 
                 return False, detected_chip_id_value

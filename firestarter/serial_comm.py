@@ -27,18 +27,19 @@ DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
 
 EXPECTED_PREFIXES = [
-    "OK:",
-    "INFO:",
-    "DEBUG:",
-    "ERROR:",
-    "WARN:",
-    "DATA:",
-    "DONE:",
-    "INIT:",
-    "END:",
+    "OK",
+    "INFO",
+    "DEBUG",
+    "ERROR",
+    "WARN",
+    "DATA",
+    "MAIN",
+    "INIT",
+    "END",
 ]
 
-
+STATE_MACHINE_PREFIXES = ["INIT", "MAIN", "END"]
+NON_RESPONSE_PREFIXES = ["INFO", "DEBUG"]
 class SerialError(Exception):
     """Custom exception for serial communication errors."""
 
@@ -146,36 +147,34 @@ class SerialCommunicator:
             return None, None
 
         for prefix in EXPECTED_PREFIXES:
-            idx = line_str.find(prefix)
+            idx = line_str.find(prefix +":")
             if idx != -1:  # Prefix found in the line
                 # The "effective" line starts from the found prefix
                 effective_line_str = line_str[idx:]
                 # The type is the prefix itself (minus the colon)
-                response_type = prefix[:-1]
+                response_type = prefix
                 # The message is everything after the prefix in the effective line
-                message_content = effective_line_str[len(prefix) :].strip()
+                message_content = effective_line_str[len(prefix)+1 :].strip()
                 return response_type, message_content
         return None, line_str
 
     def _log_rurp_feedback(self, response_type: str | None, message: str | None):
-        if (response_type and message) or response_type in ["INIT", "DONE", "END"]:
+        if response_type in STATE_MACHINE_PREFIXES:
+                message = "Done"
+
+        if (response_type and message):
             level = logging.DEBUG
             if response_type == "ERROR":
                 level = logging.ERROR
             elif response_type == "WARN":
                 level = logging.WARNING
 
-            if response_type in ["INIT", "DONE", "END"]:
-                message = "Done"
-                if response_type == "DONE":
-                    response_type = "OPERATION"
-
             # Shorten prefix for debug, full for others
             log_prefix = (
                 response_type[:1]
                 if rurp_logger.isEnabledFor(logging.DEBUG)
                 and response_type
-                not in ["OK", "ERROR", "WARN", "INIT", "END", "OPERATION"]
+                in NON_RESPONSE_PREFIXES 
                 else response_type
             )
             rurp_logger.log(level, f"{log_prefix}: {message}")
