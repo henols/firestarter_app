@@ -350,15 +350,15 @@ class EpromOperator:
             with open(input_file_path, "rb") as file_handle:
                 file_size = os.path.getsize(input_file_path)
                 progress.start(file_size)
-
-                while file_handle.tell() < file_size:
+                
+                # This loop now handles the entire data transfer, including the 'DONE' signal.
+                # It continues until the firmware signals the 'MAIN' phase is complete.
+                while True:
                     # Wait for the Arduino to signal it's ready for a chunk.
-                    # This is our software flow control.
                     res, msg = self.comm.get_response()
 
                     if res == "MAIN":
-                        # The programmer has finished its main loop before we're done sending.
-                        # This can happen if the file size is not a multiple of the buffer size.
+                        # The programmer has finished its main loop. This is our exit condition.
                         logger.debug("MAIN phase complete signal received.")
                         break
                     elif res != "OK":
@@ -367,37 +367,27 @@ class EpromOperator:
                         )
                         return False
 
-                    data_chunk: bytes = file_handle.read(buffer_size)
+                    # Firmware has requested a data chunk. Check if we have more data to send.
+                    if file_handle.tell() < file_size:
+                        data_chunk: bytes = file_handle.read(buffer_size)
 
-                    # Calculate an 8-bit XOR checksum to match the firmware.
-                    checksum = functools.reduce(operator.xor, data_chunk, 0)
-                    data = (
-                        b"#"
-                        + (len(data_chunk)).to_bytes(2, byteorder="big")
-                        + checksum.to_bytes(1)
-                    )
-                    self.comm.send_bytes(data + data_chunk)
-                    # We do NOT wait for an ACK here. The next "OK" we get is the
-                    # request for the *next* chunk.
+                        # Calculate an 8-bit XOR checksum to match the firmware.
+                        checksum = functools.reduce(operator.xor, data_chunk, 0)
+                        data = (
+                            b"#"
+                            + (len(data_chunk)).to_bytes(2, byteorder="big")
+                            + checksum.to_bytes(1)
+                        )
+                        self.comm.send_bytes(data + data_chunk)
 
-                    if progress:
-                        progress.update(len(data_chunk))
-
-            # Tell the programmer we are done sending data
-            self.comm.send_done()
-
-            # After sending DONE, the firmware will finish its main processing loop
-            # and send back a "MAIN: Done" signal. We must wait for this signal
-            # before we can proceed to the END phase.
-            while True:
-                res, msg = self.comm.get_response()
-                if res == "MAIN":
-                    logger.debug("MAIN phase complete signal received from firmware.")
-                    break
-                elif res == "ERROR":
-                    logger.error(f"Programmer error after sending all data: {msg}")
-                    return False
-                # Other messages like INFO, WARN are logged but we continue waiting.
+                        if progress:
+                            progress.update(len(data_chunk))
+                    else:
+                        # We have no more data to send. The firmware just asked for more.
+                        # Instead of data, we send the DONE signal.
+                        self.comm.send_done()
+                        # We do NOT break here. We loop again to wait for the 'MAIN'
+                        # signal from the firmware, which is handled at the top of this loop.
 
             if not self._process_pre_post("END", progress):
                 return False
