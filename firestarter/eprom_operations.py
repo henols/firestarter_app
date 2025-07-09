@@ -139,13 +139,11 @@ class EpromOperator:
         self.progress_callback = progress_callback
 
     def _calculate_buffer_size(self) -> int:
-        if (
-            self.comm
-            and self.comm.programmer_info
-            and "leonardo" in self.comm.programmer_info.lower()
-        ):
-            return LEONARDO_BUFFER_SIZE
-        return BUFFER_SIZE
+        # For write/verify, we now use a "pull" protocol where the Arduino
+        # requests a data block when it's ready. This means we can send a full
+        # page at a time, matching the firmware's internal buffer size,
+        # without worrying about overflowing the serial buffer.
+        return BUFFER_SIZE  # This is 512 in constants.py
 
     def _setup_operation(
         self,
@@ -286,21 +284,30 @@ class EpromOperator:
         )
 
         progress = ClassProgressHandler(self.progress_callback)
+        is_ok = False
+        final_msg = "Operation failed before starting."
         try:
-            is_ok, final_msg = self._execute_state_machine(operation_name, progress)
-            if not is_ok:
-                logger.error(f"{operation_name} failed for {eprom_name.upper()}: {final_msg}")
-                return False
-            logger.info(
-                f"{operation_name} for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {final_msg or ''}"
-            )
-            return True
+            # Redirect logging to tqdm only while the operation is running
+            with logging_redirect_tqdm():
+                is_ok, final_msg = self._execute_state_machine(operation_name, progress)
         except (SerialError, SerialTimeoutError) as e:
             logger.error(f"Error during {operation_name} for {eprom_name.upper()}: {e}")
-            return False
+            # is_ok is already False
+            final_msg = str(e)
         finally:
+            # Always close the progress bar and disconnect
             progress.close()
             self._disconnect_programmer()
+
+        # Now that the bar is closed and logging is normal, print the final status.
+        if not is_ok:
+            logger.error(f"{operation_name} failed for {eprom_name.upper()}: {final_msg}")
+            return False
+
+        logger.info(
+            f"{operation_name} for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {final_msg or ''}"
+        )
+        return True
 
     def _process_pre_post(self, type: str, progress: ClassProgressHandler) -> bool:
         if not self.comm:
@@ -337,18 +344,30 @@ class EpromOperator:
             if not self._process_pre_post("INIT", progress):
                 return False
 
-            # Tell the programmer to start the main operation (and expect data)
+            # Tell the programmer to start the main operation (and expect data requests)
             self.comm.send_ack()
 
             with open(input_file_path, "rb") as file_handle:
                 file_size = os.path.getsize(input_file_path)
                 progress.start(file_size)
 
-                while True:
-                    data_chunk: bytes = file_handle.read(buffer_size)
-                    if not data_chunk or len(data_chunk) == 0:
-                        self.comm.send_done()
+                while file_handle.tell() < file_size:
+                    # Wait for the Arduino to signal it's ready for a chunk.
+                    # This is our software flow control.
+                    res, msg = self.comm.get_response()
+
+                    if res == "MAIN":
+                        # The programmer has finished its main loop before we're done sending.
+                        # This can happen if the file size is not a multiple of the buffer size.
+                        logger.debug("MAIN phase complete signal received.")
                         break
+                    elif res != "OK":
+                        logger.error(
+                            f"Programmer did not request data chunk, got {res}: {msg}"
+                        )
+                        return False
+
+                    data_chunk: bytes = file_handle.read(buffer_size)
 
                     # Calculate an 8-bit XOR checksum to match the firmware.
                     checksum = functools.reduce(operator.xor, data_chunk, 0)
@@ -358,13 +377,27 @@ class EpromOperator:
                         + checksum.to_bytes(1)
                     )
                     self.comm.send_bytes(data + data_chunk)
-                    is_ok, msg = self.comm.expect_ack()
-                    if not is_ok:
-                        logger.error(f"Programmer did not ACK data chunk: {msg}")
-                        return False
+                    # We do NOT wait for an ACK here. The next "OK" we get is the
+                    # request for the *next* chunk.
 
                     if progress:
                         progress.update(len(data_chunk))
+
+            # Tell the programmer we are done sending data
+            self.comm.send_done()
+
+            # After sending DONE, the firmware will finish its main processing loop
+            # and send back a "MAIN: Done" signal. We must wait for this signal
+            # before we can proceed to the END phase.
+            while True:
+                res, msg = self.comm.get_response()
+                if res == "MAIN":
+                    logger.debug("MAIN phase complete signal received from firmware.")
+                    break
+                elif res == "ERROR":
+                    logger.error(f"Programmer error after sending all data: {msg}")
+                    return False
+                # Other messages like INFO, WARN are logged but we continue waiting.
 
             if not self._process_pre_post("END", progress):
                 return False
@@ -378,6 +411,8 @@ class EpromOperator:
         except IOError as e:
             logger.error(f"File I/O error with {input_file_path}: {e}")
             return False
+        finally:
+            progress.close()
 
         return True
 

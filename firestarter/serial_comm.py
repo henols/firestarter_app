@@ -381,8 +381,18 @@ class SerialCommunicator:
         try:
             num_bytes = int.from_bytes(self.connection.read(2), "big")
             checksum_rcvd = self.connection.read(1)
-            data = self.connection.read(num_bytes)
-            # Calculate an 8-bit XOR checksum to match the firmware.
+
+            data = b''
+            bytes_to_read = num_bytes
+            while bytes_to_read > 0:
+                # read() will block until timeout or all bytes are received.
+                chunk = self.connection.read(bytes_to_read)
+                if not chunk:
+                    # Timeout occurred before all bytes were received
+                    break
+                data += chunk
+                bytes_to_read -= len(chunk)
+
             checksum = functools.reduce(operator.xor, data, 0)
             if checksum_rcvd[0] != checksum:
                 raise SerialError("Data corruption detected (checksum mismatch).")
