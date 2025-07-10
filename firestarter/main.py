@@ -595,7 +595,7 @@ def main():
         return (
             1
             if not hardware_manager.read_vpe_voltage(
-                args.timeout, flags=build_arg_flags(args)
+                timeout_seconds=args.timeout, flags=build_arg_flags(args)
             )
             else 0
         )
@@ -603,7 +603,7 @@ def main():
         return (
             1
             if not hardware_manager.read_vpp_voltage(
-                args.timeout, flags=build_arg_flags(args)
+                timeout_seconds=args.timeout, flags=build_arg_flags(args)
             )
             else 0
         )

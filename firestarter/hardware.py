@@ -124,8 +124,29 @@ class HardwareManager:
         else:
             logger.info(f"Setting hardware configuration: {', '.join(log_parts)}")
 
-        success, _ = self._execute_simple_command(command, "Hardware configuration")
-        return success
+        if not log_parts:
+            # This is a GET operation, needs special handling for the second response
+            comm = None
+            try:
+                comm = SerialCommunicator.find_and_connect(command, self.config)
+                # find_and_connect got the first OK. Now get the second with the data.
+                is_ok, msg = comm.expect_ack()
+                if is_ok:
+                    logger.info(f"Hardware configuration: {msg}")
+                    return True
+                else:
+                    logger.error(f"Failed to read hardware configuration: {msg}")
+                    return False
+            except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
+                logger.error(f"Failed to read hardware configuration: {e}")
+                return False
+            finally:
+                if comm:
+                    comm.disconnect()
+        else:
+            # This is a SET operation, the simple command execution is sufficient.
+            success, _ = self._execute_simple_command(command, "Hardware configuration")
+            return success
 
     def _read_voltage_loop(
         self,
@@ -138,6 +159,11 @@ class HardwareManager:
         Continuously reads and prints voltage from the programmer.
         """
         logger.info(f"Reading {voltage_type_str} voltage...")
+        if timeout_seconds:
+            logger.info(f"Reading will stop after {timeout_seconds} seconds.")
+        else:
+            logger.info("Reading continuously. Press Ctrl+C to stop.")
+
         command_for_connect = {"state": state_to_set}
         if flags:
             command_for_connect["flags"] = flags
@@ -145,32 +171,34 @@ class HardwareManager:
 
         try:
             comm = SerialCommunicator.find_and_connect(command_for_connect, self.config)
-            # After find_and_connect, the programmer is in the specified state.
-            # Now, tell it to start sending data by sending an ACK.
+
+            # Wait for the firmware to signal it's ready before we start the reading loop.
+            # This establishes a handshake and prevents a race condition.
+            is_ok, msg = comm.expect_ack()
+            if not is_ok:
+                logger.error(f"Firmware did not signal ready for voltage reading: {msg}")
+                return False
+            logger.debug(f"Firmware ready for voltage reading: {msg}")
+
+            # After receiving ready, send an ACK to start the reading loop on the firmware.
             comm.send_ack()
 
             start_time = time.time()
             while True:
-                response_type, message = comm.get_response()  # Wait for DATA: or OK:
+                response_type, message = comm.get_response()
+
                 if response_type == "DATA":
-                    if logger.isEnabledFor(logging.DEBUG):
-                        logger.info(message)  # Full log for debug
-                    else:
-                        print(f"\r{message}    ", end="")  # Overwrite line for INFO
+                    print(f"\r{message}    ", end="", flush=True)
 
                     if timeout_seconds and (time.time() - start_time > timeout_seconds):
                         print()  # Newline after continuous printing
-                        logger.info(
-                            f"{voltage_type_str} reading timed out after {timeout_seconds}s."
-                        )
-                        return True  # Or False if timeout should be an error
+                        logger.info(f"{voltage_type_str} reading timed out after {timeout_seconds}s.")
+                        return True
 
-                    comm.send_ack()  # Acknowledge data and request next
+                    comm.send_ack()  # Acknowledge data and request next reading
                 elif response_type == "OK":
-                    print()  # Newline after continuous printing
-                    logger.info(
-                        f"{voltage_type_str} reading finished by programmer: {message or 'OK'}"
-                    )
+                    print()
+                    logger.info(f"{voltage_type_str} reading finished by programmer: {message or 'OK'}")
                     return True
                 elif response_type == "ERROR":
                     print()
@@ -178,9 +206,7 @@ class HardwareManager:
                     return False
                 else:  # Timeout or unexpected
                     print()
-                    logger.error(
-                        f"Unexpected response or timeout reading {voltage_type_str}: {response_type} - {message}"
-                    )
+                    logger.error(f"Unexpected response or timeout reading {voltage_type_str}: {response_type} - {message}")
                     return False
         except (
             ProgrammerNotFoundError,
@@ -191,18 +217,18 @@ class HardwareManager:
             print()
             logger.error(f"Failed to read {voltage_type_str} voltage: {e}")
             return False
+        except KeyboardInterrupt:
+            print()  # Newline after Ctrl+C
+            logger.info(f"\n{voltage_type_str} reading stopped by user.")
+            return True
         finally:
             if comm:
                 comm.disconnect()
 
-    def read_vpp_voltage(
-        self, timeout_seconds: int | None = None, flags: int = 0
-    ) -> bool:
+    def read_vpp_voltage(self, timeout_seconds: int | None = None, flags: int = 0) -> bool:
         """Reads the VPP voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPP, "VPP", timeout_seconds, flags)
 
-    def read_vpe_voltage(
-        self, timeout_seconds: int | None = None, flags: int = 0
-    ) -> bool:
+    def read_vpe_voltage(self, timeout_seconds: int | None = None, flags: int = 0) -> bool:
         """Reads the VPE voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds, flags)
