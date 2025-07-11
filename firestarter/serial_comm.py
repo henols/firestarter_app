@@ -11,16 +11,24 @@ import serial
 import serial.tools.list_ports
 import serial.serialutil
 import time
+import re
 import functools
 import operator
 import json
 import logging
+from collections import namedtuple
+from typing import Optional, Generator, Tuple, List
 
 from firestarter.constants import *
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
 
 logger = logging.getLogger("SerialComm")
 rurp_logger = logging.getLogger("RURP")
+
+# Define a structured object for responses to improve clarity over tuples.
+Response = namedtuple('Response', ['type', 'message'])
+
+# Compile regex for parsing prefixes once for efficiency
 
 DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
@@ -37,6 +45,7 @@ EXPECTED_PREFIXES = [
     "INIT",
     "END",
 ]
+PREFIX_REGEX = re.compile(rf"\b({'|'.join(EXPECTED_PREFIXES)}):(.*)")
 
 STATE_MACHINE_PREFIXES = ["INIT", "MAIN", "END"]
 NON_RESPONSE_PREFIXES = ["INFO", "DEBUG"]
@@ -76,7 +85,7 @@ class SerialCommunicator:
         self.port_name = port
         self.baud_rate = baud_rate
         self.timeout = timeout
-        self.connection: serial.Serial | None = None
+        self.connection: Optional[serial.Serial] = None
         self.programmer_info: str | None = None
 
         try:
@@ -125,7 +134,7 @@ class SerialCommunicator:
         # json_data = json.dumps(command_dict)
         return self.send_string(json_data)
 
-    def read_line_bytes(self) -> bytes | None:
+    def read_line_bytes(self) -> Optional[bytes]:
         if not self.is_connected():
             raise SerialError("Not connected.")
         try:
@@ -135,53 +144,56 @@ class SerialCommunicator:
         except serial.SerialException as e:
             raise SerialError(f"Serial error reading from {self.port_name}: {e}") from e
 
-    def _parse_response_line(self, line_bytes: bytes) -> tuple[str | None, str | None]:
+    def _parse_response_line(self, line_bytes: bytes) -> Optional[Response]:
+        """
+        Parses a raw byte line from the serial port into a structured Response object.
+        It filters non-printable characters and uses a regex to find a known prefix.
+        """
         if not line_bytes:
-            return None, None
+            return None
         # Filters a byte array to extract readable characters.
         res_bytes = bytes(b for b in line_bytes if 32 <= b <= 126)
         line_str = res_bytes.decode("ascii", errors="ignore") if res_bytes else ""
-        # logger.debug(f"Received bytes: {line_bytes}")
-        # logger.debug(f"Received line: {line_str}")
         if not line_str:
-            return None, None
+            return None
 
-        for prefix in EXPECTED_PREFIXES:
-            idx = line_str.find(prefix +":")
-            if idx != -1:  # Prefix found in the line
-                # The "effective" line starts from the found prefix
-                effective_line_str = line_str[idx:]
-                # The type is the prefix itself (minus the colon)
-                response_type = prefix
-                # The message is everything after the prefix in the effective line
-                message_content = effective_line_str[len(prefix)+1 :].strip()
-                return response_type, message_content
-        return None, line_str
+        match = PREFIX_REGEX.search(line_str)
+        if match:
+            # Found a known prefix, return a structured response
+            return Response(type=match.group(1), message=match.group(2).strip())
 
-    def _log_rurp_feedback(self, response_type: str | None, message: str | None):
-        if response_type in STATE_MACHINE_PREFIXES:
+        # No known prefix found, return the raw line as a message with no type
+        return Response(type=None, message=line_str)
+
+    def _log_rurp_feedback(self, response: Response):
+        """Logs feedback from the programmer based on the parsed Response object."""
+        if not response or not response.type:
+            return
+
+        message = response.message
+        if response.type in STATE_MACHINE_PREFIXES:
                 message = "Done"
 
-        if (response_type and message):
-            level = logging.DEBUG
-            if response_type == "ERROR":
-                level = logging.ERROR
-            elif response_type == "WARN":
-                level = logging.WARNING
+        level = logging.DEBUG
+        if response.type == "ERROR":
+            level = logging.ERROR
+        elif response.type == "WARN":
+            level = logging.WARNING
 
-            # Shorten prefix for debug, full for others
-            log_prefix = (
-                response_type[:1]
-                if rurp_logger.isEnabledFor(logging.DEBUG)
-                and response_type
-                in NON_RESPONSE_PREFIXES 
-                else response_type
-            )
-            rurp_logger.log(level, f"{log_prefix}: {message}")
+        # Shorten prefix for debug, full for others
+        log_prefix = (
+            response.type[:1]
+            if rurp_logger.isEnabledFor(logging.DEBUG) and response.type in NON_RESPONSE_PREFIXES
+            else response.type
+        )
+        rurp_logger.log(level, f"{log_prefix}: {message}")
 
-    def get_response(
-        self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
-    ) -> tuple[str | None, str | None]:
+    def _read_and_parse_lines(self, timeout: float) -> Generator[Response, None, None]:
+        """
+        A generator that continuously reads lines from the serial port,
+        parses them, logs them, and yields them as Response objects.
+        Resets the timeout if any data is received.
+        """
         if not self.is_connected():
             raise SerialError("Not connected.")
 
@@ -189,15 +201,25 @@ class SerialCommunicator:
         while time.time() - start_time < timeout:
             line_bytes = self.read_line_bytes()
             if line_bytes:
-                response_type, message = self._parse_response_line(line_bytes)
-                self._log_rurp_feedback(response_type, message)
-                if response_type and response_type not in [
-                    "INFO",
-                    "DEBUG",
-                ]:  # Return significant responses
-                    return response_type, message
-                start_time = time.time()
-            time.sleep(0.01)  # Small delay to prevent busy-waiting
+                response = self._parse_response_line(line_bytes)
+                if response:
+                    self._log_rurp_feedback(response)
+                    yield response
+                    start_time = time.time()  # Reset timeout on any valid line
+            time.sleep(0.01)  # Prevent busy-waiting
+
+    def get_response(
+        self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
+    ) -> Response:
+        """
+        Waits for and returns the next significant (i.e., not INFO or DEBUG)
+        response from the programmer.
+        """
+        for response in self._read_and_parse_lines(timeout):
+            if response.type and response.type not in NON_RESPONSE_PREFIXES:
+                return response
+
+        # If the generator finishes without yielding a significant response, it's a timeout.
         logger.warning(f"Timeout waiting for a response from {self.port_name}.")
         raise SerialTimeoutError(
             f"Timeout waiting for a significant response from {self.port_name}."
@@ -205,13 +227,17 @@ class SerialCommunicator:
 
     def expect_ack(
         self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
-    ) -> tuple[bool, str | None]:
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Waits for an 'OK' or 'ERROR' response from the programmer.
+        """
         while True:
-            response_type, message = self.get_response(timeout)
-            if response_type == "OK":
-                return True, message
-            elif response_type == "ERROR":
-                return False, message
+            response = self.get_response(timeout)
+            if response.type == "OK":
+                return True, response.message
+            elif response.type == "ERROR":
+                return False, response.message
+            # Other significant responses are ignored by this loop, which is the intended behavior.
 
     def send_ack(self):
         self.send_string("OK")
@@ -220,29 +246,17 @@ class SerialCommunicator:
         self.send_string("DONE")
 
     def consume_remaining_input(self, timeout: float = 0.5):
+        """Consumes and logs any pending input from the serial buffer."""
         if not self.is_connected():
             return
 
-        start_time = time.time()
-        # Temporarily set a short timeout for consuming
+        # Temporarily set a short timeout for the underlying serial read
         original_timeout = self.connection.timeout
         self.connection.timeout = 0.05
         try:
-            while time.time() - start_time < timeout:
-                if self.connection.in_waiting > 0:
-                    line_bytes = self.read_line_bytes()
-                    if line_bytes:
-                        response_type, message = self._parse_response_line(line_bytes)
-                        self._log_rurp_feedback(
-                            response_type, message
-                        )  # Log what's being consumed
-                        start_time = (
-                            time.time()
-                        )  # Reset timeout if we are still getting data
-                    else:  # No more data in buffer or partial line
-                        break
-                else:  # No data in waiting
-                    break
+            # Simply exhaust the generator with the short timeout
+            for _ in self._read_and_parse_lines(timeout):
+                pass
         finally:
             self.connection.timeout = original_timeout  # Restore original timeout
 
@@ -285,8 +299,8 @@ class SerialCommunicator:
 
     @staticmethod
     def _list_potential_ports(
-        preferred_port: str | None = None, config_manager: ConfigManager | None = None
-    ) -> list[str]:
+        preferred_port: Optional[str] = None
+    ) -> List[str]:
         ports = []
         if preferred_port:
             ports.append(preferred_port)
@@ -308,25 +322,24 @@ class SerialCommunicator:
         logger.debug(f"Potential programmer ports found: {ports}")
         return ports
 
-    @classmethod
-    def create_connection(
-        cls,
-        command_to_send: dict,
+    @staticmethod
+    def _probe_port(
         port_name: str,
-        baud_rate: int = int(BAUD_RATE),
-    ) -> "SerialCommunicator":
-        global communicator
+        baud_rate: int,
+        command_to_send: dict,
+        config_manager: ConfigManager,
+    ) -> Optional["SerialCommunicator"]:
+        """
+        Attempts to connect to and validate a programmer on a single port.
+        This is a helper for find_and_connect.
+        """
         communicator = None
         try:
             if not logger.isEnabledFor(logging.DEBUG):
-                logger.info(f"Attempting to connect to programmer on {port_name}...")
-            communicator = cls(
-                port=port_name, baud_rate=baud_rate
-            )  # This tries to open the port
-            if not communicator.is_connected():
-                return None
+                logger.info(f"Probing for programmer on {port_name}...")
 
-            # Try next port
+            communicator = SerialCommunicator(port=port_name, baud_rate=baud_rate)
+
             communicator.consume_remaining_input()
             communicator.send_json_command(command_to_send)
             is_ok, msg = communicator.expect_ack()
@@ -334,18 +347,18 @@ class SerialCommunicator:
             if is_ok:
                 communicator.programmer_info = msg
                 logger.info(f"Programmer found on {port_name}: {msg}")
+                config_manager.set_value("port", port_name)  # Save successful port
                 return communicator
             else:
                 logger.warning(f"Port {port_name} responded but not with OK: {msg}")
-                communicator.disconnect()  # Clean up before trying next port
+                communicator.disconnect()
+                return None
 
-        except SerialError as e:  # Includes SerialTimeoutError from expect_ack
-            logger.debug(
-                f"Failed to establish valid communication with {port_name}: {e}"
-            )
+        except SerialError as e:
+            logger.debug(f"Failed to establish valid communication with {port_name}: {e}")
             if communicator:
                 communicator.disconnect()
-        except Exception as e:  # Catch any other unexpected errors during probing
+        except Exception as e:
             logger.error(f"Unexpected error while probing {port_name}: {e}")
             if communicator:
                 communicator.disconnect()
@@ -356,9 +369,12 @@ class SerialCommunicator:
         cls,
         command_to_send: dict,
         config_manager: ConfigManager,
-        preferred_port: str | None = None,
+        preferred_port: Optional[str] = None,
         baud_rate: int = int(BAUD_RATE),
     ) -> "SerialCommunicator":
+        """
+        Finds a compatible programmer by probing potential serial ports.
+        """
         if not preferred_port:
             preferred_port = config_manager.get_value("port")
 
@@ -367,9 +383,8 @@ class SerialCommunicator:
             raise ProgrammerNotFoundError("No potential serial ports found.")
 
         for port_name in potential_ports:
-            communicator = cls.create_connection(command_to_send, port_name, baud_rate)
+            communicator = cls._probe_port(port_name, baud_rate, command_to_send, config_manager)
             if communicator:
-                config_manager.set_value("port", port_name)  # Save successful port
                 return communicator
 
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
@@ -418,14 +433,16 @@ if __name__ == "__main__":
         level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s"
     )
 
+    config = ConfigManager()
+
     # Test data for finding programmer
     test_command = {"state": COMMAND_FW_VERSION}
 
     comm = None
     try:
         # To test, you might need to specify a port if auto-detection is tricky
-        # comm = SerialCommunicator.find_and_connect(test_command, preferred_port="/dev/ttyACM0")
-        comm = SerialCommunicator.find_and_connect(test_command)
+        # comm = SerialCommunicator.find_and_connect(test_command, config, preferred_port="/dev/ttyACM0")
+        comm = SerialCommunicator.find_and_connect(test_command, config)
 
         logger.info(
             f"Successfully connected to programmer: {comm.programmer_info} on {comm.port_name}"

@@ -12,6 +12,7 @@ import time
 import functools
 import operator
 import logging
+from typing import Optional, Tuple, Dict
 import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
@@ -24,7 +25,6 @@ from firestarter.serial_comm import (
 )
 from firestarter.config import ConfigManager
 from firestarter.utils import extract_hex_to_decimal
-from firestarter.eprom_info import print_eprom_list_table  # Changed import
 
 logger = logging.getLogger("EpromOperator")
 
@@ -151,9 +151,9 @@ class EpromOperator:
         eprom_data_dict: dict,  # Pre-fetched EPROM data
         cmd: int,
         operation_flags: int = 0,
-        address: str | None = None,
-        size: str | None = None,
-    ) -> tuple[dict | None, int]:
+        address: Optional[str] = None,
+        size: Optional[str] = None,
+    ) -> Tuple[Optional[Dict], int]:
         """
         Prepares for an EPROM operation: uses pre-fetched EPROM data, sets up command, and connects.
         Returns (eprom_data_for_command, buffer_size) or (None, 0) on failure.
@@ -209,7 +209,7 @@ class EpromOperator:
 
     def _execute_state_machine(
         self, operation_name: str, progress: ClassProgressHandler | None = None
-    ) -> tuple[bool, str | None]:
+    ) -> Tuple[bool, Optional[str]]:
         """
         Drives the firmware state machine for simple commands by sending ACKs and
         processing responses until the operation is complete.
@@ -223,7 +223,8 @@ class EpromOperator:
             for phase in ["INIT", "MAIN", "END"]:
                 self.comm.send_ack()
                 while True:
-                    res, msg = self.comm.get_response()
+                    response = self.comm.get_response()
+                    res, msg = response.type, response.message
                     if res == phase:
                         logger.debug(f"{phase} phase complete.")
                         break
@@ -248,6 +249,8 @@ class EpromOperator:
                         except (ValueError, TypeError):
                             # Not a progress update we can parse.
                             pass
+                        # Acknowledge the data to allow firmware to continue.
+                        self.comm.send_ack()
                     elif res is None:  # Timeout
                         return False, "Timeout waiting for {phase}."
 
@@ -267,7 +270,7 @@ class EpromOperator:
         eprom_data_dict: dict,  # Pre-fetched
         cmd: int,
         operation_flags: int = 0,
-        success_log_msg: str = "",
+        success_log_msg: Optional[str] = "",
     ) -> bool:
         command_eprom_data, _ = self._setup_operation(
             eprom_name, eprom_data_dict, cmd, operation_flags
@@ -317,7 +320,8 @@ class EpromOperator:
         self.comm.send_ack()
 
         while True:
-            res, message = self.comm.get_response()
+            response = self.comm.get_response()
+            res, message = response.type, response.message
             if res == "ERROR":
                 logger.error(f"Programmer error during {type.lower()}: {message}")
                 return False
@@ -325,6 +329,18 @@ class EpromOperator:
                 break
             elif res == "WARN":
                 logger.warning(f"Programmer warning during {type.lower()}: {message}")
+            elif res == "DATA":
+                # Handle progress updates during pre/post phases (e.g., blank check in INIT)
+                logger.debug(f"Received progress update during {type.lower()}: {message}")
+                try:
+                    if message and "/" in message:
+                        current, total = map(int, message.split('/'))
+                        if progress: progress.set_progress(current, total)
+                except (ValueError, TypeError):
+                    # Not a parsable progress update, or message is empty/None.
+                    pass
+                # Acknowledge the progress update to allow the firmware to continue.
+                self.comm.send_ack()
 
         logger.debug(f"{type.lower()} complete.")
         return True
@@ -426,7 +442,8 @@ class EpromOperator:
 
             progress.start(data_size)
             while True:
-                response_type, message = self.comm.get_response()
+                response = self.comm.get_response()
+                response_type, message = response.type, response.message
                 if response_type == "DATA":
                     payload = self.comm.read_data_block()
                     if not payload:
@@ -475,10 +492,10 @@ class EpromOperator:
         self,
         eprom_name: str,
         eprom_data_dict: dict,
-        output_file: str | None = None,
+        output_file: Optional[str] = None,
         operation_flags: int = 0,
-        address_str: str | None = None,
-        size_str: str | None = None,
+        address_str: Optional[str] = None,
+        size_str: Optional[str] = None,
     ) -> bool:
         # Existing setup, validation, logging...
         command_eprom_data, _ = self._setup_operation(
@@ -520,7 +537,7 @@ class EpromOperator:
         self,
         eprom_name: str,
         eprom_data_dict: dict,
-        address_str: str | None = None,
+        address_str: Optional[str] = None,
         size_str: str = "256",
         operation_flags: int = 0,
     ) -> bool:
@@ -621,7 +638,7 @@ class EpromOperator:
             self._disconnect_programmer()
 
     def dev_set_address_mode(
-        self, eprom_name: str, eprom_data_dict: dict, address_str: str, flags: int = 0
+        self, eprom_name: str, eprom_data_dict: dict, address_str: Optional[str], flags: int = 0
     ) -> bool:
         try:
             # This command sets the RURP into a mode where it holds a specific address
@@ -654,7 +671,7 @@ class EpromOperator:
         eprom_data_dict: dict,
         input_file_path: str,
         operation_flags: int = 0,
-        address_str: str | None = None,
+        address_str: Optional[str] = None,
     ) -> bool:
         # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         command_eprom_data, buffer_size = self._setup_operation(
@@ -687,7 +704,7 @@ class EpromOperator:
         eprom_data_dict: dict,
         input_file_path: str,
         operation_flags: int = 0,
-        address_str: str | None = None,
+        address_str: Optional[str] = None,
     ) -> bool:
         # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         command_eprom_data, buffer_size = self._setup_operation(
@@ -738,7 +755,7 @@ class EpromOperator:
 
     def check_eprom_id(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
-    ) -> tuple[bool, int | None]:
+    ) -> Tuple[bool, Optional[int]]:
         # eprom_data_dict is pre-fetched and validated by the caller (main.py)
         command_eprom_data, _ = self._setup_operation(
             eprom_name, eprom_data_dict, COMMAND_CHECK_CHIP_ID, operation_flags
@@ -825,8 +842,8 @@ if __name__ == "__main__":
         full_eprom_data_for_test = db.get_eprom(eprom_name_to_read)
         eprom_data_for_read = None
         if full_eprom_data_for_test:
-            eprom_data_for_read = db.convert_full_eprom_to_programmer_data(
-                full_eprom_data_for_test
+            eprom_data_for_read = db.convert_to_programmer(
+                full_eprom_data_for_test,
             )
         if eprom_data_for_read:
             success = eprom_op.read_eprom(

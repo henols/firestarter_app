@@ -7,6 +7,7 @@ IC Layout Generation Module
 """
 
 import logging
+from typing import Optional, List, Dict
 from firestarter.database import EpromDatabase # Changed import
 
 logger = logging.getLogger("EpromSpecBuilder")
@@ -121,7 +122,7 @@ class EpromSpecBuilder:
                 }
         return None
 
-    def _generate_pin_names_for_display(self, eprom_data: dict) -> list[str] | None:
+    def _generate_pin_names_for_display(self, eprom_data: dict) -> Optional[List[str]]:
         pin_count = eprom_data.get("pin-count")
         if pin_count not in self._generic_pin_names_map:
             logger.error(f"No generic layout available for {pin_count}-pin EPROM.")
@@ -180,7 +181,7 @@ class EpromSpecBuilder:
             })
         return layout_data
 
-    def build_specifications(self, eprom_data: dict) -> dict | None:
+    def build_specifications(self, eprom_data: dict) -> Optional[Dict]:
         """
         Builds a dictionary containing comprehensive technical specifications
         for the given EPROM data. This includes basic properties, pin names for layout,

@@ -7,6 +7,7 @@ Hardware Management Module
 """
 
 import time
+from typing import Optional, Tuple
 import logging
 
 from firestarter.constants import *
@@ -41,7 +42,7 @@ class HardwareManager:
 
     def _execute_simple_command(
         self, command_dict: dict, operation_name: str
-    ) -> tuple[bool, str | None]:
+    ) -> Tuple[bool, Optional[str]]:
         """
         Connects, sends a command, expects an OK, and disconnects.
         Returns (success_status, message_from_programmer).
@@ -92,9 +93,9 @@ class HardwareManager:
 
     def set_hardware_config(
         self,
-        rev: int | None = None,
-        r1_val: int | None = None,
-        r2_val: int | None = None,
+        rev: Optional[int] = None,
+        r1_val: Optional[int] = None,
+        r2_val: Optional[int] = None,
         flags: int = 0,
     ) -> bool:
         """
@@ -152,7 +153,7 @@ class HardwareManager:
         self,
         state_to_set: int,
         voltage_type_str: str,
-        timeout_seconds: int | None = None,
+        timeout_seconds: Optional[int] = None,
         flags: int = 0,
     ) -> bool:
         """
@@ -225,10 +226,10 @@ class HardwareManager:
             if comm:
                 comm.disconnect()
 
-    def read_vpp_voltage(self, timeout_seconds: int | None = None, flags: int = 0) -> bool:
+    def read_vpp_voltage(self, timeout_seconds: Optional[int] = None, flags: int = 0) -> bool:
         """Reads the VPP voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPP, "VPP", timeout_seconds, flags)
 
-    def read_vpe_voltage(self, timeout_seconds: int | None = None, flags: int = 0) -> bool:
+    def read_vpe_voltage(self, timeout_seconds: Optional[int] = None, flags: int = 0) -> bool:
         """Reads the VPE voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds, flags)

@@ -10,6 +10,7 @@ Configuration Management Module
 import os
 import json
 import logging
+from typing import Optional
 
 # Define the home path and configuration file path
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
@@ -64,7 +65,7 @@ class ConfigManager:
     _instances = {} # Stores instances, keyed by config file path
     _initialized_configs = {} # Tracks initialization status, keyed by config file path
 
-    def __new__(cls, config_filename: str | None = None, *args, **kwargs):
+    def __new__(cls, config_filename: Optional[str] = None, *args, **kwargs):
         actual_filename = config_filename or CONFIG_FILE_DEFAULT
         instance_key = os.path.join(HOME_PATH, actual_filename)
 
@@ -72,7 +73,7 @@ class ConfigManager:
             cls._instances[instance_key] = super(ConfigManager, cls).__new__(cls)
         return cls._instances[instance_key]
 
-    def __init__(self, config_filename: str | None = None):
+    def __init__(self, config_filename: Optional[str] = None):
         actual_filename = config_filename or CONFIG_FILE_DEFAULT
         self.config_file_path = os.path.join(HOME_PATH, actual_filename)
 

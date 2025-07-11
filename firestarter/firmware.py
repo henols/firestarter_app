@@ -12,6 +12,7 @@ import time
 import requests
 import logging
 import re
+from typing import Optional, Tuple
 
 # Add this line with the other imports
 from rich.prompt import Confirm
@@ -55,7 +56,7 @@ class FirmwareManager:
     def check_current_firmware(
         self, preferred_port: str | None = None,
         flags: int = 0,
-    ) -> tuple[str | None, str | None, str | None]:
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
         Checks the currently installed firmware version on the programmer.
         Returns: (port_name, current_version, board_name) or (None, None, None) on failure.
@@ -94,7 +95,7 @@ class FirmwareManager:
 
     def fetch_latest_release_info(
         self, board: str = "uno"
-    ) -> tuple[str | None, str | None]:
+    ) -> Tuple[Optional[str], Optional[str]]:
         """
         Fetches the latest firmware version and download URL for the specified board.
         Returns: (latest_version_str, download_url_str) or (None, None) on failure.
@@ -142,7 +143,7 @@ class FirmwareManager:
             )
             return False  # Treat as not up-to-date if parsing fails
 
-    def _download_firmware_file(self, url: str) -> str | None:
+    def _download_firmware_file(self, url: str) -> Optional[str]:
         """Downloads firmware from the URL and saves it to a temporary local path."""
         logger.info(f"Downloading firmware from {url}...")
         start_time = time.time()
@@ -179,9 +180,9 @@ class FirmwareManager:
         self,
         hex_file_path: str,
         board: str,
-        avrdude_path_override: str | None,
-        avrdude_config_override: str | None,
-        target_port: str | None,
+        avrdude_path_override: Optional[str],
+        avrdude_config_override: Optional[str],
+        target_port: Optional[str],
     ) -> bool:
         """Internal method to perform the Avrdude flashing process."""
         start_time = time.time()
@@ -288,10 +289,10 @@ class FirmwareManager:
     def manage_firmware_update(
         self,
         install_flag: bool = False,
-        avrdude_path_override: str | None = None,
-        avrdude_config_override: str | None = None,
-        port_override: str | None = None,
-        board_override: str | None = "uno",
+        avrdude_path_override: Optional[str] = None,
+        avrdude_config_override: Optional[str] = None,
+        port_override: Optional[str] = None,
+        board_override: Optional[str] = "uno",
         flags: int = 0,
         ) -> bool:
         """

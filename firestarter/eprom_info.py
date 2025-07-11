@@ -10,6 +10,7 @@ EPROM Information Module
 import json
 import re
 import logging
+from typing import Optional, Dict
 
 from firestarter.database import EpromDatabase # Changed import
 from firestarter.ic_layout import EpromSpecBuilder # Import renamed class
@@ -84,12 +85,12 @@ class EpromConsolePresenter:
     def prepare_detailed_eprom_data(
         self,
         eprom_name: str, # For logging and titles
-        eprom_details: dict | None, # Pre-fetched from db.get_eprom(name, full=True)
-        eprom_data_for_programmer: dict | None, # Pre-fetched from db.get_eprom(name, full=False)
-        raw_config_data: dict | None, # Pre-fetched from db.get_eprom_config()
-        manufacturer: str | None, # Pre-fetched from db.get_eprom_config()
+        eprom_details: Optional[Dict], # Pre-fetched from db.get_eprom(name, full=True)
+        eprom_data_for_programmer: Optional[Dict], # Pre-fetched from db.get_eprom(name, full=False)
+        raw_config_data: Optional[Dict], # Pre-fetched from db.get_eprom_config()
+        manufacturer: Optional[str], # Pre-fetched from db.get_eprom_config()
         include_export_config: bool = False
-    ) -> dict | None:
+    ) -> Optional[Dict]:
         """
         Prepares a comprehensive data structure for a specific EPROM,
         ready for presentation. It fetches raw specifications, constructs
@@ -124,7 +125,7 @@ class EpromConsolePresenter:
         
         return combined_data
 
-    def _prepare_export_configuration_data(self, raw_config_data: dict | None, manufacturer: str | None, eprom_name: str) -> dict | None:
+    def _prepare_export_configuration_data(self, raw_config_data: Optional[Dict], manufacturer: Optional[str], eprom_name: str) -> Optional[Dict]:
         """
         Prepares EPROM and Pin Map configuration data formatted for export.
         """
@@ -152,7 +153,7 @@ class EpromConsolePresenter:
                 logger.warning(f"Pin map '{pin_map_id}' for {pin_count}-pin {eprom_name} not found for export.")
         return export_data_to_return
 
-    def present_eprom_details(self, chip_data: dict | None, show_export_config: bool = False):
+    def present_eprom_details(self, chip_data: Optional[Dict], show_export_config: bool = False):
         """
         Formats and prints the structured chip data to the console.
         This method now incorporates the logic from the former print_structured_chip_data.
@@ -264,8 +265,10 @@ def main():
 
     logger.info("\n--- Info for 27C256 (with export) ---")
     eprom_name_test = "2732"
-    details_full = db_instance.get_eprom(eprom_name_test, full=True)
-    data_prog = db_instance.get_eprom(eprom_name_test, full=False)
+    details_full = db_instance.get_eprom(eprom_name_test)
+    data_prog = None
+    if details_full:
+        data_prog = db_instance.convert_to_programmer(details_full)
     raw_conf, manuf = db_instance.get_eprom_config(eprom_name_test)
 
     if details_full and data_prog and raw_conf:

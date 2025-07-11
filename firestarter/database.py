@@ -424,7 +424,7 @@ class EpromDatabase:
             "memory-size": full_eprom_data.get("memory-size", 0),
             "type": full_eprom_data.get("type", 0),
             "pin-count": full_eprom_data.get("pin-count", 0),
-            "vpp": full_eprom_data.get("vpp", 0)*1000,
+            "vpp": full_eprom_data.get("vpp", 0) * 1000,  # Firmware expects millivolts
             "pulse-delay": full_eprom_data.get("pulse-delay", 0),
             # 'chip-id' is optional
         }
