@@ -1,6 +1,6 @@
 """
 Project Name: Firestarter
-Copyright (c) 2024 Henrik Olsson
+Copyright (c) 2025 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
@@ -14,12 +14,13 @@ from typing import Optional
 
 # Define the home path and configuration file path
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
-CONFIG_FILE_DEFAULT = "config.json" # Default filename
+CONFIG_FILE_DEFAULT = "config.json"  # Default filename
 # CONFIG_FILE = os.path.join(HOME_PATH, "config.json") # No longer used directly as a global fixed path for ConfigManager
 DATABASE_FILE = os.path.join(HOME_PATH, "database.json")
 PIN_MAP_FILE = os.path.join(HOME_PATH, "pin-maps.json")
 
 logger = logging.getLogger("Config")
+
 
 def get_local_database():
     """
@@ -32,10 +33,9 @@ def get_local_database():
             with open(DATABASE_FILE, "rt") as file:
                 return json.load(file)
         except json.JSONDecodeError:
-            logger.error(
-                f"Warning: Database file {DATABASE_FILE} is not a valid JSON."
-            )
+            logger.error(f"Warning: Database file {DATABASE_FILE} is not a valid JSON.")
     return None
+
 
 def get_local_pin_maps():
     """
@@ -48,10 +48,9 @@ def get_local_pin_maps():
             with open(PIN_MAP_FILE, "rt") as file:
                 return json.load(file)
         except json.JSONDecodeError:
-            logger.error(
-                f"Warning: Pin map file {PIN_MAP_FILE} is not a valid JSON."
-            )
+            logger.error(f"Warning: Pin map file {PIN_MAP_FILE} is not a valid JSON.")
     return None
+
 
 class ConfigManager:
     """
@@ -62,8 +61,9 @@ class ConfigManager:
     application.
     It's a singleton per configuration file name.
     """
-    _instances = {} # Stores instances, keyed by config file path
-    _initialized_configs = {} # Tracks initialization status, keyed by config file path
+
+    _instances = {}  # Stores instances, keyed by config file path
+    _initialized_configs = {}  # Tracks initialization status, keyed by config file path
 
     def __new__(cls, config_filename: Optional[str] = None, *args, **kwargs):
         actual_filename = config_filename or CONFIG_FILE_DEFAULT
@@ -112,13 +112,17 @@ class ConfigManager:
             try:
                 os.makedirs(HOME_PATH)
             except OSError as e:
-                logger.error(f"Error: Unable to create configuration directory {HOME_PATH}: {e}")
+                logger.error(
+                    f"Error: Unable to create configuration directory {HOME_PATH}: {e}"
+                )
                 return
         try:
             with open(self.config_file_path, "w") as f:
                 json.dump(self._config, f, indent=4)
         except IOError as e:
-            logger.error(f"Error: Unable to save configuration to {self.config_file_path}: {e}")
+            logger.error(
+                f"Error: Unable to save configuration to {self.config_file_path}: {e}"
+            )
 
     def get_value(self, key, default=None):
         """
@@ -159,6 +163,7 @@ class ConfigManager:
         Returns all configuration keys and values as a dictionary.
         """
         return self._config.copy()
+
 
 # For testing or standalone execution
 if __name__ == "__main__":
