@@ -47,8 +47,9 @@ firestarter="firestarter.main:main"
 
 [tool.setuptools]
 include-package-data = true
-packages = find:
-
+packages = [
+    "firestarter",
+]
 [tool.setuptools.package-data]
     "firestarter" = [
         "data/database_generated.json",
