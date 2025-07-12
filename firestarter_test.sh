@@ -14,10 +14,19 @@ EPROM_NAME=${1:-W27C512}
 # DEFAULT_ARGS="-f"
 VERBOSE=0
 
+ONLY_EPROM_TESTS=0
+
 FIRMWARE_TESTS=1
 HARDWARE_TESTS=1
 EPROM_TESTS=1
 INFO_TESTS=1
+
+if test $ONLY_EPROM_TESTS -eq 1; then
+  FIRMWARE_TESTS=0
+    HARDWARE_TESTS=0
+    INFO_TESTS=0
+fi
+CLEAN_UP=1
 
 JSON_FILE='./firestarter/data/database_generated.json'
 TEMP_DIR="./test_data"
@@ -29,9 +38,10 @@ if test $EPROM_TESTS -eq 1; then
         # echo "Temporary directory created: $TEMP_DIR"
     fi
 
-    # Trap to clean up the temporary files on exit or interrupt
-    trap "rm -rf $TEMP_DIR; echo 'Cleaned up temp files'; exit" EXIT
-
+    if test $CLEAN_UP -eq 1; then
+        # Trap to clean up the temporary files on exit or interrupt
+        trap "rm -rf $TEMP_DIR; echo 'Cleaned up temp files'; exit" EXIT
+    fi
     # Convert TARGET_NAME to uppercase
     EPROM_NAME=$(echo "$EPROM_NAME" | tr '[:lower:]' '[:upper:]')
 
@@ -66,9 +76,6 @@ if test $EPROM_TESTS -eq 1; then
     # Convert the hex value (e.g., 0x40000) to decimal
     MEMORY_SIZE_DECIMAL=$((MEMORY_SIZE_HEX))
 
-    # Output the result or use it further in your script
-    echo "Memory size: $MEMORY_SIZE_HEX"
-
     HALF_SIZE=$((MEMORY_SIZE_DECIMAL / 2))
 
     # Generate two random files in the temp directory, each with size HALF_SIZE
@@ -92,7 +99,7 @@ exec_firestarter() {
     fi
     CMD_ARGS=${5:-}
     if test $VERBOSE -eq 1; then
-        VERBOSE_FLAG="-v"
+        VERBOSE_FLAG="--verbose"
     fi
     firestarter_cmd="firestarter $VERBOSE_FLAG $CMD_NAME $CMD_ARGS $EPROM $FILE_NAME"
     echo "---------------------------------"
@@ -108,7 +115,11 @@ exec_firestarter() {
     echo
     sleep 0.5
 }
-# exec_firestarter "Dev read" "dev read" $EPROM_NAME
+
+echo "Firestarter Python Application"
+firestarter --version
+echo "Eprom: $EPROM_NAME, memory size: $MEMORY_SIZE_HEX"
+echo
 
 # ------------------------------ FIRMWARE TESTS ------------------------------
 if test $FIRMWARE_TESTS -eq 1; then

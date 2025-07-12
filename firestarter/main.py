@@ -18,14 +18,15 @@ import platform
 import argcomplete
 from argcomplete.completers import BaseCompleter
 
-from firestarter.config import ConfigManager  # Refactored
+from firestarter.config import ConfigManager
 from firestarter.constants import *
 from firestarter import __version__ as version
 from firestarter.eprom_operations import EpromOperator, build_flags
-from firestarter.eprom_info import EpromConsolePresenter  # Refactored
-from firestarter.database import EpromDatabase  # Refactored
-from firestarter.firmware import FirmwareManager  # Refactored
-from firestarter.hardware import HardwareManager  # Refactored
+from firestarter.logging_utils import SingleLineStatusHandler
+from firestarter.eprom_info import EpromConsolePresenter
+from firestarter.database import EpromDatabase
+from firestarter.firmware import FirmwareManager
+from firestarter.hardware import HardwareManager
 
 logger = logging.getLogger("Firestarter")
 
@@ -340,8 +341,9 @@ def build_arg_flags(args):
     )
 
     force = args.force if "force" in args else False
+    verbose = args.verbose if "verbose" in args else False
     vpe_as_vpp = args.vpe_as_vpp if "vpe_as_vpp" in args else False
-    flags = build_flags(ignore_blank_check, force, vpe_as_vpp)
+    flags = build_flags(ignore_blank_check, force, vpe_as_vpp, verbose)
 
     if "input_enable" in args:
         flags |= 0 if args.input_enable else FLAG_OUTPUT_ENABLE
@@ -397,21 +399,32 @@ def main():
     # Initialize ConfigManager (Singleton)
     config_manager = ConfigManager()
 
-    # Setup logging based on verbosity
+    # Setup logging manually to use our custom handler for single-line status updates.
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+
+    # Get the root logger and set its level.
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    # Create and configure our custom handler.
+    handler = SingleLineStatusHandler()
     if args.verbose:
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s",
+        formatter = logging.Formatter(
+            "%(levelname)-7s:%(name)-13s:%(lineno)4d: %(message)s"
         )
     else:
-        logging.basicConfig(level=logging.INFO, format="%(message)s")
+        formatter = logging.Formatter("%(message)s")
+    handler.setFormatter(formatter)
+
+    # Replace any existing handlers with our custom one.
+    root_logger.handlers = [handler]
 
     # Initialize EpromDatabase (Singleton)
     db_instance = EpromDatabase()
     # Initialize EpromOperator
-    eprom_operator = EpromOperator(db_instance)
+    eprom_operator = EpromOperator(config_manager)
     # Initialize HardwareManager
-    hardware_manager = HardwareManager()
+    hardware_manager = HardwareManager(config_manager)
     # Initialize FirmwareManager
     firmware_manager = FirmwareManager(config_manager)
     # Initialize EpromInfoProvider
@@ -425,29 +438,32 @@ def main():
 
     # Command dispatch
     if args.command == "list":
-        eprom_data_list = eprom_presenter.get_all_eproms_data(args.verified)
+        # Call db_instance directly
+        eprom_data_list = db_instance.get_eproms(verified=args.verified)
         if eprom_data_list:
             print_eprom_list_table(eprom_data_list, eprom_presenter.spec_builder)
             return 0
         return 1
     elif args.command == "info":
         eprom_name = args.eprom
-        eprom_details_full = db_instance.get_eprom(eprom_name, full=True)
-        if not eprom_details_full:
+        eprom_details = db_instance.get_eprom(eprom_name)
+        if not eprom_details:
             logger.error(f"EPROM '{eprom_name}' not found in database.")
             return 1
 
         # For programmer config JSON and export config
-        eprom_data_for_programmer = db_instance.get_eprom(eprom_name, full=False) # Concise
+        eprom_data_for_programmer = None
+        if eprom_details:  # eprom_details_full is already fetched
+            eprom_data_for_programmer = db_instance.convert_to_programmer(eprom_details)
         raw_config_data, manufacturer = db_instance.get_eprom_config(eprom_name)
 
         structured_details = eprom_presenter.prepare_detailed_eprom_data(
             eprom_name,
-            eprom_details_full,
+            eprom_details,
             eprom_data_for_programmer,
             raw_config_data,
             manufacturer,
-            include_export_config=args.config
+            include_export_config=args.config,
         )
         if structured_details:
             # EpromInfoProvider now handles displaying, including the export config if requested by args.config
@@ -457,13 +473,17 @@ def main():
             return 0
         return 1
     elif args.command == "search":
-        search_results = eprom_presenter.search_eproms_by_name(args.text)
+        # Call db_instance directly
+        search_results = db_instance.search_eprom(args.text, include_unverified=True)
         if search_results:
             print_eprom_list_table(search_results, eprom_presenter.spec_builder)
             return 0
         return 1
     elif args.command == "read":
-        eprom_data = db_instance.get_eprom(args.eprom)
+        full_eprom_data = db_instance.get_eprom(args.eprom)
+        eprom_data = None
+        if full_eprom_data:
+            eprom_data = db_instance.convert_to_programmer(full_eprom_data)
         if not eprom_data:
             logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
@@ -480,7 +500,10 @@ def main():
             else 0
         )
     elif args.command == "write":
-        eprom_data = db_instance.get_eprom(args.eprom)
+        full_eprom_data = db_instance.get_eprom(args.eprom)
+        eprom_data = None
+        if full_eprom_data:
+            eprom_data = db_instance.convert_to_programmer(full_eprom_data)
         if not eprom_data:
             logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
@@ -496,7 +519,10 @@ def main():
             else 0
         )
     elif args.command == "verify":
-        eprom_data = db_instance.get_eprom(args.eprom)
+        full_eprom_data = db_instance.get_eprom(args.eprom)
+        eprom_data = None
+        if full_eprom_data:
+            eprom_data = db_instance.convert_to_programmer(full_eprom_data)
         if not eprom_data:
             logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
@@ -512,7 +538,10 @@ def main():
             else 0
         )
     elif args.command == "blank":
-        eprom_data = db_instance.get_eprom(args.eprom)
+        full_eprom_data = db_instance.get_eprom(args.eprom)
+        eprom_data = None
+        if full_eprom_data:
+            eprom_data = db_instance.convert_to_programmer(full_eprom_data)
         if not eprom_data:
             logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
@@ -524,7 +553,10 @@ def main():
             else 0
         )
     elif args.command == "erase":
-        eprom_data = db_instance.get_eprom(args.eprom)
+        full_eprom_data = db_instance.get_eprom(args.eprom)
+        eprom_data = None
+        if full_eprom_data:
+            eprom_data = db_instance.convert_to_programmer(full_eprom_data)
         if not eprom_data:
             logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
@@ -536,21 +568,57 @@ def main():
             else 0
         )
     elif args.command == "id":
-        eprom_data = db_instance.get_eprom(args.eprom)
+        full_eprom_data = db_instance.get_eprom(args.eprom)
+        eprom_data = None
+        if full_eprom_data:
+            eprom_data = db_instance.convert_to_programmer(full_eprom_data)
         if not eprom_data:
             logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
+
+        res, detected_id_value = eprom_operator.check_eprom_id(
+            args.eprom, eprom_data, operation_flags=build_arg_flags(args)
+        )
+
+        if not res and detected_id_value:
+            logger.info(
+                f"Looking up detected Chip ID 0x{detected_id_value:X} in the database..."
+            )
+            found_eproms_for_detected_id = db_instance.search_chip_id(detected_id_value)
+            if found_eproms_for_detected_id:
+                logger.info(
+                    f"The detected Chip ID 0x{detected_id_value:X} matches the following EPROMs in the database:"
+                )
+                mapped_found_eproms = [
+                    db_instance._map_data(ic, ic.get("manufacturer", "Unknown"))
+                    for ic in found_eproms_for_detected_id
+                ]
+                print_eprom_list_table(
+                    mapped_found_eproms, eprom_presenter.spec_builder
+                )
+            else:
+                logger.warning(
+                    f"Detected Chip ID 0x{detected_id_value:X} not found in the database."
+                )
+
+        return 0 if res else 1
+
+    elif args.command == "vpe":
         return (
             1
-            if not eprom_operator.check_eprom_id(
-                args.eprom, eprom_data, operation_flags=build_arg_flags(args)
+            if not hardware_manager.read_vpe_voltage(
+                timeout_seconds=args.timeout, flags=build_arg_flags(args)
             )
             else 0
         )
-    elif args.command == "vpe":
-        return 1 if not hardware_manager.read_vpe_voltage(args.timeout) else 0
     elif args.command == "vpp":
-        return 1 if not hardware_manager.read_vpp_voltage(args.timeout) else 0
+        return (
+            1
+            if not hardware_manager.read_vpp_voltage(
+                timeout_seconds=args.timeout, flags=build_arg_flags(args)
+            )
+            else 0
+        )
     elif args.command == "fw":
         return (
             1
@@ -560,21 +628,30 @@ def main():
                 avrdude_config_override=args.avrdude_config_path,
                 port_override=args.port,
                 board_override=args.board,
-                force_install=args.force,
+                flags=build_arg_flags(args)
             )
             else 0
         )
     elif args.command == "hw":
-        return 1 if not hardware_manager.get_hardware_revision() else 0
+        return (
+            1
+            if not hardware_manager.get_hardware_revision(flags=build_arg_flags(args))
+            else 0
+        )
     elif args.command == "config":
         return (
             1
-            if not hardware_manager.set_hardware_config(args.rev, args.r16, args.r14r15)
+            if not hardware_manager.set_hardware_config(
+                args.rev, args.r16, args.r14r15, flags=build_arg_flags(args)
+            )
             else 0
         )
     elif args.command == "dev":
         if args.dev_command == "read":
-            eprom_data = db_instance.get_eprom(args.eprom)
+            full_eprom_data = db_instance.get_eprom(args.eprom)
+            eprom_data = None
+            if full_eprom_data:
+                eprom_data = db_instance.convert_to_programmer(full_eprom_data)
             if not eprom_data:
                 logger.error(f"EPROM '{args.eprom}' not found in database.")
                 return 1
@@ -602,7 +679,10 @@ def main():
                 else 0
             )
         elif args.dev_command == "addr":
-            eprom_data = db_instance.get_eprom(args.eprom)
+            full_eprom_data = db_instance.get_eprom(args.eprom)
+            eprom_data = None
+            if full_eprom_data:
+                eprom_data = db_instance.convert_to_programmer(full_eprom_data)
             if not eprom_data:
                 logger.error(f"EPROM '{args.eprom}' not found in database.")
                 return 1

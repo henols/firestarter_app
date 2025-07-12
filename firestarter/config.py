@@ -10,10 +10,12 @@ Configuration Management Module
 import os
 import json
 import logging
+from typing import Optional
 
 # Define the home path and configuration file path
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
-CONFIG_FILE = os.path.join(HOME_PATH, "config.json")
+CONFIG_FILE_DEFAULT = "config.json" # Default filename
+# CONFIG_FILE = os.path.join(HOME_PATH, "config.json") # No longer used directly as a global fixed path for ConfigManager
 DATABASE_FILE = os.path.join(HOME_PATH, "database.json")
 PIN_MAP_FILE = os.path.join(HOME_PATH, "pin-maps.json")
 
@@ -58,35 +60,44 @@ class ConfigManager:
     and providing access to configuration values. Implemented as a singleton
     to ensure a single, consistent source of configuration throughout the
     application.
+    It's a singleton per configuration file name.
     """
-    _instance = None
-    _initialized = False
+    _instances = {} # Stores instances, keyed by config file path
+    _initialized_configs = {} # Tracks initialization status, keyed by config file path
 
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = super(ConfigManager, cls).__new__(cls, *args, **kwargs)
-        return cls._instance
+    def __new__(cls, config_filename: Optional[str] = None, *args, **kwargs):
+        actual_filename = config_filename or CONFIG_FILE_DEFAULT
+        instance_key = os.path.join(HOME_PATH, actual_filename)
 
-    def __init__(self):
-        if ConfigManager._initialized:
+        if instance_key not in cls._instances:
+            cls._instances[instance_key] = super(ConfigManager, cls).__new__(cls)
+        return cls._instances[instance_key]
+
+    def __init__(self, config_filename: Optional[str] = None):
+        actual_filename = config_filename or CONFIG_FILE_DEFAULT
+        self.config_file_path = os.path.join(HOME_PATH, actual_filename)
+
+        if self.config_file_path in ConfigManager._initialized_configs:
             return
+
         self._config = {}
         self._load_config()
-        ConfigManager._initialized = True
-        logger.debug("ConfigManager initialized.")
+        ConfigManager._initialized_configs[self.config_file_path] = True
+        logger.debug(f"ConfigManager initialized for {self.config_file_path}.")
 
     def _load_config(self):
         """
         Loads the configuration from the configuration file.
         If the file doesn't exist, an empty configuration is used.
         """
-        if os.path.exists(CONFIG_FILE):
+        if os.path.exists(self.config_file_path):
             try:
-                with open(CONFIG_FILE, "r") as file:
+                with open(self.config_file_path, "r") as file:
                     self._config = json.load(file)
             except json.JSONDecodeError:
                 logger.error(
-                    f"Error: Configuration file {CONFIG_FILE} is not a valid JSON. Resetting configuration."
+                    f"Error: Configuration file {self.config_file_path} "
+                    "is not a valid JSON. Resetting configuration."
                 )
                 self._config = {}
         else:
@@ -104,10 +115,10 @@ class ConfigManager:
                 logger.error(f"Error: Unable to create configuration directory {HOME_PATH}: {e}")
                 return
         try:
-            with open(CONFIG_FILE, "w") as f:
+            with open(self.config_file_path, "w") as f:
                 json.dump(self._config, f, indent=4)
         except IOError as e:
-            logger.error(f"Error: Unable to save configuration to {CONFIG_FILE}: {e}")
+            logger.error(f"Error: Unable to save configuration to {self.config_file_path}: {e}")
 
     def get_value(self, key, default=None):
         """

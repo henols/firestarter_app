@@ -11,7 +11,7 @@ import os
 import time
 import requests
 import logging
-import re
+from typing import Optional, Tuple
 
 # Add this line with the other imports
 from rich.prompt import Confirm
@@ -53,25 +53,31 @@ class FirmwareManager:
         self.config_manager = config_manager
 
     def check_current_firmware(
-        self, preferred_port: str | None = None
-    ) -> tuple[str | None, str | None, str | None]:
+        self, preferred_port: str | None = None,
+        flags: int = 0,
+    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
         Checks the currently installed firmware version on the programmer.
         Returns: (port_name, current_version, board_name) or (None, None, None) on failure.
         """
         logger.info("Reading current firmware version...")
         command_dict = {"state": COMMAND_FW_VERSION}
+        if flags:
+            command_dict["flags"] = flags
         comm = None
         try:
             comm = SerialCommunicator.find_and_connect(
-                command_dict, preferred_port=preferred_port
+                command_dict, self.config_manager, preferred_port=preferred_port
             )
-            # The programmer_info from find_and_connect will contain "version:board"
-            if comm.programmer_info:
-                # Split by colon or comma
-                version_info_parts = re.split(r"[:,]", comm.programmer_info)
-                current_version = version_info_parts[1].strip()
-                board_name = version_info_parts[2].strip()
+            # find_and_connect gets the initial OK from the programmer.
+            # The firmware then executes the fw_version command and sends a second OK with the payload.
+            is_ok, msg = comm.expect_ack()
+
+            if is_ok and msg and ":" in msg:
+                # Expected format is "version:board"
+                parts = msg.split(":", 1)
+                current_version = parts[0].strip()
+                board_name = parts[1].strip()
 
                 logger.info(
                     f"Current firmware version: {current_version}, for controller: {board_name} on port {comm.port_name}"
@@ -79,7 +85,7 @@ class FirmwareManager:
                 return comm.port_name, current_version, board_name
             else:
                 logger.error(
-                    "Failed to read firmware version: No valid response from programmer."
+                    f"Failed to read firmware version: Invalid response from programmer: '{msg}'"
                 )
                 return None, None, None
         except (ProgrammerNotFoundError, SerialError) as e:
@@ -91,7 +97,7 @@ class FirmwareManager:
 
     def fetch_latest_release_info(
         self, board: str = "uno"
-    ) -> tuple[str | None, str | None]:
+    ) -> Tuple[Optional[str], Optional[str]]:
         """
         Fetches the latest firmware version and download URL for the specified board.
         Returns: (latest_version_str, download_url_str) or (None, None) on failure.
@@ -139,7 +145,7 @@ class FirmwareManager:
             )
             return False  # Treat as not up-to-date if parsing fails
 
-    def _download_firmware_file(self, url: str) -> str | None:
+    def _download_firmware_file(self, url: str) -> Optional[str]:
         """Downloads firmware from the URL and saves it to a temporary local path."""
         logger.info(f"Downloading firmware from {url}...")
         start_time = time.time()
@@ -176,9 +182,9 @@ class FirmwareManager:
         self,
         hex_file_path: str,
         board: str,
-        avrdude_path_override: str | None,
-        avrdude_config_override: str | None,
-        target_port: str | None,
+        avrdude_path_override: Optional[str],
+        avrdude_config_override: Optional[str],
+        target_port: Optional[str],
     ) -> bool:
         """Internal method to perform the Avrdude flashing process."""
         start_time = time.time()
@@ -285,18 +291,18 @@ class FirmwareManager:
     def manage_firmware_update(
         self,
         install_flag: bool = False,
-        avrdude_path_override: str | None = None,
-        avrdude_config_override: str | None = None,
-        port_override: str | None = None,
-        board_override: str | None = "uno",
-        force_install: bool = False,
-    ) -> bool:
+        avrdude_path_override: Optional[str] = None,
+        avrdude_config_override: Optional[str] = None,
+        port_override: Optional[str] = None,
+        board_override: Optional[str] = "uno",
+        flags: int = 0,
+        ) -> bool:
         """
         Manages the firmware update process: checks version, prompts user, and installs if needed.
         Returns True if an operation (check or install) was successful in some sense, False on major failure.
         """
         connected_port, current_version, current_board = self.check_current_firmware(
-            preferred_port=port_override
+            preferred_port=port_override,flags=flags
         )
 
         # Use the port where firmware was checked, or CLI override for flashing
@@ -314,6 +320,7 @@ class FirmwareManager:
             board=board_to_use
         )
 
+        force_install = flags & FLAG_FORCE
         if not current_version and not install_flag and not force_install:
             logger.error(
                 "Could not determine current firmware version. Use --install or --force to proceed with installation."

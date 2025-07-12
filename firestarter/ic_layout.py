@@ -7,6 +7,7 @@ IC Layout Generation Module
 """
 
 import logging
+from typing import Optional, List, Dict
 from firestarter.database import EpromDatabase # Changed import
 
 logger = logging.getLogger("EpromSpecBuilder")
@@ -121,7 +122,7 @@ class EpromSpecBuilder:
                 }
         return None
 
-    def _generate_pin_names_for_display(self, eprom_data: dict) -> list[str] | None:
+    def _generate_pin_names_for_display(self, eprom_data: dict) -> Optional[List[str]]:
         pin_count = eprom_data.get("pin-count")
         if pin_count not in self._generic_pin_names_map:
             logger.error(f"No generic layout available for {pin_count}-pin EPROM.")
@@ -160,7 +161,27 @@ class EpromSpecBuilder:
         
         return pin_names
 
-    def build_specifications(self, eprom_data: dict) -> dict | None:
+    def _build_dip_layout_data_from_names(self, pin_count: int, pin_names: list) -> dict:
+        """
+        Creates the structured data for a DIP package layout using pin count and names.
+        """
+        half = pin_count // 2
+        layout_data = {
+            "title": f"{pin_count}-DIP package",
+            "dent": " " * 8 + "-" * 5 + "v" + "-" * 5,
+            "pin_pairs": [],
+            "bottom": " " * 8 + "-" * 11,
+        }
+        for i in range(half):
+            pin_left = pin_names[i]
+            pin_right = pin_names[pin_count - 1 - i]
+            layout_data["pin_pairs"].append({
+                "left_name": pin_left, "left_num": i + 1,
+                "right_num": pin_count - i, "right_name": pin_right,
+            })
+        return layout_data
+
+    def build_specifications(self, eprom_data: dict) -> Optional[Dict]:
         """
         Builds a dictionary containing comprehensive technical specifications
         for the given EPROM data. This includes basic properties, pin names for layout,
@@ -180,7 +201,7 @@ class EpromSpecBuilder:
             "vcc_str": f"{eprom_data.get('vcc', 'N/A')}v",
             "pulse_delay_us_str": f"{eprom_data.get('pulse-delay', 'N/A')}µS",
             "verified_str": "" if eprom_data.get("verified", False) else "-- NOT VERIFIED --",
-            "layout_pin_names": None, # Will store the list of pin names for the layout
+            "dip_layout": None, # Will store the structured DIP layout data
             "jumpers":{},
             "protocol_info": None,
             "flags_info": None,
@@ -203,7 +224,7 @@ class EpromSpecBuilder:
         if pin_count:
             display_pin_names = self._generate_pin_names_for_display(eprom_data)
             if display_pin_names:
-                output_data["layout_pin_names"] = display_pin_names # Store raw pin names
+                output_data["dip_layout"] = self._build_dip_layout_data_from_names(pin_count, display_pin_names)
 
                 # Determine jumper settings based on pin count and VPP presence
                 jp1, jp2, jp3_rev01, jp4_rev2 = 0, 0, 0, 0 # Default to N/A or first position
@@ -243,12 +264,14 @@ class EpromSpecBuilder:
 
 
 def main(): # Test function
+    import json
     logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s")
     db_instance = EpromDatabase()
     spec_builder = EpromSpecBuilder(db_instance)
 
     chip_name = "AT28C256" # A chip with a known pin map
-    eprom_details = db_instance.get_eprom(chip_name, full=True)
+    chip_name = "2732" # A chip with a known pin map
+    eprom_details = db_instance.get_eprom(chip_name)
     if not eprom_details:
         logger.error(f"EPROM {chip_name} not found in the database.")
         return 1

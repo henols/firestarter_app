@@ -23,6 +23,7 @@ Module-level constants:
 - `pin_conversions`: A hardcoded dictionary mapping standard EPROM pin numbers
   (for 24, 28, 32-pin DIP packages) to the RURP's internal address/control lines.
 """
+
 import os
 import json
 import logging
@@ -33,7 +34,8 @@ from firestarter.constants import *
 
 # Module-level constants
 types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
-ROM_CE = 100
+ROM_CE = 0x100
+ROM_OE = 0x101
 # eprom pins to rurp conversion
 pin_conversions = {
     # Maps EPROM pin number to RURP hardware line number
@@ -48,6 +50,7 @@ pin_conversions = {
         8: 0,
         18: ROM_CE,
         19: 10,
+        20: ROM_OE,
         21: 11,
         22: 9,
         23: 8,
@@ -63,7 +66,9 @@ pin_conversions = {
         8: 2,
         9: 1,
         10: 0,
+        20: ROM_CE,
         21: 10,
+        22: ROM_OE,
         23: 11,
         24: 9,
         25: 8,
@@ -83,7 +88,9 @@ pin_conversions = {
         10: 2,
         11: 1,
         12: 0,
+        22: ROM_CE,
         23: 10,
+        24: ROM_OE,
         26: 9,
         27: 8,
         25: 11,
@@ -123,6 +130,7 @@ class EpromDatabase:
     configurations. Implemented as a singleton to ensure a single, consistent
     database instance throughout the application.
     """
+
     _instance = None
     _initialized = False
 
@@ -196,7 +204,9 @@ class EpromDatabase:
             else:
                 # Replace sub-objects in the existing key
                 for sub_key, sub_value in sub_map.items():
-                    pin_maps_base[key][sub_key] = sub_value  # Replace existing or add new
+                    pin_maps_base[key][
+                        sub_key
+                    ] = sub_value  # Replace existing or add new
         return pin_maps_base
 
     def get_pin_map(self, pins: int, pin_map_id: str):
@@ -214,7 +224,7 @@ class EpromDatabase:
         """
         Generates the RURP-specific bus configuration from a generic pin map.
         """
-        # This specific condition was in the original code.
+        # This default pin-map.
         if pins == 28 and str(variant) == "16":
             return None
 
@@ -229,19 +239,29 @@ class EpromDatabase:
                 if pin in pin_conversions[pins]:
                     bus.append(pin_conversions[pins][pin])
                 else:
-                    logger.warning(f"Pin {pin} not in pin_conversions for {pins}-pin EPROM during bus config.")
+                    logger.warning(
+                        f"Pin {pin} not in pin_conversions for {pins}-pin EPROM during bus config."
+                    )
             map_config["bus"] = bus
         else:
-            logger.warning(f"Missing 'address-bus-pins' or pin_conversions for {pins}-pin EPROM.")
-            return None # Cannot form bus without address pins
+            logger.warning(
+                f"Missing 'address-bus-pins' or pin_conversions for {pins}-pin EPROM."
+            )
+            return None  # Cannot form bus without address pins
 
-        if "rw-pin" in pin_map_data and pin_map_data["rw-pin"] in pin_conversions.get(pins, {}):
+        if "rw-pin" in pin_map_data and pin_map_data["rw-pin"] in pin_conversions.get(
+            pins, {}
+        ):
             map_config["rw-pin"] = pin_conversions[pins][pin_map_data["rw-pin"]]
-        if "oe-pin" in pin_map_data and pin_map_data["oe-pin"] in pin_conversions.get(pins, {}):
+        if "oe-pin" in pin_map_data and pin_map_data["oe-pin"] in pin_conversions.get(
+            pins, {}
+        ):
             map_config["oe-pin"] = pin_conversions[pins][pin_map_data["oe-pin"]]
-        if "vpp-pin" in pin_map_data and pin_map_data["vpp-pin"] in pin_conversions.get(pins, {}):
+        if "vpp-pin" in pin_map_data and pin_map_data["vpp-pin"] in pin_conversions.get(
+            pins, {}
+        ):
             map_config["vpp-pin"] = pin_conversions[pins][pin_map_data["vpp-pin"]]
-        
+
         return map_config
 
     def _map_data(self, ic: dict, manufacturer: str) -> dict:
@@ -262,37 +282,45 @@ class EpromDatabase:
                 try:
                     vpp = int(voltages["vpp"])
                 except ValueError:
-                    logger.warning(f"Invalid VPP value for {ic.get('name')}: {voltages['vpp']}")
+                    logger.warning(
+                        f"Invalid VPP value for {ic.get('name')}: {voltages['vpp']}"
+                    )
             if "vcc" in voltages and voltages["vcc"] is not None:
                 try:
                     vcc = float(voltages["vcc"])
                 except ValueError:
-                    logger.warning(f"Invalid VCC value for {ic.get('name')}: {voltages['vcc']}")
+                    logger.warning(
+                        f"Invalid VCC value for {ic.get('name')}: {voltages['vcc']}"
+                    )
 
         pin_map_id = None
         pin_map_id = ic.get("pin-map", ic.get("variant"))
-        ic_type_key = ic.get("type") # e.g., "memory", "flash"
-        ic_type_val = types.get(ic_type_key) # e.g., 0x01, 0x03
-        
+        ic_type_key = ic.get("type")  # e.g., "memory", "flash"
+        ic_type_val = types.get(ic_type_key)  # e.g., 0x01, 0x03
+
         protocol_id = int(ic.get("protocol-id", "0x0"), 16)
         flags = int(ic.get("flags", "0x0"), 16)
 
         # Determine integer 'type' for application use
         determined_type = 4  # Default to SRAM or unknown
-        if ic_type_val == types.get("memory"): # 0x01
+        if ic_type_val == types.get("memory"):  # 0x01
             if protocol_id == 0x06:  # Flash type 3
                 determined_type = 3
             elif protocol_id == 0x05:  # Flash type 2
                 determined_type = 2
             elif flags & 0x08:  # EPROM
                 determined_type = 1
-        elif ic_type_val == types.get("flash"): # 0x03 - Could be Flash Type 2 or 3 based on protocol
-            if protocol_id == 0x06: determined_type = 3
-            elif protocol_id == 0x05: determined_type = 2
-            else: determined_type = 2 # Default flash type if protocol doesn't specify
-        elif ic_type_val == types.get("sram"): # 0x04
+        elif ic_type_val == types.get(
+            "flash"
+        ):  # 0x03 - Could be Flash Type 2 or 3 based on protocol
+            if protocol_id == 0x06:
+                determined_type = 3
+            elif protocol_id == 0x05:
+                determined_type = 2
+            else:
+                determined_type = 2  # Default flash type if protocol doesn't specify
+        elif ic_type_val == types.get("sram"):  # 0x04
             determined_type = 4
-
 
         data = {
             "name": ic.get("name"),
@@ -313,9 +341,6 @@ class EpromDatabase:
 
         if "chip-id" in ic and ic["chip-id"] is not None:
             data["chip-id"] = int(ic["chip-id"], 16)
-
-        if ic.get("can-erase", False):
-            data["flags"] |= FLAG_CAN_ERASE
 
         if pin_count and not pin_map_id is None:
             bus_config = self.get_bus_config(pin_count, pin_map_id)
@@ -338,7 +363,11 @@ class EpromDatabase:
         for manufacturer, ics in self.proms.items():
             for ic_config in ics:
                 is_verified_in_db = bool(ic_config.get("verified", False))
-                if verified is None or (verified and is_verified_in_db) or (not verified): # Corrected logic for verified filter
+                if (
+                    verified is None
+                    or (verified and is_verified_in_db)
+                    or (not verified)
+                ):  # Corrected logic for verified filter
                     selected_proms.append(self._map_data(ic_config, manufacturer))
         return selected_proms
 
@@ -353,25 +382,68 @@ class EpromDatabase:
                     return ic_config, manufacturer
         return None, None
 
-    def get_eprom(self, chip_name: str, full: bool = False):
+    def get_eprom(self, chip_name: str):
         """
         Retrieves processed data for a specific EPROM.
-        If `full` is False, a concise set of fields is returned.
+        This version always returns the "full" data, which includes detailed information
+        but removes the simple 'flags' key (used for programmer communication).
         """
         config, manufacturer = self.get_eprom_config(chip_name)
         if config:
             data = self._map_data(config, manufacturer)
-            if not full:
-                # Prune fields for concise output
-                keys_to_pop = ["manufacturer", "verified", "pin-map", "name",  "protocol-id", "vcc", "info-flags"]
-                for key in keys_to_pop:
-                    if key in data:
-                        data.pop(key)
-            else:
-                if "flags" in data:
-                        data.pop("flags")
+            # if not data:
+            #     # Prune fields for concise output
+            #     keys_to_pop = [
+            #         "manufacturer",
+            #         "verified",
+            #         "pin-map",
+            #         "name",
+            #         "protocol-id",
+            #         "vcc",
+            #         "info-flags",
+            #     ]
+            #     for key in keys_to_pop:
+            #         if key in data:
+            #             data.pop(key)
+            # else:
+            #     if "flags" in data:
+            #         data.pop("flags")
             return data
         return None
+    
+    def convert_to_programmer(self, full_eprom_data: dict) -> dict:
+        """
+        Converts the full EPROM data structure (from get_eprom)
+        into the concise format suitable for sending to the programmer.
+        """
+        if not full_eprom_data:
+            return {}
+
+        # Keys to keep from the full data
+        programmer_data = {
+            "memory-size": full_eprom_data.get("memory-size", 0),
+            "type": full_eprom_data.get("type", 0),
+            "pin-count": full_eprom_data.get("pin-count", 0),
+            "vpp": full_eprom_data.get("vpp", 0) * 1000,  # Firmware expects millivolts
+            "pulse-delay": full_eprom_data.get("pulse-delay", 0),
+            # 'chip-id' is optional
+        }
+
+        if "chip-id" in full_eprom_data:
+            programmer_data["chip-id"] = full_eprom_data["chip-id"]
+
+        if "bus-config" in full_eprom_data:
+            programmer_data["bus-config"] = full_eprom_data["bus-config"]
+
+        # Calculate the simple 'flags' key for the programmer
+        # Inferring from mapped 'type': Type 2 (Flash 2) and Type 3 (Flash 3) are electrically erasable.
+        # New requirement: FLAG_CAN_ERASE should be set if info-flags has the 0x00000010 bit.
+        simple_flags = 0
+        if full_eprom_data.get("info-flags", 0) & 0x00000010: # Check for "Can be electrically erased" bit
+            simple_flags |= FLAG_CAN_ERASE # FLAG_CAN_ERASE is 0x02
+        programmer_data["flags"] = simple_flags
+
+        return programmer_data
 
     def search_eprom(self, chip_name_query: str, include_unverified: bool = True) -> list:
         """
@@ -396,8 +468,10 @@ class EpromDatabase:
         selected_proms = []
         for manufacturer, ics in self.proms.items():
             for ic_config in ics:
-                if ic_config.get("has-chip-id") and \
-                   ic_config.get("chip-id") is not None:
+                if (
+                    ic_config.get("has-chip-id")
+                    and ic_config.get("chip-id") is not None
+                ):
                     try:
                         if int(ic_config.get("chip-id"), 16) == chip_id_val:
                             # Return a copy of the raw config with manufacturer added
@@ -405,18 +479,22 @@ class EpromDatabase:
                             ic_copy["manufacturer"] = manufacturer
                             selected_proms.append(ic_copy)
                     except ValueError:
-                        logger.warning(f"Invalid chip-id format for {ic_config.get('name', 'Unknown EPROM')}: {ic_config.get('chip-id')}")
+                        logger.warning(
+                            f"Invalid chip-id format for {ic_config.get('name', 'Unknown EPROM')}: {ic_config.get('chip-id')}"
+                        )
         return selected_proms
 
 
-def main(): # Test function
+def main():  # Test function
     """
     Main function for standalone testing or demonstration of the database module.
     """
-    logging.basicConfig(level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s")
-    db = EpromDatabase() # Initializes the database
+    logging.basicConfig(
+        level=logging.DEBUG, format="[%(levelname)s:%(name)s:%(lineno)d] %(message)s"
+    )
+    db = EpromDatabase()  # Initializes the database
 
-    chip_name = "m27c1001"
+    chip_name = "W27C512"
     print(f"\n--- Getting EPROM config for: {chip_name} ---")
     config, manufacturer = db.get_eprom_config(chip_name)
     if config is None:
@@ -426,14 +504,17 @@ def main(): # Test function
         print(json.dumps(config, indent=2))
 
     print(f"\n--- Getting full EPROM data for: {chip_name} ---")
-    full_data = db.get_eprom(chip_name, full=True)
+    full_data = db.get_eprom(chip_name)
     if full_data:
         print(json.dumps(full_data, indent=2))
     else:
         print(f"EPROM {chip_name} not found.")
 
     print(f"\n--- Getting concise EPROM data for: {chip_name} ---")
-    concise_data = db.get_eprom(chip_name, full=False)
+    full_data_for_conversion = db.get_eprom(chip_name)
+    concise_data = None
+    if full_data_for_conversion:
+        concise_data = db.convert_to_programmer(full_data_for_conversion)
     if concise_data:
         print(json.dumps(concise_data, indent=2))
     else:
@@ -461,6 +542,7 @@ def main(): # Test function
             print("\n--- Bus Config ---")
             bus_config_details = db.get_bus_config(pin_count, variant)
             print(json.dumps(bus_config_details, indent=2))
+
 
 if __name__ == "__main__":
     main()
