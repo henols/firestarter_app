@@ -271,7 +271,7 @@ def main(): # Test function
 
     chip_name = "AT28C256" # A chip with a known pin map
     chip_name = "2732" # A chip with a known pin map
-    eprom_details = db_instance.get_eprom(chip_name, full=True)
+    eprom_details = db_instance.get_eprom(chip_name)
     if not eprom_details:
         logger.error(f"EPROM {chip_name} not found in the database.")
         return 1

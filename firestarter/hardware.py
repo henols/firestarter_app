@@ -88,8 +88,23 @@ class HardwareManager:
         if flags:
             command["flags"] = flags
 
-        success, _ = self._execute_simple_command(command, "Hardware revision")
-        return success
+        comm = None
+        try:
+            comm = SerialCommunicator.find_and_connect(command, self.config)
+            # The first OK is handled by find_and_connect. Now wait for the second response with the data.
+            is_ok, msg = comm.expect_ack()
+            if is_ok:
+                logger.info(f"Hardware revision: {msg}")
+                return True
+            else:
+                logger.error(f"Failed to read hardware revision: {msg}")
+                return False
+        except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
+            logger.error(f"Failed to read hardware revision: {e}")
+            return False
+        finally:
+            if comm:
+                comm.disconnect()
 
     def set_hardware_config(
         self,

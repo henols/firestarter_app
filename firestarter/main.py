@@ -22,6 +22,7 @@ from firestarter.config import ConfigManager
 from firestarter.constants import *
 from firestarter import __version__ as version
 from firestarter.eprom_operations import EpromOperator, build_flags
+from firestarter.logging_utils import SingleLineStatusHandler
 from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.database import EpromDatabase
 from firestarter.firmware import FirmwareManager
@@ -398,14 +399,25 @@ def main():
     # Initialize ConfigManager (Singleton)
     config_manager = ConfigManager()
 
-    # Setup logging based on verbosity
+    # Setup logging manually to use our custom handler for single-line status updates.
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+
+    # Get the root logger and set its level.
+    root_logger = logging.getLogger()
+    root_logger.setLevel(log_level)
+
+    # Create and configure our custom handler.
+    handler = SingleLineStatusHandler()
     if args.verbose:
-        logging.basicConfig(
-            level=logging.DEBUG,
-            format="%(levelname)-7s:%(name)-13s:%(lineno)4d: %(message)s",
+        formatter = logging.Formatter(
+            "%(levelname)-7s:%(name)-13s:%(lineno)4d: %(message)s"
         )
     else:
-        logging.basicConfig(level=logging.INFO, format="%(message)s")
+        formatter = logging.Formatter("%(message)s")
+    handler.setFormatter(formatter)
+
+    # Replace any existing handlers with our custom one.
+    root_logger.handlers = [handler]
 
     # Initialize EpromDatabase (Singleton)
     db_instance = EpromDatabase()

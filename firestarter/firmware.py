@@ -11,7 +11,6 @@ import os
 import time
 import requests
 import logging
-import re
 from typing import Optional, Tuple
 
 # Add this line with the other imports
@@ -70,12 +69,15 @@ class FirmwareManager:
             comm = SerialCommunicator.find_and_connect(
                 command_dict, self.config_manager, preferred_port=preferred_port
             )
-            # The programmer_info from find_and_connect will contain "version:board"
-            if comm.programmer_info:
-                # Split by colon or comma
-                version_info_parts = re.split(r"[:,]", comm.programmer_info)
-                current_version = version_info_parts[1].strip()
-                board_name = version_info_parts[2].strip()
+            # find_and_connect gets the initial OK from the programmer.
+            # The firmware then executes the fw_version command and sends a second OK with the payload.
+            is_ok, msg = comm.expect_ack()
+
+            if is_ok and msg and ":" in msg:
+                # Expected format is "version:board"
+                parts = msg.split(":", 1)
+                current_version = parts[0].strip()
+                board_name = parts[1].strip()
 
                 logger.info(
                     f"Current firmware version: {current_version}, for controller: {board_name} on port {comm.port_name}"
@@ -83,7 +85,7 @@ class FirmwareManager:
                 return comm.port_name, current_version, board_name
             else:
                 logger.error(
-                    "Failed to read firmware version: No valid response from programmer."
+                    f"Failed to read firmware version: Invalid response from programmer: '{msg}'"
                 )
                 return None, None, None
         except (ProgrammerNotFoundError, SerialError) as e:

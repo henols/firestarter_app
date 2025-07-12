@@ -67,6 +67,12 @@ class ProgrammerNotFoundError(SerialError):
     pass
 
 
+class FirmwareOutdatedError(SerialError):
+    """Custom exception for outdated firmware."""
+
+    pass
+
+
 class SerialCommunicator:
     """
     Manages serial communication with the EPROM programmer hardware.
@@ -98,7 +104,7 @@ class SerialCommunicator:
                 timeout=self.timeout,
             )
             time.sleep(CONNECTION_STABILIZE_DELAY)  # Allow port to stabilize
-            logger.info(f"Successfully connected to {self.port_name}.")
+            logger.debug(f"Successfully connected to {self.port_name}.")
         except (
             OSError,
             serial.SerialException,
@@ -265,7 +271,7 @@ class SerialCommunicator:
             try:
                 self.consume_remaining_input()
                 self.connection.close()
-                logger.info(f"Disconnected from {self.port_name}.")
+                logger.debug(f"Disconnected from {self.port_name}.")
             except serial.SerialException as e:
                 logger.error(f"Error closing port {self.port_name}: {e}")
             finally:
@@ -323,6 +329,21 @@ class SerialCommunicator:
         return ports
 
     @staticmethod
+    def _is_version_sufficient(current_version_str: str, required_version_str: str) -> bool:
+        """Compares two version strings. Returns True if current >= required."""
+        if not current_version_str or not required_version_str:
+            return False
+        try:
+            # Replace 'x' with a high number for comparison purposes
+            current = tuple(map(int, current_version_str.lower().replace('x', '999').split('.')))
+            required = tuple(map(int, required_version_str.lower().replace('x', '999').split('.')))
+            return current >= required
+        except (ValueError, AttributeError):
+            logger.warning(f"Could not parse version string for comparison: '{current_version_str}'")
+            return False # If parsing fails, assume it's not sufficient.
+
+
+    @staticmethod
     def _probe_port(
         port_name: str,
         baud_rate: int,
@@ -335,29 +356,63 @@ class SerialCommunicator:
         """
         communicator = None
         try:
-            if not logger.isEnabledFor(logging.DEBUG):
-                logger.info(f"Probing for programmer on {port_name}...")
-
+            logger.debug(f"Probing for programmer on {port_name}...")
             communicator = SerialCommunicator(port=port_name, baud_rate=baud_rate)
-
             communicator.consume_remaining_input()
             communicator.send_json_command(command_to_send)
             is_ok, msg = communicator.expect_ack()
 
             if is_ok:
+                # Firmware version check for all commands except firmware check itself.
+                exempt_cmds = [COMMAND_FW_VERSION]
+                command_code = command_to_send.get("state") or command_to_send.get("cmd")
+                if command_code not in exempt_cmds:
+                    try:
+                        # Expected format from new firmware: "FW: 2.0.x, HW: Rev2, ..."
+                        if msg and "FW:" in msg:
+                            match = re.search(r"FW:\s*([\d.x]+)", msg)
+                            if match:
+                                current_version = match.group(1).strip()
+                                if not SerialCommunicator._is_version_sufficient(current_version, "2.0.0"):
+                                    raise FirmwareOutdatedError(
+                                        f"Firmware version {current_version} is outdated. "
+                                        f"Version 2.0.0 or higher is required. "
+                                        f"Please upgrade the firmware using 'firestarter fw --install'."
+                                    )
+                            else:
+                                # "FW:" is present but version not found, treat as error
+                                raise FirmwareOutdatedError(
+                                    "Could not parse firmware version from programmer response. "
+                                    "Please upgrade the firmware using 'firestarter fw --install'."
+                                )
+                        else:
+                            # Response does not contain "FW:", assume it's an old firmware.
+                            raise FirmwareOutdatedError(
+                                "Firmware is outdated (pre-2.0.0). "
+                                "Please upgrade the firmware using 'firestarter fw --install'."
+                            )
+                    except (IndexError, AttributeError):
+                        # This case should be rare with the regex, but as a fallback.
+                        raise FirmwareOutdatedError(
+                            "Could not determine firmware version. "
+                            "Please upgrade the firmware using 'firestarter fw --install'."
+                        )
+
                 communicator.programmer_info = msg
-                logger.info(f"Programmer found on {port_name}: {msg}")
+                logger.debug(f"Programmer found on {port_name}: {msg}")
                 config_manager.set_value("port", port_name)  # Save successful port
                 return communicator
             else:
-                logger.warning(f"Port {port_name} responded but not with OK: {msg}")
+                logger.debug(f"Port {port_name} responded but not with OK: {msg}")
                 communicator.disconnect()
                 return None
 
-        except SerialError as e:
-            logger.debug(f"Failed to establish valid communication with {port_name}: {e}")
+        except (SerialError, FirmwareOutdatedError) as e:
+            logger.debug(f"Probe failed for {port_name}: {e}")
             if communicator:
                 communicator.disconnect()
+            if isinstance(e, FirmwareOutdatedError):
+                raise
         except Exception as e:
             logger.error(f"Unexpected error while probing {port_name}: {e}")
             if communicator:
@@ -382,11 +437,30 @@ class SerialCommunicator:
         if not potential_ports:
             raise ProgrammerNotFoundError("No potential serial ports found.")
 
-        for port_name in potential_ports:
-            communicator = cls._probe_port(port_name, baud_rate, command_to_send, config_manager)
-            if communicator:
-                return communicator
+        # For non-verbose mode, provide a single-line status update via the logger.
+        # Our custom handler will interpret the 'status' extra to handle overwriting.
+        status_update_active = False
+        if logger.isEnabledFor(logging.INFO) and not logger.isEnabledFor(logging.DEBUG):
+            logger.info("Connecting...", extra={"status": "start"})
+            status_update_active = True
 
+        for port_name in potential_ports:
+            try:
+                communicator = cls._probe_port(port_name, baud_rate, command_to_send, config_manager)
+                if communicator:
+                    if status_update_active:
+                        logger.info("Connecting... OK      ", extra={"status": "end"})
+                    # The "Programmer found on..." message is logged by _probe_port on a new line.
+                    return communicator
+            except FirmwareOutdatedError as e:
+                if status_update_active:
+                    logger.info("Connecting... Failed  ", extra={"status": "end"})
+                # If firmware is outdated on a port, stop probing and raise the specific error.
+                raise e
+
+        # If the loop completes without finding a programmer, it's a failure.
+        if status_update_active:
+            logger.info("Connecting... Failed  ", extra={"status": "end"})
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
 
     def read_data_block(self) -> bytes:
