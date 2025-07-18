@@ -44,6 +44,8 @@ Support and discussions forum at [Discord](https://discord.com/invite/kmhbxAjQc3
   - [Using the Adapter Configuration](#using-the-adapter-configuration)
 - [Contributing](#contributing)
 - [License](#license)
+- [Support me](#support-me)
+
 
 ## Installation
 To install the Firestarter Python program and the firmware on the Arduino, follow the steps below:
@@ -446,3 +448,7 @@ Please make sure to update tests as appropriate.
 ## License
 [MIT](https://raw.githubusercontent.com/henols/firestarter_app/main/LICENSE)
 
+## Support me
+Support me on ko-fi to keep me motivated to continue to develop Firestarter.
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1E21I2WWW)

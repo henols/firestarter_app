@@ -32,11 +32,12 @@ logger = logging.getLogger("EpromOperator")
 bar_format = "{l_bar}{bar}| {n:#06x}/{total:#06x} bytes "
 
 
-def build_flags(ignore_blank_check=False, force=False, vpe_as_vpp=False, verbose=False):
+def build_flags(blank_check=True, force=False, vpe_as_vpp=False, verbose=False, skip_erase=False):
     flags = 0
-    if ignore_blank_check:
-        flags |= FLAG_SKIP_ERASE
+    if not blank_check:
         flags |= FLAG_SKIP_BLANK_CHECK
+    if skip_erase:
+        flags |= FLAG_SKIP_ERASE
     if force:
         flags |= FLAG_FORCE
     if vpe_as_vpp:

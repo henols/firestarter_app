@@ -95,9 +95,11 @@ def create_write_args(parser):
     add_eprom_completer(write_parser)
     write_parser.add_argument(
         "-b",
-        "--ignore-blank-check",
-        action="store_true",
-        help="Ignore blank check before write (and skip erase).",
+        "--no-blank-check",
+        action="store_false",
+        dest="blank_check",
+        default=True,
+        help="Do not perform blank check before write (and skip erase).",
     )
     write_parser.add_argument(
         "-f",
@@ -154,9 +156,8 @@ def create_erase_parser(parser):
     erase_parser.add_argument(
         "-b",
         "--blank-check",
-        action="store_false",
-        default=True,
-        dest="ignore_blank_check",
+        action="store_true",
+        dest="blank_check",
         help="Do a blank check after erase.",
     )
 
@@ -336,14 +337,11 @@ def create_oe_ce_args(parser):
 
 
 def build_arg_flags(args):
-    ignore_blank_check = (
-        args.ignore_blank_check if "ignore_blank_check" in args else False
-    )
-
+    blank_check = getattr(args, "blank_check", True)
     force = args.force if "force" in args else False
     verbose = args.verbose if "verbose" in args else False
     vpe_as_vpp = args.vpe_as_vpp if "vpe_as_vpp" in args else False
-    flags = build_flags(ignore_blank_check, force, vpe_as_vpp, verbose)
+    flags = build_flags(blank_check, force, vpe_as_vpp, verbose, skip_erase=not blank_check)
 
     if "input_enable" in args:
         flags |= 0 if args.input_enable else FLAG_OUTPUT_ENABLE
