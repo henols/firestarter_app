@@ -1,10 +1,14 @@
-# Firestarter EPROM programmer, python application
-Firestarter is an application for the [Relatively-Universal-ROM-Programmer](https://github.com/AndersBNielsen/Relatively-Universal-ROM-Programmer).
+# Firestarter
+[![PyPI version](https://badge.fury.io/py/firestarter.svg)](https://badge.fury.io/py/firestarter)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1E21I2WWW)
 
-Get one here [Relatively-Universal-ROM-Programmer](https://www.imania.dk/samlesaet-hobbyelektronik-og-ic-er-relatively-universal-rom-programmer.htm).
+---
 
-Arduino PlatformIO project is found here [Firestarter](https://github.com/henols/firestarter).
+Firestarter is an application for the [Relatively-Universal-ROM-Programmer](https://github.com/AndersBNielsen/Relatively-Universal-ROM-Programmer) RURP Arduino shield ([Get one here](https://www.imania.dk/samlesaet-hobbyelektronik-og-ic-er-relatively-universal-rom-programmer.htm).
+
+The Firestarter Firmware can be found here [Firestarter](https://github.com/henols/firestarter).
 
 Firestarter in action [watch the video](https://youtu.be/JDHOKbyNnrE?si=0_iXKPZZwyyNGUTZ).
 

@@ -6,17 +6,30 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools_scm]
 
 [project]
-authors = [
-    { name = "Henrik Olsson", email = "henols@gmail.com" },
-]
+authors = [{ name = "Henrik Olsson", email = "henols@gmail.com" }]
 name = "firestarter"
 description = "EPROM programmer software for the Relatively Universal ROM Programmer"
-readme = {file = "README.md", content-type = "text/markdown"}
+readme = { file = "README.md", content-type = "text/markdown" }
 dynamic = ["version"]
 requires-python = ">=3.9"
-keywords = ["eprom", "programmer", "arduino", "electronics", "retrocomputing"] # Example keywords
+keywords = [
+    "firestarter",
+    "eprom",
+    "rom",
+    "eeprom",
+    "flash",
+    "programmer",
+    "arduino",
+    "electronics",
+    "retro computing",
+    "retro game console",
+    "commodore",
+    "atari",
+    "apple",
+    "c64",
+    "nes",
+]
 classifiers = [
-    "Development Status :: 4 - Beta", # Or appropriate status
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Intended Audience :: End Users/Desktop",
@@ -37,25 +50,23 @@ dependencies = [
     "requests>=2.20",
     "tqdm>=4.60",
     "argcomplete>=3.6.2",
-    "rich>=14.0"
+    "rich>=14.0",
 ]
 
 urls = { "Homepage" = "https://github.com/henols/firestarter_app" }
 
 [project.scripts]
-firestarter="firestarter.main:main"
+firestarter = "firestarter.main:main"
 
 [tool.setuptools]
 include-package-data = true
-packages = [
-    "firestarter",
-]
+packages = ["firestarter"]
 [tool.setuptools.package-data]
-    "firestarter" = [
-        "data/database_generated.json",
-        "data/database_overrides.json",
-        "data/pin-maps.json",
-        ]
+"firestarter" = [
+    "data/database_generated.json",
+    "data/database_overrides.json",
+    "data/pin-maps.json",
+]
 
 [tool.setuptools.dynamic]
-version = {attr = "firestarter.__version__"}
+version = { attr = "firestarter.__version__" }
