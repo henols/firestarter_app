@@ -143,7 +143,7 @@ class EpromConsolePresenter:
 
         pin_map_id = cleaned_raw_config.get("pin-map")
         pin_count = cleaned_raw_config.get("pin-count")
-        if pin_map_id and pin_count:
+        if not pin_map_id == None and pin_count:
             pin_map_details = self.db.get_pin_map(pin_count, pin_map_id)
             if pin_map_details:
                 export_pin_map_dict = {str(pin_count): {str(pin_map_id): pin_map_details}}
