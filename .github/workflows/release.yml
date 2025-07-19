@@ -10,6 +10,7 @@ on:
     - 'docs/**'
     - 'images/**'
     - '.github/**'
+    - '.vscode/**'
     - 'tools/**'
 
 jobs:
