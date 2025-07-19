@@ -8,7 +8,7 @@
 [![PyPI version](https://badge.fury.io/py/firestarter.svg)](https://badge.fury.io/py/firestarter)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1E21I2WWW)
+[![ko-fi](https://raw.githubusercontent.com/henols/firestarter_app/refs/heads/main/images/ko-fi.png)](https://ko-fi.com/E1E21I2WWW)
 
 ---
 
