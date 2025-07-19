@@ -1,4 +1,3 @@
-
 <p align="center"><img src="https://github.com/henols/firestarter_app/blob/main/images/firestarter_logo.png" alt="Firestarter EPROM Programmer" width="200"></p>
 
 ----
