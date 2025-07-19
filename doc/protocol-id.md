@@ -1,4 +1,6 @@
+<p align="left"><img src="https://raw.githubusercontent.com/henols/firestarter_app/refs/heads/main/images/firestarter_logo.png" alt="Firestarter EPROM Programmer" width="200"></p>
 
+---
 ## **Analysis of `protocol-id`s**
 
 The `protocol-id` field in the database represents the programming protocol or algorithm required to interface with the device. This includes information about voltage requirements, programming sequences, and other specific characteristics necessary for programming or accessing the device.

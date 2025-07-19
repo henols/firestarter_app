@@ -1,3 +1,6 @@
+<p align="left"><img src="https://raw.githubusercontent.com/henols/firestarter_app/refs/heads/main/images/firestarter_logo.png" alt="Firestarter EPROM Programmer" width="200"></p>
+
+---
 ### **Updated Flag Bits and Inferred Meanings**
 
 | Hex Value   | Bit Position(s)  | Inferred Meaning                                                                  |

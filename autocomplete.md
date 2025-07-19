@@ -1,3 +1,6 @@
+<p align="left"><img src="https://raw.githubusercontent.com/henols/firestarter_app/refs/heads/main/images/firestarter_logo.png" alt="Firestarter EPROM Programmer" width="200"></p>
+
+---
 ## Enabling Shell Autocompletion
 
 **Note:** Autocompletion isn’t automatically activated on installation. You must set it up in your shell environment. You have two main approaches:
