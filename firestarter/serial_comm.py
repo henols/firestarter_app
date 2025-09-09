@@ -12,8 +12,6 @@ import serial.tools.list_ports
 import serial.serialutil
 import time
 import re
-import functools
-import operator
 import json
 import logging
 from collections import namedtuple
@@ -482,7 +480,9 @@ class SerialCommunicator:
                 data += chunk
                 bytes_to_read -= len(chunk)
 
-            checksum = functools.reduce(operator.xor, data, 0)
+            checksum = 0
+            for byte in data:
+                checksum ^= byte
             if checksum_rcvd[0] != checksum:
                 raise SerialError("Data corruption detected (checksum mismatch).")
 
