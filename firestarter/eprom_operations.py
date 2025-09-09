@@ -34,7 +34,7 @@ bar_format = "{l_bar}{bar}| {n:#06x}/{total:#06x} bytes "
 
 def build_flags(blank_check=True, force=False, vpe_as_vpp=False, verbose=False, skip_erase=False):
     flags = 0
-    if not blank_check:
+    if not blank_check or force:
         flags |= FLAG_SKIP_BLANK_CHECK
     if skip_erase:
         flags |= FLAG_SKIP_ERASE

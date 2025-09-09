@@ -99,7 +99,14 @@ def create_write_args(parser):
         action="store_false",
         dest="blank_check",
         default=True,
-        help="Do not perform blank check before write (and skip erase).",
+        help="Do not perform blank check before write.",
+    )
+    write_parser.add_argument(
+        "--skip-erase",
+        action="store_true",
+        dest="skip_erase",
+        default=False,
+        help="Skip erase and blank check operations (for partial writes or pre-erased chips).",
     )
     write_parser.add_argument(
         "-f",
@@ -338,10 +345,16 @@ def create_oe_ce_args(parser):
 
 def build_arg_flags(args):
     blank_check = getattr(args, "blank_check", True)
+    skip_erase = getattr(args, "skip_erase", False)
+    
+    # If skipping erase, no need for blank check either
+    if skip_erase:
+        blank_check = False
+        
     force = args.force if "force" in args else False
     verbose = args.verbose if "verbose" in args else False
     vpe_as_vpp = args.vpe_as_vpp if "vpe_as_vpp" in args else False
-    flags = build_flags(blank_check, force, vpe_as_vpp, verbose, skip_erase=not blank_check)
+    flags = build_flags(blank_check, force, vpe_as_vpp, verbose, skip_erase=skip_erase)
 
     if "input_enable" in args:
         flags |= 0 if args.input_enable else FLAG_OUTPUT_ENABLE
