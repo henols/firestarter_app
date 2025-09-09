@@ -9,8 +9,6 @@ EPROM Operations Module (Refactored)
 
 import os
 import time
-import functools
-import operator
 import logging
 from typing import Optional, Tuple, Dict, Callable
 from contextlib import contextmanager
@@ -347,13 +345,28 @@ class EpromOperator:
                 if response.type == "MAIN":
                     break # Main phase is complete
                 if response.type != "OK":
-                    raise EpromOperationError(f"Programmer did not request data chunk, got {response.type}: {response.message}")
+                    progress.close()  # Close progress bar before raising error
+                    raise EpromOperationError(f"{response.type}: {response.message}")
 
                 if file_handle.tell() < file_size:
                     data_chunk = file_handle.read(buffer_size)
-                    checksum = functools.reduce(operator.xor, data_chunk, 0)
+                    checksum = 0
+                    for byte in data_chunk:
+                        checksum ^= byte
                     header = b"#" + len(data_chunk).to_bytes(2, "big") + checksum.to_bytes(1)
-                    self.comm.send_bytes(header + data_chunk)
+                   
+                    # Send header first
+                    self.comm.send_bytes(header)
+                    
+                    # Wait for OK response before sending actual data
+                    is_ok, msg = self.comm.expect_ack()
+                    if not is_ok:
+                        progress.close()  # Close progress bar before raising error
+                        raise EpromOperationError(f"Firmware did not acknowledge header: {msg}")
+                    
+                    # Send actual data
+                    self.comm.send_bytes(data_chunk)
+                    
                     progress.update(len(data_chunk))
                 else:
                     self.comm.send_done()
