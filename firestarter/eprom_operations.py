@@ -266,13 +266,18 @@ class EpromOperator:
                 logger.debug("Main complete.")
 
                 # --- END Phase ---
+                # Don't show progress bar for END phase - it's usually just cleanup
+                progress.close()  # Close progress bar before END phase
                 end_msg = self._execute_phase("END", progress)
 
                 # --- Final ACK to complete transaction ---
                 self.comm.send_ack()
                 return True, final_msg
-        except (SerialError, SerialTimeoutError, EpromOperationError) as e:
+        except (SerialError, SerialTimeoutError) as e:
             logger.error(f"Communication error during {operation_name}: {e}")
+            return False, str(e)
+        except EpromOperationError as e:
+            logger.error(str(e))  # Already includes "Programmer error during..." prefix
             return False, str(e)
         finally:
             progress.close()
@@ -321,6 +326,7 @@ class EpromOperator:
                 final_msg = response.message
                 break
             if response.type == "ERROR":
+                progress.close()  # Close progress bar before raising error
                 raise EpromOperationError(response.message)
             if response.type == "OK" and final_msg is None:
                 final_msg = response.message # Capture final message from MAIN's OK
@@ -364,6 +370,7 @@ class EpromOperator:
                 logger.info("EPROM read complete.")
                 break
             if response.type == "ERROR":
+                progress.close()  # Close progress bar before raising error
                 raise EpromOperationError(f"Programmer error during read: {response.message}")
             if response.type == "DATA":
                 payload = self.comm.read_data_block()

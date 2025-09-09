@@ -174,14 +174,17 @@ class SerialCommunicator:
         if not response or not response.type:
             return
 
+        # Don't log ERROR responses here - they are handled by exception mechanism
+        # to appear beneath the progress bar instead of interrupting it
+        if response.type == "ERROR":
+            return
+
         message = response.message
         if response.type in STATE_MACHINE_PREFIXES:
                 message = "Done"
 
         level = logging.DEBUG
-        if response.type == "ERROR":
-            level = logging.ERROR
-        elif response.type == "WARN":
+        if response.type == "WARN":
             level = logging.WARNING
 
         # Shorten prefix for debug, full for others
