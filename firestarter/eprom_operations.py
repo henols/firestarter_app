@@ -86,6 +86,16 @@ class ClassProgressHandler:
         self.pbar = None
         self.current_step = 0
         self.total_steps = 0
+        self.phase_name = ""
+
+    def set_phase(self, phase_name: str):
+        """Set the current phase name for the progress bar"""
+        self.phase_name = phase_name
+        # Close existing progress bar when changing phases
+        # A new one will be created when start() is called with actual progress
+        if self.pbar:
+            self.pbar.close()
+            self.pbar = None
 
     def start(self, total_steps: int):
         self.total_steps = total_steps
@@ -96,7 +106,8 @@ class ClassProgressHandler:
             if self.pbar:
                 self.pbar.close()  # Close old one if any
             logging_redirect_tqdm()
-            self.pbar = tqdm.tqdm(total=total_steps, bar_format=bar_format)
+            phase_bar_format = f"{self.phase_name}: {{l_bar}}{{bar}}| {{n:#06x}}/{{total:#06x}} bytes " if self.phase_name else bar_format
+            self.pbar = tqdm.tqdm(total=total_steps, bar_format=phase_bar_format)
 
     def update(self, completed_steps: int):
         self.current_step += completed_steps
@@ -239,9 +250,11 @@ class EpromOperator:
         try:
             with logging_redirect_tqdm():
                 # --- INIT Phase ---
+                progress.set_phase("Initializing")
                 _ = self._execute_phase("INIT", progress)
 
                 # --- MAIN Phase ---
+                progress.set_phase(operation_name)
                 self.comm.send_ack()  # Signal start of MAIN
                 logger.debug("Main start")
                 if main_phase_handler:
