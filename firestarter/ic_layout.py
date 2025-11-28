@@ -75,16 +75,15 @@ class EpromSpecBuilder:
         """
         properties = []
         flag_definitions = [
-            (0x00000010, "Can be electrically erased"),
-            (0x00000020, "Has Readable Chip ID"),
-            (0x00000080, "Is Electrically Erasable or Writable (EEPROM/Flash/SRAM)"),
-            (0x00000200, "Supports Boot Block Features"),
-            (0x00001000, "Data Memory Addressing"),
-            (0x00002000, "Data Bus Width"), # This seems more like a category than a boolean flag
-            (0x00004000, "Software Data Protection (SDP) before Erase/Program"),
-            (0x00008000, "Software Data Protection (SDP) after Erase/Program"),
-            # (0x00300000, "Supported Programming Modes"), # This is a multi-bit field
-            # (0x03000000, "Data Organization"), # This is a multi-bit field
+            (0x00000008, "Requires elevated VPP for programming"),
+            (0x00000010, "Needs software write-enable/unlock sequence"),
+            (0x00000020, "Provides readable manufacturer/device ID"),
+            (0x00000040, "UV-erasable EPROM timing"),
+            (0x00000080, "Electrically erasable/writable device (EEPROM/Flash/SRAM)"),
+            (0x00000200, "Supports boot-block or sector-protection features"),
+            (0x00004000, "Implements software data protection (SDP)"),
+            (0x00008000, "Requires additional write-protection sequence or hardware condition"),
+            (0x00400000, "Supports per-block lock / sector lock commands"),
         ]
         for bitmask, description in flag_definitions:
             if flags & bitmask:
@@ -96,9 +95,9 @@ class EpromSpecBuilder:
         protocol_info_data = [
             (0x05, "EEPROM/Flash", ("EEPROM/Flash with write enable sequence, software commands", "Requires specific software commands for programming/erasure", "Operates at standard voltage levels")),
             (0x06, "Flash Memory", ("Standard Flash memory programming protocol", "Uses command sequences for programming/erasure", "Operates at standard voltage levels")),
-            (0x07, "EEPROM", ("EEPROM programming protocol for 28-pin devices", "Byte-wise programming, no high voltage required", "May include software data protection")),
-            (0x08, "EPROM", ("EPROM programming protocol requiring high programming voltage", "Uses VPP (typically 12.5V or higher) for programming", "Follows EPROM programming algorithms")),
-            (0x0B, "EPROM/EEPROM", ("Programming protocol for older 24-pin devices", "May require VPP for programming", "Smaller capacity devices")),
+            (0x07, "EPROM/EEPROM", ("JEDEC 28-pin EPROM algorithm (also covers compatible 28C parts)", "Requires VPP on OE/VPP pin and byte-program style pulses", "Vendors may enable software data protection/unlock cycles")),
+            (0x08, "Large EPROM", ("High-voltage EPROM algorithm for 32-pin devices", "Uses ≥12 V VPP and EPROM-style timing", "Covers classic 27C010/020/040 and EPROM-like 28C oddballs (Linkage/PTC)")),
+            (0x0B, "Legacy EPROM/EEPROM", ("Programming protocol for older 24-pin devices", "Shares pins between OE/VPP so high voltage is common", "Targets small capacity 2716/2732/28C04/16 era parts")),
             (0x0D, "EEPROM", ("Programming protocol for large EEPROMs", "Supports byte-wise programming", "May require specific write sequences")),
             (0x0E, "SRAM", ("SRAM with battery backup or additional features", "Standard SRAM access protocols", "32-pin devices")),
             (0x10, "Flash Memory", ("Intel-compatible Flash memory programming protocol", "Requires specific command sequences", "Operates at standard voltage levels")),
@@ -106,12 +105,6 @@ class EpromSpecBuilder:
             (0x27, "SRAM", ("Standard SRAM access protocol for 24-pin devices", "2Kb SRAM devices", "Simple read/write operations")),
             (0x28, "SRAM", ("Standard SRAM access protocol for 28-pin devices", "8Kb SRAM devices", "Simple read/write operations")),
             (0x29, "SRAM", ("Standard SRAM access protocol for 32-pin devices", "512Kb to 1Mb SRAM devices", "Simple read/write operations")),
-            (0x2A, "NVRAM", ("Non-volatile SRAM with built-in battery", "Requires special handling for battery-backed operation", "32-pin devices")),
-            (0x2C, "NVRAM", ("Non-volatile SRAM (Timekeeping RAM)", "May include real-time clock features", "Standard SRAM access protocol")),
-            (0x2E, "NVRAM", ("High-capacity non-volatile SRAM", "512Kb and larger sizes", "Requires specific protocols for access")),
-            (0x35, "Flash Memory", ("Flash memory with EEPROM-like interface", "Requires specific write sequences", "May include software data protection")),
-            (0x39, "Flash Memory", ("Advanced Flash memory programming protocol", "Uses command sequences similar to Intel algorithms", "Operates at standard voltage levels")),
-            (0x3C, "Flash Memory", ("Common Flash memory protocol for 4Mb devices", "Uses standard command sequences for programming", "May operate at lower voltages (3.3V)")),
         ]
         for pid, ptype, desc_tuple in protocol_info_data:
             if pid == protocol_id:

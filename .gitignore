@@ -25,3 +25,7 @@ fires/
 tools/__pycache__/
 
 anything.txt
+
+.claude/*
+
+CLAUDE.md
