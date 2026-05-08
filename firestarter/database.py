@@ -430,12 +430,16 @@ class EpromDatabase:
         if not full_eprom_data:
             return {}
 
+        # Use vpp_mv directly when available (integer millivolts from parse_db_2.py)
+        vpp_mv = full_eprom_data.get("vpp_mv") or int(full_eprom_data.get("vpp", 0) * 1000)
+
         # Keys to keep from the full data
         programmer_data = {
             "memory-size": full_eprom_data.get("memory-size", 0),
             "type": full_eprom_data.get("type", 0),
+            "algorithm": full_eprom_data.get("protocol-id", 0),
             "pin-count": full_eprom_data.get("pin-count", 0),
-            "vpp": full_eprom_data.get("vpp", 0) * 1000,  # Firmware expects millivolts
+            "vpp": vpp_mv,
             "pulse-delay": full_eprom_data.get("pulse-delay", 0),
             # 'chip-id' is optional
         }
