@@ -334,7 +334,17 @@ class EpromOperator:
                     data_chunk = file_handle.read(buffer_size)
                     checksum = functools.reduce(operator.xor, data_chunk, 0)
                     header = b"#" + len(data_chunk).to_bytes(2, "big") + checksum.to_bytes(1)
-                    self.comm.send_bytes(header + data_chunk)
+                    
+                    # Send header first
+                    self.comm.send_bytes(header)
+                    
+                    # Wait for OK response before sending actual data
+                    is_ok, msg = self.comm.expect_ack()
+                    if not is_ok:
+                        raise EpromOperationError(f"Firmware did not acknowledge header: {msg}")
+                    
+                    # Send actual data
+                    self.comm.send_bytes(data_chunk)
                     progress.update(len(data_chunk))
                 else:
                     self.comm.send_done()
@@ -569,9 +579,10 @@ class EpromOperator:
             return is_ok
 
     def erase_eprom(
-        self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
+        self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0,
+        address_str: Optional[str] = None
     ) -> bool:
-        with self._operation_context(eprom_name, eprom_data_dict, COMMAND_ERASE, operation_flags) as (cmd_data, _, op_name):
+        with self._operation_context(eprom_name, eprom_data_dict, COMMAND_ERASE, operation_flags, address_str) as (cmd_data, _, op_name):
             if not cmd_data: return False
             logger.info(f"Erasing EPROM {eprom_name.upper()}")
             start_time = time.time()
