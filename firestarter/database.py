@@ -268,7 +268,7 @@ class EpromDatabase:
             return None  # Cannot form bus without address pins
 
         # Handle pins that can be a single value or a list
-        for pin_func in ["rw-pin", "oe-pin", "vpp-pin"]:
+        for pin_func in ["rw-pin", "vpp-pin"]:
             if pin_func in pin_map_data:
                 pin_val = pin_map_data[pin_func]
                 # The value can be a list (e.g., [22]) or a single int.
@@ -276,7 +276,10 @@ class EpromDatabase:
                 pin_to_check = pin_val[0] if isinstance(pin_val, list) else pin_val
 
                 if pin_to_check in pin_conversions.get(pins, {}):
-                    map_config[pin_func] = pin_conversions[pins][pin_to_check]
+                    resolved = pin_conversions[pins][pin_to_check]
+                    if pin_func == "vpp-pin" and resolved in (ROM_CE, ROM_OE):
+                        continue  # No dedicated VPP pin; firmware defaults vpp_line=0xFF (VPE path)
+                    map_config[pin_func] = resolved
                 else:
                     logger.warning(
                         f"Pin function '{pin_func}' with pin number {pin_to_check} not in pin_conversions for {pins}-pin EPROM."
