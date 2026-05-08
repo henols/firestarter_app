@@ -234,6 +234,9 @@ def create_info_args(parser):
     info_parser.add_argument(
         "-c", "--config", action="store_true", help="Show EPROM config."
     )
+    info_parser.add_argument(
+        "-a", "--adapter", action="store_true", help="Show adapter pin wiring table."
+    )
 
 
 def create_list_args(parser):
@@ -470,11 +473,13 @@ def main():
             raw_config_data,
             manufacturer,
             include_export_config=args.config,
+            include_adapter=getattr(args, 'adapter', False),
         )
         if structured_details:
-            # EpromInfoProvider now handles displaying, including the export config if requested by args.config
             eprom_presenter.present_eprom_details(
-                structured_details, show_export_config=args.config
+                structured_details,
+                show_export_config=args.config,
+                show_adapter=getattr(args, 'adapter', False),
             )
             return 0
         return 1

@@ -287,6 +287,42 @@ class EpromDatabase:
 
         return map_config
 
+    def get_adapter_table(self, pin_count: int, pinout_key: str) -> list:
+        """
+        Returns [(pin_number, signal_name), ...] for every physical DIP pin 1..pin_count.
+        Derived directly from pinouts.json. Returns [] if the pinout key is unknown.
+        Used to display adapter wiring via `firestarter info --adapter`.
+        """
+        pin_map_data = self.get_pin_map(pin_count, pinout_key)
+        if not pin_map_data:
+            return []
+
+        pin_signals = {}
+
+        def _assign(pins_val, signal):
+            for p in (pins_val if isinstance(pins_val, list) else [pins_val]):
+                if p in pin_signals and signal not in pin_signals[p]:
+                    pin_signals[p] = pin_signals[p] + "/" + signal
+                else:
+                    pin_signals[p] = signal
+
+        _assign(pin_map_data.get("vcc-pin", []), "VCC")
+        _assign(pin_map_data.get("gnd-pin", []), "GND")
+        _assign(pin_map_data.get("ce-pin", []), "CE")
+        _assign(pin_map_data.get("oe-pin", []), "OE")
+        _assign(pin_map_data.get("pgm-pin", []), "PGM")
+        _assign(pin_map_data.get("vpp-pin", []), "VPP")  # may append "/VPP" to OE if shared
+
+        for i, p in enumerate(pin_map_data.get("address-bus-pins", [])):
+            if p not in pin_signals:
+                pin_signals[p] = f"A{i}"
+
+        for i, p in enumerate(pin_map_data.get("data-bus-pins", [])):
+            if p not in pin_signals:
+                pin_signals[p] = f"D{i}"
+
+        return [(p, pin_signals.get(p, "NC")) for p in range(1, pin_count + 1)]
+
     def _map_data(self, ic: dict, manufacturer: str) -> dict:
         """
         Transforms raw EPROM data from the JSON structure into a more processed
