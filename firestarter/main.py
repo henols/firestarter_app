@@ -160,6 +160,14 @@ def create_erase_parser(parser):
         dest="blank_check",
         help="Do a blank check after erase.",
     )
+    erase_parser.add_argument(
+        "-s",
+        "--sector-address",
+        dest="sector_address",
+        metavar="ADDRESS",
+        default=None,
+        help="Sector address for sector erase (hex e.g. 0x10000). Omit for chip erase.",
+    )
 
 
 def create_id_args(parser):
@@ -561,7 +569,8 @@ def main():
         return (
             1
             if not eprom_operator.erase_eprom(
-                args.eprom, eprom_data, operation_flags=build_arg_flags(args)
+                args.eprom, eprom_data, operation_flags=build_arg_flags(args),
+                address_str=getattr(args, 'sector_address', None)
             )
             else 0
         )
