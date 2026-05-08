@@ -1,0 +1,62 @@
+{
+    "DIP24_2716": {
+        "name": "JEDEC 2716 (2KB)",
+        "pins": {
+            "vcc-pin": [24], "gnd-pin": [12], "vpp-pin": [21],
+            "VCC_READ": 5.0, "VCC_PROG": 25.0,
+            "address-bus-pins": [8, 7, 6, 5, 4, 3, 2, 1, 23, 22, 19],
+            "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
+            "ce-pin": [18], "oe-pin": [20],
+            "static-high-pins": [24]
+        }
+    },
+    "DIP24_2732": {
+        "name": "JEDEC 2732 (4KB)",
+        "pins": {
+            "vcc-pin": [24], "gnd-pin": [12],
+            "vpp-pin": [20], "oe-pin": [20],
+            "address-bus-pins": [8, 7, 6, 5, 4, 3, 2, 1, 23, 22, 19, 21],
+            "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
+            "ce-pin": [18],
+            "static-high-pins": [24]
+        }
+    },
+    "DIP28_2764": {
+        "name": "JEDEC 2764/128",
+        "pins": {
+            "vcc-pin": [28], "gnd-pin": [14], "vpp-pin": [1],
+            "pgm-pin": [27], "nc-pin": [26],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2, 26],
+            "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
+            "ce-pin": [20], "oe-pin": [22]
+        }
+    },
+    "DIP28_27256": {
+        "name": "JEDEC 27256",
+        "pins": {
+            "vcc-pin": [28], "gnd-pin": [14], "vpp-pin": [1],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2, 26, 27],
+            "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
+            "ce-pin": [20], "oe-pin": [22]
+        }
+    },
+    "DIP28_27512": {
+        "name": "JEDEC 27512",
+        "pins": {
+            "vcc-pin": [28], "gnd-pin": [14],
+            "vpp-pin": [22], "oe-pin": [22],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2, 26, 27, 1],
+            "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
+            "ce-pin": [20]
+        }
+    },
+    "DIP32_STD": {
+        "name": "JEDEC 32-Pin Standard",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16], "vpp-pin": [1],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30, 31],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22], "oe-pin": [24]
+        }
+    }
+}

@@ -64,6 +64,9 @@ pin_conversions = {
         21: 11,
         22: 9,
         23: 8,
+        # Pin 24 (VCC) sits at DIP32 socket position 28 = bus line 13 on the RURP
+        # shield. Bus line 13 must be driven HIGH to supply VCC to the DIP24 chip.
+        24: 13,
     },
     28: {
         1: 15,
@@ -284,6 +287,18 @@ class EpromDatabase:
                     logger.warning(
                         f"Pin function '{pin_func}' with pin number {pin_to_check} not in pin_conversions for {pins}-pin EPROM."
                     )
+
+        if "static-high-pins" in pin_map_data and pins in pin_conversions:
+            static_high = []
+            for pin in pin_map_data["static-high-pins"]:
+                if pin in pin_conversions[pins]:
+                    static_high.append(pin_conversions[pins][pin])
+                else:
+                    logger.warning(
+                        f"static-high-pin {pin} not in pin_conversions for {pins}-pin EPROM."
+                    )
+            if static_high:
+                map_config["static-high"] = static_high
 
         return map_config
 
