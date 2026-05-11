@@ -42,6 +42,24 @@ PROTOCOL_MAP = {
     0x28: "SRAM_STD",
 }
 
+# Algorithm (minipro protocol_id) → firmware mem_type integer.
+# Firmware dispatches on protocol first; mem_type is kept consistent for fallback paths.
+_ALGO_MEM_TYPE = {
+    0x05: 5,   # FLASH_AMD_STD     → TYPE_FLASH_TYPE_4
+    0x06: 3,   # FLASH_AMD_ALT     → TYPE_FLASH_TYPE_3
+    0x07: 1,   # EPROM_STD         → TYPE_EPROM
+    0x08: 1,   # EPROM_QUICK       → TYPE_EPROM
+    0x0B: 1,   # EPROM_LEGACY      → TYPE_EPROM
+    0x0D: 1,   # EEPROM_POLL       → TYPE_EPROM (firmware dispatches on protocol prefix)
+    0x0E: 4,   # SRAM_32PIN        → TYPE_SRAM
+    0x10: 1,   # FLASH_INTEL       → TYPE_EPROM (firmware dispatches on protocol prefix)
+    0x27: 4,   # SRAM_24PIN        → TYPE_SRAM
+    0x28: 4,   # SRAM_STD          → TYPE_SRAM
+    0x29: 4,   # SRAM_512K_1M      → TYPE_SRAM
+    0x35: 5,   # FLASH_EEPROM_LIKE → TYPE_FLASH_TYPE_4
+    0x39: 5,   # FLASH_INTEL_ALT   → TYPE_FLASH_TYPE_4 (no DB chips; future-proofed)
+}
+
 # Module-level constants
 types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
 ROM_CE = 0x100
