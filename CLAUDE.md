@@ -8,7 +8,7 @@ Python host CLI for the Firestarter EPROM programmer. Communicates with the Ardu
 pip install -e .                    # install in dev mode
 firestarter --help                  # verify install
 ./firestarter_test.sh [EPROM]       # hardware integration test
-python tools/parse_db_2.py          # regenerate chip database from infoic.xml
+python tools/build_db.py            # regenerate chip database from infoic.xml
 ```
 
 ## Architecture
@@ -16,7 +16,7 @@ python tools/parse_db_2.py          # regenerate chip database from infoic.xml
 ### Data Flow
 
 ```
-infoic.xml → parse_db_2.py → minipro_complete_db.json
+infoic.xml → build_db.py → minipro_complete_db.json
                                         ↓
 firestarter <chip> write/read/erase
      ↓
@@ -39,7 +39,7 @@ serial_comm.py                      # send over serial, handle response
 - `firestarter/eprom_operations.py` — high-level operations (read, write, erase, verify, blank check)
 - `firestarter/serial_comm.py` — serial protocol implementation (INIT/MAIN/END state machine)
 - `firestarter/main.py` — Click CLI entry point
-- `tools/parse_db_2.py` — database pipeline: parses minipro `infoic.xml`, outputs JSON
+- `tools/build_db.py` — database pipeline: parses minipro `infoic.xml`, outputs JSON
 
 ### Wire Protocol
 
@@ -66,7 +66,7 @@ Firmware responses are prefix-tagged lines: `OK:`, `DATA:`, `MAIN:`, `END:`, `ER
 
 ### Database Pipeline
 
-`tools/parse_db_2.py` parses `tools/infoic.xml` (minipro chip database XML) and outputs `firestarter/data/minipro_complete_db.json`.
+`tools/build_db.py` parses `tools/infoic.xml` (minipro chip database XML) and outputs `firestarter/data/minipro_complete_db.json`.
 
 Key fields per chip entry:
 - `algorithm` — minipro `protocol_id` integer (primary dispatch key)

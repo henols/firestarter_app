@@ -376,7 +376,7 @@ class EpromDatabase:
         elif "SRAM" in type_str:
             determined_type = 4
 
-        # Read algorithm integer directly — set by parse_db_2.py as minipro protocol_id
+        # Read algorithm integer directly — set by build_db.py as minipro protocol_id
         protocol_id = programming.get("algorithm", 0)
 
         # The new DB doesn't have the raw flags, so we infer what we can
@@ -484,7 +484,7 @@ class EpromDatabase:
         if not full_eprom_data:
             return {}
 
-        # Use vpp_mv directly when available (integer millivolts from parse_db_2.py)
+        # Use vpp_mv directly when available (integer millivolts from build_db.py)
         vpp_mv = full_eprom_data.get("vpp_mv") or int(full_eprom_data.get("vpp", 0) * 1000)
 
         # Keys to keep from the full data

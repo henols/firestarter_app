@@ -23,6 +23,7 @@ fires/
 *.o64
 
 tools/__pycache__/
+tools/infoic*.xml
 
 anything.txt
 
