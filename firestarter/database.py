@@ -386,16 +386,20 @@ class EpromDatabase:
             # logger.warning(f"Invalid VCC value for {ic.get('part_number')}: {vcc_str}")
         vpp_mv = electrical.get("vpp_mv", 0)
 
-        # Simplified type determination
-        type_str = electrical.get("type", "")
-        determined_type = 1  # Default to EPROM
-        if "Flash" in type_str:
-            determined_type = 2  # Generic Flash
-        elif "SRAM" in type_str:
-            determined_type = 4
-
         # Read algorithm integer directly — set by build_db.py as minipro protocol_id
         protocol_id = programming.get("algorithm", 0)
+
+        # Derive mem_type from algorithm (D3). Fall back to electrical.type substring
+        # only when algorithm is absent / 0 (legacy user-override DB entries).
+        if protocol_id and protocol_id in _ALGO_MEM_TYPE:
+            determined_type = _ALGO_MEM_TYPE[protocol_id]
+        else:
+            type_str = electrical.get("type", "")
+            determined_type = 1  # Default to EPROM
+            if "Flash" in type_str:
+                determined_type = 2  # Generic Flash (legacy fallback only)
+            elif "SRAM" in type_str:
+                determined_type = 4
 
         # The new DB doesn't have the raw flags, so we infer what we can
         info_flags = 0
