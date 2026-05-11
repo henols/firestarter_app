@@ -51,6 +51,16 @@ _ALGO_MEM_TYPE = {
 # enables the VPP boost regulator on a 5V SRAM part).
 _SRAM_PROTOCOLS = {0x0E, 0x27, 0x28, 0x29}
 
+# DIP28_2764 + Flash/EEPROM hazard guard (WARNING-5).
+# Chips whose pinout == _28C_EEPROM_HAZARD_PINOUT AND electrical.type == "Flash/EEPROM"
+# must NOT route to `configure_eprom`. configure_eprom would assert P1_VPP_ENABLE,
+# applying 12V to socket pin 1 — which on the DIP28_2764 pinout is A14 on these
+# 5V parallel EEPROMs (AT28C-family, MICROCHIP 28C*, NEC UPD28C*, XICOR X28C*, etc.).
+# The safe handler is `configure_eeprom28c` (algorithm=0x0D); chips reach it after
+# Plan 02 regenerates the DB with `_PROTOCOL_OVERRIDES` in build_db.py.
+# See WARNING-5 in .planning/v1.0-MILESTONE-AUDIT.md.
+_28C_EEPROM_HAZARD_PINOUT = "DIP28_2764"
+
 
 def dispatch(protocol, mem_type):
     """Mirror firmware D2 dispatch order in memory.cpp::configure_memory."""
@@ -76,6 +86,7 @@ def main():
 
     errors = []
     sram_in_eprom = []
+    eeprom28c_in_eprom = []
     total = 0
     for mfg, chips in db.items():
         if not isinstance(chips, list):
@@ -96,8 +107,20 @@ def main():
                 sram_in_eprom.append(
                     f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}"
                 )
+            # WARNING-5 safety: DIP28_2764 + Flash/EEPROM chips must NOT route to
+            # configure_eprom (12V P1_VPP_ENABLE would hit A14 on the 5V part).
+            pinout = chip.get("pinout", "")
+            etype = chip.get("electrical", {}).get("type", "")
+            if (
+                pinout == _28C_EEPROM_HAZARD_PINOUT
+                and etype == "Flash/EEPROM"
+                and handler == "configure_eprom"
+            ):
+                eeprom28c_in_eprom.append(
+                    f"{mfg}/{part} proto=0x{proto:02X} pinout={pinout}"
+                )
 
-    if errors or sram_in_eprom:
+    if errors or sram_in_eprom or eeprom28c_in_eprom:
         if errors:
             print(
                 f"FAIL: {len(errors)} of {total} chips have no valid dispatch path:"
@@ -115,11 +138,21 @@ def main():
                 print(f"  {e}")
             if len(sram_in_eprom) > 20:
                 print(f"  ... and {len(sram_in_eprom) - 20} more")
+        if eeprom28c_in_eprom:
+            print(
+                f"FAIL: {len(eeprom28c_in_eprom)} DIP28_2764 Flash/EEPROM chips "
+                f"route to configure_eprom (WARNING-5: 12V on A14 hazard):"
+            )
+            for e in eeprom28c_in_eprom[:20]:
+                print(f"  {e}")
+            if len(eeprom28c_in_eprom) > 20:
+                print(f"  ... and {len(eeprom28c_in_eprom) - 20} more")
         sys.exit(1)
 
     print(
         f"PASS: all {total} chips have a valid dispatch path; "
-        f"0 SRAM chips route to configure_eprom"
+        f"0 SRAM chips route to configure_eprom; "
+        f"0 DIP28_2764 Flash/EEPROM chips route to configure_eprom"
     )
 
 
