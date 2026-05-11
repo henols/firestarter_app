@@ -208,10 +208,20 @@ def main():
                 # --- SYNTHESIZE "COMPLETE" DATA ---
                 pinout_key = resolve_pinout_key(pin_count, variant, flags)
 
+                # SRAM protocols emit electrical.type = "SRAM" (D4) so downstream
+                # layers no longer mislabel SRAM as UV-EPROM and the info_flags
+                # "electrically erasable" bit is not set spuriously.
+                if proto_id in {0x0E, 0x27, 0x28, 0x29}:
+                    _etype = "SRAM"
+                elif flags & 0x10:
+                    _etype = "Flash/EEPROM"
+                else:
+                    _etype = "UV-EPROM"
+
                 chip_entry = {
                     "part_number": name.split("@")[0],
                     "electrical": {
-                        "type": "Flash/EEPROM" if (flags & 0x10) else "UV-EPROM",
+                        "type": _etype,
                         "size_bytes": mem_size,
                         "pin_count": pin_count,
                         "vpp": VPP_VOLTAGES.get(voltages & 0xFF, "Unknown"),
