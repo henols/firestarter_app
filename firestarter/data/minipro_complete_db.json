@@ -3751,7 +3751,7 @@
     {
       "part_number": "DS1220(TEST)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -3789,7 +3789,7 @@
     {
       "part_number": "DS1225(TEST)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 8192,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -3827,7 +3827,7 @@
     {
       "part_number": "DS1230AB(TEST),DS1230Y(TEST)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "12V",
@@ -3865,7 +3865,7 @@
     {
       "part_number": "DS1230W(TEST3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -3884,7 +3884,7 @@
     {
       "part_number": "DS1245AB(RW),DS1245Y(RW)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "12V",
@@ -3903,7 +3903,7 @@
     {
       "part_number": "DS1245AB(TEST),DS1245Y(TEST)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "12V",
@@ -3922,7 +3922,7 @@
     {
       "part_number": "DS1245W(RW3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -3941,7 +3941,7 @@
     {
       "part_number": "DS1245W(TEST3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -3960,7 +3960,7 @@
     {
       "part_number": "DS1249AB(RW),DS1249Y(RW)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 262144,
         "pin_count": 32,
         "vpp": "12V",
@@ -3979,7 +3979,7 @@
     {
       "part_number": "DS1249AB(TEST),DS1249Y(TEST)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 262144,
         "pin_count": 32,
         "vpp": "12V",
@@ -3998,7 +3998,7 @@
     {
       "part_number": "DS1249W(RW3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 262144,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -4017,7 +4017,7 @@
     {
       "part_number": "DS1249W(TEST3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 262144,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -4036,7 +4036,7 @@
     {
       "part_number": "DS1250AB(RW),DS1250Y(RW)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "12V",
@@ -4055,7 +4055,7 @@
     {
       "part_number": "DS1250AB(TEST),DS1250Y(TEST)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "12V",
@@ -4074,7 +4074,7 @@
     {
       "part_number": "DS1250W(RW3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -4093,7 +4093,7 @@
     {
       "part_number": "DS1250W(TEST3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -10469,7 +10469,7 @@
     {
       "part_number": "M48T128Y",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "12V",
@@ -10488,7 +10488,7 @@
     {
       "part_number": "M48T128V",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -10507,7 +10507,7 @@
     {
       "part_number": "M48T512Y",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "12V",
@@ -10526,7 +10526,7 @@
     {
       "part_number": "M48T512V",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -12280,7 +12280,7 @@
     {
       "part_number": "M48T128Y",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "12V",
@@ -12299,7 +12299,7 @@
     {
       "part_number": "M48T128V",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -12318,7 +12318,7 @@
     {
       "part_number": "M48T512Y",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "12V",
@@ -12337,7 +12337,7 @@
     {
       "part_number": "M48T512V",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -12930,7 +12930,7 @@
     {
       "part_number": "BQ4010YMA(TEST)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 8192,
         "pin_count": 28,
         "vpp": "12V",
@@ -12968,7 +12968,7 @@
     {
       "part_number": "BQ4011YMA(TEST)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "12V",
@@ -13006,7 +13006,7 @@
     {
       "part_number": "BQ4011LYMA(TEST3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -13025,7 +13025,7 @@
     {
       "part_number": "BQ4013YMA(RW)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "12V",
@@ -13044,7 +13044,7 @@
     {
       "part_number": "BQ4013YMA(TEST)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "12V",
@@ -13063,7 +13063,7 @@
     {
       "part_number": "BQ4013LYMA(RW3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -13082,7 +13082,7 @@
     {
       "part_number": "BQ4013LYMA(TEST3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -13101,7 +13101,7 @@
     {
       "part_number": "BQ4014YMA(RW)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 262144,
         "pin_count": 32,
         "vpp": "12V",
@@ -13120,7 +13120,7 @@
     {
       "part_number": "BQ4014YMA(TEST)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 262144,
         "pin_count": 32,
         "vpp": "12V",
@@ -13139,7 +13139,7 @@
     {
       "part_number": "BQ4014LYMA(RW3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 262144,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -13158,7 +13158,7 @@
     {
       "part_number": "BQ4014LYMA(TEST3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 262144,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -13177,7 +13177,7 @@
     {
       "part_number": "BQ4015YMA(RW)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "12V",
@@ -13196,7 +13196,7 @@
     {
       "part_number": "BQ4015YMA(TEST)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "12V",
@@ -13215,7 +13215,7 @@
     {
       "part_number": "BQ4015LYMA(RW3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -13234,7 +13234,7 @@
     {
       "part_number": "BQ4015LYMA(TEST3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "Unknown",
@@ -13677,7 +13677,7 @@
     {
       "part_number": "W24010",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "12V",
@@ -13696,7 +13696,7 @@
     {
       "part_number": "W24020",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 262144,
         "pin_count": 32,
         "vpp": "12V",
@@ -13715,7 +13715,7 @@
     {
       "part_number": "W24040",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "12V",
@@ -13734,7 +13734,7 @@
     {
       "part_number": "W24256,W24257A",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "12V",
@@ -13753,7 +13753,7 @@
     {
       "part_number": "W24512",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 65536,
         "pin_count": 32,
         "vpp": "12V",
@@ -13772,7 +13772,7 @@
     {
       "part_number": "W2464,W2465",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 8192,
         "pin_count": 28,
         "vpp": "12V",
@@ -14101,7 +14101,7 @@
     {
       "part_number": "6116",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -14120,7 +14120,7 @@
     {
       "part_number": "6164,6264",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 8192,
         "pin_count": 28,
         "vpp": "12V",
@@ -14139,7 +14139,7 @@
     {
       "part_number": "61256,62256",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "12V",
@@ -14158,7 +14158,7 @@
     {
       "part_number": "61512,62512",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 65536,
         "pin_count": 32,
         "vpp": "12V",
@@ -14177,7 +14177,7 @@
     {
       "part_number": "628128",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 131072,
         "pin_count": 32,
         "vpp": "12V",
@@ -14196,7 +14196,7 @@
     {
       "part_number": "628256",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 262144,
         "pin_count": 32,
         "vpp": "12V",
@@ -14215,7 +14215,7 @@
     {
       "part_number": "628512",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 524288,
         "pin_count": 32,
         "vpp": "12V",
