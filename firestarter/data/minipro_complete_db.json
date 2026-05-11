@@ -1698,8 +1698,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "300000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -1717,8 +1717,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "1000000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -1736,8 +1736,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "1000000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -1869,8 +1869,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "100000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -1888,8 +1888,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "20000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -1907,8 +1907,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "1000000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -1926,8 +1926,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "100000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -1945,8 +1945,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "1000000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -1964,8 +1964,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "20000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -2059,8 +2059,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "1000000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -4395,8 +4395,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "1000000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -7927,8 +7927,8 @@
         "vcc": "3.3V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "100000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -7946,8 +7946,8 @@
         "vcc": "3.3V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "20000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -7965,8 +7965,8 @@
         "vcc": "3.3V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "1000000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -7984,8 +7984,8 @@
         "vcc": "3.3V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "100000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -8003,8 +8003,8 @@
         "vcc": "3.3V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "20000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -8022,8 +8022,8 @@
         "vcc": "3.3V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "500000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -8041,8 +8041,8 @@
         "vcc": "3.3V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "100000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -8674,8 +8674,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "1000000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -8693,8 +8693,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "1000000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -11738,8 +11738,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "1000000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -14070,8 +14070,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "1000000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -14089,8 +14089,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "100000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },

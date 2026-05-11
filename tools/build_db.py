@@ -218,6 +218,34 @@ def main():
                 else:
                     _etype = "UV-EPROM"
 
+                # WARNING-5 safety override: DIP28_2764 chips on the 0x07
+                # (EPROM_STD) path apply 12V P1_VPP_ENABLE to socket pin 1
+                # during the write pulse. On the DIP28_2764 pinout, socket
+                # pin 1 = A14 (high address line) on 28C-family 5V CMOS
+                # EEPROMs — applying 12V there is a hardware-damage path.
+                # Flip proto_id to 0x0D so these chips route to
+                # configure_eeprom28c (5V page-write, SDP-disable + DQ7
+                # polling, no VPP regulator) which the firmware already
+                # implements correctly. Leave _etype = "Flash/EEPROM"
+                # unchanged — database.py's info_flags derivation depends
+                # on that string for the "electrically erasable" bit, which
+                # IS correct for these chips.
+                # Discriminator (3 predicates): pinout_key == "DIP28_2764"
+                # AND proto_id == 0x07 AND _etype == "Flash/EEPROM".
+                # Inline literal — no module-top constant — matches the
+                # Phase 12 Plan 04 SRAM-detection precedent above.
+                # References: WARNING-5 in .planning/v1.0-MILESTONE-AUDIT.md
+                # and .planning/INTEGRATION-CHECK.md.
+                if (pinout_key == "DIP28_2764"
+                        and proto_id == 0x07
+                        and _etype == "Flash/EEPROM"):
+                    print(
+                        f"INFO: {mfg_name}/{name} algorithm override 0x07->0x0D "
+                        f"(WARNING-5: 5V EEPROM mistagged as UV-EPROM, DIP28_2764 pin 1 = A14)",
+                        file=sys.stderr,
+                    )
+                    proto_id = 0x0D
+
                 chip_entry = {
                     "part_number": name.split("@")[0],
                     "electrical": {
