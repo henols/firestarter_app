@@ -515,7 +515,7 @@ class EpromDatabase:
             "type": full_eprom_data.get("type", 0),
             "algorithm": full_eprom_data.get("protocol-id", 0),
             "pin-count": full_eprom_data.get("pin-count", 0),
-            "vpp": vpp_mv,
+            "vpp_mv": vpp_mv,
             "pulse-delay": full_eprom_data.get("pulse-delay", 0),
             # 'chip-id' is optional
         }

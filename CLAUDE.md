@@ -52,7 +52,6 @@ Example write command:
   "type": 1,
   "algorithm": 7,
   "memory-size": 65536,
-  "vpp": 12000,
   "vpp_mv": 12000,
   "pulse-delay": 0,
   "pin-count": 28,
