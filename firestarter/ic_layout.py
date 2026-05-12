@@ -207,7 +207,7 @@ class EpromSpecBuilder:
             output_data["can_erase_str"] = "true" if eprom_data.get('flags', 0) & 0x00000010 else "false"
 
         if eprom_data.get("flags", 0) & 0x00000008: # Assumes this flag means VPP is relevant
-            output_data["vpp_str"] = f"{eprom_data.get('vpp', 'N/A')}v"
+            output_data["vpp_str"] = f"{eprom_data.get('vpp_volts', 'N/A')}v"
 
         if "chip-id" in eprom_data:
             output_data["chip_id_hex"] = hex(eprom_data.get('chip-id', 0))

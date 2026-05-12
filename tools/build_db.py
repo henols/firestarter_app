@@ -9,7 +9,7 @@ import sys
 # ==========================================
 MINIPRO_XML_URL = "https://gitlab.com/DavidGriffith/minipro/-/raw/master/infoic.xml"
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "firestarter", "data")
-OUTPUT_FILE = os.path.join(_DATA_DIR, "minipro_complete_db.json")
+OUTPUT_FILE = os.path.join(_DATA_DIR, "chip_database.json")
 PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
 
 # ==========================================

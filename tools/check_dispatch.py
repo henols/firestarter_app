@@ -1,5 +1,5 @@
 """
-Regression scan: assert every chip in minipro_complete_db.json reaches a real
+Regression scan: assert every chip in chip_database.json reaches a real
 firmware dispatch path after Phase 12.
 
 Mirrors the post-Phase-12 dispatch order documented in
@@ -24,7 +24,7 @@ _DATA_DIR = os.path.join(
 )
 DB_FILE = os.environ.get(
     "FIRESTARTER_DB_FILE",
-    os.path.join(_DATA_DIR, "minipro_complete_db.json"),
+    os.path.join(_DATA_DIR, "chip_database.json"),
 )
 
 # Algorithm (minipro protocol_id) → firmware mem_type integer.

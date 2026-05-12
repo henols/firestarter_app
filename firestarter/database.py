@@ -186,7 +186,7 @@ class EpromDatabase:
         """
         # Load base EPROMs and overrides
         base_proms = _read_config_file(
-            "minipro_complete_db.json"
+            "chip_database.json"
         )  # Use only the new database
         override_proms = None  # //_read_config_file("database_overrides.json")
         self.proms = (
@@ -363,7 +363,7 @@ class EpromDatabase:
 
         This includes converting string hex values to integers, determining EPROM type,
         extracting voltages, and attaching the RURP-specific bus configuration. This now
-        works with the new 'minipro_complete_db.json' format.
+        works with the new 'chip_database.json' format.
         """
         electrical = ic.get("electrical", {})
         programming = ic.get("programming", {})
@@ -414,7 +414,7 @@ class EpromDatabase:
             "memory-size": electrical.get("size_bytes", 0),
             "type": determined_type,
             "pin-count": pin_count,
-            "vpp": vpp,
+            "vpp_volts": vpp,
             "vpp_mv": vpp_mv,
             "vcc": vcc,
             "pulse-delay": 0,  # Not directly available in new format, may need parsing from string
@@ -507,7 +507,7 @@ class EpromDatabase:
             return {}
 
         # Use vpp_mv directly when available (integer millivolts from build_db.py)
-        vpp_mv = full_eprom_data.get("vpp_mv") or int(full_eprom_data.get("vpp", 0) * 1000)
+        vpp_mv = full_eprom_data.get("vpp_mv") or int(full_eprom_data.get("vpp_volts", 0) * 1000)
 
         # Keys to keep from the full data
         programmer_data = {

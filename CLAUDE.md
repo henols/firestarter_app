@@ -16,7 +16,7 @@ python tools/build_db.py            # regenerate chip database from infoic.xml
 ### Data Flow
 
 ```
-infoic.xml → build_db.py → minipro_complete_db.json
+infoic.xml → build_db.py → chip_database.json
                                         ↓
 firestarter <chip> write/read/erase
      ↓
@@ -33,7 +33,7 @@ serial_comm.py                      # send over serial, handle response
 
 ### Key Files
 
-- `firestarter/data/minipro_complete_db.json` — generated chip database (do NOT edit by hand)
+- `firestarter/data/chip_database.json` — generated chip database (do NOT edit by hand)
 - `firestarter/data/pinouts.json` — physical DIP pin → RURP bus line mappings
 - `firestarter/database.py` — `EpromDatabase` singleton: lookup, pin translation, command building
 - `firestarter/eprom_operations.py` — high-level operations (read, write, erase, verify, blank check)
@@ -65,7 +65,7 @@ Firmware responses are prefix-tagged lines: `OK:`, `DATA:`, `MAIN:`, `END:`, `ER
 
 ### Database Pipeline
 
-`tools/build_db.py` parses `tools/infoic.xml` (minipro chip database XML) and outputs `firestarter/data/minipro_complete_db.json`.
+`tools/build_db.py` parses `tools/infoic.xml` (minipro chip database XML) and outputs `firestarter/data/chip_database.json`.
 
 Key fields per chip entry:
 - `algorithm` — minipro `protocol_id` integer (primary dispatch key)

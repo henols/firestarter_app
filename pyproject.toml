@@ -63,9 +63,9 @@ include-package-data = true
 packages = ["firestarter"]
 [tool.setuptools.package-data]
 "firestarter" = [
-    "data/database_generated.json",
+    "data/chip_database.json",
     "data/database_overrides.json",
-    "data/pin-maps.json",
+    "data/pinouts.json",
 ]
 
 [tool.setuptools.dynamic]

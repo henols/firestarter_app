@@ -268,7 +268,7 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
     logger.info(divider)
     for ic in eproms_data:
         chip_id_str = f"0x{ic.get('chip-id', 0):04X}" if ic.get('chip-id') else ""
-        vpp_str = f"{ic.get('vpp', '-')}v" if ic.get("type") == 1 else "- " # EPROM type
+        vpp_str = f"{ic.get('vpp_volts', '-')}v" if ic.get("type") == 1 else "- " # EPROM type
         type_str = spec_builder.get_chip_type_string(ic.get("type", 0))
         name = ic.get('name', '')
         if not ic.get('bus-config'):

@@ -1,5 +1,6 @@
-include firestarter/data/database.json
-include firestarter/data/pin-maps.json
+include firestarter/data/chip_database.json
+include firestarter/data/pinouts.json
+include firestarter/data/database_overrides.json
 include firestarter/data/avrdude.conf
 include firestarter/database.py
 include firestarter/ic_layout.py
