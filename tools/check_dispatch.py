@@ -18,6 +18,8 @@ import json
 import os
 import sys
 
+from firestarter.database import EpromDatabase
+
 # Module-top path constants (mirrors firestarter_app/tools/build_db.py:11-13)
 _DATA_DIR = os.path.join(
     os.path.dirname(__file__), "..", "firestarter", "data"
@@ -27,7 +29,7 @@ DB_FILE = os.environ.get(
     os.path.join(_DATA_DIR, "chip_database.json"),
 )
 
-# Algorithm (minipro protocol_id) → firmware mem_type integer.
+# Algorithm integer (upstream protocol_id from infoic.xml) → firmware mem_type integer.
 # Must mirror firestarter_app/firestarter/database.py::_ALGO_MEM_TYPE
 # (lands in Plan 03 per CONTEXT.md D3).
 _ALGO_MEM_TYPE = {
@@ -82,13 +84,20 @@ def dispatch(protocol, mem_type):
 def main():
     """Entry point: scan DB and exit non-zero if any chip lacks a dispatch path."""
     with open(DB_FILE, encoding="utf-8") as f:
-        db = json.load(f)
+        db_raw = json.load(f)
+
+    # WIRE-02 (D-15 Shape A): host-side wire-emit round-trip surface.
+    # Per-chip we call db.convert_to_programmer(db.get_eprom(part)) and assert
+    # the produced wire dict contains canonical "vpp_mv" (Plan 02-01 contract)
+    # and never the legacy "vpp" key.
+    db = EpromDatabase()
 
     errors = []
     sram_in_eprom = []
     eeprom28c_in_eprom = []
+    wire_regressions = []
     total = 0
-    for mfg, chips in db.items():
+    for mfg, chips in db_raw.items():
         if not isinstance(chips, list):
             continue
         for chip in chips:
@@ -120,7 +129,23 @@ def main():
                     f"{mfg}/{part} proto=0x{proto:02X} pinout={pinout}"
                 )
 
-    if errors or sram_in_eprom or eeprom28c_in_eprom:
+            # WIRE-02 (D-15 Shape A): assert wire emits "vpp_mv" and no legacy
+            # "vpp" for every chip. Chips not registered in EpromDatabase's
+            # index (rare) skip the wire assert; the dispatch scan above still
+            # covers them.
+            mapped = db.get_eprom(part)
+            if mapped:
+                wire = db.convert_to_programmer(mapped)
+                if "vpp_mv" not in wire:
+                    wire_regressions.append(
+                        f"{mfg}/{part} — missing vpp_mv on wire"
+                    )
+                if "vpp" in wire:
+                    wire_regressions.append(
+                        f"{mfg}/{part} — legacy vpp key still emitted on wire"
+                    )
+
+    if errors or sram_in_eprom or eeprom28c_in_eprom or wire_regressions:
         if errors:
             print(
                 f"FAIL: {len(errors)} of {total} chips have no valid dispatch path:"
@@ -147,12 +172,21 @@ def main():
                 print(f"  {e}")
             if len(eeprom28c_in_eprom) > 20:
                 print(f"  ... and {len(eeprom28c_in_eprom) - 20} more")
+        if wire_regressions:
+            print(
+                f"FAIL: {len(wire_regressions)} wire-key regressions:"
+            )
+            for e in wire_regressions[:20]:
+                print(f"  {e}")
+            if len(wire_regressions) > 20:
+                print(f"  ... and {len(wire_regressions) - 20} more")
         sys.exit(1)
 
     print(
         f"PASS: all {total} chips have a valid dispatch path; "
         f"0 SRAM chips route to configure_eprom; "
-        f"0 DIP28_2764 Flash/EEPROM chips route to configure_eprom"
+        f"0 DIP28_2764 Flash/EEPROM chips route to configure_eprom; "
+        f"0 wire-key regressions"
     )
 
 

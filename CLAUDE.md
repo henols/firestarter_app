@@ -39,11 +39,11 @@ serial_comm.py                      # send over serial, handle response
 - `firestarter/eprom_operations.py` — high-level operations (read, write, erase, verify, blank check)
 - `firestarter/serial_comm.py` — serial protocol implementation (INIT/MAIN/END state machine)
 - `firestarter/main.py` — Click CLI entry point
-- `tools/build_db.py` — database pipeline: parses minipro `infoic.xml`, outputs JSON
+- `tools/build_db.py` — database pipeline: parses the upstream `infoic.xml`, outputs JSON
 
 ### Wire Protocol
 
-JSON commands sent to firmware at 250000 baud. The `algorithm` field carries the minipro `protocol_id` integer and is the primary firmware dispatch key.
+JSON commands sent to firmware at 250000 baud. The `algorithm` field carries the upstream `protocol_id` integer and is the primary firmware dispatch key.
 
 Example write command:
 ```json
@@ -68,7 +68,7 @@ Firmware responses are prefix-tagged lines: `OK:`, `DATA:`, `MAIN:`, `END:`, `ER
 `tools/build_db.py` parses `tools/infoic.xml` (minipro chip database XML) and outputs `firestarter/data/chip_database.json`.
 
 Key fields per chip entry:
-- `algorithm` — minipro `protocol_id` integer (primary dispatch key)
+- `algorithm` — upstream `protocol_id` integer (primary dispatch key)
 - `vpp_mv` — VPP voltage in millivolts (decoded from `voltages` field)
 - `pinout` — DIP pinout key (`DIP24_2716`, `DIP28_27256`, `DIP28_27512`, `DIP28_2764`, `DIP32_STD`)
 

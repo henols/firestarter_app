@@ -20,7 +20,7 @@ PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
 # 3. LOGIC MAPPERS
 # ==========================================
 
-# This map translates the numeric protocol ID from minipro's XML
+# This map translates the numeric protocol ID from upstream's XML
 # into a human-readable string that Firestarter's database uses.
 PROTOCOL_MAP = {
     0x05: "FLASH_AMD_STD",

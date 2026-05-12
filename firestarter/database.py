@@ -42,7 +42,7 @@ PROTOCOL_MAP = {
     0x28: "SRAM_STD",
 }
 
-# Algorithm (minipro protocol_id) → firmware mem_type integer.
+# Algorithm integer (upstream protocol_id from infoic.xml) → firmware mem_type integer.
 # Firmware dispatches on protocol first; mem_type is kept consistent for fallback paths.
 _ALGO_MEM_TYPE = {
     0x05: 5,   # FLASH_AMD_STD     → TYPE_FLASH_TYPE_4
@@ -386,7 +386,7 @@ class EpromDatabase:
             # logger.warning(f"Invalid VCC value for {ic.get('part_number')}: {vcc_str}")
         vpp_mv = electrical.get("vpp_mv", 0)
 
-        # Read algorithm integer directly — set by build_db.py as minipro protocol_id
+        # Read algorithm integer directly — set by build_db.py from upstream protocol_id
         protocol_id = programming.get("algorithm", 0)
 
         # Derive mem_type from algorithm (D3). Fall back to electrical.type substring
