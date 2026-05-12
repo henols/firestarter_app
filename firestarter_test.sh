@@ -28,7 +28,7 @@ if test $ONLY_EPROM_TESTS -eq 1; then
 fi
 CLEAN_UP=1
 
-JSON_FILE='./firestarter/data/database_generated.json'
+JSON_FILE='./firestarter/data/chip_database.json'
 TEMP_DIR="./test_data"
 
 if test $EPROM_TESTS -eq 1; then
@@ -45,26 +45,27 @@ if test $EPROM_TESTS -eq 1; then
     # Convert TARGET_NAME to uppercase
     EPROM_NAME=$(echo "$EPROM_NAME" | tr '[:lower:]' '[:upper:]')
 
-    # Use jq to parse JSON and match name, retrieving the corresponding memory-size
+    # Use jq to parse JSON and match part_number, retrieving the corresponding size_bytes
+    # Schema: chip_database.json is {manufacturer: [chip_records, ...]} — flatten across both levels.
     MEMORY_SIZE_HEX=$(jq -e --arg target_name "$EPROM_NAME" -r '
-  .[] | 
-  .[] | 
-  select(.name == $target_name) | 
-  .["memory-size"]
+  .[] |
+  .[] |
+  select(.part_number == $target_name) |
+  .electrical.size_bytes
 ' "$JSON_FILE")
 
     HAS_CHIP_ID=$(jq -e --arg target_name "$EPROM_NAME" -r '
-  .[] | 
-  .[] | 
-  select(.name == $target_name) | 
-  .["has-chip-id"]
+  .[] |
+  .[] |
+  select(.part_number == $target_name) |
+  .programming.chip_id_check
 ' "$JSON_FILE")
 
     CAN_ERASE=$(jq -e --arg target_name "$EPROM_NAME" -r '
-  .[] | 
-  .[] | 
-  select(.name == $target_name) | 
-  .["can-erase"]
+  .[] |
+  .[] |
+  select(.part_number == $target_name) |
+  (.electrical.type == "Flash/EEPROM")
 ' "$JSON_FILE")
 
     # Exit if no match is found (MEMORY_SIZE_HEX will be null if no match)
