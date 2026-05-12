@@ -175,32 +175,6 @@ def main():
             for ic in mfg.findall(".//ic"):
                 name = ic.get("name")
 
-                # RAMTRON parallel FRAM safety skip (fm1608-db-mismatch).
-                # Upstream infoic.xml mistags Ramtron parallel FRAM chips
-                # (FM1208, FM1608, FM16W08, FM1808, FM18L08) as UV-EPROM
-                # (type=1) with bogus 12V vpp and 3.3V vdd. Real chips are
-                # 5V single-supply parallel FRAM — no programming voltage,
-                # SRAM-like writes. Routing them through configure_eprom
-                # (algo=0x07/0x0B) engages the 12V VPP regulator and
-                # asserts P1_VPP_ENABLE to socket pin 1, which on the
-                # Ramtron parallel pinout is A12 (address line), not VPP.
-                # Bench-confirmed 2026-05-12: reads return address-bus
-                # crosstalk; writes would route 12V to A12 → chip damage.
-                # firestarter does not yet ship a FRAM handler or a
-                # Ramtron-specific pinout, so we skip these chips entirely:
-                # `firestarter info FM1608` returns "chip not found" — a
-                # clean error instead of silent damage. Re-enable when a
-                # FRAM handler + Ramtron pinout land.
-                # Reference: fm1608-db-mismatch follow_up in
-                # firestarter_prom meta-repo:
-                # .planning/phases/04-hardware-validation-rurp-shield/04-HW-VALIDATION.md
-                if mfg_name == "RAMTRON":
-                    print(
-                        f"WARN: skipping {mfg_name}/{name} — RAMTRON parallel FRAM not supported (fm1608-db-mismatch)",
-                        file=sys.stderr,
-                    )
-                    continue
-
                 # --- FILTER: DIP PARALLEL ONLY ---
                 try:
                     pkg_val = int(ic.get("package_details"), 16)
@@ -271,6 +245,34 @@ def main():
                         file=sys.stderr,
                     )
                     proto_id = 0x0D
+
+                # fm1608-db-mismatch override: Ramtron parallel FRAM dispatch.
+                # Upstream infoic.xml tags Ramtron FRAM (FM1208/1608/16W08/1808/
+                # 18L08) with EPROM-family algorithms (0x07 EPROM_STD, 0x0B
+                # EPROM_LEGACY). These chips are 5V single-supply parallel FRAM
+                # with SRAM-like byte writes — no programming voltage. Pre-
+                # Phase-12-02, the OLD database.json had FM1608 manually tagged
+                # type='sram' (verified=true), routing through configure_sram via
+                # the firmware's mem_type fallback. The Phase 12-02 protocol-
+                # prefix dispatch now fires BEFORE mem_type fallback, so the
+                # upstream algo=0x07 routes through configure_eprom (12V VPP
+                # regulator) and damages the chip. Restore the old working
+                # dispatch by flipping proto_id to 0x28 (SRAM_STD) so memory.cpp
+                # line 98-99 routes Ramtron FRAMs to configure_sram (no VPP).
+                # Also flip _etype to "SRAM" so host info-flags + display layers
+                # are consistent. Pinout pass-through (DIP28_2764 / DIP24_2716)
+                # is imperfect for Ramtron's actual chip pinout but harmless
+                # under configure_sram (no VPP routing).
+                # Reference: fm1608-db-mismatch follow_up in firestarter_prom
+                # at .planning/phases/04-hardware-validation-rurp-shield/04-HW-VALIDATION.md
+                if mfg_name == "RAMTRON" and proto_id in (0x07, 0x0B):
+                    print(
+                        f"INFO: {mfg_name}/{name} algorithm override 0x{proto_id:02X}->0x28 "
+                        f"(fm1608-db-mismatch: Ramtron parallel FRAM → configure_sram, no VPP)",
+                        file=sys.stderr,
+                    )
+                    proto_id = 0x28
+                    _etype = "SRAM"
 
                 chip_entry = {
                     "part_number": name.split("@")[0],
