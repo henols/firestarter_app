@@ -334,17 +334,14 @@ class EpromOperator:
                     data_chunk = file_handle.read(buffer_size)
                     checksum = functools.reduce(operator.xor, data_chunk, 0)
                     header = b"#" + len(data_chunk).to_bytes(2, "big") + checksum.to_bytes(1)
-                    
-                    # Send header first
-                    self.comm.send_bytes(header)
-                    
-                    # Wait for OK response before sending actual data
-                    is_ok, msg = self.comm.expect_ack()
-                    if not is_ok:
-                        raise EpromOperationError(f"Firmware did not acknowledge header: {msg}")
-                    
-                    # Send actual data
-                    self.comm.send_bytes(data_chunk)
+
+                    # Firmware reads header + payload as one synchronous flow via
+                    # rurp_communication_read_data (rurp_serial_utils.cpp): 2-byte size,
+                    # 1-byte checksum, then the payload bytes. There is no ACK between
+                    # header and payload — sending one (and waiting for an OK that
+                    # never comes) trips the firmware's 2-second data-block timeout
+                    # and returns Data err -3.
+                    self.comm.send_bytes(header + data_chunk)
                     progress.update(len(data_chunk))
                 else:
                     self.comm.send_done()
