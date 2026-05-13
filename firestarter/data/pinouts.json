@@ -63,11 +63,42 @@
     },
     "DIP32_STD": {
         "name": "JEDEC 32-Pin Standard",
+        "comment": "Standard 32-pin UV-EPROM layout (27C010/27C020/27C040 family). VPP on pin 1, PGM (where applicable) on pin 31; A18 takes over pin 31 on 27C040. NOT correct for 5V flash (AM29F040/SST39SF040 family — those have A18 at pin 1, WE at pin 31 — see DIP32_SST39SF040).",
         "pins": {
             "vcc-pin": [32], "gnd-pin": [16], "vpp-pin": [1],
             "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30, 31],
             "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
             "ce-pin": [22], "oe-pin": [24]
+        }
+    },
+    "DIP32_SST39SF040": {
+        "name": "JEDEC 32-pin 5V Flash (SST39SF040/AM29F040 family)",
+        "comment": "Per piersfinlayson/one-rom (datasheet-verified): SST39SF040 and same-family 4Mbit/8Mbit 5V flash chips have A18 at pin 1 (NOT VPP) and WE at pin 31 (NOT address bus). Distinct from DIP32_STD (UV-EPROM 27C040 layout) where pins 1 and 31 are swapped. Covers ~47 chips at (pin_count=32, pm_idx=13, protocol_id=0x06): AM29F040, SST39SF040, A29040, EN29F040, MX29F040, etc. — all 5V single-supply flash.",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30, 1],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22], "oe-pin": [24], "rw-pin": [31]
+        }
+    },
+    "DIP28_28C256": {
+        "name": "JEDEC 28-pin 5V parallel EEPROM (28C256 family)",
+        "comment": "Per piersfinlayson/one-rom (datasheet-verified): 28C256 family has 15 address pins (A0-A14), with A14 at pin 1 (NOT VPP) and WE at pin 27 (NOT PGM). 5V single-supply, no programming voltage. Distinct from DIP28_2764 (UV-EPROM layout) which has VPP at pin 1 and PGM at pin 27. Covers ~8 chips at (pin_count=28, pm_idx=20, protocol_id=0x07): AT28C256, AT28C256E/F, HN58C256, HN58C256AP, etc. Routes through configure_eeprom28c after WARNING-5 algo override OR directly via pm_idx-based pinout selection.",
+        "pins": {
+            "vcc-pin": [28], "gnd-pin": [14],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2, 26, 1],
+            "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
+            "ce-pin": [20], "oe-pin": [22], "rw-pin": [27]
+        }
+    },
+    "DIP24_6116": {
+        "name": "JEDEC 24-pin 5V SRAM (6116/6264-style)",
+        "comment": "Per piersfinlayson/one-rom (datasheet-verified): 6116 SRAM has 11 address pins (A0-A10) with A10=pin 19, CE=18, OE=20, WE=21. 5V single-supply, no programming voltage. Used by 6116-class 2KB SRAM chips. Covers the (pin_count=24, pm_idx=0, protocol_id=0x27) group + any other JEDEC 24-pin SRAM/FRAM with 6116-compatible pinout.",
+        "pins": {
+            "vcc-pin": [24], "gnd-pin": [12],
+            "address-bus-pins": [8, 7, 6, 5, 4, 3, 2, 1, 23, 22, 19],
+            "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
+            "ce-pin": [18], "oe-pin": [20], "rw-pin": [21]
         }
     }
 }

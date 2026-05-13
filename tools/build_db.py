@@ -116,16 +116,27 @@ DIP28_VARIANT_MAP = {
 #     signals but the bus layout is common).
 PIN_MAP_TO_PINOUT = {
     # (pin_count, pm_idx): pinout_key  (None = use sub-discriminator)
-    (28, 21): "DIP28_2764",   # 27C64 family — 8K UV-EPROM with PGM on pin 27
-    (28, 22): None,            # 27C128/256/512 family — variant_lo discriminates
-    (28, 0):  None,            # SRAM/FRAM (type=4) handled via override below
-    (32, 7):  "DIP32_STD",    # Small 32-pin flash
-    (32, 9):  "DIP32_STD",    # 1Mbit 32-pin Intel-flash + AM29F010
-    (32, 10): "DIP32_STD",    # 27C010 32-pin UV-EPROM
-    (32, 11): "DIP32_STD",    # AM29F002 32-pin flash
-    (32, 12): "DIP32_STD",    # 27C040/080 32-pin UV-EPROM
-    (32, 13): "DIP32_STD",    # AM29F040 / SST39SF040 32-pin flash
-    (24, 23): None,            # 2716/2732 — variant_lo discriminates (DIP24_2716 / DIP24_2732)
+    # Tuple variants below override based on protocol_id (see resolve_pinout_key).
+    (28, 21): "DIP28_2764",        # 27C64 family — 8K UV-EPROM with PGM on pin 27 (one-rom verified)
+    (28, 22): None,                 # 27C128/256/512 family — variant_lo discriminates
+    (28, 0):  None,                 # SRAM/FRAM (type=4) handled via override below
+    (28, 20): "DIP28_28C256",      # 28C256 EEPROM family (A14 at pin 1, WE at pin 27, no VPP — one-rom verified)
+    (32, 7):  "DIP32_STD",         # Small 32-pin flash/EPROM
+    (32, 9):  "DIP32_STD",         # 1Mbit 32-pin Intel-flash + AM29F010 (one-rom verified for AM29F010)
+    (32, 10): "DIP32_STD",         # 27C010 32-pin UV-EPROM (one-rom verified)
+    (32, 11): "DIP32_STD",         # AM29F002 32-pin flash (one-rom verified)
+    (32, 12): "DIP32_STD",         # 27C020/040 32-pin UV-EPROM (one-rom verified for 27C020/040)
+    (32, 13): None,                 # 5V flash vs UV-EPROM at same pm_idx — protocol_id discriminates
+    (24, 23): None,                 # 2716/2732 — variant_lo discriminates (DIP24_2716 / DIP24_2732)
+    (24, 0):  None,                 # 24-pin SRAM (6116) handled via protocol_id discriminator
+}
+
+# Per-protocol overrides for chips that share pm_idx but have different layouts based on
+# programming protocol. Most relevant: 5V flash vs UV-EPROM at the same pm_idx.
+PIN_MAP_PROTO_TO_PINOUT = {
+    # (pin_count, pm_idx, proto_id): pinout_key
+    (32, 13, 0x06): "DIP32_SST39SF040",  # 5V AMD/SST flash (A18 at pin 1, WE at pin 31, no VPP — one-rom verified for SST39SF040)
+    (24, 0,  0x27): "DIP24_6116",        # 24-pin SRAM (CE/OE/WE, no VPP — one-rom verified for 6116)
 }
 
 with open(PINOUT_FILE) as _f:
@@ -136,33 +147,47 @@ with open(PINOUT_FILE) as _f:
 # ==========================================
 
 
-def resolve_pinout_key(pin_count, variant, flags_int, pm_idx=None):
+def resolve_pinout_key(pin_count, variant, flags_int, pm_idx=None, proto_id=None):
     """Resolve the firestarter pinout key for a chip.
 
     Lookup order (most-specific-first):
-      1. (pin_count, pm_idx) tuple from PIN_MAP_TO_PINOUT — preferred when
-         pm_idx is non-None and the tuple has a concrete pinout.
-      2. (pin_count, pm_idx) tuple yielding None — fall through to variant_lo.
-      3. DIP28_VARIANT_MAP (variant low byte) for 28-pin chips.
-      4. Defaults per pin_count.
+      1. (pin_count, pm_idx, proto_id) from PIN_MAP_PROTO_TO_PINOUT — used when
+         chips at the same pm_idx have different layouts based on protocol
+         (e.g., (32, 13, 0x06) = 5V flash → DIP32_SST39SF040; 0x08 = UV-EPROM
+         → DIP32_STD). Highest specificity wins.
+      2. (pin_count, pm_idx) tuple from PIN_MAP_TO_PINOUT.
+      3. (pin_count, pm_idx) tuple yielding None → fall through to variant_lo.
+      4. DIP28_VARIANT_MAP (variant low byte) for 28-pin chips.
+      5. Defaults per pin_count.
 
-    pm_idx is the low byte of infoic.xml's `pin_map` attribute (minipro
-    chip-family clustering signal). When passed, it strongly suggests the
-    physical layout family even when the protocol differs.
+    pm_idx is the low byte of infoic.xml's `pin_map` attribute. When combined
+    with proto_id, it discriminates chip-layout families precisely.
     """
     key = None
 
+    # Tier 1: (pin_count, pm_idx, proto_id) — most specific
+    if pm_idx is not None and proto_id is not None:
+        key = PIN_MAP_PROTO_TO_PINOUT.get((pin_count, pm_idx, proto_id))
+        if key is not None:
+            if key in VALID_PINOUT_KEYS:
+                return key
+            print(f"WARN: PIN_MAP_PROTO_TO_PINOUT[{pin_count},{pm_idx},0x{proto_id:02X}] = '{key}' not in pinouts.json", file=sys.stderr)
+
+    # Tier 2: (pin_count, pm_idx)
     if pm_idx is not None and (pin_count, pm_idx) in PIN_MAP_TO_PINOUT:
         key = PIN_MAP_TO_PINOUT[(pin_count, pm_idx)]
-        # `None` in the table means "fall through to variant-based logic"
         if key is not None:
             if key in VALID_PINOUT_KEYS:
                 return key
             print(f"WARN: PIN_MAP_TO_PINOUT[{pin_count},{pm_idx}] = '{key}' not in pinouts.json", file=sys.stderr)
 
-    # Fall-through: pre-existing variant-based logic
+    # Tier 3: variant-based fall-through
     if pin_count == 24:
-        if variant == 1:
+        # 2732 (4K UV-EPROM) has variant_lo=0x01 (full variant=0x3a01).
+        # 2716 (2K UV-EPROM) has variant_lo=0x00 (full variant=0x3b00 et al).
+        # The previous `variant == 1` check compared the full 16-bit value
+        # and missed all real-world 2732 entries — fixed to compare low byte.
+        if (variant & 0xFF) == 1:
             key = "DIP24_2732"
         else:
             key = "DIP24_2716"  # Default to 2716
@@ -170,7 +195,6 @@ def resolve_pinout_key(pin_count, variant, flags_int, pm_idx=None):
         key = DIP28_VARIANT_MAP.get(variant & 0xFF, "DIP28_2764")
     elif pin_count == 32:
         # Most 32-pin chips follow the standard JEDEC layout
-        # Variant usually just toggles high address lines vs NC pins
         key = "DIP32_STD"
     else:
         key = None
@@ -258,7 +282,7 @@ def main():
                     continue
 
                 # --- SYNTHESIZE "COMPLETE" DATA ---
-                pinout_key = resolve_pinout_key(pin_count, variant, flags, pm_idx=pm_idx)
+                pinout_key = resolve_pinout_key(pin_count, variant, flags, pm_idx=pm_idx, proto_id=proto_id)
 
                 # Derive electrical.type — priority order:
                 # 1. XML's `type` attribute is authoritative when it says 4 (SRAM/RAM-family).
@@ -295,12 +319,12 @@ def main():
                 # Phase 12 Plan 04 SRAM-detection precedent above.
                 # References: WARNING-5 in .planning/v1.0-MILESTONE-AUDIT.md
                 # and .planning/INTEGRATION-CHECK.md.
-                if (pinout_key == "DIP28_2764"
+                if (pinout_key in ("DIP28_2764", "DIP28_28C256")
                         and proto_id == 0x07
                         and _etype == "Flash/EEPROM"):
                     print(
                         f"INFO: {mfg_name}/{name} algorithm override 0x07->0x0D "
-                        f"(WARNING-5: 5V EEPROM mistagged as UV-EPROM, DIP28_2764 pin 1 = A14)",
+                        f"(WARNING-5: 5V EEPROM with non-EPROM pinout — route through configure_eeprom28c)",
                         file=sys.stderr,
                     )
                     proto_id = 0x0D

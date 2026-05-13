@@ -116,7 +116,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "AM2732B",
@@ -135,7 +135,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "AM2764A",
@@ -762,7 +762,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x000001a4"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "AMIC": [
@@ -1087,7 +1087,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00003786"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "A29L040",
@@ -1106,7 +1106,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00003792"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "ANACHIP": [
@@ -1342,7 +1342,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "AT27256",
@@ -1741,7 +1741,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "AT28C010,AT28C010E",
@@ -2520,7 +2520,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f13"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "AT49BV040T,AT49LV040T",
@@ -2539,7 +2539,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f12"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "AT49BV512,AT49LV512",
@@ -2767,7 +2767,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f13"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "AT49F040T",
@@ -2786,7 +2786,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f12"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "AT49F512",
@@ -3398,7 +3398,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "EN29LV040A",
@@ -3417,7 +3417,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "CHINGIS": [
@@ -3476,7 +3476,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d1e"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "PM29F004B",
@@ -3495,7 +3495,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d2e"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "PM39F010",
@@ -3552,7 +3552,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d4e"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "CYPRESS": [
@@ -3725,14 +3725,14 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     }
   ],
   "DALLAS": [
     {
       "part_number": "DS1220(RW)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "Unknown",
@@ -3741,7 +3741,7 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 11,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
@@ -3765,12 +3765,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_6116"
     },
     {
       "part_number": "DS1225(RW)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 8192,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -3779,12 +3779,12 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "DS1225(TEST)",
@@ -3808,7 +3808,7 @@
     {
       "part_number": "DS1230AB(RW),DS1230Y(RW)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "12V",
@@ -3817,12 +3817,12 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "DS1230AB(TEST),DS1230Y(TEST)",
@@ -3846,7 +3846,7 @@
     {
       "part_number": "DS1230W(RW3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -3855,12 +3855,12 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "DS1230W(TEST3.3V)",
@@ -4322,7 +4322,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "EN29LV040A",
@@ -4341,7 +4341,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "EXEL": [
@@ -4476,7 +4476,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     }
   ],
   "FAIRCHILD": [
@@ -4668,7 +4668,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "NMC27C16",
@@ -4744,7 +4744,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "NMC27C32B",
@@ -4763,7 +4763,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     }
   ],
   "FUJITSU": [
@@ -4784,7 +4784,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "MBM2716",
@@ -4860,7 +4860,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "MBM2764",
@@ -5126,7 +5126,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x000004a4"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "GREENWICH": [
@@ -5472,7 +5472,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     }
   ],
   "HOLTEK": [
@@ -5685,7 +5685,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000ad40"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "HY29F040A,HY29F040T",
@@ -5704,7 +5704,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000ada4"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "HYUNDAI": [
@@ -5763,7 +5763,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000ad40"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "HY29F040A,HY29F040T",
@@ -5782,7 +5782,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000ada4"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "ICE": [
@@ -6018,7 +6018,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00007fa8"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "IM29LV004T",
@@ -6037,7 +6037,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00007fa7"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "INTEL": [
@@ -6096,7 +6096,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "2764",
@@ -6824,7 +6824,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004003"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "MACRONIX(MXIC)": [
@@ -6940,7 +6940,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c24f"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "MX27C1000",
@@ -7415,7 +7415,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c246"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "MX29F004T",
@@ -7434,7 +7434,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c245"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "MX29F022B",
@@ -7529,7 +7529,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c2a4"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "MX29LV002CB",
@@ -7685,7 +7685,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "27C512",
@@ -7970,7 +7970,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "28C64A,28C64A",
@@ -8240,7 +8240,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004073"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "V29C31004T",
@@ -8259,7 +8259,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004063"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "V29C51001B",
@@ -8354,7 +8354,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x000040a3"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "V29C51004T",
@@ -8373,7 +8373,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004003"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "V29LC51000",
@@ -8679,7 +8679,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "UPD28C64,UPD28C64",
@@ -9025,7 +9025,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "NMC27C16",
@@ -9101,7 +9101,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     }
   ],
   "OKI": [
@@ -9335,7 +9335,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d1e"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "PM29F004B",
@@ -9354,7 +9354,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d2e"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "PM39F010",
@@ -9411,7 +9411,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d4e"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "PTC": [
@@ -9550,7 +9550,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "M23C1001",
@@ -9664,7 +9664,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "M27512",
@@ -10101,7 +10101,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x000020e2"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "M29F512B",
@@ -10258,7 +10258,7 @@
     {
       "part_number": "M48T02,M48T12,M48Z02,M48Z12",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -10267,7 +10267,7 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 11,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
@@ -10277,7 +10277,7 @@
     {
       "part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 8192,
         "pin_count": 28,
         "vpp": "12V",
@@ -10286,17 +10286,17 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "M48T35AY,M48Z35,M48Z35Y,M48Z35AY",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "12V",
@@ -10305,17 +10305,17 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "M48T35AV,M48Z35V,M48Z35AV",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -10324,17 +10324,17 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "M48T59,M48T59Y,M48Z59,M48Z59Y",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 8192,
         "pin_count": 28,
         "vpp": "12V",
@@ -10343,17 +10343,17 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "M48T59V,M48Z59V",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 8192,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -10362,12 +10362,12 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "M48T128Y",
@@ -10559,7 +10559,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x000001a4"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "MBM29F002B",
@@ -10616,7 +10616,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x000004a4"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "SST": [
@@ -10979,7 +10979,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf13"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "SST29SF512",
@@ -11055,7 +11055,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf14"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "SST29VF512",
@@ -11207,7 +11207,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfd7"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "SST39LH512,SST39VF512",
@@ -11283,7 +11283,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfb7"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "SST39SF512,SST39SF512A",
@@ -11321,7 +11321,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfd7"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     }
   ],
   "ST": [
@@ -11361,7 +11361,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "M27128A",
@@ -11418,7 +11418,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "M27512",
@@ -11893,7 +11893,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x000020e2"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "M29F512B",
@@ -12069,7 +12069,7 @@
     {
       "part_number": "M48T02,M48T12",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -12078,7 +12078,7 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 11,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
@@ -12088,7 +12088,7 @@
     {
       "part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 8192,
         "pin_count": 28,
         "vpp": "12V",
@@ -12097,17 +12097,17 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "M48T35AY",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "12V",
@@ -12116,17 +12116,17 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "M48T35AV",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -12135,17 +12135,17 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "M48T59,M48T59Y",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 8192,
         "pin_count": 28,
         "vpp": "12V",
@@ -12154,17 +12154,17 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "M48T59V",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 8192,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -12173,12 +12173,12 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "M48T128Y",
@@ -12275,7 +12275,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004073"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "F29C31004T",
@@ -12294,7 +12294,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004063"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "F29C51001B",
@@ -12389,7 +12389,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x000040a3"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "F29C51004T",
@@ -12408,7 +12408,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004003"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "F29LC51000",
@@ -12638,7 +12638,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2732"
     },
     {
       "part_number": "TMS2764",
@@ -12814,7 +12814,7 @@
     {
       "part_number": "BQ4010YMA(RW)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 8192,
         "pin_count": 28,
         "vpp": "12V",
@@ -12823,12 +12823,12 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "BQ4010YMA(TEST)",
@@ -12852,7 +12852,7 @@
     {
       "part_number": "BQ4011YMA(RW)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "12V",
@@ -12861,12 +12861,12 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "BQ4011YMA(TEST)",
@@ -12890,7 +12890,7 @@
     {
       "part_number": "BQ4011LYMA(RW3.3V)",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "SRAM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -12899,12 +12899,12 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 7,
+        "algorithm": 40,
         "pulse_duration": "100 us",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "BQ4011LYMA(TEST3.3V)",
@@ -13537,7 +13537,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000dad6"
       },
-      "pinout": "DIP32_STD"
+      "pinout": "DIP32_SST39SF040"
     },
     {
       "part_number": "W49F002,W49F002A,W49F002B,W49F002U",
@@ -13921,7 +13921,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "X2864AP",
@@ -14018,7 +14018,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_6116"
     },
     {
       "part_number": "6164,6264",
