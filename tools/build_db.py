@@ -43,6 +43,17 @@ PROTOCOL_MAP = {
     0x3C: "FLASH_4MB",
 }
 
+# Upstream infoic.xml caps VPP at 18V (0xF0), but a handful of antique
+# Intel NMOS parts physically require higher programming voltages that the
+# upstream schema cannot express. Known cases (preserved from the now-removed
+# database_overrides.json):
+#   - Intel M2716  → 25V VPP (original 1977 NMOS 2716)
+#   - Intel M2732  → 25V VPP (NMOS 2732)
+#   - Intel M2732A → 21V VPP (later 21V-VPP variant)
+# These chips currently report 18V here because upstream aliases them under
+# generic 2716/2732 entries — operator must override via ~/.firestarter/database.json
+# before programming an original-NMOS Intel part. RURP shield max is ~22V so
+# the 25V variants cannot be programmed on this hardware regardless.
 VPP_VOLTAGES = {
     0x00: "12V",
     0x10: "9V",

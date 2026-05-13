@@ -153,7 +153,7 @@ class EpromConsolePresenter:
         export_eprom_data_dict = {manufacturer: [cleaned_raw_config]}
         
         export_data_to_return = {
-            "eprom_config_title": f"{cleaned_raw_config['name']} EPROM config (for database_overrides.json):",
+            "eprom_config_title": f"{cleaned_raw_config['name']} EPROM config (for ~/.firestarter/database.json):",
             "eprom_config_json_str": self._json_output_formatted(export_eprom_data_dict)
         }
 
