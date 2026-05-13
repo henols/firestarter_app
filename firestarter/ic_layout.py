@@ -65,7 +65,34 @@ class EpromSpecBuilder:
             "jp5": {"config_text": "28pin", "display": jumper_display[jp5], "pin_text": "32pin", "selected_label": jp5_label},
         }}
 
-    def get_chip_type_string(self, chip_type_int: int) -> str:
+    def get_chip_type_string(self, chip_type_int: int, protocol_id: int | None = None) -> str:
+        """Return a user-facing chip-type label.
+
+        When protocol_id is supplied, use it to disambiguate the chip family
+        more precisely than the numeric mem_type alone (which collapses
+        UV-EPROM, 5V EEPROM, and Intel-flash into the same value 1). The
+        protocol-based labels are aligned with the algorithm-family names
+        in firestarter/CLAUDE.md so the displayed type matches the firmware
+        dispatch path the chip actually takes.
+        """
+        if protocol_id is not None:
+            proto_display = {
+                0x05: "Flash/EEPROM (5V, AMD-std)",
+                0x06: "Flash/EEPROM (5V, AMD-alt sector-erase)",
+                0x07: "UV-EPROM / MTP-Flash (12V VPP)",
+                0x08: "UV-EPROM (12V VPP, quick pulse)",
+                0x0B: "UV-EPROM (legacy 24-pin)",
+                0x0D: "EEPROM (5V parallel, 28C-family)",
+                0x0E: "SRAM (32-pin)",
+                0x10: "Flash (Intel 28F, 12V VPP)",
+                0x27: "SRAM (24-pin)",
+                0x28: "SRAM (28-pin)",
+                0x29: "SRAM/NVRAM (32-pin)",
+                0x35: "Flash (EEPROM-like)",
+                0x39: "Flash (Intel-alt)",
+            }
+            if protocol_id in proto_display:
+                return proto_display[protocol_id]
         type_map = {1: "EPROM", 2: "Flash type 2", 3: "Flash type 3", 4: "SRAM"}
         return type_map.get(chip_type_int, f"Unknown ({chip_type_int})")
 
@@ -190,7 +217,7 @@ class EpromSpecBuilder:
             "manufacturer": eprom_data.get('manufacturer', 'N/A'),
             "pin_count": eprom_data.get('pin-count', 'N/A'),
             "memory_size_hex": hex(eprom_data.get('memory-size', 0)),
-            "type_str": self.get_chip_type_string(eprom_data.get('type', 0)),
+            "type_str": self.get_chip_type_string(eprom_data.get('type', 0), eprom_data.get('protocol-id')),
             "vcc_str": f"{eprom_data.get('vcc', 'N/A')}v",
             "pulse_delay_us_str": f"{eprom_data.get('pulse-delay', 'N/A')}µS",
             "verified_str": "" if eprom_data.get("verified", False) else "-- NOT VERIFIED --",
@@ -200,11 +227,19 @@ class EpromSpecBuilder:
             "flags_info": None,
         }
 
-        chip_type_str = self.get_chip_type_string(eprom_data.get('type', 0))
+        chip_type_str = self.get_chip_type_string(eprom_data.get('type', 0), eprom_data.get('protocol-id'))
         output_data["type_str"] = chip_type_str
 
-        if eprom_data.get("type") == 1: # EPROM
-            output_data["can_erase_str"] = "true" if eprom_data.get('flags', 0) & 0x00000010 else "false"
+        # `Can be erased` semantic: "does firestarter have an erase command for
+        # this chip family". Protocol-aware derivation per firestarter/CLAUDE.md.
+        proto = eprom_data.get("protocol-id")
+        if eprom_data.get("type") == 1 or eprom_data.get("type") == 3:
+            if proto in (0x07, 0x08, 0x0B):
+                output_data["can_erase_str"] = "false (UV erase only)"
+            elif proto in (0x05, 0x06, 0x0D, 0x10, 0x35, 0x39):
+                output_data["can_erase_str"] = "true (firmware-supported)"
+            else:
+                output_data["can_erase_str"] = "true" if eprom_data.get('info-flags', 0) & 0x00000010 else "false"
 
         if eprom_data.get("flags", 0) & 0x00000008: # Assumes this flag means VPP is relevant
             output_data["vpp_str"] = f"{eprom_data.get('vpp_volts', 'N/A')}v"

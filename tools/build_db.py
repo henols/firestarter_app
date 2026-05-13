@@ -121,22 +121,75 @@ PIN_MAP_TO_PINOUT = {
     (28, 22): None,                 # 27C128/256/512 family — variant_lo discriminates
     (28, 0):  None,                 # SRAM/FRAM (type=4) handled via override below
     (28, 20): "DIP28_28C256",      # 28C256 EEPROM family (A14 at pin 1, WE at pin 27, no VPP — one-rom verified)
-    (32, 7):  "DIP32_STD",         # Small 32-pin flash/EPROM
-    (32, 9):  "DIP32_STD",         # 1Mbit 32-pin Intel-flash + AM29F010 (one-rom verified for AM29F010)
-    (32, 10): "DIP32_STD",         # 27C010 32-pin UV-EPROM (one-rom verified)
-    (32, 11): "DIP32_STD",         # AM29F002 32-pin flash (one-rom verified)
-    (32, 12): "DIP32_STD",         # 27C020/040 32-pin UV-EPROM (one-rom verified for 27C020/040)
+    (28, 19): "DIP28_28C64",       # 28C64 EEPROM family (8K, WE at pin 27, no VPP — one-rom verified)
+    (28, 18): "DIP28_28C64",       # 28C16/17 EEPROM family (2K-class; same DIP28 5V layout as 28C64, smaller addr range)
     (32, 13): None,                 # 5V flash vs UV-EPROM at same pm_idx — protocol_id discriminates
-    (24, 23): None,                 # 2716/2732 — variant_lo discriminates (DIP24_2716 / DIP24_2732)
-    (24, 0):  None,                 # 24-pin SRAM (6116) handled via protocol_id discriminator
+    (32, 12): None,                 # 27C020/040 vs 5V flash at same pm_idx — protocol_id discriminates
+    (32, 11): None,                 # AM29F002 5V flash vs Intel-flash vs 28C-family — protocol_id discriminates
+    (32, 10): None,                 # 27C010 UV-EPROM vs Intel-flash — protocol_id discriminates
+    (32, 9):  None,                 # 1Mbit mix — proto_id discriminates (5V flash / Intel-flash / 28C-EEPROM)
+    (32, 7):  None,                 # Small 32-pin mix
+    (32, 5):  "DIP32_STD",         # 32-pin Intel-flash variants (12V VPP at pin 1)
+    (32, 0):  None,                 # 32-pin SRAM/NVRAM/EEPROM — protocol_id discriminates
+    (24, 23): None,                 # 2716/2732 — variant_lo discriminates
+    (24, 0):  None,                 # 24-pin SRAM (6116) — protocol_id discriminates
 }
 
-# Per-protocol overrides for chips that share pm_idx but have different layouts based on
-# programming protocol. Most relevant: 5V flash vs UV-EPROM at the same pm_idx.
+# Per-protocol overrides for chips that share pm_idx but have different layouts.
+# Used when the same pin_map index covers chips with different programming families
+# (e.g., 5V flash vs UV-EPROM both with pm_idx=13).
+#
+# Pinout naming families (one-rom verified or one-rom-canonical-derived):
+#   DIP32_SST39SF040       : 32-pin 5V flash (CE=22, OE=24, WE=31, no VPP)
+#   DIP32_STD              : 32-pin UV-EPROM (CE=22, OE=24, VPP=1, PGM=31)
+#   DIP32_28C512_EEPROM    : 32-pin 5V EEPROM 64K (CE=22, OE=24, WE=30, no VPP)
+#   DIP28_28C256           : 28-pin 5V EEPROM 32K (CE=20, OE=22, WE=27, no VPP)
+#   DIP28_28C64            : 28-pin 5V EEPROM 8K (CE=20, OE=22, WE=27, no VPP)
 PIN_MAP_PROTO_TO_PINOUT = {
     # (pin_count, pm_idx, proto_id): pinout_key
-    (32, 13, 0x06): "DIP32_SST39SF040",  # 5V AMD/SST flash (A18 at pin 1, WE at pin 31, no VPP — one-rom verified for SST39SF040)
-    (24, 0,  0x27): "DIP24_6116",        # 24-pin SRAM (CE/OE/WE, no VPP — one-rom verified for 6116)
+    # ---- 32-pin 5V flash (proto 0x05 FLASH_AMD_STD + 0x06 FLASH_AMD_ALT) ----
+    # All route to DIP32_SST39SF040 (5V flash family — no VPP, WE on pin 31).
+    # Address bus is over-allocated to 19 pins; firmware uses memory-size to
+    # restrict driving for smaller variants.
+    (32,  7, 0x05): "DIP32_SST39SF040",
+    (32,  7, 0x06): "DIP32_SST39SF040",
+    (32,  9, 0x05): "DIP32_SST39SF040",
+    (32,  9, 0x06): "DIP32_SST39SF040",
+    (32, 10, 0x06): "DIP32_SST39SF040",
+    (32, 11, 0x05): "DIP32_SST39SF040",
+    (32, 11, 0x06): "DIP32_SST39SF040",
+    (32, 12, 0x06): "DIP32_SST39SF040",
+    (32, 13, 0x05): "DIP32_SST39SF040",
+    (32, 13, 0x06): "DIP32_SST39SF040",  # one-rom verified for SST39SF040 + AM29F040
+    # ---- 32-pin UV-EPROM (proto 0x08 EPROM_QUICK) ----
+    # All route to DIP32_STD (UV-EPROM family — 12V VPP at pin 1, PGM/A18 at pin 31).
+    (32,  7, 0x08): "DIP32_STD",
+    (32, 10, 0x08): "DIP32_STD",         # one-rom verified for 27C010
+    (32, 12, 0x08): "DIP32_STD",         # one-rom verified for 27C020/27C040
+    (32, 13, 0x08): "DIP32_STD",
+    # ---- 32-pin 5V EEPROM (proto 0x0D EEPROM_POLL) ----
+    # All route to DIP32_28C512_EEPROM (one-rom verified for 28C512 family).
+    (32,  9, 0x0D): "DIP32_28C512_EEPROM",
+    (32, 11, 0x0D): "DIP32_28C512_EEPROM",
+    (32, 13, 0x0D): "DIP32_28C512_EEPROM",
+    # ---- 32-pin Intel-flash (proto 0x10) ----
+    # All route to DIP32_STD (Intel-flash uses 12V VPP at pin 1, similar physical
+    # layout to UV-EPROM though programming algorithm is command-register based).
+    (32,  7, 0x10): "DIP32_STD",
+    (32,  9, 0x10): "DIP32_STD",
+    (32, 10, 0x10): "DIP32_STD",
+    (32, 11, 0x10): "DIP32_STD",
+    (32, 12, 0x10): "DIP32_STD",
+    (32, 13, 0x10): "DIP32_STD",
+    # ---- 32-pin SRAM/NVRAM (proto 0x0E SRAM_32PIN + 0x29 SRAM_512K_1M) ----
+    # TENTATIVE: use DIP32_28C512_EEPROM as the canonical 32-pin SRAM-class layout
+    # (same physical pin layout; programming algorithm differs — SRAM uses byte-write
+    # via configure_sram, no EEPROM page-write). Bench-validation needed for the
+    # M48Txx NVRAM family — one-rom has no NVRAM entries.
+    (32,  0, 0x0E): "DIP32_28C512_EEPROM",
+    (32,  0, 0x29): "DIP32_28C512_EEPROM",
+    # ---- 24-pin 5V SRAM (proto 0x27 SRAM_24PIN) ----
+    (24, 0,  0x27): "DIP24_6116",        # one-rom verified for 6116
 }
 
 with open(PINOUT_FILE) as _f:
@@ -365,7 +418,18 @@ def main():
                     # vpp-pin field is ignored, making the pass-through safe.
 
                 chip_entry = {
-                    "part_number": name.split("@")[0],
+                    # Upstream `name` is a comma-separated alias list where each
+                    # alias may carry an @PACKAGE suffix (e.g.,
+                    # "AT28C256,AT28C256@SOIC28,AT28C256E,AT28HC256,...").
+                    # The previous `name.split("@")[0]` truncated at the FIRST
+                    # @, silently losing all aliases that appeared after a
+                    # @PACKAGE-suffixed entry. Fix: split on comma first, strip
+                    # @-suffix from each piece, dedupe, rejoin. Combined with
+                    # database.py's alias-aware get_eprom_config lookup, this
+                    # makes `firestarter info <alias>` work for every alias.
+                    "part_number": ",".join(dict.fromkeys(
+                        a.split("@")[0].strip() for a in name.split(",") if a.split("@")[0].strip()
+                    )),
                     "electrical": {
                         "type": _etype,
                         "size_bytes": mem_size,

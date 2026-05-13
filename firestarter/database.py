@@ -462,11 +462,25 @@ class EpromDatabase:
         """
         Retrieves the raw configuration data for a specific EPROM by its name.
             Returns (config_dict, manufacturer_str) or (None, None).
+
+        Matches against `part_number` directly OR against any of the
+        comma-separated alias names within it. Upstream infoic.xml encodes
+        chip aliases as comma-separated lists (e.g.,
+        "AT28C256,AT28C256E,AT28HC256"), which build_db.py preserves in
+        the part_number field. Without alias-aware lookup, queries like
+        `firestarter info AT28C256` failed despite the chip being in the DB.
         """
+        query = chip_name.lower()
         for manufacturer, ics in self.proms.items():
             for ic_config in ics:
-                if chip_name.lower() == ic_config.get("part_number", "").lower():
+                part_number = ic_config.get("part_number", "")
+                if query == part_number.lower():
                     return ic_config, manufacturer
+                # Alias match: split on comma + match individual aliases
+                if "," in part_number:
+                    aliases = [a.strip().lower() for a in part_number.split(",")]
+                    if query in aliases:
+                        return ic_config, manufacturer
         return None, None
 
     def get_eprom(self, chip_name: str):

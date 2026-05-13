@@ -100,5 +100,25 @@
             "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
             "ce-pin": [18], "oe-pin": [20], "rw-pin": [21]
         }
+    },
+    "DIP28_28C64": {
+        "name": "JEDEC 28-pin 5V parallel EEPROM 8K (28C64 family)",
+        "comment": "Per piersfinlayson/one-rom (datasheet-verified): 28C64 has 13 address pins (A0-A12, same as 2764 EPROM), CE=20, OE=22, WE=27, pin 1=NC (or /busy on some variants). 5V single-supply, no programming voltage. Distinct from DIP28_2764 (UV-EPROM layout) — pin 27 is WE (not PGM), pin 1 is NC (not VPP). Covers (pin_count=28, pm_idx=19, protocol_id=0x07) group: AM28C64A/B/E, etc. Routes through configure_eeprom28c via WARNING-5 algo flip.",
+        "pins": {
+            "vcc-pin": [28], "gnd-pin": [14], "nc-pin": [1, 26],
+            "address-bus-pins": [10, 9, 8, 7, 6, 5, 4, 3, 25, 24, 21, 23, 2],
+            "data-bus-pins": [11, 12, 13, 15, 16, 17, 18, 19],
+            "ce-pin": [20], "oe-pin": [22], "rw-pin": [27]
+        }
+    },
+    "DIP32_28C512_EEPROM": {
+        "name": "JEDEC 32-pin 5V parallel EEPROM 64K (28C512 family)",
+        "comment": "Per piersfinlayson/one-rom (datasheet-verified): 28C512 has 16 address pins (A0-A15) with A15=pin 3, data bus on pins 13,14,15,17-21, CE=22, OE=24, WE=30, no VPP. 5V single-supply. Used by 32-pin 5V parallel EEPROMs (64K class). Covers (pin_count=32, pm_idx=9, protocol_id=0x0D) group: CAT28C512, CAT28C010 (note CAT28C010 is 64K despite name due to 16-bit organization), etc. Also reasonable default for 32-pin SRAM/NVRAM (M48Tx) with similar physical layout, though those use byte-write semantics rather than EEPROM page-write.",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22], "oe-pin": [24], "rw-pin": [30]
+        }
     }
 }
