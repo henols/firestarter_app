@@ -208,10 +208,17 @@ def main():
                 # --- SYNTHESIZE "COMPLETE" DATA ---
                 pinout_key = resolve_pinout_key(pin_count, variant, flags)
 
-                # SRAM protocols emit electrical.type = "SRAM" (D4) so downstream
-                # layers no longer mislabel SRAM as UV-EPROM and the info_flags
-                # "electrically erasable" bit is not set spuriously.
-                if proto_id in {0x0E, 0x27, 0x28, 0x29}:
+                # Derive electrical.type — priority order:
+                # 1. XML's `type` attribute is authoritative when it says 4 (SRAM/RAM-family).
+                #    Per minipro/src/database.c, type=4 means RAM/SRAM regardless of protocol.
+                #    FM1608 (FRAM) is tagged type=4 with protocol_id=0x07 — without this guard
+                #    we'd mislabel it as UV-EPROM and risk routing 12V VPP to address pins.
+                # 2. SRAM-class protocols (configure_sram dispatch).
+                # 3. flags bit 0x10 = electrically erasable (Flash/EEPROM family).
+                # 4. Default to UV-EPROM.
+                if type_int == 4:
+                    _etype = "SRAM"
+                elif proto_id in {0x0E, 0x27, 0x28, 0x29}:
                     _etype = "SRAM"
                 elif flags & 0x10:
                     _etype = "Flash/EEPROM"
@@ -246,33 +253,40 @@ def main():
                     )
                     proto_id = 0x0D
 
-                # fm1608-db-mismatch override: Ramtron parallel FRAM dispatch.
-                # Upstream infoic.xml tags Ramtron FRAM (FM1208/1608/16W08/1808/
-                # 18L08) with EPROM-family algorithms (0x07 EPROM_STD, 0x0B
-                # EPROM_LEGACY). These chips are 5V single-supply parallel FRAM
-                # with SRAM-like byte writes — no programming voltage. Pre-
-                # Phase-12-02, the OLD database.json had FM1608 manually tagged
-                # type='sram' (verified=true), routing through configure_sram via
-                # the firmware's mem_type fallback. The Phase 12-02 protocol-
-                # prefix dispatch now fires BEFORE mem_type fallback, so the
-                # upstream algo=0x07 routes through configure_eprom (12V VPP
-                # regulator) and damages the chip. Restore the old working
-                # dispatch by flipping proto_id to 0x28 (SRAM_STD) so memory.cpp
-                # line 98-99 routes Ramtron FRAMs to configure_sram (no VPP).
-                # Also flip _etype to "SRAM" so host info-flags + display layers
-                # are consistent. Pinout pass-through (DIP28_2764 / DIP24_2716)
-                # is imperfect for Ramtron's actual chip pinout but harmless
-                # under configure_sram (no VPP routing).
+                # fm1608-db-mismatch override: SRAM-tagged chips with EPROM-family
+                # protocol. Upstream infoic.xml tags Ramtron parallel FRAM (FM1208/
+                # 1608/16W08/1808/18L08) with `type="4"` (SRAM/RAM-family) but
+                # protocol_id 0x07/0x0B (EPROM family). The Phase 12-02 firmware
+                # protocol-prefix dispatch routes 0x07/0x0B/0x08 to configure_eprom
+                # (engages 12V VPP regulator + asserts P1_VPP_ENABLE on socket pin 1).
+                # On a 5V FRAM chip whose pin 1 is an address line (or NC), routing
+                # 12V there is a hardware-damage path.
+                #
+                # Restore the pre-Phase-12-02 working dispatch by flipping proto_id
+                # to 0x28 (SRAM_STD). memory.cpp lines 98-99 now route protocol==0x28
+                # to configure_sram (no VPP, byte-write at 5V). Also override pinout
+                # to DIP28_JEDEC_SRAM_8K (28-pin variants) so pin 27 emits rw-pin
+                # (WE strobe for SRAM) instead of pgm-pin (EPROM programming pulse).
+                # The 8K pinout has only 13 address bits — 16K/32K Ramtron variants
+                # (FM16W08/FM1808/FM18L08) over-emit but tolerate it under configure_sram
+                # (firmware ignores address bits beyond memory-size).
+                #
                 # Reference: fm1608-db-mismatch follow_up in firestarter_prom
                 # at .planning/phases/04-hardware-validation-rurp-shield/04-HW-VALIDATION.md
-                if mfg_name == "RAMTRON" and proto_id in (0x07, 0x0B):
+                # Bench-validation pending — Ramtron pinout assumptions need confirmation.
+                if type_int == 4 and proto_id in (0x07, 0x08, 0x0B):
                     print(
-                        f"INFO: {mfg_name}/{name} algorithm override 0x{proto_id:02X}->0x28 "
-                        f"(fm1608-db-mismatch: Ramtron parallel FRAM → configure_sram, no VPP)",
+                        f"INFO: {mfg_name}/{name} type=4 SRAM override "
+                        f"algorithm 0x{proto_id:02X}->0x28 + pinout->DIP28_JEDEC_SRAM_8K "
+                        f"(fm1608-db-mismatch: route SRAM-tagged chip through configure_sram)",
                         file=sys.stderr,
                     )
                     proto_id = 0x28
-                    _etype = "SRAM"
+                    if pin_count == 28:
+                        pinout_key = "DIP28_JEDEC_SRAM_8K"
+                    # 24-pin (FM1208) keeps its DIP24_2716 pinout — no SRAM-specific
+                    # 24-pin entry yet; configure_sram doesn't engage VPP so the
+                    # vpp-pin field is ignored, making the pass-through safe.
 
                 chip_entry = {
                     "part_number": name.split("@")[0],

@@ -14172,7 +14172,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "FM16W08",
@@ -14191,7 +14191,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "FM1808",
@@ -14210,7 +14210,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "FM18L08",
@@ -14229,7 +14229,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     }
   ]
 }
