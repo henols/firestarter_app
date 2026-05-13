@@ -45,7 +45,17 @@ EXPECTED_PREFIXES = [
     "INIT",
     "END",
 ]
-PREFIX_REGEX = re.compile(rf"\b({'|'.join(EXPECTED_PREFIXES)}):(.*)")
+# Prefix regex matches "<PREFIX>: <message>" anywhere in the line. The leading
+# word-boundary anchor was REMOVED because the Uno's USB-CDC bridge can prepend
+# garbage bytes to legitimate response lines: the firmware's data-bus writes
+# during programming toggle PD1 (which doubles as UART TX), and the bridge
+# captures those toggles as spurious UART frames. After the host's non-printable
+# filter, the garbage can leave digits or letters immediately before the real
+# prefix (e.g., "...80OK: Req data"), which the old `\b` anchor refused to match.
+# The combined `_parse_response_line` rightmost-match logic ensures we pick the
+# real prefix (which always appears at the end of the line, before \r\n) rather
+# than any false-positive embedded in the garbage.
+PREFIX_REGEX = re.compile(rf"({'|'.join(EXPECTED_PREFIXES)}):(.*)")
 
 STATE_MACHINE_PREFIXES = ["INIT", "MAIN", "END"]
 NON_RESPONSE_PREFIXES = ["INFO", "DEBUG"]
@@ -163,9 +173,15 @@ class SerialCommunicator:
         if not line_str:
             return None
 
-        match = PREFIX_REGEX.search(line_str)
-        if match:
-            # Found a known prefix, return a structured response
+        # Use the RIGHTMOST prefix occurrence — the real response always appears
+        # at the end of the line (followed by message + \r\n), and the Uno's
+        # USB-CDC bridge can prepend spurious bytes that the printable-ASCII
+        # filter doesn't fully strip. Without this, a legitimate "OK: Req data"
+        # at the end of a long noisy line can be missed if the garbage happens
+        # to contain an earlier "OK:"-like sequence.
+        matches = list(PREFIX_REGEX.finditer(line_str))
+        if matches:
+            match = matches[-1]
             return Response(type=match.group(1), message=match.group(2).strip())
 
         # No known prefix found, return the raw line as a message with no type
