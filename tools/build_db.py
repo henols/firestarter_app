@@ -358,17 +358,50 @@ def main():
                     print(f"WARN: skipping {name} — unknown protocol_id 0x{proto_id:02X}", file=sys.stderr)
                     continue
 
+                # SAFETY SKIP: 24-pin 5V parallel EEPROMs routed via EPROM
+                # algorithms (0x07/0x08/0x0B). Affected family per upstream:
+                # AT28C04/16, AT28HC16, UPD28C04, 28C04A/16A — 5V single-supply
+                # parallel EEPROMs with WE on socket pin 21 (per datasheet).
+                # If we let them through:
+                #   - configure_eprom (0x07/0x08/0x0B dispatch) engages the
+                #     12V VPP regulator and asserts VPP_ENABLE during writes.
+                #   - DIP24_2716 pinout has vpp-pin=21 — so 12V hits the chip's
+                #     WE pin → hardware-damage path.
+                # The firmware has no 24-pin EEPROM handler (configure_eeprom28c
+                # is 28-pin only; configure_sram is empty stub and would silently
+                # fail EEPROM byte-program timing). Until a 24-pin EEPROM
+                # dispatch lands, these chips are unsafe to expose.
+                # Discriminator: pin_count == 24 AND proto_id in EPROM-family
+                # AND flags has the "electrically erasable" bit (0x10).
+                if (pin_count == 24
+                        and proto_id in (0x07, 0x08, 0x0B)
+                        and (flags & 0x10)):
+                    print(
+                        f"WARN: skipping {mfg_name}/{name} — 24-pin 5V EEPROM with "
+                        f"EPROM-family algo 0x{proto_id:02X} (damage hazard: 12V VPP "
+                        f"to socket pin 21 = WE of 28C-family chips). No 24-pin "
+                        f"EEPROM firmware handler yet; tracked in follow_up "
+                        f"24pin-eeprom-no-handler.",
+                        file=sys.stderr,
+                    )
+                    continue
+
                 # --- SYNTHESIZE "COMPLETE" DATA ---
                 pinout_key = resolve_pinout_key(pin_count, variant, flags, pm_idx=pm_idx, proto_id=proto_id)
 
-                # Derive electrical.type — priority order:
-                # 1. XML's `type` attribute is authoritative when it says 4 (SRAM/RAM-family).
-                #    Per minipro/src/database.c, type=4 means RAM/SRAM regardless of protocol.
-                #    FM1608 (FRAM) is tagged type=4 with protocol_id=0x07 — without this guard
-                #    we'd mislabel it as UV-EPROM and risk routing 12V VPP to address pins.
-                # 2. SRAM-class protocols (configure_sram dispatch).
-                # 3. flags bit 0x10 = electrically erasable (Flash/EEPROM family).
-                # 4. Default to UV-EPROM.
+                # Derive electrical.type — FLAGS-BASED (used by WARNING-5 trigger).
+                # The "electrically erasable" flag distinguishes 5V parallel
+                # EEPROMs mistagged with EPROM protocol_id from genuine 12V VPP
+                # UV-EPROMs at the same proto_id. WARNING-5 needs this signal
+                # BEFORE the algorithm override runs.
+                # Priority:
+                #   1. XML type=4 → SRAM/RAM family (per minipro/src/database.c).
+                #      FM1608 (FRAM) is tagged type=4 with proto=0x07 — without
+                #      this guard we'd misclassify as UV-EPROM and risk 12V VPP
+                #      on address pins.
+                #   2. SRAM-class proto_id (configure_sram dispatch family).
+                #   3. flags bit 0x10 = electrically erasable → Flash/EEPROM.
+                #   4. Default → UV-EPROM.
                 if type_int == 4:
                     _etype = "SRAM"
                 elif proto_id in {0x0E, 0x27, 0x28, 0x29}:
@@ -450,6 +483,27 @@ def main():
                     # 24-pin (FM1208) keeps its DIP24_2716 pinout — no SRAM-specific
                     # 24-pin entry yet; configure_sram doesn't engage VPP so the
                     # vpp-pin field is ignored, making the pass-through safe.
+
+                # Re-derive electrical.type protocol-aware after all algorithm
+                # overrides have run. The firmware dispatch is the ground truth:
+                #   - 0x07/0x08/0x0B → configure_eprom (12V VPP) → UV-EPROM
+                #   - 0x0D / 0x05 / 0x06 / 0x10 / 0x35 / 0x39 → Flash/EEPROM family
+                #   - 0x0E/0x27/0x28/0x29 → SRAM
+                # This keeps the in-DB type consistent with ic_layout.py's
+                # protocol-aware Type/Can-be-erased display, eliminating the
+                # "display says X but DB says Y" inconsistency that previously
+                # masked WARNING-5-class hazards in triage. Note: must run AFTER
+                # the WARNING-5 / fm1608 overrides because those rely on the
+                # flags-based _etype to detect mistagged chips.
+                if proto_id in {0x0E, 0x27, 0x28, 0x29}:
+                    _etype = "SRAM"
+                elif proto_id in {0x07, 0x08, 0x0B}:
+                    _etype = "UV-EPROM"
+                elif proto_id in {0x05, 0x06, 0x0D, 0x10, 0x35, 0x39}:
+                    _etype = "Flash/EEPROM"
+                # else: leave _etype at the flags-based value (uncommon path —
+                # any new proto_id added to KNOWN_PROTOCOLS but not classified
+                # above falls back to whatever the flags-based block decided).
 
                 chip_entry = {
                     # Upstream `name` is a comma-separated alias list where each
