@@ -97,6 +97,37 @@ DIP28_VARIANT_MAP = {
     0x13: "DIP28_2764",    # 27C64/2764A
 }
 
+# fm1608-db-mismatch: pm_idx is the upstream pin_map low byte (chip-family
+# clustering signal per minipro infoic.xml). Maps (pin_count, pm_idx) to a
+# firestarter pinout key. Falls back to DIP28_VARIANT_MAP / DIP32_STD when
+# the (pin_count, pm_idx) tuple has no specific override.
+#
+# Derived from a chip-by-chip survey of infoic.xml:
+#   - pm_idx clusters chips by chip family — chips in the same group share
+#     the same physical pin layout (per minipro/src/database.c gnd/mask
+#     analysis), even when protocol_id differs across the group.
+#   - For pm_idx=22 (28-pin 27C128/256/512 family), the variant_lo sub-
+#     discriminates layouts (DIP28_VARIANT_MAP).
+#   - For pm_idx=21 (28-pin 27C64), layout is DIP28_2764 with PGM on pin 27.
+#   - For pm_idx=0 type=4 (28-pin SRAM/FRAM), layout is JEDEC SRAM
+#     (DIP28_JEDEC_SRAM_8K).
+#   - 32-pin pm_idx 7/9/10/11/12/13 are flash/EPROM variants sharing
+#     DIP32_STD address bus (different protocols use different control
+#     signals but the bus layout is common).
+PIN_MAP_TO_PINOUT = {
+    # (pin_count, pm_idx): pinout_key  (None = use sub-discriminator)
+    (28, 21): "DIP28_2764",   # 27C64 family — 8K UV-EPROM with PGM on pin 27
+    (28, 22): None,            # 27C128/256/512 family — variant_lo discriminates
+    (28, 0):  None,            # SRAM/FRAM (type=4) handled via override below
+    (32, 7):  "DIP32_STD",    # Small 32-pin flash
+    (32, 9):  "DIP32_STD",    # 1Mbit 32-pin Intel-flash + AM29F010
+    (32, 10): "DIP32_STD",    # 27C010 32-pin UV-EPROM
+    (32, 11): "DIP32_STD",    # AM29F002 32-pin flash
+    (32, 12): "DIP32_STD",    # 27C040/080 32-pin UV-EPROM
+    (32, 13): "DIP32_STD",    # AM29F040 / SST39SF040 32-pin flash
+    (24, 23): None,            # 2716/2732 — variant_lo discriminates (DIP24_2716 / DIP24_2732)
+}
+
 with open(PINOUT_FILE) as _f:
     VALID_PINOUT_KEYS = set(json.load(_f).keys())
 
@@ -105,26 +136,42 @@ with open(PINOUT_FILE) as _f:
 # ==========================================
 
 
-def resolve_pinout_key(pin_count, variant, flags_int):
-    """Infers the physical pinout based on Variant + Pin Count."""
+def resolve_pinout_key(pin_count, variant, flags_int, pm_idx=None):
+    """Resolve the firestarter pinout key for a chip.
 
-    # 24-Pin Logic
+    Lookup order (most-specific-first):
+      1. (pin_count, pm_idx) tuple from PIN_MAP_TO_PINOUT — preferred when
+         pm_idx is non-None and the tuple has a concrete pinout.
+      2. (pin_count, pm_idx) tuple yielding None — fall through to variant_lo.
+      3. DIP28_VARIANT_MAP (variant low byte) for 28-pin chips.
+      4. Defaults per pin_count.
+
+    pm_idx is the low byte of infoic.xml's `pin_map` attribute (minipro
+    chip-family clustering signal). When passed, it strongly suggests the
+    physical layout family even when the protocol differs.
+    """
+    key = None
+
+    if pm_idx is not None and (pin_count, pm_idx) in PIN_MAP_TO_PINOUT:
+        key = PIN_MAP_TO_PINOUT[(pin_count, pm_idx)]
+        # `None` in the table means "fall through to variant-based logic"
+        if key is not None:
+            if key in VALID_PINOUT_KEYS:
+                return key
+            print(f"WARN: PIN_MAP_TO_PINOUT[{pin_count},{pm_idx}] = '{key}' not in pinouts.json", file=sys.stderr)
+
+    # Fall-through: pre-existing variant-based logic
     if pin_count == 24:
         if variant == 1:
             key = "DIP24_2732"
         else:
             key = "DIP24_2716"  # Default to 2716
-
-    # 28-Pin Logic
     elif pin_count == 28:
         key = DIP28_VARIANT_MAP.get(variant & 0xFF, "DIP28_2764")
-
-    # 32-Pin Logic
     elif pin_count == 32:
         # Most 32-pin chips follow the standard JEDEC layout
         # Variant usually just toggles high address lines vs NC pins
         key = "DIP32_STD"
-
     else:
         key = None
 
@@ -199,6 +246,11 @@ def main():
                 flags = int(ic.get("flags"), 16)
                 voltages = int(ic.get("voltages"), 16)
                 mem_size = int(ic.get("code_memory_size"), 16)
+                # pm_idx: low byte of upstream pin_map field — clusters chips by
+                # physical layout family (per minipro infoic.xml schema). Used by
+                # resolve_pinout_key as the primary chip-family selector.
+                pin_map_raw = int(ic.get("pin_map", "0"), 16)
+                pm_idx = pin_map_raw & 0xFF
 
                 # Skip chips with unknown protocol_id
                 if proto_id not in KNOWN_PROTOCOLS:
@@ -206,7 +258,7 @@ def main():
                     continue
 
                 # --- SYNTHESIZE "COMPLETE" DATA ---
-                pinout_key = resolve_pinout_key(pin_count, variant, flags)
+                pinout_key = resolve_pinout_key(pin_count, variant, flags, pm_idx=pm_idx)
 
                 # Derive electrical.type — priority order:
                 # 1. XML's `type` attribute is authoritative when it says 4 (SRAM/RAM-family).
