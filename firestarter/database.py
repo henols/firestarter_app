@@ -469,17 +469,32 @@ class EpromDatabase:
         "AT28C256,AT28C256E,AT28HC256"), which build_db.py preserves in
         the part_number field. Without alias-aware lookup, queries like
         `firestarter info AT28C256` failed despite the chip being in the DB.
+
+        Also handles infoic.xml's parenthetical mode annotations: many
+        chip names carry "(RW)", "(TEST)", "(RW3.3V)" etc. (e.g.,
+        "DS1245AB(RW),DS1245Y(RW)"). A plain query like "DS1245AB"
+        is normalized to match against the paren-stripped alias.
         """
+        import re
+        def _strip_paren(s):
+            # "DS1245AB(RW)" -> "DS1245AB"; preserves the canonical chip name.
+            return re.sub(r"\([^)]*\)", "", s).strip().lower()
+
         query = chip_name.lower()
+        query_stripped = _strip_paren(chip_name)
         for manufacturer, ics in self.proms.items():
             for ic_config in ics:
                 part_number = ic_config.get("part_number", "")
                 if query == part_number.lower():
                     return ic_config, manufacturer
-                # Alias match: split on comma + match individual aliases
-                if "," in part_number:
+                # Alias match: split on comma + match individual aliases.
+                # Try exact alias first, then paren-stripped alias.
+                if "," in part_number or "(" in part_number:
                     aliases = [a.strip().lower() for a in part_number.split(",")]
                     if query in aliases:
+                        return ic_config, manufacturer
+                    aliases_stripped = [_strip_paren(a) for a in part_number.split(",")]
+                    if query_stripped and query_stripped in aliases_stripped:
                         return ic_config, manufacturer
         return None, None
 

@@ -182,12 +182,25 @@ PIN_MAP_PROTO_TO_PINOUT = {
     (32, 12, 0x10): "DIP32_STD",
     (32, 13, 0x10): "DIP32_STD",
     # ---- 32-pin SRAM/NVRAM (proto 0x0E SRAM_32PIN + 0x29 SRAM_512K_1M) ----
-    # TENTATIVE: use DIP32_28C512_EEPROM as the canonical 32-pin SRAM-class layout
-    # (same physical pin layout; programming algorithm differs — SRAM uses byte-write
-    # via configure_sram, no EEPROM page-write). Bench-validation needed for the
-    # M48Txx NVRAM family — one-rom has no NVRAM entries.
-    (32,  0, 0x0E): "DIP32_28C512_EEPROM",
-    (32,  0, 0x29): "DIP32_28C512_EEPROM",
+    # JEDEC standard 32-pin SRAM layout (Dallas DS1245/DS1249/DS1250 + ST/SGS-Thomson
+    # M48T128/M48T512). All have CE=22, OE=24, **WE=31** (NOT WE=30 like the 28C512
+    # EEPROM variant), and no VPP. Pin 1 is A18 for 4M variants / NC for smaller.
+    # Same physical layout as DIP32_SST39SF040 — only the programming algorithm
+    # differs (SRAM-byte-write via configure_sram vs flash sector-erase).
+    #
+    # Multi-source evidence for MEDIUM confidence:
+    #   - JEDEC JC-42 standard for 32-pin parallel SRAM
+    #   - one-rom SST39SF040 verified WE=31 (5V flash, same physical layout class)
+    #   - one-rom 28C512 EEPROM (32-pin, 64K) has WE=30 — that's an EEPROM-specific
+    #     variation, NOT applicable to SRAM/NVRAM at this pin count
+    #   - minipro devices.h: DS1245/49/50 family has package_details=0x20000000
+    #     (32-pin) and protocol_id=0xd2 (Dallas-specific NVRAM algorithm) confirming
+    #     RAM-class chip classification — pin layout follows JEDEC SRAM
+    #
+    # Previous routing to DIP32_28C512_EEPROM (WE=30) was WRONG — DIP32_SST39SF040
+    # is the correct JEDEC SRAM-family pinout.
+    (32,  0, 0x0E): "DIP32_SST39SF040",
+    (32,  0, 0x29): "DIP32_SST39SF040",
     # ---- 24-pin 5V SRAM (proto 0x27 SRAM_24PIN) ----
     (24, 0,  0x27): "DIP24_6116",        # one-rom verified for 6116
 }
@@ -404,15 +417,25 @@ def main():
                 # at .planning/phases/04-hardware-validation-rurp-shield/04-HW-VALIDATION.md
                 # Bench-validation pending — Ramtron pinout assumptions need confirmation.
                 if type_int == 4 and proto_id in (0x07, 0x08, 0x0B):
-                    print(
-                        f"INFO: {mfg_name}/{name} type=4 SRAM override "
-                        f"algorithm 0x{proto_id:02X}->0x28 + pinout->DIP28_JEDEC_SRAM_8K "
-                        f"(fm1608-db-mismatch: route SRAM-tagged chip through configure_sram)",
-                        file=sys.stderr,
-                    )
                     proto_id = 0x28
                     if pin_count == 28:
-                        pinout_key = "DIP28_JEDEC_SRAM_8K"
+                        # Memory-size discriminator: 8K chips use the 13-address
+                        # DIP28_JEDEC_SRAM_8K layout; 16K+ chips use the 15-address
+                        # DIP28_28C256 layout (same physical layout family, more
+                        # address pins to reach A13/A14). Covers FM1608 (8K) +
+                        # FM16W08 (16K) + FM1808/FM18L08 (32K) all routed correctly.
+                        if mem_size <= 8192:
+                            pinout_key = "DIP28_JEDEC_SRAM_8K"
+                            size_label = "8K"
+                        else:
+                            pinout_key = "DIP28_28C256"
+                            size_label = f"{mem_size//1024}K"
+                        print(
+                            f"INFO: {mfg_name}/{name} type=4 SRAM override "
+                            f"algorithm 0x{proto_id-0x21:02X}->0x28 + pinout->{pinout_key} "
+                            f"(SRAM/FRAM {size_label}; configure_sram dispatch)",
+                            file=sys.stderr,
+                        )
                     # 24-pin (FM1208) keeps its DIP24_2716 pinout — no SRAM-specific
                     # 24-pin entry yet; configure_sram doesn't engage VPP so the
                     # vpp-pin field is ignored, making the pass-through safe.
