@@ -55,6 +55,11 @@ dependencies = [
 
 urls = { "Homepage" = "https://github.com/henols/firestarter_app" }
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
 [project.scripts]
 firestarter = "firestarter.main:main"
 
@@ -70,3 +75,7 @@ packages = ["firestarter"]
 
 [tool.setuptools.dynamic]
 version = { attr = "firestarter.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
