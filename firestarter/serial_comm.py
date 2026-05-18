@@ -23,7 +23,13 @@ from typing import Any, Optional, Generator, Tuple, List
 
 from firestarter.constants import *
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
-from firestarter.messages import CATALOG, SEVERITY_LABEL
+from firestarter.messages import (
+    CATALOG,
+    SEVERITY_LABEL,
+    MSG_OK_REV,
+    MSG_OK_CFG,
+    MSG_OK_FW_HANDSHAKE,
+)
 
 logger = logging.getLogger("SerialComm")
 rurp_logger = logging.getLogger("RURP")
@@ -126,6 +132,9 @@ DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
 
+# Phase 8 W-01: INIT/MAIN/END removed (now arrive as ID frames via the catalog
+# severity-band lookup). OK + DATA remain until Plan 04 + 05 firmware
+# conversions land (firmware still emits those as text prefixes for now).
 EXPECTED_PREFIXES = [
     "OK",
     "INFO",
@@ -133,9 +142,6 @@ EXPECTED_PREFIXES = [
     "ERROR",
     "WARN",
     "DATA",
-    "MAIN",
-    "INIT",
-    "END",
 ]
 # Prefix regex matches "<PREFIX>: <message>" anywhere in the line. The leading
 # word-boundary anchor was REMOVED because the Uno's USB-CDC bridge can prepend
@@ -149,7 +155,7 @@ EXPECTED_PREFIXES = [
 # than any false-positive embedded in the garbage.
 PREFIX_REGEX = re.compile(rf"({'|'.join(EXPECTED_PREFIXES)}):(.*)")
 
-STATE_MACHINE_PREFIXES = ["INIT", "MAIN", "END"]
+STATE_MACHINE_PREFIXES = []  # W-01: state-machine acks now arrive as ID frames; catalog format strings own the rendering.
 NON_RESPONSE_PREFIXES = ["INFO", "DEBUG"]
 class SerialError(Exception):
     """Custom exception for serial communication errors."""
@@ -285,8 +291,9 @@ class SerialCommunicator:
             return
 
         message = response.message
-        if response.type in STATE_MACHINE_PREFIXES:
-                message = "Done"
+        # W-01: STATE_MACHINE_PREFIXES is now empty; the old "Done" rewrite for
+        # INIT/MAIN/END is removed — catalog format strings own the rendering for
+        # ID frames. The conditional is kept but is a no-op ([] never matches).
 
         level = logging.DEBUG
         if response.type == "ERROR":
@@ -301,6 +308,45 @@ class SerialCommunicator:
             else response.type
         )
         rurp_logger.log(level, f"{log_prefix}: {message}")
+
+    def _format_message(self, msg_id: int, params: list, entry) -> Optional[str]:
+        """Sentinel-aware message renderer for P-02/P-03/P-04 shaped IDs.
+
+        Returns the rendered string for sentinel-byte IDs where the catalog
+        format string cannot express the conditional (0xFF = no override).
+        Returns None for all other IDs (caller falls through to generic rendering).
+
+        P-02 MSG_OK_REV  — params[0]=physical u8, params[1]=effective u8
+          effective==0xFF → "Rev{physical}" (no override)
+          effective!=0xFF → "Rev{effective}, Override HW: Rev{physical}"
+
+        P-03 MSG_OK_CFG  — params[0]=r1 u32, params[1]=r2 u32, params[2]=override u8
+          override==0xFF → "R1: {r1}, R2: {r2}"
+          override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: Rev{override}"
+
+        P-04 MSG_OK_FW_HANDSHAKE — params[0]=hw u8, params[1]=cmd u8, params[2]=fw str
+          hw==0xFF → "FW: {fw}, Cmd: 0x{cmd:02x}"
+          hw!=0xFF → "FW: {fw}, HW: Rev{hw}, Cmd: 0x{cmd:02x}"
+        """
+        if msg_id == MSG_OK_REV and len(params) == 2:
+            physical, effective = params[0], params[1]
+            if effective == 0xFF:
+                return f"Rev{physical}"
+            return f"Rev{effective}, Override HW: Rev{physical}"
+
+        if msg_id == MSG_OK_CFG and len(params) == 3:
+            r1, r2, override = params[0], params[1], params[2]
+            if override == 0xFF:
+                return f"R1: {r1}, R2: {r2}"
+            return f"R1: {r1}, R2: {r2}, Override HW: Rev{override}"
+
+        if msg_id == MSG_OK_FW_HANDSHAKE and len(params) == 3:
+            hw, cmd, fw = params[0], params[1], params[2]
+            if hw == 0xFF:
+                return f"FW: {fw}, Cmd: 0x{cmd:02x}"
+            return f"FW: {fw}, HW: Rev{hw}, Cmd: 0x{cmd:02x}"
+
+        return None  # fall through to generic catalog format-string rendering
 
     def _decode_id_frame(self, frame_len: int, body: bytes) -> Optional[LogMessage]:
         """
@@ -380,20 +426,25 @@ class SerialCommunicator:
             )
             return None
 
-        # Render via the catalog format string. Format errors fall back to a
-        # tagged placeholder so the read loop continues yielding subsequent
-        # frames (T-06-12).
-        # Filter out raw-bytes values (bytes-type params, e.g. MSG_DATA_CHUNK)
-        # before printf-style substitution — they have no corresponding %
-        # specifier in the format string.
-        fmt_values = [v for v in values if not isinstance(v, (bytes, bytearray))]
-        try:
-            text = entry.format % tuple(fmt_values) if fmt_values else entry.format
-        except (TypeError, ValueError) as exc:
-            logger.warning(
-                f"Format-error rendering ID 0x{msg_id:02x} ({entry.name}): {exc}"
-            )
-            text = f"<format-error: {entry.name}>"
+        # Sentinel-aware rendering for P-02/P-03/P-04 shaped IDs (W-02).
+        # _format_message returns a string for MSG_OK_REV/CFG/FW_HANDSHAKE,
+        # or None to fall through to the generic catalog format-string path.
+        text = self._format_message(msg_id, values, entry)
+        if text is None:
+            # Generic render via the catalog format string. Format errors fall
+            # back to a tagged placeholder so the read loop continues yielding
+            # subsequent frames (T-06-12).
+            # Filter out raw-bytes values (bytes-type params, e.g. MSG_DATA_CHUNK)
+            # before printf-style substitution — they have no corresponding %
+            # specifier in the format string.
+            fmt_values = [v for v in values if not isinstance(v, (bytes, bytearray))]
+            try:
+                text = entry.format % tuple(fmt_values) if fmt_values else entry.format
+            except (TypeError, ValueError) as exc:
+                logger.warning(
+                    f"Format-error rendering ID 0x{msg_id:02x} ({entry.name}): {exc}"
+                )
+                text = f"<format-error: {entry.name}>"
 
         severity_label = SEVERITY_LABEL.get(entry.severity, f"SEV{entry.severity}")
         return LogMessage(severity=severity_label, text=text, id=msg_id)

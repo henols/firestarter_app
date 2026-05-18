@@ -22,6 +22,7 @@ from conftest.py. No real serial port is opened.
 """
 
 import logging
+import struct
 
 import pytest
 
@@ -30,6 +31,11 @@ from firestarter.messages import (
     MSG_OK_READY,
     MSG_OK_FW_VERSION,
     MSG_OK_FW_HANDSHAKE,
+    MSG_OK_REV,
+    MSG_OK_CFG,
+    MSG_INIT_DONE,
+    MSG_MAIN_DONE,
+    MSG_END_DONE,
     MSG_INFO_ADDR,
     MSG_INFO_BIT_STR,
     MSG_INFO_MEM_SIZE,
@@ -314,3 +320,142 @@ class TestIdFrameDecoder:
             f"expected ascii_str overrun warning, got: "
             f"{[r.message for r in caplog.records]}"
         )
+
+    # -----------------------------------------------------------------
+    # Wave 0 gap tests: INIT/MAIN/END ID-frame decode (W-01 / W-02)
+    # -----------------------------------------------------------------
+
+    def test_init_done_arrives_as_id_frame(self, fake_serial, make_comm):
+        """W-01/W-02: MSG_INIT_DONE zero-param frame → Response(type='INIT',
+        message='(init done)').  Proves the host decoder routes state-machine
+        acks via the catalog severity-band, not line-prefix matching."""
+        comm = make_comm()
+        frame = build_frame(MSG_INIT_DONE, b"")
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "INIT"
+        assert response.message == "(init done)"
+
+    def test_main_done_arrives_as_id_frame(self, fake_serial, make_comm):
+        """W-01/W-02: MSG_MAIN_DONE zero-param frame → Response(type='MAIN',
+        message='(main done)')."""
+        comm = make_comm()
+        frame = build_frame(MSG_MAIN_DONE, b"")
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "MAIN"
+        assert response.message == "(main done)"
+
+    def test_end_done_arrives_as_id_frame(self, fake_serial, make_comm):
+        """W-01/W-02: MSG_END_DONE zero-param frame → Response(type='END',
+        message='(end done)')."""
+        comm = make_comm()
+        frame = build_frame(MSG_END_DONE, b"")
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "END"
+        assert response.message == "(end done)"
+
+    # -----------------------------------------------------------------
+    # Wave 0 gap tests: P-04 MSG_OK_FW_HANDSHAKE sentinel rendering
+    # -----------------------------------------------------------------
+
+    def test_fw_handshake_p04_with_hw_revision_decodes(self, fake_serial, make_comm):
+        """P-04: MSG_OK_FW_HANDSHAKE with hw_rev=0x01 (not sentinel) renders
+        'FW: 2.0.11-dev, HW: Rev1, Cmd: 0x0f'."""
+        comm = make_comm()
+        fw_str = b"2.0.11-dev"
+        # params: u8 hw=0x01, u8 cmd=0x0F, ascii_str fw_version
+        params = bytes([0x01, 0x0F, len(fw_str)]) + fw_str
+        frame = build_frame(MSG_OK_FW_HANDSHAKE, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "OK"
+        assert response.message == "FW: 2.0.11-dev, HW: Rev1, Cmd: 0x0f"
+
+    def test_fw_handshake_p04_no_hw_revision_decodes(self, fake_serial, make_comm):
+        """P-04: MSG_OK_FW_HANDSHAKE with hw_rev=0xFF sentinel renders
+        'FW: 2.0.11-dev, Cmd: 0x0f' (no HW: clause)."""
+        comm = make_comm()
+        fw_str = b"2.0.11-dev"
+        # params: u8 hw=0xFF (sentinel), u8 cmd=0x0F, ascii_str fw_version
+        params = bytes([0xFF, 0x0F, len(fw_str)]) + fw_str
+        frame = build_frame(MSG_OK_FW_HANDSHAKE, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "OK"
+        assert response.message == "FW: 2.0.11-dev, Cmd: 0x0f"
+
+    # -----------------------------------------------------------------
+    # Wave 0 gap tests: P-02 MSG_OK_REV sentinel rendering
+    # -----------------------------------------------------------------
+
+    def test_ok_rev_p02_with_override_decodes(self, fake_serial, make_comm):
+        """P-02: MSG_OK_REV with physical=0x01, effective=0x02 (override active)
+        renders 'Rev2, Override HW: Rev1'."""
+        comm = make_comm()
+        # params: u8 physical=0x01, u8 effective=0x02
+        params = bytes([0x01, 0x02])
+        frame = build_frame(MSG_OK_REV, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "OK"
+        assert response.message == "Rev2, Override HW: Rev1"
+
+    def test_ok_rev_p02_no_override_decodes(self, fake_serial, make_comm):
+        """P-02: MSG_OK_REV with physical=0x01, effective=0xFF sentinel renders
+        'Rev1' (no override clause)."""
+        comm = make_comm()
+        # params: u8 physical=0x01, u8 effective=0xFF (sentinel = no override)
+        params = bytes([0x01, 0xFF])
+        frame = build_frame(MSG_OK_REV, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "OK"
+        assert response.message == "Rev1"
+
+    # -----------------------------------------------------------------
+    # Wave 0 gap tests: P-03 MSG_OK_CFG sentinel rendering
+    # -----------------------------------------------------------------
+
+    def test_ok_cfg_p03_with_override_decodes(self, fake_serial, make_comm):
+        """P-03: MSG_OK_CFG with r1=10000, r2=4700, override=0x02 renders
+        'R1: 10000, R2: 4700, Override HW: Rev2'."""
+        comm = make_comm()
+        # params: u32 r1=10000, u32 r2=4700, u8 override=0x02
+        params = struct.pack(">II", 10000, 4700) + bytes([0x02])
+        frame = build_frame(MSG_OK_CFG, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "OK"
+        assert response.message == "R1: 10000, R2: 4700, Override HW: Rev2"
+
+    def test_ok_cfg_p03_no_override_decodes(self, fake_serial, make_comm):
+        """P-03: MSG_OK_CFG with r1=10000, r2=4700, override=0xFF sentinel renders
+        'R1: 10000, R2: 4700' (no override clause)."""
+        comm = make_comm()
+        # params: u32 r1=10000, u32 r2=4700, u8 override=0xFF (sentinel = no override)
+        params = struct.pack(">II", 10000, 4700) + bytes([0xFF])
+        frame = build_frame(MSG_OK_CFG, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "OK"
+        assert response.message == "R1: 10000, R2: 4700"
