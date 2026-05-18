@@ -639,6 +639,14 @@ params      = [
 ]
 wire_format = "id_frame"
 
+[[messages]]
+id          = 0xBA
+name        = "MSG_ERR_MEM_SIZE_TOO_SMALL"
+severity    = "ERROR"
+format      = "mem_size %lu too small for chip-id check"
+params      = [{ type = "u32", render = "dec" }]
+wire_format = "id_frame"
+
 # ---------------------------------------------------------------------------
 # DATA (0xE0..0xEF)
 # ---------------------------------------------------------------------------
