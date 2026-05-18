@@ -1,0 +1,653 @@
+# Firestarter v1.2 log-message catalog (canonical source — meta-repo authoritative)
+#
+# DO NOT REORDER ENTRIES. Codegen sorts by id ascending; the source file order
+# is preserved for human-edit diff readability.
+#
+# Distribution: copied byte-identically into firestarter/tools/catalog/ and
+# firestarter_app/tools/catalog/ by .planning/catalog/sync_to_subrepos.sh.
+# Edit ONLY this meta-repo copy; run the sync script after every edit.
+#
+# Schema reference: .planning/phases/06-logging-infrastructure/06-RESEARCH.md
+# §"Catalog Format + Schema" and §"Param Shape + Render Hints".
+
+[catalog]
+version = 1
+project = "firestarter"
+
+# ---------------------------------------------------------------------------
+# 0x00 reserved sentinel
+# ---------------------------------------------------------------------------
+
+[[messages]]
+id          = 0x00
+name        = "MSG_NONE"
+severity    = "OK"
+format      = "(reserved sentinel)"
+params      = []
+wire_format = "id_frame"
+
+# ---------------------------------------------------------------------------
+# OK (0x01..0x0F)
+# ---------------------------------------------------------------------------
+
+[[messages]]
+id          = 0x01
+name        = "MSG_OK_READY"
+severity    = "OK"
+format      = "Ready"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x02
+name        = "MSG_OK_REQ_DATA"
+severity    = "OK"
+format      = "Req data"
+params      = []
+wire_format = "id_frame"
+
+# Special: FW-version handshake stays text-format so the host can read the
+# firmware version BEFORE loading the catalog (LFW-05). params MUST be [].
+[[messages]]
+id          = 0x03
+name        = "MSG_OK_FW_VERSION"
+severity    = "OK"
+format      = "FW_VERSION"
+params      = []
+wire_format = "text"
+
+[[messages]]
+id          = 0x04
+name        = "MSG_OK_REV"
+severity    = "OK"
+format      = "Rev%d%s"
+params      = [
+    { type = "u8" },
+    { type = "ascii_str" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x05
+name        = "MSG_OK_CFG"
+severity    = "OK"
+format      = "R1: %ld, R2: %ld%s"
+params      = [
+    { type = "i32" },
+    { type = "i32" },
+    { type = "ascii_str" },
+]
+wire_format = "id_frame"
+
+# Special: FW handshake response (carries fw, hw, cmd in one text frame).
+# Locked text-format per LFW-05; params MUST be [].
+[[messages]]
+id          = 0x06
+name        = "MSG_OK_FW_HANDSHAKE"
+severity    = "OK"
+format      = "FW: %s, HW: Rev%d, Cmd: 0x%02x"
+params      = []
+wire_format = "text"
+
+# ---------------------------------------------------------------------------
+# INIT (0x10..0x1F)
+# ---------------------------------------------------------------------------
+
+[[messages]]
+id          = 0x10
+name        = "MSG_INIT_DONE"
+severity    = "INIT"
+format      = "(init done)"
+params      = []
+wire_format = "id_frame"
+
+# ---------------------------------------------------------------------------
+# MAIN (0x20..0x2F)
+# ---------------------------------------------------------------------------
+
+[[messages]]
+id          = 0x20
+name        = "MSG_MAIN_DONE"
+severity    = "MAIN"
+format      = "(main done)"
+params      = []
+wire_format = "id_frame"
+
+# ---------------------------------------------------------------------------
+# END (0x30..0x3F)
+# ---------------------------------------------------------------------------
+
+[[messages]]
+id          = 0x30
+name        = "MSG_END_DONE"
+severity    = "END"
+format      = "(end done)"
+params      = []
+wire_format = "id_frame"
+
+# ---------------------------------------------------------------------------
+# INFO (0x40..0x7F)
+# ---------------------------------------------------------------------------
+
+[[messages]]
+id          = 0x40
+name        = "MSG_INFO_MAIN_START"
+severity    = "INFO"
+format      = "Main start"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x41
+name        = "MSG_INFO_MAIN_DONE"
+severity    = "INFO"
+format      = "Main done"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x42
+name        = "MSG_INFO_INIT_START"
+severity    = "INFO"
+format      = "Init start"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x43
+name        = "MSG_INFO_END_START"
+severity    = "INFO"
+format      = "End start"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x44
+name        = "MSG_INFO_BUF_VAL"
+severity    = "INFO"
+format      = "Buf val: 0x%02x"
+params      = [{ type = "u8", render = "hex_byte" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x45
+name        = "MSG_INFO_TOKEN_COUNT"
+severity    = "INFO"
+format      = "Token count: %d"
+params      = [{ type = "i16" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x46
+name        = "MSG_INFO_FLAG_FORCE"
+severity    = "INFO"
+format      = "Force: %d"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x47
+name        = "MSG_INFO_FLAG_CAN_ERASE"
+severity    = "INFO"
+format      = "Can erase: %d"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x48
+name        = "MSG_INFO_FLAG_SKIP_ERASE"
+severity    = "INFO"
+format      = "Skip erase: %d"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x49
+name        = "MSG_INFO_FLAG_SKIP_BLANK"
+severity    = "INFO"
+format      = "Skip blank check: %d"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x4A
+name        = "MSG_INFO_FLAG_VPE_AS_VPP"
+severity    = "INFO"
+format      = "VPE as VPP: %d"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x4B
+name        = "MSG_INFO_FLAG_OUTPUT_EN"
+severity    = "INFO"
+format      = "Output enable: %d"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x4C
+name        = "MSG_INFO_FLAG_CHIP_EN"
+severity    = "INFO"
+format      = "Chip enable: %d"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x4D
+name        = "MSG_INFO_BUFFER_SIZE"
+severity    = "INFO"
+format      = "Buffer size: %d"
+params      = [{ type = "u16" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x4E
+name        = "MSG_INFO_MEM_SIZE"
+severity    = "INFO"
+format      = "Memory size 0x%lx"
+params      = [{ type = "u32" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x4F
+name        = "MSG_INFO_ADDR_MASK"
+severity    = "INFO"
+format      = "Address mask 0x%lx"
+params      = [{ type = "u32" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x50
+name        = "MSG_INFO_MATCH_LINES"
+severity    = "INFO"
+format      = "Matching lines %u"
+params      = [{ type = "u16" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x51
+name        = "MSG_INFO_RETRIES"
+severity    = "INFO"
+format      = "Number of retries: %d"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x52
+name        = "MSG_INFO_REG_HEADER"
+severity    = "INFO"
+format      = "%s: 0x%02X"
+params      = [
+    { type = "ascii_str" },
+    { type = "u8", render = "hex_byte" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x53
+name        = "MSG_INFO_BIT_HEADER"
+severity    = "INFO"
+format      = "%s|D7|D6|D5|D4|D3|D2|D1|D0|"
+params      = [{ type = "ascii_str" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x54
+name        = "MSG_INFO_BIT_STR"
+severity    = "INFO"
+format      = "%s"
+params      = [{ type = "ascii_str" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x55
+name        = "MSG_INFO_CE_OE"
+severity    = "INFO"
+format      = "CE: %d, OE: %d"
+params      = [
+    { type = "u8" },
+    { type = "u8" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x56
+name        = "MSG_INFO_ADDR"
+severity    = "INFO"
+format      = "Address: 0x%06x"
+params      = [{ type = "u24", render = "hex_addr" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x57
+name        = "MSG_INFO_ADDR_REMAP"
+severity    = "INFO"
+format      = "Address: 0x%06x remappend"
+params      = [{ type = "u24", render = "hex_addr" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x58
+name        = "MSG_INFO_SKIPPING_ERASE"
+severity    = "INFO"
+format      = "Skipping erase."
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x59
+name        = "MSG_INFO_SKIPPING_ERASE_MEM"
+severity    = "INFO"
+format      = "Skipping erase of memory"
+params      = []
+wire_format = "id_frame"
+
+# ---------------------------------------------------------------------------
+# WARN (0x80..0x9F)
+# ---------------------------------------------------------------------------
+
+[[messages]]
+id          = 0x80
+name        = "MSG_WARN_REV0_VPP_UNSUPPORTED"
+severity    = "WARN"
+format      = "Rev0 dont support reading VPP/VPE"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x81
+name        = "MSG_WARN_VPP_LOW"
+severity    = "WARN"
+format      = "VPP is low: %u.%uV < %u.%uV"
+params      = [
+    { type = "u16" },
+    { type = "u16" },
+    { type = "u16" },
+    { type = "u16" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x82
+name        = "MSG_WARN_VPP_HIGH"
+severity    = "WARN"
+format      = "VPP is high: %u.%uV > %u.%uV"
+params      = [
+    { type = "u16" },
+    { type = "u16" },
+    { type = "u16" },
+    { type = "u16" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x83
+name        = "MSG_WARN_CHIP_ID_MISMATCH"
+severity    = "WARN"
+format      = "Chip ID %#04x dont match expected ID %#04x"
+params      = [
+    { type = "u16" },
+    { type = "u16" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x84
+name        = "MSG_WARN_MEM_SIZE_TOO_SMALL"
+severity    = "WARN"
+format      = "mem_size %lu too small for chip-id check"
+params      = [{ type = "u32", render = "dec" }]
+wire_format = "id_frame"
+
+# ---------------------------------------------------------------------------
+# ERROR (0xA0..0xDF)
+# ---------------------------------------------------------------------------
+
+[[messages]]
+id          = 0xA0
+name        = "MSG_ERR_BAD_JSON"
+severity    = "ERROR"
+format      = "Bad JSON"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xA1
+name        = "MSG_ERR_NO_CMD"
+severity    = "ERROR"
+format      = "No cmd"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xA2
+name        = "MSG_ERR_SETUP"
+severity    = "ERROR"
+format      = "Setup error"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xA3
+name        = "MSG_ERR_PARSE_CFG"
+severity    = "ERROR"
+format      = "Failed parsing config"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xA4
+name        = "MSG_ERR_EMPTY_INPUT"
+severity    = "ERROR"
+format      = "Empty input"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xA5
+name        = "MSG_ERR_NOT_SUPPORTED"
+severity    = "ERROR"
+format      = "Not supported"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xA6
+name        = "MSG_ERR_NO_CHIP_ID"
+severity    = "ERROR"
+format      = "No chip ID"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xA7
+name        = "MSG_ERR_OUT_OF_RANGE"
+severity    = "ERROR"
+format      = "Out of range"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xA8
+name        = "MSG_ERR_TIMEOUT"
+severity    = "ERROR"
+format      = "Timeout"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xA9
+name        = "MSG_ERR_DATA_ERR_N"
+severity    = "ERROR"
+format      = "Data err %d"
+params      = [{ type = "i16" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xAA
+name        = "MSG_ERR_CMD_TIMEOUT"
+severity    = "ERROR"
+format      = "Cmd: %d, timeout"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xAB
+name        = "MSG_ERR_UNKNOWN_CMD"
+severity    = "ERROR"
+format      = "Unknown cmd: %d"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xAC
+name        = "MSG_ERR_REV0_VPP_RD"
+severity    = "ERROR"
+format      = "Rev0 dont support reading VPP/VPE"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xAD
+name        = "MSG_ERR_CMD"
+severity    = "ERROR"
+format      = "Error cmd"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xAE
+name        = "MSG_ERR_MEM_TYPE_UNSUPPORTED"
+severity    = "ERROR"
+format      = "Memory type 0x%02x not supported"
+params      = [{ type = "u8", render = "hex_byte" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xAF
+name        = "MSG_ERR_VERIFY"
+severity    = "ERROR"
+format      = "0x%02x != 0x%02x at 0x%06x"
+params      = [
+    { type = "u8", render = "hex_byte" },
+    { type = "u8", render = "hex_byte" },
+    { type = "u24", render = "hex_addr" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xB0
+name        = "MSG_ERR_NOT_BLANK"
+severity    = "ERROR"
+format      = "Not blank, at 0x%06x, v: 0x%02x"
+params      = [
+    { type = "u24", render = "hex_addr" },
+    { type = "u8", render = "hex_byte" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xB1
+name        = "MSG_ERR_WRITE_FAILED"
+severity    = "ERROR"
+format      = "Failed to write memory, 0x%06x, retries: %d, bad bytes: %d"
+params      = [
+    { type = "u24", render = "hex_addr" },
+    { type = "u8" },
+    { type = "u16" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xB2
+name        = "MSG_ERR_EEPROM_TIMEOUT"
+severity    = "ERROR"
+format      = "EEPROM timeout at 0x%06lx: wrote 0x%02x got 0x%02x"
+params      = [
+    { type = "u24", render = "hex_addr" },
+    { type = "u8", render = "hex_byte" },
+    { type = "u8", render = "hex_byte" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xB3
+name        = "MSG_ERR_FL4_VERIFY_TIMEOUT"
+severity    = "ERROR"
+format      = "Timeout verifying 0x%02x at 0x%06lx (got 0x%02x)"
+params      = [
+    { type = "u8", render = "hex_byte" },
+    { type = "u24", render = "hex_addr" },
+    { type = "u8", render = "hex_byte" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xB4
+name        = "MSG_ERR_INTEL_VPP"
+severity    = "ERROR"
+format      = "Intel flash: VPP error"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xB5
+name        = "MSG_ERR_INTEL_PROGRAM"
+severity    = "ERROR"
+format      = "Intel flash: program error"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xB6
+name        = "MSG_ERR_INTEL_SR_TIMEOUT"
+severity    = "ERROR"
+format      = "Intel flash: SR timeout"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xB7
+name        = "MSG_ERR_OP_TIMEOUT"
+severity    = "ERROR"
+format      = "Operation timed out"
+params      = []
+wire_format = "id_frame"
+
+# ---------------------------------------------------------------------------
+# DATA (0xE0..0xEF)
+# ---------------------------------------------------------------------------
+
+[[messages]]
+id          = 0xE0
+name        = "MSG_DATA_PROGRESS"
+severity    = "DATA"
+format      = "%lu/%lu"
+params      = [
+    { type = "u32", render = "dec" },
+    { type = "u32", render = "dec" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xE1
+name        = "MSG_DATA_VOLTAGE"
+severity    = "DATA"
+format      = "%s: %u.%uV, Internal VCC: %u.%uV"
+params      = [
+    { type = "ascii_str" },
+    { type = "u16" },
+    { type = "u16" },
+    { type = "u16" },
+    { type = "u16" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xE2
+name        = "MSG_DATA_SENDING"
+severity    = "DATA"
+format      = "Sending data"
+params      = []
+wire_format = "id_frame"
