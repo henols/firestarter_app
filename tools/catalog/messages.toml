@@ -48,46 +48,57 @@ wire_format = "id_frame"
 
 # Special: FW-version handshake stays text-format so the host can read the
 # firmware version BEFORE loading the catalog (LFW-05). params MUST be [].
+# The firmware sends a plain text line; the host bootstrap path parses it.
+# ascii_str shape is documented here but wire_format=text means the validator
+# enforces params=[] (Rule 8). See P-01 in 08-CONTEXT.md.
 [[messages]]
 id          = 0x03
 name        = "MSG_OK_FW_VERSION"
 severity    = "OK"
-format      = "FW_VERSION"
+format      = "FW: {0}"
 params      = []
 wire_format = "text"
 
+# P-02: Fixed-shape u8 physical + u8 effective. effective=0xFF means no override.
+# Host renders "Rev{physical}" or "Rev{effective}, Override HW: Rev{physical}".
 [[messages]]
 id          = 0x04
 name        = "MSG_OK_REV"
 severity    = "OK"
-format      = "Rev%d%s"
+format      = "Rev%u (eff: %u)"
 params      = [
     { type = "u8" },
-    { type = "ascii_str" },
+    { type = "u8" },
 ]
 wire_format = "id_frame"
 
+# P-03: Fixed-shape u32 r1 + u32 r2 + u8 override. override=0xFF means no override.
+# 9 wire bytes fixed. Host renders override branch host-side.
 [[messages]]
 id          = 0x05
 name        = "MSG_OK_CFG"
 severity    = "OK"
-format      = "R1: %ld, R2: %ld%s"
+format      = "R1: %lu, R2: %lu, Cfg: %u"
 params      = [
-    { type = "i32" },
-    { type = "i32" },
-    { type = "ascii_str" },
+    { type = "u32" },
+    { type = "u32" },
+    { type = "u8" },
 ]
 wire_format = "id_frame"
 
-# Special: FW handshake response (carries fw, hw, cmd in one text frame).
-# Locked text-format per LFW-05; params MUST be [].
+# P-04: Composite id_frame: u8 hw + u8 cmd + ascii_str fw_version.
+# hw=0xFF sentinel means no HARDWARE_REVISION defined. Fixed-shape params first.
 [[messages]]
 id          = 0x06
 name        = "MSG_OK_FW_HANDSHAKE"
 severity    = "OK"
-format      = "FW: %s, HW: Rev%d, Cmd: 0x%02x"
-params      = []
-wire_format = "text"
+format      = "HW: %u, Cmd: 0x%02x, FW: %s"
+params      = [
+    { type = "u8" },
+    { type = "u8" },
+    { type = "ascii_str" },
+]
+wire_format = "id_frame"
 
 # ---------------------------------------------------------------------------
 # INIT (0x10..0x1F)
@@ -683,3 +694,321 @@ severity    = "DATA"
 format      = "Sending data"
 params      = []
 wire_format = "id_frame"
+
+# VPP voltage reading: u16 voltage_mv + u16 vcc_mv (4 wire bytes).
+# Host renders decimal from raw millivolt integers.
+[[messages]]
+id          = 0xE4
+name        = "MSG_DATA_VPP_VOLTAGE"
+severity    = "DATA"
+format      = "VPP: %u.%uV, Internal VCC: %u.%uV"
+params      = [
+    { type = "u16" },
+    { type = "u16" },
+    { type = "u16" },
+    { type = "u16" },
+]
+wire_format = "id_frame"
+
+# VPE voltage reading: same shape as VPP_VOLTAGE with VPE prefix.
+[[messages]]
+id          = 0xE5
+name        = "MSG_DATA_VPE_VOLTAGE"
+severity    = "DATA"
+format      = "VPE: %u.%uV, Internal VCC: %u.%uV"
+params      = [
+    { type = "u16" },
+    { type = "u16" },
+    { type = "u16" },
+    { type = "u16" },
+]
+wire_format = "id_frame"
+
+# Chip-read streaming wrapper. params[0] is the raw chip-byte payload (W-04).
+# format is documentation-only; host extracts raw bytes, never renders this string.
+[[messages]]
+id          = 0xE6
+name        = "MSG_DATA_CHUNK"
+severity    = "DATA"
+format      = "<data chunk>"
+params      = [
+    { type = "bytes" },
+]
+wire_format = "id_frame"
+
+# Debug channel main entry (B-01..B-04). sub_id in params[0] indexes DEBUG_CATALOG.
+# params[1] is the sub-payload decoded via DEBUG_CATALOG[sub_id].params.
+# Production-stripped via #ifdef SERIAL_DEBUG in firmware.
+[[messages]]
+id          = 0xF0
+name        = "MSG_DEBUG"
+severity    = "DATA"
+format      = "[debug:%u]"
+params      = [
+    { type = "u8" },
+    { type = "bytes" },
+]
+wire_format = "id_frame"
+
+# ---------------------------------------------------------------------------
+# [debug] section — sub_id namespace for MSG_DEBUG (B-03)
+#
+# Each [[debug.messages]] entry declares one DBG_* sub-ID. The sub_id is
+# packed as params[0] of MSG_DEBUG on the wire. params here declare the
+# sub-payload shape that follows sub_id on the wire.
+#
+# Audit: 43 total debug() call-sites / 41 unique strings (phase 8 grep audit).
+# Note: CONTEXT.md B-01 cites 34 — actual count is 41 unique strings.
+# Shared strings: "Check chip ID" used at eprom.cpp:84 + :305 (one entry).
+#                 "Checking VPP voltage %u mV" used at eprom.cpp:230 + flash_intel.cpp:39.
+# ---------------------------------------------------------------------------
+
+[debug]
+
+[[debug.messages]]
+id     = 0x00
+name   = "DBG_FIRESTARTER_STARTED"
+format = "Firestarter started"
+params = []
+
+[[debug.messages]]
+id     = 0x01
+name   = "DBG_FIRMWARE_VERSION"
+format = "Firmware version: %s"
+params = [{ type = "ascii_str" }]
+
+[[debug.messages]]
+id     = 0x02
+name   = "DBG_HARDWARE_REVISION"
+format = "Hardware revision: %d"
+params = [{ type = "u8" }]
+
+[[debug.messages]]
+id     = 0x03
+name   = "DBG_PARSE_JSON"
+format = "Parse JSON"
+params = []
+
+[[debug.messages]]
+id     = 0x04
+name   = "DBG_CMD"
+format = "Cmd: %d"
+params = [{ type = "u8" }]
+
+[[debug.messages]]
+id     = 0x05
+name   = "DBG_SETUP"
+format = "Setup"
+params = []
+
+[[debug.messages]]
+id     = 0x06
+name   = "DBG_CMD_FINISHED"
+format = "Cmd finished"
+params = []
+
+[[debug.messages]]
+id     = 0x07
+name   = "DBG_WRITE_EPROM"
+format = "Write EPROM"
+params = []
+
+[[debug.messages]]
+id     = 0x08
+name   = "DBG_VERIFY_PROM"
+format = "Verify PROM"
+params = []
+
+[[debug.messages]]
+id     = 0x09
+name   = "DBG_ERASE_PROM"
+format = "Erase PROM"
+params = []
+
+[[debug.messages]]
+id     = 0x0A
+name   = "DBG_CHECK_CHIP_ID_OP"
+format = "Check Chip ID"
+params = []
+
+[[debug.messages]]
+id     = 0x0B
+name   = "DBG_BLANK_CHECK_PROM"
+format = "Blank check PROM"
+params = []
+
+[[debug.messages]]
+id     = 0x0C
+name   = "DBG_INIT_READ_VOLTAGE"
+format = "Init read voltage"
+params = []
+
+[[debug.messages]]
+id     = 0x0D
+name   = "DBG_SETTING_UP_VPP"
+format = "Setting up VPP"
+params = []
+
+[[debug.messages]]
+id     = 0x0E
+name   = "DBG_SETTING_UP_VPE"
+format = "Setting up VPE"
+params = []
+
+[[debug.messages]]
+id     = 0x0F
+name   = "DBG_GET_FW_VERSION"
+format = "Get FW version"
+params = []
+
+[[debug.messages]]
+id     = 0x10
+name   = "DBG_GET_HW_VERSION"
+format = "Get HW version"
+params = []
+
+[[debug.messages]]
+id     = 0x11
+name   = "DBG_GET_CONFIG"
+format = "Get config"
+params = []
+
+[[debug.messages]]
+id     = 0x12
+name   = "DBG_CONFIGURING_EPROM"
+format = "Configuring EPROM"
+params = []
+
+# Used at eprom.cpp:84 and eprom.cpp:305 — shared entry (same literal).
+[[debug.messages]]
+id     = 0x13
+name   = "DBG_CHECK_CHIP_ID"
+format = "Check chip ID"
+params = []
+
+[[debug.messages]]
+id     = 0x14
+name   = "DBG_ERASE"
+format = "Erase"
+params = []
+
+[[debug.messages]]
+id     = 0x15
+name   = "DBG_PULSE_DELAY_MISMATCH"
+format = "Mismatch, retrying with increased pulse delay from %d to %d"
+params = [{ type = "u8" }, { type = "u8" }]
+
+[[debug.messages]]
+id     = 0x16
+name   = "DBG_GET_CHIP_ID"
+format = "Get chip ID"
+params = []
+
+[[debug.messages]]
+id     = 0x17
+name   = "DBG_CHECK_VPP"
+format = "Check VPP"
+params = []
+
+# Used at eprom.cpp:230 and flash_intel.cpp:39 — shared entry (same literal + params).
+[[debug.messages]]
+id     = 0x18
+name   = "DBG_CHECKING_VPP_VOLTAGE"
+format = "Checking VPP voltage %u mV"
+params = [{ type = "u16" }]
+
+[[debug.messages]]
+id     = 0x19
+name   = "DBG_INTERNAL_ERASE"
+format = "Internal erase"
+params = []
+
+[[debug.messages]]
+id     = 0x1A
+name   = "DBG_CHECK_VPP_INTEL"
+format = "Check VPP (Intel)"
+params = []
+
+[[debug.messages]]
+id     = 0x1B
+name   = "DBG_CONFIGURING_INTEL_FLASH"
+format = "Configuring Intel Flash"
+params = []
+
+[[debug.messages]]
+id     = 0x1C
+name   = "DBG_ERASE_COMPLETE"
+format = "Erase complete"
+params = []
+
+[[debug.messages]]
+id     = 0x1D
+name   = "DBG_CONFIGURING_FLASH"
+format = "Configuring Flash"
+params = []
+
+[[debug.messages]]
+id     = 0x1E
+name   = "DBG_SKIPPING_ERASE_MEMORY"
+format = "Skipping erase of memory"
+params = []
+
+[[debug.messages]]
+id     = 0x1F
+name   = "DBG_SECTOR_ERASE"
+format = "Sector erase"
+params = []
+
+[[debug.messages]]
+id     = 0x20
+name   = "DBG_CHIP_ERASE"
+format = "Chip erase"
+params = []
+
+[[debug.messages]]
+id     = 0x21
+name   = "DBG_CONFIGURING_FLASH4"
+format = "Configuring Flash 4"
+params = []
+
+[[debug.messages]]
+id     = 0x22
+name   = "DBG_CONFIGURING_SRAM"
+format = "Configuring SRAM"
+params = []
+
+[[debug.messages]]
+id     = 0x23
+name   = "DBG_CONFIGURING_MEMORY"
+format = "Configuring memory"
+params = []
+
+[[debug.messages]]
+id     = 0x24
+name   = "DBG_ADDRESS"
+format = "Address 0x%06x"
+params = [{ type = "u24" }]
+
+[[debug.messages]]
+id     = 0x25
+name   = "DBG_TOP_MSB_LSB"
+format = "top msb lsb %02x %02x %02x"
+params = [{ type = "u8" }, { type = "u8" }, { type = "u8" }]
+
+[[debug.messages]]
+id     = 0x26
+name   = "DBG_READING_FROM_ADDRESS"
+format = "Reading from address 0x%06x"
+params = [{ type = "u24" }]
+
+[[debug.messages]]
+id     = 0x27
+name   = "DBG_CONFIGURING_EEPROM_28C"
+format = "Configuring EEPROM 28C"
+params = []
+
+[[debug.messages]]
+id     = 0x28
+name   = "DBG_CHECK_CHIP_ID_28C"
+format = "Check chip ID (28C)"
+params = []

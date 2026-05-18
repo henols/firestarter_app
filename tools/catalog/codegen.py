@@ -55,7 +55,7 @@ SEVERITY_CODES = {
     "DATA":  0x08,
 }
 
-VALID_PARAM_TYPES = ("u8", "u16", "u24", "u32", "i8", "i16", "i32", "ascii_str")
+VALID_PARAM_TYPES = ("u8", "u16", "u24", "u32", "i8", "i16", "i32", "ascii_str", "bytes")
 PARAM_TYPE_BYTES = {
     "u8":        1,
     "u16":       2,
@@ -67,6 +67,10 @@ PARAM_TYPE_BYTES = {
     # ascii_str is variable length on the wire; we store 0xFF in the param-byte
     # table to flag "variable" (callers must use a length prefix).
     "ascii_str": None,
+    # bytes is a raw payload; no fixed wire-byte count. Used for MSG_DATA_CHUNK
+    # (chip-read streaming payload) and MSG_DEBUG sub-payload. No printf specifier
+    # is emitted for bytes params — the host decoder handles them as raw bytes.
+    "bytes":     None,
 }
 
 VALID_RENDERS = (
@@ -83,10 +87,14 @@ DEFAULT_RENDER_BY_TYPE = {
     "u32":       "hex",
     "i32":       "signed_dec",
     "ascii_str": "ascii_str",
+    # bytes is a raw payload; rendered as a hex dump by the host if needed.
+    "bytes":     "hex",
 }
 
 VALID_WIRE_FORMATS = ("id_frame", "text")
 NAME_PATTERN = re.compile(r"^MSG_[A-Z][A-Z0-9_]*$")
+# Pattern for debug sub-ID names in the [debug] section (B-03).
+DBG_PATTERN = re.compile(r"^DBG_[A-Z][A-Z0-9_]*$")
 
 # printf-style specifier matcher. Matches one specifier (excluding "%%").
 # Specifier grammar (subset used in the catalog):
@@ -276,14 +284,18 @@ def validate_catalog(catalog):
                 f"(ID 0x{mid:02X} {name} has {len(params)} params)"
             )
 
-        # Rule 9: format-spec count must match param count (skipped for text).
+        # Rule 9: format-spec count must match non-bytes param count (skipped for
+        # text). 'bytes' params are raw payload with no printf representation;
+        # they are excluded from the specifier count check.
         if wf == "id_frame":
             spec_count = _count_printf_specs(fmt)
-            if spec_count != len(params):
+            non_bytes_count = sum(1 for p in params if p.get("type") != "bytes")
+            if spec_count != non_bytes_count:
                 raise CatalogError(
                     f"Format-vs-param-count mismatch for ID 0x{mid:02X} "
                     f"({name}): format has {spec_count} printf "
-                    f"specifier(s), params has {len(params)}. "
+                    f"specifier(s), params has {non_bytes_count} non-bytes "
+                    f"params (total params: {len(params)}). "
                     f"format={fmt!r}"
                 )
 
@@ -305,6 +317,126 @@ def validate_catalog(catalog):
 
         seen_ids[mid] = name
         seen_names[name] = mid
+
+    # --- [debug] section validation (B-03 — parallel rules, DBG_* namespace) ---
+    debug_messages = catalog.get("debug", {}).get("messages", [])
+    seen_dbg_ids = {}
+    seen_dbg_names = {}
+
+    for dbg in debug_messages:
+        if not isinstance(dbg, dict):
+            raise CatalogError("Every [[debug.messages]] entry must be a TOML table.")
+
+        # Rule D1: id missing / not int / out of range / duplicate (within debug namespace)
+        did = dbg.get("id")
+        if did is None:
+            raise CatalogError(f"Missing 'id' field in [[debug.messages]] entry: {dbg!r}")
+        if not isinstance(did, int) or isinstance(did, bool):
+            raise CatalogError(
+                f"[[debug.messages]] 'id' must be an integer; got "
+                f"{type(did).__name__} ({did!r}) in entry "
+                f"{dbg.get('name', '<no name>')}"
+            )
+        if did < 0 or did > 255:
+            raise CatalogError(
+                f"[[debug.messages]] 'id' out of range [0, 255]: 0x{did:X} "
+                f"in entry {dbg.get('name', '<no name>')}"
+            )
+        if did in seen_dbg_ids:
+            other = seen_dbg_ids[did]
+            raise CatalogError(
+                f"Duplicate debug sub_id 0x{did:02X}: "
+                f"'{dbg.get('name', '<no name>')}' conflicts with prior '{other}'"
+            )
+
+        # Rule D2: name missing / wrong format / duplicate within debug namespace /
+        #          must not collide with any MSG_* name in the main catalog
+        dname = dbg.get("name")
+        if dname is None or not isinstance(dname, str):
+            raise CatalogError(
+                f"Missing or non-string 'name' for [[debug.messages]] id 0x{did:02X}"
+            )
+        if not DBG_PATTERN.match(dname):
+            raise CatalogError(
+                f"Invalid name format for [[debug.messages]] id 0x{did:02X}: "
+                f"'{dname}' (must match ^DBG_[A-Z][A-Z0-9_]*$)"
+            )
+        if dname in seen_dbg_names:
+            other_id = seen_dbg_names[dname]
+            raise CatalogError(
+                f"Duplicate debug name '{dname}' at id 0x{did:02X} "
+                f"(prior id 0x{other_id:02X})"
+            )
+        if dname in seen_names:
+            raise CatalogError(
+                f"Debug name '{dname}' at id 0x{did:02X} collides with "
+                f"main-catalog name at 0x{seen_names[dname]:02X}"
+            )
+
+        # Rule D3: format non-empty string
+        dfmt = dbg.get("format")
+        if not isinstance(dfmt, str) or dfmt == "":
+            raise CatalogError(
+                f"Missing or empty 'format' for [[debug.messages]] id 0x{did:02X} ({dname})"
+            )
+
+        # Rule D4: params list of tables
+        dparams = dbg.get("params")
+        if not isinstance(dparams, list):
+            raise CatalogError(
+                f"Field 'params' must be a list for [[debug.messages]] id 0x{did:02X} ({dname})"
+            )
+        for i, p in enumerate(dparams):
+            if not isinstance(p, dict):
+                raise CatalogError(
+                    f"params[{i}] must be a table in [[debug.messages]] id 0x{did:02X} ({dname})"
+                )
+
+        # Rule D5: param types valid
+        for i, p in enumerate(dparams):
+            ptype = p.get("type")
+            if ptype not in VALID_PARAM_TYPES:
+                raise CatalogError(
+                    f"Invalid param type '{ptype}' at params[{i}] in "
+                    f"[[debug.messages]] id 0x{did:02X} ({dname}). "
+                    f"Allowed: {sorted(VALID_PARAM_TYPES)}"
+                )
+
+        # Rule D6: render hints valid (if present)
+        for i, p in enumerate(dparams):
+            r = p.get("render")
+            if r is not None and r not in VALID_RENDERS:
+                raise CatalogError(
+                    f"Invalid render '{r}' at params[{i}] in "
+                    f"[[debug.messages]] id 0x{did:02X} ({dname}). "
+                    f"Allowed: {sorted(VALID_RENDERS)}"
+                )
+
+        # Rule D7: format-spec count must match non-bytes param count
+        spec_count = _count_printf_specs(dfmt)
+        non_bytes_count = sum(1 for p in dparams if p.get("type") != "bytes")
+        if spec_count != non_bytes_count:
+            raise CatalogError(
+                f"Format-vs-param-count mismatch for [[debug.messages]] id 0x{did:02X} "
+                f"({dname}): format has {spec_count} printf specifier(s), "
+                f"params has {non_bytes_count} non-bytes params. "
+                f"format={dfmt!r}"
+            )
+
+        # Rule D8: total wire-param byte budget <= 24 (non-ascii_str, non-bytes)
+        fixed_bytes = 0
+        for p in dparams:
+            w = PARAM_TYPE_BYTES.get(p["type"])
+            if w is not None:
+                fixed_bytes += w
+        if fixed_bytes > PARAM_BUDGET_BYTES:
+            raise CatalogError(
+                f"Param byte budget exceeded for [[debug.messages]] id 0x{did:02X} "
+                f"({dname}): {fixed_bytes} > {PARAM_BUDGET_BYTES}"
+            )
+
+        seen_dbg_ids[did] = dname
+        seen_dbg_names[dname] = did
 
     return True
 
@@ -344,6 +476,10 @@ def emit_cpp_header(catalog):
     version = catalog["catalog"]["version"]
     messages = _sorted_messages(catalog)
     count = len(messages)
+    debug_messages = sorted(
+        catalog.get("debug", {}).get("messages", []),
+        key=lambda m: m["id"],
+    )
 
     parts = []
     parts.append(CPP_BANNER_TEMPLATE.format(
@@ -369,13 +505,25 @@ def emit_cpp_header(catalog):
         )
     parts.append("\n")
     parts.append("// --- Message IDs (sorted ascending) ---\n")
-    # Width: longest name + 4 chars of slack for alignment.
+    # Width: longest name + 2 chars for alignment.
     max_name_len = max(len(m["name"]) for m in messages)
     name_col = max_name_len + 2
     for m in messages:
         parts.append(
             f"#define {m['name']:<{name_col}}0x{m['id']:02X}\n"
         )
+    # --- Debug sub-IDs (sorted ascending) ---
+    if debug_messages:
+        parts.append("\n")
+        parts.append("// --- Debug sub-IDs (sorted ascending) ---\n")
+        # Use a separate alignment column computed over DBG_* names only, so
+        # a long DBG_* name does not shift the MSG_* block above.
+        max_dbg_name_len = max(len(d["name"]) for d in debug_messages)
+        dbg_name_col = max_dbg_name_len + 2
+        for d in debug_messages:
+            parts.append(
+                f"#define {d['name']:<{dbg_name_col}}0x{d['id']:02X}\n"
+            )
     parts.append("\n")
     parts.append("#ifdef __cplusplus\n")
     parts.append("}\n")
@@ -390,6 +538,10 @@ def emit_python(catalog):
     version = catalog["catalog"]["version"]
     messages = _sorted_messages(catalog)
     count = len(messages)
+    debug_messages = sorted(
+        catalog.get("debug", {}).get("messages", []),
+        key=lambda m: m["id"],
+    )
 
     parts = []
     parts.append(PY_BANNER_TEMPLATE.format(version=version, count=count))
@@ -463,6 +615,49 @@ def emit_python(catalog):
             f'wire_format="{m.get("wire_format", "id_frame")}"),\n'
         )
     parts.append("}\n")
+
+    # --- Debug sub-ID constants and DEBUG_CATALOG (B-03) ---
+    if debug_messages:
+        parts.append("\n\n")
+        parts.append("# --- Debug sub-ID constants (sorted ascending) ---\n")
+        max_dbg_name_len = max(len(d["name"]) for d in debug_messages)
+        dbg_name_col = max_dbg_name_len + 1
+        for d in debug_messages:
+            parts.append(f"{d['name']:<{dbg_name_col}}= 0x{d['id']:02X}\n")
+
+        parts.append("\n\n")
+        parts.append("# --- Debug sub-ID catalog lookup ---\n")
+        parts.append("DEBUG_CATALOG: dict[int, MessageDef] = {\n")
+        for d in debug_messages:
+            dparams_tuple_parts = []
+            for p in d["params"]:
+                ptype = p["type"]
+                render = p.get("render") or DEFAULT_RENDER_BY_TYPE[ptype]
+                dparams_tuple_parts.append(f'("{ptype}", "{render}")')
+            if dparams_tuple_parts:
+                if len(dparams_tuple_parts) == 1:
+                    dparams_repr = f"({dparams_tuple_parts[0]},)"
+                else:
+                    dparams_repr = "(" + ", ".join(dparams_tuple_parts) + ")"
+            else:
+                dparams_repr = "()"
+            dwb = _param_wire_bytes(d["params"])
+            dparam_bytes_int = -1 if dwb is None else dwb
+            dfmt_escaped = d["format"].replace("\\", "\\\\").replace('"', '\\"')
+            # DEBUG_CATALOG uses severity=SEVERITY_DATA (MSG_DEBUG band) and
+            # wire_format="id_frame" implicitly for all debug entries.
+            parts.append(
+                f"    0x{d['id']:02X}: MessageDef("
+                f"id=0x{d['id']:02X}, "
+                f'name="{d["name"]}", '
+                f"severity=SEVERITY_DATA, "
+                f'format="{dfmt_escaped}", '
+                f"params={dparams_repr}, "
+                f"param_bytes={dparam_bytes_int}, "
+                f'wire_format="id_frame"),\n'
+            )
+        parts.append("}\n")
+
     return "".join(parts)
 
 
