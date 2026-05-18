@@ -674,20 +674,6 @@ params      = [
 wire_format = "id_frame"
 
 [[messages]]
-id          = 0xE1
-name        = "MSG_DATA_VOLTAGE"
-severity    = "DATA"
-format      = "%s: %u.%uV, Internal VCC: %u.%uV"
-params      = [
-    { type = "ascii_str" },
-    { type = "u16" },
-    { type = "u16" },
-    { type = "u16" },
-    { type = "u16" },
-]
-wire_format = "id_frame"
-
-[[messages]]
 id          = 0xE2
 name        = "MSG_DATA_SENDING"
 severity    = "DATA"
