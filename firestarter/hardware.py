@@ -201,7 +201,9 @@ class HardwareManager:
 
             start_time = time.time()
             while True:
-                response_type, message = comm.get_response()
+                response = comm.get_response()
+                response_type = response.type
+                message = response.message
 
                 if response_type == "DATA":
                     print(f"\r{message}    ", end="", flush=True)
