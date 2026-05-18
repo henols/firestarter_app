@@ -3,15 +3,20 @@
 Firestarter v1.2 log-message catalog codegen.
 
 Reads tools/catalog/messages.toml (or a vendored copy in a sub-repo's
-tools/catalog/ directory) and emits one of three deterministic outputs:
+tools/catalog/ directory) and emits one of two deterministic outputs:
 
   --language cpp        -> messages.h   (header guard, severity defines,
-                                         MSG_* ID defines, PROGMEM extern,
-                                         MSG_PARAM_COUNT macro)
-  --language cpp-table  -> messages.c   (designated-init 256-byte
-                                         PROGMEM param-byte-count table)
+                                         MSG_* ID defines)
   --language python     -> messages.py  (severity codes, MSG_* ID constants,
                                          MessageDef dataclass, CATALOG dict)
+
+LCAT-03 historical note: an earlier revision emitted a third output
+(`--language cpp-table` -> messages.c) holding a 256-byte PROGMEM table
+backing a `MSG_PARAM_COUNT(id)` macro. The firmware never wired up a
+caller for it (every emit-site already passes its param_count explicitly),
+so the table cost ~256 B of Leonardo flash for no functional benefit.
+Dropped post-Phase-7 to reclaim that space; the cpp-table emitter and
+messages.c are gone from the codegen surface.
 
 Determinism contract (LCAT-05): two consecutive runs against the same catalog
 file produce byte-identical output. Achieved by:
@@ -372,62 +377,11 @@ def emit_cpp_header(catalog):
             f"#define {m['name']:<{name_col}}0x{m['id']:02X}\n"
         )
     parts.append("\n")
-    parts.append("// --- Param-count lookup (PROGMEM table, 256 bytes flat) ---\n")
-    parts.append("// MSG_PARAM_COUNT(id) returns the wire-byte count of the params for the\n")
-    parts.append("// given ID, or 0xFF for unallocated IDs or variable-length (ascii_str)\n")
-    parts.append("// payloads. Callers needing fixed-shape byte counts at compile time\n")
-    parts.append("// should consult the catalog directly.\n")
-    parts.append("extern const uint8_t MSG_PARAM_BYTES_TABLE[256] PROGMEM;\n")
-    parts.append("\n")
-    parts.append(
-        "#define MSG_PARAM_COUNT(id) ((uint8_t)pgm_read_byte("
-        "&MSG_PARAM_BYTES_TABLE[(id)]))\n"
-    )
-    parts.append("\n")
     parts.append("#ifdef __cplusplus\n")
     parts.append("}\n")
     parts.append("#endif\n")
     parts.append("\n")
     parts.append("#endif  // __MESSAGES_H__\n")
-    return "".join(parts)
-
-
-def emit_cpp_table(catalog):
-    """Render messages.c source text (256-byte PROGMEM byte-count table)."""
-    version = catalog["catalog"]["version"]
-    messages = _sorted_messages(catalog)
-    count = len(messages)
-
-    # Build a 256-entry mapping {id -> (bytes_or_None, name)}.
-    allocated = {}
-    for m in messages:
-        wb = _param_wire_bytes(m["params"])
-        allocated[m["id"]] = (wb, m["name"])
-
-    parts = []
-    parts.append(CPP_BANNER_TEMPLATE.format(
-        side="C firmware side (PROGMEM table)",
-        version=version,
-        count=count,
-    ))
-    parts.append("\n")
-    parts.append('#include "messages.h"\n')
-    parts.append("\n")
-    parts.append("// 256-byte PROGMEM table: index = message ID, value = wire byte count.\n")
-    parts.append("// 0xFF means \"unallocated\" or \"variable-length (ascii_str present)\".\n")
-    parts.append("// Designated initializers (C99) keep this readable; gcc fills the gaps\n")
-    parts.append("// with the explicit 0xFF entries below so the result is unambiguous.\n")
-    parts.append("const uint8_t MSG_PARAM_BYTES_TABLE[256] PROGMEM = {\n")
-    for i in range(256):
-        if i in allocated:
-            wb, name = allocated[i]
-            if wb is None:
-                parts.append(f"    [0x{i:02X}] = 0xFF,  // {name} (variable: ascii_str)\n")
-            else:
-                parts.append(f"    [0x{i:02X}] = {wb},  // {name}\n")
-        else:
-            parts.append(f"    [0x{i:02X}] = 0xFF,\n")
-    parts.append("};\n")
     return "".join(parts)
 
 
@@ -518,7 +472,6 @@ def emit_python(catalog):
 
 LANGUAGE_EMITTERS = {
     "cpp":       emit_cpp_header,
-    "cpp-table": emit_cpp_table,
     "python":    emit_python,
 }
 
@@ -533,8 +486,7 @@ def _build_argparser():
                    help="Path to messages.toml (canonical or vendored copy).")
     p.add_argument("--target", type=Path, default=None,
                    help="Output path (required unless --check). "
-                        "Suggested suffix: .h for cpp, .c for cpp-table, "
-                        ".py for python.")
+                        "Suggested suffix: .h for cpp, .py for python.")
     p.add_argument("--language", choices=sorted(LANGUAGE_EMITTERS.keys()),
                    default=None,
                    help="Output language (required unless --check).")
