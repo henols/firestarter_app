@@ -131,7 +131,7 @@ MSG_DEBUG                     = 0xF0
 CATALOG: dict[int, MessageDef] = {
     0x00: MessageDef(id=0x00, name="MSG_NONE", severity=SEVERITY_OK, format="(reserved sentinel)", params=(), param_bytes=0, wire_format="id_frame"),
     0x01: MessageDef(id=0x01, name="MSG_OK_READY", severity=SEVERITY_OK, format="Ready", params=(), param_bytes=0, wire_format="id_frame"),
-    0x02: MessageDef(id=0x02, name="MSG_OK_REQ_DATA", severity=SEVERITY_OK, format="Req data", params=(), param_bytes=0, wire_format="id_frame"),
+    0x02: MessageDef(id=0x02, name="MSG_OK_REQ_DATA", severity=SEVERITY_OK, format="Request data", params=(), param_bytes=0, wire_format="id_frame"),
     0x03: MessageDef(id=0x03, name="MSG_OK_FW_VERSION", severity=SEVERITY_OK, format="FW: {0}", params=(), param_bytes=0, wire_format="text"),
     0x04: MessageDef(id=0x04, name="MSG_OK_REV", severity=SEVERITY_OK, format="Rev%u (eff: %u)", params=(("u8", "dec"), ("u8", "dec")), param_bytes=2, wire_format="id_frame"),
     0x05: MessageDef(id=0x05, name="MSG_OK_CFG", severity=SEVERITY_OK, format="R1: %lu, R2: %lu, Cfg: %u", params=(("u32", "hex"), ("u32", "hex"), ("u8", "dec")), param_bytes=9, wire_format="id_frame"),

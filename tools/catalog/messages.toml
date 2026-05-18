@@ -42,7 +42,7 @@ wire_format = "id_frame"
 id          = 0x02
 name        = "MSG_OK_REQ_DATA"
 severity    = "OK"
-format      = "Req data"
+format      = "Request data"
 params      = []
 wire_format = "id_frame"
 
