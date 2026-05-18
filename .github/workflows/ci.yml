@@ -1,0 +1,49 @@
+# Phase 6 (LCI-02 + LCI-03 + LCI-04): host CI — codegen drift + catalog validity + pytest. release.yml and publish.yml are tag/PyPI-only.
+name: Host CI
+on:
+  push:
+    branches:
+    - main
+    paths-ignore:
+    - '**.md'
+    - '.gitignore'
+    - 'docs/**'
+    - '.vscode/**'
+    - '.editorconfig'
+  pull_request:
+    branches:
+    - main
+    paths-ignore:
+    - '**.md'
+    - '.gitignore'
+    - 'docs/**'
+    - '.vscode/**'
+    - '.editorconfig'
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Catalog validity check
+        run: python3 tools/catalog/codegen.py --catalog tools/catalog/messages.toml --check
+
+      - name: Codegen drift gate (messages.py)
+        run: |
+          python3 tools/catalog/codegen.py \
+            --catalog tools/catalog/messages.toml \
+            --target firestarter/messages.py \
+            --language python
+          git diff --exit-code firestarter/messages.py
+
+      - name: Install package + dev deps
+        run: pip install -e .[dev]
+
+      - name: Run pytest
+        run: pytest tests/ -v
