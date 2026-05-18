@@ -29,17 +29,20 @@ from firestarter.messages import (
     MSG_OK_REV,
     MSG_OK_CFG,
     MSG_OK_FW_HANDSHAKE,
+    MSG_DATA_CHUNK,
 )
 
 logger = logging.getLogger("SerialComm")
 rurp_logger = logging.getLogger("RURP")
 
 # Define a structured object for responses to improve clarity over tuples.
-Response = namedtuple('Response', ['type', 'message'])
+# `payload` carries raw bytes for MSG_DATA_CHUNK frames (W-04); None otherwise.
+Response = namedtuple('Response', ['type', 'message', 'payload'], defaults=[None])
 
 # Phase 6: ID-encoded wire frame primitives. MAGIC_PREAMBLE locked by
 # CONTEXT §D-02; LogMessage is the decoded-frame value type per D-06.
-LogMessage = namedtuple('LogMessage', ['severity', 'text', 'id'])
+# `payload` carries raw bytes for MSG_DATA_CHUNK (W-04); None for all others.
+LogMessage = namedtuple('LogMessage', ['severity', 'text', 'id', 'payload'], defaults=[None])
 MAGIC_PREAMBLE: bytes = b'\xAA\x55\xAA\x55'
 
 
@@ -346,6 +349,10 @@ class SerialCommunicator:
                 return f"FW: {fw}, Cmd: 0x{cmd:02x}"
             return f"FW: {fw}, HW: Rev{hw}, Cmd: 0x{cmd:02x}"
 
+        if msg_id == MSG_DATA_CHUNK and len(params) == 1 and isinstance(params[0], (bytes, bytearray)):
+            # W-04: return a short summary so log lines don't dump 512 raw bytes.
+            return f"<chunk: {len(params[0])} bytes>"
+
         return None  # fall through to generic catalog format-string rendering
 
     def _decode_id_frame(self, frame_len: int, body: bytes) -> Optional[LogMessage]:
@@ -446,8 +453,14 @@ class SerialCommunicator:
                 )
                 text = f"<format-error: {entry.name}>"
 
+        # Extract raw-bytes payload for MSG_DATA_CHUNK (W-04) so the chip-read
+        # loop can obtain the chip data without a second read call.
+        chunk_payload = None
+        if msg_id == MSG_DATA_CHUNK and values and isinstance(values[0], (bytes, bytearray)):
+            chunk_payload = bytes(values[0])
+
         severity_label = SEVERITY_LABEL.get(entry.severity, f"SEV{entry.severity}")
-        return LogMessage(severity=severity_label, text=text, id=msg_id)
+        return LogMessage(severity=severity_label, text=text, id=msg_id, payload=chunk_payload)
 
     def _read_and_parse_lines(self, timeout: float) -> Generator[Response, None, None]:
         """
@@ -551,8 +564,12 @@ class SerialCommunicator:
 
                 decoded = self._decode_id_frame(frame_len, body)
                 if decoded is not None:
+                    # Propagate raw-bytes payload for MSG_DATA_CHUNK (W-04);
+                    # Response.payload is None for all other message types.
                     response = Response(
-                        type=decoded.severity, message=decoded.text
+                        type=decoded.severity,
+                        message=decoded.text,
+                        payload=decoded.payload,
                     )
                     self._log_rurp_feedback(response)
                     yield response

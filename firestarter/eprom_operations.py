@@ -347,7 +347,16 @@ class EpromOperator:
                     self.comm.send_done()
 
     def _main_phase_read_data(self, progress: ClassProgressHandler, start_addr: int, end_addr: int, process_data_chunk_callback: Callable):
-        """Main phase handler for reading data."""
+        """Main phase handler for reading data.
+
+        Phase 8 W-04: the firmware now wraps each chip-byte chunk inside a
+        MSG_DATA_CHUNK ID frame instead of emitting raw bytes after a DATA:
+        text prefix.  The response loop distinguishes:
+          - DATA response with payload set → MSG_DATA_CHUNK; extract raw bytes.
+          - DATA response with no payload  → MSG_DATA_SENDING (zero-param batch
+            starter, which arrives before the chunk frame); skip and continue.
+        """
+        from firestarter.messages import MSG_DATA_CHUNK  # local import avoids circular
         data_size = end_addr - start_addr
         if data_size > 0:
             progress.start(data_size)
@@ -360,14 +369,20 @@ class EpromOperator:
             if response.type == "ERROR":
                 raise EpromOperationError(f"Programmer error during read: {response.message}")
             if response.type == "DATA":
-                payload = self.comm.read_data_block()
-                if not payload:
-                    logger.warning("Received DATA signal but no data followed.")
-                    continue
-                process_data_chunk_callback(start_addr, payload)
-                start_addr += len(payload)
-                progress.update(len(payload))
-                self.comm.send_ack()
+                if response.payload is not None:
+                    # MSG_DATA_CHUNK: the raw chip bytes are in response.payload.
+                    payload = response.payload
+                    if not payload:
+                        logger.warning("Received MSG_DATA_CHUNK with empty payload.")
+                        continue
+                    process_data_chunk_callback(start_addr, payload)
+                    start_addr += len(payload)
+                    progress.update(len(payload))
+                    self.comm.send_ack()
+                else:
+                    # MSG_DATA_SENDING (zero-param batch-start ack): no data yet;
+                    # the MSG_DATA_CHUNK frame follows immediately.
+                    logger.debug(f"Received DATA signal (no payload): {response.message}")
             else:
                 self._handle_progress_response(response, progress)
 

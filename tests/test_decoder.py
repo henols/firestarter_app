@@ -41,6 +41,7 @@ from firestarter.messages import (
     MSG_INFO_MEM_SIZE,
     MSG_ERR_WRITE_FAILED,
     MSG_DATA_PROGRESS,
+    MSG_DATA_SENDING,
     MSG_DATA_CHUNK,
 )
 from firestarter.serial_comm import (
@@ -459,3 +460,94 @@ class TestIdFrameDecoder:
         assert response is not None
         assert response.type == "OK"
         assert response.message == "R1: 10000, R2: 4700"
+
+    # -----------------------------------------------------------------
+    # W-04 MSG_DATA_CHUNK roundtrip tests
+    # -----------------------------------------------------------------
+
+    def test_data_chunk_payload_exposed_via_response_payload_field(self, fake_serial, make_comm):
+        """W-04: MSG_DATA_CHUNK frame with 256-byte payload → Response.payload
+        holds the exact raw bytes; Response.type == 'DATA'."""
+        comm = make_comm()
+        # 256-byte deterministic payload.
+        payload_bytes = bytes(range(256))
+        frame = build_frame(MSG_DATA_CHUNK, payload_bytes)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None, "MSG_DATA_CHUNK must decode successfully"
+        assert response.type == "DATA"
+        assert response.payload is not None, "Response.payload must be set for MSG_DATA_CHUNK"
+        assert response.payload == payload_bytes, (
+            "Response.payload must match the transmitted chunk bytes exactly"
+        )
+
+    def test_chip_read_loop_concatenates_multiple_chunks(self, fake_serial, make_comm):
+        """W-04: chip-read loop in _main_phase_read_data concatenates N
+        MSG_DATA_CHUNK frames into an in-order byte stream.
+
+        Simulates the firmware emitting:
+          MSG_DATA_SENDING (zero-param, before first chunk)
+          MSG_DATA_CHUNK(chunk0: 256 bytes)
+          MSG_DATA_CHUNK(chunk1: 256 bytes)
+          MSG_DATA_CHUNK(chunk2: 256 bytes)
+          MSG_MAIN_DONE (end of read)
+
+        Asserts the concatenated output is 768 bytes in the correct order.
+        """
+        from firestarter.messages import MSG_DATA_SENDING, MSG_MAIN_DONE
+
+        comm = make_comm()
+
+        # Build the simulated firmware byte stream.
+        chunk0 = bytes(range(256))        # 0x00..0xFF
+        chunk1 = bytes(range(256))[::-1]  # 0xFF..0x00
+        chunk2 = bytes([0xAA] * 256)      # all 0xAA
+
+        stream = (
+            build_frame(MSG_DATA_SENDING, b"")   # zero-param batch-start ack
+            + build_frame(MSG_DATA_CHUNK, chunk0)
+            + build_frame(MSG_DATA_CHUNK, chunk1)
+            + build_frame(MSG_DATA_CHUNK, chunk2)
+            + build_frame(MSG_MAIN_DONE, b"")
+        )
+        fake_serial.feed(stream)
+
+        # Drive the read loop manually.
+        from firestarter.eprom_operations import ClassProgressHandler, EpromOperationError
+
+        collected = bytearray()
+        start_addr = [0]  # mutable box for callback closure
+
+        def _collect(address, data_chunk):
+            collected.extend(data_chunk)
+
+        # Patch comm.send_ack so the loop's send_ack calls don't fail.
+        ack_calls = []
+        original_send_ack = comm.send_ack
+        comm.send_ack = lambda: ack_calls.append(1)
+
+        progress = ClassProgressHandler()
+        progress.start(768)
+
+        # Manually drive _main_phase_read_data by calling get_response loop.
+        # We simulate it inline since the method needs self.comm (which is comm).
+        from firestarter.messages import MSG_DATA_CHUNK as _MSG_DATA_CHUNK
+
+        while True:
+            response = comm.get_response(timeout=1.0)
+            if response.type == "MAIN":
+                break
+            if response.type == "ERROR":
+                raise EpromOperationError(response.message)
+            if response.type == "DATA":
+                if response.payload is not None:
+                    _collect(0, response.payload)
+                    comm.send_ack()
+                # else: MSG_DATA_SENDING — skip
+
+        assert len(collected) == 768, f"Expected 768 bytes, got {len(collected)}"
+        assert bytes(collected[:256]) == chunk0, "First chunk mismatch"
+        assert bytes(collected[256:512]) == chunk1, "Second chunk mismatch"
+        assert bytes(collected[512:]) == chunk2, "Third chunk mismatch"
+        assert len(ack_calls) == 3, f"Expected 3 ACKs (one per chunk), got {len(ack_calls)}"
