@@ -24,6 +24,7 @@ reference and fail the test suite.
 """
 
 import io
+import struct
 
 import pytest
 
@@ -50,15 +51,16 @@ def _ref_crc8_ccitt(data: bytes) -> int:
 
 
 def build_frame(msg_id: int, params: bytes) -> bytes:
-    """Assemble a wire frame: magic | len | id | params | crc | 0x0A.
+    """Assemble a wire frame: magic | len_u16 | id | params | crc | 0x0A.
 
-    `len` counts (id + params + crc) per CONTEXT §D-03. The trailing 0x0A
-    is a re-sync anchor (not a delimiter — length is authoritative).
+    `len` (u16, big-endian) counts (id + params + crc) per Phase 8 W-04.
+    The trailing 0x0A is a re-sync anchor (not a delimiter — length is
+    authoritative).
     """
     body = bytes([msg_id]) + params
     crc = _ref_crc8_ccitt(body)
     length = len(body) + 1  # id + params + crc
-    return MAGIC_PREAMBLE_REF + bytes([length]) + body + bytes([crc, 0x0A])
+    return MAGIC_PREAMBLE_REF + struct.pack(">H", length) + body + bytes([crc, 0x0A])
 
 
 class _FakeSerial:

@@ -112,6 +112,12 @@ def _decode_param(ptype: str, buf: bytes, cursor: int) -> Tuple[Any, int]:
                 f"({len(buf) - start} bytes available at cursor={cursor})"
             )
         return buf[start:end].decode("ascii", errors="replace"), end
+    if ptype == "bytes":
+        # Variable-length raw payload (W-04 MSG_DATA_CHUNK): consume all
+        # remaining bytes from cursor to end of params_bytes. No length-prefix
+        # wire encoding — the frame's u16 len field already delimits the body.
+        raw = buf[cursor:]
+        return raw, len(buf)
     raise ValueError(f"Unknown param type: {ptype}")
 
 # Compile regex for parsing prefixes once for efficiency
@@ -377,8 +383,12 @@ class SerialCommunicator:
         # Render via the catalog format string. Format errors fall back to a
         # tagged placeholder so the read loop continues yielding subsequent
         # frames (T-06-12).
+        # Filter out raw-bytes values (bytes-type params, e.g. MSG_DATA_CHUNK)
+        # before printf-style substitution — they have no corresponding %
+        # specifier in the format string.
+        fmt_values = [v for v in values if not isinstance(v, (bytes, bytearray))]
         try:
-            text = entry.format % tuple(values) if values else entry.format
+            text = entry.format % tuple(fmt_values) if fmt_values else entry.format
         except (TypeError, ValueError) as exc:
             logger.warning(
                 f"Format-error rendering ID 0x{msg_id:02x} ({entry.name}): {exc}"
@@ -448,20 +458,20 @@ class SerialCommunicator:
                         yield text_response
                         start_time = time.time()
 
-                # Read length byte.
+                # Read length field (u16 big-endian, W-04: 2 bytes MSB then LSB).
                 try:
-                    len_bytes = self.connection.read(1)
+                    len_bytes = self.connection.read(2)
                 except serial.SerialException as e:
                     raise SerialError(
                         f"Serial error reading from {self.port_name}: {e}"
                     ) from e
-                if not len_bytes:
+                if len(len_bytes) < 2:
                     logger.warning(
-                        "Magic preamble seen but length byte not received "
+                        "Magic preamble seen but length bytes not received "
                         "before timeout — re-syncing."
                     )
                     continue
-                frame_len = len_bytes[0]
+                frame_len = struct.unpack_from(">H", len_bytes)[0]
 
                 # Read body (`frame_len` bytes: id + params + crc).
                 try:

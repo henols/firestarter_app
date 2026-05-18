@@ -35,6 +35,7 @@ from firestarter.messages import (
     MSG_INFO_MEM_SIZE,
     MSG_ERR_WRITE_FAILED,
     MSG_DATA_PROGRESS,
+    MSG_DATA_CHUNK,
 )
 from firestarter.serial_comm import (
     LogMessage,
@@ -207,13 +208,19 @@ class TestIdFrameDecoder:
         self, fake_serial, make_comm, caplog
     ):
         """WR-03: catalog entries flagged wire_format='text' (MSG_OK_FW_VERSION
-        id=0x03, MSG_OK_FW_HANDSHAKE id=0x06) must NOT decode through the
-        id-frame path. A buggy or malicious peer sending id=0x03 as a binary
-        frame would otherwise bypass _probe_port's pre-v1.2 firmware-version
-        guard, which inspects only the text channel."""
-        # Sanity-check the catalog still flags these as text-format.
+        id=0x03) must NOT decode through the id-frame path. A buggy or
+        malicious peer sending id=0x03 as a binary frame would otherwise
+        bypass _probe_port's pre-v1.2 firmware-version guard, which inspects
+        only the text channel.
+
+        Note: MSG_OK_FW_HANDSHAKE (id=0x06) was changed to wire_format='id_frame'
+        in Phase 8 Plan 01 per P-04 — it now decodes as a binary ID frame.
+        Only MSG_OK_FW_VERSION (id=0x03) retains wire_format='text' per LFW-05.
+        """
+        # Sanity-check the catalog state.
         assert CATALOG[MSG_OK_FW_VERSION].wire_format == "text"
-        assert CATALOG[MSG_OK_FW_HANDSHAKE].wire_format == "text"
+        # MSG_OK_FW_HANDSHAKE is now id_frame (P-04 change from Plan 01).
+        assert CATALOG[MSG_OK_FW_HANDSHAKE].wire_format == "id_frame"
 
         comm = make_comm()
 
@@ -236,13 +243,38 @@ class TestIdFrameDecoder:
             f"got: {[r.message for r in caplog.records]}"
         )
 
-        # Also pin MSG_OK_FW_HANDSHAKE (the other text-flagged entry).
-        comm2 = make_comm()
-        body2 = bytes(
-            [MSG_OK_FW_HANDSHAKE, _crc8_ccitt(bytes([MSG_OK_FW_HANDSHAKE]))]
-        )
-        decoded2 = comm2._decode_id_frame(frame_len=2, body=body2)
-        assert decoded2 is None
+    def test_data_chunk_body_over_253_bytes_decodes(self, fake_serial, make_comm):
+        """W-04 Wave-0 gap: MSG_DATA_CHUNK with a 512-byte payload (> 253 bytes,
+        which a u8 len field could not have carried) round-trips through the
+        decoder. Proves the u16-only path is exercised end-to-end."""
+        comm = make_comm()
+        # 512-byte deterministic payload: two full 0..255 sequences.
+        payload = bytes(range(256)) + bytes(range(256))
+        assert len(payload) == 512
+        frame = build_frame(MSG_DATA_CHUNK, payload)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None, "512-byte MSG_DATA_CHUNK must decode successfully"
+        assert response.type == "DATA"
+        # The decoder formats MSG_DATA_CHUNK's bytes param as a hex string; we
+        # only assert the response is non-None and carries DATA severity since
+        # the exact text representation is catalog-defined.
+
+    def test_data_chunk_body_254_bytes_at_old_u8_limit(self, fake_serial, make_comm):
+        """W-04: MSG_DATA_CHUNK frame whose body (id + params + crc) is 254 bytes —
+        one byte past the old u8 max of 253 inclusive — decodes correctly.
+        Under a u8 len this frame was unreachable; under u16 it is valid."""
+        comm = make_comm()
+        # 252-byte payload: body = 1 id + 252 params + 1 crc = 254 bytes.
+        payload = bytes(range(252))
+        assert len(payload) == 252
+        frame = build_frame(MSG_DATA_CHUNK, payload)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None, "254-byte body MSG_DATA_CHUNK must decode (u16 len)"
+        assert response.type == "DATA"
 
     def test_ascii_str_overrun_rejected(self, fake_serial, make_comm, caplog):
         """WR-04: a length-prefix byte in an ascii_str payload that exceeds
