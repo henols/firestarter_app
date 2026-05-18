@@ -21,6 +21,7 @@ from firestarter.serial_comm import (
     SerialCommunicator,
     ProgrammerNotFoundError,
     SerialError,
+    FirmwareOutdatedError,
 )
 from firestarter.config import ConfigManager
 from firestarter.avr_tool import (
@@ -88,6 +89,8 @@ class FirmwareManager:
                     f"Failed to read firmware version: Invalid response from programmer: '{msg}'"
                 )
                 return None, None, None
+        except FirmwareOutdatedError:
+            raise   # Phase 6 (LHOST-04): surface lockstep refuse to operator (do NOT swallow)
         except (ProgrammerNotFoundError, SerialError) as e:
             logger.error(f"Failed to read firmware version: {e}")
             return None, None, None

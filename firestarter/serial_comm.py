@@ -7,6 +7,7 @@ Permission is hereby granted under MIT license.
 Serial Communication Module
 """
 
+import os
 import serial
 import serial.tools.list_ports
 import serial.serialutil
@@ -642,6 +643,27 @@ class SerialCommunicator:
                             match = re.search(r"FW:\s*([\d.x]+)", msg)
                             if match:
                                 current_version = match.group(1).strip()
+
+                                # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2
+                                # firmware. The firmware bumps to major=3 in
+                                # Phase 9; until then, bench scripts use
+                                # FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass.
+                                try:
+                                    major = int(current_version.split(".")[0])
+                                except (ValueError, IndexError):
+                                    major = 0
+                                if (
+                                    major < 3
+                                    and os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") != "1"
+                                ):
+                                    raise FirmwareOutdatedError(
+                                        f"Firmware version {current_version} is pre-v1.2 (text-format logging). "
+                                        f"This host expects v1.2+ firmware emitting ID-encoded log frames. "
+                                        f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "
+                                        f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "
+                                        f"see PROJECT.md \"Constraints\".)"
+                                    )
+
                                 if not SerialCommunicator._is_version_sufficient(current_version, "2.0.0"):
                                     raise FirmwareOutdatedError(
                                         f"Firmware version {current_version} is outdated. "
