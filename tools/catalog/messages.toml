@@ -334,7 +334,7 @@ wire_format = "id_frame"
 id          = 0x57
 name        = "MSG_INFO_ADDR_REMAP"
 severity    = "INFO"
-format      = "Address: 0x%06x remappend"
+format      = "Address: 0x%06x remapped"
 params      = [{ type = "u24", render = "hex_addr" }]
 wire_format = "id_frame"
 
@@ -342,7 +342,7 @@ wire_format = "id_frame"
 id          = 0x58
 name        = "MSG_INFO_SKIPPING_ERASE"
 severity    = "INFO"
-format      = "Skipping erase."
+format      = "Skipping erase"
 params      = []
 wire_format = "id_frame"
 
@@ -362,7 +362,7 @@ wire_format = "id_frame"
 id          = 0x80
 name        = "MSG_WARN_REV0_VPP_UNSUPPORTED"
 severity    = "WARN"
-format      = "Rev0 dont support reading VPP/VPE"
+format      = "Rev0 does not support reading VPP/VPE"
 params      = []
 wire_format = "id_frame"
 
@@ -396,7 +396,7 @@ wire_format = "id_frame"
 id          = 0x83
 name        = "MSG_WARN_CHIP_ID_MISMATCH"
 severity    = "WARN"
-format      = "Chip ID %#04x dont match expected ID %#04x"
+format      = "Chip ID %#04x does not match expected ID %#04x"
 params      = [
     { type = "u16" },
     { type = "u16" },
@@ -407,7 +407,7 @@ wire_format = "id_frame"
 id          = 0x84
 name        = "MSG_WARN_MEM_SIZE_TOO_SMALL"
 severity    = "WARN"
-format      = "mem_size %lu too small for chip-id check"
+format      = "Memory size %lu too small for chip-id check"
 params      = [{ type = "u32", render = "dec" }]
 wire_format = "id_frame"
 
@@ -427,7 +427,7 @@ wire_format = "id_frame"
 id          = 0xA1
 name        = "MSG_ERR_NO_CMD"
 severity    = "ERROR"
-format      = "No cmd"
+format      = "No command"
 params      = []
 wire_format = "id_frame"
 
@@ -491,7 +491,7 @@ wire_format = "id_frame"
 id          = 0xA9
 name        = "MSG_ERR_DATA_ERR_N"
 severity    = "ERROR"
-format      = "Data err %d"
+format      = "Data error: %d"
 params      = [{ type = "i16" }]
 wire_format = "id_frame"
 
@@ -499,7 +499,7 @@ wire_format = "id_frame"
 id          = 0xAA
 name        = "MSG_ERR_CMD_TIMEOUT"
 severity    = "ERROR"
-format      = "Cmd: %d, timeout"
+format      = "Command %d timed out"
 params      = [{ type = "u8" }]
 wire_format = "id_frame"
 
@@ -507,7 +507,7 @@ wire_format = "id_frame"
 id          = 0xAB
 name        = "MSG_ERR_UNKNOWN_CMD"
 severity    = "ERROR"
-format      = "Unknown cmd: %d"
+format      = "Unknown command: %d"
 params      = [{ type = "u8" }]
 wire_format = "id_frame"
 
@@ -515,7 +515,7 @@ wire_format = "id_frame"
 id          = 0xAC
 name        = "MSG_ERR_REV0_VPP_RD"
 severity    = "ERROR"
-format      = "Rev0 dont support reading VPP/VPE"
+format      = "Rev0 does not support reading VPP/VPE"
 params      = []
 wire_format = "id_frame"
 
@@ -523,7 +523,7 @@ wire_format = "id_frame"
 id          = 0xAD
 name        = "MSG_ERR_CMD"
 severity    = "ERROR"
-format      = "Error cmd"
+format      = "Command error"
 params      = []
 wire_format = "id_frame"
 
@@ -643,7 +643,7 @@ wire_format = "id_frame"
 id          = 0xB9
 name        = "MSG_ERR_CHIP_ID_MISMATCH"
 severity    = "ERROR"
-format      = "Chip ID %#04x dont match expected ID %#04x"
+format      = "Chip ID %#04x does not match expected ID %#04x"
 params      = [
     { type = "u16" },
     { type = "u16" },
@@ -654,7 +654,7 @@ wire_format = "id_frame"
 id          = 0xBA
 name        = "MSG_ERR_MEM_SIZE_TOO_SMALL"
 severity    = "ERROR"
-format      = "mem_size %lu too small for chip-id check"
+format      = "Memory size %lu too small for chip-id check"
 params      = [{ type = "u32", render = "dec" }]
 wire_format = "id_frame"
 
