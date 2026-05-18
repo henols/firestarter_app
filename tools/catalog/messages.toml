@@ -628,6 +628,17 @@ params      = [
 ]
 wire_format = "id_frame"
 
+[[messages]]
+id          = 0xB9
+name        = "MSG_ERR_CHIP_ID_MISMATCH"
+severity    = "ERROR"
+format      = "Chip ID %#04x dont match expected ID %#04x"
+params      = [
+    { type = "u16" },
+    { type = "u16" },
+]
+wire_format = "id_frame"
+
 # ---------------------------------------------------------------------------
 # DATA (0xE0..0xEF)
 # ---------------------------------------------------------------------------
