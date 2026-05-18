@@ -4,7 +4,7 @@
 # is preserved for human-edit diff readability.
 #
 # Distribution: copied byte-identically into firestarter/tools/catalog/ and
-# firestarter_app/tools/catalog/ by .planning/catalog/sync_to_subrepos.sh.
+# firestarter_app/tools/catalog/ by tools/catalog/sync_to_subrepos.sh.
 # Edit ONLY this meta-repo copy; run the sync script after every edit.
 #
 # Schema reference: .planning/phases/06-logging-infrastructure/06-RESEARCH.md

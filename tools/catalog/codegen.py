@@ -2,7 +2,7 @@
 """
 Firestarter v1.2 log-message catalog codegen.
 
-Reads .planning/catalog/messages.toml (or a vendored copy in a sub-repo's
+Reads tools/catalog/messages.toml (or a vendored copy in a sub-repo's
 tools/catalog/ directory) and emits one of three deterministic outputs:
 
   --language cpp        -> messages.h   (header guard, severity defines,
