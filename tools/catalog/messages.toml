@@ -615,6 +615,19 @@ format      = "Operation timed out"
 params      = []
 wire_format = "id_frame"
 
+[[messages]]
+id          = 0xB8
+name        = "MSG_ERR_VPP_HIGH"
+severity    = "ERROR"
+format      = "VPP is high: %u.%uV > %u.%uV"
+params      = [
+    { type = "u16" },
+    { type = "u16" },
+    { type = "u16" },
+    { type = "u16" },
+]
+wire_format = "id_frame"
+
 # ---------------------------------------------------------------------------
 # DATA (0xE0..0xEF)
 # ---------------------------------------------------------------------------
