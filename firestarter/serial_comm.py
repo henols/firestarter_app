@@ -96,9 +96,21 @@ def _decode_param(ptype: str, buf: bytes, cursor: int) -> Tuple[Any, int]:
     if ptype == "i32":
         return struct.unpack_from(">i", buf, cursor)[0], cursor + 4
     if ptype == "ascii_str":
+        # WR-04: bounds-check the length prefix against the remaining buffer
+        # BEFORE slicing. Python slicing silently truncates when end >
+        # len(buf), which would advance the cursor past the end of the buffer
+        # and leave a mangled string in the rendered output if ascii_str is
+        # the last param in a catalog entry. The CRC check upstream catches
+        # truncated wire frames; this guards against a malformed length-prefix
+        # byte inside an otherwise-correctly-CRC'd payload.
         length = buf[cursor]
         start = cursor + 1
         end = start + length
+        if end > len(buf):
+            raise ValueError(
+                f"ascii_str length {length} exceeds remaining buffer "
+                f"({len(buf) - start} bytes available at cursor={cursor})"
+            )
         return buf[start:end].decode("ascii", errors="replace"), end
     raise ValueError(f"Unknown param type: {ptype}")
 
@@ -320,6 +332,21 @@ class SerialCommunicator:
         if entry is None:
             logger.warning(
                 f"Unknown message ID 0x{msg_id:02x} — catalog out of date?"
+            )
+            return None
+
+        # WR-03: reject id-frame payloads for catalog entries flagged
+        # wire_format="text". MSG_OK_FW_VERSION (0x03) and MSG_OK_FW_HANDSHAKE
+        # (0x06) are expected to arrive over the legacy text channel only
+        # (LFW-05). A buggy or malicious peer emitting id=0x03 / id=0x06 as a
+        # binary frame would otherwise render via the catalog format string
+        # and bypass the host's pre-v1.2 firmware-version guard in
+        # _probe_port (which only inspects the text path).
+        if entry.wire_format != "id_frame":
+            logger.warning(
+                f"Rejected id-frame for catalog entry with "
+                f"wire_format={entry.wire_format!r}: id=0x{msg_id:02x} "
+                f"({entry.name})"
             )
             return None
 

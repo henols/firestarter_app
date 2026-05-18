@@ -28,7 +28,10 @@ import pytest
 from firestarter.messages import (
     CATALOG,
     MSG_OK_READY,
+    MSG_OK_FW_VERSION,
+    MSG_OK_FW_HANDSHAKE,
     MSG_INFO_ADDR,
+    MSG_INFO_BIT_STR,
     MSG_INFO_MEM_SIZE,
     MSG_ERR_WRITE_FAILED,
     MSG_DATA_PROGRESS,
@@ -199,3 +202,83 @@ class TestIdFrameDecoder:
         assert response is not None
         assert response.type == "DATA"
         assert response.message == "1/65536"
+
+    def test_wire_format_text_catalog_id_rejected_as_id_frame(
+        self, fake_serial, make_comm, caplog
+    ):
+        """WR-03: catalog entries flagged wire_format='text' (MSG_OK_FW_VERSION
+        id=0x03, MSG_OK_FW_HANDSHAKE id=0x06) must NOT decode through the
+        id-frame path. A buggy or malicious peer sending id=0x03 as a binary
+        frame would otherwise bypass _probe_port's pre-v1.2 firmware-version
+        guard, which inspects only the text channel."""
+        # Sanity-check the catalog still flags these as text-format.
+        assert CATALOG[MSG_OK_FW_VERSION].wire_format == "text"
+        assert CATALOG[MSG_OK_FW_HANDSHAKE].wire_format == "text"
+
+        comm = make_comm()
+
+        # Hand-build a well-formed id-frame body for id=0x03 with no params.
+        # CRC is valid; the only reason to reject is the wire_format mismatch.
+        body = bytes([MSG_OK_FW_VERSION, _crc8_ccitt(bytes([MSG_OK_FW_VERSION]))])
+
+        with caplog.at_level(logging.WARNING, logger="SerialComm"):
+            decoded = comm._decode_id_frame(frame_len=2, body=body)
+
+        assert decoded is None, (
+            "id-frame with wire_format='text' catalog entry must be rejected"
+        )
+        assert any(
+            "wire_format='text'" in record.message
+            and "MSG_OK_FW_VERSION" in record.message
+            for record in caplog.records
+        ), (
+            f"expected wire_format-rejection warning naming MSG_OK_FW_VERSION, "
+            f"got: {[r.message for r in caplog.records]}"
+        )
+
+        # Also pin MSG_OK_FW_HANDSHAKE (the other text-flagged entry).
+        comm2 = make_comm()
+        body2 = bytes(
+            [MSG_OK_FW_HANDSHAKE, _crc8_ccitt(bytes([MSG_OK_FW_HANDSHAKE]))]
+        )
+        decoded2 = comm2._decode_id_frame(frame_len=2, body=body2)
+        assert decoded2 is None
+
+    def test_ascii_str_overrun_rejected(self, fake_serial, make_comm, caplog):
+        """WR-04: a length-prefix byte in an ascii_str payload that exceeds
+        the remaining buffer must raise (and the decoder must swallow it as
+        a warning + return None), rather than silently truncating via Python
+        slice semantics. Uses MSG_INFO_BIT_STR (id=0x54), the single-ascii_str
+        catalog entry — the most direct attack surface."""
+        # Pin the catalog shape — single ascii_str param.
+        entry = CATALOG[MSG_INFO_BIT_STR]
+        assert entry.params == (("ascii_str", "ascii_str"),)
+
+        comm = make_comm()
+
+        # Hand-build a body claiming ascii_str length=10 but providing only
+        # 3 bytes of payload after the length prefix. The CRC is computed
+        # over the actual emitted bytes so the CRC gate passes — only the
+        # bounds check inside _decode_param should fail this frame.
+        #     body = id | length_prefix=10 | "ABC" | crc
+        # Total params_bytes len = 4 (one length byte + 3 string bytes),
+        # CRC covers [id] + params_bytes.
+        bad_payload = bytes([10]) + b"ABC"   # claims 10 bytes, supplies 3
+        crc = _crc8_ccitt(bytes([MSG_INFO_BIT_STR]) + bad_payload)
+        body = bytes([MSG_INFO_BIT_STR]) + bad_payload + bytes([crc])
+
+        with caplog.at_level(logging.WARNING, logger="SerialComm"):
+            decoded = comm._decode_id_frame(frame_len=len(body), body=body)
+
+        assert decoded is None, (
+            "ascii_str length-prefix overflow must produce None, not a "
+            "silently-truncated string"
+        )
+        assert any(
+            "ascii_str length" in record.message
+            and "exceeds remaining buffer" in record.message
+            for record in caplog.records
+        ), (
+            f"expected ascii_str overrun warning, got: "
+            f"{[r.message for r in caplog.records]}"
+        )
