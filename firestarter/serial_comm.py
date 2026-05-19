@@ -23,12 +23,14 @@ from typing import Any, Optional, Generator, Tuple, List
 
 from firestarter.constants import *
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
+from firestarter.constants import COMMAND_NAMES
 from firestarter.messages import (
     CATALOG,
     SEVERITY_LABEL,
     MSG_OK_REV,
     MSG_OK_CFG,
     MSG_DATA_CHUNK,
+    MSG_INFO_CMD,
 )
 
 logger = logging.getLogger("SerialComm")
@@ -312,7 +314,8 @@ class SerialCommunicator:
         rurp_logger.log(level, f"{log_prefix}: {message}")
 
     def _format_message(self, msg_id: int, params: list, entry) -> Optional[str]:
-        """Sentinel-aware message renderer for P-02/P-03 shaped IDs.
+        """Sentinel-aware message renderer for P-02/P-03 shaped IDs and
+        MSG_INFO_CMD (annotate raw cmd byte with its symbolic name).
 
         Returns the rendered string for sentinel-byte IDs where the catalog
         format string cannot express the conditional (0xFF = no override).
@@ -337,6 +340,11 @@ class SerialCommunicator:
             if override == 0xFF:
                 return f"R1: {r1}, R2: {r2}"
             return f"R1: {r1}, R2: {r2}, Override HW: Rev{override}"
+
+        if msg_id == MSG_INFO_CMD and len(params) == 1:
+            cmd = params[0]
+            name = COMMAND_NAMES.get(cmd)
+            return f"Cmd: 0x{cmd:02x} ({name})" if name else f"Cmd: 0x{cmd:02x}"
 
         if msg_id == MSG_DATA_CHUNK and len(params) == 1 and isinstance(params[0], (bytes, bytearray)):
             # W-04: return a short summary so log lines don't dump 512 raw bytes.
