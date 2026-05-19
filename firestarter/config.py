@@ -135,18 +135,25 @@ class ConfigManager:
         """
         return self._config.get(key, default)
 
-    def set_value(self, key, value):
+    def set_value(self, key, value, persist=True):
         """
-        Sets a value in the configuration and saves the configuration file.
+        Sets a value in the configuration.
         Args:
             key (str): The configuration key to set.
             value: The value to associate with the key.
+            persist (bool): If True (default), save the configuration file to disk.
+                If False, only update the in-memory value (used for CLI overrides
+                that should not stick for future invocations).
         """
         if value is None:
-            self.remove_key(key)
+            if persist:
+                self.remove_key(key)
+            else:
+                self._config.pop(key, None)
             return
         self._config[key] = value
-        self._save_config()
+        if persist:
+            self._save_config()
 
     def remove_key(self, key):
         """

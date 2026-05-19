@@ -219,7 +219,6 @@ def create_firmware_args(parser):
         type=str,
         help="Full path to avrdude config (optional), set if avrdude version is 6.3 or not found.",
     )
-    fw_parser.add_argument("-p", "--port", type=str, help="Serial port name (optional)")
     fw_parser.add_argument(
         "-f",
         "--force",
@@ -372,6 +371,13 @@ def main():
         "-v", "--verbose", action="store_true", help="Enable verbose mode"
     )
     parser.add_argument(
+        "-p",
+        "--port",
+        type=str,
+        default=None,
+        help="Serial port to use (e.g. /dev/ttyACM1). Overrides the saved port in config.json for this invocation.",
+    )
+    parser.add_argument(
         "--version",
         action="version",
         version=f"Firestarter version: {version}",
@@ -407,6 +413,11 @@ def main():
 
     # Initialize ConfigManager (Singleton)
     config_manager = ConfigManager()
+
+    # Apply --port override to the in-memory config so all subcommands honor it.
+    # Doesn't persist to disk — only affects this invocation.
+    if args.port:
+        config_manager.set_value("port", args.port, persist=False)
 
     # Setup logging manually to use our custom handler for single-line status updates.
     log_level = logging.DEBUG if args.verbose else logging.INFO
