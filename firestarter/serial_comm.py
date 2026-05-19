@@ -28,7 +28,6 @@ from firestarter.messages import (
     SEVERITY_LABEL,
     MSG_OK_REV,
     MSG_OK_CFG,
-    MSG_OK_FW_HANDSHAKE,
     MSG_DATA_CHUNK,
 )
 
@@ -313,7 +312,7 @@ class SerialCommunicator:
         rurp_logger.log(level, f"{log_prefix}: {message}")
 
     def _format_message(self, msg_id: int, params: list, entry) -> Optional[str]:
-        """Sentinel-aware message renderer for P-02/P-03/P-04 shaped IDs.
+        """Sentinel-aware message renderer for P-02/P-03 shaped IDs.
 
         Returns the rendered string for sentinel-byte IDs where the catalog
         format string cannot express the conditional (0xFF = no override).
@@ -326,10 +325,6 @@ class SerialCommunicator:
         P-03 MSG_OK_CFG  — params[0]=r1 u32, params[1]=r2 u32, params[2]=override u8
           override==0xFF → "R1: {r1}, R2: {r2}"
           override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: Rev{override}"
-
-        P-04 MSG_OK_FW_HANDSHAKE — params[0]=hw u8, params[1]=cmd u8, params[2]=fw str
-          hw==0xFF → "FW: {fw}, Cmd: 0x{cmd:02x}"
-          hw!=0xFF → "FW: {fw}, HW: Rev{hw}, Cmd: 0x{cmd:02x}"
         """
         if msg_id == MSG_OK_REV and len(params) == 2:
             physical, effective = params[0], params[1]
@@ -342,12 +337,6 @@ class SerialCommunicator:
             if override == 0xFF:
                 return f"R1: {r1}, R2: {r2}"
             return f"R1: {r1}, R2: {r2}, Override HW: Rev{override}"
-
-        if msg_id == MSG_OK_FW_HANDSHAKE and len(params) == 3:
-            hw, cmd, fw = params[0], params[1], params[2]
-            if hw == 0xFF:
-                return f"FW: {fw}, Cmd: 0x{cmd:02x}"
-            return f"FW: {fw}, HW: Rev{hw}, Cmd: 0x{cmd:02x}"
 
         if msg_id == MSG_DATA_CHUNK and len(params) == 1 and isinstance(params[0], (bytes, bytearray)):
             # W-04: return a short summary so log lines don't dump 512 raw bytes.
@@ -395,12 +384,11 @@ class SerialCommunicator:
             return None
 
         # WR-03: reject id-frame payloads for catalog entries flagged
-        # wire_format="text". MSG_OK_FW_VERSION (0x03) and MSG_OK_FW_HANDSHAKE
-        # (0x06) are expected to arrive over the legacy text channel only
-        # (LFW-05). A buggy or malicious peer emitting id=0x03 / id=0x06 as a
-        # binary frame would otherwise render via the catalog format string
-        # and bypass the host's pre-v1.2 firmware-version guard in
-        # _probe_port (which only inspects the text path).
+        # wire_format="text". MSG_OK_FW_VERSION (0x03) is expected to arrive
+        # over the legacy text channel only (LFW-05). A buggy or malicious
+        # peer emitting id=0x03 as a binary frame would otherwise render via
+        # the catalog format string and bypass the host's pre-v1.2 firmware-
+        # version guard in _probe_port (which only inspects the text path).
         if entry.wire_format != "id_frame":
             logger.warning(
                 f"Rejected id-frame for catalog entry with "
@@ -433,8 +421,8 @@ class SerialCommunicator:
             )
             return None
 
-        # Sentinel-aware rendering for P-02/P-03/P-04 shaped IDs (W-02).
-        # _format_message returns a string for MSG_OK_REV/CFG/FW_HANDSHAKE,
+        # Sentinel-aware rendering for P-02/P-03 shaped IDs (W-02).
+        # _format_message returns a string for MSG_OK_REV/CFG,
         # or None to fall through to the generic catalog format-string path.
         text = self._format_message(msg_id, values, entry)
         if text is None:

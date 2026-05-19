@@ -30,7 +30,6 @@ from firestarter.messages import (
     CATALOG,
     MSG_OK_READY,
     MSG_OK_FW_VERSION,
-    MSG_OK_FW_HANDSHAKE,
     MSG_OK_REV,
     MSG_OK_CFG,
     MSG_INIT_DONE,
@@ -218,16 +217,11 @@ class TestIdFrameDecoder:
         id=0x03) must NOT decode through the id-frame path. A buggy or
         malicious peer sending id=0x03 as a binary frame would otherwise
         bypass _probe_port's pre-v1.2 firmware-version guard, which inspects
-        only the text channel.
-
-        Note: MSG_OK_FW_HANDSHAKE (id=0x06) was changed to wire_format='id_frame'
-        in Phase 8 Plan 01 per P-04 — it now decodes as a binary ID frame.
-        Only MSG_OK_FW_VERSION (id=0x03) retains wire_format='text' per LFW-05.
+        only the text channel. Only MSG_OK_FW_VERSION (id=0x03) carries
+        wire_format='text' per LFW-05.
         """
         # Sanity-check the catalog state.
         assert CATALOG[MSG_OK_FW_VERSION].wire_format == "text"
-        # MSG_OK_FW_HANDSHAKE is now id_frame (P-04 change from Plan 01).
-        assert CATALOG[MSG_OK_FW_HANDSHAKE].wire_format == "id_frame"
 
         comm = make_comm()
 
@@ -362,40 +356,6 @@ class TestIdFrameDecoder:
         assert response is not None
         assert response.type == "END"
         assert response.message == "(end done)"
-
-    # -----------------------------------------------------------------
-    # Wave 0 gap tests: P-04 MSG_OK_FW_HANDSHAKE sentinel rendering
-    # -----------------------------------------------------------------
-
-    def test_fw_handshake_p04_with_hw_revision_decodes(self, fake_serial, make_comm):
-        """P-04: MSG_OK_FW_HANDSHAKE with hw_rev=0x01 (not sentinel) renders
-        'FW: 2.0.11-dev, HW: Rev1, Cmd: 0x0f'."""
-        comm = make_comm()
-        fw_str = b"2.0.11-dev"
-        # params: u8 hw=0x01, u8 cmd=0x0F, ascii_str fw_version
-        params = bytes([0x01, 0x0F, len(fw_str)]) + fw_str
-        frame = build_frame(MSG_OK_FW_HANDSHAKE, params)
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "OK"
-        assert response.message == "FW: 2.0.11-dev, HW: Rev1, Cmd: 0x0f"
-
-    def test_fw_handshake_p04_no_hw_revision_decodes(self, fake_serial, make_comm):
-        """P-04: MSG_OK_FW_HANDSHAKE with hw_rev=0xFF sentinel renders
-        'FW: 2.0.11-dev, Cmd: 0x0f' (no HW: clause)."""
-        comm = make_comm()
-        fw_str = b"2.0.11-dev"
-        # params: u8 hw=0xFF (sentinel), u8 cmd=0x0F, ascii_str fw_version
-        params = bytes([0xFF, 0x0F, len(fw_str)]) + fw_str
-        frame = build_frame(MSG_OK_FW_HANDSHAKE, params)
-        fake_serial.feed(frame)
-
-        response = _drive_one_response(comm)
-        assert response is not None
-        assert response.type == "OK"
-        assert response.message == "FW: 2.0.11-dev, Cmd: 0x0f"
 
     # -----------------------------------------------------------------
     # Wave 0 gap tests: P-02 MSG_OK_REV sentinel rendering

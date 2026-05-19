@@ -86,20 +86,6 @@ params      = [
 ]
 wire_format = "id_frame"
 
-# P-04: Composite id_frame: u8 hw + u8 cmd + ascii_str fw_version.
-# hw=0xFF sentinel means no HARDWARE_REVISION defined. Fixed-shape params first.
-[[messages]]
-id          = 0x06
-name        = "MSG_OK_FW_HANDSHAKE"
-severity    = "OK"
-format      = "HW: %u, Cmd: 0x%02x, FW: %s"
-params      = [
-    { type = "u8" },
-    { type = "u8" },
-    { type = "ascii_str" },
-]
-wire_format = "id_frame"
-
 # ---------------------------------------------------------------------------
 # INIT (0x10..0x1F)
 # ---------------------------------------------------------------------------
