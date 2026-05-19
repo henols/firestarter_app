@@ -121,6 +121,107 @@ def size_label(size_bytes):
     return _SIZE_LABELS.get(size_bytes, str(size_bytes))
 
 
+# ---------------------------------------------------------------------------
+# BENCH chip map (D-11) — verbatim from REQUIREMENTS.md §BENCH lines 14-19
+# ---------------------------------------------------------------------------
+#
+# BENCH-01..06 are the six bench chips that v1.3 milestone close cites as the
+# receipt that the algo-0x07 + algo-0x08 families generalize across the 339
+# in-scope DB rows. BENCH-05 and BENCH-06 are candidate-pending — Phase 12
+# CONTEXT.md owns the actual selection decision (D-11). Phase 11's matrix
+# records the candidate set neutrally and does NOT propose a swap.
+#
+# Per-chip fields:
+#   id:        "BENCH-NN" label (used as table-cell text + cross-references)
+#   names:     list of candidate part-number strings; matched against the
+#              DB row's comma-joined `part_number` field via membership.
+#   algorithm: 0x07 or 0x08 (used to filter the algo-axis tables)
+#   pinout:    expected pinout class — used to populate the pinout-coverage
+#              table when the chip's actual DB row pulse is unavailable
+#              (e.g. BENCH-05 / BENCH-06 candidates).
+#   size_bytes: typical size for the candidate set (used for size-coverage
+#               when the chip is "candidate" and no concrete DB row name
+#               is matched).
+#   selection_pending: True for BENCH-05 / BENCH-06 — marks the chip as
+#                      candidate until Phase 12 selects one of the names.
+
+BENCH_CHIP_MAP = [
+    {
+        "id": "BENCH-01",
+        "names": ["W27C512"],
+        "algorithm": 0x07,
+        "pinout": "DIP28_27512",
+        "size_bytes": 65536,
+        "selection_pending": False,
+    },
+    {
+        "id": "BENCH-02",
+        "names": ["SST27SF512"],
+        "algorithm": 0x07,
+        "pinout": "DIP28_27512",
+        "size_bytes": 65536,
+        "selection_pending": False,
+    },
+    {
+        "id": "BENCH-03",
+        "names": ["W27C020"],
+        "algorithm": 0x08,
+        "pinout": "DIP32_STD",
+        "size_bytes": 262144,
+        "selection_pending": False,
+    },
+    {
+        "id": "BENCH-04",
+        "names": ["W27E040"],
+        "algorithm": 0x08,
+        "pinout": "DIP32_STD",
+        "size_bytes": 524288,
+        "selection_pending": False,
+    },
+    {
+        "id": "BENCH-05",
+        "names": ["W27C257", "W27E257", "SST27SF256"],
+        "algorithm": 0x07,
+        "pinout": "DIP28_27256",
+        "size_bytes": 32768,
+        "selection_pending": True,
+    },
+    {
+        "id": "BENCH-06",
+        "names": ["W27C010", "W27E010", "W27L010", "SST27SF010"],
+        "algorithm": 0x08,
+        "pinout": "DIP32_STD",
+        "size_bytes": 131072,
+        "selection_pending": True,
+    },
+]
+
+
+def _bench_chip_label(b):
+    """Format a BENCH chip cell — 'BENCH-NN' or 'BENCH-NN (candidate)'."""
+    if b.get("selection_pending"):
+        return f"{b['id']} (candidate)"
+    return b["id"]
+
+
+def _bench_covered_label(b):
+    """Format the Covered? cell for a BENCH chip — 'Y' or 'Y (pending selection)'."""
+    if b.get("selection_pending"):
+        return "Y (pending selection)"
+    return "Y"
+
+
+def _bench_row_for_chip(rows, names):
+    """Find the first (mfg, chip) tuple from `rows` whose `part_number` comma
+    list contains any of `names`. Returns None if no match."""
+    for mfg, chip in rows:
+        pn_list = [p.strip() for p in chip["part_number"].split(",")]
+        for n in names:
+            if n in pn_list:
+                return mfg, chip
+    return None
+
+
 def md_table(headers, rows):
     """Pipe-style markdown table; per-column ljust to max cell width.
 
@@ -941,14 +1042,330 @@ def emit_defects(findings, ledger, next_n_holder):
     return lines
 
 
-def emit_placeholder_sections():
-    """Return the §5 stub block. §4 is now wired (Wave 3 / Plan 11-04)."""
-    s5 = (
-        "## §5: BENCH Coverage Proof\n"
-        "\n"
-        "_Populated in Wave 4 (Plan 11-05 — bench-coverage proof)._"
+# ---------------------------------------------------------------------------
+# §5 — BENCH Coverage Proof (D-09 / D-10 / D-11)
+# ---------------------------------------------------------------------------
+#
+# Three per-axis coverage tables (D-09) demonstrate that BENCH-01..06 cover
+# the algo-0x07 + algo-0x08 family across the axes that matter: pinout-class,
+# pulse-duration bucket, size bucket. Uncovered cells cross-reference §4
+# DEFECT-COV-NN findings where the gap is structural (D-10); deliberate gaps
+# are listed in the Known Gaps subsection.
+#
+# D-11 forbids proposing alternative BENCH chip selections — BENCH-05 /
+# BENCH-06 stay "candidate" until Phase 12 CONTEXT.md decides.
+
+
+def _findings_for_pinout(findings, ledger, pinout):
+    """Return a list of DEFECT-COV-NN IDs whose signature touches `pinout`.
+
+    HAZARD findings carry a list-of-pinout-strings as the first signature
+    element; CORRECTNESS / VARIANCE carry the pinout string in position 1.
+    We accept either shape and return IDs sorted ascending for stable output.
+    """
+    ids = []
+    for f in findings:
+        sig = f.get("signature")
+        if sig is None:
+            continue
+        first = sig[0] if len(sig) > 0 else None
+        # HAZARD shape: signature = (list_of_pinouts, algorithm, etype).
+        if isinstance(first, (list, tuple)) and pinout in first:
+            ids.append(ledger.get(f["hash"]))
+            continue
+        # CORRECTNESS / VARIANCE shape: (algo, pinout, size, ...).
+        if len(sig) >= 2 and sig[1] == pinout:
+            ids.append(ledger.get(f["hash"]))
+    return sorted({i for i in ids if i is not None})
+
+
+def pinout_coverage(rows, findings, ledger):
+    """Build the pinout-class coverage table — one row per pinout class.
+
+    Columns: Pinout, Row count, BENCH chip(s) exercising, Covered?, Note.
+    Pinouts uncovered by the BENCH set get a `Covered? = N` + a cross-reference
+    note pointing at the §4 finding IDs whose signature touches that pinout.
+    """
+    # Count rows per pinout.
+    pinout_rows = defaultdict(list)
+    for mfg, chip in rows:
+        pinout_rows[chip["pinout"]].append((mfg, chip))
+
+    table_rows = []
+    for pinout in sorted(pinout_rows):
+        members = pinout_rows[pinout]
+        # BENCH chips that target this pinout class.
+        covering = [b for b in BENCH_CHIP_MAP if b["pinout"] == pinout]
+        bench_cell = ", ".join(_bench_chip_label(b) for b in covering) if covering else "none"
+
+        any_pending = any(b.get("selection_pending") for b in covering)
+        if covering:
+            covered = "Y (pending selection)" if any_pending else "Y"
+            note = "Selection lives in Phase 12 CONTEXT.md." if any_pending else ""
+        else:
+            covered = "N"
+            cross_refs = _findings_for_pinout(findings, ledger, pinout)
+            if cross_refs:
+                note = "cross-ref: " + ", ".join(cross_refs)
+            else:
+                note = "uncovered — see Known Gaps"
+
+        table_rows.append([pinout, len(members), bench_cell, covered, note])
+
+    return table_rows
+
+
+def _bench_pulse_bucket(rows, b):
+    """Return the pulse-duration bucket label that BENCH chip `b` falls into,
+    or None if no concrete DB row in `rows` matches any of `b["names"]`."""
+    match = _bench_row_for_chip(rows, b["names"])
+    if match is None:
+        return None
+    _mfg, chip = match
+    us = parse_pulse_us(chip["programming"]["pulse_duration"])
+    return pulse_bucket(us)
+
+
+def pulse_coverage(rows, findings, ledger, algo):
+    """Build the per-algorithm pulse-duration bucket coverage table.
+
+    Columns: Bucket, Row count, BENCH chip(s) in this bucket, Covered?, Note.
+    """
+    # Filter rows for the target algorithm.
+    algo_rows = [(m, c) for m, c in rows if c["programming"]["algorithm"] == algo]
+    bucket_rows = defaultdict(list)
+    for mfg, chip in algo_rows:
+        us = parse_pulse_us(chip["programming"]["pulse_duration"])
+        bucket_rows[pulse_bucket(us)].append((mfg, chip))
+
+    # Map each BENCH chip on this algorithm to a bucket (or None if pending).
+    bench_for_algo = [b for b in BENCH_CHIP_MAP if b["algorithm"] == algo]
+
+    # For coverage decisions, we need to know which bucket each BENCH chip
+    # lands in. For non-pending bench chips with a concrete DB row name, look
+    # up the actual pulse_duration; for pending bench chips, attempt each
+    # candidate name and report the union of buckets.
+    def bench_buckets(b):
+        """Return list of (bucket_label, candidate_pulse_us_or_None) tuples
+        for every candidate name match against the DB."""
+        out = []
+        for name in b["names"]:
+            for mfg, chip in algo_rows:
+                pn_list = [p.strip() for p in chip["part_number"].split(",")]
+                if name in pn_list:
+                    us = parse_pulse_us(chip["programming"]["pulse_duration"])
+                    out.append(pulse_bucket(us))
+                    break
+        return out
+
+    bench_bucket_map = {}
+    for b in bench_for_algo:
+        bench_bucket_map[b["id"]] = bench_buckets(b)
+
+    table_rows = []
+    # Iterate D-09 bucket order over the union of seen + pre-declared buckets.
+    seen = sorted(bucket_rows, key=_pulse_bucket_sort_key)
+    for bucket in seen:
+        members = bucket_rows[bucket]
+        chips_in_bucket = []
+        for b in bench_for_algo:
+            if bucket in bench_bucket_map[b["id"]]:
+                chips_in_bucket.append(b)
+        if chips_in_bucket:
+            any_pending = any(b.get("selection_pending") for b in chips_in_bucket)
+            bench_cell = ", ".join(_bench_chip_label(b) for b in chips_in_bucket)
+            covered = "Y (pending selection)" if any_pending else "Y"
+            note = (
+                "Selection lives in Phase 12 CONTEXT.md."
+                if any_pending else ""
+            )
+        else:
+            bench_cell = "none"
+            covered = "N"
+            # Cross-reference §4 findings that actually have rows IN this
+            # (algo, bucket) cell. For each CORRECTNESS finding (whose
+            # signature is (algo, pinout, size, mfg, alias)), we check whether
+            # the row corresponding to the signature's (mfg, alias) lives in
+            # the same pulse bucket as the cell being annotated.
+            in_bucket_part_numbers = {
+                chip["part_number"].split(",")[0]
+                for _mfg, chip in members
+            }
+            cross = []
+            for f in findings:
+                sig = f.get("signature")
+                if sig is None or len(sig) < 5:
+                    continue
+                f_algo, _f_pinout, _f_size, _f_mfg, f_alias = sig[:5]
+                if f_algo != algo:
+                    continue
+                if f_alias in in_bucket_part_numbers:
+                    fid = ledger.get(f["hash"])
+                    if fid is not None:
+                        cross.append(fid)
+            cross_ids = sorted(set(cross))
+            note = (
+                ("cross-ref: " + ", ".join(cross_ids))
+                if cross_ids else "uncovered — see Known Gaps"
+            )
+        table_rows.append([bucket, len(members), bench_cell, covered, note])
+
+    return table_rows
+
+
+def size_coverage(rows, findings, ledger, algo):
+    """Build the per-algorithm size-bucket coverage table.
+
+    Columns: Size, Row count, BENCH chip(s) at this size, Covered?, Note.
+    """
+    algo_rows = [(m, c) for m, c in rows if c["programming"]["algorithm"] == algo]
+    size_rows = defaultdict(list)
+    for mfg, chip in algo_rows:
+        size_rows[chip["electrical"]["size_bytes"]].append((mfg, chip))
+
+    bench_for_algo = [b for b in BENCH_CHIP_MAP if b["algorithm"] == algo]
+
+    table_rows = []
+    for size_b in sorted(size_rows):
+        members = size_rows[size_b]
+        chips_at_size = [b for b in bench_for_algo if b["size_bytes"] == size_b]
+        if chips_at_size:
+            any_pending = any(b.get("selection_pending") for b in chips_at_size)
+            bench_cell = ", ".join(_bench_chip_label(b) for b in chips_at_size)
+            covered = "Y (pending selection)" if any_pending else "Y"
+            note = (
+                "Selection lives in Phase 12 CONTEXT.md."
+                if any_pending else ""
+            )
+        else:
+            bench_cell = "none"
+            covered = "N"
+            note = "uncovered — see Known Gaps"
+        table_rows.append(
+            [f"{size_b} / {size_label(size_b)}", len(members), bench_cell, covered, note]
+        )
+
+    return table_rows
+
+
+def emit_bench_coverage(rows, findings, ledger):
+    """Return §5 as a single markdown string.
+
+    Three per-axis tables (D-09) + Known Gaps subsection (D-10) + milestone-
+    claim closing prose. BENCH chip selection is observational only — D-11
+    forbids swap proposals; BENCH-05 / BENCH-06 stay "candidate".
+    """
+    parts = ["## §5: BENCH Coverage Proof", ""]
+    parts.append(
+        "Three per-axis coverage tables (D-09) demonstrating BENCH-01..06 "
+        "represent the algo-0x07 + algo-0x08 family. Uncovered cells "
+        "cross-reference §4 findings where the gap is structural (per D-10)."
     )
-    return s5
+    parts.append("")
+    parts.append(
+        "BENCH-05 / BENCH-06 are candidate-pending — Phase 12 CONTEXT.md owns "
+        "the selection decision (D-11). §5 records candidate names verbatim "
+        "from REQUIREMENTS.md and is observational only."
+    )
+    parts.append("")
+
+    # Pinout-class coverage
+    parts.append("### Pinout-Class Coverage")
+    parts.append("")
+    parts.append(
+        md_table(
+            ["Pinout", "Row count", "BENCH chip(s)", "Covered?", "Note / Finding"],
+            pinout_coverage(rows, findings, ledger),
+        )
+    )
+    parts.append("")
+
+    # Pulse-duration coverage — split per-algorithm
+    parts.append("### Pulse-Duration Bucket Coverage (algo-0x07)")
+    parts.append("")
+    parts.append(
+        md_table(
+            ["Bucket", "Row count", "BENCH chip(s)", "Covered?", "Note / Finding"],
+            pulse_coverage(rows, findings, ledger, 0x07),
+        )
+    )
+    parts.append("")
+
+    parts.append("### Pulse-Duration Bucket Coverage (algo-0x08)")
+    parts.append("")
+    parts.append(
+        md_table(
+            ["Bucket", "Row count", "BENCH chip(s)", "Covered?", "Note / Finding"],
+            pulse_coverage(rows, findings, ledger, 0x08),
+        )
+    )
+    parts.append("")
+
+    # Size-bucket coverage — split per-algorithm
+    parts.append("### Size Bucket Coverage (algo-0x07)")
+    parts.append("")
+    parts.append(
+        md_table(
+            ["Size (bytes / label)", "Row count", "BENCH chip(s)", "Covered?", "Note / Finding"],
+            size_coverage(rows, findings, ledger, 0x07),
+        )
+    )
+    parts.append("")
+
+    parts.append("### Size Bucket Coverage (algo-0x08)")
+    parts.append("")
+    parts.append(
+        md_table(
+            ["Size (bytes / label)", "Row count", "BENCH chip(s)", "Covered?", "Note / Finding"],
+            size_coverage(rows, findings, ledger, 0x08),
+        )
+    )
+    parts.append("")
+
+    # Known Gaps subsection (D-10)
+    parts.append("### Known Gaps")
+    parts.append("")
+    parts.append(
+        "Deliberate gaps — uncovered cells whose absence from the BENCH set is "
+        "an explicit v1.3 scope decision rather than a structural concern:"
+    )
+    parts.append("")
+    parts.append(
+        "- **DIP28_28C64 / DIP28_28C256 pinouts** — already raised as a "
+        "HAZARD finding in §4 (DEFECT-COV-01); v1.3 explicitly does NOT "
+        "bench these pinouts because the WARNING-5 override class needs "
+        "extension before any 5V EEPROM-class chip can safely take 12V VPP."
+    )
+    parts.append(
+        "- **2K / 8K / 16K size buckets on algo-0x07** — sub-density chips "
+        "below the BENCH-05 32K low-end. v1.3 density-extreme strategy "
+        "exercises the 32K → 512K span; sub-32K density is not bench-worthy."
+    )
+    parts.append(
+        "- **64K / 1MB size buckets on algo-0x08** — single-chip / "
+        "few-chip buckets at the algorithm's density extremes. The 64K "
+        "bucket holds 1 row; the 1MB bucket holds 8 rows. Both are excluded "
+        "per the density-extreme strategy (128K → 512K span suffices)."
+    )
+    parts.append(
+        "- **100 ms-1 s pulse bucket on algo-0x07** — likely-mis-classified "
+        "chips clustering at suspect pulse durations. Cross-referenced to "
+        "§4 CORRECTNESS findings for v1.4 follow-up; not bench-worthy in v1.3."
+    )
+    parts.append("")
+
+    # Milestone-claim closing prose (CONTEXT.md <specifics> "the matrix is the receipt")
+    parts.append(
+        "These six BENCH chips (BENCH-01..06) represent N=339 in-scope DB "
+        "rows on axes pinout-class, pulse-duration bucket, and size bucket. "
+        "Uncovered cells are documented above with cross-references to §4 "
+        "defect candidates where the gap reflects a structural concern. "
+        "After Phases 12+13 ship green on the six BENCH chips, the v1.3 "
+        "milestone close (Phase 14 BENCH-RESULTS) can cite this matrix as "
+        "proof that bench results generalize to the rest of the family."
+    )
+
+    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -1041,12 +1458,14 @@ def generate_matrix(output, ledger_path, check=False):
         start_n = 1
     next_n_holder = [start_n]
 
-    # Assemble matrix body.
+    # Assemble matrix body. §4 emit_defects mints DEFECT-COV-NN IDs into the
+    # ledger via mint_or_reuse — must run BEFORE §5 so emit_bench_coverage
+    # can cross-reference uncovered cells to live finding IDs by hash lookup.
     s1 = emit_summary(summary, severity_counts=severity_counts)
     s2 = emit_reconciliation(summary)
     s3 = emit_full_enumeration(rows)
     s4 = "\n".join(emit_defects(findings, ledger, next_n_holder)).rstrip("\n")
-    s5 = emit_placeholder_sections()
+    s5 = emit_bench_coverage(rows, findings, ledger)
     body_parts = [
         _FILE_HEADER.rstrip("\n"),
         "",
