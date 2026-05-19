@@ -37,12 +37,13 @@ from firestarter.messages import (
     MSG_END_DONE,
     MSG_INFO_ADDR,
     MSG_INFO_BIT_STR,
-    MSG_INFO_CMD,
-    MSG_INFO_MEM_SIZE,
+    MSG_WARN_MEM_SIZE_TOO_SMALL,
     MSG_ERR_WRITE_FAILED,
     MSG_DATA_PROGRESS,
     MSG_DATA_SENDING,
     MSG_DATA_CHUNK,
+    MSG_DEBUG,
+    DBG_CMD,
 )
 from firestarter.serial_comm import (
     LogMessage,
@@ -83,15 +84,15 @@ class TestIdFrameDecoder:
         assert decoded == LogMessage(severity="OK", text="Ready", id=MSG_OK_READY)
 
     def test_u32_param_renders_via_format_string(self, fake_serial, make_comm):
-        """LHOST-01/02: u32 param renders via printf '%lx' lowercase, no padding."""
+        """LHOST-01/02: u32 param renders via printf format substitution."""
         comm = make_comm()
         params = bytes.fromhex("00010000")  # 0x10000 / 65536
-        fake_serial.feed(build_frame(MSG_INFO_MEM_SIZE, params))
+        fake_serial.feed(build_frame(MSG_WARN_MEM_SIZE_TOO_SMALL, params))
 
         response = _drive_one_response(comm)
         assert response is not None
-        assert response.type == "INFO"
-        assert response.message == "Memory size 0x10000"
+        assert response.type == "WARN"
+        assert response.message == "Memory size 65536 too small for chip-id check"
 
     def test_u24_render_as_hex_addr(self, fake_serial, make_comm):
         """LHOST-02: u24 render-hint 'hex_addr' renders as 0x%06x lowercase."""
@@ -423,31 +424,31 @@ class TestIdFrameDecoder:
         assert response.message == "R1: 10000, R2: 4700"
 
     # -----------------------------------------------------------------
-    # MSG_INFO_CMD: cmd byte annotated with symbolic name from COMMAND_NAMES
+    # MSG_DEBUG / DBG_CMD: cmd byte annotated with symbolic name from
+    # COMMAND_NAMES via the MSG_DEBUG sub_id decode path.
     # -----------------------------------------------------------------
 
-    def test_info_cmd_renders_with_symbolic_name(self, fake_serial, make_comm):
-        """MSG_INFO_CMD with cmd=0x02 (COMMAND_WRITE) renders
-        'Cmd: 0x02 (WRITE)'."""
+    def test_dbg_cmd_renders_with_symbolic_name(self, fake_serial, make_comm):
+        """DBG_CMD (sub_id 0x04) with cmd=0x02 (COMMAND_WRITE) renders
+        'Cmd: 0x02 (WRITE)'. Wire shape: MSG_DEBUG params = [sub_id u8, cmd u8]."""
         comm = make_comm()
-        frame = build_frame(MSG_INFO_CMD, bytes([0x02]))
+        frame = build_frame(MSG_DEBUG, bytes([DBG_CMD, 0x02]))
         fake_serial.feed(frame)
 
         response = _drive_one_response(comm)
         assert response is not None
-        assert response.type == "INFO"
+        assert response.type == "DATA"
         assert response.message == "Cmd: 0x02 (WRITE)"
 
-    def test_info_cmd_unknown_falls_back_to_bare_hex(self, fake_serial, make_comm):
-        """MSG_INFO_CMD with an unmapped cmd byte renders bare hex
-        (no name annotation)."""
+    def test_dbg_cmd_unknown_falls_back_to_bare_hex(self, fake_serial, make_comm):
+        """DBG_CMD with an unmapped cmd byte renders bare hex."""
         comm = make_comm()
-        frame = build_frame(MSG_INFO_CMD, bytes([0xFE]))
+        frame = build_frame(MSG_DEBUG, bytes([DBG_CMD, 0xFE]))
         fake_serial.feed(frame)
 
         response = _drive_one_response(comm)
         assert response is not None
-        assert response.type == "INFO"
+        assert response.type == "DATA"
         assert response.message == "Cmd: 0xfe"
 
     # -----------------------------------------------------------------

@@ -159,110 +159,6 @@ params      = []
 wire_format = "id_frame"
 
 [[messages]]
-id          = 0x44
-name        = "MSG_INFO_BUF_VAL"
-severity    = "INFO"
-format      = "Buf val: 0x%02x"
-params      = [{ type = "u8", render = "hex_byte" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x45
-name        = "MSG_INFO_TOKEN_COUNT"
-severity    = "INFO"
-format      = "Token count: %d"
-params      = [{ type = "i16" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x46
-name        = "MSG_INFO_FLAG_FORCE"
-severity    = "INFO"
-format      = "Force: %d"
-params      = [{ type = "u8" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x47
-name        = "MSG_INFO_FLAG_CAN_ERASE"
-severity    = "INFO"
-format      = "Can erase: %d"
-params      = [{ type = "u8" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x48
-name        = "MSG_INFO_FLAG_SKIP_ERASE"
-severity    = "INFO"
-format      = "Skip erase: %d"
-params      = [{ type = "u8" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x49
-name        = "MSG_INFO_FLAG_SKIP_BLANK"
-severity    = "INFO"
-format      = "Skip blank check: %d"
-params      = [{ type = "u8" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x4A
-name        = "MSG_INFO_FLAG_VPE_AS_VPP"
-severity    = "INFO"
-format      = "VPE as VPP: %d"
-params      = [{ type = "u8" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x4B
-name        = "MSG_INFO_FLAG_OUTPUT_EN"
-severity    = "INFO"
-format      = "Output enable: %d"
-params      = [{ type = "u8" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x4C
-name        = "MSG_INFO_FLAG_CHIP_EN"
-severity    = "INFO"
-format      = "Chip enable: %d"
-params      = [{ type = "u8" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x4D
-name        = "MSG_INFO_BUFFER_SIZE"
-severity    = "INFO"
-format      = "Buffer size: %d"
-params      = [{ type = "u16" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x4E
-name        = "MSG_INFO_MEM_SIZE"
-severity    = "INFO"
-format      = "Memory size 0x%lx"
-params      = [{ type = "u32" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x4F
-name        = "MSG_INFO_ADDR_MASK"
-severity    = "INFO"
-format      = "Address mask 0x%lx"
-params      = [{ type = "u32" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x50
-name        = "MSG_INFO_MATCH_LINES"
-severity    = "INFO"
-format      = "Matching lines %u"
-params      = [{ type = "u16" }]
-wire_format = "id_frame"
-
-[[messages]]
 id          = 0x51
 name        = "MSG_INFO_RETRIES"
 severity    = "INFO"
@@ -338,34 +234,6 @@ name        = "MSG_INFO_SKIPPING_ERASE_MEM"
 severity    = "INFO"
 format      = "Skipping erase of memory"
 params      = []
-wire_format = "id_frame"
-
-# Verbose-build diagnostics (EXTRA_INFO_LOGGING-gated in firmware).
-# Three single-purpose INFO emits replacing the dropped per-command
-# MSG_OK_FW_HANDSHAKE wire chatter. Each renders one labeled value;
-# MSG_INFO_HW is only emitted when HARDWARE_REVISION is defined.
-[[messages]]
-id          = 0x5A
-name        = "MSG_INFO_FW"
-severity    = "INFO"
-format      = "FW: %s"
-params      = [{ type = "ascii_str" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x5B
-name        = "MSG_INFO_HW"
-severity    = "INFO"
-format      = "HW: Rev%u"
-params      = [{ type = "u8" }]
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0x5C
-name        = "MSG_INFO_CMD"
-severity    = "INFO"
-format      = "Cmd: 0x%02x"
-params      = [{ type = "u8", render = "hex_byte" }]
 wire_format = "id_frame"
 
 # ---------------------------------------------------------------------------
@@ -792,8 +660,8 @@ params = []
 [[debug.messages]]
 id     = 0x04
 name   = "DBG_CMD"
-format = "Cmd: %d"
-params = [{ type = "u8" }]
+format = "Cmd: 0x%02x"
+params = [{ type = "u8", render = "hex_byte" }]
 
 [[debug.messages]]
 id     = 0x05
@@ -1012,3 +880,94 @@ id     = 0x28
 name   = "DBG_CHECK_CHIP_ID_28C"
 format = "Check chip ID (28C)"
 params = []
+
+# ---------------------------------------------------------------------------
+# Verbose-build per-command diagnostics (replaces the EXTRA_INFO_LOGGING
+# INFO emits in firestarter.cpp init_programmer + parse_json). Each is
+# wrapped at the macro level by the SERIAL_DEBUG-gated LOG_DEBUG_ID_SUB_*
+# family — zero wire bytes in production builds.
+# ---------------------------------------------------------------------------
+
+[[debug.messages]]
+id     = 0x29
+name   = "DBG_BUF_VAL"
+format = "Buf val: 0x%02x"
+params = [{ type = "u8", render = "hex_byte" }]
+
+[[debug.messages]]
+id     = 0x2A
+name   = "DBG_TOKEN_COUNT"
+format = "Token count: %u"
+params = [{ type = "u16" }]
+
+[[debug.messages]]
+id     = 0x2B
+name   = "DBG_FLAG_FORCE"
+format = "Force: %u"
+params = [{ type = "u8" }]
+
+[[debug.messages]]
+id     = 0x2C
+name   = "DBG_FLAG_CAN_ERASE"
+format = "Can erase: %u"
+params = [{ type = "u8" }]
+
+[[debug.messages]]
+id     = 0x2D
+name   = "DBG_FLAG_SKIP_ERASE"
+format = "Skip erase: %u"
+params = [{ type = "u8" }]
+
+[[debug.messages]]
+id     = 0x2E
+name   = "DBG_FLAG_SKIP_BLANK"
+format = "Skip blank check: %u"
+params = [{ type = "u8" }]
+
+[[debug.messages]]
+id     = 0x2F
+name   = "DBG_FLAG_VPE_AS_VPP"
+format = "VPE as VPP: %u"
+params = [{ type = "u8" }]
+
+[[debug.messages]]
+id     = 0x30
+name   = "DBG_FLAG_OUTPUT_EN"
+format = "Output enable: %u"
+params = [{ type = "u8" }]
+
+[[debug.messages]]
+id     = 0x31
+name   = "DBG_FLAG_CHIP_EN"
+format = "Chip enable: %u"
+params = [{ type = "u8" }]
+
+[[debug.messages]]
+id     = 0x32
+name   = "DBG_BUFFER_SIZE"
+format = "Buffer size: %u"
+params = [{ type = "u16" }]
+
+[[debug.messages]]
+id     = 0x33
+name   = "DBG_MEM_SIZE"
+format = "Memory size 0x%lx"
+params = [{ type = "u32" }]
+
+[[debug.messages]]
+id     = 0x34
+name   = "DBG_ADDR_MASK"
+format = "Address mask 0x%lx"
+params = [{ type = "u32" }]
+
+[[debug.messages]]
+id     = 0x35
+name   = "DBG_MATCH_LINES"
+format = "Matching lines %u"
+params = [{ type = "u16" }]
+
+[[debug.messages]]
+id     = 0x36
+name   = "DBG_PHYSICAL_HARDWARE_REVISION"
+format = "Physical hardware revision: %u"
+params = [{ type = "u8" }]

@@ -26,11 +26,13 @@ from firestarter.config import ConfigManager  # Assuming ConfigManager is refact
 from firestarter.constants import COMMAND_NAMES
 from firestarter.messages import (
     CATALOG,
+    DEBUG_CATALOG,
     SEVERITY_LABEL,
     MSG_OK_REV,
     MSG_OK_CFG,
     MSG_DATA_CHUNK,
-    MSG_INFO_CMD,
+    MSG_DEBUG,
+    DBG_CMD,
 )
 
 logger = logging.getLogger("SerialComm")
@@ -315,7 +317,8 @@ class SerialCommunicator:
 
     def _format_message(self, msg_id: int, params: list, entry) -> Optional[str]:
         """Sentinel-aware message renderer for P-02/P-03 shaped IDs and
-        MSG_INFO_CMD (annotate raw cmd byte with its symbolic name).
+        MSG_DEBUG sub-payloads (currently DBG_CMD gets symbolic-name
+        annotation; other DBG_* sub_ids render via DEBUG_CATALOG).
 
         Returns the rendered string for sentinel-byte IDs where the catalog
         format string cannot express the conditional (0xFF = no override).
@@ -341,10 +344,31 @@ class SerialCommunicator:
                 return f"R1: {r1}, R2: {r2}"
             return f"R1: {r1}, R2: {r2}, Override HW: Rev{override}"
 
-        if msg_id == MSG_INFO_CMD and len(params) == 1:
-            cmd = params[0]
-            name = COMMAND_NAMES.get(cmd)
-            return f"Cmd: 0x{cmd:02x} ({name})" if name else f"Cmd: 0x{cmd:02x}"
+        if msg_id == MSG_DEBUG and len(params) == 2:
+            sub_id = params[0]
+            sub_body = params[1] if isinstance(params[1], (bytes, bytearray)) else b""
+            sub_entry = DEBUG_CATALOG.get(sub_id)
+            # Special-case DBG_CMD: annotate the cmd byte with its symbolic
+            # name from COMMAND_NAMES so verbose logs read e.g. "Cmd: 0x02 (WRITE)".
+            if sub_id == DBG_CMD and len(sub_body) >= 1:
+                cmd = sub_body[0]
+                name = COMMAND_NAMES.get(cmd)
+                return f"Cmd: 0x{cmd:02x} ({name})" if name else f"Cmd: 0x{cmd:02x}"
+            # Generic DBG render: walk sub_entry.params and format. Falls back
+            # to the standard "[debug:N]" string for sub_ids the catalog hasn't
+            # seen yet so unknown debug emits still appear in the log.
+            if sub_entry is not None:
+                try:
+                    values: list = []
+                    cursor = 0
+                    for ptype, _prender in sub_entry.params:
+                        value, cursor = _decode_param(ptype, sub_body, cursor)
+                        values.append(value)
+                    fmt_values = [v for v in values if not isinstance(v, (bytes, bytearray))]
+                    return sub_entry.format % tuple(fmt_values) if fmt_values else sub_entry.format
+                except (IndexError, struct.error, ValueError):
+                    return None  # fall through to generic [debug:N] render
+            return None
 
         if msg_id == MSG_DATA_CHUNK and len(params) == 1 and isinstance(params[0], (bytes, bytearray)):
             # W-04: return a short summary so log lines don't dump 512 raw bytes.
