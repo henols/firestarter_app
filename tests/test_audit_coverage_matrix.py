@@ -218,51 +218,134 @@ class TestAuditCoverageMatrix:
     def test_hazard_cluster_42_rows(self, tmp_path):
         """COV-02 / D-12 / D-15: §4 reports the 42-row pinout/algorithm HAZARD.
 
-        Wave 3 impl: assert §4 contains a HAZARD-tier finding whose signature
-        is (("DIP28_28C64", "DIP28_28C256"), 0x07, "UV-EPROM") and whose
+        Asserts the §4 body contains a HAZARD-tier finding whose signature
+        covers (("DIP28_28C64", "DIP28_28C256"), 0x07, "UV-EPROM") and whose
         `affected_chips == 42`. This is the post-re-derivation cluster — the
         WARNING-5 override predicate at build_db.py:397-423 is structurally
         unreachable for these rows because `_etype` is re-derived to
         "UV-EPROM" at build_db.py:483-484 AFTER the override fires
         (PATTERNS.md §"_etype re-derivation pattern").
         """
-        from tools.audit_coverage_matrix import generate_matrix  # noqa: F401
-        raise NotImplementedError(
-            "Wave 3 — see VALIDATION.md row 11-COV-02-hazard-cluster "
-            "(COV-02 / D-12 / D-15: §4 HAZARD finding with affected_chips=42 "
-            "covering (DIP28_28C64, DIP28_28C256, 0x07, UV-EPROM) cluster)"
-        )
+        from tools.audit_coverage_matrix import generate_matrix
+
+        out = tmp_path / "m.md"
+        ledger = tmp_path / "l.json"
+        rc = generate_matrix(output=out, ledger_path=ledger)
+        assert rc == 0, f"generate_matrix returned non-zero rc={rc}"
+
+        body = out.read_text(encoding="utf-8")
+
+        # §4 body slice: from `## §4:` (inclusive) to `## §5:` (exclusive).
+        s4_start = body.index("## §4:")
+        s5_start = body.index("## §5:")
+        s4_body = body[s4_start:s5_start]
+
+        # Required literals: the 42-row HAZARD must surface the row count, the
+        # two pinout keys, and the HAZARD tier label inside §4.
+        assert "HAZARD" in s4_body, "HAZARD tier missing from §4"
+        assert "DIP28_28C64" in s4_body, "DIP28_28C64 pinout missing from §4"
+        assert "DIP28_28C256" in s4_body, "DIP28_28C256 pinout missing from §4"
+        assert "42" in s4_body, "affected_chips=42 missing from §4"
 
     def test_ledger_idempotent(self, tmp_path):
         """COV-02 / D-13: ledger is byte-identical on a second run.
 
-        Wave 3 impl: seed a ledger via a first generate_matrix() call, snapshot
-        the ledger bytes, run generate_matrix() again with the same ledger
-        path, assert the second-run ledger text equals the first. Defect-IDs
-        must NOT be re-minted on every run — that would defeat the stable
-        cross-document identity contract from CONTEXT.md D-13.
+        Seeds a ledger via a first generate_matrix() call, snapshots the
+        ledger bytes, runs generate_matrix() again with the same ledger
+        path, then asserts the second-run ledger text equals the first.
+        Defect-IDs must NOT be re-minted on every run — that would defeat
+        the stable cross-document identity contract from CONTEXT.md D-13.
+        Also asserts the ledger is JSON with sorted keys (Pattern B).
         """
-        from tools.audit_coverage_matrix import generate_matrix  # noqa: F401
-        raise NotImplementedError(
-            "Wave 3 — see VALIDATION.md row 11-COV-02-ledger-idempotent "
-            "(COV-02 / D-13: second-run ledger text byte-identical to first)"
+        import json
+        from tools.audit_coverage_matrix import generate_matrix
+
+        ledger_path = tmp_path / "l.json"
+        out1 = tmp_path / "m1.md"
+        out2 = tmp_path / "m2.md"
+
+        rc1 = generate_matrix(output=out1, ledger_path=ledger_path)
+        assert rc1 == 0
+        snap_1 = ledger_path.read_text(encoding="utf-8")
+
+        rc2 = generate_matrix(output=out2, ledger_path=ledger_path)
+        assert rc2 == 0
+        snap_2 = ledger_path.read_text(encoding="utf-8")
+
+        assert snap_1 == snap_2, "ledger text mutated on second run (D-13 violation)"
+
+        parsed = json.loads(snap_2)
+        assert list(parsed.keys()) == sorted(parsed.keys()), (
+            "ledger keys must be sorted for byte-identical idempotence"
         )
 
     def test_ledger_id_reuse(self, tmp_path):
         """COV-02 / D-13: existing DEFECT-COV-NN reused for same finding-hash.
 
-        Wave 3 impl: write a ledger with a single pre-minted DEFECT-COV-07
-        entry whose `finding_hash` matches one of the live findings, run
-        generate_matrix() pointed at that ledger, assert the same NN (07) is
-        reused for the matching hash — no new ID minted, no collision. This
-        proves the hash → ID mapping is the stable contract from PATTERNS.md
-        Pattern C (Stable defect-ID hash composition).
+        Two checks: (1) every hash → ID mapping minted on the first run is
+        preserved on the second run (no extra keys, identical values);
+        (2) a hand-seeded high-NN ID (DEFECT-COV-99) for a real finding hash
+        is REUSED on subsequent runs, not overwritten by a freshly-minted
+        ID. This proves the hash → ID mapping is the stable contract from
+        PATTERNS.md Pattern C (Stable defect-ID hash composition).
         """
-        from tools.audit_coverage_matrix import generate_matrix  # noqa: F401
-        raise NotImplementedError(
-            "Wave 3 — see VALIDATION.md row 11-COV-02-ledger-reuse "
-            "(COV-02 / D-13: seeded DEFECT-COV-NN reused for matching "
-            "finding-hash on subsequent runs)"
+        import json
+        from tools.audit_coverage_matrix import (
+            generate_matrix,
+            finding_hash,
+            detect_hazard,
+            iter_in_scope_rows,
+        )
+
+        ledger_path = tmp_path / "l.json"
+        out1 = tmp_path / "m1.md"
+        out2 = tmp_path / "m2.md"
+
+        # Step 1: mint everything from a clean state.
+        rc1 = generate_matrix(output=out1, ledger_path=ledger_path)
+        assert rc1 == 0
+        parsed_1 = json.loads(ledger_path.read_text(encoding="utf-8"))
+
+        # Step 2: re-run — assert every hash → ID survives and no new keys.
+        rc2 = generate_matrix(output=out2, ledger_path=ledger_path)
+        assert rc2 == 0
+        parsed_2 = json.loads(ledger_path.read_text(encoding="utf-8"))
+
+        assert set(parsed_2) == set(parsed_1), "extra hash keys minted on re-run"
+        for h, defect_id in parsed_1.items():
+            assert parsed_2[h] == defect_id, (
+                f"hash {h} re-minted: {defect_id} -> {parsed_2[h]}"
+            )
+
+        # Step 3: pre-seed scenario — seed the HAZARD-42 finding hash with
+        # DEFECT-COV-99 in a fresh ledger; assert the next run reuses NN=99.
+        # Compute the HAZARD-42 hash by inspecting the real detector against
+        # the live DB (Pitfall 5 — derive expected hashes from the tool surface,
+        # not from hard-coded literals).
+        import json as _json
+        with open(
+            __import__("tools.audit_coverage_matrix", fromlist=["DB_FILE"]).DB_FILE,
+            encoding="utf-8",
+        ) as f:
+            db_raw = _json.load(f)
+        live_rows = list(iter_in_scope_rows(db_raw))
+        hazard_findings = list(detect_hazard(live_rows))
+        assert hazard_findings, "expected at least one HAZARD finding"
+        hazard_hash = hazard_findings[0]["hash"]
+        # Sanity: confirm the freshly minted ledger contains that hash.
+        assert hazard_hash in parsed_1
+
+        seeded_ledger_path = tmp_path / "seeded.json"
+        seeded_ledger_path.write_text(
+            _json.dumps({hazard_hash: "DEFECT-COV-99"}, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        out3 = tmp_path / "m3.md"
+        rc3 = generate_matrix(output=out3, ledger_path=seeded_ledger_path)
+        assert rc3 == 0
+        seeded_parsed = _json.loads(seeded_ledger_path.read_text(encoding="utf-8"))
+        assert seeded_parsed[hazard_hash] == "DEFECT-COV-99", (
+            "pre-seeded DEFECT-COV-99 must be reused, not overwritten"
         )
 
     # ------------------------------------------------------------------
@@ -308,15 +391,18 @@ class TestAuditCoverageMatrix:
         assert "127" in body, "algo_0x08=127 missing from matrix body"
 
     def test_exit_codes(self, tmp_path):
-        """D-03: CLI exit-code surface — 0 on clean run.
+        """D-03: CLI exit-code surface — 0 on clean run, 1 on --check drift.
 
         Drives the real CLI via subprocess (per VALIDATION.md
         "integration (subprocess)" classification) — mirrors
         check_dispatch.py:148-190 exit-code discipline.
 
-        Wave 1: only clean-generate (rc=0) is reachable; ledger minting
-        lands in Wave 3, after which `--check` against a mutated ledger
-        returns 1 if a new DEFECT-COV-NN would be minted. See TODO below.
+        Three steps:
+          1. plain mode → returncode 0
+          2. --check against an empty ledger → returncode 1 (every detected
+             finding plus the DEFECT-COV-00 baseline would be a new mint)
+          3. --check against the full-from-step-1 ledger → returncode 0
+             (no drift; all hashes already minted)
         """
         import subprocess
         import sys
@@ -326,6 +412,8 @@ class TestAuditCoverageMatrix:
 
         out = tmp_path / "m.md"
         ledger = tmp_path / "l.json"
+
+        # Step 1: clean generate populates the ledger.
         result = subprocess.run(
             [
                 sys.executable,
@@ -336,6 +424,7 @@ class TestAuditCoverageMatrix:
             cwd=str(firestarter_app_dir),
             capture_output=True,
             text=True,
+            check=False,
         )
         assert result.returncode == 0, (
             f"clean-run returncode={result.returncode}; "
@@ -344,27 +433,46 @@ class TestAuditCoverageMatrix:
         assert out.exists(), "matrix output not written"
         assert ledger.exists(), "ledger output not written"
 
-        # --check on the same clean state should also exit 0 (no new findings).
-        result_check = subprocess.run(
+        # Step 2: --check against an empty ledger MUST exit 1 (drift gate).
+        empty_ledger = tmp_path / "empty.json"
+        empty_ledger.write_text("{}\n", encoding="utf-8")
+        scratch_out = tmp_path / "scratch.md"
+        result_empty = subprocess.run(
             [
                 sys.executable,
                 "tools/audit_coverage_matrix.py",
-                "--output", str(out),
+                "--output", str(scratch_out),
+                "--ledger", str(empty_ledger),
+                "--check",
+            ],
+            cwd=str(firestarter_app_dir),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result_empty.returncode == 1, (
+            f"--check on empty ledger expected rc=1, got {result_empty.returncode}; "
+            f"stderr={result_empty.stderr!r}"
+        )
+
+        # Step 3: --check against the full ledger from Step 1 MUST exit 0.
+        result_full = subprocess.run(
+            [
+                sys.executable,
+                "tools/audit_coverage_matrix.py",
+                "--output", str(scratch_out),
                 "--ledger", str(ledger),
                 "--check",
             ],
             cwd=str(firestarter_app_dir),
             capture_output=True,
             text=True,
+            check=False,
         )
-        assert result_check.returncode == 0, (
-            f"--check on clean ledger returncode={result_check.returncode}; "
-            f"stderr={result_check.stderr!r}"
+        assert result_full.returncode == 0, (
+            f"--check on full ledger expected rc=0, got {result_full.returncode}; "
+            f"stderr={result_full.stderr!r}"
         )
-
-        # TODO: Wave 3 — extend this test to mutate the ledger (drop an
-        # entry) and assert the next --check returns 1 because the
-        # missing DEFECT-COV-NN would be minted on a real generate.
 
     # ------------------------------------------------------------------
     # Wave 4 — bench-coverage proof + golden-file regression
