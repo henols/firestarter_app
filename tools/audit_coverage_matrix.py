@@ -34,11 +34,12 @@ Idempotence contract (D-02 / Pattern B):
   Two consecutive runs MUST produce byte-identical output.
 """
 import argparse
-import hashlib  # noqa: F401 — used by later-wave ledger minting
+import hashlib
 import json
 import os
+import statistics
 import sys
-from collections import Counter, defaultdict  # noqa: F401 — defaultdict used by later waves
+from collections import Counter, defaultdict
 from pathlib import Path
 
 from firestarter.database import EpromDatabase  # noqa: F401 — singleton kept available for §3/§4 lookups
@@ -209,8 +210,13 @@ def compute_summary(rows, db_raw):
 # §1 — Summary Statistics
 # ---------------------------------------------------------------------------
 
-def emit_summary(summary):
-    """Return the §1 markdown block as a single string."""
+def emit_summary(summary, severity_counts=None):
+    """Return the §1 markdown block as a single string.
+
+    `severity_counts` (if provided) is a dict like
+    `{"HAZARD": 1, "CORRECTNESS": 4, "VARIANCE": 12}` from the Wave 3
+    defect-detection pass; used to replace the Wave 1 TBD placeholder.
+    """
     parts = ["## §1: Summary Statistics", ""]
 
     # a. Top-level counts
@@ -306,14 +312,24 @@ def emit_summary(summary):
     parts.append(md_table(["Algorithm", "True", "False"], cid_rows))
     parts.append("")
 
-    # h. Severity-tier counts placeholder (D-12 — populated in Wave 3)
+    # h. Severity-tier counts (D-12) — populated by Wave 3 detection pass.
     parts.append("### Severity-tier finding counts (D-12)")
     parts.append("")
-    parts.append("- HAZARD: TBD")
-    parts.append("- CORRECTNESS: TBD")
-    parts.append("- VARIANCE: TBD")
-    parts.append("")
-    parts.append("_Populated in Wave 3 (Plan 11-04 — defect-findings emit)._")
+    if severity_counts is None:
+        parts.append("- HAZARD: TBD")
+        parts.append("- CORRECTNESS: TBD")
+        parts.append("- VARIANCE: TBD")
+        parts.append("")
+        parts.append("_Populated in Wave 3 (Plan 11-04 — defect-findings emit)._")
+    else:
+        parts.append(f"- HAZARD: {severity_counts.get('HAZARD', 0)}")
+        parts.append(f"- CORRECTNESS: {severity_counts.get('CORRECTNESS', 0)}")
+        parts.append(f"- VARIANCE: {severity_counts.get('VARIANCE', 0)}")
+        parts.append("")
+        parts.append(
+            "_DEFECT-COV-00 is the v1.0 Phase 13 RESOLVED baseline (D-15) and "
+            "is not counted in the live-detection totals above._"
+        )
 
     return "\n".join(parts)
 
@@ -536,22 +552,403 @@ def emit_reconciliation(summary):
 
 
 # ---------------------------------------------------------------------------
-# §4 / §5 — Placeholder headers (populated by Waves 3-4)
+# §4 — Defect findings: hashing, ledger, detection, emit (Wave 3 / Plan 11-04)
 # ---------------------------------------------------------------------------
+#
+# Pattern C (PATTERNS.md "Stable defect-ID hash composition" + RESEARCH.md
+# Pattern 4 lines 195-218): every finding has a deterministic 16-hex hash of
+# its (severity, axis, signature) tuple. The hash → DEFECT-COV-NN mapping is
+# persisted in `.planning/v1.3-defect-coverage-ids.json` so IDs survive DB
+# regenerations (D-13 stable identity contract).
+
+
+def finding_hash(severity, axis, signature):
+    """Return the 16-hex stable hash of a finding's identity tuple.
+
+    Verbatim shape from RESEARCH.md Pattern 4: sha1 over canonical JSON
+    (sort_keys=True, compact separators) of `{severity, axis, signature}`,
+    truncated to 16 hex chars. Truncation is intentional — 16 hex = 64 bits
+    of state, more than enough to avoid collisions across the < 100 expected
+    findings while keeping rendered IDs readable (D-13).
+
+    `signature` may be a tuple or list; it is coerced to a list for JSON
+    serializability (tuples are not JSON-native).
+    """
+    payload = {
+        "severity": severity,
+        "axis": axis,
+        "signature": list(signature),
+    }
+    blob = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha1(blob).hexdigest()[:16]
+
+
+def load_ledger(ledger_path):
+    """Read `ledger_path` as JSON dict; return `{}` if missing (Pitfall 4 cold-start).
+
+    A parse error is surfaced (not swallowed) so a corrupted ledger fails
+    fast rather than silently overwriting itself.
+    """
+    try:
+        return json.loads(Path(ledger_path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+
+
+def save_ledger(ledger, ledger_path):
+    """Write the ledger as `json.dumps(..., indent=2, sort_keys=True) + \"\\n\"`.
+
+    LF-only newlines, UTF-8, trailing newline — Pattern B invariants 1+3+4.
+    """
+    blob = json.dumps(ledger, indent=2, sort_keys=True) + "\n"
+    Path(ledger_path).write_text(blob, encoding="utf-8", newline="\n")
+
+
+def mint_or_reuse(ledger, severity, axis, signature, next_n_holder):
+    """Return the DEFECT-COV-NN ID for this finding; mint a new one if absent.
+
+    `next_n_holder` is a single-element list used as a mutable counter so
+    repeated calls within one generate_matrix() pass share the next-N
+    increment (RESEARCH.md Code Examples lines 609-619).
+
+    IDs are formatted with 2-digit zero-padding (`DEFECT-COV-07`) until
+    NN >= 100, at which point Python's natural width takes over
+    (RESEARCH.md Open Question 2 — current corpus is well below 100).
+    """
+    h = finding_hash(severity, axis, signature)
+    if h in ledger:
+        return ledger[h]
+    new_id = f"DEFECT-COV-{next_n_holder[0]:02d}"
+    ledger[h] = new_id
+    next_n_holder[0] += 1
+    return new_id
+
+
+def detect_resolved_baseline(ledger, next_n_holder):
+    """Seed `DEFECT-COV-00` into the ledger if absent (D-15 RESOLVED baseline).
+
+    DEFECT-COV-00 is the v1.0 Phase 13 WARNING-5 override — the
+    `DIP28_2764` HAZARD that was caught and fixed in v1.0. Including it
+    in the ledger makes the matrix's §4 narrative complete (the audit
+    starts from the last known-good state) and reserves NN=00 forever so
+    new mints start at NN=01.
+
+    Signature: severity=HAZARD, axis=pinout_vs_algorithm,
+    signature=(["DIP28_2764","DIP28_28C256"], 0x07, "Flash/EEPROM").
+    Note this is the PRE-rederive _etype value because at WARNING-5
+    predicate time `_etype == "Flash/EEPROM"` (per build_db.py:415-417).
+    """
+    h = finding_hash(
+        "HAZARD",
+        "pinout_vs_algorithm",
+        (["DIP28_2764", "DIP28_28C256"], 0x07, "Flash/EEPROM"),
+    )
+    if h not in ledger:
+        ledger[h] = "DEFECT-COV-00"
+
+
+def _examples_for(rows_subset, limit=3):
+    """Return up to `limit` 'MFG/first_alias' strings sorted by sort_key."""
+    sorted_rows = sorted(rows_subset, key=lambda mc: sort_key(*mc))
+    out = []
+    for mfg, chip in sorted_rows[:limit]:
+        first_alias = chip["part_number"].split(",")[0]
+        out.append(f"{mfg}/{first_alias}")
+    return out
+
+
+def detect_hazard(rows):
+    """Yield HAZARD findings.
+
+    Currently yields the single new 42-row cluster: pinout in
+    {DIP28_28C64, DIP28_28C256} AND algorithm == 0x07. After
+    build_db.py:481-486 re-derivation, every algo-0x07 row has
+    `electrical.type == "UV-EPROM"`, so the WARNING-5 override predicate
+    (build_db.py:415-423) which requires `_etype == "Flash/EEPROM"` is
+    structurally unreachable for these rows.
+    """
+    cluster = [
+        (mfg, chip) for mfg, chip in rows
+        if chip["pinout"] in ("DIP28_28C64", "DIP28_28C256")
+        and chip["programming"]["algorithm"] == 0x07
+    ]
+    if not cluster:
+        return
+
+    affected = len(cluster)
+    signature = (["DIP28_28C64", "DIP28_28C256"], 0x07, "UV-EPROM")
+    yield {
+        "severity": "HAZARD",
+        "axis": "pinout_vs_algorithm",
+        "signature": signature,
+        "hash": finding_hash("HAZARD", "pinout_vs_algorithm", signature),
+        "affected_chips": affected,
+        "title": (
+            f"DIP28_28C64 + DIP28_28C256 on algorithm 0x07 — "
+            f"WARNING-5 override structurally unreachable for {affected} rows"
+        ),
+        "root_cause_hypothesis": (
+            "Upstream infoic.xml lacks the EEPROM flag bit for these chips; "
+            "WARNING-5 predicate gates on _etype == Flash/EEPROM which is "
+            "False at predicate time, then post-override re-derivation "
+            "rewrites all 0x07 chips to UV-EPROM (build_db.py:481-486), "
+            "making the predicate structurally unreachable."
+        ),
+        "suggested_fix_venue": (
+            "v1.4 build_db.py override (extend WARNING-5 predicate to drop "
+            "the _etype == Flash/EEPROM clause OR add a new override class "
+            "keyed on pinout in {DIP28_28C64, DIP28_28C256} and proto_id == 0x07)"
+        ),
+        "examples": _examples_for(cluster, 3),
+    }
+
+
+def detect_correctness(rows):
+    """Yield CORRECTNESS findings: pulse_duration outliers per cluster.
+
+    Group rows by (algorithm, pinout, size_bytes). Within each group with
+    >= 2 distinct pulse values, compute the cluster median; flag rows whose
+    pulse differs from the median by >= 10x (max/min ratio). One finding
+    per (cluster, outlier-pulse-bucket) pair.
+    """
+    clusters = defaultdict(list)
+    for mfg, chip in rows:
+        algo = chip["programming"]["algorithm"]
+        pinout = chip["pinout"]
+        size = chip["electrical"]["size_bytes"]
+        clusters[(algo, pinout, size)].append((mfg, chip))
+
+    findings = []
+    for (algo, pinout, size), members in clusters.items():
+        pulses = [parse_pulse_us(chip["programming"]["pulse_duration"]) for _, chip in members]
+        if len(set(pulses)) < 2:
+            continue
+        median = statistics.median(pulses)
+        if median <= 0:
+            continue
+
+        # Identify outlier rows: any pulse whose max/min ratio vs the median is >= 10x.
+        outlier_rows = []
+        for (mfg, chip), pulse in zip(members, pulses):
+            if pulse <= 0:
+                continue
+            ratio = max(pulse, median) / min(pulse, median)
+            if ratio >= 10:
+                outlier_rows.append((mfg, chip))
+
+        if not outlier_rows:
+            continue
+
+        # One finding per (algo, pinout, size, manufacturer, first_alias) outlier
+        # so multi-manufacturer clusters split into per-manufacturer findings
+        # per D-14 signature schema.
+        per_sig = defaultdict(list)
+        for mfg, chip in outlier_rows:
+            first_alias = chip["part_number"].split(",")[0]
+            per_sig[(algo, pinout, size, mfg, first_alias)].append((mfg, chip))
+
+        for sig_tuple, sig_rows in per_sig.items():
+            algo_i, pinout_s, size_b, mfg_s, alias_s = sig_tuple
+            signature = (algo_i, pinout_s, size_b, mfg_s, alias_s)
+            findings.append({
+                "severity": "CORRECTNESS",
+                "axis": "pulse_duration_outlier",
+                "signature": signature,
+                "hash": finding_hash("CORRECTNESS", "pulse_duration_outlier", signature),
+                "affected_chips": len(sig_rows),
+                "title": (
+                    f"{mfg_s}/{alias_s} pulse_duration outlier (>=10x median) "
+                    f"in algo-0x{algo_i:02X} / {pinout_s} / {size_b}B cluster"
+                ),
+                "root_cause_hypothesis": (
+                    "Pulse duration deviates by at least 10x from cluster "
+                    "median; possible upstream infoic.xml mis-classification "
+                    "or real-chip variance — verify against datasheet."
+                ),
+                "suggested_fix_venue": "awaiting bench data",
+                "examples": _examples_for(sig_rows, 3),
+            })
+
+    yield from findings
+
+
+def detect_variance(rows):
+    """Yield VARIANCE findings: chip_id_check toggles + chip_id_value drift.
+
+    Per D-14 signature schema, group by (algorithm, pinout, size_bytes,
+    manufacturer). Two axes:
+      (a) chip_id_check_toggle — different members of a cluster have
+          different `chip_id_check` boolean values
+      (b) chip_id_value_drift — multiple members have chip_id_check=True
+          but their `chip_id_value` strings differ
+    """
+    clusters = defaultdict(list)
+    for mfg, chip in rows:
+        algo = chip["programming"]["algorithm"]
+        pinout = chip["pinout"]
+        size = chip["electrical"]["size_bytes"]
+        clusters[(algo, pinout, size, mfg)].append((mfg, chip))
+
+    findings = []
+    for (algo, pinout, size, mfg), members in clusters.items():
+        if len(members) < 2:
+            continue
+
+        cid_checks = {
+            bool(chip["programming"].get("chip_id_check", False))
+            for _, chip in members
+        }
+        if len(cid_checks) > 1:
+            signature = (algo, pinout, size, mfg)
+            findings.append({
+                "severity": "VARIANCE",
+                "axis": "chip_id_check_toggle",
+                "signature": signature,
+                "hash": finding_hash("VARIANCE", "chip_id_check_toggle", signature),
+                "affected_chips": len(members),
+                "title": (
+                    f"{mfg} on algo-0x{algo:02X} / {pinout} / {size}B: "
+                    "chip_id_check toggles between members"
+                ),
+                "root_cause_hypothesis": (
+                    "Cluster members disagree on whether chip_id readout is "
+                    "supported; likely upstream infoic.xml drift across "
+                    "die revisions or pin-compatible aliases."
+                ),
+                "suggested_fix_venue": "documentation-only",
+                "examples": _examples_for(members, 3),
+            })
+
+        # chip_id_value drift among members with chip_id_check=True.
+        true_members = [
+            (mfg2, chip) for mfg2, chip in members
+            if bool(chip["programming"].get("chip_id_check", False))
+        ]
+        if len(true_members) >= 2:
+            cid_values = {chip["programming"].get("chip_id_value") for _, chip in true_members}
+            if len(cid_values) > 1:
+                signature = (algo, pinout, size, mfg)
+                findings.append({
+                    "severity": "VARIANCE",
+                    "axis": "chip_id_value_drift",
+                    "signature": signature,
+                    "hash": finding_hash("VARIANCE", "chip_id_value_drift", signature),
+                    "affected_chips": len(true_members),
+                    "title": (
+                        f"{mfg} on algo-0x{algo:02X} / {pinout} / {size}B: "
+                        "chip_id_value differs across members with chip_id_check=True"
+                    ),
+                    "root_cause_hypothesis": (
+                        "Legitimate die-revision identity drift OR upstream "
+                        "infoic.xml carries different signature bytes for "
+                        "pin-compatible aliases; expected for some Atmel / "
+                        "ST / SST families."
+                    ),
+                    "suggested_fix_venue": "documentation-only",
+                    "examples": _examples_for(true_members, 3),
+                })
+
+    yield from findings
+
+
+def emit_defects(findings, ledger, next_n_holder):
+    """Render §4 as a list of markdown lines.
+
+    Order: DEFECT-COV-00 RESOLVED baseline first, then HAZARD, then
+    CORRECTNESS, then VARIANCE (D-12 severity-tier order). Within each
+    tier, sort by finding hash ascending for stable output.
+    """
+    lines = ["## §4: DB Inconsistencies / Defect Candidates", ""]
+    lines.append(
+        "Per D-12 severity tiers: HAZARD (potential hardware damage), "
+        "CORRECTNESS (likely DB-data bug, no damage path), VARIANCE "
+        "(legitimate diversity captured for completeness). IDs are stable "
+        "across DB regenerations — the on-disk ledger at "
+        "`.planning/v1.3-defect-coverage-ids.json` maps each finding's "
+        "16-hex hash to its DEFECT-COV-NN."
+    )
+    lines.append("")
+
+    # DEFECT-COV-00 RESOLVED block (D-15).
+    lines.append("### DEFECT-COV-00 — RESOLVED in v1.0 Phase 13 (WARNING-5)")
+    lines.append("")
+    lines.append(
+        "Baseline RESOLVED entry — the v1.0 audit caught and fixed the "
+        "`DIP28_2764` 5V-EEPROM HAZARD. Predicate quoted verbatim from "
+        "`firestarter_app/tools/build_db.py:415-423`:"
+    )
+    lines.append("")
+    lines.append("```python")
+    lines.append('if (pinout_key in ("DIP28_2764", "DIP28_28C256")')
+    lines.append('        and proto_id == 0x07')
+    lines.append('        and _etype == "Flash/EEPROM"):')
+    lines.append('    print(')
+    lines.append('        f"INFO: {mfg_name}/{name} algorithm override 0x07->0x0D "')
+    lines.append('        f"(WARNING-5: 5V EEPROM with non-EPROM pinout — route through configure_eeprom28c)",')
+    lines.append('        file=sys.stderr,')
+    lines.append('    )')
+    lines.append('    proto_id = 0x0D')
+    lines.append("```")
+    lines.append("")
+    resolved_table_rows = [
+        ["severity", "HAZARD"],
+        ["affected_chips", "~23 chips (pre-override; resolved)"],
+        ["axis", "pinout_vs_algorithm"],
+        [
+            "root_cause_hypothesis",
+            "DIP28_2764 + 0x07 EPROM_STD path asserted 12V P1_VPP_ENABLE on "
+            "socket pin 1 which is A14 on 28C-family 5V EEPROMs.",
+        ],
+        ["suggested_fix_venue", "documentation-only (resolved)"],
+        [
+            "examples",
+            "AT28C256, AT28C64, M28256, UPD28C64, X28C256",
+        ],
+    ]
+    lines.append(md_table(["Field", "Value"], resolved_table_rows))
+    lines.append("")
+
+    # Tier-first order, then hash-ascending within tier.
+    tier_order = {"HAZARD": 0, "CORRECTNESS": 1, "VARIANCE": 2}
+    sorted_findings = sorted(
+        findings,
+        key=lambda f: (tier_order.get(f["severity"], 99), f["hash"]),
+    )
+
+    for finding in sorted_findings:
+        defect_id = mint_or_reuse(
+            ledger,
+            finding["severity"],
+            finding["axis"],
+            finding["signature"],
+            next_n_holder,
+        )
+        lines.append(
+            f"### {defect_id} — {finding['severity']}: {finding['title']}"
+        )
+        lines.append("")
+        table_rows = [
+            ["severity", finding["severity"]],
+            ["affected_chips", str(finding["affected_chips"])],
+            ["axis", finding["axis"]],
+            ["root_cause_hypothesis", finding["root_cause_hypothesis"]],
+            ["suggested_fix_venue", finding["suggested_fix_venue"]],
+            ["examples", ", ".join(finding["examples"])],
+        ]
+        lines.append(md_table(["Field", "Value"], table_rows))
+        lines.append("")
+
+    return lines
+
 
 def emit_placeholder_sections():
-    """Return the §4 + §5 stub blocks. §3 is now wired (Wave 2 / Plan 11-03)."""
-    s4 = (
-        "## §4: DB Inconsistencies / Defect Candidates\n"
-        "\n"
-        "_Populated in Wave 3 (Plan 11-04 — defect findings + ledger)._"
-    )
+    """Return the §5 stub block. §4 is now wired (Wave 3 / Plan 11-04)."""
     s5 = (
         "## §5: BENCH Coverage Proof\n"
         "\n"
         "_Populated in Wave 4 (Plan 11-05 — bench-coverage proof)._"
     )
-    return s4, s5
+    return s5
 
 
 # ---------------------------------------------------------------------------
@@ -591,21 +988,65 @@ def generate_matrix(output, ledger_path, check=False):
     rows = list(iter_in_scope_rows(db_raw))
     summary = compute_summary(rows, db_raw)
 
-    # Stub ledger handling (Pitfall 4 cold-start). Wave 3 wires minting; for
-    # Wave 1 we just persist the loaded-or-empty ledger back unchanged.
+    # Load ledger (Pitfall 4 cold-start handled by load_ledger).
     try:
-        ledger = json.loads(Path(ledger_path).read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        ledger = {}
+        ledger = load_ledger(ledger_path)
     except json.JSONDecodeError as exc:
         print(f"ERROR: ledger {ledger_path} parse failed: {exc}", file=sys.stderr)
         return 1
 
+    # Run detection pass: gather all findings BEFORE deciding to mint or
+    # check. This keeps --check semantics dry-run (D-03).
+    findings = (
+        list(detect_hazard(rows))
+        + list(detect_correctness(rows))
+        + list(detect_variance(rows))
+    )
+
+    # Severity-tier counts for §1 (live detection only — DEFECT-COV-00 is
+    # excluded as a static RESOLVED entry per D-15).
+    severity_counts = Counter(f["severity"] for f in findings)
+
+    # --check semantics (D-03): dry-run drift gate.
+    # 1. Seed the RESOLVED baseline into a copy of the on-disk ledger.
+    # 2. Compute hash for each detected finding; if any hash is absent from
+    #    that ledger (including the post-seed baseline), exit 1.
+    # 3. Do NOT mutate the on-disk ledger.
+    if check:
+        check_ledger = dict(ledger)
+        detect_resolved_baseline(check_ledger, [1])
+        new_finding_seen = False
+        for f in findings:
+            if f["hash"] not in check_ledger:
+                new_finding_seen = True
+                break
+        # A baseline that was missing from the on-disk ledger also counts as
+        # drift — the operator must regenerate to seed DEFECT-COV-00.
+        if "DEFECT-COV-00" not in ledger.values():
+            new_finding_seen = True
+        return 1 if new_finding_seen else 0
+
+    # Normal generate path: seed RESOLVED baseline, then mint IDs for new
+    # findings. next_n_holder starts at max(existing_NN, 0) + 1 (DEFECT-COV-00
+    # is reserved — minting starts at 01).
+    detect_resolved_baseline(ledger, [1])
+    existing_ns = []
+    for v in ledger.values():
+        try:
+            existing_ns.append(int(v.split("-")[-1]))
+        except (ValueError, IndexError):
+            continue
+    start_n = max([0] + existing_ns) + 1
+    if start_n < 1:
+        start_n = 1
+    next_n_holder = [start_n]
+
     # Assemble matrix body.
-    s1 = emit_summary(summary)
+    s1 = emit_summary(summary, severity_counts=severity_counts)
     s2 = emit_reconciliation(summary)
     s3 = emit_full_enumeration(rows)
-    s4, s5 = emit_placeholder_sections()
+    s4 = "\n".join(emit_defects(findings, ledger, next_n_holder)).rstrip("\n")
+    s5 = emit_placeholder_sections()
     body_parts = [
         _FILE_HEADER.rstrip("\n"),
         "",
@@ -634,16 +1075,8 @@ def generate_matrix(output, ledger_path, check=False):
     # Pattern B invariant 3: LF-only, UTF-8, trailing newline.
     Path(output).write_text(content, encoding="utf-8", newline="\n")
 
-    # Ledger: sort_keys=True + LF newline + trailing \n (Pattern B invariants 1+3+4).
-    ledger_blob = json.dumps(ledger, indent=2, sort_keys=True) + "\n"
-    Path(ledger_path).write_text(ledger_blob, encoding="utf-8", newline="\n")
-
-    # --check semantics: Wave 1 has no minting, so no new findings are
-    # possible. Wave 3 will extend this to compare in-memory mint set vs
-    # on-disk ledger and return 1 if a new ID would be added.
-    if check:
-        # TODO: Wave 3 — return 1 if mint would add new IDs vs current ledger.
-        return 0
+    # Persist ledger (sort_keys=True + LF + trailing \n).
+    save_ledger(ledger, ledger_path)
 
     return 0
 
