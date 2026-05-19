@@ -331,6 +331,127 @@ def _pulse_bucket_sort_key(bucket):
 
 
 # ---------------------------------------------------------------------------
+# Pattern F — Sort key for deterministic enumeration (§3 + §5)
+# ---------------------------------------------------------------------------
+
+def sort_key(mfg, chip):
+    """Pattern F (PATTERNS.md lines 593-601 + RESEARCH.md 564-575) — D-06 sort.
+
+    Returns the 5-tuple `(algorithm, pinout, size_bytes, manufacturer,
+    first_alias)` used to order every §3 + §5 enumeration. The first_alias
+    is the leading comma-delimited variant in `part_number` (per D-06: rows
+    cover the variant set verbatim, but sort by the first alias).
+
+    This tuple is the load-bearing contract for byte-identical re-runs
+    (Pattern B codegen-idempotence guarantee).
+    """
+    return (
+        chip["programming"]["algorithm"],
+        chip["pinout"],
+        chip["electrical"]["size_bytes"],
+        mfg,
+        chip["part_number"].split(",")[0],
+    )
+
+
+# ---------------------------------------------------------------------------
+# §3 — Full Enumeration (per-algorithm sub-tables, D-06 sort)
+# ---------------------------------------------------------------------------
+
+_ENUM_HEADERS = [
+    "Manufacturer",
+    "Part Number(s)",
+    "Pin Count",
+    "Size (bytes)",
+    "Pulse Duration",
+    "Chip ID Check",
+    "Chip ID Value",
+    "Pinout",
+    "Electrical Type",
+]
+
+
+def _md_escape(s):
+    """Escape `|` inside markdown table cells (defensive — DB rows are not
+    known to contain `|`, but rendering must remain robust)."""
+    return str(s).replace("|", r"\|")
+
+
+def _enum_row(mfg, chip):
+    """Build one §3 markdown-row payload from (mfg, chip).
+
+    Field access patterns are documented in the plan's <interfaces> block.
+    chip_id_check renders as Python `str(bool)` ("True"/"False");
+    chip_id_value renders verbatim because the live DB stores it as a string
+    (`"0x00000108"` etc.) — confirmed via `chip_database.json` inspection.
+    """
+    cid_check = bool(chip["programming"]["chip_id_check"])
+    cid_value = chip["programming"]["chip_id_value"]
+    return [
+        _md_escape(mfg),
+        _md_escape(chip["part_number"]),
+        _md_escape(chip["electrical"]["pin_count"]),
+        _md_escape(chip["electrical"]["size_bytes"]),
+        _md_escape(chip["programming"]["pulse_duration"]),
+        "True" if cid_check else "False",
+        _md_escape(cid_value),
+        _md_escape(chip["pinout"]),
+        _md_escape(chip["electrical"]["type"]),
+    ]
+
+
+def emit_full_enumeration(rows):
+    """Return the §3 markdown block as a single string.
+
+    Split into two per-algorithm sub-tables (CONTEXT.md "Claude's Discretion"
+    + PATTERNS.md "Multi-table-stacked layout"): algo-0x07 first, then
+    algo-0x08. Rows within each sub-table are sorted by Pattern F (D-06).
+
+    `rows` is a list of (mfg, chip) tuples from `iter_in_scope_rows`.
+    """
+    parts = ["## §3: Full Enumeration", ""]
+    parts.append(
+        "One row per `chip_database.json` record (not per variant). "
+        "339 total rows: 212 algo-0x07 + 127 algo-0x08. "
+        "Sort: (algorithm, pinout, size_bytes, manufacturer, first_alias). "
+        "Per D-06."
+    )
+    parts.append("")
+
+    algo_07_rows = [
+        (mfg, chip) for mfg, chip in rows
+        if chip["programming"]["algorithm"] == 0x07
+    ]
+    algo_08_rows = [
+        (mfg, chip) for mfg, chip in rows
+        if chip["programming"]["algorithm"] == 0x08
+    ]
+
+    algo_07_rows = sorted(algo_07_rows, key=lambda mc: sort_key(*mc))
+    algo_08_rows = sorted(algo_08_rows, key=lambda mc: sort_key(*mc))
+
+    parts.append(f"### algo-0x07 ({len(algo_07_rows)} rows)")
+    parts.append("")
+    parts.append(
+        md_table(
+            _ENUM_HEADERS,
+            [_enum_row(mfg, chip) for mfg, chip in algo_07_rows],
+        )
+    )
+    parts.append("")
+    parts.append(f"### algo-0x08 ({len(algo_08_rows)} rows)")
+    parts.append("")
+    parts.append(
+        md_table(
+            _ENUM_HEADERS,
+            [_enum_row(mfg, chip) for mfg, chip in algo_08_rows],
+        )
+    )
+
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # §2 — DB Count Reconciliation
 # ---------------------------------------------------------------------------
 
@@ -415,16 +536,11 @@ def emit_reconciliation(summary):
 
 
 # ---------------------------------------------------------------------------
-# §3 / §4 / §5 — Placeholder headers (populated by Waves 2-4)
+# §4 / §5 — Placeholder headers (populated by Waves 3-4)
 # ---------------------------------------------------------------------------
 
 def emit_placeholder_sections():
-    """Return the §3 + §4 + §5 stub blocks joined with `---` separators."""
-    s3 = (
-        "## §3: Full Enumeration\n"
-        "\n"
-        "_Populated in Wave 2 (Plan 11-03 — enumeration + idempotence)._"
-    )
+    """Return the §4 + §5 stub blocks. §3 is now wired (Wave 2 / Plan 11-03)."""
     s4 = (
         "## §4: DB Inconsistencies / Defect Candidates\n"
         "\n"
@@ -435,7 +551,7 @@ def emit_placeholder_sections():
         "\n"
         "_Populated in Wave 4 (Plan 11-05 — bench-coverage proof)._"
     )
-    return s3, s4, s5
+    return s4, s5
 
 
 # ---------------------------------------------------------------------------
@@ -488,7 +604,8 @@ def generate_matrix(output, ledger_path, check=False):
     # Assemble matrix body.
     s1 = emit_summary(summary)
     s2 = emit_reconciliation(summary)
-    s3, s4, s5 = emit_placeholder_sections()
+    s3 = emit_full_enumeration(rows)
+    s4, s5 = emit_placeholder_sections()
     body_parts = [
         _FILE_HEADER.rstrip("\n"),
         "",
