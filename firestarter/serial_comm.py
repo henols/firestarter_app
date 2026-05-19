@@ -749,10 +749,9 @@ class SerialCommunicator:
                             if match:
                                 current_version = match.group(1).strip()
 
-                                # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2
-                                # firmware. The firmware bumps to major=3 in
-                                # Phase 9; until then, bench scripts use
-                                # FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass.
+                                # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped
+                                # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when
+                                # bench-testing a current host against a historical (v2.x) firmware build.
                                 try:
                                     major = int(current_version.split(".")[0])
                                 except (ValueError, IndexError):
