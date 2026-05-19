@@ -69,15 +69,57 @@ class TestAuditCoverageMatrix:
     def test_enumeration_row_count(self, tmp_path):
         """COV-01 / D-06: §3 contains exactly 339 enumerated in-scope rows.
 
-        Wave 2 impl: import generate_matrix, run it into tmp_path, parse §3
-        body table, assert row count == 339 (= 212 algo-0x07 + 127 algo-0x08
-        per the post-WARNING-5 / post-fm1608 reconciled DB histogram in
-        PATTERNS.md §"Database state").
+        Splits the body between `## §3:` and `## §4:` headers, counts
+        data rows (pipe-prefixed, not the `| Manufacturer` header row and
+        not the `|---` separator row). Asserts:
+
+            total in §3 == 339
+            algo-0x07 sub-table == 212
+            algo-0x08 sub-table == 127
+
+        Per the post-WARNING-5 / post-fm1608 reconciled DB histogram in
+        PATTERNS.md §"Database state".
         """
-        from tools.audit_coverage_matrix import generate_matrix  # noqa: F401
-        raise NotImplementedError(
-            "Wave 2 — see VALIDATION.md row 11-COV-01-row-count "
-            "(COV-01 / D-06: §3 must enumerate exactly 339 in-scope rows)"
+        from tools.audit_coverage_matrix import generate_matrix
+
+        out = tmp_path / "m.md"
+        ledger = tmp_path / "l.json"
+        rc = generate_matrix(output=out, ledger_path=ledger)
+        assert rc == 0, f"generate_matrix returned non-zero rc={rc}"
+
+        body = out.read_text(encoding="utf-8")
+
+        # §3 body slice: from `## §3:` (inclusive) to `## §4:` (exclusive).
+        s3_start = body.index("## §3:")
+        s4_start = body.index("## §4:")
+        s3_body = body[s3_start:s4_start]
+
+        def _data_rows(text):
+            return [
+                line for line in text.split("\n")
+                if line.startswith("| ")
+                and not line.startswith("| Manufacturer")
+                and not line.startswith("|---")
+            ]
+
+        all_rows = _data_rows(s3_body)
+        assert len(all_rows) == 339, (
+            f"§3 enumerated row count: expected 339, got {len(all_rows)}"
+        )
+
+        # Per-sub-table breakdown — 212 algo-0x07, 127 algo-0x08.
+        algo7_start = s3_body.index("### algo-0x07")
+        algo8_start = s3_body.index("### algo-0x08")
+        algo7_body = s3_body[algo7_start:algo8_start]
+        algo8_body = s3_body[algo8_start:]
+
+        algo7_rows = _data_rows(algo7_body)
+        algo8_rows = _data_rows(algo8_body)
+        assert len(algo7_rows) == 212, (
+            f"algo-0x07 sub-table row count: expected 212, got {len(algo7_rows)}"
+        )
+        assert len(algo8_rows) == 127, (
+            f"algo-0x08 sub-table row count: expected 127, got {len(algo8_rows)}"
         )
 
     def test_enumeration_sort(self, tmp_path):
@@ -86,41 +128,88 @@ class TestAuditCoverageMatrix:
             (algorithm asc, pinout asc, size_bytes asc, manufacturer asc,
              first_alias asc)
 
-        Wave 2 impl: parse §3 table, assert each consecutive pair of rows
-        satisfies the lexicographic sort-key tuple from PATTERNS.md Pattern F.
+        Parses each per-algorithm sub-table, extracts the (pinout,
+        size_bytes, manufacturer, first_alias) tuple from each row, and
+        asserts non-decreasing order pair-wise. Algorithm is implicit per
+        sub-table so it's omitted from the comparison key.
+
         This invariant is load-bearing for byte-identical re-runs (Pattern B
         codegen-idempotence guarantee).
         """
-        from tools.audit_coverage_matrix import generate_matrix  # noqa: F401
-        raise NotImplementedError(
-            "Wave 2 — see VALIDATION.md row 11-COV-01-sort "
-            "(COV-01 / D-06 sort tuple: (algorithm, pinout, size_bytes, "
-            "manufacturer, first_alias) ascending)"
-        )
+        from tools.audit_coverage_matrix import generate_matrix
+
+        out = tmp_path / "m.md"
+        ledger = tmp_path / "l.json"
+        rc = generate_matrix(output=out, ledger_path=ledger)
+        assert rc == 0
+
+        body = out.read_text(encoding="utf-8")
+        s3_body = body[body.index("## §3:"):body.index("## §4:")]
+        algo7_body = s3_body[
+            s3_body.index("### algo-0x07"):s3_body.index("### algo-0x08")
+        ]
+        algo8_body = s3_body[s3_body.index("### algo-0x08"):]
+
+        def _parse_rows(text):
+            """Extract (pinout, size_bytes, manufacturer, first_alias) per row."""
+            keys = []
+            for line in text.split("\n"):
+                if not line.startswith("| "):
+                    continue
+                if line.startswith("| Manufacturer") or line.startswith("|---"):
+                    continue
+                # Strip leading/trailing `|` then split.
+                cells = [c.strip() for c in line.strip().strip("|").split("|")]
+                # Columns per D-06: Manufacturer, Part Number(s), Pin Count,
+                # Size (bytes), Pulse Duration, Chip ID Check, Chip ID Value,
+                # Pinout, Electrical Type
+                mfg = cells[0]
+                part_first_alias = cells[1].split(",")[0].strip()
+                size_bytes = int(cells[3])
+                pinout = cells[7]
+                keys.append((pinout, size_bytes, mfg, part_first_alias))
+            return keys
+
+        for sub_name, sub_text in (
+            ("algo-0x07", algo7_body),
+            ("algo-0x08", algo8_body),
+        ):
+            keys = _parse_rows(sub_text)
+            assert keys, f"{sub_name}: no rows parsed"
+            for i in range(1, len(keys)):
+                assert keys[i - 1] <= keys[i], (
+                    f"{sub_name} sort violation at row {i}: "
+                    f"{keys[i - 1]!r} > {keys[i]!r}"
+                )
 
     def test_idempotence(self, tmp_path):
         """COV-01 / D-02: byte-identical matrix + unchanged ledger on re-run.
 
-        Wave 2 impl follows RESEARCH.md §"Code Examples" lines 242-255 verbatim:
+        Verbatim shape from RESEARCH.md §"Code Examples" lines 242-255: two
+        output paths share a single ledger; the second run must produce
+        byte-identical matrix output AND a byte-identical ledger.
 
-            out_a = tmp_path / "a.md"
-            out_b = tmp_path / "b.md"
-            ledger = tmp_path / "ids.json"
-            generate_matrix(output=out_a, ledger_path=ledger)
-            snap_ledger_1 = ledger.read_text()
-            generate_matrix(output=out_b, ledger_path=ledger)
-            assert out_a.read_bytes() == out_b.read_bytes(), "matrix not idempotent"
-            assert ledger.read_text() == snap_ledger_1, "ledger mutated on second run"
-
-        This is the canonical D-02 contract: codegen-idempotence is what lets
-        the matrix be regenerated in CI without producing a noisy diff.
+        Wave 2 has no defect-ID minting (Wave 3 adds it), so the ledger
+        stays at `{}`/empty-blob — the test still verifies the no-mutation
+        property, which is the canonical D-02 contract.
         """
-        from tools.audit_coverage_matrix import generate_matrix  # noqa: F401
-        raise NotImplementedError(
-            "Wave 2 — see VALIDATION.md row 11-COV-01-idempotence "
-            "(COV-01 / D-02: re-run produces byte-identical output and "
-            "unchanged ledger; recipe in RESEARCH.md lines 242-255)"
-        )
+        from tools.audit_coverage_matrix import generate_matrix
+
+        out_a = tmp_path / "a.md"
+        out_b = tmp_path / "b.md"
+        ledger = tmp_path / "ids.json"
+
+        # First run mints anything that needs minting; capture ledger bytes.
+        rc1 = generate_matrix(output=out_a, ledger_path=ledger)
+        assert rc1 == 0
+        snap_ledger_1 = ledger.read_bytes()
+
+        # Second run — must be byte-identical AND must not mint new IDs.
+        rc2 = generate_matrix(output=out_b, ledger_path=ledger)
+        assert rc2 == 0
+
+        assert out_a.read_bytes() == out_b.read_bytes(), "matrix not idempotent"
+        assert ledger.read_bytes() == snap_ledger_1, "ledger mutated on second run"
 
     # ------------------------------------------------------------------
     # Wave 3 — defect findings + ledger semantics (COV-02)
