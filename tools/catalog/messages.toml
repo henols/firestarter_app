@@ -340,6 +340,34 @@ format      = "Skipping erase of memory"
 params      = []
 wire_format = "id_frame"
 
+# Verbose-build diagnostics (EXTRA_INFO_LOGGING-gated in firmware).
+# Three single-purpose INFO emits replacing the dropped per-command
+# MSG_OK_FW_HANDSHAKE wire chatter. Each renders one labeled value;
+# MSG_INFO_HW is only emitted when HARDWARE_REVISION is defined.
+[[messages]]
+id          = 0x5A
+name        = "MSG_INFO_FW"
+severity    = "INFO"
+format      = "FW: %s"
+params      = [{ type = "ascii_str" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x5B
+name        = "MSG_INFO_HW"
+severity    = "INFO"
+format      = "HW: Rev%u"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x5C
+name        = "MSG_INFO_CMD"
+severity    = "INFO"
+format      = "Cmd: 0x%02x"
+params      = [{ type = "u8", render = "hex_byte" }]
+wire_format = "id_frame"
+
 # ---------------------------------------------------------------------------
 # WARN (0x80..0x9F)
 # ---------------------------------------------------------------------------
