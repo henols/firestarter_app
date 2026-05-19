@@ -236,6 +236,43 @@ format      = "Skipping erase of memory"
 params      = []
 wire_format = "id_frame"
 
+# Per-command identity echo (emitted by init_programmer for every command).
+# INFO severity so they're visible in host's verbose mode but filtered out
+# of the OK/ERROR ack chain (expect_ack treats INFO as non-significant).
+# MSG_INFO_HW + MSG_INFO_PHYSICAL_HW are only emitted when HARDWARE_REVISION
+# is defined (boards without HW revision detection skip them).
+[[messages]]
+id          = 0x5A
+name        = "MSG_INFO_FW"
+severity    = "INFO"
+format      = "FW: %s"
+params      = [{ type = "ascii_str" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x5B
+name        = "MSG_INFO_HW"
+severity    = "INFO"
+format      = "HW: Rev%u"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x5C
+name        = "MSG_INFO_PHYSICAL_HW"
+severity    = "INFO"
+format      = "Physical HW: Rev%u"
+params      = [{ type = "u8" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x5D
+name        = "MSG_INFO_CMD"
+severity    = "INFO"
+format      = "Cmd: 0x%02x"
+params      = [{ type = "u8", render = "hex_byte" }]
+wire_format = "id_frame"
+
 # ---------------------------------------------------------------------------
 # WARN (0x80..0x9F)
 # ---------------------------------------------------------------------------
@@ -966,8 +1003,3 @@ name   = "DBG_MATCH_LINES"
 format = "Matching lines %u"
 params = [{ type = "u16" }]
 
-[[debug.messages]]
-id     = 0x36
-name   = "DBG_PHYSICAL_HARDWARE_REVISION"
-format = "Physical hardware revision: %u"
-params = [{ type = "u8" }]

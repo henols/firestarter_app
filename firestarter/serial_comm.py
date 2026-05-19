@@ -30,6 +30,7 @@ from firestarter.messages import (
     SEVERITY_LABEL,
     MSG_OK_REV,
     MSG_OK_CFG,
+    MSG_INFO_CMD,
     MSG_DATA_CHUNK,
     MSG_DEBUG,
     DBG_CMD,
@@ -343,6 +344,11 @@ class SerialCommunicator:
             if override == 0xFF:
                 return f"R1: {r1}, R2: {r2}"
             return f"R1: {r1}, R2: {r2}, Override HW: Rev{override}"
+
+        if msg_id == MSG_INFO_CMD and len(params) == 1:
+            cmd = params[0]
+            name = COMMAND_NAMES.get(cmd)
+            return f"Cmd: 0x{cmd:02x} ({name})" if name else f"Cmd: 0x{cmd:02x}"
 
         if msg_id == MSG_DEBUG and len(params) == 2:
             sub_id = params[0]
@@ -754,65 +760,88 @@ class SerialCommunicator:
             logger.debug(f"Probing for programmer on {port_name}...")
             communicator = SerialCommunicator(port=port_name, baud_rate=baud_rate)
             communicator.consume_remaining_input()
+
+            # FW-version handshake (independent of the user's command). Firmware
+            # emits the LFW-05 "OK: FW: <version>" text line on CMD_FW_VERSION;
+            # we use it to gate version compatibility before sending the actual
+            # user command. Prior firmware shipped MSG_OK_FW_HANDSHAKE with the
+            # version in every ack body, but that was dropped in Phase 9 — a
+            # dedicated probe is now the load-bearing version check.
+            exempt_cmds = [COMMAND_FW_VERSION]
+            command_code = command_to_send.get("state") or command_to_send.get("cmd")
+            if command_code not in exempt_cmds:
+                communicator.send_json_command({"state": COMMAND_FW_VERSION})
+                # CMD_FW_VERSION emits 2 acks: setup-complete "Ready" from
+                # init_programmer, then "OK: FW: <version>" from fw_get_version.
+                # Discard the first; parse the second for version validation.
+                pre_is_ok, _pre_msg = communicator.expect_ack()
+                if not pre_is_ok:
+                    logger.debug(f"Port {port_name}: FW-probe setup-ack not OK: {_pre_msg}")
+                    communicator.disconnect()
+                    return None
+                fw_is_ok, fw_msg = communicator.expect_ack()
+                if not fw_is_ok:
+                    logger.debug(f"Port {port_name}: FW-probe payload not OK: {fw_msg}")
+                    communicator.disconnect()
+                    return None
+
+                try:
+                    if fw_msg and "FW:" in fw_msg:
+                        match = re.search(r"FW:\s*([\d.x]+)", fw_msg)
+                        if match:
+                            current_version = match.group(1).strip()
+
+                            # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped
+                            # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when
+                            # bench-testing a current host against a historical (v2.x) firmware build.
+                            try:
+                                major = int(current_version.split(".")[0])
+                            except (ValueError, IndexError):
+                                major = 0
+                            if (
+                                major < 3
+                                and os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") != "1"
+                            ):
+                                raise FirmwareOutdatedError(
+                                    f"Firmware version {current_version} is pre-v1.2 (text-format logging). "
+                                    f"This host expects v1.2+ firmware emitting ID-encoded log frames. "
+                                    f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "
+                                    f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "
+                                    f"see PROJECT.md \"Constraints\".)"
+                                )
+
+                            if not SerialCommunicator._is_version_sufficient(current_version, "2.0.0"):
+                                raise FirmwareOutdatedError(
+                                    f"Firmware version {current_version} is outdated. "
+                                    f"Version 2.0.0 or higher is required. "
+                                    f"Please upgrade the firmware using 'firestarter fw --install'."
+                                )
+                        else:
+                            raise FirmwareOutdatedError(
+                                "Could not parse firmware version from programmer response. "
+                                "Please upgrade the firmware using 'firestarter fw --install'."
+                            )
+                    else:
+                        raise FirmwareOutdatedError(
+                            "Firmware is outdated (pre-2.0.0). "
+                            "Please upgrade the firmware using 'firestarter fw --install'."
+                        )
+                except (IndexError, AttributeError):
+                    raise FirmwareOutdatedError(
+                        "Could not determine firmware version. "
+                        "Please upgrade the firmware using 'firestarter fw --install'."
+                    )
+
+                # FW probe succeeded; drain any trailing diagnostic frames the
+                # firmware emitted alongside the FW handshake before we send
+                # the user's actual command.
+                communicator.consume_remaining_input()
+
+            # Send the user's actual command (or CMD_FW_VERSION re-send when exempt).
             communicator.send_json_command(command_to_send)
             is_ok, msg = communicator.expect_ack()
 
             if is_ok:
-                # Firmware version check for all commands except firmware check itself.
-                exempt_cmds = [COMMAND_FW_VERSION]
-                command_code = command_to_send.get("state") or command_to_send.get("cmd")
-                if command_code not in exempt_cmds:
-                    try:
-                        # Expected format from new firmware: "FW: 2.0.x, HW: Rev2, ..."
-                        if msg and "FW:" in msg:
-                            match = re.search(r"FW:\s*([\d.x]+)", msg)
-                            if match:
-                                current_version = match.group(1).strip()
-
-                                # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped
-                                # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when
-                                # bench-testing a current host against a historical (v2.x) firmware build.
-                                try:
-                                    major = int(current_version.split(".")[0])
-                                except (ValueError, IndexError):
-                                    major = 0
-                                if (
-                                    major < 3
-                                    and os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") != "1"
-                                ):
-                                    raise FirmwareOutdatedError(
-                                        f"Firmware version {current_version} is pre-v1.2 (text-format logging). "
-                                        f"This host expects v1.2+ firmware emitting ID-encoded log frames. "
-                                        f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "
-                                        f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "
-                                        f"see PROJECT.md \"Constraints\".)"
-                                    )
-
-                                if not SerialCommunicator._is_version_sufficient(current_version, "2.0.0"):
-                                    raise FirmwareOutdatedError(
-                                        f"Firmware version {current_version} is outdated. "
-                                        f"Version 2.0.0 or higher is required. "
-                                        f"Please upgrade the firmware using 'firestarter fw --install'."
-                                    )
-                            else:
-                                # "FW:" is present but version not found, treat as error
-                                raise FirmwareOutdatedError(
-                                    "Could not parse firmware version from programmer response. "
-                                    "Please upgrade the firmware using 'firestarter fw --install'."
-                                )
-                        else:
-                            # Response does not contain "FW:", assume it's an old firmware.
-                            raise FirmwareOutdatedError(
-                                "Firmware is outdated (pre-2.0.0). "
-                                "Please upgrade the firmware using 'firestarter fw --install'."
-                            )
-                    except (IndexError, AttributeError):
-                        # This case should be rare with the regex, but as a fallback.
-                        raise FirmwareOutdatedError(
-                            "Could not determine firmware version. "
-                            "Please upgrade the firmware using 'firestarter fw --install'."
-                        )
-
                 communicator.programmer_info = msg
                 logger.debug(f"Programmer found on {port_name}: {msg}")
                 config_manager.set_value("port", port_name)  # Save successful port
