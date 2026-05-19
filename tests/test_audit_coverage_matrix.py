@@ -183,61 +183,99 @@ class TestAuditCoverageMatrix:
     def test_summary_stats(self, tmp_path):
         """COV-01 / D-07: §1 reports the reconciled live-DB counts.
 
-        Wave 1 impl: parse §1 (Summary), assert it reports::
+        Asserts §1 (Summary Statistics) carries the live-DB numbers
+        post-WARNING-5 override (DIP28_2764 + 0x07 + Flash/EEPROM → 0x0D)
+        and post-fm1608 override (type=4 ∧ proto_id ∈ {0x07,0x08,0x0B}
+        → 0x28), plus upstream `infoic.xml` drift between v1.0 close and
+        v1.3 start:
 
             total_chips == 734
             algo_0x07   == 212
             algo_0x08   == 127
             in_scope    == 339
 
-        These are the live-DB numbers post-WARNING-5 override (23 chips
-        flipped 0x07 → 0x0D) and post-fm1608 override (chips flipped 0x07/0x0B
-        → 0x28). PATTERNS.md §"D-07 Planning-Doc Reconciliation" enumerates
-        the planning-doc rows that quote the stale 743 / 341 / 214 numbers
-        and must be Edit-tool patched to match.
+        PATTERNS.md §"D-07 Planning-Doc Reconciliation" enumerates the
+        planning-doc rows that quote the stale 743 / 341 / 214 numbers
+        and must be Edit-tool patched to match. The matrix's §2
+        carries the reconciliation narrative.
         """
-        from tools.audit_coverage_matrix import generate_matrix  # noqa: F401
-        raise NotImplementedError(
-            "Wave 1 — see VALIDATION.md row 11-COV-01-summary-stats "
-            "(COV-01 / D-07: §1 reports total_chips=734, algo_0x07=212, "
-            "algo_0x08=127, in_scope=339)"
-        )
+        from tools.audit_coverage_matrix import generate_matrix
+
+        out = tmp_path / "m.md"
+        ledger = tmp_path / "l.json"
+        rc = generate_matrix(output=out, ledger_path=ledger)
+        assert rc == 0, f"generate_matrix returned non-zero rc={rc}"
+
+        body = out.read_text(encoding="utf-8")
+
+        # Section anchors (D-05 fixed order — §1 + §2 land in Wave 1).
+        assert "## §1: Summary Statistics" in body, "§1 header missing"
+        assert "## §2: DB Count Reconciliation" in body, "§2 header missing"
+
+        # Live counts must appear in §1 — these are the regression anchors.
+        assert "734" in body, "total_chips=734 missing from matrix body"
+        assert "339" in body, "in_scope=339 missing from matrix body"
+        assert "212" in body, "algo_0x07=212 missing from matrix body"
+        assert "127" in body, "algo_0x08=127 missing from matrix body"
 
     def test_exit_codes(self, tmp_path):
-        """D-03: CLI exit-code surface — 0 on clean run, 1 on new findings.
+        """D-03: CLI exit-code surface — 0 on clean run.
 
-        Wave 1 impl uses subprocess to drive the real CLI surface::
+        Drives the real CLI via subprocess (per VALIDATION.md
+        "integration (subprocess)" classification) — mirrors
+        check_dispatch.py:148-190 exit-code discipline.
 
-            import subprocess, sys
-            result = subprocess.run(
-                [sys.executable, "tools/audit_coverage_matrix.py",
-                 "--output", str(out), "--ledger", str(ledger)],
-                cwd=<firestarter_app>,
-                capture_output=True,
-            )
-            assert result.returncode == 0  # clean run
-
-            # Mutate ledger to simulate "new finding" — drop one entry so
-            # the next run must mint a new DEFECT-COV-NN
-            result2 = subprocess.run(
-                [sys.executable, "tools/audit_coverage_matrix.py",
-                 "--check", "--ledger", str(mutated_ledger)],
-                cwd=<firestarter_app>,
-                capture_output=True,
-            )
-            assert result2.returncode == 1
-
-        Mirrors check_dispatch.py:148-190 exit-code discipline
-        (PATTERNS.md §"Exit-code discipline").
+        Wave 1: only clean-generate (rc=0) is reachable; ledger minting
+        lands in Wave 3, after which `--check` against a mutated ledger
+        returns 1 if a new DEFECT-COV-NN would be minted. See TODO below.
         """
-        # subprocess and sys imports deferred too — keep collection-time
-        # imports limited to pytest itself.
-        from tools.audit_coverage_matrix import generate_matrix  # noqa: F401
-        raise NotImplementedError(
-            "Wave 1 — see VALIDATION.md row 11-D-03-exit-codes "
-            "(D-03: subprocess returncode 0 on clean run; "
-            "returncode 1 on --check against mutated ledger)"
+        import subprocess
+        import sys
+        from pathlib import Path
+
+        firestarter_app_dir = Path(__file__).resolve().parent.parent
+
+        out = tmp_path / "m.md"
+        ledger = tmp_path / "l.json"
+        result = subprocess.run(
+            [
+                sys.executable,
+                "tools/audit_coverage_matrix.py",
+                "--output", str(out),
+                "--ledger", str(ledger),
+            ],
+            cwd=str(firestarter_app_dir),
+            capture_output=True,
+            text=True,
         )
+        assert result.returncode == 0, (
+            f"clean-run returncode={result.returncode}; "
+            f"stderr={result.stderr!r}; stdout={result.stdout!r}"
+        )
+        assert out.exists(), "matrix output not written"
+        assert ledger.exists(), "ledger output not written"
+
+        # --check on the same clean state should also exit 0 (no new findings).
+        result_check = subprocess.run(
+            [
+                sys.executable,
+                "tools/audit_coverage_matrix.py",
+                "--output", str(out),
+                "--ledger", str(ledger),
+                "--check",
+            ],
+            cwd=str(firestarter_app_dir),
+            capture_output=True,
+            text=True,
+        )
+        assert result_check.returncode == 0, (
+            f"--check on clean ledger returncode={result_check.returncode}; "
+            f"stderr={result_check.stderr!r}"
+        )
+
+        # TODO: Wave 3 — extend this test to mutate the ledger (drop an
+        # entry) and assert the next --check returns 1 because the
+        # missing DEFECT-COV-NN would be minted on a real generate.
 
     # ------------------------------------------------------------------
     # Wave 4 — bench-coverage proof + golden-file regression
