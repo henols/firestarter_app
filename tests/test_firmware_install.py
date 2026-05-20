@@ -577,6 +577,14 @@ class TestFirmwareInstallPinned:
                 f"Expected {v!r} NOT to match FIRMWARE_VERSION_RE"
             )
 
+        # CR-02: $ matches before trailing \n in Python; must use \Z so newlines
+        # cannot smuggle into the URL template downstream.
+        trailing_newline_inputs = ["3.1.0\n", "3.1.0b2\n", "3.1.0\r\n"]
+        for v in trailing_newline_inputs:
+            assert not FIRMWARE_VERSION_RE.match(v), (
+                f"Expected {v!r} NOT to match (regex anchored with \\Z)"
+            )
+
 
 # ===========================================================================
 # TestFirmwareList — INST-04: fw --list output
@@ -830,6 +838,7 @@ class TestMagicDefault:
         args.install = True
         args.pre = False
         args.firmware_version = None
+        args.stable = False
         _maybe_auto_route_to_pre(args)
         assert args.pre is True, "Magic default must set args.pre=True on dev install"
 
@@ -848,6 +857,7 @@ class TestMagicDefault:
         args.install = True
         args.pre = False
         args.firmware_version = None
+        args.stable = False
         _maybe_auto_route_to_pre(args)
         assert args.pre is False, "Stable install must NOT trigger magic default"
 
@@ -866,6 +876,7 @@ class TestMagicDefault:
         args.install = True
         args.pre = True  # already set by user
         args.firmware_version = None
+        args.stable = False
         with caplog.at_level(logging.INFO):
             _maybe_auto_route_to_pre(args)
         # Must NOT log "Beta app detected" when --pre is already set
@@ -893,6 +904,27 @@ class TestMagicDefault:
             "Explicit --firmware-version must opt out of magic default"
         )
 
+    def test_explicit_stable_flag_no_magic(self, monkeypatch):
+        """CR-01 — explicit --stable opts out of magic default.
+
+        revision blocker #1 added --stable to channel_group specifically so
+        operators on beta-installed apps can pick stable explicitly. The guard
+        must honor that intent and NOT auto-route to --pre when args.stable
+        is True, even on a pre-release-installed app.
+        """
+        import firestarter as _pkg
+        monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")  # prerelease
+        from firestarter.main import _maybe_auto_route_to_pre
+        args = MagicMock()
+        args.install = True
+        args.pre = False
+        args.firmware_version = None
+        args.stable = True  # explicit "stay on stable"
+        _maybe_auto_route_to_pre(args)
+        assert args.pre is False, (
+            "Explicit --stable must opt out of magic default even on beta-app install"
+        )
+
     def test_magic_default_logs_info_line(self, monkeypatch, caplog):
         """D-25 — magic default must log INFO containing 'Beta app detected'
         and a hint about using --firmware-version X.Y.Z.
@@ -909,6 +941,7 @@ class TestMagicDefault:
         args.install = True
         args.pre = False
         args.firmware_version = None
+        args.stable = False
         caplog.set_level(logging.INFO)
         _maybe_auto_route_to_pre(args)
         messages = [r.message for r in caplog.records]

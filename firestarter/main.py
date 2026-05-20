@@ -214,12 +214,17 @@ def _maybe_auto_route_to_pre(args) -> None:
     records automatically by logger name.
 
     D-23: stable-installed apps (Version.is_prerelease=False) are unaffected.
-    D-24: explicit --firmware-version pins opt out of this magic.
+    D-24: explicit --firmware-version OR --stable opts out of this magic.
+          --stable carve-out added 2026-05-20 per Phase 18 code review CR-01:
+          revision blocker #1 added --stable to channel_group specifically so
+          operators on beta-installed apps can pick stable explicitly; the
+          guard must honor that intent before routing to --pre.
     """
     logger = logging.getLogger(__name__)
     if not (getattr(args, "install", False)
             and not getattr(args, "pre", False)
-            and not getattr(args, "firmware_version", None)):
+            and not getattr(args, "firmware_version", None)
+            and not getattr(args, "stable", False)):
         return
     try:
         import firestarter as _pkg

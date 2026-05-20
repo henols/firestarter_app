@@ -37,7 +37,10 @@ logger = logging.getLogger("Firmware")
 # Phase 18: FIRMWARE_VERSION_RE validates consumer-side --firmware-version input.
 # Superset of Phase 15's BETA_VERSION_RE (which validates publisher-side input).
 # D-07: accepts stable (X.Y.Z) and pre-release (X.Y.ZbN, X.Y.ZrcN) forms.
-FIRMWARE_VERSION_RE = re.compile(r'^[0-9]+\.[0-9]+\.[0-9]+((b|rc)[0-9]+)?$')
+# Note: anchor with \Z (not $) — $ matches before a trailing \n in Python,
+# letting "3.1.0\n" sneak through and corrupt the URL template downstream.
+# Fixed 2026-05-20 per Phase 18 code review CR-02.
+FIRMWARE_VERSION_RE = re.compile(r'^[0-9]+\.[0-9]+\.[0-9]+((b|rc)[0-9]+)?\Z')
 
 # Used by _fetch_all_releases to follow pagination Link headers.
 _LINK_NEXT_RE = re.compile(r'<([^>]+)>;\s*rel="next"')
