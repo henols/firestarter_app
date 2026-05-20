@@ -9,6 +9,14 @@ FIRESTARTER_RELEASE_URL = (
     "https://api.github.com/repos/henols/firestarter/releases/latest"
 )
 
+FIRESTARTER_RELEASES_URL = (
+    "https://api.github.com/repos/henols/firestarter/releases"
+)
+
+FIRESTARTER_RELEASE_BY_TAG_URL = (
+    "https://api.github.com/repos/henols/firestarter/releases/tags/{tag}"
+)
+
 # Constants
 BAUD_RATE = "250000"
 

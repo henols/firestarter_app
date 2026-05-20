@@ -51,6 +51,7 @@ dependencies = [
     "tqdm>=4.60",
     "argcomplete>=3.6.2",
     "rich>=14.0",
+    "packaging>=21.0",
 ]
 
 urls = { "Homepage" = "https://github.com/henols/firestarter_app" }

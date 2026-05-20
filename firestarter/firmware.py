@@ -8,10 +8,12 @@ Firmware Management Module
 """
 
 import os
+import re
 import time
 import requests
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Literal, List, TypedDict
+from packaging.version import Version, InvalidVersion
 
 # Add this line with the other imports
 from rich.prompt import Confirm
@@ -31,6 +33,25 @@ from firestarter.avr_tool import (
 )
 
 logger = logging.getLogger("Firmware")
+
+# Phase 18: FIRMWARE_VERSION_RE validates consumer-side --firmware-version input.
+# Superset of Phase 15's BETA_VERSION_RE (which validates publisher-side input).
+# D-07: accepts stable (X.Y.Z) and pre-release (X.Y.ZbN, X.Y.ZrcN) forms.
+FIRMWARE_VERSION_RE = re.compile(r'^[0-9]+\.[0-9]+\.[0-9]+((b|rc)[0-9]+)?$')
+
+# Used by _fetch_all_releases to follow pagination Link headers.
+_LINK_NEXT_RE = re.compile(r'<([^>]+)>;\s*rel="next"')
+
+
+class ReleaseInfo(TypedDict):
+    """Structured release entry returned by list_releases (D-12 schema)."""
+
+    version: str          # tag_name from GitHub API
+    tag: str              # raw tag_name (same as version for firmware releases)
+    channel: str          # "stable" or "prerelease"
+    published: str        # ISO-8601 from published_at field
+    asset_url: str        # browser_download_url for the board-matching .hex asset
+
 
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 
@@ -104,6 +125,8 @@ class FirmwareManager:
         """
         Fetches the latest firmware version and download URL for the specified board.
         Returns: (latest_version_str, download_url_str) or (None, None) on failure.
+
+        Stable-only path; use fetch_release_info for general channel selection.
         """
         logger.debug(f"Fetching latest firmware release for board: {board}...")
         try:
@@ -135,18 +158,207 @@ class FirmwareManager:
     def _compare_versions(
         self, current_version_str: str | None, latest_version_str: str | None
     ) -> bool:
-        """Compares two version strings (e.g., "1.2.3"). Returns True if current >= latest."""
+        """Compares two version strings using PEP 440 ordering via packaging.version.Version.
+
+        Returns True if current >= latest. Handles pre-release strings (e.g., '3.1.0b1',
+        '3.1.0rc2', '2.0.7_dev') correctly. Returns False on unparseable input.
+        """
         if not current_version_str or not latest_version_str:
             return False  # Cannot compare if one is missing
         try:
-            current = tuple(map(int, current_version_str.split(".")))
-            latest = tuple(map(int, latest_version_str.split(".")))
-            return current >= latest
-        except ValueError:
+            return Version(current_version_str) >= Version(latest_version_str)
+        except InvalidVersion:
             logger.warning(
                 f"Could not parse version strings for comparison: '{current_version_str}', '{latest_version_str}'"
             )
             return False  # Treat as not up-to-date if parsing fails
+
+    def _fetch_all_releases(self, max_pages: int = 5) -> list:
+        """Paginate GET /releases via Link: rel="next" headers. Cap at max_pages (D-04).
+
+        Returns a flat list of all release dicts from all pages fetched.
+        Logs INFO when the cap is hit so operators know truncation occurred.
+        """
+        url = FIRESTARTER_RELEASES_URL
+        all_releases = []
+        pages_fetched = 0
+
+        while url and pages_fetched < max_pages:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            page_data = response.json()
+            all_releases.extend(page_data)
+            pages_fetched += 1
+
+            # Follow Link: rel="next" header per GitHub pagination spec.
+            link_header = response.headers.get("Link", "")
+            match = _LINK_NEXT_RE.search(link_header)
+            url = match.group(1) if match else None
+
+        if url and pages_fetched >= max_pages:
+            logger.info(
+                f"Firmware release list capped at {max_pages} pages "
+                f"({max_pages * 30} releases). More releases may exist."
+            )
+
+        return all_releases
+
+    def fetch_release_info(
+        self,
+        channel: Literal['stable', 'pre', 'pinned'] = 'stable',
+        version: Optional[str] = None,
+        board: str = 'uno',
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Router: returns (resolved_version, download_url) or (None, None) on failure.
+
+        channel='stable'  → delegates to fetch_latest_release_info (D-15 back-compat shim).
+        channel='pre'     → paginates /releases, filters prerelease=True, sorts by PEP 440
+                            descending, takes highest; falls back to stable if none (D-05).
+        channel='pinned'  → fetches /releases/tags/{version} directly (D-09).
+        """
+        firmware_asset_name = f"firestarter_{board}.hex"
+
+        if channel == 'stable':
+            return self.fetch_latest_release_info(board=board)
+
+        elif channel == 'pinned':
+            if not version:
+                logger.error("fetch_release_info(channel='pinned') requires a version string.")
+                return None, None
+            url = FIRESTARTER_RELEASE_BY_TAG_URL.format(tag=version)
+            try:
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
+                release_data = response.json()
+            except requests.RequestException as e:
+                logger.error(
+                    f"Failed to fetch firmware release for tag {version!r}: {e}"
+                )
+                return None, None
+
+            download_url = None
+            for asset in release_data.get("assets", []):
+                if asset.get("name") == firmware_asset_name:
+                    download_url = asset.get("browser_download_url")
+                    break
+            if not download_url:
+                logger.error(
+                    f"Release {version!r} has no asset {firmware_asset_name!r} for board {board!r}."
+                )
+                return None, None
+            return release_data.get("tag_name"), download_url
+
+        elif channel == 'pre':
+            try:
+                all_releases = self._fetch_all_releases()
+            except requests.RequestException as e:
+                logger.error(f"Failed to fetch releases for pre-release channel: {e}")
+                return None, None
+
+            # Filter: prerelease=True AND draft=False, skip unparseable tags.
+            candidates = []
+            for r in all_releases:
+                if not r.get("prerelease") or r.get("draft"):
+                    continue
+                tag = r.get("tag_name", "")
+                try:
+                    candidates.append((Version(tag), r))
+                except InvalidVersion:
+                    logger.warning(f"Skipping release with unparseable tag: {tag!r}")
+
+            if not candidates:
+                logger.info(
+                    "No pre-release firmware available — falling back to stable "
+                    "(matches pip --pre semantics)."
+                )
+                return self.fetch_latest_release_info(board=board)
+
+            # Sort descending by PEP 440 version, take highest.
+            candidates.sort(key=lambda t: t[0], reverse=True)
+            _, picked = candidates[0]
+
+            download_url = None
+            for asset in picked.get("assets", []):
+                if asset.get("name") == firmware_asset_name:
+                    download_url = asset.get("browser_download_url")
+                    break
+            if not download_url:
+                logger.error(
+                    f"Pre-release {picked.get('tag_name')!r} has no asset "
+                    f"{firmware_asset_name!r} for board {board!r}."
+                )
+                return None, None
+            return picked.get("tag_name"), download_url
+
+        else:
+            logger.error(f"Unknown firmware channel {channel!r}; expected 'stable', 'pre', or 'pinned'.")
+            return None, None
+
+    def list_releases(
+        self,
+        channel_filter: Literal['all', 'pre', 'stable'] = 'all',
+        board: str = 'uno',
+    ) -> List[ReleaseInfo]:
+        """Enumerate available firmware releases sorted by PEP 440 version descending.
+
+        Omits draft releases and releases without a board-matching .hex asset.
+        Omits releases whose tag_name cannot be parsed by packaging.version.Version.
+
+        channel_filter='all'    → include stable + prerelease (D-13).
+        channel_filter='pre'    → prerelease only.
+        channel_filter='stable' → stable only.
+
+        Returns a flat list of ReleaseInfo dicts (D-12 schema: version, tag, channel,
+        published, asset_url).
+        """
+        firmware_asset_name = f"firestarter_{board}.hex"
+        try:
+            all_releases = self._fetch_all_releases()
+        except requests.RequestException as e:
+            logger.error(f"Failed to fetch releases for list: {e}")
+            return []
+
+        out: List[ReleaseInfo] = []
+        for r in all_releases:
+            # Skip drafts.
+            if r.get("draft"):
+                continue
+
+            is_pre = bool(r.get("prerelease"))
+
+            # Apply channel filter.
+            if channel_filter == 'pre' and not is_pre:
+                continue
+            if channel_filter == 'stable' and is_pre:
+                continue
+
+            # Skip unparseable tags.
+            tag = r.get("tag_name", "")
+            try:
+                Version(tag)
+            except InvalidVersion:
+                logger.warning(f"Skipping release with unparseable tag: {tag!r}")
+                continue
+
+            # Resolve board-matching asset.
+            asset_url = None
+            for asset in r.get("assets", []):
+                if asset.get("name") == firmware_asset_name:
+                    asset_url = asset.get("browser_download_url")
+                    break
+            if not asset_url:
+                continue  # Silently omit releases without the board asset (D-11).
+
+            out.append(ReleaseInfo(
+                version=tag,
+                tag=tag,
+                channel="prerelease" if is_pre else "stable",
+                published=r.get("published_at") or "",
+                asset_url=asset_url,
+            ))
+
+        out.sort(key=lambda entry: Version(entry["version"]), reverse=True)
+        return out
 
     def _download_firmware_file(self, url: str) -> Optional[str]:
         """Downloads firmware from the URL and saves it to a temporary local path."""
@@ -299,10 +511,16 @@ class FirmwareManager:
         port_override: Optional[str] = None,
         board_override: Optional[str] = "uno",
         flags: int = 0,
+        channel: Literal['stable', 'pre', 'pinned'] = 'stable',
+        pinned_version: Optional[str] = None,
         ) -> bool:
         """
         Manages the firmware update process: checks version, prompts user, and installs if needed.
         Returns True if an operation (check or install) was successful in some sense, False on major failure.
+
+        channel='stable'  → uses /releases/latest (default, INST-01 non-regression).
+        channel='pre'     → selects highest pre-release (INST-02).
+        channel='pinned'  → uses exact tag from pinned_version (INST-03).
         """
         connected_port, current_version, current_board = self.check_current_firmware(
             preferred_port=port_override,flags=flags
@@ -319,8 +537,8 @@ class FirmwareManager:
         # Use board detected from firmware if available, else use CLI override or default
         board_to_use = current_board or board_override
 
-        latest_version, download_url = self.fetch_latest_release_info(
-            board=board_to_use
+        latest_version, download_url = self.fetch_release_info(
+            channel=channel, version=pinned_version, board=board_to_use
         )
 
         force_install = flags & FLAG_FORCE
