@@ -60,12 +60,30 @@ jobs:
         run: .github/scripts/update_version.py
 
       - name: Commit updated version
+        id: auto_commit
         uses: stefanzweifel/git-auto-commit-action@v5
+
+      # Resolve the post-auto-commit HEAD SHA. When git-auto-commit-action
+      # creates a commit it sets steps.auto_commit.outputs.commit_hash; if no
+      # changes were staged (idempotent re-run) we fall back to the current
+      # HEAD. This SHA is then passed as target_commitish to action-gh-release
+      # so the tag lands on the commit that contains the bumped __version__,
+      # NOT on the workflow's pre-bump trigger SHA. (Phase 20 E2E-02 fix.)
+      - name: Resolve release target SHA
+        id: release_target
+        run: |
+          SHA="${{ steps.auto_commit.outputs.commit_hash }}"
+          if [ -z "$SHA" ]; then
+            SHA=$(git rev-parse HEAD)
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Release target SHA: $SHA"
 
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.version }}
+          target_commitish: ${{ steps.release_target.outputs.sha }}
           prerelease: true
           make_latest: false
         env:
