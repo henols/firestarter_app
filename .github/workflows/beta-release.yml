@@ -1,0 +1,72 @@
+name: Create a new beta pre-release
+on:
+  push:
+    branches:
+    - beta
+    paths-ignore:
+    - '**.md'
+    - '**.sh'
+    - '.gitignore'
+    - 'docs/**'
+    - 'images/**'
+    - '.github/**'
+    - '.vscode/**'
+    - 'tools/**'
+  workflow_dispatch:
+    inputs:
+      beta_version:
+        description: 'Explicit PEP 440 pre-release version (e.g. 3.1.0b1). Leave blank for auto-increment via git-tag scan.'
+        required: false
+        type: string
+
+jobs:
+  github:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Catalog validity check
+        run: python3 tools/catalog/codegen.py --catalog tools/catalog/messages.toml --check
+
+      - name: Codegen drift gate (messages.py)
+        run: |
+          python3 tools/catalog/codegen.py \
+            --catalog tools/catalog/messages.toml \
+            --target firestarter/messages.py \
+            --language python
+          git diff --exit-code firestarter/messages.py
+
+      - name: Install package + dev deps
+        run: pip install -e .[dev]
+
+      - name: Run pytest
+        run: pytest tests/ -v
+
+      - name: Create new pre-release version
+        id: version
+        env:
+          BETA_VERSION: ${{ github.event.inputs.beta_version }}
+        run: .github/scripts/update_version.py
+
+      - name: Commit updated version
+        uses: stefanzweifel/git-auto-commit-action@v5
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          prerelease: true
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
