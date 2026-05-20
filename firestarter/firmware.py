@@ -98,9 +98,16 @@ class FirmwareManager:
             # The firmware then executes the fw_version command and sends a second OK with the payload.
             is_ok, msg = comm.expect_ack()
 
-            if is_ok and msg and ":" in msg:
-                # Expected format is "version:board"
-                parts = msg.split(":", 1)
+            # Firmware emits the legacy text line "OK: FW: <version>:<board>"
+            # (LFW-05). _parse_response_line strips the "OK:" prefix, so the
+            # payload reaching us here is "FW: <version>:<board>". Strip the
+            # secondary "FW:" tag before splitting on the version/board colon.
+            payload = None
+            if is_ok and msg:
+                payload = msg[3:].lstrip() if msg.startswith("FW:") else msg
+
+            if payload and ":" in payload:
+                parts = payload.split(":", 1)
                 current_version = parts[0].strip()
                 board_name = parts[1].strip()
 
