@@ -4,7 +4,11 @@ build/
 .venv/
 dist/
 firestarter.egg-info/
-firestarter/__pycache__/
+
+# Python bytecode caches (any depth, any package)
+__pycache__/
+*.pyc
+*.pyo
 
 l1.txt
 
@@ -22,7 +26,6 @@ fires/
 
 *.o64
 
-tools/__pycache__/
 tools/infoic*.xml
 
 anything.txt
