@@ -25,6 +25,7 @@ Support and discussions forum at [Discord](https://discord.com/invite/kmhbxAjQc3
 ## Table of Content
 - [Installation](#Installation)
   - [Installing the Firestarter Python Program](#installing-the-firestarter-python-program)
+  - [Beta / Pre-release Channel](#beta--pre-release-channel)
   - [Installing the Firmware on the Arduino](#installing-the-firmware-on-the-arduino)
 - [Usage](#usage)
   - [General Usage](#general-usage)
@@ -71,6 +72,110 @@ This command installs the Firestarter application, which allows you to interact 
 
 #### Auto complete
 How to enable auto complete for firestarter, see: [auto complete](autocomplete.md)
+
+### Beta / Pre-release Channel
+
+v1.4 introduces an opt-in beta channel for both the app (via PyPI pre-releases) and the firmware
+(via GitHub Pre-releases). App and firmware beta versions use matching `X.Y.ZbN` lockstep identifiers
+so you always know both components are from the same beta cut.
+
+#### Installing the beta app
+
+```bash
+pip install --pre firestarter
+firestarter --version   # should print X.Y.ZbN (a beta identifier)
+```
+
+`pip install --pre` opts into pre-release versions on PyPI. `pip install firestarter` (without `--pre`)
+still installs only the latest stable release.
+
+#### Installing beta firmware
+
+**Fetch and install the latest beta firmware for the configured board:**
+
+```bash
+firestarter fw -i --pre
+```
+
+Mirrors `pip install --pre` semantics; if no pre-release firmware exists for the board, falls back
+to stable.
+
+**Pin an exact firmware tag:**
+
+```bash
+firestarter fw -i --firmware-version 3.1.0b2
+firestarter fw -i --firmware-version 3.1.0
+```
+
+The version string is validated against the PEP 440 regex (`^[0-9]+\.[0-9]+\.[0-9]+((b|rc)[0-9]+)?$`);
+invalid input fails fast with no network call.
+
+**Explicit stable channel override (escape hatch):**
+
+```bash
+firestarter fw -i --stable
+```
+
+Use `--stable` on a beta-installed app to force installation of the stable firmware channel instead
+of the magic-default `--pre` routing (see **Magic default on beta-installed apps** below).
+
+#### Listing available firmwares
+
+```bash
+firestarter fw --list             # all releases for the configured board
+firestarter fw --list --pre       # pre-releases only
+firestarter fw --list --stable    # stable releases only
+firestarter fw --list --json      # JSON output (greppable / scriptable)
+```
+
+Output is plain-text with columns for version, channel, published date, and asset URL by default;
+`--json` emits the same data as a JSON array.
+
+#### Magic default on beta-installed apps
+
+On a beta-installed app (i.e. `__version__` parses as a PEP 440 pre-release), bare
+`firestarter fw -i` (no channel flag) auto-routes to `--pre` so beta users get matching beta
+firmware by default. The following INFO line is logged when this routing occurs:
+
+> Beta app detected — defaulting to --pre. Use --firmware-version X.Y.Z to pin a stable version.
+
+Use `firestarter fw -i --stable` as the escape hatch to keep installing stable firmware on a
+beta-installed app.
+
+Note: `--pre`, `--firmware-version`, and `--stable` are mutually exclusive (3-way mutex). Only
+one may be specified at a time. `--json` requires `--list`. `-i/--install` and `--list` are
+mutually exclusive.
+
+#### Channel selection matrix
+
+| Goal | App install | Firmware install |
+|------|-------------|-----------------|
+| Stable everything (default) | `pip install firestarter` | `firestarter fw -i` |
+| Beta everything (matched lockstep) | `pip install --pre firestarter` | `firestarter fw -i --pre` |
+| Beta app, stable firmware (escape hatch) | `pip install --pre firestarter` | `firestarter fw -i --stable` |
+| Pin exact firmware version | — | `firestarter fw -i --firmware-version 3.1.0b2` |
+
+#### Stability guarantee
+
+> **⚠ No stability guarantees.** Beta builds are intended for testing pre-release features. They may contain bugs, may change without notice, or may be withdrawn. For production / hardware-bench use, install the stable release.
+
+#### Reporting issues against a beta build
+
+When reporting a bug against a beta build, please include:
+
+- **App beta version:** output of `pip show firestarter` (the `Version:` line, which will read `X.Y.ZbN`)
+- **Firmware beta version:** output of `firestarter fw --list` (locate the installed `X.Y.ZbN` row) OR the firmware handshake string printed at `firestarter hw` startup
+- **Board:** `uno` or `leonardo` (or other configured board)
+- **OS:** macOS / Linux / Windows + version
+- **For hardware-related issues:** chip part number + manufacturer
+- **Full stderr / traceback** for crashes
+- **Repro steps**
+
+Report app issues at: https://github.com/henols/firestarter_app/issues
+
+Report firmware issues at: https://github.com/henols/firestarter/issues
+
+Do not create new issue templates — use the existing Issues page linked above.
 
 ### Installing the Firmware on the Arduino
 
