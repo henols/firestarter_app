@@ -189,14 +189,92 @@ def create_voltage_args(parser):
     vpe_parser.add_argument("-t", "--timeout", type=int, help=argparse.SUPPRESS)
 
 
+def _validate_firmware_version(value: str) -> str:
+    """argparse type= validator for --firmware-version.
+
+    Validates against FIRMWARE_VERSION_RE before any network call (D-07).
+    Accepts stable (X.Y.Z) and pre-release (X.Y.ZbN, X.Y.ZrcN) forms (D-08).
+    Raises ArgumentTypeError on invalid input — argparse converts this to SystemExit(2).
+    """
+    from firestarter.firmware import FIRMWARE_VERSION_RE
+    if not FIRMWARE_VERSION_RE.match(value):
+        raise argparse.ArgumentTypeError(
+            f"Invalid firmware version {value!r}. "
+            "Expected X.Y.Z, X.Y.ZbN, or X.Y.ZrcN (e.g. 3.1.0, 3.1.0b2, 3.1.0rc1)."
+        )
+    return value
+
+
+def _maybe_auto_route_to_pre(args) -> None:
+    """D-22 / D-25 beta-app magic default: when installed app is a pre-release,
+    bare 'fw -i' (no --pre, no --firmware-version) auto-routes to --pre channel.
+
+    Signature is (args) -> None — NO logger parameter (revision warning #6).
+    Uses logging.getLogger(__name__) internally so pytest's caplog captures
+    records automatically by logger name.
+
+    D-23: stable-installed apps (Version.is_prerelease=False) are unaffected.
+    D-24: explicit --firmware-version pins opt out of this magic.
+    """
+    logger = logging.getLogger(__name__)
+    if not (getattr(args, "install", False)
+            and not getattr(args, "pre", False)
+            and not getattr(args, "firmware_version", None)):
+        return
+    try:
+        import firestarter as _pkg
+        from packaging.version import Version, InvalidVersion
+        try:
+            if Version(_pkg.__version__).is_prerelease:
+                args.pre = True
+                logger.info(
+                    "Beta app detected — defaulting to --pre. "
+                    "Use --firmware-version X.Y.Z to pin a stable version."
+                )
+        except InvalidVersion:
+            pass
+    except ImportError:
+        pass
+
+
 def create_firmware_args(parser):
     fw_parser = parser.add_parser("fw", help="Firmware version.")
-    fw_parser.add_argument(
+
+    # install_group: -i/--install XOR --list (D-20).
+    install_group = fw_parser.add_mutually_exclusive_group()
+    install_group.add_argument(
         "-i",
         "--install",
         action="store_true",
         help="Try to install the latest firmware.",
     )
+    install_group.add_argument(
+        "--list",
+        action="store_true",
+        help="List available firmware releases for the configured board.",
+    )
+
+    # channel_group: --pre XOR --firmware-version XOR --stable (D-13 / D-19 / revision blocker #1).
+    # All three in one group so argparse enforces the 3-way mutex natively.
+    # --stable in install context is a redundant no-op (stable is default); in --list it filters.
+    channel_group = fw_parser.add_mutually_exclusive_group()
+    channel_group.add_argument(
+        "--pre",
+        action="store_true",
+        help="Fetch latest pre-release firmware (mirrors pip install --pre).",
+    )
+    channel_group.add_argument(
+        "--firmware-version",
+        type=_validate_firmware_version,
+        metavar="VERSION",
+        help="Pin exact firmware version (e.g. 3.1.0, 3.1.0b2, 3.1.0rc1).",
+    )
+    channel_group.add_argument(
+        "--stable",
+        action="store_true",
+        help="Explicitly select stable channel. With --list, filters to stable releases only.",
+    )
+
     fw_parser.add_argument(
         "-b",
         "--board",
@@ -225,6 +303,12 @@ def create_firmware_args(parser):
         action="store_true",
         help="Will install firmware even if the version is the same.",
     )
+    fw_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output --list results as JSON array (only with --list).",
+    )
+    return fw_parser  # REQUIRED for fw_parser.error() in dispatch (RESEARCH.md Pitfall 5)
 
 
 def create_info_args(parser):
@@ -399,7 +483,7 @@ def main():
 
     create_voltage_args(subparsers)
     hw_parser = subparsers.add_parser("hw", help="Hardware revision.")
-    create_firmware_args(subparsers)
+    fw_parser = create_firmware_args(subparsers)
     create_config_args(subparsers)
     create_dev_args(subparsers)
 
@@ -643,6 +727,41 @@ def main():
             else 0
         )
     elif args.command == "fw":
+        # Post-parse check: --json is only meaningful with --list (RESEARCH.md Finding 4 / Pitfall 5).
+        if args.json and not args.list:
+            fw_parser.error("--json requires --list")
+
+        if args.list:
+            # Read-only enumeration path — does not install anything.
+            if args.pre:
+                channel_filter = "pre"
+            elif args.stable:
+                channel_filter = "stable"
+            else:
+                channel_filter = "all"
+            releases = firmware_manager.list_releases(
+                channel_filter=channel_filter, board=args.board
+            )
+            if args.json:
+                import json as _json
+                print(_json.dumps(releases, indent=2))
+            else:
+                print(f"{'Version':<12} {'Channel':<14} {'Published':<22} Asset URL")
+                for r in releases:
+                    print(f"{r['version']:<12} {r['channel']:<14} {r['published']:<22} {r['asset_url']}")
+            return 0
+
+        # Magic default: on a beta-installed app, bare fw -i auto-routes to --pre (D-21/D-22).
+        _maybe_auto_route_to_pre(args)  # NOTE: no logger arg (revision warning #6)
+
+        # Channel resolution for install path.
+        if getattr(args, "firmware_version", None):
+            channel = "pinned"
+        elif args.pre:
+            channel = "pre"
+        else:
+            channel = "stable"  # --stable in install context is a redundant no-op (stable is default)
+
         return (
             1
             if not firmware_manager.manage_firmware_update(
@@ -651,7 +770,9 @@ def main():
                 avrdude_config_override=args.avrdude_config_path,
                 port_override=args.port,
                 board_override=args.board,
-                flags=build_arg_flags(args)
+                flags=build_arg_flags(args),
+                channel=channel,
+                pinned_version=getattr(args, "firmware_version", None),
             )
             else 0
         )
