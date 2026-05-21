@@ -9,9 +9,13 @@ EPROM Operations Module (Refactored)
 
 import os
 import time
+import hashlib
+import shutil
 import functools
 import operator
 import logging
+from datetime import datetime
+from pathlib import Path
 from typing import Optional, Tuple, Dict, Callable
 from contextlib import contextmanager
 import tqdm
@@ -423,6 +427,180 @@ class EpromOperator:
             except IOError as e:
                 logger.error(f"File I/O error with {actual_output_file}: {e}")
                 return False
+
+    def consistency_check_eprom(
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        runs: int = 3,
+        output_dir: Optional[str] = None,
+        keep_files: bool = True,
+        max_diffs: int = 10,
+        quiet: bool = False,
+        operation_flags: int = 0,
+    ) -> int:
+        """Run N consecutive read_eprom passes and report SHA-256 divergence.
+
+        Returns:
+            0 -- all N reads byte-identical (PASS)
+            1 -- one or more reads diverge (FAIL -- bug detected)
+            2 -- hardware / serial / timeout error (could not complete N reads)
+
+        This is the ONLY EpromOperator method that returns int rather than bool;
+        the 3-way verdict (PASS / FAIL / hardware-error) cannot fit in a bool.
+        Same exit-code convention as grep(1). Precedent for non-bool return:
+        check_eprom_id() returns Tuple[bool, Optional[int]] above.
+
+        Reuses _run_state_machine + _main_phase_read_data verbatim (per Phase 26
+        CONTEXT.md D-03 reuse-not-duplicate rule) -- the diagnostic exercises
+        the same code path the read bug lives in. Do NOT refactor into a
+        parallel read implementation.
+
+        REPRO-03 (Phase 26 / Plan 26-01).
+        """
+        # D-10 Test 6: reject runs < 2 BEFORE any state-machine invocation
+        if runs < 2:
+            logger.error(
+                f"--runs must be >= 2 (got {runs}); "
+                f"a consistency check requires at least 2 reads to compare."
+            )
+            return 2
+
+        # Quiet mode: suppress tqdm by swapping progress_callback to a no-op.
+        # ClassProgressHandler.__init__ checks `if self.progress_callback:` --
+        # a truthy no-op short-circuits the tqdm.tqdm() instantiation.
+        prior_callback = self.progress_callback
+        if quiet:
+            self.progress_callback = lambda *a, **kw: None
+
+        try:
+            # Default output_dir naming uses datetime + chip name.
+            # Board name is optional; if firmware handshake hasn't run we
+            # render "unknown-board" rather than blocking on an extra round-
+            # trip (per RESEARCH Pitfall 2 Option a, the cleanest production
+            # path is to use the actual board name -- but the unit-test
+            # surface doesn't have a serial connection, so we fall back).
+            if output_dir is None:
+                timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+                output_dir = f"consistency-check-{eprom_name}-unknown-board-{timestamp}"
+            output_path = Path(output_dir)
+            output_path.mkdir(parents=True, exist_ok=True)
+
+            # Run loop: N reads through the production state machine
+            results = []  # list of (run_i, sha_hex, bytes_written)
+            total_size = 0
+            for i in range(1, runs + 1):
+                run_path = output_path / f"run_{i:02d}.bin"
+                logger.info(f"Run {i}/{runs}: reading {eprom_name} -> {run_path}")
+                start_t = time.time()
+
+                # Reuse the EXACT code path read_eprom uses (D-03 reuse-not-duplicate)
+                try:
+                    with self._operation_context(
+                        eprom_name,
+                        eprom_data_dict,
+                        COMMAND_READ,
+                        operation_flags,
+                    ) as (cmd_data, _, op_name):
+                        if not cmd_data:
+                            logger.error(f"Run {i}: failed to set up read operation.")
+                            return 2  # D-05 hardware error
+                        try:
+                            with open(run_path, "wb") as fh:
+                                def _writer(address, data_chunk, _fh=fh, _start=cmd_data.get("address", 0)):
+                                    # Mirror read_eprom's _write_to_file inner closure
+                                    # (eprom_operations.py:408-411). Use relative-from-start
+                                    # offset so the file fills from byte 0 regardless of
+                                    # absolute start_addr.
+                                    _fh.seek(address - _start)
+                                    _fh.write(data_chunk)
+
+                                is_ok, _ = self._run_state_machine(
+                                    op_name,
+                                    main_phase_handler=self._main_phase_read_data,
+                                    start_addr=cmd_data.get("address", 0),
+                                    end_addr=cmd_data.get("memory-size", 0),
+                                    process_data_chunk_callback=_writer,
+                                )
+                        except IOError as e:
+                            logger.error(f"Run {i}: file I/O error on {run_path}: {e}")
+                            return 2
+
+                    # Map _run_state_machine (False, msg) -> exit 2 (per
+                    # RESEARCH Pitfall 4: state machine catches serial
+                    # exceptions and returns (False, str(e)) rather than
+                    # propagating).
+                    if not is_ok:
+                        logger.error(f"Run {i}: hardware/serial error -- read incomplete.")
+                        return 2
+
+                except EpromOperationError as e:
+                    logger.error(f"Run {i}: {e}")
+                    return 2
+
+                bytes_written = run_path.stat().st_size
+                sha = hashlib.sha256(run_path.read_bytes()).hexdigest()
+                elapsed = time.time() - start_t
+                results.append((i, sha, bytes_written))
+                total_size = bytes_written
+                logger.info(
+                    f"Run {i}/{runs}: SHA-256 {sha}  "
+                    f"bytes={bytes_written}  elapsed={elapsed:.2f}s"
+                )
+
+            # Verdict
+            distinct = sorted({r[1] for r in results})
+            exit_code = 0 if len(distinct) == 1 else 1
+
+            # Print verdict block (D-04 -- exact substrings pinned by
+            # Phase 29 forward-compat regex test_stdout_verdict_block_format).
+            verdict = "PASS" if exit_code == 0 else "FAIL"
+            port = self.config.get_value("port") if hasattr(self.config, "get_value") else "?"
+            print(f"\nConsistency check: {verdict}")
+            print(f"Chip: {eprom_name}  Board: unknown-board  Port: {port}")
+            print(f"Runs: N={runs}")
+            print(f"Distinct SHAs: {len(distinct)}")
+            print(f"Output dir: {output_dir}/")
+
+            # Divergence detail on FAIL (D-04)
+            if exit_code == 1:
+                run1_path = output_path / "run_01.bin"
+                run2_path = output_path / "run_02.bin"
+                run1_bytes = run1_path.read_bytes()
+                run2_bytes = run2_path.read_bytes()
+                cmp_len = min(len(run1_bytes), len(run2_bytes))
+                diff_offsets = [
+                    o for o in range(cmp_len) if run1_bytes[o] != run2_bytes[o]
+                ]
+                if diff_offsets:
+                    first = diff_offsets[0]
+                    # 4-hex-digit format guaranteed for 64KB chips; widen
+                    # automatically for larger payloads. Use %04X minimum.
+                    width = max(4, len(f"{cmp_len-1:X}"))
+                    print(
+                        f"First divergence: offset 0x{first:0{width}X}  "
+                        f"(run_1=0x{run1_bytes[first]:02X}, "
+                        f"run_2=0x{run2_bytes[first]:02X})"
+                    )
+                    total_diffs = len(diff_offsets)
+                    pct = 100.0 * total_diffs / cmp_len if cmp_len else 0.0
+                    print(
+                        f"Total divergent bytes (run_1 vs run_2): "
+                        f"{total_diffs} / {cmp_len} ({pct:.1f}%)"
+                    )
+                    head = diff_offsets[:max_diffs]
+                    offs_str = ", ".join(f"0x{o:0{width}X}" for o in head)
+                    print(f"First {max_diffs} divergent offsets: {offs_str}")
+
+            # Cleanup (D-10 #5)
+            if not keep_files:
+                shutil.rmtree(output_dir, ignore_errors=True)
+
+            return exit_code
+        finally:
+            # Restore the operator's progress_callback so subsequent
+            # operations are unaffected by --quiet for THIS invocation.
+            self.progress_callback = prior_callback
 
     # --- DEV Methods ---
 
