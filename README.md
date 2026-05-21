@@ -165,7 +165,7 @@ When reporting a bug against a beta build, please include:
 
 - **App beta version:** output of `pip show firestarter` (the `Version:` line, which will read `X.Y.ZbN`)
 - **Firmware beta version:** output of `firestarter fw --list` (locate the installed `X.Y.ZbN` row) OR the firmware handshake string printed at `firestarter hw` startup
-- **Board:** `uno` or `leonardo` (or other configured board)
+- **Board:** `uno`, `uno328pb`, or `leonardo` (or other configured board)
 - **OS:** macOS / Linux / Windows + version
 - **For hardware-related issues:** chip part number + manufacturer
 - **Full stderr / traceback** for crashes
@@ -193,7 +193,7 @@ Firestarter is using **avrdude** to install the firmware.
 * `-p, --avrdude-path <path>`: Full path to avrdude (optional), set if avrdude is not found.
 * `-c, --avrdude-config-path <path>`: Full path to avrdude config file (optional), may be needed if avrdude cannot find its default configuration (e.g., with older versions like 6.3 or non-standard installations).
 * `--port <port>`: Serial port name (optional), set if the Arduino is not found.
-* `-b, --board <board>`: Microcontroller board (optional), defaults to *uno*, other supported boards *leonardo*.
+* `-b, --board <board>`: Microcontroller board (optional), defaults to *uno*, other supported boards *uno328pb*, *leonardo*. (Since v1.5, the `uno328pb` target adds support for Arduino Uno R3 boards retrofitted with the ATmega328PB MCU.)
 * `-f, --force`: Will install firmware even if the version is the same.
 ### Description
 The `fw --install` command installs the latest firmware on the Arduino. The process typically involves the following steps:
@@ -212,6 +212,13 @@ To install the firmware on the **Arduino Leonardo**, you can run:
 ``` bash
 firestarter fw --install --board leonardo
 ```
+
+To install the firmware on a **328PB-Uno** (Arduino Uno R3 carrier board re-MCU'd with ATmega328PB):
+``` bash
+firestarter fw --install --board uno328pb
+```
+
+Note: the `uno328pb` board uses MiniCore's Urclock bootloader by default. The host CLI auto-selects `programmer_id=urclock` for this board.
 
 
 ## Usage
