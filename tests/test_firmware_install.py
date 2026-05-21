@@ -1255,10 +1255,15 @@ class TestUno328pbResolution:
         """INST-01 / D-01..D-04 + GATE-01 anti-regression anchor.
 
         _install_with_avrdude(board='uno328pb') must pass
-        (partno='atmega328pb', programmer_id='arduino', baud_rate=115200) to
-        the Avrdude(...) constructor. This is THE load-bearing RED test —
-        FAILS today because the default branch (firmware.py:417-421) sets
-        partno='atmega328p' (the 328P, not the 328PB).
+        (partno='atmega328pb', programmer_id='urclock', baud_rate=115200) to
+        the Avrdude(...) constructor. This is THE load-bearing anchor pinning
+        the bench-validated profile triple.
+
+        programmer_id pinned to 'urclock' (NOT 'arduino') after Phase 23
+        bench validation 2026-05-21: the operator's MiniCore-flashed 328PB-Uno
+        ships Urclock as its stock bootloader; 'arduino' (stk500v1) fails to
+        sync. Phase 23 CONTEXT D-02's initial 'arduino' guess was the
+        documented 1-line contingency point — this is the swap.
 
         Mocks firmware.Avrdude (not avr_tool.Avrdude) — the symbol resolved
         at firmware.py:472 is the module-level import at firmware.py:30.
@@ -1287,7 +1292,11 @@ class TestUno328pbResolution:
             f"got {captured.get('partno')!r}. The 328P partno would abort "
             f"avrdude with a signature mismatch on real silicon."
         )
-        assert captured["programmer_id"] == "arduino"
+        assert captured["programmer_id"] == "urclock", (
+            f"Expected programmer_id='urclock' (MiniCore stock bootloader on "
+            f"operator's 328PB-Uno, bench-validated 2026-05-21). "
+            f"Got {captured.get('programmer_id')!r}."
+        )
         assert captured["baud_rate"] == 115200
 
     def test_argparse_accepts_uno328pb_board_choice(self, monkeypatch):
