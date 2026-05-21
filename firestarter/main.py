@@ -287,6 +287,7 @@ def create_firmware_args(parser):
         default="uno",
         choices=[
             "uno",
+            "uno328pb",
             "leonardo",
         ],
         help="Microcontroller board (optional), defaults to 'uno'.",

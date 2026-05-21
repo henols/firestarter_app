@@ -66,6 +66,28 @@ def mock_404_response():
     return mock
 
 
+class _FakeAvrdude:
+    """Captures Avrdude(...) constructor kwargs for Phase 23 D-06 assertions.
+
+    Skips _find_avrdude_path / _get_avrdude_version / _configure_avrconf side
+    effects (RESEARCH Pitfall 5). `command` is a str so the post-success
+    `config_manager.set_value("avrdude-path", avrdude.command)` save at
+    firmware.py:492 does not crash; `config` is None to match the avrdude>=7
+    path that bypasses the `-C` flag branch at firmware.py:493.
+    """
+
+    def __init__(self, partno, programmer_id, baud_rate, port, **kw):
+        self.partno = partno
+        self.programmer_id = programmer_id
+        self.baud_rate = baud_rate
+        self.port = port
+        self.command = "/fake/avrdude"  # str — _install_with_avrdude saves this
+        self.config = None              # avrdude>=7 path (no -C arg)
+
+    def flash_firmware(self, hex_file_path):
+        return ("", 0)  # (stderr, returncode) — 0 = success
+
+
 # ---------------------------------------------------------------------------
 # Stable release fixture data
 # ---------------------------------------------------------------------------
@@ -93,6 +115,32 @@ _STABLE_RELEASE_LEONARDO = {
             "name": "firestarter_leonardo.hex",
             "browser_download_url": "https://example.com/leonardo_stable.hex",
         }
+    ],
+}
+
+# Phase 23 — 3-asset stable release fixture for uno328pb-driven resolution.
+# tag_name "3.0.1" distinguishes from the existing uno/leonardo fixtures
+# (both at 3.0.0). Asset order [uno, uno328pb, leonardo] follows Phase 21
+# D-08 section-order discipline (matches platformio.ini default_envs order
+# Phase 22 D-01 landed).
+_STABLE_RELEASE_UNO328PB = {
+    "tag_name": "3.0.1",
+    "prerelease": False,
+    "draft": False,
+    "published_at": "2026-05-22T11:00:00Z",
+    "assets": [
+        {
+            "name": "firestarter_uno.hex",
+            "browser_download_url": "https://example.com/uno_stable.hex",
+        },
+        {
+            "name": "firestarter_uno328pb.hex",
+            "browser_download_url": "https://example.com/uno328pb_stable.hex",
+        },
+        {
+            "name": "firestarter_leonardo.hex",
+            "browser_download_url": "https://example.com/leonardo_stable.hex",
+        },
     ],
 }
 
@@ -1066,3 +1114,221 @@ class TestArgparseMutex:
         fw_parser = create_firmware_args(sp)
         with pytest.raises(SystemExit):
             p.parse_args(["fw", "-i", "--firmware-version", "not-a-version"])
+
+
+# ===========================================================================
+# TestUno328pbResolution — Phase 23 INST-01/02/03 + D-01..D-06 + revised D-10
+# ===========================================================================
+
+
+class TestUno328pbResolution:
+    """Phase 23 — INST-01/02/03 + D-01..D-06 + D-10(revised) board-driven
+    asset resolution + avrdude profile resolution + argparse allowlist for
+    uno328pb-reporting devices.
+
+    Decisions pinned: D-01..D-06 (23-CONTEXT.md), D-10 revised 2026-05-21
+    (main.py --board choices widening per RESEARCH Open Q1 resolution),
+    D-07 GATE-01 non-regression (existing tests untouched).
+
+    Expected RED status pre-Wave-2:
+      tests 1-3: may pass green already (v1.4 INST-04 substrate is board-
+                 string-generic); they pin the contract for uno328pb.
+      test 4   : FAILS with AssertionError (default 'atmega328p' branch).
+      test 5   : FAILS with SystemExit (choices=['uno','leonardo'] rejects).
+    """
+
+    @pytest.fixture(autouse=True)
+    def _isolate_env(self, monkeypatch):
+        monkeypatch.delenv("FIRESTARTER_DEV_ALLOW_PRE_V12", raising=False)
+
+    def test_uno328pb_stable_path_resolves_correct_asset(self, monkeypatch):
+        """INST-01 / D-01 — fetch_release_info(channel='stable', board='uno328pb')
+        returns the uno328pb_stable.hex asset URL from a 3-asset release.
+
+        Today: may pass green already because the v1.4 INST-04 resolver is
+        board-string-generic (`firestarter_{board}.hex` lookup). Pins the
+        contract for the uno328pb board name.
+        """
+        stable_mock = mock_releases_factory([_STABLE_RELEASE_UNO328PB])
+        # Override json() to return a single release dict — /releases/latest
+        # returns a single object, not a list (Pitfall 4).
+        stable_mock.json.return_value = _STABLE_RELEASE_UNO328PB
+        monkeypatch.setattr(
+            firmware.requests, "get", lambda url, **kw: stable_mock
+        )
+        fm = FirmwareManager(config_manager=MagicMock())
+        v, url = fm.fetch_release_info(channel="stable", board="uno328pb")
+        assert v == "3.0.1"
+        assert "uno328pb_stable.hex" in url
+        # Must NOT pick the uno or leonardo asset — board-driven resolution.
+        assert "uno_stable.hex" not in url
+        assert "leonardo_stable.hex" not in url
+
+    def test_uno328pb_pre_path_resolves_highest_prerelease(self, monkeypatch):
+        """INST-02 / D-01 — fetch_release_info(channel='pre', board='uno328pb')
+        selects highest pre-release with uno328pb asset (rc1 > b10 > b9 by
+        PEP 440, NOT lexicographic where b9 > b10 would be wrong).
+        """
+        releases = [
+            {
+                "tag_name": "3.0.1b9",
+                "prerelease": True,
+                "draft": False,
+                "published_at": "2026-05-10T10:00:00Z",
+                "assets": [
+                    {
+                        "name": "firestarter_uno328pb.hex",
+                        "browser_download_url": "https://example.com/uno328pb_b9.hex",
+                    }
+                ],
+            },
+            {
+                "tag_name": "3.0.1rc1",
+                "prerelease": True,
+                "draft": False,
+                "published_at": "2026-05-20T09:00:00Z",
+                "assets": [
+                    {
+                        "name": "firestarter_uno328pb.hex",
+                        "browser_download_url": "https://example.com/uno328pb_rc1.hex",
+                    }
+                ],
+            },
+            {
+                "tag_name": "3.0.1b10",
+                "prerelease": True,
+                "draft": False,
+                "published_at": "2026-05-15T08:00:00Z",
+                "assets": [
+                    {
+                        "name": "firestarter_uno328pb.hex",
+                        "browser_download_url": "https://example.com/uno328pb_b10.hex",
+                    }
+                ],
+            },
+        ]
+        mock = mock_releases_factory(releases)
+        monkeypatch.setattr(firmware.requests, "get", lambda *a, **kw: mock)
+        fm = FirmwareManager(config_manager=MagicMock())
+        version, url = fm.fetch_release_info(channel="pre", board="uno328pb")
+        # rc > b per PEP 440; b10 > b9 requires Version sort (not string sort).
+        assert version == "3.0.1rc1"
+        assert "uno328pb_rc1.hex" in url
+
+    def test_uno328pb_list_releases_enumerates_correctly(self, monkeypatch):
+        """INST-03 / D-01 — list_releases(board='uno328pb') returns ReleaseInfo
+        entries in PEP 440 descending order with the same 5-key shape as for
+        uno/leonardo. Stable 3.0.1 wins over pre-release 3.0.1b2 per PEP 440.
+        """
+        releases = [
+            _STABLE_RELEASE_UNO328PB,  # 3.0.1 stable
+            {
+                "tag_name": "3.0.1b2",
+                "prerelease": True,
+                "draft": False,
+                "published_at": "2026-05-18T10:00:00Z",
+                "assets": [
+                    {
+                        "name": "firestarter_uno328pb.hex",
+                        "browser_download_url": "https://example.com/uno328pb_b2.hex",
+                    }
+                ],
+            },
+        ]
+        mock = mock_releases_factory(releases)
+        monkeypatch.setattr(firmware.requests, "get", lambda *a, **kw: mock)
+        fm = FirmwareManager(config_manager=MagicMock())
+        out = fm.list_releases(channel_filter="all", board="uno328pb")
+        assert len(out) == 2
+        # Stable 3.0.1 > pre-release 3.0.1b2 per PEP 440 descending.
+        assert out[0]["version"] == "3.0.1"
+        assert out[1]["version"] == "3.0.1b2"
+        required_keys = {"version", "tag", "channel", "published", "asset_url"}
+        for entry in out:
+            assert required_keys <= entry.keys(), (
+                f"Missing keys in release entry: {entry.keys()} "
+                f"(expected {required_keys})"
+            )
+            assert "uno328pb" in entry["asset_url"]
+
+    def test_uno328pb_avrdude_profile_resolution(self, monkeypatch, tmp_path):
+        """INST-01 / D-01..D-04 + GATE-01 anti-regression anchor.
+
+        _install_with_avrdude(board='uno328pb') must pass
+        (partno='atmega328pb', programmer_id='urclock', baud_rate=115200) to
+        the Avrdude(...) constructor. This is THE load-bearing anchor pinning
+        the bench-validated profile triple.
+
+        programmer_id pinned to 'urclock' (NOT 'arduino') after Phase 23
+        bench validation 2026-05-21: the operator's MiniCore-flashed 328PB-Uno
+        ships Urclock as its stock bootloader; 'arduino' (stk500v1) fails to
+        sync. Phase 23 CONTEXT D-02's initial 'arduino' guess was the
+        documented 1-line contingency point — this is the swap.
+
+        Mocks firmware.Avrdude (not avr_tool.Avrdude) — the symbol resolved
+        at firmware.py:472 is the module-level import at firmware.py:30.
+        """
+        captured = {}
+
+        def _capture_init(*args, **kwargs):
+            captured.update(kwargs)
+            return _FakeAvrdude(*args, **kwargs)
+
+        monkeypatch.setattr(firmware, "Avrdude", _capture_init)
+        fake_hex = tmp_path / "firestarter_uno328pb.hex"
+        fake_hex.write_text(":00000001FF\n")  # minimal valid Intel HEX EOF
+
+        fm = FirmwareManager(config_manager=MagicMock())
+        ok = fm._install_with_avrdude(
+            hex_file_path=str(fake_hex),
+            board="uno328pb",
+            avrdude_path_override=None,
+            avrdude_config_override=None,
+            target_port="/dev/ttyACM0",
+        )
+        assert ok is True
+        assert captured["partno"] == "atmega328pb", (
+            f"Expected partno='atmega328pb' (328PB signature 0x1E 0x95 0x16); "
+            f"got {captured.get('partno')!r}. The 328P partno would abort "
+            f"avrdude with a signature mismatch on real silicon."
+        )
+        assert captured["programmer_id"] == "urclock", (
+            f"Expected programmer_id='urclock' (MiniCore stock bootloader on "
+            f"operator's 328PB-Uno, bench-validated 2026-05-21). "
+            f"Got {captured.get('programmer_id')!r}."
+        )
+        assert captured["baud_rate"] == 115200
+
+    def test_argparse_accepts_uno328pb_board_choice(self, monkeypatch):
+        """INST-03 listing-flag path / revised D-10 — main.py --board allowlist
+        must accept 'uno328pb'.
+
+        Today: argparse `choices=["uno", "leonardo"]` rejects 'uno328pb' with
+        `error: argument -b/--board: invalid choice: 'uno328pb'` → SystemExit.
+        Wave 2 widens the choices tuple to `["uno", "uno328pb", "leonardo"]`
+        (Phase 21 D-08 section-order discipline).
+
+        Positive assertion: --board uno328pb does NOT raise SystemExit and
+                            args.board == 'uno328pb'.
+        Negative control:   --board ungabunga STILL raises SystemExit (proves
+                            choices= was widened, not removed entirely).
+        """
+        import argparse
+        from firestarter.main import create_firmware_args
+
+        # Positive: uno328pb must be accepted (currently FAILS — SystemExit).
+        p = argparse.ArgumentParser()
+        sp = p.add_subparsers(dest="command")
+        fw_parser = create_firmware_args(sp)
+        args = p.parse_args(["fw", "--list", "--board", "uno328pb"])
+        assert args.board == "uno328pb", (
+            f"Expected args.board='uno328pb'; got {args.board!r}. "
+            f"Wave 2 must widen choices= to include 'uno328pb'."
+        )
+
+        # Negative control: unknown board values must still be rejected.
+        p2 = argparse.ArgumentParser()
+        sp2 = p2.add_subparsers(dest="command")
+        fw_parser2 = create_firmware_args(sp2)
+        with pytest.raises(SystemExit):
+            p2.parse_args(["fw", "--list", "--board", "ungabunga"])

@@ -421,6 +421,15 @@ class FirmwareManager:
         )  # Defaults for uno
         if board.lower() == "leonardo":
             partno, programmer_id, baud_rate = ("atmega32u4", "avr109", 57600)
+        elif board.lower() == "uno328pb":
+            # Phase 21 D-10 hand-off: ATmega328PB signature 0x1E 0x95 0x16 differs
+            # from 328P's 0x1E 0x95 0x0F -- partno must be "atmega328pb" exactly,
+            # else avrdude aborts on signature mismatch. programmer_id "urclock"
+            # matches MiniCore's stock Urclock bootloader on operator's 328PB-Uno
+            # (bench-validated 2026-05-21 — "arduino" was the initial guess from
+            # Phase 23 CONTEXT D-02 but the bootloader rejected it; this is the
+            # documented 1-line contingency swap).
+            partno, programmer_id, baud_rate = ("atmega328pb", "urclock", 115200)
 
         # Determine port: use target_port if provided, else try saved port, else scan.
         # This logic might be better in SerialCommunicator._list_potential_ports if generalized.
