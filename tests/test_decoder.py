@@ -400,10 +400,14 @@ class TestIdFrameDecoder:
     # -----------------------------------------------------------------
 
     def test_ok_cfg_p03_with_override_decodes(self, fake_serial, make_comm):
-        """P-03: MSG_OK_CFG with r1=10000, r2=4700, override=0x02 renders
-        'R1: 10000, R2: 4700, Override HW: Rev2'."""
+        """P-03: MSG_OK_CFG with r1=10000, r2=4700, override=0x02 (REVISION_2_0)
+        renders 'R1: 10000, R2: 4700, Override HW: Rev 2.0-class' via the
+        Phase 35 D-04 silkscreen-aware lookup (was 'Override HW: Rev2'
+        pre-Phase-35). Closes 34-REVIEW.md WR-02 — the same byte must not
+        render as 'Rev 2.0-class' on the MSG_OK_REV ack and 'Rev2' on the
+        adjacent MSG_OK_CFG ack."""
         comm = make_comm()
-        # params: u32 r1=10000, u32 r2=4700, u8 override=0x02
+        # params: u32 r1=10000, u32 r2=4700, u8 override=0x02 (REVISION_2_0)
         params = struct.pack(">II", 10000, 4700) + bytes([0x02])
         frame = build_frame(MSG_OK_CFG, params)
         fake_serial.feed(frame)
@@ -411,7 +415,7 @@ class TestIdFrameDecoder:
         response = _drive_one_response(comm)
         assert response is not None
         assert response.type == "OK"
-        assert response.message == "R1: 10000, R2: 4700, Override HW: Rev2"
+        assert response.message == "R1: 10000, R2: 4700, Override HW: Rev 2.0-class"
 
     def test_ok_cfg_p03_no_override_decodes(self, fake_serial, make_comm):
         """P-03: MSG_OK_CFG with r1=10000, r2=4700, override=0xFF sentinel renders
