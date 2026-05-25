@@ -365,7 +365,8 @@ class TestIdFrameDecoder:
 
     def test_ok_rev_p02_with_override_decodes(self, fake_serial, make_comm):
         """P-02: MSG_OK_REV with physical=0x01, effective=0x02 (override active)
-        renders 'Rev2, Override HW: Rev1'."""
+        renders 'Rev 2.0-class, Override HW: Rev 1' per Phase 34 D-05 Path A
+        silkscreen-string mapping (was 'Rev2, Override HW: Rev1' pre-Phase-34)."""
         comm = make_comm()
         # params: u8 physical=0x01, u8 effective=0x02
         params = bytes([0x01, 0x02])
@@ -375,11 +376,12 @@ class TestIdFrameDecoder:
         response = _drive_one_response(comm)
         assert response is not None
         assert response.type == "OK"
-        assert response.message == "Rev2, Override HW: Rev1"
+        assert response.message == "Rev 2.0-class, Override HW: Rev 1"
 
     def test_ok_rev_p02_no_override_decodes(self, fake_serial, make_comm):
         """P-02: MSG_OK_REV with physical=0x01, effective=0xFF sentinel renders
-        'Rev1' (no override clause)."""
+        'Rev 1' per Phase 34 D-05 Path A silkscreen-string mapping (was 'Rev1'
+        pre-Phase-34)."""
         comm = make_comm()
         # params: u8 physical=0x01, u8 effective=0xFF (sentinel = no override)
         params = bytes([0x01, 0xFF])
@@ -389,7 +391,7 @@ class TestIdFrameDecoder:
         response = _drive_one_response(comm)
         assert response is not None
         assert response.type == "OK"
-        assert response.message == "Rev1"
+        assert response.message == "Rev 1"
 
     # -----------------------------------------------------------------
     # Wave 0 gap tests: P-03 MSG_OK_CFG sentinel rendering

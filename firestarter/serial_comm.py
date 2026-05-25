@@ -164,6 +164,21 @@ PREFIX_REGEX = re.compile(rf"({'|'.join(EXPECTED_PREFIXES)}):(.*)")
 
 STATE_MACHINE_PREFIXES = []  # W-01: state-machine acks now arrive as ID frames; catalog format strings own the rendering.
 NON_RESPONSE_PREFIXES = ["INFO", "DEBUG"]
+
+# Phase 34: REVISION_* byte → silkscreen-string mapping for MSG_OK_REV rendering.
+# Mirrors firmware enum at firestarter/include/rurp_shield.h. Lookup-via-dict.get()
+# so unknown bytes fall back to "Rev{n}" instead of raising.
+_REVISION_SILKSCREEN = {
+    REVISION_0:       "Rev 0",
+    REVISION_1:       "Rev 1",
+    REVISION_2_0:     "Rev 2.0-class",   # broad bucket per Phase 34 D-04
+    REVISION_2_1:     "Rev 2.1 (override)",
+    REVISION_2_2:     "Rev 2.2 (override)",
+    REVISION_2_3:     "Rev 2.3",
+    REVISION_UNKNOWN: "rev_unknown",
+}
+
+
 class SerialError(Exception):
     """Custom exception for serial communication errors."""
 
@@ -335,9 +350,11 @@ class SerialCommunicator:
         """
         if msg_id == MSG_OK_REV and len(params) == 2:
             physical, effective = params[0], params[1]
+            phys_str = _REVISION_SILKSCREEN.get(physical, f"Rev{physical}")
             if effective == 0xFF:
-                return f"Rev{physical}"
-            return f"Rev{effective}, Override HW: Rev{physical}"
+                return phys_str
+            eff_str = _REVISION_SILKSCREEN.get(effective, f"Rev{effective}")
+            return f"{eff_str}, Override HW: {phys_str}"
 
         if msg_id == MSG_OK_CFG and len(params) == 3:
             r1, r2, override = params[0], params[1], params[2]
