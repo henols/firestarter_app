@@ -378,7 +378,12 @@ class SerialCommunicator:
             r1, r2, override = params[0], params[1], params[2]
             if override == 0xFF:
                 return f"R1: {r1}, R2: {r2}"
-            return f"R1: {r1}, R2: {r2}, Override HW: Rev{override}"
+            # Phase 35 D-04 / WR-02 close: route the override byte through
+            # _REVISION_SILKSCREEN so the same byte that renders "Rev 2.0-class"
+            # on MSG_OK_REV no longer renders "Rev2" on this adjacent ack line.
+            # No-space "Rev{n}" fallback mirrors the MSG_OK_REV branch shape.
+            override_str = _REVISION_SILKSCREEN.get(override, f"Rev{override}")
+            return f"R1: {r1}, R2: {r2}, Override HW: {override_str}"
 
         # Phase 35 D-03 / WR-01 close — silkscreen-aware rendering for the two
         # boot-time INFO surfaces that carry the same revision byte as
