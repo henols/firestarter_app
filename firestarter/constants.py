@@ -67,3 +67,17 @@ FLAG_OUTPUT_ENABLE = 0x20
 FLAG_CHIP_ENABLE = 0x40
 
 FLAG_VERBOSE = 0x80
+
+# RURP Control Register Bits — mirror of firestarter/include/rurp_pinout.h
+# Documentary only — Python does not write the control register directly
+# (firmware owns that). Used by `firestarter dev registers --firestarter`
+# and similar host-side helpers. Keep in sync per CLAUDE.md sync rule.
+CTRL_VPP_VPE_DROP_ENABLE     = 0x100   # was VPE_TO_VPP (wide layout)
+CTRL_VPP_REGULATOR_ENABLE    = 0x080   # was REGULATOR
+CTRL_READ_WRITE              = 0x040   # was READ_WRITE
+CTRL_ADDRESS_LINE_18         = 0x020
+CTRL_ADDRESS_LINE_17         = 0x010
+CTRL_VPP_P1_ENABLE           = 0x008   # was P1_VPP_ENABLE
+CTRL_VPE_ENABLE              = 0x004   # was VPE_ENABLE
+CTRL_VPP_A9_ENABLE           = 0x002   # was A9_VPP_ENABLE
+CTRL_ADDRESS_LINE_16         = 0x001
