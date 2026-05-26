@@ -561,6 +561,23 @@ firestarter blank M2716-adapter
 ```
 Firestarter will use the `M2716-adapter` definition, look up the `pin-map` ID `2716` under the `28`-pin section in `pin-maps.json`, and correctly control the address lines and apply VPP using Pin 1 of its own socket, which the physical adapter then routes to the correct pin on the M2716 EPROM.
 
+## Shield Revision Detection
+
+The Firestarter firmware reports the detected RURP shield silkscreen revision on every handshake (`MSG_OK_REV`). For the per-revision capability matrix, silkscreen → code alias table, and per-rev expected ADC band table, see the firmware sub-repo doc:
+
+https://github.com/henols/firestarter/blob/main/doc/SHIELD-REVISIONS.md
+
+If detection reports `rev_unknown` (pre-detect-resistor boards or guard-gap landing), set the EEPROM override byte: `firestarter rev <N>` where `<N>` is the silkscreen-rev byte:
+
+| Byte | Silkscreen rev |
+|------|----------------|
+| `0x00` | Rev 0 |
+| `0x01` | Rev 1 |
+| `0x02` | Rev 2.0-class (broad bucket — covers Rev 2.0/2.1/2.2) |
+| `0x05` | Rev 2.3 |
+| `0xFE` | `rev_unknown` sentinel (no override) |
+| `0xFF` | EEPROM-override-absent sentinel (reset to detect-rev) |
+
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first
 to discuss what you would like to change.
