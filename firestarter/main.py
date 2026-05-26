@@ -426,6 +426,61 @@ See constants.RURP_CONTROL_REGISTER_BITS (mirror of rurp_pinout.h).
     addr_parser.add_argument("address", type=str, help="Address in dec/hex")
     create_oe_ce_args(addr_parser)
 
+    # `dev consistency-check` -- REPRO-03 / Phase 26 / Plan 26-01.
+    # Reads the EPROM N consecutive times and reports SHA-256 divergence;
+    # canonical pre-fix-and-post-fix regression check for the v1.6 read bug.
+    # See CONTEXT.md D-01 for the locked flag set + defaults.
+    cc_parser = subparsers.add_parser(
+        "consistency-check",
+        help="Read EPROM N consecutive times and report SHA-256 divergence (REPRO-03; per D-01).",
+    )
+    add_eprom_completer(cc_parser)
+    cc_parser.add_argument(
+        "--runs",
+        type=int,
+        default=3,
+        help="Number of consecutive reads (default 3; minimum 2).",
+    )
+    cc_parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Output dir for per-run binaries "
+        "(default consistency-check-<chip>-<board>-<TS>/).",
+    )
+    cc_parser.add_argument(
+        "--keep-files",
+        dest="keep_files",
+        action="store_true",
+        default=True,
+        help="Keep per-run binary files after verdict (default).",
+    )
+    cc_parser.add_argument(
+        "--no-keep-files",
+        dest="keep_files",
+        action="store_false",
+        help="Delete per-run binaries after verdict.",
+    )
+    cc_parser.add_argument(
+        "--max-diffs",
+        type=int,
+        default=10,
+        help="Max divergent offsets to print on FAIL (default 10).",
+    )
+    cc_parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Suppress per-run tqdm progress bars (D-11).",
+    )
+    cc_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force read, even if the chip id doesn't match "
+        "(e.g. Shield-3 missing-chip case).",
+    )
+
 
 def create_oe_ce_args(parser):
     parser.add_argument(
@@ -843,6 +898,29 @@ def main():
                     args.eprom, eprom_data, args.address, flags=build_arg_flags(args)
                 )
                 else 0
+            )
+        elif args.dev_command == "consistency-check":
+            full_eprom_data = db_instance.get_eprom(args.eprom)
+            eprom_data = (
+                db_instance.convert_to_programmer(full_eprom_data)
+                if full_eprom_data
+                else None
+            )
+            if not eprom_data:
+                logger.error(f"EPROM '{args.eprom}' not found in database.")
+                return 1
+            # consistency_check_eprom returns int directly (D-05: 0=PASS,
+            # 1=FAIL, 2=hardware-error). Do NOT wrap in the bool->int form
+            # `dev_read_eprom` uses -- the 3-way verdict cannot fit in a bool.
+            return eprom_operator.consistency_check_eprom(
+                args.eprom,
+                eprom_data,
+                runs=args.runs,
+                output_dir=args.output_dir,
+                keep_files=args.keep_files,
+                max_diffs=args.max_diffs,
+                quiet=args.quiet,
+                operation_flags=build_arg_flags(args),
             )
     return 0
 
