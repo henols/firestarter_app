@@ -31,6 +31,8 @@ from firestarter.messages import (
     MSG_OK_REV,
     MSG_OK_CFG,
     MSG_INFO_CMD,
+    MSG_INFO_HW,
+    MSG_INFO_PHYSICAL_HW,
     MSG_DATA_CHUNK,
     MSG_DEBUG,
     DBG_CMD,
@@ -164,6 +166,21 @@ PREFIX_REGEX = re.compile(rf"({'|'.join(EXPECTED_PREFIXES)}):(.*)")
 
 STATE_MACHINE_PREFIXES = []  # W-01: state-machine acks now arrive as ID frames; catalog format strings own the rendering.
 NON_RESPONSE_PREFIXES = ["INFO", "DEBUG"]
+
+# Phase 34: REVISION_* byte → silkscreen-string mapping for MSG_OK_REV rendering.
+# Mirrors firmware enum at firestarter/include/rurp_shield.h. Lookup-via-dict.get()
+# so unknown bytes fall back to "Rev{n}" instead of raising.
+_REVISION_SILKSCREEN = {
+    REVISION_0:       "Rev 0",
+    REVISION_1:       "Rev 1",
+    REVISION_2_0:     "Rev 2.0-class",   # broad bucket per Phase 34 D-04
+    REVISION_2_1:     "Rev 2.1 (override)",
+    REVISION_2_2:     "Rev 2.2 (override)",
+    REVISION_2_3:     "Rev 2.3",
+    REVISION_UNKNOWN: "rev_unknown",
+}
+
+
 class SerialError(Exception):
     """Custom exception for serial communication errors."""
 
@@ -322,7 +339,10 @@ class SerialCommunicator:
         annotation; other DBG_* sub_ids render via DEBUG_CATALOG).
 
         Returns the rendered string for sentinel-byte IDs where the catalog
-        format string cannot express the conditional (0xFF = no override).
+        format string cannot express the conditional (0xFF = no override),
+        and for the silkscreen-aware INFO surfaces that share the same
+        revision byte as MSG_OK_REV (Phase 35 D-03 / D-04 — close WR-01 + WR-02).
+
         Returns None for all other IDs (caller falls through to generic rendering).
 
         P-02 MSG_OK_REV  — params[0]=physical u8, params[1]=effective u8
@@ -331,19 +351,51 @@ class SerialCommunicator:
 
         P-03 MSG_OK_CFG  — params[0]=r1 u32, params[1]=r2 u32, params[2]=override u8
           override==0xFF → "R1: {r1}, R2: {r2}"
-          override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: Rev{override}"
+          override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: {silkscreen_str}"
+          Phase 35 D-04 / WR-02 close: override clause now routes through
+          _REVISION_SILKSCREEN so the same byte that surfaces as "Rev 2.0-class"
+          via MSG_OK_REV no longer surfaces as "Rev2" on the adjacent ack line.
+
+        MSG_INFO_HW (0x5B) — single u8 revision byte; renders
+          "HW: {silkscreen_str}" via _REVISION_SILKSCREEN.get(byte, "Rev{byte}").
+          Phase 35 D-03 / WR-01 close: was rendering catalog-default
+          "HW: Rev%u" (e.g. "HW: Rev254" for REVISION_UNKNOWN=0xFE) — directly
+          contradicting Phase 34 D-09 (host displays silkscreen strings; wire
+          carries raw byte).
+
+        MSG_INFO_PHYSICAL_HW (0x5C) — same shape as MSG_INFO_HW with the
+          "Physical HW: " prefix. Phase 35 D-03 / WR-01 close.
         """
         if msg_id == MSG_OK_REV and len(params) == 2:
             physical, effective = params[0], params[1]
+            phys_str = _REVISION_SILKSCREEN.get(physical, f"Rev{physical}")
             if effective == 0xFF:
-                return f"Rev{physical}"
-            return f"Rev{effective}, Override HW: Rev{physical}"
+                return phys_str
+            eff_str = _REVISION_SILKSCREEN.get(effective, f"Rev{effective}")
+            return f"{eff_str}, Override HW: {phys_str}"
 
         if msg_id == MSG_OK_CFG and len(params) == 3:
             r1, r2, override = params[0], params[1], params[2]
             if override == 0xFF:
                 return f"R1: {r1}, R2: {r2}"
-            return f"R1: {r1}, R2: {r2}, Override HW: Rev{override}"
+            # Phase 35 D-04 / WR-02 close: route the override byte through
+            # _REVISION_SILKSCREEN so the same byte that renders "Rev 2.0-class"
+            # on MSG_OK_REV no longer renders "Rev2" on this adjacent ack line.
+            # No-space "Rev{n}" fallback mirrors the MSG_OK_REV branch shape.
+            override_str = _REVISION_SILKSCREEN.get(override, f"Rev{override}")
+            return f"R1: {r1}, R2: {r2}, Override HW: {override_str}"
+
+        # Phase 35 D-03 / WR-01 close — silkscreen-aware rendering for the two
+        # boot-time INFO surfaces that carry the same revision byte as
+        # MSG_OK_REV. Mirror of the MSG_OK_REV branch shape above: lookup via
+        # _REVISION_SILKSCREEN.get() with no-space "Rev{n}" fallback.
+        if msg_id == MSG_INFO_HW and len(params) == 1:
+            byte = params[0]
+            return f"HW: {_REVISION_SILKSCREEN.get(byte, f'Rev{byte}')}"
+
+        if msg_id == MSG_INFO_PHYSICAL_HW and len(params) == 1:
+            byte = params[0]
+            return f"Physical HW: {_REVISION_SILKSCREEN.get(byte, f'Rev{byte}')}"
 
         if msg_id == MSG_INFO_CMD and len(params) == 1:
             cmd = params[0]

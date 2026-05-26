@@ -402,18 +402,19 @@ def create_dev_args(parser):
         "--firestarter",
         action="store_true",
         help="""Using Firestarter register definition.
-By using the firestarter argumet, 
-the control register will be remaped to match 
+By using the firestarter argumet,
+the control register will be remaped to match
 the hardware revision of the RURP sheild.
-0x100 - VPE_TO_VPP
-0x080 - REGULATOR
-0x040 - READ_WRITE
-0x020 - ADDRESS_LINE_18
-0x010 - ADDRESS_LINE_17
-0x008 - P1_VPP_ENABLE
-0x004 - VPE_ENABLE
-0x002 - A9_VPP_ENABLE
-0x001 - ADDRESS_LINE_16""",
+See constants.RURP_CONTROL_REGISTER_BITS (mirror of rurp_pinout.h).
+0x100 - CTRL_VPP_VPE_DROP_ENABLE
+0x080 - CTRL_VPP_REGULATOR_ENABLE
+0x040 - CTRL_READ_WRITE
+0x020 - CTRL_ADDRESS_LINE_18
+0x010 - CTRL_ADDRESS_LINE_17
+0x008 - CTRL_VPP_P1_ENABLE
+0x004 - CTRL_VPE_ENABLE
+0x002 - CTRL_VPP_A9_ENABLE
+0x001 - CTRL_ADDRESS_LINE_16""",
     )
 
     addr_parser = subparsers.add_parser(

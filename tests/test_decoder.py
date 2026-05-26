@@ -37,6 +37,8 @@ from firestarter.messages import (
     MSG_END_DONE,
     MSG_INFO_ADDR,
     MSG_INFO_BIT_STR,
+    MSG_INFO_HW,
+    MSG_INFO_PHYSICAL_HW,
     MSG_WARN_MEM_SIZE_TOO_SMALL,
     MSG_ERR_WRITE_FAILED,
     MSG_DATA_PROGRESS,
@@ -365,7 +367,8 @@ class TestIdFrameDecoder:
 
     def test_ok_rev_p02_with_override_decodes(self, fake_serial, make_comm):
         """P-02: MSG_OK_REV with physical=0x01, effective=0x02 (override active)
-        renders 'Rev2, Override HW: Rev1'."""
+        renders 'Rev 2.0-class, Override HW: Rev 1' per Phase 34 D-05 Path A
+        silkscreen-string mapping (was 'Rev2, Override HW: Rev1' pre-Phase-34)."""
         comm = make_comm()
         # params: u8 physical=0x01, u8 effective=0x02
         params = bytes([0x01, 0x02])
@@ -375,11 +378,12 @@ class TestIdFrameDecoder:
         response = _drive_one_response(comm)
         assert response is not None
         assert response.type == "OK"
-        assert response.message == "Rev2, Override HW: Rev1"
+        assert response.message == "Rev 2.0-class, Override HW: Rev 1"
 
     def test_ok_rev_p02_no_override_decodes(self, fake_serial, make_comm):
         """P-02: MSG_OK_REV with physical=0x01, effective=0xFF sentinel renders
-        'Rev1' (no override clause)."""
+        'Rev 1' per Phase 34 D-05 Path A silkscreen-string mapping (was 'Rev1'
+        pre-Phase-34)."""
         comm = make_comm()
         # params: u8 physical=0x01, u8 effective=0xFF (sentinel = no override)
         params = bytes([0x01, 0xFF])
@@ -389,17 +393,21 @@ class TestIdFrameDecoder:
         response = _drive_one_response(comm)
         assert response is not None
         assert response.type == "OK"
-        assert response.message == "Rev1"
+        assert response.message == "Rev 1"
 
     # -----------------------------------------------------------------
     # Wave 0 gap tests: P-03 MSG_OK_CFG sentinel rendering
     # -----------------------------------------------------------------
 
     def test_ok_cfg_p03_with_override_decodes(self, fake_serial, make_comm):
-        """P-03: MSG_OK_CFG with r1=10000, r2=4700, override=0x02 renders
-        'R1: 10000, R2: 4700, Override HW: Rev2'."""
+        """P-03: MSG_OK_CFG with r1=10000, r2=4700, override=0x02 (REVISION_2_0)
+        renders 'R1: 10000, R2: 4700, Override HW: Rev 2.0-class' via the
+        Phase 35 D-04 silkscreen-aware lookup (was 'Override HW: Rev2'
+        pre-Phase-35). Closes 34-REVIEW.md WR-02 — the same byte must not
+        render as 'Rev 2.0-class' on the MSG_OK_REV ack and 'Rev2' on the
+        adjacent MSG_OK_CFG ack."""
         comm = make_comm()
-        # params: u32 r1=10000, u32 r2=4700, u8 override=0x02
+        # params: u32 r1=10000, u32 r2=4700, u8 override=0x02 (REVISION_2_0)
         params = struct.pack(">II", 10000, 4700) + bytes([0x02])
         frame = build_frame(MSG_OK_CFG, params)
         fake_serial.feed(frame)
@@ -407,7 +415,7 @@ class TestIdFrameDecoder:
         response = _drive_one_response(comm)
         assert response is not None
         assert response.type == "OK"
-        assert response.message == "R1: 10000, R2: 4700, Override HW: Rev2"
+        assert response.message == "R1: 10000, R2: 4700, Override HW: Rev 2.0-class"
 
     def test_ok_cfg_p03_no_override_decodes(self, fake_serial, make_comm):
         """P-03: MSG_OK_CFG with r1=10000, r2=4700, override=0xFF sentinel renders
@@ -422,6 +430,115 @@ class TestIdFrameDecoder:
         assert response is not None
         assert response.type == "OK"
         assert response.message == "R1: 10000, R2: 4700"
+
+    def test_ok_cfg_p03_with_unknown_override_decodes(self, fake_serial, make_comm):
+        """P-03: MSG_OK_CFG with override=0x99 (unknown byte) falls back to
+        'R1: ..., R2: ..., Override HW: Rev153' (no space — mirrors MSG_OK_REV
+        fallback shape). Per Phase 35 D-04 + WR-02 close."""
+        comm = make_comm()
+        params = struct.pack(">II", 10000, 4700) + bytes([0x99])
+        frame = build_frame(MSG_OK_CFG, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "OK"
+        assert response.message == "R1: 10000, R2: 4700, Override HW: Rev153"
+
+    # -----------------------------------------------------------------
+    # Phase 35 D-03 / WR-01 close: MSG_INFO_HW + MSG_INFO_PHYSICAL_HW
+    # silkscreen-string rendering.
+    #
+    # WR-01: both INFO frames carry the same revision byte as MSG_OK_REV
+    # but were rendering 'HW: Rev254' (raw catalog %u) for REVISION_UNKNOWN
+    # (0xFE) instead of 'HW: rev_unknown'. Both surfaces must agree on the
+    # silkscreen-string mapping per Phase 35 D-03.
+    # -----------------------------------------------------------------
+
+    def test_info_hw_silkscreen_known_rev_decodes(self, fake_serial, make_comm):
+        """D-03: MSG_INFO_HW with byte=0x01 (REVISION_1) renders 'HW: Rev 1'
+        via _REVISION_SILKSCREEN lookup. Phase 35 WR-01 close — see
+        34-REVIEW.md WR-01 + 35-CONTEXT.md D-03."""
+        comm = make_comm()
+        params = bytes([0x01])
+        frame = build_frame(MSG_INFO_HW, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "INFO"
+        assert response.message == "HW: Rev 1"
+
+    def test_info_hw_silkscreen_rev_unknown_decodes(self, fake_serial, make_comm):
+        """D-03: MSG_INFO_HW with byte=0xFE (REVISION_UNKNOWN) renders
+        'HW: rev_unknown' instead of the catalog-default 'HW: Rev254'.
+        Phase 35 WR-01 close — co-designed with Plan 01's CR-02 hard-fail-loud
+        emit at boot time."""
+        comm = make_comm()
+        params = bytes([0xFE])
+        frame = build_frame(MSG_INFO_HW, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "INFO"
+        assert response.message == "HW: rev_unknown"
+
+    def test_info_hw_silkscreen_unknown_byte_falls_back(self, fake_serial, make_comm):
+        """D-03: MSG_INFO_HW with an unmapped byte (0x99) falls back to
+        'HW: Rev153' (no space — mirrors MSG_OK_REV fallback shape).
+        Phase 35 WR-01 close."""
+        comm = make_comm()
+        params = bytes([0x99])
+        frame = build_frame(MSG_INFO_HW, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "INFO"
+        assert response.message == "HW: Rev153"
+
+    def test_info_physical_hw_silkscreen_known_rev_decodes(self, fake_serial, make_comm):
+        """D-03: MSG_INFO_PHYSICAL_HW with byte=0x01 (REVISION_1) renders
+        'Physical HW: Rev 1' via _REVISION_SILKSCREEN lookup. Phase 35 WR-01
+        close — mirrors MSG_INFO_HW shape with the 'Physical HW: ' prefix."""
+        comm = make_comm()
+        params = bytes([0x01])
+        frame = build_frame(MSG_INFO_PHYSICAL_HW, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "INFO"
+        assert response.message == "Physical HW: Rev 1"
+
+    def test_info_physical_hw_silkscreen_rev_unknown_decodes(self, fake_serial, make_comm):
+        """D-03: MSG_INFO_PHYSICAL_HW with byte=0xFE (REVISION_UNKNOWN) renders
+        'Physical HW: rev_unknown' instead of the catalog-default 'Physical HW: Rev254'.
+        Phase 35 WR-01 close."""
+        comm = make_comm()
+        params = bytes([0xFE])
+        frame = build_frame(MSG_INFO_PHYSICAL_HW, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "INFO"
+        assert response.message == "Physical HW: rev_unknown"
+
+    def test_info_physical_hw_silkscreen_unknown_byte_falls_back(self, fake_serial, make_comm):
+        """D-03: MSG_INFO_PHYSICAL_HW with an unmapped byte (0x99) falls back to
+        'Physical HW: Rev153' (no space — mirrors MSG_OK_REV fallback shape).
+        Phase 35 WR-01 close."""
+        comm = make_comm()
+        params = bytes([0x99])
+        frame = build_frame(MSG_INFO_PHYSICAL_HW, params)
+        fake_serial.feed(frame)
+
+        response = _drive_one_response(comm)
+        assert response is not None
+        assert response.type == "INFO"
+        assert response.message == "Physical HW: Rev153"
 
     # -----------------------------------------------------------------
     # MSG_DEBUG / DBG_CMD: cmd byte annotated with symbolic name from
