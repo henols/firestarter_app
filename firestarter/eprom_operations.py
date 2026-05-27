@@ -22,6 +22,7 @@ from typing import Callable, Dict, Optional, Tuple  # noqa: UP035
 import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+from firestarter.address_parser import parse_address, parse_size
 from firestarter.config import ConfigManager
 from firestarter.constants import *  # noqa: F403
 from firestarter.exceptions import (
@@ -177,7 +178,7 @@ class EpromOperator:
         addr = 0
         if address:
             try:
-                addr = int(address, 16) if "0x" in address.lower() else int(address)
+                addr = parse_address(address) or 0
                 command_dict["address"] = addr
             except ValueError:
                 logger.error(f"Invalid address format: {address}")
@@ -186,7 +187,7 @@ class EpromOperator:
         # Special handling for read operation size
         if cmd == COMMAND_READ and size:  # noqa: F405
             try:
-                read_size = int(size, 16) if "0x" in size.lower() else int(size)
+                read_size = parse_size(size) or 0
                 # 'memory-size' in command_dict will define the end address for read
 
                 command_dict["memory-size"] = addr + read_size
