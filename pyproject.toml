@@ -112,7 +112,7 @@ python_version = "3.9"          # Must be in config file — mypy 2.1.0 rejects 
 ignore_missing_imports = true   # needed for tqdm, rich, argcomplete (no stubs)
 disallow_untyped_defs = false   # gradual adoption — global stays lenient (D-10)
 check_untyped_defs = false
-# mypy_error_watermark = 41     # Baseline: Phase 37 tip. Lower as modules get typed.
+# mypy_error_watermark = 44     # Baseline: Phase 37 tip. Lower as modules get typed.
 
 [[tool.mypy.overrides]]
 # Phase 36 test modules — strict-island: check bodies of untyped test functions.
