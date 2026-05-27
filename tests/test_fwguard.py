@@ -44,11 +44,17 @@ class TestFirmwareVersionGuard:
     def test_refuse_pre_v3_firmware(self):
         """LFW-05 / LHOST-04 path: refuse. v2.0.11 firmware must trip the guard."""
         mock_msg = "FW: 2.0.11, HW: Rev2, Cmd: 0x0d"
-        with patch.object(SerialCommunicator, "expect_ack", return_value=(True, mock_msg)), \
-             patch.object(SerialCommunicator, "send_json_command", return_value=42), \
-             patch.object(SerialCommunicator, "consume_remaining_input", return_value=None), \
-             patch.object(SerialCommunicator, "disconnect", return_value=None), \
-             patch.object(SerialCommunicator, "__init__", lambda self, port, **k: None):
+        with (
+            patch.object(
+                SerialCommunicator, "expect_ack", return_value=(True, mock_msg)
+            ),
+            patch.object(SerialCommunicator, "send_json_command", return_value=42),
+            patch.object(
+                SerialCommunicator, "consume_remaining_input", return_value=None
+            ),
+            patch.object(SerialCommunicator, "disconnect", return_value=None),
+            patch.object(SerialCommunicator, "__init__", lambda self, port, **k: None),
+        ):
             with pytest.raises(FirmwareOutdatedError, match="pre-v1.2") as exc_info:
                 SerialCommunicator._probe_port(
                     port_name="/dev/null",
@@ -65,11 +71,17 @@ class TestFirmwareVersionGuard:
     def test_accept_v3_firmware(self):
         """LFW-05 / LHOST-04 path: accept. v3.0.0 firmware passes the guard."""
         mock_msg = "FW: 3.0.0, HW: Rev2, Cmd: 0x0d"
-        with patch.object(SerialCommunicator, "expect_ack", return_value=(True, mock_msg)), \
-             patch.object(SerialCommunicator, "send_json_command", return_value=42), \
-             patch.object(SerialCommunicator, "consume_remaining_input", return_value=None), \
-             patch.object(SerialCommunicator, "disconnect", return_value=None), \
-             patch.object(SerialCommunicator, "__init__", lambda self, port, **k: None):
+        with (
+            patch.object(
+                SerialCommunicator, "expect_ack", return_value=(True, mock_msg)
+            ),
+            patch.object(SerialCommunicator, "send_json_command", return_value=42),
+            patch.object(
+                SerialCommunicator, "consume_remaining_input", return_value=None
+            ),
+            patch.object(SerialCommunicator, "disconnect", return_value=None),
+            patch.object(SerialCommunicator, "__init__", lambda self, port, **k: None),
+        ):
             try:
                 SerialCommunicator._probe_port(
                     port_name="/dev/null",
@@ -78,19 +90,23 @@ class TestFirmwareVersionGuard:
                     config_manager=MagicMock(),
                 )
             except FirmwareOutdatedError as exc:
-                pytest.fail(
-                    f"v3.0.0 firmware should NOT trip the guard; got: {exc}"
-                )
+                pytest.fail(f"v3.0.0 firmware should NOT trip the guard; got: {exc}")
 
     def test_dev_escape_hatch_env_var(self, monkeypatch):
         """LFW-05 / LHOST-04 path: escape-hatch. FIRESTARTER_DEV_ALLOW_PRE_V12=1 bypasses."""
         monkeypatch.setenv("FIRESTARTER_DEV_ALLOW_PRE_V12", "1")
         mock_msg = "FW: 2.0.11, HW: Rev2, Cmd: 0x0d"
-        with patch.object(SerialCommunicator, "expect_ack", return_value=(True, mock_msg)), \
-             patch.object(SerialCommunicator, "send_json_command", return_value=42), \
-             patch.object(SerialCommunicator, "consume_remaining_input", return_value=None), \
-             patch.object(SerialCommunicator, "disconnect", return_value=None), \
-             patch.object(SerialCommunicator, "__init__", lambda self, port, **k: None):
+        with (
+            patch.object(
+                SerialCommunicator, "expect_ack", return_value=(True, mock_msg)
+            ),
+            patch.object(SerialCommunicator, "send_json_command", return_value=42),
+            patch.object(
+                SerialCommunicator, "consume_remaining_input", return_value=None
+            ),
+            patch.object(SerialCommunicator, "disconnect", return_value=None),
+            patch.object(SerialCommunicator, "__init__", lambda self, port, **k: None),
+        ):
             try:
                 SerialCommunicator._probe_port(
                     port_name="/dev/null",
@@ -111,11 +127,17 @@ class TestFirmwareVersionGuard:
         # matches the regex but cannot parse as int: `x.x.x` (the version-regex
         # accepts 'x' literally; `int('x')` raises ValueError).
         mock_msg = "FW: x.x.x, HW: Rev2, Cmd: 0x0d"
-        with patch.object(SerialCommunicator, "expect_ack", return_value=(True, mock_msg)), \
-             patch.object(SerialCommunicator, "send_json_command", return_value=42), \
-             patch.object(SerialCommunicator, "consume_remaining_input", return_value=None), \
-             patch.object(SerialCommunicator, "disconnect", return_value=None), \
-             patch.object(SerialCommunicator, "__init__", lambda self, port, **k: None):
+        with (
+            patch.object(
+                SerialCommunicator, "expect_ack", return_value=(True, mock_msg)
+            ),
+            patch.object(SerialCommunicator, "send_json_command", return_value=42),
+            patch.object(
+                SerialCommunicator, "consume_remaining_input", return_value=None
+            ),
+            patch.object(SerialCommunicator, "disconnect", return_value=None),
+            patch.object(SerialCommunicator, "__init__", lambda self, port, **k: None),
+        ):
             with pytest.raises(FirmwareOutdatedError, match="pre-v1.2"):
                 SerialCommunicator._probe_port(
                     port_name="/dev/null",

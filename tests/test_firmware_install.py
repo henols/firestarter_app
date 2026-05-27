@@ -82,7 +82,7 @@ class _FakeAvrdude:
         self.baud_rate = baud_rate
         self.port = port
         self.command = "/fake/avrdude"  # str — _install_with_avrdude saves this
-        self.config = None              # avrdude>=7 path (no -C arg)
+        self.config = None  # avrdude>=7 path (no -C arg)
 
     def flash_firmware(self, hex_file_path):
         return ("", 0)  # (stderr, returncode) — 0 = success
@@ -420,9 +420,9 @@ class TestFirmwareInstallPreRelease:
         assert url is not None
         # Must log something about falling back to stable
         lower_records = [r.message.lower() for r in caplog.records]
-        assert any("fall" in m or "stable" in m or "no pre" in m for m in lower_records), (
-            f"Expected a fallback log record; got: {[r.message for r in caplog.records]}"
-        )
+        assert any(
+            "fall" in m or "stable" in m or "no pre" in m for m in lower_records
+        ), f"Expected a fallback log record; got: {[r.message for r in caplog.records]}"
 
     def test_pre_filters_draft_releases(self, monkeypatch):
         """INST-02 / D-03 — draft releases are excluded from pre-release candidates.
@@ -491,7 +491,7 @@ class TestFirmwareInstallPreRelease:
         pages = [
             mock_releases_factory(
                 release_on_page(i),
-                next_url=f"https://api.github.com/repos/henols/firestarter/releases?page={i+1}",
+                next_url=f"https://api.github.com/repos/henols/firestarter/releases?page={i + 1}",
             )
             for i in range(1, 7)  # 6 pages, last has a next_url too
         ]
@@ -617,7 +617,9 @@ class TestFirmwareInstallPinned:
 
         valid = ["3.1.0", "3.1.0b2", "3.1.0rc1", "0.0.1b1", "3.0.0", "10.20.30rc99"]
         for v in valid:
-            assert FIRMWARE_VERSION_RE.match(v), f"Expected {v!r} to match FIRMWARE_VERSION_RE"
+            assert FIRMWARE_VERSION_RE.match(v), (
+                f"Expected {v!r} to match FIRMWARE_VERSION_RE"
+            )
 
         invalid = ["3.1.0-dev", "3.1.0beta2", "3.1", "latest", "3.1.0.4.5", "", "abc"]
         for v in invalid:
@@ -869,6 +871,7 @@ class TestMagicDefault:
     def _isolate_env(self, monkeypatch):
         """Restore firestarter.__version__ after each test."""
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", _pkg.__version__)
 
     def test_dev_suffix_is_prerelease(self, monkeypatch):
@@ -880,8 +883,10 @@ class TestMagicDefault:
         RED today: _maybe_auto_route_to_pre does not exist in firestarter.main — ImportError.
         """
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
         from firestarter.main import _maybe_auto_route_to_pre
+
         args = MagicMock()
         args.install = True
         args.pre = False
@@ -899,8 +904,10 @@ class TestMagicDefault:
         RED today: _maybe_auto_route_to_pre does not exist in firestarter.main — ImportError.
         """
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", "2.0.7")
         from firestarter.main import _maybe_auto_route_to_pre
+
         args = MagicMock()
         args.install = True
         args.pre = False
@@ -918,8 +925,10 @@ class TestMagicDefault:
         RED today: _maybe_auto_route_to_pre does not exist — ImportError.
         """
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
         from firestarter.main import _maybe_auto_route_to_pre
+
         args = MagicMock()
         args.install = True
         args.pre = True  # already set by user
@@ -941,8 +950,10 @@ class TestMagicDefault:
         RED today: _maybe_auto_route_to_pre does not exist — ImportError.
         """
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
         from firestarter.main import _maybe_auto_route_to_pre
+
         args = MagicMock()
         args.install = True
         args.pre = False
@@ -961,8 +972,10 @@ class TestMagicDefault:
         is True, even on a pre-release-installed app.
         """
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")  # prerelease
         from firestarter.main import _maybe_auto_route_to_pre
+
         args = MagicMock()
         args.install = True
         args.pre = False
@@ -983,8 +996,10 @@ class TestMagicDefault:
         RED today: _maybe_auto_route_to_pre does not exist — ImportError.
         """
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
         from firestarter.main import _maybe_auto_route_to_pre
+
         args = MagicMock()
         args.install = True
         args.pre = False
@@ -1033,9 +1048,12 @@ class TestArgparseMutex:
         """
         import argparse
         from firestarter.main import create_firmware_args
+
         p = argparse.ArgumentParser()
         sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)  # MUST return fw_parser per RESEARCH Open Q2
+        fw_parser = create_firmware_args(
+            sp
+        )  # MUST return fw_parser per RESEARCH Open Q2
         return p, fw_parser
 
     def test_pre_and_firmware_version_mutex(self):
@@ -1048,6 +1066,7 @@ class TestArgparseMutex:
         """
         import argparse
         from firestarter.main import create_firmware_args
+
         p = argparse.ArgumentParser()
         sp = p.add_subparsers(dest="command")
         fw_parser = create_firmware_args(sp)
@@ -1061,6 +1080,7 @@ class TestArgparseMutex:
         """
         import argparse
         from firestarter.main import create_firmware_args
+
         p = argparse.ArgumentParser()
         sp = p.add_subparsers(dest="command")
         fw_parser = create_firmware_args(sp)
@@ -1075,6 +1095,7 @@ class TestArgparseMutex:
         """
         import argparse
         from firestarter.main import create_firmware_args
+
         p = argparse.ArgumentParser()
         sp = p.add_subparsers(dest="command")
         fw_parser = create_firmware_args(sp)
@@ -1093,8 +1114,10 @@ class TestArgparseMutex:
         or AttributeError, not SystemExit(2).
         """
         import sys
+
         monkeypatch.setattr(sys, "argv", ["firestarter", "fw", "--json"])
         from firestarter.main import main
+
         with pytest.raises(SystemExit):
             main()
 
@@ -1109,6 +1132,7 @@ class TestArgparseMutex:
         """
         import argparse
         from firestarter.main import create_firmware_args
+
         p = argparse.ArgumentParser()
         sp = p.add_subparsers(dest="command")
         fw_parser = create_firmware_args(sp)
@@ -1153,9 +1177,7 @@ class TestUno328pbResolution:
         # Override json() to return a single release dict — /releases/latest
         # returns a single object, not a list (Pitfall 4).
         stable_mock.json.return_value = _STABLE_RELEASE_UNO328PB
-        monkeypatch.setattr(
-            firmware.requests, "get", lambda url, **kw: stable_mock
-        )
+        monkeypatch.setattr(firmware.requests, "get", lambda url, **kw: stable_mock)
         fm = FirmwareManager(config_manager=MagicMock())
         v, url = fm.fetch_release_info(channel="stable", board="uno328pb")
         assert v == "3.0.1"

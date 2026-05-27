@@ -43,13 +43,15 @@ rurp_logger = logging.getLogger("RURP")
 
 # Define a structured object for responses to improve clarity over tuples.
 # `payload` carries raw bytes for MSG_DATA_CHUNK frames (W-04); None otherwise.
-Response = namedtuple('Response', ['type', 'message', 'payload'], defaults=[None])
+Response = namedtuple("Response", ["type", "message", "payload"], defaults=[None])
 
 # Phase 6: ID-encoded wire frame primitives. MAGIC_PREAMBLE locked by
 # CONTEXT §D-02; LogMessage is the decoded-frame value type per D-06.
 # `payload` carries raw bytes for MSG_DATA_CHUNK (W-04); None for all others.
-LogMessage = namedtuple('LogMessage', ['severity', 'text', 'id', 'payload'], defaults=[None])
-MAGIC_PREAMBLE: bytes = b'\xAA\x55\xAA\x55'
+LogMessage = namedtuple(
+    "LogMessage", ["severity", "text", "id", "payload"], defaults=[None]
+)
+MAGIC_PREAMBLE: bytes = b"\xaa\x55\xaa\x55"
 
 
 def _build_crc8_table() -> bytes:
@@ -135,6 +137,7 @@ def _decode_param(ptype: str, buf: bytes, cursor: int) -> Tuple[Any, int]:
         return raw, len(buf)
     raise ValueError(f"Unknown param type: {ptype}")
 
+
 # Compile regex for parsing prefixes once for efficiency
 
 DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
@@ -171,12 +174,12 @@ NON_RESPONSE_PREFIXES = ["INFO", "DEBUG"]
 # Mirrors firmware enum at firestarter/include/rurp_shield.h. Lookup-via-dict.get()
 # so unknown bytes fall back to "Rev{n}" instead of raising.
 _REVISION_SILKSCREEN = {
-    REVISION_0:       "Rev 0",
-    REVISION_1:       "Rev 1",
-    REVISION_2_0:     "Rev 2.0-class",   # broad bucket per Phase 34 D-04
-    REVISION_2_1:     "Rev 2.1 (override)",
-    REVISION_2_2:     "Rev 2.2 (override)",
-    REVISION_2_3:     "Rev 2.3",
+    REVISION_0: "Rev 0",
+    REVISION_1: "Rev 1",
+    REVISION_2_0: "Rev 2.0-class",  # broad bucket per Phase 34 D-04
+    REVISION_2_1: "Rev 2.1 (override)",
+    REVISION_2_2: "Rev 2.2 (override)",
+    REVISION_2_3: "Rev 2.3",
     REVISION_UNKNOWN: "rev_unknown",
 }
 
@@ -328,7 +331,8 @@ class SerialCommunicator:
         # Shorten prefix for debug, full for others
         log_prefix = (
             response.type[:1]
-            if rurp_logger.isEnabledFor(logging.DEBUG) and response.type in NON_RESPONSE_PREFIXES
+            if rurp_logger.isEnabledFor(logging.DEBUG)
+            and response.type in NON_RESPONSE_PREFIXES
             else response.type
         )
         rurp_logger.log(level, f"{log_prefix}: {message}")
@@ -422,13 +426,23 @@ class SerialCommunicator:
                     for ptype, _prender in sub_entry.params:
                         value, cursor = _decode_param(ptype, sub_body, cursor)
                         values.append(value)
-                    fmt_values = [v for v in values if not isinstance(v, (bytes, bytearray))]
-                    return sub_entry.format % tuple(fmt_values) if fmt_values else sub_entry.format
+                    fmt_values = [
+                        v for v in values if not isinstance(v, (bytes, bytearray))
+                    ]
+                    return (
+                        sub_entry.format % tuple(fmt_values)
+                        if fmt_values
+                        else sub_entry.format
+                    )
                 except (IndexError, struct.error, ValueError):
                     return None  # fall through to generic [debug:N] render
             return None
 
-        if msg_id == MSG_DATA_CHUNK and len(params) == 1 and isinstance(params[0], (bytes, bytearray)):
+        if (
+            msg_id == MSG_DATA_CHUNK
+            and len(params) == 1
+            and isinstance(params[0], (bytes, bytearray))
+        ):
             # W-04: return a short summary so log lines don't dump 512 raw bytes.
             return f"<chunk: {len(params[0])} bytes>"
 
@@ -468,9 +482,7 @@ class SerialCommunicator:
 
         entry = CATALOG.get(msg_id)
         if entry is None:
-            logger.warning(
-                f"Unknown message ID 0x{msg_id:02x} — catalog out of date?"
-            )
+            logger.warning(f"Unknown message ID 0x{msg_id:02x} — catalog out of date?")
             return None
 
         # WR-03: reject id-frame payloads for catalog entries flagged
@@ -534,11 +546,17 @@ class SerialCommunicator:
         # Extract raw-bytes payload for MSG_DATA_CHUNK (W-04) so the chip-read
         # loop can obtain the chip data without a second read call.
         chunk_payload = None
-        if msg_id == MSG_DATA_CHUNK and values and isinstance(values[0], (bytes, bytearray)):
+        if (
+            msg_id == MSG_DATA_CHUNK
+            and values
+            and isinstance(values[0], (bytes, bytearray))
+        ):
             chunk_payload = bytes(values[0])
 
         severity_label = SEVERITY_LABEL.get(entry.severity, f"SEV{entry.severity}")
-        return LogMessage(severity=severity_label, text=text, id=msg_id, payload=chunk_payload)
+        return LogMessage(
+            severity=severity_label, text=text, id=msg_id, payload=chunk_payload
+        )
 
     def _read_and_parse_lines(self, timeout: float) -> Generator[Response, None, None]:
         """
@@ -667,9 +685,7 @@ class SerialCommunicator:
 
             # Otherwise: keep accumulating; the byte is already appended.
 
-    def get_response(
-        self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
-    ) -> Response:
+    def get_response(self, timeout: float = DEFAULT_RESPONSE_TIMEOUT) -> Response:
         """
         Waits for and returns the next significant (i.e., not INFO or DEBUG)
         response from the programmer.
@@ -757,9 +773,7 @@ class SerialCommunicator:
                     )
 
     @staticmethod
-    def _list_potential_ports(
-        preferred_port: Optional[str] = None
-    ) -> List[str]:
+    def _list_potential_ports(preferred_port: Optional[str] = None) -> List[str]:
         ports = []
         if preferred_port:
             ports.append(preferred_port)
@@ -782,19 +796,26 @@ class SerialCommunicator:
         return ports
 
     @staticmethod
-    def _is_version_sufficient(current_version_str: str, required_version_str: str) -> bool:
+    def _is_version_sufficient(
+        current_version_str: str, required_version_str: str
+    ) -> bool:
         """Compares two version strings. Returns True if current >= required."""
         if not current_version_str or not required_version_str:
             return False
         try:
             # Replace 'x' with a high number for comparison purposes
-            current = tuple(map(int, current_version_str.lower().replace('x', '999').split('.')))
-            required = tuple(map(int, required_version_str.lower().replace('x', '999').split('.')))
+            current = tuple(
+                map(int, current_version_str.lower().replace("x", "999").split("."))
+            )
+            required = tuple(
+                map(int, required_version_str.lower().replace("x", "999").split("."))
+            )
             return current >= required
         except (ValueError, AttributeError):
-            logger.warning(f"Could not parse version string for comparison: '{current_version_str}'")
-            return False # If parsing fails, assume it's not sufficient.
-
+            logger.warning(
+                f"Could not parse version string for comparison: '{current_version_str}'"
+            )
+            return False  # If parsing fails, assume it's not sufficient.
 
     @staticmethod
     def _probe_port(
@@ -828,7 +849,9 @@ class SerialCommunicator:
                 # Discard the first; parse the second for version validation.
                 pre_is_ok, _pre_msg = communicator.expect_ack()
                 if not pre_is_ok:
-                    logger.debug(f"Port {port_name}: FW-probe setup-ack not OK: {_pre_msg}")
+                    logger.debug(
+                        f"Port {port_name}: FW-probe setup-ack not OK: {_pre_msg}"
+                    )
                     communicator.disconnect()
                     return None
                 fw_is_ok, fw_msg = communicator.expect_ack()
@@ -852,17 +875,20 @@ class SerialCommunicator:
                                 major = 0
                             if (
                                 major < 3
-                                and os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") != "1"
+                                and os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12")
+                                != "1"
                             ):
                                 raise FirmwareOutdatedError(
                                     f"Firmware version {current_version} is pre-v1.2 (text-format logging). "
                                     f"This host expects v1.2+ firmware emitting ID-encoded log frames. "
                                     f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "
                                     f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "
-                                    f"see PROJECT.md \"Constraints\".)"
+                                    f'see PROJECT.md "Constraints".)'
                                 )
 
-                            if not SerialCommunicator._is_version_sufficient(current_version, "2.0.0"):
+                            if not SerialCommunicator._is_version_sufficient(
+                                current_version, "2.0.0"
+                            ):
                                 raise FirmwareOutdatedError(
                                     f"Firmware version {current_version} is outdated. "
                                     f"Version 2.0.0 or higher is required. "
@@ -942,7 +968,9 @@ class SerialCommunicator:
 
         for port_name in potential_ports:
             try:
-                communicator = cls._probe_port(port_name, baud_rate, command_to_send, config_manager)
+                communicator = cls._probe_port(
+                    port_name, baud_rate, command_to_send, config_manager
+                )
                 if communicator:
                     if status_update_active:
                         logger.info("Connecting... OK      ", extra={"status": "end"})
@@ -967,7 +995,7 @@ class SerialCommunicator:
             num_bytes = int.from_bytes(self.connection.read(2), "big")
             checksum_rcvd = self.connection.read(1)
 
-            data = b''
+            data = b""
             bytes_to_read = num_bytes
             while bytes_to_read > 0:
                 # read() will block until timeout or all bytes are received.

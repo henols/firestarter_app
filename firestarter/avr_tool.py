@@ -5,6 +5,7 @@ Copyright (c) 2025 Henrik Olsson
 Permission is hereby granted under MIT license.
 AVRdude Tool Wrapper Module
 """
+
 import os
 import re
 import time
@@ -30,6 +31,7 @@ class Avrdude:
     retrieving its version, and executing commands for flashing firmware
     or testing connections to AVR microcontrollers.
     """
+
     def __init__(
         self,
         partno,

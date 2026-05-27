@@ -197,6 +197,7 @@ def _validate_firmware_version(value: str) -> str:
     Raises ArgumentTypeError on invalid input — argparse converts this to SystemExit(2).
     """
     from firestarter.firmware import FIRMWARE_VERSION_RE
+
     if not FIRMWARE_VERSION_RE.match(value):
         raise argparse.ArgumentTypeError(
             f"Invalid firmware version {value!r}. "
@@ -221,14 +222,17 @@ def _maybe_auto_route_to_pre(args) -> None:
           guard must honor that intent before routing to --pre.
     """
     logger = logging.getLogger(__name__)
-    if not (getattr(args, "install", False)
-            and not getattr(args, "pre", False)
-            and not getattr(args, "firmware_version", None)
-            and not getattr(args, "stable", False)):
+    if not (
+        getattr(args, "install", False)
+        and not getattr(args, "pre", False)
+        and not getattr(args, "firmware_version", None)
+        and not getattr(args, "stable", False)
+    ):
         return
     try:
         import firestarter as _pkg
         from packaging.version import Version, InvalidVersion
+
         try:
             if Version(_pkg.__version__).is_prerelease:
                 args.pre = True
@@ -314,7 +318,9 @@ def create_firmware_args(parser):
         action="store_true",
         help="Output --list results as JSON array (only with --list).",
     )
-    return fw_parser  # REQUIRED for fw_parser.error() in dispatch (RESEARCH.md Pitfall 5)
+    return (
+        fw_parser  # REQUIRED for fw_parser.error() in dispatch (RESEARCH.md Pitfall 5)
+    )
 
 
 def create_info_args(parser):
@@ -497,7 +503,9 @@ def build_arg_flags(args):
     force = args.force if "force" in args else False
     verbose = args.verbose if "verbose" in args else False
     vpe_as_vpp = args.vpe_as_vpp if "vpe_as_vpp" in args else False
-    flags = build_flags(blank_check, force, vpe_as_vpp, verbose, skip_erase=not blank_check)
+    flags = build_flags(
+        blank_check, force, vpe_as_vpp, verbose, skip_erase=not blank_check
+    )
 
     if "input_enable" in args:
         flags |= 0 if args.input_enable else FLAG_OUTPUT_ENABLE
@@ -597,7 +605,7 @@ def main():
     eprom_presenter = EpromConsolePresenter(db_instance)
 
     logger.debug(f"Firestarter version: {version}")
-    logger.debug(f"Running on Python: { platform.python_version()}")
+    logger.debug(f"Running on Python: {platform.python_version()}")
     logger.debug(f"Platform: {platform.system()} {platform.release()}")
     logger.debug(f"Architecture: {platform.architecture()[0]}")
     logger.debug(f"OS: {platform.platform()}")
@@ -630,13 +638,13 @@ def main():
             raw_config_data,
             manufacturer,
             include_export_config=args.config,
-            include_adapter=getattr(args, 'adapter', False),
+            include_adapter=getattr(args, "adapter", False),
         )
         if structured_details:
             eprom_presenter.present_eprom_details(
                 structured_details,
                 show_export_config=args.config,
-                show_adapter=getattr(args, 'adapter', False),
+                show_adapter=getattr(args, "adapter", False),
             )
             return 0
         return 1
@@ -731,8 +739,10 @@ def main():
         return (
             1
             if not eprom_operator.erase_eprom(
-                args.eprom, eprom_data, operation_flags=build_arg_flags(args),
-                address_str=getattr(args, 'sector_address', None)
+                args.eprom,
+                eprom_data,
+                operation_flags=build_arg_flags(args),
+                address_str=getattr(args, "sector_address", None),
             )
             else 0
         )
@@ -806,11 +816,14 @@ def main():
             )
             if args.json:
                 import json as _json
+
                 print(_json.dumps(releases, indent=2))
             else:
                 print(f"{'Version':<12} {'Channel':<14} {'Published':<22} Asset URL")
                 for r in releases:
-                    print(f"{r['version']:<12} {r['channel']:<14} {r['published']:<22} {r['asset_url']}")
+                    print(
+                        f"{r['version']:<12} {r['channel']:<14} {r['published']:<22} {r['asset_url']}"
+                    )
             return 0
 
         # Magic default: on a beta-installed app, bare fw -i auto-routes to --pre (D-21/D-22).

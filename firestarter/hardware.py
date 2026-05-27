@@ -192,7 +192,9 @@ class HardwareManager:
             # This establishes a handshake and prevents a race condition.
             is_ok, msg = comm.expect_ack()
             if not is_ok:
-                logger.error(f"Firmware did not signal ready for voltage reading: {msg}")
+                logger.error(
+                    f"Firmware did not signal ready for voltage reading: {msg}"
+                )
                 return False
             logger.debug(f"Firmware ready for voltage reading: {msg}")
 
@@ -210,13 +212,17 @@ class HardwareManager:
 
                     if timeout_seconds and (time.time() - start_time > timeout_seconds):
                         print()  # Newline after continuous printing
-                        logger.info(f"{voltage_type_str} reading timed out after {timeout_seconds}s.")
+                        logger.info(
+                            f"{voltage_type_str} reading timed out after {timeout_seconds}s."
+                        )
                         return True
 
                     comm.send_ack()  # Acknowledge data and request next reading
                 elif response_type == "OK":
                     print()
-                    logger.info(f"{voltage_type_str} reading finished by programmer: {message or 'OK'}")
+                    logger.info(
+                        f"{voltage_type_str} reading finished by programmer: {message or 'OK'}"
+                    )
                     return True
                 elif response_type == "ERROR":
                     print()
@@ -224,7 +230,9 @@ class HardwareManager:
                     return False
                 else:  # Timeout or unexpected
                     print()
-                    logger.error(f"Unexpected response or timeout reading {voltage_type_str}: {response_type} - {message}")
+                    logger.error(
+                        f"Unexpected response or timeout reading {voltage_type_str}: {response_type} - {message}"
+                    )
                     return False
         except (
             ProgrammerNotFoundError,
@@ -243,10 +251,14 @@ class HardwareManager:
             if comm:
                 comm.disconnect()
 
-    def read_vpp_voltage(self, timeout_seconds: Optional[int] = None, flags: int = 0) -> bool:
+    def read_vpp_voltage(
+        self, timeout_seconds: Optional[int] = None, flags: int = 0
+    ) -> bool:
         """Reads the VPP voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPP, "VPP", timeout_seconds, flags)
 
-    def read_vpe_voltage(self, timeout_seconds: Optional[int] = None, flags: int = 0) -> bool:
+    def read_vpe_voltage(
+        self, timeout_seconds: Optional[int] = None, flags: int = 0
+    ) -> bool:
         """Reads the VPE voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds, flags)

@@ -45,19 +45,19 @@ PROTOCOL_MAP = {
 # Algorithm integer (upstream protocol_id from infoic.xml) → firmware mem_type integer.
 # Firmware dispatches on protocol first; mem_type is kept consistent for fallback paths.
 _ALGO_MEM_TYPE = {
-    0x05: 5,   # FLASH_AMD_STD     → TYPE_FLASH_TYPE_4
-    0x06: 3,   # FLASH_AMD_ALT     → TYPE_FLASH_TYPE_3
-    0x07: 1,   # EPROM_STD         → TYPE_EPROM
-    0x08: 1,   # EPROM_QUICK       → TYPE_EPROM
-    0x0B: 1,   # EPROM_LEGACY      → TYPE_EPROM
-    0x0D: 1,   # EEPROM_POLL       → TYPE_EPROM (firmware dispatches on protocol prefix)
-    0x0E: 4,   # SRAM_32PIN        → TYPE_SRAM
-    0x10: 1,   # FLASH_INTEL       → TYPE_EPROM (firmware dispatches on protocol prefix)
-    0x27: 4,   # SRAM_24PIN        → TYPE_SRAM
-    0x28: 4,   # SRAM_STD          → TYPE_SRAM
-    0x29: 4,   # SRAM_512K_1M      → TYPE_SRAM
-    0x35: 5,   # FLASH_EEPROM_LIKE → TYPE_FLASH_TYPE_4
-    0x39: 5,   # FLASH_INTEL_ALT   → TYPE_FLASH_TYPE_4 (no DB chips; future-proofed)
+    0x05: 5,  # FLASH_AMD_STD     → TYPE_FLASH_TYPE_4
+    0x06: 3,  # FLASH_AMD_ALT     → TYPE_FLASH_TYPE_3
+    0x07: 1,  # EPROM_STD         → TYPE_EPROM
+    0x08: 1,  # EPROM_QUICK       → TYPE_EPROM
+    0x0B: 1,  # EPROM_LEGACY      → TYPE_EPROM
+    0x0D: 1,  # EEPROM_POLL       → TYPE_EPROM (firmware dispatches on protocol prefix)
+    0x0E: 4,  # SRAM_32PIN        → TYPE_SRAM
+    0x10: 1,  # FLASH_INTEL       → TYPE_EPROM (firmware dispatches on protocol prefix)
+    0x27: 4,  # SRAM_24PIN        → TYPE_SRAM
+    0x28: 4,  # SRAM_STD          → TYPE_SRAM
+    0x29: 4,  # SRAM_512K_1M      → TYPE_SRAM
+    0x35: 5,  # FLASH_EEPROM_LIKE → TYPE_FLASH_TYPE_4
+    0x39: 5,  # FLASH_INTEL_ALT   → TYPE_FLASH_TYPE_4 (no DB chips; future-proofed)
 }
 
 # Module-level constants
@@ -234,9 +234,9 @@ class EpromDatabase:
             else:
                 # Replace sub-objects in the existing key
                 for sub_key, sub_value in sub_map.items():
-                    pin_maps_base[key][
-                        sub_key
-                    ] = sub_value  # Replace existing or add new
+                    pin_maps_base[key][sub_key] = (
+                        sub_value  # Replace existing or add new
+                    )
         return pin_maps_base
 
     def get_pin_map(self, pins: int, pin_map_id: str):
@@ -318,7 +318,7 @@ class EpromDatabase:
         pin_signals = {}
 
         def _assign(pins_val, signal):
-            for p in (pins_val if isinstance(pins_val, list) else [pins_val]):
+            for p in pins_val if isinstance(pins_val, list) else [pins_val]:
                 if p in pin_signals and signal not in pin_signals[p]:
                     pin_signals[p] = pin_signals[p] + "/" + signal
                 else:
@@ -329,7 +329,9 @@ class EpromDatabase:
         _assign(pin_map_data.get("ce-pin", []), "CE")
         _assign(pin_map_data.get("oe-pin", []), "OE")
         _assign(pin_map_data.get("pgm-pin", []), "PGM")
-        _assign(pin_map_data.get("vpp-pin", []), "VPP")  # may append "/VPP" to OE if shared
+        _assign(
+            pin_map_data.get("vpp-pin", []), "VPP"
+        )  # may append "/VPP" to OE if shared
 
         for i, p in enumerate(pin_map_data.get("address-bus-pins", [])):
             if p not in pin_signals:
@@ -461,6 +463,7 @@ class EpromDatabase:
         is normalized to match against the paren-stripped alias.
         """
         import re
+
         def _strip_paren(s):
             # "DS1245AB(RW)" -> "DS1245AB"; preserves the canonical chip name.
             return re.sub(r"\([^)]*\)", "", s).strip().lower()
@@ -521,7 +524,9 @@ class EpromDatabase:
             return {}
 
         # Use vpp_mv directly when available (integer millivolts from build_db.py)
-        vpp_mv = full_eprom_data.get("vpp_mv") or int(full_eprom_data.get("vpp_volts", 0) * 1000)
+        vpp_mv = full_eprom_data.get("vpp_mv") or int(
+            full_eprom_data.get("vpp_volts", 0) * 1000
+        )
 
         # Keys to keep from the full data
         programmer_data = {

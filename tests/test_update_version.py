@@ -115,6 +115,7 @@ class TestUpdateVersionStable:
 
         import io
         import contextlib
+
         stdout_capture = io.StringIO()
         with contextlib.redirect_stdout(stdout_capture):
             update_version.calculate_version()
@@ -172,13 +173,15 @@ class TestUpdateVersionBeta:
 
         # Wave 1 contract: parse_args() and is_beta_mode() exist; main script entry.
         args = update_version.parse_args()
-        assert update_version.is_beta_mode(args), "GITHUB_REF=refs/heads/beta must trigger beta mode"
+        assert update_version.is_beta_mode(args), (
+            "GITHUB_REF=refs/heads/beta must trigger beta mode"
+        )
 
         update_version.calculate_version()
 
         content = version_file.read_text()
         assert content.endswith('__version__ = "1.2.3b1"\n'), (
-            f"Beta version file must end with __version__ = \"1.2.3b1\"\\n. Got: {content!r}"
+            f'Beta version file must end with __version__ = "1.2.3b1"\\n. Got: {content!r}'
         )
         output_text = output_file.read_text()
         assert "version=1.2.3b1" in output_text, (
@@ -240,7 +243,9 @@ class TestUpdateVersionBeta:
         fake_result = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="1.2.3b1\n1.2.3b2\n", stderr=""
         )
-        monkeypatch.setattr(update_version.subprocess, "run", lambda *a, **kw: fake_result)
+        monkeypatch.setattr(
+            update_version.subprocess, "run", lambda *a, **kw: fake_result
+        )
 
         update_version.calculate_version()
 
@@ -272,7 +277,9 @@ class TestUpdateVersionBeta:
         fake_result = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
-        monkeypatch.setattr(update_version.subprocess, "run", lambda *a, **kw: fake_result)
+        monkeypatch.setattr(
+            update_version.subprocess, "run", lambda *a, **kw: fake_result
+        )
 
         update_version.calculate_version()
 
@@ -323,6 +330,7 @@ class TestUpdateVersionDryRun:
         assert update_version.is_beta_mode(args)
 
         import io, contextlib
+
         stdout_capture = io.StringIO()
         with contextlib.redirect_stdout(stdout_capture):
             update_version.calculate_version(args)
@@ -360,7 +368,9 @@ class TestUpdateVersionDryRun:
         # Wave 1 contract: parse_args(['--dry-run']) works.
         args = update_version.parse_args(["--dry-run"])
         assert args.dry_run, "--dry-run arg must set args.dry_run = True"
-        assert not update_version.is_beta_mode(args), "Stable dry-run must not be in beta mode"
+        assert not update_version.is_beta_mode(args), (
+            "Stable dry-run must not be in beta mode"
+        )
 
         update_version.calculate_version(args)
         captured = capsys.readouterr()

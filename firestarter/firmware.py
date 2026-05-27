@@ -40,7 +40,7 @@ logger = logging.getLogger("Firmware")
 # Note: anchor with \Z (not $) — $ matches before a trailing \n in Python,
 # letting "3.1.0\n" sneak through and corrupt the URL template downstream.
 # Fixed 2026-05-20 per Phase 18 code review CR-02.
-FIRMWARE_VERSION_RE = re.compile(r'^[0-9]+\.[0-9]+\.[0-9]+((b|rc)[0-9]+)?\Z')
+FIRMWARE_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+((b|rc)[0-9]+)?\Z")
 
 # Used by _fetch_all_releases to follow pagination Link headers.
 _LINK_NEXT_RE = re.compile(r'<([^>]+)>;\s*rel="next"')
@@ -49,11 +49,11 @@ _LINK_NEXT_RE = re.compile(r'<([^>]+)>;\s*rel="next"')
 class ReleaseInfo(TypedDict):
     """Structured release entry returned by list_releases (D-12 schema)."""
 
-    version: str          # tag_name from GitHub API
-    tag: str              # raw tag_name (same as version for firmware releases)
-    channel: str          # "stable" or "prerelease"
-    published: str        # ISO-8601 from published_at field
-    asset_url: str        # browser_download_url for the board-matching .hex asset
+    version: str  # tag_name from GitHub API
+    tag: str  # raw tag_name (same as version for firmware releases)
+    channel: str  # "stable" or "prerelease"
+    published: str  # ISO-8601 from published_at field
+    asset_url: str  # browser_download_url for the board-matching .hex asset
 
 
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
@@ -78,7 +78,8 @@ class FirmwareManager:
         self.config_manager = config_manager
 
     def check_current_firmware(
-        self, preferred_port: str | None = None,
+        self,
+        preferred_port: str | None = None,
         flags: int = 0,
     ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         """
@@ -121,7 +122,7 @@ class FirmwareManager:
                 )
                 return None, None, None
         except FirmwareOutdatedError:
-            raise   # Phase 6 (LHOST-04): surface lockstep refuse to operator (do NOT swallow)
+            raise  # Phase 6 (LHOST-04): surface lockstep refuse to operator (do NOT swallow)
         except (ProgrammerNotFoundError, SerialError) as e:
             logger.error(f"Failed to read firmware version: {e}")
             return None, None, None
@@ -215,9 +216,9 @@ class FirmwareManager:
 
     def fetch_release_info(
         self,
-        channel: Literal['stable', 'pre', 'pinned'] = 'stable',
+        channel: Literal["stable", "pre", "pinned"] = "stable",
         version: Optional[str] = None,
-        board: str = 'uno',
+        board: str = "uno",
     ) -> Tuple[Optional[str], Optional[str]]:
         """Router: returns (resolved_version, download_url) or (None, None) on failure.
 
@@ -228,12 +229,14 @@ class FirmwareManager:
         """
         firmware_asset_name = f"firestarter_{board}.hex"
 
-        if channel == 'stable':
+        if channel == "stable":
             return self.fetch_latest_release_info(board=board)
 
-        elif channel == 'pinned':
+        elif channel == "pinned":
             if not version:
-                logger.error("fetch_release_info(channel='pinned') requires a version string.")
+                logger.error(
+                    "fetch_release_info(channel='pinned') requires a version string."
+                )
                 return None, None
             url = FIRESTARTER_RELEASE_BY_TAG_URL.format(tag=version)
             try:
@@ -258,7 +261,7 @@ class FirmwareManager:
                 return None, None
             return release_data.get("tag_name"), download_url
 
-        elif channel == 'pre':
+        elif channel == "pre":
             try:
                 all_releases = self._fetch_all_releases()
             except requests.RequestException as e:
@@ -301,13 +304,15 @@ class FirmwareManager:
             return picked.get("tag_name"), download_url
 
         else:
-            logger.error(f"Unknown firmware channel {channel!r}; expected 'stable', 'pre', or 'pinned'.")
+            logger.error(
+                f"Unknown firmware channel {channel!r}; expected 'stable', 'pre', or 'pinned'."
+            )
             return None, None
 
     def list_releases(
         self,
-        channel_filter: Literal['all', 'pre', 'stable'] = 'all',
-        board: str = 'uno',
+        channel_filter: Literal["all", "pre", "stable"] = "all",
+        board: str = "uno",
     ) -> List[ReleaseInfo]:
         """Enumerate available firmware releases sorted by PEP 440 version descending.
 
@@ -337,9 +342,9 @@ class FirmwareManager:
             is_pre = bool(r.get("prerelease"))
 
             # Apply channel filter.
-            if channel_filter == 'pre' and not is_pre:
+            if channel_filter == "pre" and not is_pre:
                 continue
-            if channel_filter == 'stable' and is_pre:
+            if channel_filter == "stable" and is_pre:
                 continue
 
             # Skip unparseable tags.
@@ -359,13 +364,15 @@ class FirmwareManager:
             if not asset_url:
                 continue  # Silently omit releases without the board asset (D-11).
 
-            out.append(ReleaseInfo(
-                version=tag,
-                tag=tag,
-                channel="prerelease" if is_pre else "stable",
-                published=r.get("published_at") or "",
-                asset_url=asset_url,
-            ))
+            out.append(
+                ReleaseInfo(
+                    version=tag,
+                    tag=tag,
+                    channel="prerelease" if is_pre else "stable",
+                    published=r.get("published_at") or "",
+                    asset_url=asset_url,
+                )
+            )
 
         out.sort(key=lambda entry: Version(entry["version"]), reverse=True)
         return out
@@ -530,9 +537,9 @@ class FirmwareManager:
         port_override: Optional[str] = None,
         board_override: Optional[str] = "uno",
         flags: int = 0,
-        channel: Literal['stable', 'pre', 'pinned'] = 'stable',
+        channel: Literal["stable", "pre", "pinned"] = "stable",
         pinned_version: Optional[str] = None,
-        ) -> bool:
+    ) -> bool:
         """
         Manages the firmware update process: checks version, prompts user, and installs if needed.
         Returns True if an operation (check or install) was successful in some sense, False on major failure.
@@ -542,7 +549,7 @@ class FirmwareManager:
         channel='pinned'  → uses exact tag from pinned_version (INST-03).
         """
         connected_port, current_version, current_board = self.check_current_firmware(
-            preferred_port=port_override,flags=flags
+            preferred_port=port_override, flags=flags
         )
 
         # Use the port where firmware was checked, or CLI override for flashing

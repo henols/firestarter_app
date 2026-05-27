@@ -31,7 +31,7 @@ import pytest
 
 # Module-level reference constants — independent of firestarter.serial_comm
 # so tests do not pass tautologically on a bug in the production constant.
-MAGIC_PREAMBLE_REF: bytes = b"\xAA\x55\xAA\x55"
+MAGIC_PREAMBLE_REF: bytes = b"\xaa\x55\xaa\x55"
 
 
 def _ref_crc8_ccitt(data: bytes) -> int:

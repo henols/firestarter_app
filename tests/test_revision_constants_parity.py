@@ -51,7 +51,9 @@ from firestarter.constants import (
 # is always alongside it (same include/ directory), so this single proxy covers
 # both headers (RESEARCH Open Question 1, resolved).
 # ---------------------------------------------------------------------------
-FIRMWARE_HEADER = Path(__file__).parent.parent.parent / "firestarter" / "include" / "firestarter.h"
+FIRMWARE_HEADER = (
+    Path(__file__).parent.parent.parent / "firestarter" / "include" / "firestarter.h"
+)
 FW_ABSENT = not FIRMWARE_HEADER.exists()
 
 
@@ -60,13 +62,13 @@ def test_revision_byte_values_match_firmware_enum():
     `firestarter/include/rurp_shield.h:25-31` (post-Plan-02 HEAD). This is
     the Phase 34 D-08 cross-repo parity invariant — drift on either side
     fails the gate at pytest time."""
-    assert REVISION_0       == 0x00
-    assert REVISION_1       == 0x01
-    assert REVISION_2_0     == 0x02
-    assert REVISION_2_1     == 0x03
-    assert REVISION_2_2     == 0x04
-    assert REVISION_2_3     == 0x05   # NEW Phase 34
-    assert REVISION_UNKNOWN == 0xFE   # NEW Phase 34
+    assert REVISION_0 == 0x00
+    assert REVISION_1 == 0x01
+    assert REVISION_2_0 == 0x02
+    assert REVISION_2_1 == 0x03
+    assert REVISION_2_2 == 0x04
+    assert REVISION_2_3 == 0x05  # NEW Phase 34
+    assert REVISION_UNKNOWN == 0xFE  # NEW Phase 34
     # 0xFF is reserved as the EEPROM-override-absent sentinel — NOT a REVISION_ value.
 
 
@@ -97,21 +99,22 @@ def test_command_values_match_firmware():
         COMMAND_CONFIG,
         COMMAND_HW_VERSION,
     )
-    assert COMMAND_READ          == 0x01  # CMD_READ
-    assert COMMAND_WRITE         == 0x02  # CMD_WRITE
-    assert COMMAND_ERASE         == 0x03  # CMD_ERASE
-    assert COMMAND_BLANK_CHECK   == 0x04  # CMD_BLANK_CHECK
+
+    assert COMMAND_READ == 0x01  # CMD_READ
+    assert COMMAND_WRITE == 0x02  # CMD_WRITE
+    assert COMMAND_ERASE == 0x03  # CMD_ERASE
+    assert COMMAND_BLANK_CHECK == 0x04  # CMD_BLANK_CHECK
     assert COMMAND_CHECK_CHIP_ID == 0x05  # CMD_CHECK_CHIP_ID
-    assert COMMAND_VERIFY        == 0x06  # CMD_VERIFY
+    assert COMMAND_VERIFY == 0x06  # CMD_VERIFY
     # CMD_DEV_ADDRESS and CMD_DEV_REGISTER are #ifdef DEV_TOOLS in firmware —
     # assert Python values as standalone literals only:
-    assert COMMAND_DEV_ADDRESS   == 0x07  # #ifdef DEV_TOOLS in firmware
+    assert COMMAND_DEV_ADDRESS == 0x07  # #ifdef DEV_TOOLS in firmware
     assert COMMAND_DEV_REGISTERS == 0x08  # #ifdef DEV_TOOLS in firmware
-    assert COMMAND_READ_VPP      == 0x0B  # CMD_READ_VPP
-    assert COMMAND_READ_VPE      == 0x0C  # CMD_READ_VPE
-    assert COMMAND_FW_VERSION    == 0x0D  # CMD_FW_VERSION (D-09: confirmed present)
-    assert COMMAND_CONFIG        == 0x0E  # CMD_CONFIG
-    assert COMMAND_HW_VERSION    == 0x0F  # CMD_HW_VERSION
+    assert COMMAND_READ_VPP == 0x0B  # CMD_READ_VPP
+    assert COMMAND_READ_VPE == 0x0C  # CMD_READ_VPE
+    assert COMMAND_FW_VERSION == 0x0D  # CMD_FW_VERSION (D-09: confirmed present)
+    assert COMMAND_CONFIG == 0x0E  # CMD_CONFIG
+    assert COMMAND_HW_VERSION == 0x0F  # CMD_HW_VERSION
 
 
 @pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
@@ -129,14 +132,15 @@ def test_flag_values_match_firmware():
         FLAG_CHIP_ENABLE,
         FLAG_VERBOSE,
     )
-    assert FLAG_FORCE            == 0x01  # FLAG_FORCE
-    assert FLAG_CAN_ERASE        == 0x02  # FLAG_CAN_ERASE
-    assert FLAG_SKIP_ERASE       == 0x04  # FLAG_SKIP_ERASE
+
+    assert FLAG_FORCE == 0x01  # FLAG_FORCE
+    assert FLAG_CAN_ERASE == 0x02  # FLAG_CAN_ERASE
+    assert FLAG_SKIP_ERASE == 0x04  # FLAG_SKIP_ERASE
     assert FLAG_SKIP_BLANK_CHECK == 0x08  # FLAG_SKIP_BLANK_CHECK
-    assert FLAG_VPE_AS_VPP       == 0x10  # FLAG_VPE_AS_VPP
-    assert FLAG_OUTPUT_ENABLE    == 0x20  # FLAG_OUTPUT_ENABLE
-    assert FLAG_CHIP_ENABLE      == 0x40  # FLAG_CHIP_ENABLE
-    assert FLAG_VERBOSE          == 0x80  # FLAG_VERBOSE
+    assert FLAG_VPE_AS_VPP == 0x10  # FLAG_VPE_AS_VPP
+    assert FLAG_OUTPUT_ENABLE == 0x20  # FLAG_OUTPUT_ENABLE
+    assert FLAG_CHIP_ENABLE == 0x40  # FLAG_CHIP_ENABLE
+    assert FLAG_VERBOSE == 0x80  # FLAG_VERBOSE
 
 
 @pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
@@ -165,13 +169,16 @@ def test_ctrl_values_match_firmware():
         CTRL_VPP_A9_ENABLE,
         CTRL_ADDRESS_LINE_16,
     )
+
     # HARDWARE_REVISION wide-layout branch (rurp_pinout.h §2 #else branch):
-    assert CTRL_ADDRESS_LINE_16      == 0x001  # CTRL_ADDRESS_LINE_16 (wide layout)
-    assert CTRL_VPP_A9_ENABLE        == 0x002  # CTRL_VPP_A9_ENABLE
-    assert CTRL_VPE_ENABLE           == 0x004  # CTRL_VPE_ENABLE
-    assert CTRL_VPP_P1_ENABLE        == 0x008  # CTRL_VPP_P1_ENABLE
-    assert CTRL_ADDRESS_LINE_17      == 0x010  # CTRL_ADDRESS_LINE_17
-    assert CTRL_ADDRESS_LINE_18      == 0x020  # CTRL_ADDRESS_LINE_18
-    assert CTRL_READ_WRITE           == 0x040  # CTRL_READ_WRITE
+    assert CTRL_ADDRESS_LINE_16 == 0x001  # CTRL_ADDRESS_LINE_16 (wide layout)
+    assert CTRL_VPP_A9_ENABLE == 0x002  # CTRL_VPP_A9_ENABLE
+    assert CTRL_VPE_ENABLE == 0x004  # CTRL_VPE_ENABLE
+    assert CTRL_VPP_P1_ENABLE == 0x008  # CTRL_VPP_P1_ENABLE
+    assert CTRL_ADDRESS_LINE_17 == 0x010  # CTRL_ADDRESS_LINE_17
+    assert CTRL_ADDRESS_LINE_18 == 0x020  # CTRL_ADDRESS_LINE_18
+    assert CTRL_READ_WRITE == 0x040  # CTRL_READ_WRITE
     assert CTRL_VPP_REGULATOR_ENABLE == 0x080  # CTRL_VPP_REGULATOR_ENABLE
-    assert CTRL_VPP_VPE_DROP_ENABLE  == 0x100  # CTRL_VPP_VPE_DROP_ENABLE (wide layout, differs from legacy 0x01)
+    assert (
+        CTRL_VPP_VPE_DROP_ENABLE == 0x100
+    )  # CTRL_VPP_VPE_DROP_ENABLE (wide layout, differs from legacy 0x01)

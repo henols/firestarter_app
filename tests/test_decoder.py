@@ -154,9 +154,7 @@ class TestIdFrameDecoder:
             "Unknown message ID 0x77" in record.message for record in caplog.records
         ), f"expected unknown-ID warning, got: {[r.message for r in caplog.records]}"
 
-    def test_severity_routing_preserves_response_shape(
-        self, fake_serial, make_comm
-    ):
+    def test_severity_routing_preserves_response_shape(self, fake_serial, make_comm):
         """LHOST-03: Response.type carries severity LABEL (string), not int."""
         # OK severity.
         comm_ok = make_comm()
@@ -278,7 +276,9 @@ class TestIdFrameDecoder:
         fake_serial.feed(frame)
 
         response = _drive_one_response(comm)
-        assert response is not None, "254-byte body MSG_DATA_CHUNK must decode (u16 len)"
+        assert response is not None, (
+            "254-byte body MSG_DATA_CHUNK must decode (u16 len)"
+        )
         assert response.type == "DATA"
 
     def test_ascii_str_overrun_rejected(self, fake_serial, make_comm, caplog):
@@ -300,7 +300,7 @@ class TestIdFrameDecoder:
         #     body = id | length_prefix=10 | "ABC" | crc
         # Total params_bytes len = 4 (one length byte + 3 string bytes),
         # CRC covers [id] + params_bytes.
-        bad_payload = bytes([10]) + b"ABC"   # claims 10 bytes, supplies 3
+        bad_payload = bytes([10]) + b"ABC"  # claims 10 bytes, supplies 3
         crc = _crc8_ccitt(bytes([MSG_INFO_BIT_STR]) + bad_payload)
         body = bytes([MSG_INFO_BIT_STR]) + bad_payload + bytes([crc])
 
@@ -498,7 +498,9 @@ class TestIdFrameDecoder:
         assert response.type == "INFO"
         assert response.message == "HW: Rev153"
 
-    def test_info_physical_hw_silkscreen_known_rev_decodes(self, fake_serial, make_comm):
+    def test_info_physical_hw_silkscreen_known_rev_decodes(
+        self, fake_serial, make_comm
+    ):
         """D-03: MSG_INFO_PHYSICAL_HW with byte=0x01 (REVISION_1) renders
         'Physical HW: Rev 1' via _REVISION_SILKSCREEN lookup. Phase 35 WR-01
         close — mirrors MSG_INFO_HW shape with the 'Physical HW: ' prefix."""
@@ -512,7 +514,9 @@ class TestIdFrameDecoder:
         assert response.type == "INFO"
         assert response.message == "Physical HW: Rev 1"
 
-    def test_info_physical_hw_silkscreen_rev_unknown_decodes(self, fake_serial, make_comm):
+    def test_info_physical_hw_silkscreen_rev_unknown_decodes(
+        self, fake_serial, make_comm
+    ):
         """D-03: MSG_INFO_PHYSICAL_HW with byte=0xFE (REVISION_UNKNOWN) renders
         'Physical HW: rev_unknown' instead of the catalog-default 'Physical HW: Rev254'.
         Phase 35 WR-01 close."""
@@ -526,7 +530,9 @@ class TestIdFrameDecoder:
         assert response.type == "INFO"
         assert response.message == "Physical HW: rev_unknown"
 
-    def test_info_physical_hw_silkscreen_unknown_byte_falls_back(self, fake_serial, make_comm):
+    def test_info_physical_hw_silkscreen_unknown_byte_falls_back(
+        self, fake_serial, make_comm
+    ):
         """D-03: MSG_INFO_PHYSICAL_HW with an unmapped byte (0x99) falls back to
         'Physical HW: Rev153' (no space — mirrors MSG_OK_REV fallback shape).
         Phase 35 WR-01 close."""
@@ -572,7 +578,9 @@ class TestIdFrameDecoder:
     # W-04 MSG_DATA_CHUNK roundtrip tests
     # -----------------------------------------------------------------
 
-    def test_data_chunk_payload_exposed_via_response_payload_field(self, fake_serial, make_comm):
+    def test_data_chunk_payload_exposed_via_response_payload_field(
+        self, fake_serial, make_comm
+    ):
         """W-04: MSG_DATA_CHUNK frame with 256-byte payload → Response.payload
         holds the exact raw bytes; Response.type == 'DATA'."""
         comm = make_comm()
@@ -584,7 +592,9 @@ class TestIdFrameDecoder:
         response = _drive_one_response(comm)
         assert response is not None, "MSG_DATA_CHUNK must decode successfully"
         assert response.type == "DATA"
-        assert response.payload is not None, "Response.payload must be set for MSG_DATA_CHUNK"
+        assert response.payload is not None, (
+            "Response.payload must be set for MSG_DATA_CHUNK"
+        )
         assert response.payload == payload_bytes, (
             "Response.payload must match the transmitted chunk bytes exactly"
         )
@@ -607,12 +617,12 @@ class TestIdFrameDecoder:
         comm = make_comm()
 
         # Build the simulated firmware byte stream.
-        chunk0 = bytes(range(256))        # 0x00..0xFF
+        chunk0 = bytes(range(256))  # 0x00..0xFF
         chunk1 = bytes(range(256))[::-1]  # 0xFF..0x00
-        chunk2 = bytes([0xAA] * 256)      # all 0xAA
+        chunk2 = bytes([0xAA] * 256)  # all 0xAA
 
         stream = (
-            build_frame(MSG_DATA_SENDING, b"")   # zero-param batch-start ack
+            build_frame(MSG_DATA_SENDING, b"")  # zero-param batch-start ack
             + build_frame(MSG_DATA_CHUNK, chunk0)
             + build_frame(MSG_DATA_CHUNK, chunk1)
             + build_frame(MSG_DATA_CHUNK, chunk2)
@@ -621,7 +631,10 @@ class TestIdFrameDecoder:
         fake_serial.feed(stream)
 
         # Drive the read loop manually.
-        from firestarter.eprom_operations import ClassProgressHandler, EpromOperationError
+        from firestarter.eprom_operations import (
+            ClassProgressHandler,
+            EpromOperationError,
+        )
 
         collected = bytearray()
         start_addr = [0]  # mutable box for callback closure
@@ -657,4 +670,6 @@ class TestIdFrameDecoder:
         assert bytes(collected[:256]) == chunk0, "First chunk mismatch"
         assert bytes(collected[256:512]) == chunk1, "Second chunk mismatch"
         assert bytes(collected[512:]) == chunk2, "Third chunk mismatch"
-        assert len(ack_calls) == 3, f"Expected 3 ACKs (one per chunk), got {len(ack_calls)}"
+        assert len(ack_calls) == 3, (
+            f"Expected 3 ACKs (one per chunk), got {len(ack_calls)}"
+        )

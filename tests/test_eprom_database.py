@@ -193,9 +193,9 @@ class TestDipToRurpPinTranslation:
         """Module-level pin_conversions[28] maps DIP28 pins to RURP lines correctly."""
         conv = pin_conversions[28]
         # Key address line pin numbers and their expected RURP lines
-        assert conv[10] == 0   # A0 -> RURP 0
-        assert conv[9] == 1    # A1 -> RURP 1
-        assert conv[1] == 15   # A15 -> RURP 15
+        assert conv[10] == 0  # A0 -> RURP 0
+        assert conv[9] == 1  # A1 -> RURP 1
+        assert conv[1] == 15  # A15 -> RURP 15
 
     def test_unknown_pinout_returns_none(self):
         """get_bus_config for an unknown pinout key must return None."""

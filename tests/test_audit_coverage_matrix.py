@@ -96,7 +96,8 @@ class TestAuditCoverageMatrix:
 
         def _data_rows(text):
             return [
-                line for line in text.split("\n")
+                line
+                for line in text.split("\n")
                 if line.startswith("| ")
                 and not line.startswith("| Manufacturer")
                 and not line.startswith("|---")
@@ -144,11 +145,11 @@ class TestAuditCoverageMatrix:
         assert rc == 0
 
         body = out.read_text(encoding="utf-8")
-        s3_body = body[body.index("## §3:"):body.index("## §4:")]
+        s3_body = body[body.index("## §3:") : body.index("## §4:")]
         algo7_body = s3_body[
-            s3_body.index("### algo-0x07"):s3_body.index("### algo-0x08")
+            s3_body.index("### algo-0x07") : s3_body.index("### algo-0x08")
         ]
-        algo8_body = s3_body[s3_body.index("### algo-0x08"):]
+        algo8_body = s3_body[s3_body.index("### algo-0x08") :]
 
         def _parse_rows(text):
             """Extract (pinout, size_bytes, manufacturer, first_alias) per row."""
@@ -323,6 +324,7 @@ class TestAuditCoverageMatrix:
         # the live DB (Pitfall 5 — derive expected hashes from the tool surface,
         # not from hard-coded literals).
         import json as _json
+
         with open(
             __import__("tools.audit_coverage_matrix", fromlist=["DB_FILE"]).DB_FILE,
             encoding="utf-8",
@@ -337,7 +339,8 @@ class TestAuditCoverageMatrix:
 
         seeded_ledger_path = tmp_path / "seeded.json"
         seeded_ledger_path.write_text(
-            _json.dumps({hazard_hash: "DEFECT-COV-99"}, indent=2, sort_keys=True) + "\n",
+            _json.dumps({hazard_hash: "DEFECT-COV-99"}, indent=2, sort_keys=True)
+            + "\n",
             encoding="utf-8",
         )
         out3 = tmp_path / "m3.md"
@@ -418,8 +421,10 @@ class TestAuditCoverageMatrix:
             [
                 sys.executable,
                 "tools/audit_coverage_matrix.py",
-                "--output", str(out),
-                "--ledger", str(ledger),
+                "--output",
+                str(out),
+                "--ledger",
+                str(ledger),
             ],
             cwd=str(firestarter_app_dir),
             capture_output=True,
@@ -441,8 +446,10 @@ class TestAuditCoverageMatrix:
             [
                 sys.executable,
                 "tools/audit_coverage_matrix.py",
-                "--output", str(scratch_out),
-                "--ledger", str(empty_ledger),
+                "--output",
+                str(scratch_out),
+                "--ledger",
+                str(empty_ledger),
                 "--check",
             ],
             cwd=str(firestarter_app_dir),
@@ -460,8 +467,10 @@ class TestAuditCoverageMatrix:
             [
                 sys.executable,
                 "tools/audit_coverage_matrix.py",
-                "--output", str(scratch_out),
-                "--ledger", str(ledger),
+                "--output",
+                str(scratch_out),
+                "--ledger",
+                str(ledger),
                 "--check",
             ],
             cwd=str(firestarter_app_dir),
@@ -513,14 +522,16 @@ class TestAuditCoverageMatrix:
         )
 
         # Known Gaps subsection (D-10 — deliberate gaps live here).
-        assert "### Known Gaps" in s5_body, (
-            "Known Gaps subsection missing from §5"
-        )
+        assert "### Known Gaps" in s5_body, "Known Gaps subsection missing from §5"
 
         # All six BENCH IDs (D-09 / D-11 — candidate names per REQUIREMENTS.md).
         for bench_id in (
-            "BENCH-01", "BENCH-02", "BENCH-03",
-            "BENCH-04", "BENCH-05", "BENCH-06",
+            "BENCH-01",
+            "BENCH-02",
+            "BENCH-03",
+            "BENCH-04",
+            "BENCH-05",
+            "BENCH-06",
         ):
             assert bench_id in s5_body, (
                 f"{bench_id} missing from §5 BENCH coverage proof"
@@ -562,7 +573,9 @@ class TestAuditCoverageMatrix:
         committed_ledger = meta_root / ".planning" / "v1.3-defect-coverage-ids.json"
         golden_file = (
             Path(__file__).resolve().parents[1]
-            / "tests" / "golden" / "v1.3-COVERAGE-MATRIX.md"
+            / "tests"
+            / "golden"
+            / "v1.3-COVERAGE-MATRIX.md"
         )
 
         # CI guard: when firestarter_app is checked out standalone (e.g. GitHub
@@ -586,9 +599,9 @@ class TestAuditCoverageMatrix:
 
         # Sanity: the seed must parse as JSON dict so the load_ledger surface
         # can consume it (Pitfall 4 cold-start guard expects dict or {}).
-        assert isinstance(
-            _json.loads(tmp_ledger.read_text(encoding="utf-8")), dict
-        ), "seeded ledger must be a JSON dict"
+        assert isinstance(_json.loads(tmp_ledger.read_text(encoding="utf-8")), dict), (
+            "seeded ledger must be a JSON dict"
+        )
 
         out = tmp_path / "m.md"
         rc = generate_matrix(output=out, ledger_path=tmp_ledger)

@@ -82,7 +82,6 @@ if __name__ == "__main__":
     # Test print_progress_bar
     import time
 
-
     # Test is_valid_hex_string
     print(is_valid_hex_string("0x1A2B3C"))  # Expected: True
     print(is_valid_hex_string("123ABC"))  # Expected: False

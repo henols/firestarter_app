@@ -75,7 +75,9 @@ def normalize_output(s: str) -> str:
     - Absolute paths in tracebacks and elsewhere (handles quoted paths too)
     """
     # Version string (--version output and debug log lines)
-    s = re.sub(r"Firestarter version: [\d.a-zA-Z+]+", "Firestarter version: <VERSION>", s)
+    s = re.sub(
+        r"Firestarter version: [\d.a-zA-Z+]+", "Firestarter version: <VERSION>", s
+    )
     # Serial port device names
     s = re.sub(r"/dev/tty\w+", "/dev/ttyXXX", s)
     # Absolute paths — match the path portion only, stopping at quote/comma/space/newline.
@@ -84,7 +86,7 @@ def normalize_output(s: str) -> str:
     # Broad root list so snapshots stay identical across dev containers, pipx/venv,
     # system, /opt, and CI installs (WR-02).
     s = re.sub(
-        r'(?:/home|/workspaces|/tmp|/Users|/opt|/usr|/root|/var|/private|/Library|/srv|/mnt)'
+        r"(?:/home|/workspaces|/tmp|/Users|/opt|/usr|/root|/var|/private|/Library|/srv|/mnt)"
         r'(?:/[^\s",\')]+)+',
         "<PATH>",
         s,
@@ -459,7 +461,7 @@ def test_read_happy_path(make_comm, fake_serial, tmp_path):
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
     # Feed a data chunk frame: MSG_DATA_CHUNK carries raw bytes as 'bytes' param.
     # build_frame(MSG_DATA_CHUNK, payload_bytes) encodes them as the frame body.
-    chunk_data = b"\xDE\xAD\xBE\xEF"
+    chunk_data = b"\xde\xad\xbe\xef"
     fake_serial.feed(build_frame(MSG_DATA_CHUNK, chunk_data))
     # Feed MAIN done (signals end of data transfer)
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
@@ -475,6 +477,7 @@ def test_read_happy_path(make_comm, fake_serial, tmp_path):
     operator = _make_operator_with_comm(comm)
 
     from firestarter.eprom_operations import EpromOperator
+
     success, msg = operator._run_state_machine(
         "READ",
         main_phase_handler=operator._main_phase_read_data,
@@ -514,6 +517,7 @@ def test_write_happy_path(make_comm, fake_serial, tmp_path):
     operator = _make_operator_with_comm(comm)
 
     from firestarter.eprom_operations import EpromOperator
+
     success, msg = operator._run_state_machine(
         "WRITE",
         main_phase_handler=operator._main_phase_send_data,
@@ -531,7 +535,7 @@ def test_verify_happy_path(make_comm, fake_serial, tmp_path):
     comm = make_comm()
 
     input_file = tmp_path / "test.bin"
-    file_data = b"\xAA\xBB\xCC\xDD"
+    file_data = b"\xaa\xbb\xcc\xdd"
     input_file.write_bytes(file_data)
 
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))

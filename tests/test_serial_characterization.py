@@ -116,7 +116,9 @@ def test_timeout_raises_on_empty(make_comm, fake_serial):
     with pytest.raises(SerialTimeoutError):
         comm.get_response(timeout=0.02)
     elapsed = time.time() - start
-    assert elapsed < 0.5, f"SerialTimeoutError should arrive in << 0.5 s, took {elapsed:.3f} s"
+    assert elapsed < 0.5, (
+        f"SerialTimeoutError should arrive in << 0.5 s, took {elapsed:.3f} s"
+    )
 
 
 def test_sliding_window_resets_on_yield(make_comm, fake_serial):

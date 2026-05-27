@@ -45,7 +45,10 @@ from firestarter.messages import MSG_ERR_SETUP
 from .conftest import build_frame
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: main.py:497 uses 'in' not getattr; fix lands Phase 41 (CLI-03)")
+@pytest.mark.xfail(
+    strict=True,
+    reason="BUG: main.py:497 uses 'in' not getattr; fix lands Phase 41 (CLI-03)",
+)
 def test_build_arg_flags_force_truthiness_not_existence():
     """Corrected behavior: build_arg_flags should use getattr(args, 'force', False),
     not 'force' in args. The 'in' operator raises TypeError on non-Namespace objects
@@ -74,7 +77,10 @@ def test_build_arg_flags_force_truthiness_not_existence():
     assert (flags & FLAG_FORCE) == 0  # corrected: force=False => FLAG_FORCE not set
 
 
-@pytest.mark.xfail(strict=True, reason="BUG: eprom_operations.py:265 conflates EpromOperationError with SerialError; fix lands Phase 42 (ERR-01)")
+@pytest.mark.xfail(
+    strict=True,
+    reason="BUG: eprom_operations.py:265 conflates EpromOperationError with SerialError; fix lands Phase 42 (ERR-01)",
+)
 def test_eprom_operation_error_not_labeled_as_communication_error(
     make_comm, fake_serial, caplog
 ):
@@ -120,8 +126,7 @@ def test_eprom_operation_error_not_labeled_as_communication_error(
     # (or similar operational framing) so the user knows the serial link is fine.
     # BUG: eprom_operations.py:265 — fix lands Phase 42 (ERR-01)
     comm_error_logged = any(
-        "Communication error" in record.message
-        for record in caplog.records
+        "Communication error" in record.message for record in caplog.records
     )
     assert not comm_error_logged, (
         "EpromOperationError must NOT be logged as 'Communication error'; "
