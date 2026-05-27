@@ -22,10 +22,11 @@ guarantees the escape-hatch env var is UNSET for every test that expects the
 strict path, so the suite is hermetic against the developer's shell environment.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from firestarter.serial_comm import SerialCommunicator, FirmwareOutdatedError
+import pytest
+
+from firestarter.serial_comm import FirmwareOutdatedError, SerialCommunicator
 
 
 class TestFirmwareVersionGuard:

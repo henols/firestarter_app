@@ -7,7 +7,8 @@ IC Layout Generation Module
 """
 
 import logging
-from typing import Optional, List, Dict
+from typing import Dict, List, Optional
+
 from firestarter.database import EpromDatabase  # Changed import
 
 logger = logging.getLogger("EpromSpecBuilder")

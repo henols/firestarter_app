@@ -58,9 +58,8 @@ from pathlib import Path
 
 import pytest
 
-from firestarter.eprom_operations import EpromOperator, EpromOperationError
 from firestarter.config import ConfigManager
-
+from firestarter.eprom_operations import EpromOperationError, EpromOperator
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -433,8 +432,8 @@ class TestDispatchChain:
         import sys
 
         from firestarter import main as main_mod
-        from firestarter.eprom_operations import EpromOperator
         from firestarter.database import EpromDatabase
+        from firestarter.eprom_operations import EpromOperator
 
         captured = {}
 

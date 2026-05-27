@@ -27,27 +27,26 @@ D-05a (determinism): All subprocess output is pre-processed by normalize_output(
      strings.
 """
 
+import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
-import os
 from pathlib import Path
 
 import pytest
 
 from firestarter.messages import (
+    MSG_DATA_CHUNK,
+    MSG_END_DONE,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
-    MSG_END_DONE,
-    MSG_DATA_CHUNK,
-    MSG_OK_REQ_DATA,
     MSG_OK_READY,
+    MSG_OK_REQ_DATA,
 )
 
 from .conftest import build_frame
-
 
 # ---------------------------------------------------------------------------
 # Entry-point resolution
@@ -356,9 +355,9 @@ def test_no_programmer_found_read(monkeypatch):
     """
     monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [])
 
-    from firestarter.eprom_operations import EpromOperator
     from firestarter.config import ConfigManager
     from firestarter.database import EpromDatabase
+    from firestarter.eprom_operations import EpromOperator
 
     config = ConfigManager()
     # skip_local_override=True is MANDATORY (phase 36 rule, Pitfall-4): a ~/.firestarter
@@ -378,9 +377,9 @@ def test_no_programmer_found_erase(monkeypatch):
     """Pin: erase with no serial ports found → ProgrammerNotFoundError, returns False."""
     monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [])
 
-    from firestarter.eprom_operations import EpromOperator
     from firestarter.config import ConfigManager
     from firestarter.database import EpromDatabase
+    from firestarter.eprom_operations import EpromOperator
 
     config = ConfigManager()
     # skip_local_override=True is MANDATORY (phase 36 rule, Pitfall-4): a ~/.firestarter

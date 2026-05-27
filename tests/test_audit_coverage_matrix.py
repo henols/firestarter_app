@@ -259,6 +259,7 @@ class TestAuditCoverageMatrix:
         Also asserts the ledger is JSON with sorted keys (Pattern B).
         """
         import json
+
         from tools.audit_coverage_matrix import generate_matrix
 
         ledger_path = tmp_path / "l.json"
@@ -291,10 +292,11 @@ class TestAuditCoverageMatrix:
         PATTERNS.md Pattern C (Stable defect-ID hash composition).
         """
         import json
+
         from tools.audit_coverage_matrix import (
-            generate_matrix,
-            finding_hash,
             detect_hazard,
+            finding_hash,
+            generate_matrix,
             iter_in_scope_rows,
         )
 
@@ -562,6 +564,7 @@ class TestAuditCoverageMatrix:
         """
         import json as _json
         from pathlib import Path
+
         from tools.audit_coverage_matrix import generate_matrix
 
         # Walk from this test file up to the meta-repo root:

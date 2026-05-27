@@ -24,10 +24,11 @@ Module-level constants:
   (for 24, 28, 32-pin DIP packages) to the RURP's internal address/control lines.
 """
 
-import os
 import json
 import logging
+import os
 from pathlib import Path
+
 from firestarter.config import get_local_database, get_local_pin_maps
 from firestarter.constants import *
 

@@ -25,7 +25,7 @@ that assert specific chip data is forbidden — it would merge
 
 import pytest
 
-from firestarter.database import EpromDatabase, pin_conversions, ROM_CE, ROM_OE
+from firestarter.database import ROM_CE, ROM_OE, EpromDatabase, pin_conversions
 
 
 class TestGetEprom:

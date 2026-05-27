@@ -21,16 +21,15 @@ Wave 0 contract:
 - Import succeeds against the current 60-line script (no ImportError at collection time).
 """
 
-import sys
 import subprocess
+import sys
 from pathlib import Path
 
 # Self-contained sys.path injection — NOT in conftest.py per 15-PATTERNS.md Critical Note 4.
 # Both sub-repos have the script at .github/scripts/update_version.py.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / ".github" / "scripts"))
-import update_version  # noqa: E402
-
 import pytest
+import update_version  # noqa: E402
 
 
 class TestUpdateVersionStable:
@@ -113,8 +112,8 @@ class TestUpdateVersionStable:
         args = update_version.parse_args()
         assert not update_version.is_beta_mode(args)
 
-        import io
         import contextlib
+        import io
 
         stdout_capture = io.StringIO()
         with contextlib.redirect_stdout(stdout_capture):
@@ -329,7 +328,8 @@ class TestUpdateVersionDryRun:
         assert args.dry_run, "--dry-run arg must set args.dry_run = True"
         assert update_version.is_beta_mode(args)
 
-        import io, contextlib
+        import contextlib
+        import io
 
         stdout_capture = io.StringIO()
         with contextlib.redirect_stdout(stdout_capture):

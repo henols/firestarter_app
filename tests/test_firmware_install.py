@@ -27,13 +27,13 @@ Wave 0 contract:
 
 import json
 import logging
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 import requests as _requests
 
 from firestarter import firmware
 from firestarter.firmware import FirmwareManager
-
 
 # ---------------------------------------------------------------------------
 # Module-local helpers — NOT in conftest.py (per VALIDATION.md line 60)
@@ -1047,6 +1047,7 @@ class TestArgparseMutex:
         create_firmware_args must return fw_parser (Wave 1 contract).
         """
         import argparse
+
         from firestarter.main import create_firmware_args
 
         p = argparse.ArgumentParser()
@@ -1065,6 +1066,7 @@ class TestArgparseMutex:
         or: create_firmware_args returns None (no return statement yet) — TypeError.
         """
         import argparse
+
         from firestarter.main import create_firmware_args
 
         p = argparse.ArgumentParser()
@@ -1079,6 +1081,7 @@ class TestArgparseMutex:
         RED today: create_firmware_args returns None or --list does not exist.
         """
         import argparse
+
         from firestarter.main import create_firmware_args
 
         p = argparse.ArgumentParser()
@@ -1094,6 +1097,7 @@ class TestArgparseMutex:
         RED today: create_firmware_args does not have --stable / --pre flags.
         """
         import argparse
+
         from firestarter.main import create_firmware_args
 
         p = argparse.ArgumentParser()
@@ -1131,6 +1135,7 @@ class TestArgparseMutex:
         unrecognized argument, or no exit at all.
         """
         import argparse
+
         from firestarter.main import create_firmware_args
 
         p = argparse.ArgumentParser()
@@ -1336,6 +1341,7 @@ class TestUno328pbResolution:
                             choices= was widened, not removed entirely).
         """
         import argparse
+
         from firestarter.main import create_firmware_args
 
         # Positive: uno328pb must be accepted (currently FAILS — SystemExit).

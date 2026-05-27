@@ -8,9 +8,9 @@ EPROM Information Module
 """
 
 import json
-import re
 import logging
-from typing import Optional, Dict
+import re
+from typing import Dict, Optional
 
 from firestarter.database import EpromDatabase  # Changed import
 from firestarter.ic_layout import EpromSpecBuilder  # Import renamed class

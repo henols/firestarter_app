@@ -6,14 +6,15 @@ Permission is hereby granted under MIT license.
 AVRdude Tool Wrapper Module
 """
 
+import logging
 import os
 import re
 import time
-import logging
-import serial
-from subprocess import Popen, PIPE, CalledProcessError, TimeoutExpired
 from pathlib import Path
 from shutil import which
+from subprocess import PIPE, CalledProcessError, Popen, TimeoutExpired
+
+import serial
 
 logger = logging.getLogger("Avrdude")
 

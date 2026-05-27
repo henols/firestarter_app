@@ -38,8 +38,8 @@ import logging
 
 import pytest
 
-from firestarter.main import build_arg_flags
 from firestarter.constants import FLAG_FORCE
+from firestarter.main import build_arg_flags
 from firestarter.messages import MSG_ERR_SETUP
 
 from .conftest import build_frame
@@ -105,8 +105,8 @@ def test_eprom_operation_error_not_labeled_as_communication_error(
     After Phase 42 (ERR-01) the except clause is split so EpromOperationError
     logs "Programmer error during <op>: ..." instead.
     """
-    from firestarter.eprom_operations import EpromOperator
     from firestarter.config import ConfigManager
+    from firestarter.eprom_operations import EpromOperator
 
     # Build an EpromOperator with the fake serial injected
     config = ConfigManager()

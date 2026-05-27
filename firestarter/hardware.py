@@ -6,19 +6,18 @@ Permission is hereby granted under MIT license.
 Hardware Management Module
 """
 
+import logging
 import time
 from typing import Optional, Tuple
-import logging
 
+from firestarter.config import ConfigManager
 from firestarter.constants import *
 from firestarter.serial_comm import (
-    SerialCommunicator,
     ProgrammerNotFoundError,
+    SerialCommunicator,
     SerialError,
     SerialTimeoutError,
 )
-from firestarter.config import ConfigManager
-
 
 logger = logging.getLogger("Hardware")
 

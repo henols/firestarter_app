@@ -7,29 +7,30 @@ Permission is hereby granted under MIT license.
 Firmware Management Module
 """
 
+import logging
 import os
 import re
 import time
+from typing import List, Literal, Optional, Tuple, TypedDict
+
 import requests
-import logging
-from typing import Optional, Tuple, Literal, List, TypedDict
-from packaging.version import Version, InvalidVersion
+from packaging.version import InvalidVersion, Version
 
 # Add this line with the other imports
 from rich.prompt import Confirm
 
-from firestarter.constants import *
-from firestarter.serial_comm import (
-    SerialCommunicator,
-    ProgrammerNotFoundError,
-    SerialError,
-    FirmwareOutdatedError,
-)
-from firestarter.config import ConfigManager
 from firestarter.avr_tool import (
     Avrdude,
-    AvrdudeNotFoundError,
     AvrdudeConfigNotFoundError,
+    AvrdudeNotFoundError,
+)
+from firestarter.config import ConfigManager
+from firestarter.constants import *
+from firestarter.serial_comm import (
+    FirmwareOutdatedError,
+    ProgrammerNotFoundError,
+    SerialCommunicator,
+    SerialError,
 )
 
 logger = logging.getLogger("Firmware")

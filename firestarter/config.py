@@ -7,9 +7,9 @@ Permission is hereby granted under MIT license.
 Configuration Management Module
 """
 
-import os
 import json
 import logging
+import os
 from typing import Optional
 
 # Define the home path and configuration file path

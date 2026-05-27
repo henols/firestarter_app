@@ -30,8 +30,9 @@ since they live alongside each other in the firmware checkout (RESEARCH
 Open Question 1, resolved).
 """
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 from firestarter.constants import (
     REVISION_0,
@@ -85,19 +86,19 @@ def test_command_values_match_firmware():
     with a `#ifdef DEV_TOOLS in firmware` comment per RESEARCH Pitfall 7.
     """
     from firestarter.constants import (
-        COMMAND_READ,
-        COMMAND_WRITE,
-        COMMAND_ERASE,
         COMMAND_BLANK_CHECK,
         COMMAND_CHECK_CHIP_ID,
-        COMMAND_VERIFY,
+        COMMAND_CONFIG,
         COMMAND_DEV_ADDRESS,
         COMMAND_DEV_REGISTERS,
-        COMMAND_READ_VPP,
-        COMMAND_READ_VPE,
+        COMMAND_ERASE,
         COMMAND_FW_VERSION,
-        COMMAND_CONFIG,
         COMMAND_HW_VERSION,
+        COMMAND_READ,
+        COMMAND_READ_VPE,
+        COMMAND_READ_VPP,
+        COMMAND_VERIFY,
+        COMMAND_WRITE,
     )
 
     assert COMMAND_READ == 0x01  # CMD_READ
@@ -123,14 +124,14 @@ def test_flag_values_match_firmware():
     `firestarter/include/firestarter.h` (FLAG_* defines). Phase 36 TEST-04 /
     D-11 extension — widens GATE-1.8c to the full control-flag surface."""
     from firestarter.constants import (
-        FLAG_FORCE,
         FLAG_CAN_ERASE,
-        FLAG_SKIP_ERASE,
-        FLAG_SKIP_BLANK_CHECK,
-        FLAG_VPE_AS_VPP,
-        FLAG_OUTPUT_ENABLE,
         FLAG_CHIP_ENABLE,
+        FLAG_FORCE,
+        FLAG_OUTPUT_ENABLE,
+        FLAG_SKIP_BLANK_CHECK,
+        FLAG_SKIP_ERASE,
         FLAG_VERBOSE,
+        FLAG_VPE_AS_VPP,
     )
 
     assert FLAG_FORCE == 0x01  # FLAG_FORCE
@@ -159,15 +160,15 @@ def test_ctrl_values_match_firmware():
     rurp_pinout.h per CLAUDE.md sync rule).
     """
     from firestarter.constants import (
-        CTRL_VPP_VPE_DROP_ENABLE,
-        CTRL_VPP_REGULATOR_ENABLE,
-        CTRL_READ_WRITE,
-        CTRL_ADDRESS_LINE_18,
+        CTRL_ADDRESS_LINE_16,
         CTRL_ADDRESS_LINE_17,
-        CTRL_VPP_P1_ENABLE,
+        CTRL_ADDRESS_LINE_18,
+        CTRL_READ_WRITE,
         CTRL_VPE_ENABLE,
         CTRL_VPP_A9_ENABLE,
-        CTRL_ADDRESS_LINE_16,
+        CTRL_VPP_P1_ENABLE,
+        CTRL_VPP_REGULATOR_ENABLE,
+        CTRL_VPP_VPE_DROP_ENABLE,
     )
 
     # HARDWARE_REVISION wide-layout branch (rurp_pinout.h §2 #else branch):

@@ -25,6 +25,7 @@ import time
 import pytest
 
 from firestarter.serial_comm import SerialTimeoutError
+
 from .conftest import build_frame
 
 
@@ -51,10 +52,10 @@ class TestSerialFrameParse:
         in order via the generator yield surface.
         """
         from firestarter.messages import (
-            MSG_OK_READY,
+            MSG_END_DONE,
             MSG_INIT_DONE,
             MSG_MAIN_DONE,
-            MSG_END_DONE,
+            MSG_OK_READY,
         )
 
         comm = make_comm()

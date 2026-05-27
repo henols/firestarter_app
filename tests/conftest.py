@@ -28,7 +28,6 @@ import struct
 
 import pytest
 
-
 # Module-level reference constants — independent of firestarter.serial_comm
 # so tests do not pass tautologically on a bug in the production constant.
 MAGIC_PREAMBLE_REF: bytes = b"\xaa\x55\xaa\x55"

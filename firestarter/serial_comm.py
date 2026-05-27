@@ -7,35 +7,36 @@ Permission is hereby granted under MIT license.
 Serial Communication Module
 """
 
-import os
-import serial
-import serial.tools.list_ports
-import serial.serialutil
-import time
-import re
-import struct
 import functools
-import operator
 import json
 import logging
+import operator
+import os
+import re
+import struct
+import time
 from collections import namedtuple
-from typing import Any, Optional, Generator, Tuple, List
+from typing import Any, Generator, List, Optional, Tuple
 
-from firestarter.constants import *
+import serial
+import serial.serialutil
+import serial.tools.list_ports
+
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
+from firestarter.constants import *
 from firestarter.constants import COMMAND_NAMES
 from firestarter.messages import (
     CATALOG,
+    DBG_CMD,
     DEBUG_CATALOG,
-    SEVERITY_LABEL,
-    MSG_OK_REV,
-    MSG_OK_CFG,
+    MSG_DATA_CHUNK,
+    MSG_DEBUG,
     MSG_INFO_CMD,
     MSG_INFO_HW,
     MSG_INFO_PHYSICAL_HW,
-    MSG_DATA_CHUNK,
-    MSG_DEBUG,
-    DBG_CMD,
+    MSG_OK_CFG,
+    MSG_OK_REV,
+    SEVERITY_LABEL,
 )
 
 logger = logging.getLogger("SerialComm")

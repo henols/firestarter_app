@@ -8,25 +8,25 @@ Permission is hereby granted under MIT license.
 Main CLI Handler for Firestarter Project
 """
 
-import sys
 import argparse
-from argparse import RawTextHelpFormatter
-
-import signal
 import logging
 import platform
+import signal
+import sys
+from argparse import RawTextHelpFormatter
+
 import argcomplete
 from argcomplete.completers import BaseCompleter
 
+from firestarter import __version__ as version
 from firestarter.config import ConfigManager
 from firestarter.constants import *
-from firestarter import __version__ as version
-from firestarter.eprom_operations import EpromOperator, build_flags
-from firestarter.logging_utils import SingleLineStatusHandler
-from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.database import EpromDatabase
+from firestarter.eprom_info import EpromConsolePresenter
+from firestarter.eprom_operations import EpromOperator, build_flags
 from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
+from firestarter.logging_utils import SingleLineStatusHandler
 
 logger = logging.getLogger("Firestarter")
 
@@ -230,8 +230,9 @@ def _maybe_auto_route_to_pre(args) -> None:
     ):
         return
     try:
+        from packaging.version import InvalidVersion, Version
+
         import firestarter as _pkg
-        from packaging.version import Version, InvalidVersion
 
         try:
             if Version(_pkg.__version__).is_prerelease:

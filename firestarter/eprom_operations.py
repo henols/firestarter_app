@@ -7,28 +7,29 @@ Permission is hereby granted under MIT license.
 EPROM Operations Module (Refactored)
 """
 
-import os
-import time
-import hashlib
-import shutil
 import functools
-import operator
+import hashlib
 import logging
+import operator
+import os
+import shutil
+import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Callable
-from contextlib import contextmanager
+from typing import Callable, Dict, Optional, Tuple
+
 import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+from firestarter.config import ConfigManager
 from firestarter.constants import *
 from firestarter.serial_comm import (
-    SerialCommunicator,
     ProgrammerNotFoundError,
+    SerialCommunicator,
     SerialError,
     SerialTimeoutError,
 )
-from firestarter.config import ConfigManager
 from firestarter.utils import extract_hex_to_decimal
 
 logger = logging.getLogger("EpromOperator")
