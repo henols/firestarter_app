@@ -82,3 +82,43 @@ version = { attr = "firestarter.__version__" }
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q"
+
+[tool.ruff]
+target-version = "py39"
+line-length = 88
+
+[tool.ruff.lint]
+# E: pycodestyle errors (style violations that ruff-format does not fix)
+# F: pyflakes (undefined names, unused imports)
+# I: isort (import ordering)
+# UP: pyupgrade (modernise syntax within py39 bounds — UP007/UP045 no-ops on py39)
+# No select = ["ALL"] — broadening to B/SIM/C4 deferred to Phase 42.
+# E501 excluded: ruff-format enforces line length; including E501 causes a
+# noqa-adds-noqa-on-long-lines cycle (443 violations pre-format → 3 post-format).
+select = ["E", "F", "I", "UP"]
+extend-ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.9"          # Must be in config file — mypy 2.1.0 rejects --python-version 3.9 via CLI flag
+ignore_missing_imports = true   # needed for tqdm, rich, argcomplete (no stubs)
+disallow_untyped_defs = false   # gradual adoption — global stays lenient (D-10)
+check_untyped_defs = false
+# mypy_error_watermark = 41     # Baseline: Phase 37 tip. Lower as modules get typed.
+
+[[tool.mypy.overrides]]
+# Phase 36 test modules — strict-island: check bodies of untyped test functions.
+# "Strict" here means check_untyped_defs = true, NOT disallow_untyped_defs = true
+# (the latter would require -> None on every test function and would break the suite).
+module = [
+    "tests.test_characterization",
+    "tests.test_serial_characterization",
+    "tests.test_bug_characterization",
+    "tests.test_eprom_database",
+    "tests.test_revision_constants_parity",
+    "tests.test_decoder",
+]
+check_untyped_defs = true
