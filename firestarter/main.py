@@ -19,11 +19,13 @@ import argcomplete
 from argcomplete.completers import BaseCompleter
 
 from firestarter import __version__ as version
+from firestarter.chip_resolver import resolve_chip
 from firestarter.config import ConfigManager
 from firestarter.constants import *  # noqa: F403
 from firestarter.database import EpromDatabase
 from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator, build_flags
+from firestarter.exceptions import ChipNotFoundError
 from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
 from firestarter.logging_utils import SingleLineStatusHandler
@@ -516,6 +518,21 @@ def build_arg_flags(args):
     return flags
 
 
+def _resolve_or_exit(name: str, db: EpromDatabase) -> dict | None:
+    """Resolve a chip name, logging the not-found error and returning None on miss.
+
+    The single op-site adapter over ``chip_resolver.resolve_chip``: it maps the
+    ``ChipNotFoundError`` exception back to the legacy (log + ``return 1``)
+    contract the 9 CLI op sites share, preserving the exact error string and
+    exit code (GATE-1.8b). Phase 41 will replace this with Click error mapping.
+    """
+    try:
+        return resolve_chip(name, db=db)
+    except ChipNotFoundError:
+        logger.error(f"EPROM '{name}' not found in database.")
+        return None
+
+
 def main():
     signal.signal(signal.SIGINT, exit_gracefully)
 
@@ -657,12 +674,8 @@ def main():
             return 0
         return 1
     elif args.command == "read":
-        full_eprom_data = db_instance.get_eprom(args.eprom)
-        eprom_data = None
-        if full_eprom_data:
-            eprom_data = db_instance.convert_to_programmer(full_eprom_data)
+        eprom_data = _resolve_or_exit(args.eprom, db_instance)
         if not eprom_data:
-            logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
         return (
             1
@@ -677,12 +690,8 @@ def main():
             else 0
         )
     elif args.command == "write":
-        full_eprom_data = db_instance.get_eprom(args.eprom)
-        eprom_data = None
-        if full_eprom_data:
-            eprom_data = db_instance.convert_to_programmer(full_eprom_data)
+        eprom_data = _resolve_or_exit(args.eprom, db_instance)
         if not eprom_data:
-            logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
         return (
             1
@@ -696,12 +705,8 @@ def main():
             else 0
         )
     elif args.command == "verify":
-        full_eprom_data = db_instance.get_eprom(args.eprom)
-        eprom_data = None
-        if full_eprom_data:
-            eprom_data = db_instance.convert_to_programmer(full_eprom_data)
+        eprom_data = _resolve_or_exit(args.eprom, db_instance)
         if not eprom_data:
-            logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
         return (
             1
@@ -715,12 +720,8 @@ def main():
             else 0
         )
     elif args.command == "blank":
-        full_eprom_data = db_instance.get_eprom(args.eprom)
-        eprom_data = None
-        if full_eprom_data:
-            eprom_data = db_instance.convert_to_programmer(full_eprom_data)
+        eprom_data = _resolve_or_exit(args.eprom, db_instance)
         if not eprom_data:
-            logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
         return (
             1
@@ -730,12 +731,8 @@ def main():
             else 0
         )
     elif args.command == "erase":
-        full_eprom_data = db_instance.get_eprom(args.eprom)
-        eprom_data = None
-        if full_eprom_data:
-            eprom_data = db_instance.convert_to_programmer(full_eprom_data)
+        eprom_data = _resolve_or_exit(args.eprom, db_instance)
         if not eprom_data:
-            logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
         return (
             1
@@ -748,12 +745,8 @@ def main():
             else 0
         )
     elif args.command == "id":
-        full_eprom_data = db_instance.get_eprom(args.eprom)
-        eprom_data = None
-        if full_eprom_data:
-            eprom_data = db_instance.convert_to_programmer(full_eprom_data)
+        eprom_data = _resolve_or_exit(args.eprom, db_instance)
         if not eprom_data:
-            logger.error(f"EPROM '{args.eprom}' not found in database.")
             return 1
 
         res, detected_id_value = eprom_operator.check_eprom_id(
@@ -868,12 +861,8 @@ def main():
         )
     elif args.command == "dev":
         if args.dev_command == "read":
-            full_eprom_data = db_instance.get_eprom(args.eprom)
-            eprom_data = None
-            if full_eprom_data:
-                eprom_data = db_instance.convert_to_programmer(full_eprom_data)
+            eprom_data = _resolve_or_exit(args.eprom, db_instance)
             if not eprom_data:
-                logger.error(f"EPROM '{args.eprom}' not found in database.")
                 return 1
             return (
                 1
@@ -899,12 +888,8 @@ def main():
                 else 0
             )
         elif args.dev_command == "addr":
-            full_eprom_data = db_instance.get_eprom(args.eprom)
-            eprom_data = None
-            if full_eprom_data:
-                eprom_data = db_instance.convert_to_programmer(full_eprom_data)
+            eprom_data = _resolve_or_exit(args.eprom, db_instance)
             if not eprom_data:
-                logger.error(f"EPROM '{args.eprom}' not found in database.")
                 return 1
             return (
                 1
@@ -914,14 +899,8 @@ def main():
                 else 0
             )
         elif args.dev_command == "consistency-check":
-            full_eprom_data = db_instance.get_eprom(args.eprom)
-            eprom_data = (
-                db_instance.convert_to_programmer(full_eprom_data)
-                if full_eprom_data
-                else None
-            )
+            eprom_data = _resolve_or_exit(args.eprom, db_instance)
             if not eprom_data:
-                logger.error(f"EPROM '{args.eprom}' not found in database.")
                 return 1
             # consistency_check_eprom returns int directly (D-05: 0=PASS,
             # 1=FAIL, 2=hardware-error). Do NOT wrap in the bool->int form

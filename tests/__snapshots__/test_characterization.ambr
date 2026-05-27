@@ -316,7 +316,7 @@
     File "<PATH>", line 8, in <module>
       sys.exit(main())
                ^^^^^^
-    File "<PATH>", line 635, in main
+    File "<PATH>", line 652, in main
       structured_details = eprom_presenter.prepare_detailed_eprom_data(
                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     File "<PATH>", line 122, in prepare_detailed_eprom_data
