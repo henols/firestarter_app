@@ -61,6 +61,11 @@ dev = [
 test = [
     "pytest>=8.0",
     "syrupy>=5.0",
+    # Phase 37 additions:
+    "ruff>=0.15.14",
+    "mypy>=2.1.0",
+    "pytest-cov>=7.1.0",
+    "types-pyserial>=3.5.0.20260519",
 ]
 
 [project.scripts]
@@ -122,3 +127,10 @@ module = [
     "tests.test_decoder",
 ]
 check_untyped_defs = true
+
+[tool.coverage.run]
+source = ["firestarter"]
+omit = ["firestarter/data/*"]
+
+[tool.coverage.report]
+show_missing = true
