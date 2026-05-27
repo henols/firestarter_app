@@ -7,10 +7,8 @@ Permission is hereby granted under MIT license.
 Serial Communication Module
 """
 
-import functools
 import json
 import logging
-import operator
 import os
 import re
 import struct
@@ -753,43 +751,6 @@ class SerialCommunicator:
         if status_update_active:
             logger.info("Connecting... Failed  ", extra={"status": "end"})
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
-
-    def read_data_block(self) -> bytes:
-        """Reads a specific number of bytes, typically after a DATA: response."""
-        if not self.is_connected():
-            raise SerialError("Not connected.")
-        try:
-            num_bytes = int.from_bytes(self.connection.read(2), "big")
-            checksum_rcvd = self.connection.read(1)
-
-            data = b""
-            bytes_to_read = num_bytes
-            while bytes_to_read > 0:
-                # read() will block until timeout or all bytes are received.
-                chunk = self.connection.read(bytes_to_read)
-                if not chunk:
-                    # Timeout occurred before all bytes were received
-                    break
-                data += chunk
-                bytes_to_read -= len(chunk)
-
-            checksum = functools.reduce(operator.xor, data, 0)
-            if checksum_rcvd[0] != checksum:
-                raise SerialError("Data corruption detected (checksum mismatch).")
-
-            if len(data) < num_bytes:
-                logger.warning(
-                    f"Expected {num_bytes} bytes, but received {len(data)} from {self.port_name}"  # noqa: E501
-                )
-            return data
-        except serial.SerialTimeoutException as e:
-            raise SerialTimeoutError(
-                f"Timeout reading data block from {self.port_name}: {e}"
-            ) from e
-        except serial.SerialException as e:
-            raise SerialError(
-                f"Serial error reading data block from {self.port_name}: {e}"
-            ) from e
 
 
 # Example usage (for testing this module directly)

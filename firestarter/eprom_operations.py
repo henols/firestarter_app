@@ -163,9 +163,7 @@ class EpromOperator:
         Prepares for an EPROM operation: uses pre-fetched EPROM data, sets up command, and connects.
         Returns (eprom_data_for_command, buffer_size) or (None, 0) on failure.
         """  # noqa: E501
-        operation = [k for k, v in globals().items() if v == cmd][0].replace(
-            "COMMAND_", ""
-        )  # Get command name
+        operation = COMMAND_NAMES[cmd]  # Get command name  # noqa: F405
         logger.debug(f"Performing {operation} for {eprom_name.upper()}")
 
         start_time = time.time()
@@ -225,9 +223,7 @@ class EpromOperator:
             yield None, None, None  # Yield None to indicate setup failure
             return
 
-        operation_name = [k for k, v in globals().items() if v == cmd][0].replace(
-            "COMMAND_", ""
-        )
+        operation_name = COMMAND_NAMES[cmd]  # noqa: F405
         try:
             # Yield the necessary data to the 'with' block
             yield command_dict, buffer_size, operation_name
