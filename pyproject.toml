@@ -58,6 +58,10 @@ urls = { "Homepage" = "https://github.com/henols/firestarter_app" }
 dev = [
     "pytest>=7.0",
 ]
+test = [
+    "pytest>=8.0",
+    "syrupy>=5.0",
+]
 
 [project.scripts]
 firestarter = "firestarter.main:main"
