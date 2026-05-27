@@ -26,12 +26,13 @@ from firestarter.avr_tool import (
 )
 from firestarter.config import ConfigManager
 from firestarter.constants import *  # noqa: F403
-from firestarter.serial_comm import (
+from firestarter.exceptions import (
+    FirmwareOperationError,  # noqa: F401  — orphan kept reachable (D-01; wired later)
     FirmwareOutdatedError,
     ProgrammerNotFoundError,
-    SerialCommunicator,
     SerialError,
 )
+from firestarter.serial_comm import SerialCommunicator
 
 logger = logging.getLogger("Firmware")
 
@@ -58,12 +59,6 @@ class ReleaseInfo(TypedDict):
 
 
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
-
-
-class FirmwareOperationError(Exception):
-    """Custom exception for firmware operation failures."""
-
-    pass
 
 
 class FirmwareManager:

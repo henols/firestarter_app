@@ -24,12 +24,13 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from firestarter.config import ConfigManager
 from firestarter.constants import *  # noqa: F403
-from firestarter.serial_comm import (
+from firestarter.exceptions import (
+    EpromOperationError,
     ProgrammerNotFoundError,
-    SerialCommunicator,
     SerialError,
     SerialTimeoutError,
 )
+from firestarter.serial_comm import SerialCommunicator
 from firestarter.utils import extract_hex_to_decimal
 
 logger = logging.getLogger("EpromOperator")
@@ -79,12 +80,6 @@ def hexdump(address, data, width=16):
         ascii_str = "".join(ascii_parts)
 
         logger.info(f"{address + i:08x}: {hex_str:<{width * 3}} {ascii_str}")
-
-
-class EpromOperationError(Exception):
-    """Custom exception for EPROM operation failures."""
-
-    pass
 
 
 class ClassProgressHandler:

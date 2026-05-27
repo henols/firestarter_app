@@ -12,20 +12,15 @@ from typing import Optional, Tuple  # noqa: UP035
 
 from firestarter.config import ConfigManager
 from firestarter.constants import *  # noqa: F403
-from firestarter.serial_comm import (
+from firestarter.exceptions import (
+    HardwareOperationError,
     ProgrammerNotFoundError,
-    SerialCommunicator,
     SerialError,
     SerialTimeoutError,
 )
+from firestarter.serial_comm import SerialCommunicator
 
 logger = logging.getLogger("Hardware")
-
-
-class HardwareOperationError(Exception):
-    """Custom exception for hardware operation failures."""
-
-    pass
 
 
 class HardwareManager:

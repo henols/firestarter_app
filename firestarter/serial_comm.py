@@ -25,6 +25,12 @@ import serial.tools.list_ports
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
 from firestarter.constants import *  # noqa: F403
 from firestarter.constants import COMMAND_NAMES
+from firestarter.exceptions import (
+    FirmwareOutdatedError,
+    ProgrammerNotFoundError,
+    SerialError,
+    SerialTimeoutError,
+)
 from firestarter.messages import (
     CATALOG,
     DBG_CMD,
@@ -183,30 +189,6 @@ _REVISION_SILKSCREEN = {
     REVISION_2_3: "Rev 2.3",  # noqa: F405
     REVISION_UNKNOWN: "rev_unknown",  # noqa: F405
 }
-
-
-class SerialError(Exception):
-    """Custom exception for serial communication errors."""
-
-    pass
-
-
-class SerialTimeoutError(SerialError):
-    """Custom exception for serial timeouts."""
-
-    pass
-
-
-class ProgrammerNotFoundError(SerialError):
-    """Custom exception when no programmer is found."""
-
-    pass
-
-
-class FirmwareOutdatedError(SerialError):
-    """Custom exception for outdated firmware."""
-
-    pass
 
 
 class SerialCommunicator:
