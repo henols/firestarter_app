@@ -11,7 +11,12 @@ import time
 from typing import Optional, Tuple  # noqa: UP035
 
 from firestarter.config import ConfigManager
-from firestarter.constants import *  # noqa: F403
+from firestarter.constants import (
+    COMMAND_CONFIG,
+    COMMAND_HW_VERSION,
+    COMMAND_READ_VPE,
+    COMMAND_READ_VPP,
+)
 from firestarter.exceptions import (
     HardwareOperationError,
     ProgrammerNotFoundError,
@@ -78,7 +83,7 @@ class HardwareManager:
         Returns True if successful, False otherwise.
         """
         logger.info("Reading hardware revision...")
-        command = {"state": COMMAND_HW_VERSION}  # noqa: F405
+        command = {"state": COMMAND_HW_VERSION}
         if flags:
             command["flags"] = flags
 
@@ -111,7 +116,7 @@ class HardwareManager:
         Sets hardware configuration parameters on the programmer.
         Returns True if successful, False otherwise.
         """
-        command = {"state": COMMAND_CONFIG}  # noqa: F405
+        command = {"state": COMMAND_CONFIG}
         if flags:
             command["flags"] = flags
         log_parts = []
@@ -249,10 +254,10 @@ class HardwareManager:
         self, timeout_seconds: Optional[int] = None, flags: int = 0
     ) -> bool:
         """Reads the VPP voltage from the programmer."""
-        return self._read_voltage_loop(COMMAND_READ_VPP, "VPP", timeout_seconds, flags)  # noqa: F405
+        return self._read_voltage_loop(COMMAND_READ_VPP, "VPP", timeout_seconds, flags)
 
     def read_vpe_voltage(
         self, timeout_seconds: Optional[int] = None, flags: int = 0
     ) -> bool:
         """Reads the VPE voltage from the programmer."""
-        return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds, flags)  # noqa: F405
+        return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds, flags)

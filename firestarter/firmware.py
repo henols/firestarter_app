@@ -25,7 +25,13 @@ from firestarter.avr_tool import (
     AvrdudeNotFoundError,
 )
 from firestarter.config import ConfigManager
-from firestarter.constants import *  # noqa: F403
+from firestarter.constants import (
+    COMMAND_FW_VERSION,
+    FIRESTARTER_RELEASE_BY_TAG_URL,
+    FIRESTARTER_RELEASE_URL,
+    FIRESTARTER_RELEASES_URL,
+    FLAG_FORCE,
+)
 from firestarter.exceptions import (
     FirmwareOperationError,  # noqa: F401  — orphan kept reachable (D-01; wired later)
     FirmwareOutdatedError,
@@ -83,7 +89,7 @@ class FirmwareManager:
         Returns: (port_name, current_version, board_name) or (None, None, None) on failure.
         """  # noqa: E501
         logger.info("Reading current firmware version...")
-        command_dict = {"state": COMMAND_FW_VERSION}  # noqa: F405
+        command_dict = {"state": COMMAND_FW_VERSION}
         if flags:
             command_dict["flags"] = flags
         comm = None
@@ -137,7 +143,7 @@ class FirmwareManager:
         """
         logger.debug(f"Fetching latest firmware release for board: {board}...")
         try:
-            response = requests.get(FIRESTARTER_RELEASE_URL, timeout=10)  # noqa: F405
+            response = requests.get(FIRESTARTER_RELEASE_URL, timeout=10)
             response.raise_for_status()  # Raise an exception for HTTP errors
             release_data = response.json()
             latest_version = release_data.get("tag_name")
@@ -186,7 +192,7 @@ class FirmwareManager:
         Returns a flat list of all release dicts from all pages fetched.
         Logs INFO when the cap is hit so operators know truncation occurred.
         """
-        url = FIRESTARTER_RELEASES_URL  # noqa: F405
+        url = FIRESTARTER_RELEASES_URL
         all_releases = []
         pages_fetched = 0
 
@@ -234,7 +240,7 @@ class FirmwareManager:
                     "fetch_release_info(channel='pinned') requires a version string."
                 )
                 return None, None
-            url = FIRESTARTER_RELEASE_BY_TAG_URL.format(tag=version)  # noqa: F405
+            url = FIRESTARTER_RELEASE_BY_TAG_URL.format(tag=version)
             try:
                 response = requests.get(url, timeout=10)
                 response.raise_for_status()
@@ -563,7 +569,7 @@ class FirmwareManager:
             channel=channel, version=pinned_version, board=board_to_use
         )
 
-        force_install = flags & FLAG_FORCE  # noqa: F405
+        force_install = flags & FLAG_FORCE
         if not current_version and not install_flag and not force_install:
             logger.error(
                 "Could not determine current firmware version. Use --install or --force to proceed with installation."  # noqa: E501

@@ -30,7 +30,7 @@ import os
 from pathlib import Path
 
 from firestarter.config import get_local_database, get_local_pin_maps
-from firestarter.constants import *  # noqa: F403
+from firestarter.constants import FLAG_CAN_ERASE
 
 PROTOCOL_MAP = {
     0x05: "FLASH_AMD_STD",
@@ -553,7 +553,7 @@ class EpromDatabase:
         if (
             full_eprom_data.get("info-flags", 0) & 0x00000010
         ):  # Check for "Can be electrically erased" bit
-            simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02  # noqa: F405
+            simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
         programmer_data["flags"] = simple_flags
 
         return programmer_data
