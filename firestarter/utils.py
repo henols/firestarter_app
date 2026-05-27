@@ -80,7 +80,7 @@ if __name__ == "__main__":
     print(extract_hex_to_decimal("Error at 0x1A2B3C"))  # Expected: 1715004
 
     # Test print_progress_bar
-    import time
+    import time  # noqa: F401
 
     # Test is_valid_hex_string
     print(is_valid_hex_string("0x1A2B3C"))  # Expected: True

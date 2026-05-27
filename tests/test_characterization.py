@@ -27,13 +27,13 @@ D-05a (determinism): All subprocess output is pre-processed by normalize_output(
      strings.
 """
 
-import os
+import os  # noqa: F401
 import re
 import shutil
 import subprocess
-import sys
-import tempfile
-from pathlib import Path
+import sys  # noqa: F401
+import tempfile  # noqa: F401
+from pathlib import Path  # noqa: F401
 
 import pytest
 
@@ -42,7 +42,7 @@ from firestarter.messages import (
     MSG_END_DONE,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
-    MSG_OK_READY,
+    MSG_OK_READY,  # noqa: F401
     MSG_OK_REQ_DATA,
 )
 
@@ -79,7 +79,7 @@ def normalize_output(s: str) -> str:
     )
     # Serial port device names
     s = re.sub(r"/dev/tty\w+", "/dev/ttyXXX", s)
-    # Absolute paths — match the path portion only, stopping at quote/comma/space/newline.
+    # Absolute paths — match the path portion only, stopping at quote/comma/space/newline.  # noqa: E501
     # This handles both bare paths and paths inside Python traceback strings like
     # File "/home/vscode/.local/bin/firestarter", line 8.
     # Broad root list so snapshots stay identical across dev containers, pipx/venv,
@@ -374,7 +374,7 @@ def test_no_programmer_found_read(monkeypatch):
 
 
 def test_no_programmer_found_erase(monkeypatch):
-    """Pin: erase with no serial ports found → ProgrammerNotFoundError, returns False."""
+    """Pin: erase with no serial ports found → ProgrammerNotFoundError, returns False."""  # noqa: E501
     monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [])
 
     from firestarter.config import ConfigManager
@@ -467,7 +467,7 @@ def test_read_happy_path(make_comm, fake_serial, tmp_path):
     # Feed END done
     fake_serial.feed(build_frame(MSG_END_DONE, b""))
 
-    output_file = tmp_path / "out.bin"
+    output_file = tmp_path / "out.bin"  # noqa: F841
     received = bytearray()
 
     def _collect_data(address, data_chunk):
@@ -475,7 +475,7 @@ def test_read_happy_path(make_comm, fake_serial, tmp_path):
 
     operator = _make_operator_with_comm(comm)
 
-    from firestarter.eprom_operations import EpromOperator
+    from firestarter.eprom_operations import EpromOperator  # noqa: F401
 
     success, msg = operator._run_state_machine(
         "READ",
@@ -515,7 +515,7 @@ def test_write_happy_path(make_comm, fake_serial, tmp_path):
 
     operator = _make_operator_with_comm(comm)
 
-    from firestarter.eprom_operations import EpromOperator
+    from firestarter.eprom_operations import EpromOperator  # noqa: F401
 
     success, msg = operator._run_state_machine(
         "WRITE",

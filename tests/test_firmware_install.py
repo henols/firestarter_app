@@ -25,7 +25,7 @@ Wave 0 contract:
   matching the Phase 15 / Phase 6 monkeypatch.setattr style.
 """
 
-import json
+import json  # noqa: F401
 import logging
 from unittest.mock import MagicMock
 
@@ -48,7 +48,7 @@ def mock_releases_factory(releases, next_url=None):
         next_url: if set, includes a Link: rel="next" header to simulate pagination.
 
     Returns a MagicMock with .json(), .raise_for_status(), .headers, .iter_content() set.
-    """
+    """  # noqa: E501
     mock = MagicMock()
     mock.json.return_value = releases
     mock.raise_for_status.return_value = None
@@ -58,7 +58,7 @@ def mock_releases_factory(releases, next_url=None):
 
 
 def mock_404_response():
-    """Build a MagicMock that raises HTTPError(status_code=404) on raise_for_status()."""
+    """Build a MagicMock that raises HTTPError(status_code=404) on raise_for_status()."""  # noqa: E501
     mock = MagicMock()
     mock.raise_for_status.side_effect = _requests.exceptions.HTTPError(
         response=MagicMock(status_code=404)
@@ -473,7 +473,7 @@ class TestFirmwareInstallPreRelease:
 
         RED today: FirmwareManager has no fetch_release_info — AttributeError.
         """
-        release_on_page = lambda n: [
+        release_on_page = lambda n: [  # noqa: E731
             {
                 "tag_name": f"3.{n}.0b1",
                 "prerelease": True,
@@ -491,7 +491,7 @@ class TestFirmwareInstallPreRelease:
         pages = [
             mock_releases_factory(
                 release_on_page(i),
-                next_url=f"https://api.github.com/repos/henols/firestarter/releases?page={i + 1}",
+                next_url=f"https://api.github.com/repos/henols/firestarter/releases?page={i + 1}",  # noqa: E501
             )
             for i in range(1, 7)  # 6 pages, last has a next_url too
         ]
@@ -512,7 +512,7 @@ class TestFirmwareInstallPreRelease:
         )
         lower_records = [r.message.lower() for r in caplog.records]
         assert any("cap" in m or "page" in m or "150" in m for m in lower_records), (
-            f"Expected a pagination cap INFO log; got: {[r.message for r in caplog.records]}"
+            f"Expected a pagination cap INFO log; got: {[r.message for r in caplog.records]}"  # noqa: E501
         )
 
 
@@ -612,7 +612,7 @@ class TestFirmwareInstallPinned:
                  latest (not a version), X.Y.Z.A.B (too many components)
 
         RED today: FIRMWARE_VERSION_RE does not exist in firestarter.firmware — ImportError.
-        """
+        """  # noqa: E501
         from firestarter.firmware import FIRMWARE_VERSION_RE
 
         valid = ["3.1.0", "3.1.0b2", "3.1.0rc1", "0.0.1b1", "3.0.0", "10.20.30rc99"]
@@ -717,7 +717,7 @@ class TestFirmwareList:
         Each returned element must have keys: version, tag, channel, published, asset_url.
 
         RED today: FirmwareManager has no list_releases method — AttributeError.
-        """
+        """  # noqa: E501
         mock = mock_releases_factory(self._mixed_releases())
         monkeypatch.setattr(firmware.requests, "get", lambda *a, **kw: mock)
         fm = FirmwareManager(config_manager=MagicMock())
@@ -739,7 +739,7 @@ class TestFirmwareList:
         """INST-04 / D-11 — releases without a matching board asset are silently omitted.
 
         RED today: FirmwareManager has no list_releases — AttributeError.
-        """
+        """  # noqa: E501
         releases = [
             {
                 "tag_name": "3.0.0",
@@ -881,7 +881,7 @@ class TestMagicDefault:
         The helper must set args.pre = True.
 
         RED today: _maybe_auto_route_to_pre does not exist in firestarter.main — ImportError.
-        """
+        """  # noqa: E501
         import firestarter as _pkg
 
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
@@ -902,7 +902,7 @@ class TestMagicDefault:
         args.pre must remain False after calling the helper.
 
         RED today: _maybe_auto_route_to_pre does not exist in firestarter.main — ImportError.
-        """
+        """  # noqa: E501
         import firestarter as _pkg
 
         monkeypatch.setattr(_pkg, "__version__", "2.0.7")
@@ -1064,14 +1064,14 @@ class TestArgparseMutex:
 
         RED today: create_firmware_args does not accept --pre / --firmware-version — SystemExit
         or: create_firmware_args returns None (no return statement yet) — TypeError.
-        """
+        """  # noqa: E501
         import argparse
 
         from firestarter.main import create_firmware_args
 
         p = argparse.ArgumentParser()
         sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)
+        fw_parser = create_firmware_args(sp)  # noqa: F841
         with pytest.raises(SystemExit):
             p.parse_args(["fw", "-i", "--pre", "--firmware-version", "3.1.0"])
 
@@ -1086,7 +1086,7 @@ class TestArgparseMutex:
 
         p = argparse.ArgumentParser()
         sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)
+        fw_parser = create_firmware_args(sp)  # noqa: F841
         with pytest.raises(SystemExit):
             p.parse_args(["fw", "-i", "--list"])
 
@@ -1102,7 +1102,7 @@ class TestArgparseMutex:
 
         p = argparse.ArgumentParser()
         sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)
+        fw_parser = create_firmware_args(sp)  # noqa: F841
         with pytest.raises(SystemExit):
             p.parse_args(["fw", "--list", "--pre", "--stable"])
 
@@ -1133,14 +1133,14 @@ class TestArgparseMutex:
 
         RED today: --firmware-version flag does not exist — SystemExit(2) for
         unrecognized argument, or no exit at all.
-        """
+        """  # noqa: E501
         import argparse
 
         from firestarter.main import create_firmware_args
 
         p = argparse.ArgumentParser()
         sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)
+        fw_parser = create_firmware_args(sp)  # noqa: F841
         with pytest.raises(SystemExit):
             p.parse_args(["fw", "-i", "--firmware-version", "not-a-version"])
 
@@ -1347,7 +1347,7 @@ class TestUno328pbResolution:
         # Positive: uno328pb must be accepted (currently FAILS — SystemExit).
         p = argparse.ArgumentParser()
         sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)
+        fw_parser = create_firmware_args(sp)  # noqa: F841
         args = p.parse_args(["fw", "--list", "--board", "uno328pb"])
         assert args.board == "uno328pb", (
             f"Expected args.board='uno328pb'; got {args.board!r}. "
@@ -1357,6 +1357,6 @@ class TestUno328pbResolution:
         # Negative control: unknown board values must still be rejected.
         p2 = argparse.ArgumentParser()
         sp2 = p2.add_subparsers(dest="command")
-        fw_parser2 = create_firmware_args(sp2)
+        fw_parser2 = create_firmware_args(sp2)  # noqa: F841
         with pytest.raises(SystemExit):
             p2.parse_args(["fw", "--list", "--board", "ungabunga"])

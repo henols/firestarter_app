@@ -295,7 +295,7 @@ class TestAuditCoverageMatrix:
 
         from tools.audit_coverage_matrix import (
             detect_hazard,
-            finding_hash,
+            finding_hash,  # noqa: F401
             generate_matrix,
             iter_in_scope_rows,
         )
@@ -589,7 +589,7 @@ class TestAuditCoverageMatrix:
         if not committed_ledger.exists():
             pytest.skip(
                 f"meta-repo ledger not available at {committed_ledger}; "
-                "test only runs from inside meta-repo work tree (skipped in standalone CI)"
+                "test only runs from inside meta-repo work tree (skipped in standalone CI)"  # noqa: E501
             )
         assert golden_file.exists(), (
             f"golden fixture missing at {golden_file}; "

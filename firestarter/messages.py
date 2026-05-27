@@ -15,7 +15,7 @@ Total messages: 64
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple  # noqa: UP035
 
 # --- Severity codes (mirrors firmware) ---
 SEVERITY_OK = 0x01
@@ -45,7 +45,7 @@ class MessageDef:
     name: str
     severity: int
     format: str
-    params: Tuple[Tuple[str, str], ...]
+    params: Tuple[Tuple[str, str], ...]  # noqa: UP006
     param_bytes: int
     wire_format: str
 

@@ -22,7 +22,7 @@ Key data structures:
 Module-level constants:
 - `pin_conversions`: A hardcoded dictionary mapping standard EPROM pin numbers
   (for 24, 28, 32-pin DIP packages) to the RURP's internal address/control lines.
-"""
+"""  # noqa: E501
 
 import json
 import logging
@@ -30,7 +30,7 @@ import os
 from pathlib import Path
 
 from firestarter.config import get_local_database, get_local_pin_maps
-from firestarter.constants import *
+from firestarter.constants import *  # noqa: F403
 
 PROTOCOL_MAP = {
     0x05: "FLASH_AMD_STD",
@@ -227,7 +227,7 @@ class EpromDatabase:
         """
         Merges two pin map configuration dictionaries. `manual_pin_map` takes precedence.
         Modifies and returns the `pin_maps_base` dictionary.
-        """
+        """  # noqa: E501
         for key, sub_map in manual_pin_map.items():
             if key not in pin_maps_base:
                 # Add new top-level key entirely if it doesn't exist
@@ -265,7 +265,7 @@ class EpromDatabase:
                     bus.append(pin_conversions[pins][pin])
                 else:
                     logger.warning(
-                        f"Pin {pin} not in pin_conversions for {pins}-pin EPROM during bus config."
+                        f"Pin {pin} not in pin_conversions for {pins}-pin EPROM during bus config."  # noqa: E501
                     )
             map_config["bus"] = bus
         else:
@@ -285,11 +285,11 @@ class EpromDatabase:
                 if pin_to_check in pin_conversions.get(pins, {}):
                     resolved = pin_conversions[pins][pin_to_check]
                     if pin_func == "vpp-pin" and resolved in (ROM_CE, ROM_OE):
-                        continue  # No dedicated VPP pin; firmware defaults vpp_line=0xFF (VPE path)
+                        continue  # No dedicated VPP pin; firmware defaults vpp_line=0xFF (VPE path)  # noqa: E501
                     map_config[pin_func] = resolved
                 else:
                     logger.warning(
-                        f"Pin function '{pin_func}' with pin number {pin_to_check} not in pin_conversions for {pins}-pin EPROM."
+                        f"Pin function '{pin_func}' with pin number {pin_to_check} not in pin_conversions for {pins}-pin EPROM."  # noqa: E501
                     )
 
         if "static-high-pins" in pin_map_data and pins in pin_conversions:
@@ -299,7 +299,7 @@ class EpromDatabase:
                     static_high.append(pin_conversions[pins][pin])
                 else:
                     logger.warning(
-                        f"static-high-pin {pin} not in pin_conversions for {pins}-pin EPROM."
+                        f"static-high-pin {pin} not in pin_conversions for {pins}-pin EPROM."  # noqa: E501
                     )
             if static_high:
                 map_config["static-high"] = static_high
@@ -311,7 +311,7 @@ class EpromDatabase:
         Returns [(pin_number, signal_name), ...] for every physical DIP pin 1..pin_count.
         Derived directly from pinouts.json. Returns [] if the pinout key is unknown.
         Used to display adapter wiring via `firestarter info --adapter`.
-        """
+        """  # noqa: E501
         pin_map_data = self.get_pin_map(pin_count, pinout_key)
         if not pin_map_data:
             return []
@@ -366,12 +366,12 @@ class EpromDatabase:
             vpp = float(vpp_str)
         except (ValueError, TypeError):
             None
-            # logger.warning(f"Invalid VPP value for {ic.get('part_number')}: {vpp_str}")
+            # logger.warning(f"Invalid VPP value for {ic.get('part_number')}: {vpp_str}")  # noqa: E501
         try:
             vcc = float(vcc_str)
         except (ValueError, TypeError):
             None
-            # logger.warning(f"Invalid VCC value for {ic.get('part_number')}: {vcc_str}")
+            # logger.warning(f"Invalid VCC value for {ic.get('part_number')}: {vcc_str}")  # noqa: E501
         vpp_mv = electrical.get("vpp_mv", 0)
 
         # Read algorithm integer directly — set by build_db.py from upstream protocol_id
@@ -405,7 +405,7 @@ class EpromDatabase:
             "vpp_volts": vpp,
             "vpp_mv": vpp_mv,
             "vcc": vcc,
-            "pulse-delay": 0,  # Not directly available in new format, may need parsing from string
+            "pulse-delay": 0,  # Not directly available in new format, may need parsing from string  # noqa: E501
             "verified": bool(ic.get("verified", False)),
             "info-flags": info_flags,
             "flags": 0,
@@ -433,7 +433,7 @@ class EpromDatabase:
 
         Returns:
             list: A list of dictionaries, where each dictionary represents an EPROM's data.
-        """
+        """  # noqa: E501
         selected_proms = []
         for manufacturer, ics in self.proms.items():
             for ic_config in ics:
@@ -547,13 +547,13 @@ class EpromDatabase:
             programmer_data["bus-config"] = full_eprom_data["bus-config"]
 
         # Calculate the simple 'flags' key for the programmer
-        # Inferring from mapped 'type': Type 2 (Flash 2) and Type 3 (Flash 3) are electrically erasable.
-        # New requirement: FLAG_CAN_ERASE should be set if info-flags has the 0x00000010 bit.
+        # Inferring from mapped 'type': Type 2 (Flash 2) and Type 3 (Flash 3) are electrically erasable.  # noqa: E501
+        # New requirement: FLAG_CAN_ERASE should be set if info-flags has the 0x00000010 bit.  # noqa: E501
         simple_flags = 0
         if (
             full_eprom_data.get("info-flags", 0) & 0x00000010
         ):  # Check for "Can be electrically erased" bit
-            simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
+            simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02  # noqa: F405
         programmer_data["flags"] = simple_flags
 
         return programmer_data
@@ -597,7 +597,7 @@ class EpromDatabase:
                             selected_proms.append(ic_copy)
                     except ValueError:
                         logger.warning(
-                            f"Invalid chip-id format for {ic_config.get('part_number', 'Unknown EPROM')}: {programming.get('chip_id_value')}"
+                            f"Invalid chip-id format for {ic_config.get('part_number', 'Unknown EPROM')}: {programming.get('chip_id_value')}"  # noqa: E501
                         )
         return selected_proms
 
@@ -652,7 +652,7 @@ def main():  # Test function
         variant = None
         pin_count = config.get("pin-count")
         variant = config.get("pin-map", config.get("variant"))
-        if pin_count and not variant is None:
+        if pin_count and not variant is None:  # noqa: E714
             print("\n--- Pin Map ---")
             pin_map_details = db.get_pin_map(pin_count, variant)
             print(json.dumps(pin_map_details, indent=2))

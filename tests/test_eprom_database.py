@@ -23,7 +23,7 @@ that assert specific chip data is forbidden — it would merge
 (RESEARCH Pitfall 4).
 """
 
-import pytest
+import pytest  # noqa: F401
 
 from firestarter.database import ROM_CE, ROM_OE, EpromDatabase, pin_conversions
 
@@ -174,14 +174,14 @@ class TestDipToRurpPinTranslation:
         assert len(bus) == 11  # 2KB = 2^11
 
     def test_dip24_am2716_has_vpp_pin_in_bus_config(self):
-        """DIP24_2716 pinout has a dedicated VPP pin — bus-config must include vpp-pin."""
+        """DIP24_2716 pinout has a dedicated VPP pin — bus-config must include vpp-pin."""  # noqa: E501
         db = EpromDatabase(skip_local_override=True)
         bus_config = db.get_bus_config(24, "DIP24_2716")
         assert bus_config is not None
         assert "vpp-pin" in bus_config
 
     def test_dip24_am2716_has_static_high_in_bus_config(self):
-        """DIP24_2716 has VCC at DIP32 socket position 28 (bus line 13) — must appear in static-high."""
+        """DIP24_2716 has VCC at DIP32 socket position 28 (bus line 13) — must appear in static-high."""  # noqa: E501
         db = EpromDatabase(skip_local_override=True)
         bus_config = db.get_bus_config(24, "DIP24_2716")
         assert bus_config is not None
@@ -233,7 +233,7 @@ class TestConstructionSeam:
         assert db.pin_maps
 
     def test_two_instances_are_independent(self):
-        """After de-singleton, two EpromDatabase instances must be independent objects."""
+        """After de-singleton, two EpromDatabase instances must be independent objects."""  # noqa: E501
         db1 = EpromDatabase(skip_local_override=True)
         db2 = EpromDatabase(skip_local_override=True)
         assert db1 is not db2

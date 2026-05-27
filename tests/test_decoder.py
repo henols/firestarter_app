@@ -24,14 +24,14 @@ from conftest.py. No real serial port is opened.
 import logging
 import struct
 
-import pytest
+import pytest  # noqa: F401
 
 from firestarter.messages import (
     CATALOG,
     DBG_CMD,
     MSG_DATA_CHUNK,
     MSG_DATA_PROGRESS,
-    MSG_DATA_SENDING,
+    MSG_DATA_SENDING,  # noqa: F401
     MSG_DEBUG,
     MSG_END_DONE,
     MSG_ERR_WRITE_FAILED,
@@ -48,7 +48,7 @@ from firestarter.messages import (
     MSG_WARN_MEM_SIZE_TOO_SMALL,
 )
 from firestarter.serial_comm import (
-    MAGIC_PREAMBLE,
+    MAGIC_PREAMBLE,  # noqa: F401
     LogMessage,
     Response,
     _crc8_ccitt,
@@ -70,7 +70,7 @@ class TestIdFrameDecoder:
     """End-to-end binary-frame acceptance tests for the host decoder."""
 
     def test_zero_param_frame_decodes_as_ready(self, fake_serial, make_comm):
-        """LHOST-01: zero-param MSG_OK_READY frame → Response(type='OK', message='Ready')."""
+        """LHOST-01: zero-param MSG_OK_READY frame → Response(type='OK', message='Ready')."""  # noqa: E501
         comm = make_comm()
         frame = build_frame(MSG_OK_READY, b"")
         fake_serial.feed(frame)
@@ -612,7 +612,7 @@ class TestIdFrameDecoder:
 
         Asserts the concatenated output is 768 bytes in the correct order.
         """
-        from firestarter.messages import MSG_DATA_SENDING, MSG_MAIN_DONE
+        from firestarter.messages import MSG_DATA_SENDING, MSG_MAIN_DONE  # noqa: F811
 
         comm = make_comm()
 
@@ -637,14 +637,14 @@ class TestIdFrameDecoder:
         )
 
         collected = bytearray()
-        start_addr = [0]  # mutable box for callback closure
+        start_addr = [0]  # mutable box for callback closure  # noqa: F841
 
         def _collect(address, data_chunk):
             collected.extend(data_chunk)
 
         # Patch comm.send_ack so the loop's send_ack calls don't fail.
         ack_calls = []
-        original_send_ack = comm.send_ack
+        original_send_ack = comm.send_ack  # noqa: F841
         comm.send_ack = lambda: ack_calls.append(1)
 
         progress = ClassProgressHandler()
@@ -652,7 +652,7 @@ class TestIdFrameDecoder:
 
         # Manually drive _main_phase_read_data by calling get_response loop.
         # We simulate it inline since the method needs self.comm (which is comm).
-        from firestarter.messages import MSG_DATA_CHUNK as _MSG_DATA_CHUNK
+        from firestarter.messages import MSG_DATA_CHUNK as _MSG_DATA_CHUNK  # noqa: F401
 
         while True:
             response = comm.get_response(timeout=1.0)

@@ -94,7 +94,7 @@ class TestFirmwareVersionGuard:
                 pytest.fail(f"v3.0.0 firmware should NOT trip the guard; got: {exc}")
 
     def test_dev_escape_hatch_env_var(self, monkeypatch):
-        """LFW-05 / LHOST-04 path: escape-hatch. FIRESTARTER_DEV_ALLOW_PRE_V12=1 bypasses."""
+        """LFW-05 / LHOST-04 path: escape-hatch. FIRESTARTER_DEV_ALLOW_PRE_V12=1 bypasses."""  # noqa: E501
         monkeypatch.setenv("FIRESTARTER_DEV_ALLOW_PRE_V12", "1")
         mock_msg = "FW: 2.0.11, HW: Rev2, Cmd: 0x0d"
         with (
@@ -121,7 +121,7 @@ class TestFirmwareVersionGuard:
                 )
 
     def test_malformed_version_defaults_to_refuse(self):
-        """LFW-05 / LHOST-04 path: malformed. Garbage version -> major=0 -> refuse (T-06-17)."""
+        """LFW-05 / LHOST-04 path: malformed. Garbage version -> major=0 -> refuse (T-06-17)."""  # noqa: E501
         # Force the parser to reach a path where int(...split('.')[0]) raises:
         # `NOT_A_VERSION` matches the FW: regex's `[\d.x]+` zero-or-more pattern?
         # No — `[\d.x]+` would not capture `NOT_A_VERSION`. Use a string that

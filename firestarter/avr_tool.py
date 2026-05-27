@@ -12,7 +12,7 @@ import re
 import time
 from pathlib import Path
 from shutil import which
-from subprocess import PIPE, CalledProcessError, Popen, TimeoutExpired
+from subprocess import PIPE, CalledProcessError, Popen, TimeoutExpired  # noqa: F401
 
 import serial
 
@@ -118,7 +118,7 @@ class Avrdude:
             serial.Serial(port=self.port, baudrate=1200).close()
             time.sleep(2)
             return True
-        except Exception as e:
+        except Exception as e:  # noqa: F841
             logger.warning(f"Failed to trigger reset: {self.port}")
             return False
 

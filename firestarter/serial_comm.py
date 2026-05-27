@@ -16,14 +16,14 @@ import re
 import struct
 import time
 from collections import namedtuple
-from typing import Any, Generator, List, Optional, Tuple
+from typing import Any, Generator, List, Optional, Tuple  # noqa: UP035
 
 import serial
 import serial.serialutil
 import serial.tools.list_ports
 
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
-from firestarter.constants import *
+from firestarter.constants import *  # noqa: F403
 from firestarter.constants import COMMAND_NAMES
 from firestarter.messages import (
     CATALOG,
@@ -85,7 +85,7 @@ def _crc8_ccitt(data: bytes) -> int:
     return crc
 
 
-def _decode_param(ptype: str, buf: bytes, cursor: int) -> Tuple[Any, int]:
+def _decode_param(ptype: str, buf: bytes, cursor: int) -> Tuple[Any, int]:  # noqa: UP006
     """Decode one MSB-first parameter starting at `buf[cursor]`.
 
     Returns `(value, new_cursor)`. Raises ValueError on unknown ptype or
@@ -168,20 +168,20 @@ EXPECTED_PREFIXES = [
 # than any false-positive embedded in the garbage.
 PREFIX_REGEX = re.compile(rf"({'|'.join(EXPECTED_PREFIXES)}):(.*)")
 
-STATE_MACHINE_PREFIXES = []  # W-01: state-machine acks now arrive as ID frames; catalog format strings own the rendering.
+STATE_MACHINE_PREFIXES = []  # W-01: state-machine acks now arrive as ID frames; catalog format strings own the rendering.  # noqa: E501
 NON_RESPONSE_PREFIXES = ["INFO", "DEBUG"]
 
 # Phase 34: REVISION_* byte → silkscreen-string mapping for MSG_OK_REV rendering.
 # Mirrors firmware enum at firestarter/include/rurp_shield.h. Lookup-via-dict.get()
 # so unknown bytes fall back to "Rev{n}" instead of raising.
 _REVISION_SILKSCREEN = {
-    REVISION_0: "Rev 0",
-    REVISION_1: "Rev 1",
-    REVISION_2_0: "Rev 2.0-class",  # broad bucket per Phase 34 D-04
-    REVISION_2_1: "Rev 2.1 (override)",
-    REVISION_2_2: "Rev 2.2 (override)",
-    REVISION_2_3: "Rev 2.3",
-    REVISION_UNKNOWN: "rev_unknown",
+    REVISION_0: "Rev 0",  # noqa: F405
+    REVISION_1: "Rev 1",  # noqa: F405
+    REVISION_2_0: "Rev 2.0-class",  # broad bucket per Phase 34 D-04  # noqa: F405
+    REVISION_2_1: "Rev 2.1 (override)",  # noqa: F405
+    REVISION_2_2: "Rev 2.2 (override)",  # noqa: F405
+    REVISION_2_3: "Rev 2.3",  # noqa: F405
+    REVISION_UNKNOWN: "rev_unknown",  # noqa: F405
 }
 
 
@@ -221,7 +221,7 @@ class SerialCommunicator:
     def __init__(
         self,
         port: str,
-        baud_rate: int = int(BAUD_RATE),
+        baud_rate: int = int(BAUD_RATE),  # noqa: F405
         timeout: float = DEFAULT_SERIAL_TIMEOUT,
     ):
         self.port_name = port
@@ -695,7 +695,7 @@ class SerialCommunicator:
             if response.type and response.type not in NON_RESPONSE_PREFIXES:
                 return response
 
-        # If the generator finishes without yielding a significant response, it's a timeout.
+        # If the generator finishes without yielding a significant response, it's a timeout.  # noqa: E501
         logger.warning(f"Timeout waiting for a response from {self.port_name}.")
         raise SerialTimeoutError(
             f"Timeout waiting for a significant response from {self.port_name}."
@@ -703,7 +703,7 @@ class SerialCommunicator:
 
     def expect_ack(
         self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> Tuple[bool, Optional[str]]:  # noqa: UP006
         """
         Waits for an 'OK' or 'ERROR' response from the programmer.
         """
@@ -713,7 +713,7 @@ class SerialCommunicator:
                 return True, response.message
             elif response.type == "ERROR":
                 return False, response.message
-            # Other significant responses are ignored by this loop, which is the intended behavior.
+            # Other significant responses are ignored by this loop, which is the intended behavior.  # noqa: E501
 
     def send_ack(self):
         self.send_string("OK")
@@ -754,19 +754,19 @@ class SerialCommunicator:
             flags = command_dict.get("flags", 0)
             if flags:
                 flag_details = []
-                if flags & FLAG_FORCE:
+                if flags & FLAG_FORCE:  # noqa: F405
                     flag_details.append("Force")
-                if flags & FLAG_CAN_ERASE:
+                if flags & FLAG_CAN_ERASE:  # noqa: F405
                     flag_details.append("CanErase")
-                if flags & FLAG_SKIP_ERASE:
+                if flags & FLAG_SKIP_ERASE:  # noqa: F405
                     flag_details.append("SkipErase")
-                if flags & FLAG_SKIP_BLANK_CHECK:
+                if flags & FLAG_SKIP_BLANK_CHECK:  # noqa: F405
                     flag_details.append("SkipBlankCheck")
-                if flags & FLAG_VPE_AS_VPP:
+                if flags & FLAG_VPE_AS_VPP:  # noqa: F405
                     flag_details.append("VPEasVPP")
-                if flags & FLAG_CHIP_ENABLE:
+                if flags & FLAG_CHIP_ENABLE:  # noqa: F405
                     flag_details.append("ChipEnable")
-                if flags & FLAG_OUTPUT_ENABLE:
+                if flags & FLAG_OUTPUT_ENABLE:  # noqa: F405
                     flag_details.append("OutputEnable")
                 if flag_details:
                     logger.debug(
@@ -774,7 +774,7 @@ class SerialCommunicator:
                     )
 
     @staticmethod
-    def _list_potential_ports(preferred_port: Optional[str] = None) -> List[str]:
+    def _list_potential_ports(preferred_port: Optional[str] = None) -> List[str]:  # noqa: UP006
         ports = []
         if preferred_port:
             ports.append(preferred_port)
@@ -814,7 +814,7 @@ class SerialCommunicator:
             return current >= required
         except (ValueError, AttributeError):
             logger.warning(
-                f"Could not parse version string for comparison: '{current_version_str}'"
+                f"Could not parse version string for comparison: '{current_version_str}'"  # noqa: E501
             )
             return False  # If parsing fails, assume it's not sufficient.
 
@@ -841,10 +841,10 @@ class SerialCommunicator:
             # user command. Prior firmware shipped MSG_OK_FW_HANDSHAKE with the
             # version in every ack body, but that was dropped in Phase 9 — a
             # dedicated probe is now the load-bearing version check.
-            exempt_cmds = [COMMAND_FW_VERSION]
+            exempt_cmds = [COMMAND_FW_VERSION]  # noqa: F405
             command_code = command_to_send.get("state") or command_to_send.get("cmd")
             if command_code not in exempt_cmds:
-                communicator.send_json_command({"state": COMMAND_FW_VERSION})
+                communicator.send_json_command({"state": COMMAND_FW_VERSION})  # noqa: F405
                 # CMD_FW_VERSION emits 2 acks: setup-complete "Ready" from
                 # init_programmer, then "OK: FW: <version>" from fw_get_version.
                 # Discard the first; parse the second for version validation.
@@ -867,9 +867,9 @@ class SerialCommunicator:
                         if match:
                             current_version = match.group(1).strip()
 
-                            # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped
-                            # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when
-                            # bench-testing a current host against a historical (v2.x) firmware build.
+                            # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
+                            # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
+                            # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
                             try:
                                 major = int(current_version.split(".")[0])
                             except (ValueError, IndexError):
@@ -880,10 +880,10 @@ class SerialCommunicator:
                                 != "1"
                             ):
                                 raise FirmwareOutdatedError(
-                                    f"Firmware version {current_version} is pre-v1.2 (text-format logging). "
-                                    f"This host expects v1.2+ firmware emitting ID-encoded log frames. "
-                                    f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "
-                                    f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "
+                                    f"Firmware version {current_version} is pre-v1.2 (text-format logging). "  # noqa: E501
+                                    f"This host expects v1.2+ firmware emitting ID-encoded log frames. "  # noqa: E501
+                                    f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "  # noqa: E501
+                                    f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "  # noqa: E501
                                     f'see PROJECT.md "Constraints".)'
                                 )
 
@@ -893,17 +893,17 @@ class SerialCommunicator:
                                 raise FirmwareOutdatedError(
                                     f"Firmware version {current_version} is outdated. "
                                     f"Version 2.0.0 or higher is required. "
-                                    f"Please upgrade the firmware using 'firestarter fw --install'."
+                                    f"Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
                                 )
                         else:
                             raise FirmwareOutdatedError(
-                                "Could not parse firmware version from programmer response. "
-                                "Please upgrade the firmware using 'firestarter fw --install'."
+                                "Could not parse firmware version from programmer response. "  # noqa: E501
+                                "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
                             )
                     else:
                         raise FirmwareOutdatedError(
                             "Firmware is outdated (pre-2.0.0). "
-                            "Please upgrade the firmware using 'firestarter fw --install'."
+                            "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
                         )
                 except (IndexError, AttributeError):
                     raise FirmwareOutdatedError(
@@ -948,7 +948,7 @@ class SerialCommunicator:
         command_to_send: dict,
         config_manager: ConfigManager,
         preferred_port: Optional[str] = None,
-        baud_rate: int = int(BAUD_RATE),
+        baud_rate: int = int(BAUD_RATE),  # noqa: F405
     ) -> "SerialCommunicator":
         """
         Finds a compatible programmer by probing potential serial ports.
@@ -975,12 +975,12 @@ class SerialCommunicator:
                 if communicator:
                     if status_update_active:
                         logger.info("Connecting... OK      ", extra={"status": "end"})
-                    # The "Programmer found on..." message is logged by _probe_port on a new line.
+                    # The "Programmer found on..." message is logged by _probe_port on a new line.  # noqa: E501
                     return communicator
             except FirmwareOutdatedError as e:
                 if status_update_active:
                     logger.info("Connecting... Failed  ", extra={"status": "end"})
-                # If firmware is outdated on a port, stop probing and raise the specific error.
+                # If firmware is outdated on a port, stop probing and raise the specific error.  # noqa: E501
                 raise e
 
         # If the loop completes without finding a programmer, it's a failure.
@@ -1013,7 +1013,7 @@ class SerialCommunicator:
 
             if len(data) < num_bytes:
                 logger.warning(
-                    f"Expected {num_bytes} bytes, but received {len(data)} from {self.port_name}"
+                    f"Expected {num_bytes} bytes, but received {len(data)} from {self.port_name}"  # noqa: E501
                 )
             return data
         except serial.SerialTimeoutException as e:
@@ -1035,16 +1035,16 @@ if __name__ == "__main__":
     config = ConfigManager()
 
     # Test data for finding programmer
-    test_command = {"state": COMMAND_FW_VERSION}
+    test_command = {"state": COMMAND_FW_VERSION}  # noqa: F405
 
     comm = None
     try:
         # To test, you might need to specify a port if auto-detection is tricky
-        # comm = SerialCommunicator.find_and_connect(test_command, config, preferred_port="/dev/ttyACM0")
+        # comm = SerialCommunicator.find_and_connect(test_command, config, preferred_port="/dev/ttyACM0")  # noqa: E501
         comm = SerialCommunicator.find_and_connect(test_command, config)
 
         logger.info(
-            f"Successfully connected to programmer: {comm.programmer_info} on {comm.port_name}"
+            f"Successfully connected to programmer: {comm.programmer_info} on {comm.port_name}"  # noqa: E501
         )
 
         # Example: Send another command after connection

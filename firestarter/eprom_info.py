@@ -10,7 +10,7 @@ EPROM Information Module
 import json
 import logging
 import re
-from typing import Dict, Optional
+from typing import Dict, Optional  # noqa: UP035
 
 from firestarter.database import EpromDatabase  # Changed import
 from firestarter.ic_layout import EpromSpecBuilder  # Import renamed class
@@ -33,7 +33,7 @@ class EpromConsolePresenter:
     def _json_output_formatted(self, data: dict) -> str:
         """
         Formats a dictionary as a pretty-printed JSON string with special formatting for lists of numbers.
-        """
+        """  # noqa: E501
         json_str = json.dumps(data, indent=4)
         # Compact lists of numbers (e.g., bus configurations)
         json_str = re.sub(
@@ -94,15 +94,19 @@ class EpromConsolePresenter:
     def prepare_detailed_eprom_data(
         self,
         eprom_name: str,  # For logging and titles
-        eprom_details: Optional[Dict],  # Pre-fetched from db.get_eprom(name, full=True)
+        eprom_details: Optional[
+            Dict  # noqa: UP006
+        ],  # Pre-fetched from db.get_eprom(name, full=True)  # noqa: UP006
         eprom_data_for_programmer: Optional[
-            Dict
+            Dict  # noqa: UP006
         ],  # Pre-fetched from db.get_eprom(name, full=False)
-        raw_config_data: Optional[Dict],  # Pre-fetched from db.get_eprom_config()
+        raw_config_data: Optional[
+            Dict  # noqa: UP006
+        ],  # Pre-fetched from db.get_eprom_config()  # noqa: UP006
         manufacturer: Optional[str],  # Pre-fetched from db.get_eprom_config()
         include_export_config: bool = False,
         include_adapter: bool = False,
-    ) -> Optional[Dict]:
+    ) -> Optional[Dict]:  # noqa: UP006
         """
         Prepares a comprehensive data structure for a specific EPROM,
         ready for presentation. It fetches raw specifications, constructs
@@ -160,10 +164,10 @@ class EpromConsolePresenter:
 
     def _prepare_export_configuration_data(
         self,
-        raw_config_data: Optional[Dict],
+        raw_config_data: Optional[Dict],  # noqa: UP006
         manufacturer: Optional[str],
         eprom_name: str,
-    ) -> Optional[Dict]:
+    ) -> Optional[Dict]:  # noqa: UP006
         """
         Prepares EPROM and Pin Map configuration data formatted for export.
         """
@@ -175,7 +179,7 @@ class EpromConsolePresenter:
         export_eprom_data_dict = {manufacturer: [cleaned_raw_config]}
 
         export_data_to_return = {
-            "eprom_config_title": f"{cleaned_raw_config['name']} EPROM config (for ~/.firestarter/database.json):",
+            "eprom_config_title": f"{cleaned_raw_config['name']} EPROM config (for ~/.firestarter/database.json):",  # noqa: E501
             "eprom_config_json_str": self._json_output_formatted(
                 export_eprom_data_dict
             ),
@@ -183,7 +187,7 @@ class EpromConsolePresenter:
 
         pin_map_id = cleaned_raw_config.get("pin-map")
         pin_count = cleaned_raw_config.get("pin-count")
-        if not pin_map_id == None and pin_count:
+        if not pin_map_id == None and pin_count:  # noqa: E711
             pin_map_details = self.db.get_pin_map(pin_count, pin_map_id)
             if pin_map_details:
                 export_pin_map_dict = {
@@ -197,20 +201,20 @@ class EpromConsolePresenter:
                 )
             else:
                 logger.warning(
-                    f"Pin map '{pin_map_id}' for {pin_count}-pin {eprom_name} not found for export."
+                    f"Pin map '{pin_map_id}' for {pin_count}-pin {eprom_name} not found for export."  # noqa: E501
                 )
         return export_data_to_return
 
     def present_eprom_details(
         self,
-        chip_data: Optional[Dict],
+        chip_data: Optional[Dict],  # noqa: UP006
         show_export_config: bool = False,
         show_adapter: bool = False,
     ):
         """
         Formats and prints the structured chip data to the console.
         This method now incorporates the logic from the former print_structured_chip_data.
-        """
+        """  # noqa: E501
         if not chip_data:
             # prepare_detailed_eprom_data already logs an error if chip not found
             return
@@ -234,7 +238,7 @@ class EpromConsolePresenter:
         if chip_data.get("no_pinout_warning"):
             logger.warning("")
             logger.warning(
-                "WARNING: No pinout defined for this chip — hardware operations will fail."
+                "WARNING: No pinout defined for this chip — hardware operations will fail."  # noqa: E501
             )
             logger.warning(
                 "Add a pin-map entry to ~/.firestarter/pin-maps.json to enable it."
@@ -247,7 +251,7 @@ class EpromConsolePresenter:
             logger.info(layout.get("dent"))
             for pair in layout.get("pin_pairs", []):
                 logger.info(
-                    f"  {pair['left_name']:<3} -| {pair['left_num']:2}     {pair['right_num']:2} |- {pair['right_name']:<6}"
+                    f"  {pair['left_name']:<3} -| {pair['left_num']:2}     {pair['right_num']:2} |- {pair['right_name']:<6}"  # noqa: E501
                 )
             logger.info(layout.get("bottom"))
 
@@ -256,7 +260,7 @@ class EpromConsolePresenter:
             logger.info(f"Jumper config (Rev {key}):")
             for jp, data in jumper_data.items():
                 logger.info(
-                    f"  {jp.upper()}: {data['display']} ({data['config_text']}, {data['pin_text']} = {data['selected_label']})"
+                    f"  {jp.upper()}: {data['display']} ({data['config_text']}, {data['pin_text']} = {data['selected_label']})"  # noqa: E501
                 )
 
         if chip_data.get("protocol_info"):
@@ -314,10 +318,10 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
         logger.info("No EPROMs to display.")
         return
 
-    divider = f"+{'':-<14}+{'':-<18}+{'':-<6}+{'':-<12}+{'':-<13}+{'':-<5}+"  # Adjusted type column width
+    divider = f"+{'':-<14}+{'':-<18}+{'':-<6}+{'':-<12}+{'':-<13}+{'':-<5}+"  # Adjusted type column width  # noqa: E501
     logger.info(divider)
     logger.info(
-        f"| {'Name': <13}| {'Manufacturer': <17}| {'Pins': <5}| {'Chip ID': <11}| {'Type': <12}| {'VPP': <4}|"
+        f"| {'Name': <13}| {'Manufacturer': <17}| {'Pins': <5}| {'Chip ID': <11}| {'Type': <12}| {'VPP': <4}|"  # noqa: E501
     )
     logger.info(divider)
     for ic in eproms_data:
@@ -330,7 +334,7 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
         if not ic.get("bus-config"):
             name = (name[:11] + "[!]") if len(name) > 11 else f"{name}[!]"
         logger.info(
-            f"| {name: <13}| {ic.get('manufacturer', ''): <17}|{ic.get('pin-count', 0): >5} | {chip_id_str: <11}| {type_str: <12}| {vpp_str: >4}|"
+            f"| {name: <13}| {ic.get('manufacturer', ''): <17}|{ic.get('pin-count', 0): >5} | {chip_id_str: <11}| {type_str: <12}| {vpp_str: >4}|"  # noqa: E501
         )
     logger.info(divider)
 
@@ -346,7 +350,7 @@ def main():
     # Directly use the database method for searching
     search_results = db_instance.search_eprom("27C", include_unverified=True)
     if not search_results:
-        logger.info(f"No EPROMs found matching '27C'.")
+        logger.info(f"No EPROMs found matching '27C'.")  # noqa: F541
 
     if search_results:
         print_eprom_list_table(search_results, presenter.spec_builder)
@@ -356,7 +360,7 @@ def main():
     # logger.info("\n--- Listing all (first few if many) ---")
     # all_eproms = presenter.get_all_eproms_data()
     # if all_eproms:
-    #     print_eprom_list_table(all_eproms[:10], presenter.spec_builder) # Print first 10
+    #     print_eprom_list_table(all_eproms[:10], presenter.spec_builder) # Print first 10  # noqa: E501
 
     logger.info("\n--- Info for 27C256 (with export) ---")
     eprom_name_test = "2732"

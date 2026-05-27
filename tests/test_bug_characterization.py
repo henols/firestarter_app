@@ -79,7 +79,7 @@ def test_build_arg_flags_force_truthiness_not_existence():
 
 @pytest.mark.xfail(
     strict=True,
-    reason="BUG: eprom_operations.py:265 conflates EpromOperationError with SerialError; fix lands Phase 42 (ERR-01)",
+    reason="BUG: eprom_operations.py:265 conflates EpromOperationError with SerialError; fix lands Phase 42 (ERR-01)",  # noqa: E501
 )
 def test_eprom_operation_error_not_labeled_as_communication_error(
     make_comm, fake_serial, caplog

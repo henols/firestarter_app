@@ -15,7 +15,7 @@ from typing import Optional
 # Define the home path and configuration file path
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
 CONFIG_FILE_DEFAULT = "config.json"  # Default filename
-# CONFIG_FILE = os.path.join(HOME_PATH, "config.json") # No longer used directly as a global fixed path for ConfigManager
+# CONFIG_FILE = os.path.join(HOME_PATH, "config.json") # No longer used directly as a global fixed path for ConfigManager  # noqa: E501
 DATABASE_FILE = os.path.join(HOME_PATH, "database.json")
 PIN_MAP_FILE = os.path.join(HOME_PATH, "pin-maps.json")
 
@@ -27,10 +27,10 @@ def get_local_database():
     Loads the local user EPROM database override file.
     Returns:
         dict or None: The parsed JSON data if the file exists and is valid, otherwise None.
-    """
+    """  # noqa: E501
     if os.path.exists(DATABASE_FILE):
         try:
-            with open(DATABASE_FILE, "rt") as file:
+            with open(DATABASE_FILE, "rt") as file:  # noqa: UP015
                 return json.load(file)
         except json.JSONDecodeError:
             logger.error(f"Warning: Database file {DATABASE_FILE} is not a valid JSON.")
@@ -42,10 +42,10 @@ def get_local_pin_maps():
     Loads the local user pin map override file.
     Returns:
         dict or None: The parsed JSON data if the file exists and is valid, otherwise None.
-    """
+    """  # noqa: E501
     if os.path.exists(PIN_MAP_FILE):
         try:
-            with open(PIN_MAP_FILE, "rt") as file:
+            with open(PIN_MAP_FILE, "rt") as file:  # noqa: UP015
                 return json.load(file)
         except json.JSONDecodeError:
             logger.error(f"Warning: Pin map file {PIN_MAP_FILE} is not a valid JSON.")
@@ -70,7 +70,7 @@ class ConfigManager:
         instance_key = os.path.join(HOME_PATH, actual_filename)
 
         if instance_key not in cls._instances:
-            cls._instances[instance_key] = super(ConfigManager, cls).__new__(cls)
+            cls._instances[instance_key] = super(ConfigManager, cls).__new__(cls)  # noqa: UP008
         return cls._instances[instance_key]
 
     def __init__(self, config_filename: Optional[str] = None):
@@ -92,7 +92,7 @@ class ConfigManager:
         """
         if os.path.exists(self.config_file_path):
             try:
-                with open(self.config_file_path, "r") as file:
+                with open(self.config_file_path, "r") as file:  # noqa: UP015
                     self._config = json.load(file)
             except json.JSONDecodeError:
                 logger.error(
@@ -119,7 +119,7 @@ class ConfigManager:
         try:
             with open(self.config_file_path, "w") as f:
                 json.dump(self._config, f, indent=4)
-        except IOError as e:
+        except IOError as e:  # noqa: UP024
             logger.error(
                 f"Error: Unable to save configuration to {self.config_file_path}: {e}"
             )

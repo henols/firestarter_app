@@ -316,16 +316,16 @@
     File "<PATH>", line 8, in <module>
       sys.exit(main())
                ^^^^^^
-    File "<PATH>", line 626, in main
+    File "<PATH>", line 635, in main
       structured_details = eprom_presenter.prepare_detailed_eprom_data(
                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 107, in prepare_detailed_eprom_data
+    File "<PATH>", line 122, in prepare_detailed_eprom_data
       eprom_specifications = self.spec_builder.build_specifications(eprom_details)
                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 253, in build_specifications
+    File "<PATH>", line 506, in build_specifications
       display_pin_names = self._generate_pin_names_for_display(eprom_data)
                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 167, in _generate_pin_names_for_display
+    File "<PATH>", line 396, in _generate_pin_names_for_display
       if "vpp-pin" in pin_map_details and pin_map_details["vpp-pin"] <= pin_count:
                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   TypeError: '<=' not supported between instances of 'list' and 'int'

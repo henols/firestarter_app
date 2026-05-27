@@ -20,7 +20,7 @@ from argcomplete.completers import BaseCompleter
 
 from firestarter import __version__ as version
 from firestarter.config import ConfigManager
-from firestarter.constants import *
+from firestarter.constants import *  # noqa: F403
 from firestarter.database import EpromDatabase
 from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator, build_flags
@@ -30,13 +30,13 @@ from firestarter.logging_utils import SingleLineStatusHandler
 
 logger = logging.getLogger("Firestarter")
 
-# Import helper printing functions that would ideally be in a dedicated cli_display module
-from firestarter.eprom_info import print_eprom_list_table
+# Import helper printing functions that would ideally be in a dedicated cli_display module  # noqa: E501
+from firestarter.eprom_info import print_eprom_list_table  # noqa: E402
 
 
 class EpromCompleter(BaseCompleter):
     def __init__(self):
-        db_instance = EpromDatabase()  # Initialize/get instance
+        db_instance = EpromDatabase()  # Initialize/get instance  # noqa: F841
         self.allowed_eproms = allowed_eproms()
 
     def __call__(self, prefix, **kwargs):
@@ -264,9 +264,9 @@ def create_firmware_args(parser):
         help="List available firmware releases for the configured board.",
     )
 
-    # channel_group: --pre XOR --firmware-version XOR --stable (D-13 / D-19 / revision blocker #1).
+    # channel_group: --pre XOR --firmware-version XOR --stable (D-13 / D-19 / revision blocker #1).  # noqa: E501
     # All three in one group so argparse enforces the 3-way mutex natively.
-    # --stable in install context is a redundant no-op (stable is default); in --list it filters.
+    # --stable in install context is a redundant no-op (stable is default); in --list it filters.  # noqa: E501
     channel_group = fw_parser.add_mutually_exclusive_group()
     channel_group.add_argument(
         "--pre",
@@ -282,7 +282,7 @@ def create_firmware_args(parser):
     channel_group.add_argument(
         "--stable",
         action="store_true",
-        help="Explicitly select stable channel. With --list, filters to stable releases only.",
+        help="Explicitly select stable channel. With --list, filters to stable releases only.",  # noqa: E501
     )
 
     fw_parser.add_argument(
@@ -306,7 +306,7 @@ def create_firmware_args(parser):
         "-c",
         "--avrdude-config-path",
         type=str,
-        help="Full path to avrdude config (optional), set if avrdude version is 6.3 or not found.",
+        help="Full path to avrdude config (optional), set if avrdude version is 6.3 or not found.",  # noqa: E501
     )
     fw_parser.add_argument(
         "-f",
@@ -354,7 +354,7 @@ def create_config_args(parser):
     config_parser.add_argument(
         "--rev",
         type=float,
-        help="WARNING Overrides hardware revision (0-2), only use with HW mods. -1 disables override.",
+        help="WARNING Overrides hardware revision (0-2), only use with HW mods. -1 disables override.",  # noqa: E501
     )
     config_parser.add_argument(
         "-r1", "--r16", type=int, help="Set R16 resistance, resistor connected to VPE"
@@ -439,7 +439,7 @@ See constants.RURP_CONTROL_REGISTER_BITS (mirror of rurp_pinout.h).
     # See CONTEXT.md D-01 for the locked flag set + defaults.
     cc_parser = subparsers.add_parser(
         "consistency-check",
-        help="Read EPROM N consecutive times and report SHA-256 divergence (REPRO-03; per D-01).",
+        help="Read EPROM N consecutive times and report SHA-256 divergence (REPRO-03; per D-01).",  # noqa: E501
     )
     add_eprom_completer(cc_parser)
     cc_parser.add_argument(
@@ -509,9 +509,9 @@ def build_arg_flags(args):
     )
 
     if "input_enable" in args:
-        flags |= 0 if args.input_enable else FLAG_OUTPUT_ENABLE
+        flags |= 0 if args.input_enable else FLAG_OUTPUT_ENABLE  # noqa: F405
     if "chip_disable" in args:
-        flags |= 0 if args.chip_disable else FLAG_CHIP_ENABLE
+        flags |= 0 if args.chip_disable else FLAG_CHIP_ENABLE  # noqa: F405
 
     return flags
 
@@ -520,7 +520,7 @@ def main():
     signal.signal(signal.SIGINT, exit_gracefully)
 
     parser = argparse.ArgumentParser(
-        description="EPROM programmer for Arduino and Relatively-Universal-ROM-Programmer shield."
+        description="EPROM programmer for Arduino and Relatively-Universal-ROM-Programmer shield."  # noqa: E501
     )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Enable verbose mode"
@@ -530,7 +530,7 @@ def main():
         "--port",
         type=str,
         default=None,
-        help="Serial port to use (e.g. /dev/ttyACM1). Overrides the saved port in config.json for this invocation.",
+        help="Serial port to use (e.g. /dev/ttyACM1). Overrides the saved port in config.json for this invocation.",  # noqa: E501
     )
     parser.add_argument(
         "--version",
@@ -553,7 +553,7 @@ def main():
     create_info_args(subparsers)
 
     create_voltage_args(subparsers)
-    hw_parser = subparsers.add_parser("hw", help="Hardware revision.")
+    hw_parser = subparsers.add_parser("hw", help="Hardware revision.")  # noqa: F841
     fw_parser = create_firmware_args(subparsers)
     create_config_args(subparsers)
     create_dev_args(subparsers)
@@ -762,12 +762,12 @@ def main():
 
         if not res and detected_id_value:
             logger.info(
-                f"Looking up detected Chip ID 0x{detected_id_value:X} in the database..."
+                f"Looking up detected Chip ID 0x{detected_id_value:X} in the database..."  # noqa: E501
             )
             found_eproms_for_detected_id = db_instance.search_chip_id(detected_id_value)
             if found_eproms_for_detected_id:
                 logger.info(
-                    f"The detected Chip ID 0x{detected_id_value:X} matches the following EPROMs in the database:"
+                    f"The detected Chip ID 0x{detected_id_value:X} matches the following EPROMs in the database:"  # noqa: E501
                 )
                 mapped_found_eproms = [
                     db_instance._map_data(ic, ic.get("manufacturer", "Unknown"))
@@ -778,7 +778,7 @@ def main():
                 )
             else:
                 logger.warning(
-                    f"Detected Chip ID 0x{detected_id_value:X} not found in the database."
+                    f"Detected Chip ID 0x{detected_id_value:X} not found in the database."  # noqa: E501
                 )
 
         return 0 if res else 1
@@ -800,7 +800,7 @@ def main():
             else 0
         )
     elif args.command == "fw":
-        # Post-parse check: --json is only meaningful with --list (RESEARCH.md Finding 4 / Pitfall 5).
+        # Post-parse check: --json is only meaningful with --list (RESEARCH.md Finding 4 / Pitfall 5).  # noqa: E501
         if args.json and not args.list:
             fw_parser.error("--json requires --list")
 
@@ -823,11 +823,11 @@ def main():
                 print(f"{'Version':<12} {'Channel':<14} {'Published':<22} Asset URL")
                 for r in releases:
                     print(
-                        f"{r['version']:<12} {r['channel']:<14} {r['published']:<22} {r['asset_url']}"
+                        f"{r['version']:<12} {r['channel']:<14} {r['published']:<22} {r['asset_url']}"  # noqa: E501
                     )
             return 0
 
-        # Magic default: on a beta-installed app, bare fw -i auto-routes to --pre (D-21/D-22).
+        # Magic default: on a beta-installed app, bare fw -i auto-routes to --pre (D-21/D-22).  # noqa: E501
         _maybe_auto_route_to_pre(args)  # NOTE: no logger arg (revision warning #6)
 
         # Channel resolution for install path.
@@ -836,7 +836,7 @@ def main():
         elif args.pre:
             channel = "pre"
         else:
-            channel = "stable"  # --stable in install context is a redundant no-op (stable is default)
+            channel = "stable"  # --stable in install context is a redundant no-op (stable is default)  # noqa: E501
 
         return (
             1
@@ -945,9 +945,9 @@ def exit_gracefully(signum, frame):
 
 
 if __name__ == "__main__":
-    if sys.version_info < (3, 9):
+    if sys.version_info < (3, 9):  # noqa: UP036
         sys.exit(
-            "Error: Firestarter requires Python 3.9 or higher. Please update your Python version."
+            "Error: Firestarter requires Python 3.9 or higher. Please update your Python version."  # noqa: E501
         )
 
     sys.exit(main())

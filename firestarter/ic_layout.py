@@ -7,7 +7,7 @@ IC Layout Generation Module
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional  # noqa: UP035
 
 from firestarter.database import EpromDatabase  # Changed import
 
@@ -282,7 +282,7 @@ class EpromSpecBuilder:
                 (
                     "High-voltage EPROM algorithm for 32-pin devices",
                     "Uses ≥12 V VPP and EPROM-style timing",
-                    "Covers classic 27C010/020/040 and EPROM-like 28C oddballs (Linkage/PTC)",
+                    "Covers classic 27C010/020/040 and EPROM-like 28C oddballs (Linkage/PTC)",  # noqa: E501
                 ),
             ),
             (
@@ -367,7 +367,7 @@ class EpromSpecBuilder:
                 }
         return None
 
-    def _generate_pin_names_for_display(self, eprom_data: dict) -> Optional[List[str]]:
+    def _generate_pin_names_for_display(self, eprom_data: dict) -> Optional[List[str]]:  # noqa: UP006
         pin_count = eprom_data.get("pin-count")
         if pin_count not in self._generic_pin_names_map:
             logger.error(f"No generic layout available for {pin_count}-pin EPROM.")
@@ -378,15 +378,15 @@ class EpromSpecBuilder:
 
         # Default OE pin position (example for 24-pin, adjust if needed for others)
         # This logic was a bit specific in the original, might need generalization
-        # For 24-pin, OE is pin 20 (index 19). For 28-pin, OE/VPP is pin 22 (index 21). For 32-pin, OE is pin 24 (index 23).
+        # For 24-pin, OE is pin 20 (index 19). For 28-pin, OE/VPP is pin 22 (index 21). For 32-pin, OE is pin 24 (index 23).  # noqa: E501
         # Let's assume a generic OE position if not overridden by pin map.
-        # This part of the original logic was a bit hardcoded and might need review for all chip types.
+        # This part of the original logic was a bit hardcoded and might need review for all chip types.  # noqa: E501
         # For simplicity, we'll rely on the pin_map to override.
 
         pin_map_id = eprom_data.get("pin-map")
         pin_map_details = (
             self.db.get_pin_map(pin_count, pin_map_id)
-            if not pin_map_id is None
+            if not pin_map_id is None  # noqa: E714
             else None
         )
 
@@ -395,7 +395,7 @@ class EpromSpecBuilder:
                 pin_names[pin_map_details["rw-pin"] - 1] = "R/W(WE)"
             if "vpp-pin" in pin_map_details and pin_map_details["vpp-pin"] <= pin_count:
                 pin_names[pin_map_details["vpp-pin"] - 1] = "VPP"
-                # If VPP is defined, and there's an OE pin, ensure OE is also labeled if it's different
+                # If VPP is defined, and there's an OE pin, ensure OE is also labeled if it's different  # noqa: E501
                 if (
                     "oe-pin" in pin_map_details
                     and pin_map_details["oe-pin"] != pin_map_details["vpp-pin"]
@@ -413,7 +413,7 @@ class EpromSpecBuilder:
                         pin_names[pin_num - 1] = f"A{i}"
         else:
             logger.warning(
-                f"No specific pin map '{pin_map_id}' found for {pin_count}-pin {eprom_data.get('name', 'EPROM')}. Displaying generic layout."
+                f"No specific pin map '{pin_map_id}' found for {pin_count}-pin {eprom_data.get('name', 'EPROM')}. Displaying generic layout."  # noqa: E501
             )
 
         return pin_names
@@ -444,13 +444,13 @@ class EpromSpecBuilder:
             )
         return layout_data
 
-    def build_specifications(self, eprom_data: dict) -> Optional[Dict]:
+    def build_specifications(self, eprom_data: dict) -> Optional[Dict]:  # noqa: UP006
         """
         Builds a dictionary containing comprehensive technical specifications
         for the given EPROM data. This includes basic properties, pin names for layout,
         jumper settings, protocol information, and flag interpretations.
         `eprom_data` should be the fully mapped data from `EpromDatabase.get_eprom(..., full=True)`.
-        """
+        """  # noqa: E501
         if not eprom_data:
             logger.error("No EPROM data provided to display.")
             return None
@@ -547,7 +547,7 @@ class EpromSpecBuilder:
                 output_data["jumpers"].update(
                     self._get_rev2_jumper_settings_data(jp4_rev2)
                 )
-                # output_data["jumpers"].update( self._get_rev2_2_jumper_settings_data(jp4_rev2))
+                # output_data["jumpers"].update( self._get_rev2_2_jumper_settings_data(jp4_rev2))  # noqa: E501
 
         protocol_id = eprom_data.get("protocol-id")
         if protocol_id is not None:
@@ -584,21 +584,21 @@ def main():  # Test function
     logger.info(f"\n--- Generating structured data for {chip_name} ---")
     structured_data = spec_builder.build_specifications(eprom_details)
     if structured_data:
-        # For testing, just log the raw structure. Printing is now EpromInfoProvider's job.
+        # For testing, just log the raw structure. Printing is now EpromInfoProvider's job.  # noqa: E501
         logger.info(
             f"Generated data for {chip_name}: {json.dumps(structured_data, indent=2)}"
         )
 
-    logger.info(f"\n--- Testing get_chip_type_string ---")
+    logger.info(f"\n--- Testing get_chip_type_string ---")  # noqa: F541
     logger.info(f"Type 1: {spec_builder.get_chip_type_string(1)}")
     logger.info(f"Type 5: {spec_builder.get_chip_type_string(5)}")
 
-    logger.info(f"\n--- Testing flag interpretation (example flags) ---")
+    logger.info(f"\n--- Testing flag interpretation (example flags) ---")  # noqa: F541
     example_flags = 0x000000B0  # Has ID, Elec. Erasable, Can be Elec. Erased
     interpreted = spec_builder._interpret_flags(example_flags)
     logger.info(f"Flags 0x{example_flags:08X}: {interpreted}")
 
-    logger.info(f"\n--- Testing protocol info (example protocol ID) ---")
+    logger.info(f"\n--- Testing protocol info (example protocol ID) ---")  # noqa: F541
     protocol_data = spec_builder._get_protocol_info_structured(0x08)  # EPROM
     if protocol_data:
         logger.info(f"Protocol Data: {protocol_data}")
