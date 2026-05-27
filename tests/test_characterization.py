@@ -78,10 +78,19 @@ def normalize_output(s: str) -> str:
     s = re.sub(r"Firestarter version: [\d.a-zA-Z+]+", "Firestarter version: <VERSION>", s)
     # Serial port device names
     s = re.sub(r"/dev/tty\w+", "/dev/ttyXXX", s)
-    # Absolute paths — match the path portion only, stopping at quote/comma/space/newline
+    # Absolute paths — match the path portion only, stopping at quote/comma/space/newline.
     # This handles both bare paths and paths inside Python traceback strings like
-    # File "/home/vscode/.local/bin/firestarter", line 8
-    s = re.sub(r'(?:/home|/workspaces|/tmp|/Users)(?:/[^\s",\')]+)+', "<PATH>", s)
+    # File "/home/vscode/.local/bin/firestarter", line 8.
+    # Broad root list so snapshots stay identical across dev containers, pipx/venv,
+    # system, /opt, and CI installs (WR-02).
+    s = re.sub(
+        r'(?:/home|/workspaces|/tmp|/Users|/opt|/usr|/root|/var|/private|/Library|/srv|/mnt)'
+        r'(?:/[^\s",\')]+)+',
+        "<PATH>",
+        s,
+    )
+    # Windows absolute paths (e.g. C:\Users\...\firestarter.exe)
+    s = re.sub(r'[A-Za-z]:\\(?:[^\s",\')]+\\?)+', "<PATH>", s)
     return s
 
 
@@ -350,7 +359,9 @@ def test_no_programmer_found_read(monkeypatch):
     from firestarter.database import EpromDatabase
 
     config = ConfigManager()
-    db = EpromDatabase()
+    # skip_local_override=True is MANDATORY (phase 36 rule, Pitfall-4): a ~/.firestarter
+    # override of W27C512 on an operator bench must not flip this assertion in CI.
+    db = EpromDatabase(skip_local_override=True)
     eprom_data = db.get_eprom("W27C512")
     assert eprom_data is not None
     eprom_cmd = db.convert_to_programmer(eprom_data)
@@ -370,7 +381,9 @@ def test_no_programmer_found_erase(monkeypatch):
     from firestarter.database import EpromDatabase
 
     config = ConfigManager()
-    db = EpromDatabase()
+    # skip_local_override=True is MANDATORY (phase 36 rule, Pitfall-4): a ~/.firestarter
+    # override of W27C512 on an operator bench must not flip this assertion in CI.
+    db = EpromDatabase(skip_local_override=True)
     eprom_data = db.get_eprom("W27C512")
     assert eprom_data is not None
     eprom_cmd = db.convert_to_programmer(eprom_data)
