@@ -24,7 +24,23 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from firestarter.address_parser import parse_address, parse_size
 from firestarter.config import ConfigManager
-from firestarter.constants import *  # noqa: F403
+from firestarter.constants import (
+    BUFFER_SIZE,
+    COMMAND_BLANK_CHECK,
+    COMMAND_CHECK_CHIP_ID,
+    COMMAND_DEV_ADDRESS,
+    COMMAND_DEV_REGISTERS,
+    COMMAND_ERASE,
+    COMMAND_NAMES,
+    COMMAND_READ,
+    COMMAND_VERIFY,
+    COMMAND_WRITE,
+    FLAG_FORCE,
+    FLAG_SKIP_BLANK_CHECK,
+    FLAG_SKIP_ERASE,
+    FLAG_VERBOSE,
+    FLAG_VPE_AS_VPP,
+)
 from firestarter.exceptions import (
     EpromOperationError,
     ProgrammerNotFoundError,
@@ -44,15 +60,15 @@ def build_flags(
 ):
     flags = 0
     if not blank_check:
-        flags |= FLAG_SKIP_BLANK_CHECK  # noqa: F405
+        flags |= FLAG_SKIP_BLANK_CHECK
     if skip_erase:
-        flags |= FLAG_SKIP_ERASE  # noqa: F405
+        flags |= FLAG_SKIP_ERASE
     if force:
-        flags |= FLAG_FORCE  # noqa: F405
+        flags |= FLAG_FORCE
     if vpe_as_vpp:
-        flags |= FLAG_VPE_AS_VPP  # noqa: F405
+        flags |= FLAG_VPE_AS_VPP
     if verbose:
-        flags |= FLAG_VERBOSE  # noqa: F405
+        flags |= FLAG_VERBOSE
 
     return flags
 
@@ -148,7 +164,7 @@ class EpromOperator:
         # requests a data block when it's ready. This means we can send a full
         # page at a time, matching the firmware's internal buffer size,
         # without worrying about overflowing the serial buffer.
-        return BUFFER_SIZE  # This is 512 in constants.py  # noqa: F405
+        return BUFFER_SIZE  # This is 512 in constants.py
 
     def _setup_operation(  # Remains largely the same, as it's a prerequisite for the context manager  # noqa: E501
         self,
@@ -163,7 +179,7 @@ class EpromOperator:
         Prepares for an EPROM operation: uses pre-fetched EPROM data, sets up command, and connects.
         Returns (eprom_data_for_command, buffer_size) or (None, 0) on failure.
         """  # noqa: E501
-        operation = COMMAND_NAMES[cmd]  # Get command name  # noqa: F405
+        operation = COMMAND_NAMES[cmd]  # Get command name
         logger.debug(f"Performing {operation} for {eprom_name.upper()}")
 
         start_time = time.time()
@@ -183,7 +199,7 @@ class EpromOperator:
                 return None, 0
 
         # Special handling for read operation size
-        if cmd == COMMAND_READ and size:  # noqa: F405
+        if cmd == COMMAND_READ and size:
             try:
                 read_size = parse_size(size) or 0
                 # 'memory-size' in command_dict will define the end address for read
@@ -223,7 +239,7 @@ class EpromOperator:
             yield None, None, None  # Yield None to indicate setup failure
             return
 
-        operation_name = COMMAND_NAMES[cmd]  # noqa: F405
+        operation_name = COMMAND_NAMES[cmd]
         try:
             # Yield the necessary data to the 'with' block
             yield command_dict, buffer_size, operation_name
@@ -438,7 +454,7 @@ class EpromOperator:
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
-            COMMAND_READ,  # noqa: F405
+            COMMAND_READ,
             operation_flags,
             address_str,
             size_str,
@@ -546,7 +562,7 @@ class EpromOperator:
                     with self._operation_context(
                         eprom_name,
                         eprom_data_dict,
-                        COMMAND_READ,  # noqa: F405
+                        COMMAND_READ,
                         operation_flags,
                     ) as (cmd_data, _, op_name):
                         if not cmd_data:
@@ -674,7 +690,7 @@ class EpromOperator:
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
-            COMMAND_READ,  # noqa: F405
+            COMMAND_READ,
             operation_flags,
             address_str,
             size_str or "256",
@@ -725,7 +741,7 @@ class EpromOperator:
             logger.error(f"Invalid Control Register value: 0x{ctrl_reg:02x} {ctrl_reg}")
             return False
         command_dict_for_connect = {
-            "cmd": COMMAND_DEV_REGISTERS,  # noqa: F405
+            "cmd": COMMAND_DEV_REGISTERS,
             "flags": flags,
         }
         try:
@@ -779,9 +795,9 @@ class EpromOperator:
             command_eprom_data, _ = self._setup_operation(
                 eprom_name,
                 eprom_data_dict,
-                COMMAND_DEV_ADDRESS,  # noqa: F405
+                COMMAND_DEV_ADDRESS,
                 flags,
-                address_str,  # noqa: F405
+                address_str,
             )
             if not command_eprom_data or not self.comm:
                 return False  # Setup failed, error already logged by _setup_operation
@@ -812,9 +828,9 @@ class EpromOperator:
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
-            COMMAND_WRITE,  # noqa: F405
+            COMMAND_WRITE,
             operation_flags,
-            address_str,  # noqa: F405
+            address_str,
         ) as (cmd_data, buf_size, op_name):
             if not cmd_data:
                 return False
@@ -848,9 +864,9 @@ class EpromOperator:
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
-            COMMAND_VERIFY,  # noqa: F405
+            COMMAND_VERIFY,
             operation_flags,
-            address_str,  # noqa: F405
+            address_str,
         ) as (cmd_data, buf_size, op_name):
             if not cmd_data:
                 return False
@@ -883,9 +899,9 @@ class EpromOperator:
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
-            COMMAND_ERASE,  # noqa: F405
+            COMMAND_ERASE,
             operation_flags,
-            address_str,  # noqa: F405
+            address_str,
         ) as (cmd_data, _, op_name):
             if not cmd_data:
                 return False
@@ -904,8 +920,8 @@ class EpromOperator:
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
-            COMMAND_BLANK_CHECK,  # noqa: F405
-            operation_flags,  # noqa: F405
+            COMMAND_BLANK_CHECK,
+            operation_flags,
         ) as (cmd_data, _, op_name):
             if not cmd_data:
                 return False
@@ -924,8 +940,8 @@ class EpromOperator:
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
-            COMMAND_CHECK_CHIP_ID,  # noqa: F405
-            operation_flags,  # noqa: F405
+            COMMAND_CHECK_CHIP_ID,
+            operation_flags,
         ) as (cmd_data, _, op_name):
             if not cmd_data:
                 return False, None

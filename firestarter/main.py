@@ -21,7 +21,7 @@ from argcomplete.completers import BaseCompleter
 from firestarter import __version__ as version
 from firestarter.chip_resolver import resolve_chip
 from firestarter.config import ConfigManager
-from firestarter.constants import *  # noqa: F403
+from firestarter.constants import FLAG_CHIP_ENABLE, FLAG_OUTPUT_ENABLE
 from firestarter.database import EpromDatabase
 from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator, build_flags
@@ -511,9 +511,9 @@ def build_arg_flags(args):
     )
 
     if "input_enable" in args:
-        flags |= 0 if args.input_enable else FLAG_OUTPUT_ENABLE  # noqa: F405
+        flags |= 0 if args.input_enable else FLAG_OUTPUT_ENABLE
     if "chip_disable" in args:
-        flags |= 0 if args.chip_disable else FLAG_CHIP_ENABLE  # noqa: F405
+        flags |= 0 if args.chip_disable else FLAG_CHIP_ENABLE
 
     return flags
 

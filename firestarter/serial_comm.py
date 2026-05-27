@@ -21,7 +21,17 @@ import serial.tools.list_ports
 
 import firestarter.codec as codec
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
-from firestarter.constants import *  # noqa: F403
+from firestarter.constants import (
+    BAUD_RATE,
+    COMMAND_FW_VERSION,
+    FLAG_CAN_ERASE,
+    FLAG_CHIP_ENABLE,
+    FLAG_FORCE,
+    FLAG_OUTPUT_ENABLE,
+    FLAG_SKIP_BLANK_CHECK,
+    FLAG_SKIP_ERASE,
+    FLAG_VPE_AS_VPP,
+)
 from firestarter.exceptions import (
     FirmwareOutdatedError,
     ProgrammerNotFoundError,
@@ -96,7 +106,7 @@ class SerialCommunicator:
     def __init__(
         self,
         port: str,
-        baud_rate: int = int(BAUD_RATE),  # noqa: F405
+        baud_rate: int = int(BAUD_RATE),
         timeout: float = DEFAULT_SERIAL_TIMEOUT,
     ):
         self.port_name = port
@@ -518,19 +528,19 @@ class SerialCommunicator:
             flags = command_dict.get("flags", 0)
             if flags:
                 flag_details = []
-                if flags & FLAG_FORCE:  # noqa: F405
+                if flags & FLAG_FORCE:
                     flag_details.append("Force")
-                if flags & FLAG_CAN_ERASE:  # noqa: F405
+                if flags & FLAG_CAN_ERASE:
                     flag_details.append("CanErase")
-                if flags & FLAG_SKIP_ERASE:  # noqa: F405
+                if flags & FLAG_SKIP_ERASE:
                     flag_details.append("SkipErase")
-                if flags & FLAG_SKIP_BLANK_CHECK:  # noqa: F405
+                if flags & FLAG_SKIP_BLANK_CHECK:
                     flag_details.append("SkipBlankCheck")
-                if flags & FLAG_VPE_AS_VPP:  # noqa: F405
+                if flags & FLAG_VPE_AS_VPP:
                     flag_details.append("VPEasVPP")
-                if flags & FLAG_CHIP_ENABLE:  # noqa: F405
+                if flags & FLAG_CHIP_ENABLE:
                     flag_details.append("ChipEnable")
-                if flags & FLAG_OUTPUT_ENABLE:  # noqa: F405
+                if flags & FLAG_OUTPUT_ENABLE:
                     flag_details.append("OutputEnable")
                 if flag_details:
                     logger.debug(
@@ -605,10 +615,10 @@ class SerialCommunicator:
             # user command. Prior firmware shipped MSG_OK_FW_HANDSHAKE with the
             # version in every ack body, but that was dropped in Phase 9 — a
             # dedicated probe is now the load-bearing version check.
-            exempt_cmds = [COMMAND_FW_VERSION]  # noqa: F405
+            exempt_cmds = [COMMAND_FW_VERSION]
             command_code = command_to_send.get("state") or command_to_send.get("cmd")
             if command_code not in exempt_cmds:
-                communicator.send_json_command({"state": COMMAND_FW_VERSION})  # noqa: F405
+                communicator.send_json_command({"state": COMMAND_FW_VERSION})
                 # CMD_FW_VERSION emits 2 acks: setup-complete "Ready" from
                 # init_programmer, then "OK: FW: <version>" from fw_get_version.
                 # Discard the first; parse the second for version validation.
@@ -712,7 +722,7 @@ class SerialCommunicator:
         command_to_send: dict,
         config_manager: ConfigManager,
         preferred_port: Optional[str] = None,
-        baud_rate: int = int(BAUD_RATE),  # noqa: F405
+        baud_rate: int = int(BAUD_RATE),
     ) -> "SerialCommunicator":
         """
         Finds a compatible programmer by probing potential serial ports.
@@ -762,7 +772,7 @@ if __name__ == "__main__":
     config = ConfigManager()
 
     # Test data for finding programmer
-    test_command = {"state": COMMAND_FW_VERSION}  # noqa: F405
+    test_command = {"state": COMMAND_FW_VERSION}
 
     comm = None
     try:
