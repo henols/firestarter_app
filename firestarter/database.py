@@ -65,7 +65,13 @@ _ALGO_MEM_TYPE = {
 types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
 ROM_CE = 0x100
 ROM_OE = 0x101
-# eprom pins to rurp conversion
+# pin_conversions: RURP board-wiring layer.
+# Maps DIP socket pin number → RURP bus line number (hardware-specific).
+# This is DISTINCT from pinouts.json (loaded as self.pin_maps), which maps
+# chip pin function → DIP socket pin number (chip-specific).
+# They COMPOSE in get_bus_config(): pinouts.json gives function→socket-pin,
+# pin_conversions gives socket-pin→bus-line. There is ONE source of truth
+# per layer, not duplication.
 pin_conversions = {
     # Maps EPROM pin number to RURP hardware line number
     24: {
