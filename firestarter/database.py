@@ -158,49 +158,42 @@ class EpromDatabase:
     """
     Manages the EPROM and pin map database for the Firestarter application.
     It loads, merges, and provides access to EPROM definitions and pin map
-    configurations. Implemented as a singleton to ensure a single, consistent
-    database instance throughout the application.
+    configurations. Each call to EpromDatabase() returns a fresh instance;
+    pass skip_local_override=True to skip loading ~/.firestarter/database.json
+    and ~/.firestarter/pinmaps.json (useful in tests for deterministic results).
     """
 
-    _instance = None
-    _initialized = False
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = super(EpromDatabase, cls).__new__(cls, *args, **kwargs)
-        return cls._instance
-
-    def __init__(self):
-        if EpromDatabase._initialized:
-            return
-
+    def __init__(self, skip_local_override: bool = False):
         self.proms = {}
         self.pin_maps = {}
-        self._initialize_database_core()
-        EpromDatabase._initialized = True
+        self._initialize_database_core(skip_local_override=skip_local_override)
         logger.debug("EpromDatabase initialized.")
 
-    def _initialize_database_core(self):
+    def _initialize_database_core(self, skip_local_override: bool = False):
         """
         Loads and merges EPROM and pin map data.
+        When skip_local_override=True, only the packaged chip_database.json and
+        pinouts.json are loaded; ~/.firestarter user overrides are skipped.
         """
         self.proms = _read_config_file("chip_database.json")
 
-        # Load and merge local user EPROM database (~/.firestarter/database.json).
-        # Per-user corrections live there — the shipped chip_database.json is
-        # generated from upstream infoic.xml via tools/build_db.py and should
-        # not be hand-edited.
-        local_db = get_local_database()
-        if local_db:
-            self.proms = self._merge_databases(self.proms, local_db)
+        if not skip_local_override:
+            # Load and merge local user EPROM database (~/.firestarter/database.json).
+            # Per-user corrections live there — the shipped chip_database.json is
+            # generated from upstream infoic.xml via tools/build_db.py and should
+            # not be hand-edited.
+            local_db = get_local_database()
+            if local_db:
+                self.proms = self._merge_databases(self.proms, local_db)
 
         # Load base pin maps
         self.pin_maps = _read_config_file("pinouts.json")
 
-        # Load and merge local user pin maps
-        local_pin_maps = get_local_pin_maps()
-        if local_pin_maps:
-            self.pin_maps = self._merge_pin_maps(self.pin_maps, local_pin_maps)
+        if not skip_local_override:
+            # Load and merge local user pin maps
+            local_pin_maps = get_local_pin_maps()
+            if local_pin_maps:
+                self.pin_maps = self._merge_pin_maps(self.pin_maps, local_pin_maps)
 
     def _merge_databases(self, db: dict, manual_db: dict) -> dict:
         """
