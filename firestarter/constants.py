@@ -22,6 +22,8 @@ BUFFER_SIZE = 512
 LEONARDO_BUFFER_SIZE = 1024
 
 
+# Wire-protocol command codes — Firmware sync: firestarter.h
+# cmd field values sent in JSON commands to the Arduino firmware.
 COMMAND_READ = 1
 COMMAND_WRITE = 2
 COMMAND_ERASE = 3
@@ -54,7 +56,8 @@ COMMAND_NAMES = {
     COMMAND_HW_VERSION: "HW_VERSION",
 }
 
-# Control Flags
+# Control Flags — Firmware sync: firestarter.h
+# flags bitmask values sent in JSON commands.
 FLAG_FORCE = 0x01
 FLAG_CAN_ERASE = 0x02
 FLAG_SKIP_ERASE = 0x04
