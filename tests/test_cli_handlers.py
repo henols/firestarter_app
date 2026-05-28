@@ -429,8 +429,9 @@ def test_fw_install_returns_false(runner: CliRunner) -> None:
 def test_fw_mutex_pre_and_firmware_version(runner: CliRunner) -> None:
     """TRAP #4 / D-13.4: --pre + --firmware-version exits 2 (mutually exclusive).
 
-    All three channel options share a per-option callback _check_install_mutex
-    that raises click.BadParameter (exit-2) when more than one is set.
+    Enforced by a single post-parse check at the top of fw()'s body
+    (cli_handlers.py:792-805 — WR-03) raising click.UsageError when more
+    than one of --pre / --firmware-version / --stable is set.
     """
     fw_mgr = Mock(spec=FirmwareManager)
     app = make_app_context(firmware_manager=fw_mgr)
