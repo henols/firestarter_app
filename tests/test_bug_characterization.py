@@ -36,8 +36,6 @@ executor to remove the corresponding xfail marker.
 
 import logging
 
-import pytest
-
 from firestarter.cli_handlers import build_arg_flags
 from firestarter.constants import FLAG_FORCE
 from firestarter.messages import MSG_ERR_SETUP
@@ -71,10 +69,6 @@ def test_build_arg_flags_force_truthiness_not_existence():
     assert (flags & FLAG_FORCE) == 0  # force=False => FLAG_FORCE not set
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: eprom_operations.py:265 conflates EpromOperationError with SerialError; fix lands Phase 42 (ERR-01)",  # noqa: E501
-)
 def test_eprom_operation_error_not_labeled_as_communication_error(
     make_comm, fake_serial, caplog
 ):

@@ -288,8 +288,11 @@ class EpromOperator:
                 # --- Final ACK to complete transaction ---
                 self.comm.send_ack()
                 return True, final_msg
-        except (SerialError, SerialTimeoutError, EpromOperationError) as e:
+        except (SerialError, SerialTimeoutError) as e:
             logger.error(f"Communication error during {operation_name}: {e}")
+            return False, str(e)
+        except EpromOperationError as e:
+            logger.error(f"Programmer error during {operation_name}: {e}")
             return False, str(e)
         finally:
             progress.close()
