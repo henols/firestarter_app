@@ -51,11 +51,6 @@ from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_de
     _crc8_ccitt,
     _decode_param,
 )
-from firestarter.messages import (
-    CATALOG,
-    MSG_DATA_CHUNK,
-    SEVERITY_LABEL,
-)
 
 logger = logging.getLogger("SerialComm")
 rurp_logger = logging.getLogger("RURP")
@@ -224,114 +219,8 @@ class SerialCommunicator:
         rurp_logger.log(level, f"{log_prefix}: {message}")
 
     def _decode_id_frame(self, frame_len: int, body: bytes) -> Optional[LogMessage]:
-        """
-        Decode an ID-encoded wire frame body (the bytes between the length
-        byte and the trailing 0x0A re-sync anchor).
-
-        `body` carries `id | params | crc` exactly `frame_len` bytes long
-        (length is authoritative per CONTEXT §D-03; CRC8 covers `[id, params]`
-        but not the length byte nor the terminator).
-
-        Returns a LogMessage on success. Returns None (with a `logger.warning`)
-        on shape mismatch / CRC fail / unknown ID / format-render error — the
-        outer read loop continues to the next byte (DoS resilience per T-06-12).
-        """
-        if frame_len < 2 or len(body) != frame_len:
-            logger.warning(
-                f"Frame too short or truncated: declared len={frame_len}, "
-                f"actual body len={len(body)}"
-            )
-            return None
-
-        msg_id = body[0]
-        crc_received = body[-1]
-        params_bytes = bytes(body[1:-1])
-
-        crc_expected = _crc8_ccitt(bytes([msg_id]) + params_bytes)
-        if crc_expected != crc_received:
-            logger.warning(
-                f"CRC mismatch for ID 0x{msg_id:02x}: "
-                f"expected 0x{crc_expected:02x}, got 0x{crc_received:02x}"
-            )
-            return None
-
-        entry = CATALOG.get(msg_id)
-        if entry is None:
-            logger.warning(f"Unknown message ID 0x{msg_id:02x} — catalog out of date?")
-            return None
-
-        # WR-03: reject id-frame payloads for catalog entries flagged
-        # wire_format="text". MSG_OK_FW_VERSION (0x03) is expected to arrive
-        # over the legacy text channel only (LFW-05). A buggy or malicious
-        # peer emitting id=0x03 as a binary frame would otherwise render via
-        # the catalog format string and bypass the host's pre-v1.2 firmware-
-        # version guard in _probe_port (which only inspects the text path).
-        if entry.wire_format != "id_frame":
-            logger.warning(
-                f"Rejected id-frame for catalog entry with "
-                f"wire_format={entry.wire_format!r}: id=0x{msg_id:02x} "
-                f"({entry.name})"
-            )
-            return None
-
-        # Shape check for fixed-width entries. Variable-length (ascii_str)
-        # entries carry param_bytes == -1 in the catalog; for those we
-        # cannot pre-validate, but _decode_param will surface any overrun
-        # via IndexError below.
-        if entry.param_bytes >= 0 and len(params_bytes) != entry.param_bytes:
-            logger.warning(
-                f"Param shape mismatch for ID 0x{msg_id:02x} ({entry.name}): "
-                f"expected {entry.param_bytes} bytes, got {len(params_bytes)}"
-            )
-            return None
-
-        # Decode each param per the catalog grammar.
-        values: list = []
-        cursor = 0
-        try:
-            for ptype, _prender in entry.params:
-                value, cursor = _decode_param(ptype, params_bytes, cursor)
-                values.append(value)
-        except (IndexError, struct.error, ValueError) as exc:
-            logger.warning(
-                f"Param decode failed for ID 0x{msg_id:02x} ({entry.name}): {exc}"
-            )
-            return None
-
-        # Sentinel-aware rendering for P-02/P-03 shaped IDs (W-02).
-        # codec.format_message returns a string for MSG_OK_REV/CFG,
-        # or None to fall through to the generic catalog format-string path.
-        text = codec.format_message(msg_id, values, entry)
-        if text is None:
-            # Generic render via the catalog format string. Format errors fall
-            # back to a tagged placeholder so the read loop continues yielding
-            # subsequent frames (T-06-12).
-            # Filter out raw-bytes values (bytes-type params, e.g. MSG_DATA_CHUNK)
-            # before printf-style substitution — they have no corresponding %
-            # specifier in the format string.
-            fmt_values = [v for v in values if not isinstance(v, (bytes, bytearray))]
-            try:
-                text = entry.format % tuple(fmt_values) if fmt_values else entry.format
-            except (TypeError, ValueError) as exc:
-                logger.warning(
-                    f"Format-error rendering ID 0x{msg_id:02x} ({entry.name}): {exc}"
-                )
-                text = f"<format-error: {entry.name}>"
-
-        # Extract raw-bytes payload for MSG_DATA_CHUNK (W-04) so the chip-read
-        # loop can obtain the chip data without a second read call.
-        chunk_payload = None
-        if (
-            msg_id == MSG_DATA_CHUNK
-            and values
-            and isinstance(values[0], (bytes, bytearray))
-        ):
-            chunk_payload = bytes(values[0])
-
-        severity_label = SEVERITY_LABEL.get(entry.severity, f"SEV{entry.severity}")
-        return LogMessage(
-            severity=severity_label, text=text, id=msg_id, payload=chunk_payload
-        )
+        """Compatibility wrapper — see codec.decode_id_frame."""
+        return codec.decode_id_frame(frame_len, body)
 
     def _read_and_parse_lines(self, timeout: float) -> Generator[Response, None, None]:
         """
