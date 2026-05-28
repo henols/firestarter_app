@@ -4,7 +4,7 @@
   Usage: firestarter fw [OPTIONS]
   Try 'firestarter fw --help' for help.
   
-  Error: Invalid value for '--firmware-version': --firmware-version is mutually exclusive with --pre.
+  Error: --pre is mutually exclusive with --firmware-version.
   
   '''
 # ---
@@ -13,7 +13,7 @@
   Usage: firestarter fw [OPTIONS]
   Try 'firestarter fw --help' for help.
   
-  Error: Invalid value for '--stable': --stable is mutually exclusive with --pre.
+  Error: --pre is mutually exclusive with --stable.
   
   '''
 # ---
@@ -166,8 +166,10 @@
   
     Firmware version.
   
-    Implements TRAP #4 (3-way --pre / --firmware-version / --stable mutex via
-    per-option callback _check_install_mutex) and TRAP #5 (firmware-version
+    Implements TRAP #4 (3-way --pre / --firmware-version / --stable mutex via a
+    single post-parse check at the top of the command body — WR-03; replaces the
+    earlier per-option callback _check_install_mutex which depended on Click's
+    left-to-right option-processing order) and TRAP #5 (firmware-version
     validator via custom Click ParamType _FirmwareVersionType). D-14 narrow
     upgrade: the post-parse `--json requires --list` check uses `raise
     click.UsageError(...)` (exit-2 + "Usage:" formatting preserved from the
