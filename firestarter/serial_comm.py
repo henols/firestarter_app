@@ -56,8 +56,6 @@ logger = logging.getLogger("SerialComm")
 rurp_logger = logging.getLogger("RURP")
 
 
-# Compile regex for parsing prefixes once for efficiency
-
 DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
@@ -152,18 +150,7 @@ class SerialCommunicator:
     def send_json_command(self, command_dict: dict) -> int:
         self._log_command_details(command_dict)
         json_data = json.dumps(command_dict, separators=(",", ":"))
-        # json_data = json.dumps(command_dict)
         return self.send_string(json_data)
-
-    def read_line_bytes(self) -> Optional[bytes]:
-        if not self.is_connected():
-            raise SerialError("Not connected.")
-        try:
-            if self.connection.in_waiting > 0:
-                return self.connection.readline()
-            return None
-        except serial.SerialException as e:
-            raise SerialError(f"Serial error reading from {self.port_name}: {e}") from e
 
     def _parse_response_line(self, line_bytes: bytes) -> Optional[Response]:
         """
