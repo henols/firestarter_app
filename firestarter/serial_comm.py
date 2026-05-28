@@ -204,9 +204,20 @@ class SerialCommunicator:
         """Compatibility wrapper — see codec.decode_id_frame."""
         return codec.decode_id_frame(frame_len, body)
 
+    # =================================================================
+    # DO NOT MODIFY — v1.9 RCA territory (GATE-1.8d)
+    # The body of this generator is the host-side baseline for v1.9's
+    # read-bug RCA. Phase 26 baseline binaries (.planning/v1.6/
+    # consistency-check-runs/W27C512-leonardo-20260526-*-v2*/) were
+    # captured against this exact body. Structural-only changes here
+    # (e.g. type hints on the signature) are OK; any change to the
+    # byte-by-byte read loop, the magic-preamble dispatch, the
+    # frame-length read, or the timeout reset semantics MUST be
+    # flagged and deferred to v1.9 alongside binary re-validation.
+    # =================================================================
     def _read_and_parse_lines(self, timeout: float) -> Generator[Response, None, None]:
         """
-        Always-on byte-stream reader (Phase 6 D-05). A single generator
+        [ring-fenced — v1.9 RCA territory; see header comment] Always-on byte-stream reader (Phase 6 D-05). A single generator
         handles BOTH legacy text lines (terminated by 0x0A) AND binary
         ID-encoded frames (4-byte magic preamble + length-authoritative
         body + CRC + 0x0A re-sync anchor) through the same yield surface.
