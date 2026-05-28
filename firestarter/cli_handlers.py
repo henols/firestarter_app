@@ -554,7 +554,7 @@ def erase(
     help="Force, even if the VPP is not correct.",
 )
 @click.pass_obj
-def id(app: AppContext, eprom: str, force: bool) -> None:
+def chip_id(app: AppContext, eprom: str, force: bool) -> None:
     """Checks an EPROM, if supported."""
     eprom_data = _resolve_or_exit(eprom, app.db)
     if not eprom_data:
