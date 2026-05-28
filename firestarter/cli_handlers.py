@@ -252,41 +252,6 @@ class _FirmwareVersionType(click.ParamType):
         return value
 
 
-def _check_install_mutex(
-    ctx: click.Context, param: click.Parameter, value: object
-) -> object:
-    """Per-option callback enforcing the --pre / --firmware-version / --stable mutex.
-
-    Replaces argparse's `add_mutually_exclusive_group()` for the fw command's
-    channel_group (D-13.4 TRAP #4). Picked per-option callback over
-    `result_callback` (Claude's Discretion): locality — the mutex declaration
-    sits next to the options it constrains, matching argparse's per-action
-    grouping idiom.
-
-    Raises `click.BadParameter` (exit-2) on violation; this matches argparse's
-    `SystemExit(2)` behaviour for mutually-exclusive-group violations. The
-    mutex applies in BOTH install AND `--list` contexts (matches argparse's
-    `add_mutually_exclusive_group()` scope).
-    """
-    if not value:
-        return value
-    siblings = ("pre", "firmware_version", "stable")
-    # param.name is non-None for any option (Click sets it from the option spec).
-    param_name = param.name or ""
-    for other in siblings:
-        if other == param_name:
-            continue
-        other_value = ctx.params.get(other)
-        if other_value:
-            raise click.BadParameter(
-                f"--{param_name.replace('_', '-')} is mutually exclusive with "
-                f"--{other.replace('_', '-')}.",
-                ctx=ctx,
-                param=param,
-            )
-    return value
-
-
 @click.group()
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose mode")
 @click.option(
@@ -701,9 +666,10 @@ def config(
 
 # ---------------------------------------------------------------------------
 # Firmware command (Wave 3 / D-12 step 4)
-# TRAPs #4 (3-way mutex via _check_install_mutex) + #5 (_FirmwareVersionType
-# custom ParamType). D-14 (UsageError on --json without --list). D-15
-# (SimpleNamespace adapter for _maybe_auto_route_to_pre).
+# TRAPs #4 (3-way mutex enforced post-parse at top of fw() body — WR-03;
+# previously per-option callback _check_install_mutex, now removed)
+# + #5 (_FirmwareVersionType custom ParamType). D-14 (UsageError on --json
+# without --list). D-15 (SimpleNamespace adapter for _maybe_auto_route_to_pre).
 # ---------------------------------------------------------------------------
 
 
@@ -737,7 +703,6 @@ def _maybe_auto_route_to_pre_click(
 @click.option(
     "--pre",
     is_flag=True,
-    callback=_check_install_mutex,
     help="Fetch latest pre-release firmware (mirrors pip install --pre).",
 )
 @click.option(
@@ -746,13 +711,11 @@ def _maybe_auto_route_to_pre_click(
     type=_FirmwareVersionType(),
     default=None,
     metavar="VERSION",
-    callback=_check_install_mutex,
     help="Pin exact firmware version (e.g. 3.1.0, 3.1.0b2, 3.1.0rc1).",
 )
 @click.option(
     "--stable",
     is_flag=True,
-    callback=_check_install_mutex,
     help="Explicitly select stable channel. With --list, filters to stable releases only.",  # noqa: E501
 )
 @click.option(
@@ -812,13 +775,34 @@ def fw(
     """Firmware version.
 
     Implements TRAP #4 (3-way --pre / --firmware-version / --stable mutex via
-    per-option callback _check_install_mutex) and TRAP #5 (firmware-version
+    a single post-parse check at the top of the command body — WR-03; replaces
+    the earlier per-option callback _check_install_mutex which depended on
+    Click's left-to-right option-processing order) and TRAP #5 (firmware-version
     validator via custom Click ParamType _FirmwareVersionType). D-14 narrow
     upgrade: the post-parse `--json requires --list` check uses
     `raise click.UsageError(...)` (exit-2 + "Usage:" formatting preserved
     from the argparse `fw_parser.error()` form).
     """
     app: AppContext = ctx.obj
+
+    # WR-03: 3-way --pre / --firmware-version / --stable mutex enforced once,
+    # post-parse, with a deterministic error message that doesn't depend on
+    # the user's option ordering. Raises click.UsageError → exit-2, matching
+    # argparse's add_mutually_exclusive_group() contract.
+    set_channel_opts = [
+        name
+        for name, val in (
+            ("pre", pre),
+            ("firmware-version", firmware_version),
+            ("stable", stable),
+        )
+        if val
+    ]
+    if len(set_channel_opts) > 1:
+        raise click.UsageError(
+            f"--{set_channel_opts[0]} is mutually exclusive with "
+            f"--{set_channel_opts[1]}."
+        )
 
     # D-14 narrow UsageError upgrade (was: fw_parser.error in main.py:798).
     if json_output and not list_releases:
