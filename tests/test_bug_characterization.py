@@ -38,8 +38,8 @@ import logging
 
 import pytest
 
+from firestarter.cli_handlers import build_arg_flags
 from firestarter.constants import FLAG_FORCE
-from firestarter.main import build_arg_flags
 from firestarter.messages import MSG_ERR_SETUP
 
 from .conftest import build_frame

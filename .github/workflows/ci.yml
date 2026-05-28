@@ -56,3 +56,9 @@ jobs:
 
       - name: Run pytest with coverage
         run: pytest tests/ --cov=firestarter --cov-report=term-missing --cov-fail-under=50
+
+      - name: Smoke test - firestarter entry point and --help
+        # CLI-04 SC#4 (Phase 41 D-16): prove the pip-installed `firestarter`
+        # console script resolves cleanly and renders Click's --help output
+        # without raising. Non-zero exit fails the build.
+        run: pip install -e . && firestarter --help

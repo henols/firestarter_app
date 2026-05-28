@@ -3,69 +3,67 @@
 ---
 ## Enabling Shell Autocompletion
 
-**Note:** Autocompletion isn’t automatically activated on installation. You must set it up in your shell environment. You have two main approaches:
+Firestarter ships shell completion via [Click](https://click.palletsprojects.com/en/stable/shell-completion/)'s built-in `_FIRESTARTER_COMPLETE=<shell>_source firestarter` mechanism. No external dependency is needed — Click is already a Firestarter runtime dependency, so completion is available the moment Firestarter is installed.
 
-**Note:** If you used an isolated environment installation with pipx, you need to do a [Manual Shell Configuration](#2-manual-shell-configuration)
+Completion is opt-in: each shell needs the activation line added to its rc / profile file. Pick the section for your shell below.
 
-### 1. Using activate-global-python-argcomplete
+### Bash
 
-This tool globally enables argcomplete for all your Python CLI tools.
+Add the following line to your `~/.bashrc`:
 
-- Run the following command:
+```bash
+eval "$(_FIRESTARTER_COMPLETE=bash_source firestarter)"
+```
 
-    ```bash
-    activate-global-python-argcomplete
-    ```
+Then reload your shell, or `source ~/.bashrc`.
 
-- Then, restart your shell.  
-  *This registers autocompletion for any tool using argcomplete, including `firestarter`.*
+### Zsh
 
-### 2. Manual Shell Configuration
+Add the following line to your `~/.zshrc`:
 
-If you prefer to enable autocompletion only for Firestarter, follow these instructions:
+```zsh
+eval "$(_FIRESTARTER_COMPLETE=zsh_source firestarter)"
+```
 
-#### For Linux and macOS
+Then restart your terminal session.
 
-##### Bash
+### Fish
 
-1. Ensure that the `argcomplete` package is installed (it comes with Firestarter).
-2. Add the following line to your `~/.bashrc` file:
+Save Click's completion script to fish's per-command completions directory:
 
-    ```bash
-    eval "$(register-python-argcomplete firestarter)"
-    ```
+```fish
+_FIRESTARTER_COMPLETE=fish_source firestarter | source
+```
 
-3. Reload your shell or run the command directly.
+For persistence across shell sessions, write the script to
+`~/.config/fish/completions/firestarter.fish`:
 
-##### Zsh
+```fish
+mkdir -p ~/.config/fish/completions
+_FIRESTARTER_COMPLETE=fish_source firestarter > ~/.config/fish/completions/firestarter.fish
+```
 
-1. Add the same line to your `~/.zshrc` file:
+### PowerShell
 
-    ```bash
-    eval "$(register-python-argcomplete firestarter)"
-    ```
+Add the following line to your PowerShell `$PROFILE`
+(typically `~\Documents\PowerShell\Microsoft.PowerShell_profile.ps1`):
 
-2. Restart your terminal session.
+```powershell
+_FIRESTARTER_COMPLETE=powershell_source firestarter | Out-String | Invoke-Expression
+```
 
-#### For Windows (PowerShell)
+Restart PowerShell.
 
-Argcomplete does not work in the traditional CMD shell. For PowerShell:
+### pipx Installations
 
-1. Open PowerShell as Administrator.
-2. Add the following line to your PowerShell profile (usually at `~\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1`):
-
-    ```powershell
-    register-python-argcomplete firestarter | Out-String | Invoke-Expression
-    ```
-
-3. Restart PowerShell.
-
-*Note:* If you experience issues with autocompletion in Windows, consider using the Windows Subsystem for Linux (WSL) or Git Bash, where the Linux instructions apply.
-
-#### Special Note for pipx Installations
-
-The procedure for enabling autocompletion remains the same whether you install via pip or pipx. The pipx-installed executable is isolated in its own environment, so ensure that the command name (`firestarter`) matches what you reference in your shell configuration. Verify the installation with:
+The procedure above is the same whether you install Firestarter via `pip` or `pipx`. The pipx-installed executable is isolated in its own environment, so make sure the command name (`firestarter`) matches what you reference in your shell configuration. Verify the installation with:
 
 ```bash
 pipx list
 ```
+
+### Migrating from a previous Firestarter
+
+Older Firestarter versions used a different completion library, activated via `eval "$(register-python-argcomplete firestarter)"`. That line no longer works — replace it with the matching `_FIRESTARTER_COMPLETE=<shell>_source firestarter` line for your shell from the sections above.
+
+For more details on Click's completion implementation, see the [Click shell completion documentation](https://click.palletsprojects.com/en/stable/shell-completion/).

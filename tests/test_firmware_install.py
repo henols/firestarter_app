@@ -885,7 +885,7 @@ class TestMagicDefault:
         import firestarter as _pkg
 
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
-        from firestarter.main import _maybe_auto_route_to_pre
+        from firestarter.cli_handlers import _maybe_auto_route_to_pre
 
         args = MagicMock()
         args.install = True
@@ -906,7 +906,7 @@ class TestMagicDefault:
         import firestarter as _pkg
 
         monkeypatch.setattr(_pkg, "__version__", "2.0.7")
-        from firestarter.main import _maybe_auto_route_to_pre
+        from firestarter.cli_handlers import _maybe_auto_route_to_pre
 
         args = MagicMock()
         args.install = True
@@ -927,7 +927,7 @@ class TestMagicDefault:
         import firestarter as _pkg
 
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
-        from firestarter.main import _maybe_auto_route_to_pre
+        from firestarter.cli_handlers import _maybe_auto_route_to_pre
 
         args = MagicMock()
         args.install = True
@@ -952,7 +952,7 @@ class TestMagicDefault:
         import firestarter as _pkg
 
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
-        from firestarter.main import _maybe_auto_route_to_pre
+        from firestarter.cli_handlers import _maybe_auto_route_to_pre
 
         args = MagicMock()
         args.install = True
@@ -974,7 +974,7 @@ class TestMagicDefault:
         import firestarter as _pkg
 
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")  # prerelease
-        from firestarter.main import _maybe_auto_route_to_pre
+        from firestarter.cli_handlers import _maybe_auto_route_to_pre
 
         args = MagicMock()
         args.install = True
@@ -998,7 +998,7 @@ class TestMagicDefault:
         import firestarter as _pkg
 
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
-        from firestarter.main import _maybe_auto_route_to_pre
+        from firestarter.cli_handlers import _maybe_auto_route_to_pre
 
         args = MagicMock()
         args.install = True
@@ -1017,105 +1017,50 @@ class TestMagicDefault:
 
 
 # ===========================================================================
-# TestArgparseMutex — D-19 / D-20 three-way channel mutex + install/list mutex
+# TestFirmwareCommandDispatch — --json without --list post-parse validation
 # ===========================================================================
+#
+# Phase 41 / Wave 4 (CLI-01..04) note: this class previously held 5
+# argparse-form mutex/validator tests that imported `create_firmware_args`
+# from `firestarter.main`. With the entry-point swap to Click, that argparse
+# factory + its 14 sibling `create_*_args` factories are deleted outright.
+# The equivalent Click-form contracts are pinned in
+# `tests/test_cli_handlers.py` (W3 / Plan 41-03):
+#   - test_fw_mutex_pre_and_firmware_version
+#   - test_fw_mutex_stable_and_pre
+#   - test_fw_mutex_firmware_version_and_stable
+#   - test_fw_invalid_firmware_version
+#   - (also): the Click `click.Choice` enforcement on --board renders
+#     `test_argparse_accepts_uno328pb_board_choice` redundant — `click.Choice`
+#     ships the contract structurally instead of via a per-value test.
+# Only the sys.argv-driven `test_json_without_list_post_parse_error` survives
+# here: it still pins the documented `--json requires --list` UsageError
+# contract end-to-end through the Click entry point (the test invokes
+# `from firestarter.main import main; main()`; `main = cli` re-export keeps
+# the call shape valid through D-08).
 
 
-class TestArgparseMutex:
-    """INST-02, INST-03 — argparse mutex groups enforce contradictory-intent rejection.
+class TestFirmwareCommandDispatch:
+    """INST-02 / D-14 — `--json` without `--list` is rejected at dispatch time.
 
-    Tests build the parser INLINE using create_firmware_args (no _build_root_parser
-    helper — revision blocker #3). create_firmware_args must RETURN fw_parser
-    (revision Open Q2 resolution, RESEARCH.md Pitfall 5).
-
-    Three-way channel mutex: --pre / --firmware-version / --stable all in one
-    add_mutually_exclusive_group (revision blocker #1 — CLEANEST option).
-    Two-way install/list mutex: --list / -i/--install in one group (D-20).
-
-    Decisions pinned: D-19 (--pre / --firmware-version mutex),
-                      D-20 (--list / --install mutex),
-                      D-13 (--pre / --stable / --all channel filter for list).
+    The sole surviving argparse-era test in this class: it drives the real
+    `main` entry point (re-exported as `cli` per D-08) via sys.argv
+    monkeypatching, so the post-parse UsageError still raises SystemExit (
+    `click.UsageError`'s exit_code=2). Phase 41 D-14 narrow upgrade replaces
+    the argparse `fw_parser.error(...)` form with `raise click.UsageError(...)`.
     """
 
     @pytest.fixture(autouse=True)
     def _isolate_env(self, monkeypatch):
         pass
 
-    def _build_parser(self):
-        """Build an argparse parser using create_firmware_args inline.
-
-        create_firmware_args must return fw_parser (Wave 1 contract).
-        """
-        import argparse
-
-        from firestarter.main import create_firmware_args
-
-        p = argparse.ArgumentParser()
-        sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(
-            sp
-        )  # MUST return fw_parser per RESEARCH Open Q2
-        return p, fw_parser
-
-    def test_pre_and_firmware_version_mutex(self):
-        """D-19 — --pre and --firmware-version are mutually exclusive.
-
-        Providing both must cause argparse to exit with code 2.
-
-        RED today: create_firmware_args does not accept --pre / --firmware-version — SystemExit
-        or: create_firmware_args returns None (no return statement yet) — TypeError.
-        """  # noqa: E501
-        import argparse
-
-        from firestarter.main import create_firmware_args
-
-        p = argparse.ArgumentParser()
-        sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)  # noqa: F841
-        with pytest.raises(SystemExit):
-            p.parse_args(["fw", "-i", "--pre", "--firmware-version", "3.1.0"])
-
-    def test_list_and_install_mutex(self):
-        """D-20 — --list and -i/--install are mutually exclusive.
-
-        RED today: create_firmware_args returns None or --list does not exist.
-        """
-        import argparse
-
-        from firestarter.main import create_firmware_args
-
-        p = argparse.ArgumentParser()
-        sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)  # noqa: F841
-        with pytest.raises(SystemExit):
-            p.parse_args(["fw", "-i", "--list"])
-
-    def test_stable_and_pre_mutex(self):
-        """D-13 / revision blocker #1 — --stable and --pre are mutually exclusive
-        (both in the same 3-way channel_group alongside --firmware-version).
-
-        RED today: create_firmware_args does not have --stable / --pre flags.
-        """
-        import argparse
-
-        from firestarter.main import create_firmware_args
-
-        p = argparse.ArgumentParser()
-        sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)  # noqa: F841
-        with pytest.raises(SystemExit):
-            p.parse_args(["fw", "--list", "--pre", "--stable"])
-
     def test_json_without_list_post_parse_error(self, monkeypatch):
-        """D-12 / RESEARCH.md Pattern 3 — --json without --list must be rejected.
+        """D-14 — --json without --list must be rejected with SystemExit.
 
-        argparse accepts --json at parse time, but dispatch calls fw_parser.error(...)
-        for the post-parse validation. This test verifies the dispatch path exits 2.
-
-        Uses sys.argv monkeypatching to drive the real main() entry point.
-
-        RED today: The new --json flag and dispatch logic do not exist — SystemExit(1)
-        or AttributeError, not SystemExit(2).
+        Uses sys.argv monkeypatching to drive the real `main` (== `cli`) entry
+        point. Click's `raise click.UsageError("--json requires --list")` maps
+        to SystemExit(2), matching the prior argparse `fw_parser.error(...)`
+        exit code.
         """
         import sys
 
@@ -1124,25 +1069,6 @@ class TestArgparseMutex:
 
         with pytest.raises(SystemExit):
             main()
-
-    def test_firmware_version_regex_validation_at_argparse(self):
-        """D-07 — invalid --firmware-version string is rejected by argparse type= validator.
-
-        'not-a-version' does not match FIRMWARE_VERSION_RE; the type= validator
-        raises ArgumentTypeError which argparse converts to SystemExit(2).
-
-        RED today: --firmware-version flag does not exist — SystemExit(2) for
-        unrecognized argument, or no exit at all.
-        """  # noqa: E501
-        import argparse
-
-        from firestarter.main import create_firmware_args
-
-        p = argparse.ArgumentParser()
-        sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)  # noqa: F841
-        with pytest.raises(SystemExit):
-            p.parse_args(["fw", "-i", "--firmware-version", "not-a-version"])
 
 
 # ===========================================================================
@@ -1326,37 +1252,9 @@ class TestUno328pbResolution:
         )
         assert captured["baud_rate"] == 115200
 
-    def test_argparse_accepts_uno328pb_board_choice(self, monkeypatch):
-        """INST-03 listing-flag path / revised D-10 — main.py --board allowlist
-        must accept 'uno328pb'.
-
-        Today: argparse `choices=["uno", "leonardo"]` rejects 'uno328pb' with
-        `error: argument -b/--board: invalid choice: 'uno328pb'` → SystemExit.
-        Wave 2 widens the choices tuple to `["uno", "uno328pb", "leonardo"]`
-        (Phase 21 D-08 section-order discipline).
-
-        Positive assertion: --board uno328pb does NOT raise SystemExit and
-                            args.board == 'uno328pb'.
-        Negative control:   --board ungabunga STILL raises SystemExit (proves
-                            choices= was widened, not removed entirely).
-        """
-        import argparse
-
-        from firestarter.main import create_firmware_args
-
-        # Positive: uno328pb must be accepted (currently FAILS — SystemExit).
-        p = argparse.ArgumentParser()
-        sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)  # noqa: F841
-        args = p.parse_args(["fw", "--list", "--board", "uno328pb"])
-        assert args.board == "uno328pb", (
-            f"Expected args.board='uno328pb'; got {args.board!r}. "
-            f"Wave 2 must widen choices= to include 'uno328pb'."
-        )
-
-        # Negative control: unknown board values must still be rejected.
-        p2 = argparse.ArgumentParser()
-        sp2 = p2.add_subparsers(dest="command")
-        fw_parser2 = create_firmware_args(sp2)  # noqa: F841
-        with pytest.raises(SystemExit):
-            p2.parse_args(["fw", "--list", "--board", "ungabunga"])
+    # Phase 41 / Wave 4 note: `test_argparse_accepts_uno328pb_board_choice`
+    # deleted on the entry-point swap. The Click form uses
+    # `@click.option("-b", "--board", type=click.Choice(["uno", "uno328pb",
+    # "leonardo"]))` which structurally enforces the allowlist — the contract
+    # ships in cli_handlers.py (verified by `firestarter fw --help`) without
+    # a separate test.

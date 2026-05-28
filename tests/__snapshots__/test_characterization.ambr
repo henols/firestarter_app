@@ -1,23 +1,19 @@
 # serializer version: 1
 # name: test_error_fw_pre_firmware_version_mutex
   '''
-  usage: firestarter fw [-h] [-i | --list]
-                        [--pre | --firmware-version VERSION | --stable]
-                        [-b {uno,uno328pb,leonardo}]
-                        [--avrdude-path AVRDUDE_PATH] [-c AVRDUDE_CONFIG_PATH]
-                        [-f] [--json]
-  firestarter fw: error: argument --firmware-version: not allowed with argument --pre
+  Usage: firestarter fw [OPTIONS]
+  Try 'firestarter fw --help' for help.
+  
+  Error: Invalid value for '--firmware-version': --firmware-version is mutually exclusive with --pre.
   
   '''
 # ---
 # name: test_error_fw_pre_stable_mutex
   '''
-  usage: firestarter fw [-h] [-i | --list]
-                        [--pre | --firmware-version VERSION | --stable]
-                        [-b {uno,uno328pb,leonardo}]
-                        [--avrdude-path AVRDUDE_PATH] [-c AVRDUDE_CONFIG_PATH]
-                        [-f] [--json]
-  firestarter fw: error: argument --stable: not allowed with argument --pre
+  Usage: firestarter fw [OPTIONS]
+  Try 'firestarter fw --help' for help.
+  
+  Error: Invalid value for '--stable': --stable is mutually exclusive with --pre.
   
   '''
 # ---
@@ -41,269 +37,272 @@
 # ---
 # name: test_error_read_missing_eprom
   '''
-  usage: firestarter read [-h] [-f] [-a ADDRESS] [-s SIZE] eprom [output_file]
-  firestarter read: error: the following arguments are required: eprom
+  Usage: firestarter read [OPTIONS] EPROM [OUTPUT_FILE]
+  Try 'firestarter read --help' for help.
+  
+  Error: Missing argument 'EPROM'.
   
   '''
 # ---
 # name: test_error_unknown_command
   '''
-  usage: firestarter [-h] [-v] [-p PORT] [--version]
-                     {read,write,verify,erase,blank,id,search,list,info,vpp,vpe,hw,fw,config,dev}
-                     ...
-  firestarter: error: argument command: invalid choice: 'foobar' (choose from read, write, verify, erase, blank, id, search, list, info, vpp, vpe, hw, fw, config, dev)
+  Usage: firestarter [OPTIONS] COMMAND [ARGS]...
+  Try 'firestarter --help' for help.
+  
+  Error: No such command 'foobar'.
   
   '''
 # ---
 # name: test_error_write_missing_args
   '''
-  usage: firestarter write [-h] [-b] [-f] [-a ADDRESS] [--vpe-as-vpp]
-                           eprom input_file
-  firestarter write: error: the following arguments are required: eprom, input_file
+  Usage: firestarter write [OPTIONS] EPROM INPUT_FILE
+  Try 'firestarter write --help' for help.
+  
+  Error: Missing argument 'EPROM'.
   
   '''
 # ---
 # name: test_help
   '''
-  usage: firestarter [-h] [-v] [-p PORT] [--version]
-                     {read,write,verify,erase,blank,id,search,list,info,vpp,vpe,hw,fw,config,dev}
-                     ...
+  Usage: firestarter [OPTIONS] COMMAND [ARGS]...
   
-  EPROM programmer for Arduino and Relatively-Universal-ROM-Programmer shield.
+    EPROM programmer for Arduino and Relatively-Universal-ROM-Programmer shield.
   
-  positional arguments:
-    {read,write,verify,erase,blank,id,search,list,info,vpp,vpe,hw,fw,config,dev}
-      read                Reads the content from an EPROM.
-      write               Writes a binary file to an EPROM.
-      verify              Verifies the content of an EPROM.
-      erase               Erase an EPROM, if supported.
-      blank               Checks if an EPROM is blank.
-      id                  Checks an EPROM, if supported.
-      search              Search for EPROMs in the database.
-      list                List all EPROMs in the database.
-      info                EPROM info.
-      vpp                 VPP voltage.
-      vpe                 VPE voltage.
-      hw                  Hardware revision.
-      fw                  Firmware version.
-      config              Handles CONFIGURATION values.
-      dev                 Debug command for development purposes.
+  Options:
+    -v, --verbose    Enable verbose mode
+    -p, --port TEXT  Serial port to use (e.g. /dev/ttyXXX). Overrides the saved
+                     port in config.json for this invocation.
+    --version        Show the version and exit.
+    --help           Show this message and exit.
   
-  options:
-    -h, --help            show this help message and exit
-    -v, --verbose         Enable verbose mode
-    -p PORT, --port PORT  Serial port to use (e.g. /dev/ttyXXX). Overrides the
-                          saved port in config.json for this invocation.
-    --version             Show the Firestarter version and exit.
+  Commands:
+    blank   Checks if an EPROM is blank.
+    config  Handles CONFIGURATION values.
+    dev     Debug command for development purposes.
+    erase   Erase an EPROM, if supported.
+    fw      Firmware version.
+    hw      Hardware revision.
+    id      Checks an EPROM, if supported.
+    info    EPROM info.
+    list    List all EPROMs in the database.
+    read    Reads the content from an EPROM.
+    search  Search for EPROMs in the database.
+    verify  Verifies the content of an EPROM.
+    vpe     VPE voltage.
+    vpp     VPP voltage.
+    write   Writes a binary file to an EPROM.
   
   '''
 # ---
 # name: test_help_blank
   '''
-  usage: firestarter blank [-h] [-f] eprom
+  Usage: firestarter blank [OPTIONS] EPROM
   
-  positional arguments:
-    eprom        The name of the EPROM.
+    Checks if an EPROM is blank.
   
-  options:
-    -h, --help   show this help message and exit
+  Options:
     -f, --force  Force, even if the VPP or chip id doesn't match.
+    --help       Show this message and exit.
   
   '''
 # ---
 # name: test_help_config
   '''
-  usage: firestarter config [-h] [--rev REV] [-r1 R16] [-r2 R14R15]
+  Usage: firestarter config [OPTIONS]
   
-  options:
-    -h, --help            show this help message and exit
-    --rev REV             WARNING Overrides hardware revision (0-2), only use
-                          with HW mods. -1 disables override.
-    -r1 R16, --r16 R16    Set R16 resistance, resistor connected to VPE
-    -r2 R14R15, --r14r15 R14R15
-                          Set R14/R15 resistance, resistors connected to GND
+    Handles CONFIGURATION values.
+  
+  Options:
+    --rev FLOAT            WARNING Overrides hardware revision (0-2), only use
+                           with HW mods. -1 disables override.
+    -r1, --r16 INTEGER     Set R16 resistance, resistor connected to VPE
+    -r2, --r14r15 INTEGER  Set R14/R15 resistance, resistors connected to GND
+    --help                 Show this message and exit.
   
   '''
 # ---
 # name: test_help_dev
   '''
-  usage: firestarter dev [-h] {read,reg,addr,consistency-check} ...
+  Usage: firestarter dev [OPTIONS] COMMAND [ARGS]...
   
-  positional arguments:
-    {read,reg,addr,consistency-check}
-      read                Reads the content from an EPROM and prints data to
-                          console.
-      reg                 Direct access to registers: MSB, LSB and control
-                          register.
-      addr                Direct access to address lines and control register.
-      consistency-check   Read EPROM N consecutive times and report SHA-256
-                          divergence (REPRO-03; per D-01).
+    Debug command for development purposes.
   
-  options:
-    -h, --help            show this help message and exit
+    USR button will break command and return.
+  
+  Options:
+    --help  Show this message and exit.
+  
+  Commands:
+    addr               Direct access to address lines and control register.
+    consistency-check  Read EPROM N consecutive times and report SHA-256...
+    read               Reads the content from an EPROM and prints data to...
+    reg                Direct access to registers: MSB, LSB and control...
   
   '''
 # ---
 # name: test_help_erase
   '''
-  usage: firestarter erase [-h] [-f] [-b] [-s ADDRESS] eprom
+  Usage: firestarter erase [OPTIONS] EPROM
   
-  positional arguments:
-    eprom                 The name of the EPROM.
+    Erase an EPROM, if supported.
   
-  options:
-    -h, --help            show this help message and exit
-    -f, --force           Force, even if the VPP or chip id doesn't match.
-    -b, --blank-check     Do a blank check after erase.
-    -s ADDRESS, --sector-address ADDRESS
-                          Sector address for sector erase (hex e.g. 0x10000).
-                          Omit for chip erase.
+    TRAP #3 / D-13.3: this command keeps the inverse ``--blank-check`` polarity
+    (``is_flag=True default=False``) — opposite of ``write``'s ``--no-blank-
+    check``. Both polarities coexist verbatim from argparse.
+  
+  Options:
+    -f, --force                   Force, even if the VPP or chip id doesn't
+                                  match.
+    -b, --blank-check             Do a blank check after erase.
+    -s, --sector-address ADDRESS  Sector address for sector erase (hex e.g.
+                                  0x10000). Omit for chip erase.
+    --help                        Show this message and exit.
   
   '''
 # ---
 # name: test_help_fw
   '''
-  usage: firestarter fw [-h] [-i | --list]
-                        [--pre | --firmware-version VERSION | --stable]
-                        [-b {uno,uno328pb,leonardo}]
-                        [--avrdude-path AVRDUDE_PATH] [-c AVRDUDE_CONFIG_PATH]
-                        [-f] [--json]
+  Usage: firestarter fw [OPTIONS]
   
-  options:
-    -h, --help            show this help message and exit
-    -i, --install         Try to install the latest firmware.
-    --list                List available firmware releases for the configured
-                          board.
-    --pre                 Fetch latest pre-release firmware (mirrors pip install
-                          --pre).
-    --firmware-version VERSION
-                          Pin exact firmware version (e.g. 3.1.0, 3.1.0b2,
-                          3.1.0rc1).
-    --stable              Explicitly select stable channel. With --list, filters
-                          to stable releases only.
-    -b {uno,uno328pb,leonardo}, --board {uno,uno328pb,leonardo}
-                          Microcontroller board (optional), defaults to 'uno'.
-    --avrdude-path AVRDUDE_PATH
-                          Full path to avrdude (optional), set if avrdude is not
-                          found.
-    -c AVRDUDE_CONFIG_PATH, --avrdude-config-path AVRDUDE_CONFIG_PATH
-                          Full path to avrdude config (optional), set if avrdude
-                          version is 6.3 or not found.
-    -f, --force           Will install firmware even if the version is the same.
-    --json                Output --list results as JSON array (only with
-                          --list).
+    Firmware version.
+  
+    Implements TRAP #4 (3-way --pre / --firmware-version / --stable mutex via
+    per-option callback _check_install_mutex) and TRAP #5 (firmware-version
+    validator via custom Click ParamType _FirmwareVersionType). D-14 narrow
+    upgrade: the post-parse `--json requires --list` check uses `raise
+    click.UsageError(...)` (exit-2 + "Usage:" formatting preserved from the
+    argparse `fw_parser.error()` form).
+  
+  Options:
+    -i, --install                   Try to install the latest firmware.
+    --pre                           Fetch latest pre-release firmware (mirrors
+                                    pip install --pre).
+    --firmware-version VERSION      Pin exact firmware version (e.g. 3.1.0,
+                                    3.1.0b2, 3.1.0rc1).
+    --stable                        Explicitly select stable channel. With
+                                    --list, filters to stable releases only.
+    --list                          List available firmware releases for the
+                                    configured board.
+    -b, --board [uno|uno328pb|leonardo]
+                                    Microcontroller board (optional), defaults
+                                    to 'uno'.
+    --avrdude-path TEXT             Full path to avrdude (optional), set if
+                                    avrdude is not found.
+    -c, --avrdude-config-path TEXT  Full path to avrdude config (optional), set
+                                    if avrdude version is 6.3 or not found.
+    -f, --force                     Will install firmware even if the version is
+                                    the same.
+    --json                          Output --list results as JSON array (only
+                                    with --list).
+    --help                          Show this message and exit.
   
   '''
 # ---
 # name: test_help_hw
   '''
-  usage: firestarter hw [-h]
+  Usage: firestarter hw [OPTIONS]
   
-  options:
-    -h, --help  show this help message and exit
+    Hardware revision.
+  
+  Options:
+    --help  Show this message and exit.
   
   '''
 # ---
 # name: test_help_id
   '''
-  usage: firestarter id [-h] [-f] eprom
+  Usage: firestarter id [OPTIONS] EPROM
   
-  positional arguments:
-    eprom        The name of the EPROM.
+    Checks an EPROM, if supported.
   
-  options:
-    -h, --help   show this help message and exit
+  Options:
     -f, --force  Force, even if the VPP is not correct.
+    --help       Show this message and exit.
   
   '''
 # ---
 # name: test_help_info
   '''
-  usage: firestarter info [-h] [-c] [-a] eprom
+  Usage: firestarter info [OPTIONS] EPROM
   
-  positional arguments:
-    eprom          The name of the EPROM.
+    EPROM info.
   
-  options:
-    -h, --help     show this help message and exit
+  Options:
     -c, --config   Show EPROM config.
     -a, --adapter  Show adapter pin wiring table.
+    --help         Show this message and exit.
   
   '''
 # ---
 # name: test_help_list
   '''
-  usage: firestarter list [-h] [-v]
+  Usage: firestarter list [OPTIONS]
   
-  options:
-    -h, --help      show this help message and exit
+    List all EPROMs in the database.
+  
+  Options:
     -v, --verified  Only shows verified EPROMs
+    --help          Show this message and exit.
   
   '''
 # ---
 # name: test_help_read
   '''
-  usage: firestarter read [-h] [-f] [-a ADDRESS] [-s SIZE] eprom [output_file]
+  Usage: firestarter read [OPTIONS] EPROM [OUTPUT_FILE]
   
-  positional arguments:
-    eprom                 The name of the EPROM.
-    output_file           Output file name (optional), defaults to the
-                          EPROM_NAME.bin
+    Reads the content from an EPROM.
   
-  options:
-    -h, --help            show this help message and exit
-    -f, --force           Force, even if the chip id doesn't match.
-    -a ADDRESS, --address ADDRESS
-                          Read start address in dec/hex
-    -s SIZE, --size SIZE  Size of the data to read in dec/hex
+  Options:
+    -f, --force         Force, even if the chip id doesn't match.
+    -a, --address TEXT  Read start address in dec/hex
+    -s, --size TEXT     Size of the data to read in dec/hex
+    --help              Show this message and exit.
   
   '''
 # ---
 # name: test_help_search
   '''
-  usage: firestarter search [-h] text
+  Usage: firestarter search [OPTIONS] TEXT
   
-  positional arguments:
-    text        Text to search for
+    Search for EPROMs in the database.
   
-  options:
-    -h, --help  show this help message and exit
+  Options:
+    --help  Show this message and exit.
   
   '''
 # ---
 # name: test_help_verify
   '''
-  usage: firestarter verify [-h] [-a ADDRESS] [-f] eprom input_file
+  Usage: firestarter verify [OPTIONS] EPROM INPUT_FILE
   
-  positional arguments:
-    eprom                 The name of the EPROM.
-    input_file            Input file name
+    Verifies the content of an EPROM.
   
-  options:
-    -h, --help            show this help message and exit
-    -a ADDRESS, --address ADDRESS
-                          Verify start address in dec/hex
-    -f, --force           Force, even if the VPP or chip id doesn't match.
+  Options:
+    -a, --address TEXT  Verify start address in dec/hex
+    -f, --force         Force, even if the VPP or chip id doesn't match.
+    --help              Show this message and exit.
   
   '''
 # ---
 # name: test_help_write
   '''
-  usage: firestarter write [-h] [-b] [-f] [-a ADDRESS] [--vpe-as-vpp]
-                           eprom input_file
+  Usage: firestarter write [OPTIONS] EPROM INPUT_FILE
   
-  positional arguments:
-    eprom                 The name of the EPROM.
-    input_file            Input file name
+    Writes a binary file to an EPROM.
   
-  options:
-    -h, --help            show this help message and exit
+    TRAP #3 / D-13.3: ``--no-blank-check`` uses ``is_flag=True,
+    flag_value=False, default=True`` so the presence of ``-b`` flips
+    ``blank_check`` to False (mirrors argparse ``store_false default=True``).
+    The inverse ``--blank-check`` polarity lives on the ``erase`` command — both
+    polarities coexist verbatim per the rationale lock.
+  
+  Options:
     -b, --no-blank-check  Do not perform blank check before write (and skip
                           erase).
     -f, --force           Force, even if the VPP or chip id doesn't match.
-    -a ADDRESS, --address ADDRESS
-                          Write start address in dec/hex
+    -a, --address TEXT    Write start address in dec/hex
     --vpe-as-vpp          Use VPE as VPP voltage
+    --help                Show this message and exit.
   
   '''
 # ---
@@ -316,9 +315,27 @@
     File "<PATH>", line 8, in <module>
       sys.exit(main())
                ^^^^^^
-    File "<PATH>", line 652, in main
-      structured_details = eprom_presenter.prepare_detailed_eprom_data(
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "<PATH>", line 1514, in __call__
+      return self.main(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "<PATH>", line 1435, in main
+      rv = self.invoke(ctx)
+           ^^^^^^^^^^^^^^^^
+    File "<PATH>", line 1902, in invoke
+      return _process_result(sub_ctx.command.invoke(sub_ctx))
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "<PATH>", line 1298, in invoke
+      return ctx.invoke(self.callback, **ctx.params)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "<PATH>", line 853, in invoke
+      return callback(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "<PATH>", line 46, in new_func
+      return f(get_current_context().obj, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    File "<PATH>", line 356, in info
+      structured_details = app.eprom_presenter.prepare_detailed_eprom_data(
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     File "<PATH>", line 122, in prepare_detailed_eprom_data
       eprom_specifications = self.spec_builder.build_specifications(eprom_details)
                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1077,21 +1094,23 @@
 # ---
 # name: test_no_blank_check_polarity
   '''
-  usage: firestarter write [-h] [-b] [-f] [-a ADDRESS] [--vpe-as-vpp]
-                           eprom input_file
+  Usage: firestarter write [OPTIONS] EPROM INPUT_FILE
   
-  positional arguments:
-    eprom                 The name of the EPROM.
-    input_file            Input file name
+    Writes a binary file to an EPROM.
   
-  options:
-    -h, --help            show this help message and exit
+    TRAP #3 / D-13.3: ``--no-blank-check`` uses ``is_flag=True,
+    flag_value=False, default=True`` so the presence of ``-b`` flips
+    ``blank_check`` to False (mirrors argparse ``store_false default=True``).
+    The inverse ``--blank-check`` polarity lives on the ``erase`` command — both
+    polarities coexist verbatim per the rationale lock.
+  
+  Options:
     -b, --no-blank-check  Do not perform blank check before write (and skip
                           erase).
     -f, --force           Force, even if the VPP or chip id doesn't match.
-    -a ADDRESS, --address ADDRESS
-                          Write start address in dec/hex
+    -a, --address TEXT    Write start address in dec/hex
     --vpe-as-vpp          Use VPE as VPP voltage
+    --help                Show this message and exit.
   
   '''
 # ---
@@ -1115,7 +1134,7 @@
 # ---
 # name: test_version
   '''
-  Firestarter version: <VERSION>
+  Firestarter, version 3.0.0b5
   
   '''
 # ---

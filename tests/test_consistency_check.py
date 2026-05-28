@@ -475,6 +475,9 @@ class TestDispatchChain:
         )
 
         # Inject argv and run main()
+        # Phase 41 / Wave 4 (D-08): main is re-exported as Click's `cli`. Click
+        # invokes sys.exit(...) at the end of every command, so we catch the
+        # SystemExit instead of relying on a return value from main_mod.main().
         argv_saved = sys.argv
         try:
             sys.argv = [
@@ -488,11 +491,15 @@ class TestDispatchChain:
                 "3",
                 "--no-keep-files",
             ]
-            rc = main_mod.main()
+            with pytest.raises(SystemExit) as exc_info:
+                main_mod.main()
+            rc = exc_info.value.code
         finally:
             sys.argv = argv_saved
 
-        assert rc == 0, "main() must return the operator method's exit code (0 here)."
+        assert rc == 0, (
+            "main() must exit with the operator method's exit code (0 here)."
+        )
         assert captured.get("eprom_name") == "TEST_CHIP"
         assert captured.get("runs") == 3
         assert captured.get("keep_files") is False

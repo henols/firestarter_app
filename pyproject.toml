@@ -47,7 +47,7 @@ dependencies = [
     "pyserial>=3.5",
     "requests>=2.20",
     "tqdm>=4.60",
-    "argcomplete>=3.6.2",
+    "click>=8.1",
     "rich>=14.0",
     "packaging>=21.0",
 ]
@@ -109,7 +109,7 @@ indent-style = "space"
 
 [tool.mypy]
 python_version = "3.9"          # Must be in config file — mypy 2.1.0 rejects --python-version 3.9 via CLI flag
-ignore_missing_imports = true   # needed for tqdm, rich, argcomplete (no stubs)
+ignore_missing_imports = true   # needed for tqdm, rich (no stubs)
 disallow_untyped_defs = false   # gradual adoption — global stays lenient (D-10)
 check_untyped_defs = false
 # mypy_error_watermark = 44     # Baseline: Phase 37 tip. Lower as modules get typed.

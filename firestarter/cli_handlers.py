@@ -110,6 +110,76 @@ def _resolve_or_exit(name: str, db: EpromDatabase) -> Optional[dict]:  # noqa: U
         return None
 
 
+def build_arg_flags(args: object) -> int:
+    """Argparse-Namespace/PlainArgs-bag adapter over ``_build_op_flags``.
+
+    Relocated verbatim (W1's getattr fix preserved byte-identical) from
+    main.py:504-518 per Phase 41 D-16. This is the bag-introspection form
+    used by tests/test_bug_characterization.py to pin the BUG-1 contract
+    (PlainArgs object with no ``__contains__`` must not raise TypeError).
+
+    Click handlers use ``_build_op_flags(**kwargs)`` directly; this wrapper
+    exists for the BUG-1 characterization test that pins the post-Phase-41
+    truthiness semantics on the historical helper name.
+    """
+    blank_check = getattr(args, "blank_check", True)
+    force = getattr(args, "force", False)
+    verbose = getattr(args, "verbose", False)
+    vpe_as_vpp = getattr(args, "vpe_as_vpp", False)
+    flags = build_flags(
+        blank_check, force, vpe_as_vpp, verbose, skip_erase=not blank_check
+    )
+
+    if hasattr(args, "input_enable"):
+        flags |= 0 if args.input_enable else FLAG_OUTPUT_ENABLE
+    if hasattr(args, "chip_disable"):
+        flags |= 0 if args.chip_disable else FLAG_CHIP_ENABLE
+
+    return flags
+
+
+def _maybe_auto_route_to_pre(args: object) -> None:
+    """D-22 / D-25 beta-app magic default: when installed app is a pre-release,
+    bare 'fw -i' (no --pre, no --firmware-version) auto-routes to --pre channel.
+
+    Relocated verbatim from main.py:211-249 per Phase 41 D-16. Signature is
+    ``(args) -> None`` — NO logger parameter (Phase 18 revision warning #6).
+    Uses ``logging.getLogger(__name__)`` internally so pytest's caplog captures
+    records automatically by logger name.
+
+    Callers in cli_handlers.py reach this helper via ``_maybe_auto_route_to_pre_click``
+    which builds a ``SimpleNamespace`` from the explicit Click kwargs (D-15
+    adapter pattern — zero churn to this helper's body).
+
+    D-23: stable-installed apps (Version.is_prerelease=False) are unaffected.
+    D-24: explicit --firmware-version OR --stable opts out of this magic.
+    """
+    helper_logger = logging.getLogger(__name__)
+    if not (
+        getattr(args, "install", False)
+        and not getattr(args, "pre", False)
+        and not getattr(args, "firmware_version", None)
+        and not getattr(args, "stable", False)
+    ):
+        return
+    try:
+        from packaging.version import InvalidVersion, Version
+
+        import firestarter as _pkg
+
+        try:
+            if Version(_pkg.__version__).is_prerelease:
+                args.pre = True  # type: ignore[attr-defined]
+                helper_logger.info(
+                    "Beta app detected — defaulting to --pre. "
+                    "Use --firmware-version X.Y.Z to pin a stable version."
+                )
+        except InvalidVersion:
+            pass
+    except ImportError:
+        pass
+
+
 def _build_op_flags(
     *,
     blank_check: bool = True,
@@ -638,17 +708,16 @@ def config(
 def _maybe_auto_route_to_pre_click(
     install: bool, pre: bool, firmware_version: Optional[str], stable: bool
 ) -> bool:
-    """Click-side equivalent of main.py's _maybe_auto_route_to_pre helper.
+    """Click-side equivalent of the _maybe_auto_route_to_pre helper.
 
     D-15 picks the SimpleNamespace adapter approach: build a namespace from
-    the relevant fw kwargs, hand it to main.py's helper. Keeps the helper's
-    body untouched (zero churn; will relocate in Wave 4 / Plan 41-04).
+    the relevant fw kwargs, hand it to the (now-local) helper. Keeps the
+    helper's body untouched (zero churn; relocated from main.py in Wave 4 /
+    Plan 41-04 per D-16).
 
     Returns the (possibly-overridden) pre value so the caller can use it
     for channel resolution.
     """
-    from firestarter.main import _maybe_auto_route_to_pre
-
     ns = SimpleNamespace(
         install=install,
         pre=pre,
