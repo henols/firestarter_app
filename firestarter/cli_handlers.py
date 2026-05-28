@@ -573,7 +573,7 @@ def chip_id(app: AppContext, eprom: str, force: bool) -> None:
                 f"The detected Chip ID 0x{detected_id_value:X} matches the following EPROMs in the database:"  # noqa: E501
             )
             mapped_found_eproms = [
-                app.db._map_data(ic, ic.get("manufacturer", "Unknown"))
+                app.db.map_chip_record(ic, ic.get("manufacturer", "Unknown"))
                 for ic in found_eproms_for_detected_id
             ]
             print_eprom_list_table(

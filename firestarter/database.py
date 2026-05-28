@@ -350,6 +350,17 @@ class EpromDatabase:
 
         return [(p, pin_signals.get(p, "NC")) for p in range(1, pin_count + 1)]
 
+    def map_chip_record(self, ic: dict, manufacturer: str) -> dict:
+        """Public alias for `_map_data` — stable surface for callers outside this module.
+
+        Phase 41 / WR-05: the `id` command in cli_handlers.py previously reached into
+        `db._map_data` directly to render `search_chip_id` results. That coupled the CLI
+        to a private name; this thin wrapper decouples the surface without changing
+        behaviour. Future refactors can rework `_map_data`'s signature freely as long
+        as this public alias keeps the (ic, manufacturer) -> dict contract.
+        """
+        return self._map_data(ic, manufacturer)
+
     def _map_data(self, ic: dict, manufacturer: str) -> dict:
         """
         Transforms raw EPROM data from the JSON structure into a more processed
