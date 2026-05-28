@@ -299,15 +299,17 @@ def _check_install_mutex(
 @click.pass_context
 def cli(ctx: click.Context, verbose: bool, port: Optional[str]) -> None:
     """EPROM programmer for Arduino and Relatively-Universal-ROM-Programmer shield."""
-    _setup_logging(verbose)
-
     # CliRunner tests pass a pre-built AppContext via `runner.invoke(cli, ..., obj=app)`;
     # honor that and skip manager construction in test mode. In production
     # ctx.obj starts as None (Click default) so the manager-construction path
     # runs verbatim. This is the standard "AppContext-on-ctx.obj" pattern from
     # Click's docs (https://click.palletsprojects.com/en/stable/complex/).
+    # WR-02: _setup_logging must run AFTER the test-mode short-circuit so it
+    # does not destructively replace pytest's caplog handler on the root logger.
     if ctx.obj is not None and isinstance(ctx.obj, AppContext):
         return
+
+    _setup_logging(verbose)
 
     config_manager = ConfigManager()
     if port:
