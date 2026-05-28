@@ -315,9 +315,7 @@ def info(app: AppContext, eprom: str, config: bool, adapter: bool) -> None:
         logger.error(f"EPROM '{eprom}' not found in database.")
         sys.exit(1)
 
-    eprom_data_for_programmer = None
-    if eprom_details:
-        eprom_data_for_programmer = app.db.convert_to_programmer(eprom_details)
+    eprom_data_for_programmer = app.db.convert_to_programmer(eprom_details)
     raw_config_data, manufacturer = app.db.get_eprom_config(eprom)
 
     structured_details = app.eprom_presenter.prepare_detailed_eprom_data(
