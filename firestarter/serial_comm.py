@@ -85,7 +85,6 @@ EXPECTED_PREFIXES = [
 # than any false-positive embedded in the garbage.
 PREFIX_REGEX = re.compile(rf"({'|'.join(EXPECTED_PREFIXES)}):(.*)")
 
-STATE_MACHINE_PREFIXES = []  # W-01: state-machine acks now arrive as ID frames; catalog format strings own the rendering.  # noqa: E501
 NON_RESPONSE_PREFIXES = ["INFO", "DEBUG"]
 
 
@@ -199,10 +198,6 @@ class SerialCommunicator:
             return
 
         message = response.message
-        # W-01: STATE_MACHINE_PREFIXES is now empty; the old "Done" rewrite for
-        # INIT/MAIN/END is removed — catalog format strings own the rendering for
-        # ID frames. The conditional is kept but is a no-op ([] never matches).
-
         level = logging.DEBUG
         if response.type == "ERROR":
             level = logging.ERROR
