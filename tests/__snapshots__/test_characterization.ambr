@@ -335,7 +335,7 @@
     File "<PATH>", line 46, in new_func
       return f(get_current_context().obj, *args, **kwargs)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 356, in info
+    File "<PATH>", line 324, in info
       structured_details = app.eprom_presenter.prepare_detailed_eprom_data(
                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     File "<PATH>", line 122, in prepare_detailed_eprom_data
