@@ -503,16 +503,16 @@ def create_oe_ce_args(parser):
 
 def build_arg_flags(args):
     blank_check = getattr(args, "blank_check", True)
-    force = args.force if "force" in args else False
-    verbose = args.verbose if "verbose" in args else False
-    vpe_as_vpp = args.vpe_as_vpp if "vpe_as_vpp" in args else False
+    force = getattr(args, "force", False)
+    verbose = getattr(args, "verbose", False)
+    vpe_as_vpp = getattr(args, "vpe_as_vpp", False)
     flags = build_flags(
         blank_check, force, vpe_as_vpp, verbose, skip_erase=not blank_check
     )
 
-    if "input_enable" in args:
+    if hasattr(args, "input_enable"):
         flags |= 0 if args.input_enable else FLAG_OUTPUT_ENABLE
-    if "chip_disable" in args:
+    if hasattr(args, "chip_disable"):
         flags |= 0 if args.chip_disable else FLAG_CHIP_ENABLE
 
     return flags

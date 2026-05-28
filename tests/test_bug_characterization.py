@@ -45,17 +45,12 @@ from firestarter.messages import MSG_ERR_SETUP
 from .conftest import build_frame
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: main.py:497 uses 'in' not getattr; fix lands Phase 41 (CLI-03)",
-)
 def test_build_arg_flags_force_truthiness_not_existence():
-    """Corrected behavior: build_arg_flags should use getattr(args, 'force', False),
-    not 'force' in args. The 'in' operator raises TypeError on non-Namespace objects
-    (e.g. a plain class, as Click would provide after Phase 41 migration).
-    With the corrected pattern, force=False -> FLAG_FORCE is NOT set.
-
-    # BUG: main.py:497 — fix lands Phase 41 (CLI-03)
+    """Live contract (BUG-1 fixed Phase 41, CLI-03): build_arg_flags uses
+    getattr(args, 'force', False) — not 'force' in args. The 'in' operator
+    raises TypeError on non-Namespace objects (e.g. a plain class, as Click
+    provides after Phase 41 migration). With the getattr pattern, force=False
+    -> FLAG_FORCE is NOT set.
     """
 
     class PlainArgs:
@@ -72,9 +67,8 @@ def test_build_arg_flags_force_truthiness_not_existence():
         vpe_as_vpp = False
         force = False  # force is False — FLAG_FORCE should NOT be set
 
-    # BUG: main.py:497 — fix lands Phase 41 (CLI-03)
     flags = build_arg_flags(PlainArgs())
-    assert (flags & FLAG_FORCE) == 0  # corrected: force=False => FLAG_FORCE not set
+    assert (flags & FLAG_FORCE) == 0  # force=False => FLAG_FORCE not set
 
 
 @pytest.mark.xfail(
