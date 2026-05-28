@@ -1,14 +1,17 @@
-"""Click migration target for v1.8 / Phase 41 (CLI-01, CLI-02).
+"""Click-based CLI handlers for firestarter (Phase 41 / v1.8).
 
-Wave 2 lands the skeleton + 3 read-only commands (list/info/search); Wave 3
-(this file's current state) lands the remaining 11 commands: 6 chip-ops
-(read/write/verify/blank/erase/id), 2 voltage (vpp/vpe), 2 hardware
-(hw/config), 1 firmware (fw with 3-way mutex + version validator), plus the
-`dev` group with 4 sub-commands (read/reg/addr/consistency-check).
+This module is the production CLI surface; main.py re-exports ``cli`` as
+``main`` for the ``firestarter`` console-script entry point (D-08, D-16).
+The argparse machinery in main.py was deleted in Plan 41-04 (Wave 4).
 
-The entry point in main.py STAYS argparse until Wave 4 (Plan 41-04).
-This module is feature-complete reviewable dead code from the user's
-perspective until the entry-point swap.
+Commands surfaced from here:
+  - 3 read-only: list / info / search
+  - 6 chip-ops: read / write / verify / blank / erase / id
+  - 2 voltage: vpp / vpe
+  - 2 hardware: hw / config
+  - 1 firmware: fw (3-way --pre/--firmware-version/--stable mutex + version
+    validator)
+  - 1 group: dev (4 sub-commands: read / reg / addr / consistency-check)
 """
 
 import logging
