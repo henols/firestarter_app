@@ -100,7 +100,7 @@ class SerialCommunicator:
         port: str,
         baud_rate: int = int(BAUD_RATE),
         timeout: float = DEFAULT_SERIAL_TIMEOUT,
-    ):
+    ) -> None:
         self.port_name = port
         self.baud_rate = baud_rate
         self.timeout = timeout
@@ -179,7 +179,7 @@ class SerialCommunicator:
         # No known prefix found, return the raw line as a message with no type
         return Response(type=None, message=line_str)
 
-    def _log_rurp_feedback(self, response: Response):
+    def _log_rurp_feedback(self, response: Response) -> None:
         """Logs feedback from the programmer based on the parsed Response object."""
         if not response or not response.type:
             return
@@ -371,13 +371,13 @@ class SerialCommunicator:
                 return False, response.message
             # Other significant responses are ignored by this loop, which is the intended behavior.  # noqa: E501
 
-    def send_ack(self):
+    def send_ack(self) -> None:
         self.send_string("OK")
 
-    def send_done(self):
+    def send_done(self) -> None:
         self.send_string("DONE")
 
-    def consume_remaining_input(self, timeout: float = 0.5):
+    def consume_remaining_input(self, timeout: float = 0.5) -> None:
         """Consumes and logs any pending input from the serial buffer."""
         if not self.is_connected():
             return
@@ -392,11 +392,11 @@ class SerialCommunicator:
         finally:
             self.connection.timeout = original_timeout  # Restore original timeout
 
-    def disconnect(self):
+    def disconnect(self) -> None:
         if self.is_connected():
             try:
                 self.consume_remaining_input()
-                self.connection.close()
+                self.connection.close()  # type: ignore[union-attr]
                 logger.debug(f"Disconnected from {self.port_name}.")
             except serial.SerialException as e:
                 logger.error(f"Error closing port {self.port_name}: {e}")
@@ -404,7 +404,7 @@ class SerialCommunicator:
                 self.connection = None
                 self.programmer_info = None
 
-    def _log_command_details(self, command_dict: dict):
+    def _log_command_details(self, command_dict: dict) -> None:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"Sending command to programmer: {command_dict}")
             flags = command_dict.get("flags", 0)
