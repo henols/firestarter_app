@@ -19,7 +19,7 @@ import logging
 import sys
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import Any, Callable, List, Optional  # noqa: UP035
+from typing import Any, Callable, List, Literal, Optional  # noqa: UP035
 
 import click
 import click.shell_completion
@@ -674,8 +674,12 @@ def config(
     r14r15: Optional[int],
 ) -> None:
     """Handles CONFIGURATION values."""
+    # set_hardware_config expects Optional[int]; the Click option accepts float
+    # so users can write `--rev 2.0` interchangeably with `--rev 2`. Cast to int
+    # at the boundary (rev=-1 sentinel + integer rev values preserved verbatim).
+    rev_int = int(rev) if rev is not None else None
     ok = app.hardware_manager.set_hardware_config(
-        rev, r16, r14r15, flags=_build_op_flags()
+        rev_int, r16, r14r15, flags=_build_op_flags()
     )
     sys.exit(0 if ok else 1)
 
@@ -826,6 +830,7 @@ def fw(
         raise click.UsageError("--json requires --list")
 
     if list_releases:
+        channel_filter: Literal["all", "pre", "stable"]
         if pre:
             channel_filter = "pre"
         elif stable:
@@ -851,6 +856,7 @@ def fw(
     pre = _maybe_auto_route_to_pre_click(install, pre, firmware_version, stable)
 
     # Channel resolution for install path.
+    channel: Literal["stable", "pre", "pinned"]
     if firmware_version:
         channel = "pinned"
     elif pre:

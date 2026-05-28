@@ -128,26 +128,32 @@ class SerialCommunicator:
             raise SerialError(f"Could not connect to {self.port_name}: {e}") from e
 
     def is_connected(self) -> bool:
+        """Return True if the underlying serial port is open."""
         return self.connection is not None and self.connection.is_open
 
     def send_bytes(self, data_bytes: bytes) -> int:
+        """Write raw bytes to the serial port and return the byte count written."""
         if not self.is_connected():
             raise SerialError("Not connected.")
+        assert self.connection is not None  # narrow for mypy strict (D-06)
         try:
             written_bytes = self.connection.write(data_bytes)
             self.connection.flush()
             logger.debug(f"Sent {written_bytes} bytes to {self.port_name}.")
-            return written_bytes
+            # pyserial's write returns Optional[int]; treat None as 0 for our int contract.
+            return written_bytes if written_bytes is not None else 0
         except serial.SerialTimeoutException as e:
             raise SerialTimeoutError(f"Timeout writing to {self.port_name}: {e}") from e
         except serial.SerialException as e:
             raise SerialError(f"Serial error writing to {self.port_name}: {e}") from e
 
     def send_string(self, data_string: str, encoding: str = "ascii") -> int:
+        """Encode `data_string` and send it over the serial port."""
         logger.debug(f"Sending string: {data_string}")
         return self.send_bytes(data_string.encode(encoding))
 
     def send_json_command(self, command_dict: dict) -> int:
+        """Serialise `command_dict` as compact JSON and send it over the serial port."""
         self._log_command_details(command_dict)
         json_data = json.dumps(command_dict, separators=(",", ":"))
         return self.send_string(json_data)
@@ -245,7 +251,7 @@ class SerialCommunicator:
         magic_len = len(MAGIC_PREAMBLE)
         while time.time() - start_time < timeout:
             try:
-                chunk = self.connection.read(1)
+                chunk = self.connection.read(1)  # type: ignore[union-attr]  # Phase 42 D-06: GATE-1.8d ring-fence — narrow body untouched
             except serial.SerialException as e:
                 raise SerialError(
                     f"Serial error reading from {self.port_name}: {e}"
@@ -277,7 +283,7 @@ class SerialCommunicator:
 
                 # Read length field (u16 big-endian, W-04: 2 bytes MSB then LSB).
                 try:
-                    len_bytes = self.connection.read(2)
+                    len_bytes = self.connection.read(2)  # type: ignore[union-attr]  # Phase 42 D-06
                 except serial.SerialException as e:
                     raise SerialError(
                         f"Serial error reading from {self.port_name}: {e}"
@@ -292,7 +298,7 @@ class SerialCommunicator:
 
                 # Read body (`frame_len` bytes: id + params + crc).
                 try:
-                    body = self.connection.read(frame_len)
+                    body = self.connection.read(frame_len)  # type: ignore[union-attr]  # Phase 42 D-06
                 except serial.SerialException as e:
                     raise SerialError(
                         f"Serial error reading from {self.port_name}: {e}"
@@ -307,7 +313,7 @@ class SerialCommunicator:
                 # Consume the trailing terminator (D-04: anchor, not
                 # delimiter — present but its identity is not enforced).
                 try:
-                    _terminator = self.connection.read(1)
+                    _terminator = self.connection.read(1)  # type: ignore[union-attr]  # Phase 42 D-06
                 except serial.SerialException as e:
                     raise SerialError(
                         f"Serial error reading from {self.port_name}: {e}"
@@ -333,10 +339,10 @@ class SerialCommunicator:
             if b == 0x0A:
                 line_bytes = bytes(accumulator)
                 accumulator.clear()
-                response = self._parse_response_line(line_bytes)
-                if response is not None:
-                    self._log_rurp_feedback(response)
-                    yield response
+                text_resp = self._parse_response_line(line_bytes)
+                if text_resp is not None:
+                    self._log_rurp_feedback(text_resp)
+                    yield text_resp
                     start_time = time.time()
                 continue
 
@@ -372,15 +378,18 @@ class SerialCommunicator:
             # Other significant responses are ignored by this loop, which is the intended behavior.  # noqa: E501
 
     def send_ack(self) -> None:
+        """Send the 'OK' acknowledgement string to the programmer."""
         self.send_string("OK")
 
     def send_done(self) -> None:
+        """Send the 'DONE' completion string to the programmer."""
         self.send_string("DONE")
 
     def consume_remaining_input(self, timeout: float = 0.5) -> None:
         """Consumes and logs any pending input from the serial buffer."""
         if not self.is_connected():
             return
+        assert self.connection is not None  # narrow for mypy strict (D-06)
 
         # Temporarily set a short timeout for the underlying serial read
         original_timeout = self.connection.timeout
@@ -393,6 +402,7 @@ class SerialCommunicator:
             self.connection.timeout = original_timeout  # Restore original timeout
 
     def disconnect(self) -> None:
+        """Close the serial port and clear cached programmer info."""
         if self.is_connected():
             try:
                 self.consume_remaining_input()

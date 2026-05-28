@@ -10,7 +10,7 @@ silkscreen table.
 
 import logging
 import struct
-from typing import Optional  # noqa: UP035
+from typing import Any, List, Optional  # noqa: UP035
 
 from firestarter.constants import (
     COMMAND_NAMES,
@@ -35,6 +35,7 @@ from firestarter.messages import (
     MSG_OK_CFG,
     MSG_OK_REV,
     SEVERITY_LABEL,
+    MessageDef,
 )
 
 logger = logging.getLogger("Codec")
@@ -53,7 +54,7 @@ _REVISION_SILKSCREEN = {
 }
 
 
-def format_message(msg_id: int, params: list, entry) -> Optional[str]:
+def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> Optional[str]:  # noqa: UP006
     """Sentinel-aware message renderer for P-02/P-03 shaped IDs and
     MSG_DEBUG sub-payloads (currently DBG_CMD gets symbolic-name
     annotation; other DBG_* sub_ids render via DEBUG_CATALOG).
@@ -124,7 +125,9 @@ def format_message(msg_id: int, params: list, entry) -> Optional[str]:
 
     if msg_id == MSG_DEBUG and len(params) == 2:
         sub_id = params[0]
-        sub_body = params[1] if isinstance(params[1], (bytes, bytearray)) else b""
+        sub_body: bytes = (
+            bytes(params[1]) if isinstance(params[1], (bytes, bytearray)) else b""
+        )
         sub_entry = DEBUG_CATALOG.get(sub_id)
         # Special-case DBG_CMD: annotate the cmd byte with its symbolic
         # name from COMMAND_NAMES so verbose logs read e.g. "Cmd: 0x02 (WRITE)".
@@ -137,7 +140,7 @@ def format_message(msg_id: int, params: list, entry) -> Optional[str]:
         # seen yet so unknown debug emits still appear in the log.
         if sub_entry is not None:
             try:
-                values: list = []
+                values: List[Any] = []  # noqa: UP006
                 cursor = 0
                 for ptype, _prender in sub_entry.params:
                     value, cursor = _decode_param(ptype, sub_body, cursor)
@@ -231,7 +234,7 @@ def decode_id_frame(frame_len: int, body: bytes) -> Optional[LogMessage]:
         return None
 
     # Decode each param per the catalog grammar.
-    values: list = []
+    values: List[Any] = []  # noqa: UP006
     cursor = 0
     try:
         for ptype, _prender in entry.params:

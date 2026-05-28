@@ -104,9 +104,7 @@ class TestValidateFirmwareVersion:
         False so Branch B raises.
         """
         with pytest.raises(FirmwareOutdatedError, match="outdated") as exc_info:
-            SerialCommunicator._validate_firmware_version(
-                "1.0.0", allow_pre_v12=True
-            )
+            SerialCommunicator._validate_firmware_version("1.0.0", allow_pre_v12=True)
         assert "2.0.0 or higher" in str(exc_info.value)
         assert "firestarter fw --install" in str(exc_info.value)
 

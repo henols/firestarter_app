@@ -1,0 +1,145 @@
+"""Phase 42 / ERR-03 fallback coverage lift for SerialCommunicator helpers
+(D-14 fallback per CONTEXT).
+
+Focuses on parsing helpers + version comparators that don't require a real
+serial port: ``_is_version_sufficient``, ``_validate_firmware_version`` (negative
+branches), ``_log_command_details`` (flag-decoding), and the ``_parse_response_line``
+prefix-matching surface.
+"""
+
+import logging
+
+import pytest
+
+from firestarter.constants import (
+    FLAG_CAN_ERASE,
+    FLAG_FORCE,
+    FLAG_OUTPUT_ENABLE,
+)
+from firestarter.exceptions import FirmwareOutdatedError
+from firestarter.serial_comm import SerialCommunicator
+
+
+@pytest.mark.parametrize(
+    "current, required, expected",
+    [
+        ("3.1.0", "2.0.0", True),
+        ("2.0.0", "2.0.0", True),
+        ("1.9.9", "2.0.0", False),
+        ("3.1.0x", "2.0.0", True),  # 'x' replaced with 999
+        ("garbage", "2.0.0", False),
+        ("", "2.0.0", False),
+        ("3.1.0", "", False),
+    ],
+)
+def test_is_version_sufficient(current: str, required: str, expected: bool) -> None:
+    assert SerialCommunicator._is_version_sufficient(current, required) is expected
+
+
+def test_validate_firmware_version_pre_v12_raises() -> None:
+    """A pre-v1.2 firmware version (major < 3) raises FirmwareOutdatedError."""
+    with pytest.raises(FirmwareOutdatedError):
+        SerialCommunicator._validate_firmware_version("2.0.0")
+
+
+def test_validate_firmware_version_allow_pre_v12_ok() -> None:
+    """allow_pre_v12=True bypasses the major<3 guard."""
+    # 2.0.0 satisfies the 2.0.0 floor; with allow_pre_v12 the major<3 check is skipped
+    SerialCommunicator._validate_firmware_version("2.0.0", allow_pre_v12=True)
+
+
+def test_validate_firmware_version_below_floor_raises() -> None:
+    """allow_pre_v12=True still enforces the 2.0.0 floor."""
+    with pytest.raises(FirmwareOutdatedError):
+        SerialCommunicator._validate_firmware_version("1.9.9", allow_pre_v12=True)
+
+
+def test_validate_firmware_version_strips_dev_suffix() -> None:
+    """A version like '3.0.0-dev' is parsed as '3.0.0' (suffix stripped)."""
+    SerialCommunicator._validate_firmware_version("3.0.0-dev")
+
+
+def test_validate_firmware_version_unparseable_raises() -> None:
+    """An unparseable version is treated as major=0 and rejected."""
+    with pytest.raises(FirmwareOutdatedError):
+        SerialCommunicator._validate_firmware_version("not-a-version")
+
+
+def test_parse_response_line_picks_known_prefix(make_comm) -> None:
+    """_parse_response_line returns a Response with type set to the matched prefix."""
+    comm = make_comm()
+    r = comm._parse_response_line(b"OK: hello world\r\n")
+    assert r is not None
+    assert r.type == "OK"
+    assert "hello world" in r.message
+
+
+def test_parse_response_line_empty_input_returns_none(make_comm) -> None:
+    """Empty / non-printable input yields None."""
+    comm = make_comm()
+    assert comm._parse_response_line(b"") is None
+    # Pure non-printable: only control bytes - filtered out, no match
+    assert comm._parse_response_line(b"\x00\x01\x02") is None
+
+
+def test_parse_response_line_no_known_prefix_uses_none_type(make_comm) -> None:
+    """A line without a recognised prefix returns a Response with type=None."""
+    comm = make_comm()
+    r = comm._parse_response_line(b"some random text\n")
+    assert r is not None
+    assert r.type is None
+
+
+def test_log_command_details_emits_flag_names(make_comm, caplog) -> None:
+    """_log_command_details decodes the flags bitmask and logs flag names."""
+    comm = make_comm()
+    cmd = {"cmd": 2, "flags": FLAG_FORCE | FLAG_CAN_ERASE | FLAG_OUTPUT_ENABLE}
+    with caplog.at_level(logging.DEBUG, logger="SerialComm"):
+        comm._log_command_details(cmd)
+    log_output = " ".join(r.message for r in caplog.records)
+    assert "Force" in log_output
+    assert "CanErase" in log_output
+    assert "OutputEnable" in log_output
+
+
+def test_list_potential_ports_includes_preferred(monkeypatch) -> None:
+    """_list_potential_ports always includes preferred_port (even if not auto-detected)."""
+    # Mock the system enumeration to return nothing
+    monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [])
+    ports = SerialCommunicator._list_potential_ports(preferred_port="/dev/ttyACM7")
+    assert "/dev/ttyACM7" in ports
+
+
+def test_list_potential_ports_filters_by_manufacturer(monkeypatch) -> None:
+    """_list_potential_ports picks Arduino/FTDI/CH340 hits but skips unknowns."""
+    from collections import namedtuple
+
+    Port = namedtuple("Port", ["device", "manufacturer", "description"])
+    fake_ports = [
+        Port("/dev/ttyACM0", "Arduino LLC", ""),
+        Port("/dev/ttyUSB0", "FTDI", ""),
+        Port("/dev/ttyUSB1", "CH340", ""),
+        Port("/dev/ttyS0", "SomeUnknownVendor", ""),  # filtered out
+    ]
+    monkeypatch.setattr("serial.tools.list_ports.comports", lambda: fake_ports)
+    ports = SerialCommunicator._list_potential_ports()
+    assert "/dev/ttyACM0" in ports
+    assert "/dev/ttyUSB0" in ports
+    assert "/dev/ttyUSB1" in ports
+    assert "/dev/ttyS0" not in ports
+
+
+def test_send_string_routes_through_send_bytes(make_comm) -> None:
+    """send_string encodes ASCII bytes via send_bytes."""
+    comm = make_comm()
+    n = comm.send_string("hello", encoding="ascii")
+    # The fake serial reports the written byte count
+    assert n == 5
+
+
+def test_send_json_command_routes_through_send_string(make_comm) -> None:
+    """send_json_command serialises the dict as compact JSON."""
+    comm = make_comm()
+    n = comm.send_json_command({"cmd": 2, "value": 42})
+    # JSON output is at least len("{\"cmd\":2,\"value\":42}") bytes
+    assert n > 10

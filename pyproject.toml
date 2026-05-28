@@ -112,7 +112,7 @@ python_version = "3.9"          # Must be in config file — mypy 2.1.0 rejects 
 ignore_missing_imports = true   # needed for tqdm, rich (no stubs)
 disallow_untyped_defs = false   # gradual adoption — global stays lenient (D-10)
 check_untyped_defs = false
-# mypy_error_watermark = 44     # Baseline: Phase 37 tip. Lower as modules get typed.
+# mypy_error_watermark = 26   # Updated Phase 42 D-08 post-strict-overrides addition. Old floor: 44 (Phase 37 tip).
 
 [[tool.mypy.overrides]]
 # Phase 36 test modules — strict-island: check bodies of untyped test functions.
@@ -128,9 +128,45 @@ module = [
 ]
 check_untyped_defs = true
 
+[[tool.mypy.overrides]]
+# Phase 42 D-06: strict-island for the 8 modules touched in v1.8.
+# eprom_operations.py DELIBERATELY EXCLUDED per D-07 (GATE-1.8d read-path ring-fence; deferred to v1.9 post-RCA).
+module = [
+    "firestarter.main",
+    "firestarter.cli_handlers",
+    "firestarter.chip_resolver",
+    "firestarter.frame_parser",
+    "firestarter.codec",
+    "firestarter.address_parser",
+    "firestarter.exceptions",
+    "firestarter.serial_comm",
+]
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# Phase 42 D-06 / D-07: non-strict modules — silence transitively-imported
+# errors so `mypy <strict-list>` exits 0. The full mypy gate
+# (tools/check_mypy_watermark.py) still tracks these via the watermark count.
+module = [
+    "firestarter.eprom_operations",
+    "firestarter.firmware",
+    "firestarter.hardware",
+    "firestarter.database",
+    "firestarter.config",
+    "firestarter.ic_layout",
+    "firestarter.eprom_info",
+    "firestarter.utils",
+    "firestarter.logging_utils",
+    "firestarter.avr_tool",
+]
+follow_imports = "silent"
+
 [tool.coverage.run]
 source = ["firestarter"]
-omit = ["firestarter/data/*"]
+# Phase 42 D-13: avr_tool.py omitted — subprocess wrapper for avrdude;
+# meaningful coverage would require real avrdude binary in CI.
+omit = ["firestarter/data/*", "firestarter/avr_tool.py"]
 
 [tool.coverage.report]
 show_missing = true

@@ -1258,3 +1258,235 @@ class TestUno328pbResolution:
     # "leonardo"]))` which structurally enforces the allowlist — the contract
     # ships in cli_handlers.py (verified by `firestarter fw --help`) without
     # a separate test.
+
+
+# ---------------------------------------------------------------------------
+# Phase 42 / ERR-03 coverage lift (D-14.3)
+# Adds tests for _fetch_all_releases pagination/JSON parsing + _compare_versions
+# PEP 440 edge cases not pinned by the TestVersionComparator block above.
+# ---------------------------------------------------------------------------
+
+
+class TestFetchAllReleasesJsonParsing:
+    """D-14.3 — _fetch_all_releases parses the GitHub Releases API JSON shape."""
+
+    def test_fetch_all_releases_single_page(self, monkeypatch):
+        """Returns the page's release list when no pagination header is present."""
+        releases = [{"tag_name": "v3.0.0", "prerelease": False, "draft": False}]
+        monkeypatch.setattr(
+            firmware.requests,
+            "get",
+            lambda *a, **kw: mock_releases_factory(releases),
+        )
+        fm = FirmwareManager(config_manager=MagicMock())
+        result = fm._fetch_all_releases()
+        assert result == releases
+
+    def test_fetch_all_releases_follows_pagination(self, monkeypatch):
+        """Follows Link: rel='next' to assemble multi-page results."""
+        page1 = [{"tag_name": "v3.0.0", "prerelease": False, "draft": False}]
+        page2 = [{"tag_name": "v2.9.0", "prerelease": False, "draft": False}]
+        responses = [
+            mock_releases_factory(page1, next_url="https://api.example.com/page2"),
+            mock_releases_factory(page2),
+        ]
+        call_count = {"n": 0}
+
+        def mock_get(*_args, **_kwargs):
+            r = responses[call_count["n"]]
+            call_count["n"] += 1
+            return r
+
+        monkeypatch.setattr(firmware.requests, "get", mock_get)
+        fm = FirmwareManager(config_manager=MagicMock())
+        result = fm._fetch_all_releases()
+        assert len(result) == 2
+        assert result[0]["tag_name"] == "v3.0.0"
+        assert result[1]["tag_name"] == "v2.9.0"
+
+    def test_fetch_all_releases_pagination_cap_logs_truncation(
+        self, monkeypatch, caplog
+    ):
+        """Stops at max_pages and logs an INFO message about truncation."""
+        # Every page returns a Link to itself (i.e. infinite pagination)
+        page = [{"tag_name": "v1.0.0", "prerelease": False, "draft": False}]
+
+        def mock_get(*_args, **_kwargs):
+            return mock_releases_factory(page, next_url="https://api.example.com/next")
+
+        monkeypatch.setattr(firmware.requests, "get", mock_get)
+        fm = FirmwareManager(config_manager=MagicMock())
+        with caplog.at_level(logging.INFO, logger="FirmwareManager"):
+            result = fm._fetch_all_releases(max_pages=2)
+        assert len(result) == 2  # 2 pages × 1 release each
+        assert any("capped" in r.message.lower() for r in caplog.records)
+
+
+class TestCompareVersionsAdditionalBranches:
+    """D-14.3 — additional _compare_versions branch coverage.
+
+    The TestVersionComparator class above covers the basic cases. These tests
+    add coverage for the boundary conditions specifically called out in D-14.3:
+    None inputs, mixed pre/stable ordering, and the InvalidVersion fall-through.
+    """
+
+    def test_compare_versions_none_current_returns_false(self):
+        """current_version_str=None returns False (cannot compare)."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        assert fm._compare_versions(None, "3.0.0") is False
+
+    def test_compare_versions_none_latest_returns_false(self):
+        """latest_version_str=None returns False."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        assert fm._compare_versions("3.0.0", None) is False
+
+    def test_compare_versions_both_none_returns_false(self):
+        """Both None returns False."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        assert fm._compare_versions(None, None) is False
+
+    def test_compare_versions_pre_lower_than_stable(self):
+        """A pre-release is considered LOWER than the stable form (PEP 440)."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        # 3.1.0b2 < 3.1.0 per PEP 440
+        assert fm._compare_versions("3.1.0b2", "3.1.0") is False
+        assert fm._compare_versions("3.1.0", "3.1.0b2") is True
+
+    def test_compare_versions_rc_higher_than_beta(self):
+        """rc > b > a in pre-release ordering."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        assert fm._compare_versions("3.1.0rc1", "3.1.0b9") is True
+
+    def test_compare_versions_returns_false_on_invalid_strings_logs_warning(
+        self, caplog
+    ):
+        """When both strings are unparseable, returns False and logs warning."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        with caplog.at_level(logging.WARNING, logger="FirmwareManager"):
+            result = fm._compare_versions("garbage_string", "another_garbage")
+        assert result is False
+        # The warning text references the strings being compared.
+        assert any(
+            "Could not parse" in r.message or "parse" in r.message.lower()
+            for r in caplog.records
+        )
+
+
+# Keep `pytest` referenced to avoid an unused-import lint after Phase 42's
+# extension (the original Phase 18 module imports pytest unconditionally for
+# the @pytest.fixture decorators used in earlier blocks).
+_ = pytest
+
+
+class TestDownloadFirmwareFile:
+    """D-14.3 fallback — _download_firmware_file network branch coverage."""
+
+    def test_download_success_writes_file(self, monkeypatch, tmp_path):
+        """A successful download writes the streamed content to ~/.firestarter/<name>.hex."""
+        monkeypatch.setattr("firestarter.firmware.HOME_PATH", str(tmp_path))
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.iter_content.return_value = iter([b"fake ", b"hex ", b"data"])
+        monkeypatch.setattr(firmware.requests, "get", lambda *a, **kw: mock_resp)
+
+        fm = FirmwareManager(config_manager=MagicMock())
+        path = fm._download_firmware_file("https://example.com/firestarter_uno.hex")
+        assert path is not None
+        with open(path, "rb") as f:
+            assert f.read() == b"fake hex data"
+
+    def test_download_request_exception_returns_none(self, monkeypatch, tmp_path):
+        """A requests.RequestException returns None instead of crashing."""
+        monkeypatch.setattr("firestarter.firmware.HOME_PATH", str(tmp_path))
+
+        def mock_get(*_args, **_kwargs):
+            raise _requests.RequestException("network down")
+
+        monkeypatch.setattr(firmware.requests, "get", mock_get)
+        fm = FirmwareManager(config_manager=MagicMock())
+        path = fm._download_firmware_file("https://example.com/no.hex")
+        assert path is None
+
+
+class TestCheckCurrentFirmware:
+    """D-14.3 fallback — check_current_firmware command + handshake parsing."""
+
+    def test_check_current_firmware_programmer_not_found(self, monkeypatch):
+        """ProgrammerNotFoundError → returns (None, None, None) without raising."""
+        from firestarter.exceptions import ProgrammerNotFoundError
+
+        def mock_connect(*_args, **_kwargs):
+            raise ProgrammerNotFoundError("no port")
+
+        monkeypatch.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            mock_connect,
+        )
+        fm = FirmwareManager(config_manager=MagicMock())
+        port, version, board = fm.check_current_firmware()
+        assert port is None
+        assert version is None
+        assert board is None
+
+    def test_check_current_firmware_serial_error_returns_none_tuple(self, monkeypatch):
+        """SerialError → returns the all-None tuple."""
+        from firestarter.exceptions import SerialError
+
+        def mock_connect(*_args, **_kwargs):
+            raise SerialError("transport broke")
+
+        monkeypatch.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            mock_connect,
+        )
+        fm = FirmwareManager(config_manager=MagicMock())
+        assert fm.check_current_firmware() == (None, None, None)
+
+
+class TestManageFirmwareUpdate:
+    """D-14.3 fallback — manage_firmware_update high-level branches."""
+
+    def test_manage_no_port_returns_false(self, monkeypatch):
+        """When neither override nor detected port is available, returns False."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        monkeypatch.setattr(
+            fm, "check_current_firmware", lambda **kw: (None, None, None)
+        )
+        # No port_override, no detected port → returns False.
+        result = fm.manage_firmware_update(install_flag=True)
+        assert result is False
+
+    def test_manage_already_up_to_date_returns_true(self, monkeypatch):
+        """When current_version >= latest_version (and not --force), returns True."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        monkeypatch.setattr(
+            fm, "check_current_firmware", lambda **kw: ("/dev/ttyACM0", "3.1.0", "uno")
+        )
+        monkeypatch.setattr(
+            fm,
+            "fetch_release_info",
+            lambda channel="stable", version=None, board="uno": (
+                "3.1.0",
+                "https://example.com/firestarter_uno.hex",
+            ),
+        )
+        result = fm.manage_firmware_update(install_flag=True)
+        assert result is True
+
+    def test_manage_no_current_no_install_intent_returns_false(self, monkeypatch):
+        """No current version + no --install + no --force → returns False."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        monkeypatch.setattr(
+            fm, "check_current_firmware", lambda **kw: ("/dev/ttyACM0", None, "uno")
+        )
+        monkeypatch.setattr(
+            fm,
+            "fetch_release_info",
+            lambda channel="stable", version=None, board="uno": (
+                "3.1.0",
+                "https://example.com/firestarter_uno.hex",
+            ),
+        )
+        # install_flag=False + no FLAG_FORCE in flags=0 → returns False
+        result = fm.manage_firmware_update(install_flag=False, flags=0)
+        assert result is False
