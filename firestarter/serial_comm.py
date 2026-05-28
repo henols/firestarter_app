@@ -681,31 +681,12 @@ class SerialCommunicator:
                             # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
                             # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
                             # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
-                            try:
-                                major = int(current_version.split(".")[0])
-                            except (ValueError, IndexError):
-                                major = 0
-                            if (
-                                major < 3
-                                and os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12")
-                                != "1"
-                            ):
-                                raise FirmwareOutdatedError(
-                                    f"Firmware version {current_version} is pre-v1.2 (text-format logging). "  # noqa: E501
-                                    f"This host expects v1.2+ firmware emitting ID-encoded log frames. "  # noqa: E501
-                                    f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "  # noqa: E501
-                                    f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "  # noqa: E501
-                                    f'see PROJECT.md "Constraints".)'
-                                )
-
-                            if not SerialCommunicator._is_version_sufficient(
-                                current_version, "2.0.0"
-                            ):
-                                raise FirmwareOutdatedError(
-                                    f"Firmware version {current_version} is outdated. "
-                                    f"Version 2.0.0 or higher is required. "
-                                    f"Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
-                                )
+                            allow_pre_v12 = (
+                                os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") == "1"
+                            )
+                            SerialCommunicator._validate_firmware_version(
+                                current_version, allow_pre_v12=allow_pre_v12
+                            )
                         else:
                             raise FirmwareOutdatedError(
                                 "Could not parse firmware version from programmer response. "  # noqa: E501
