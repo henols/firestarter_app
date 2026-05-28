@@ -14,11 +14,12 @@ Commands surfaced from here:
   - 1 group: dev (4 sub-commands: read / reg / addr / consistency-check)
 """
 
+import functools
 import logging
 import sys
 from dataclasses import dataclass
 from types import SimpleNamespace
-from typing import List, Optional  # noqa: UP035
+from typing import Any, Callable, List, Optional  # noqa: UP035
 
 import click
 import click.shell_completion
@@ -30,7 +31,14 @@ from firestarter.constants import FLAG_CHIP_ENABLE, FLAG_OUTPUT_ENABLE
 from firestarter.database import EpromDatabase
 from firestarter.eprom_info import EpromConsolePresenter, print_eprom_list_table
 from firestarter.eprom_operations import EpromOperator, build_flags
-from firestarter.exceptions import ChipNotFoundError
+from firestarter.exceptions import (
+    ChipNotFoundError,
+    EpromOperationError,
+    FirmwareOutdatedError,
+    HardwareOperationError,
+    SerialError,
+    SerialTimeoutError,
+)
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.hardware import HardwareManager
 from firestarter.logging_utils import SingleLineStatusHandler
@@ -95,22 +103,25 @@ def _complete_eprom(
     ]
 
 
-def _resolve_or_exit(name: str, db: EpromDatabase) -> Optional[dict]:  # noqa: UP006
-    """Resolve a chip name, logging the not-found error and returning None on miss.
+def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
+    """Map service-layer typed exceptions to ClickException + stable exit codes (D-03)."""
 
-    Relocated verbatim from main.py:521-533 per Phase 41 D-08. The main.py
-    copy still exists (used by the argparse dispatcher) and is deleted in
-    Wave 4 / Plan 41-04. Both copies coexist through this wave; the chip-op
-    Click handlers use this local copy.
+    @functools.wraps(f)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return f(*args, **kwargs)
+        except ChipNotFoundError as e:
+            raise click.ClickException(str(e)) from e
+        except FirmwareOutdatedError as e:
+            raise click.ClickException(f"Firmware outdated: {e}") from e
+        except (SerialError, SerialTimeoutError) as e:
+            raise click.ClickException(f"Communication error: {e}") from e
+        except EpromOperationError as e:
+            raise click.ClickException(f"Programmer error: {e}") from e
+        except HardwareOperationError as e:
+            raise click.ClickException(f"Hardware error: {e}") from e
 
-    Phase 42 ERR-01 will replace this with a typed-exception → ClickException
-    mapping layer (decorator); the shim is the deliberate seam.
-    """
-    try:
-        return resolve_chip(name, db=db)
-    except ChipNotFoundError:
-        logger.error(f"EPROM '{name}' not found in database.")
-        return None
+    return wrapper
 
 
 def build_arg_flags(args: object) -> int:
@@ -265,6 +276,7 @@ class _FirmwareVersionType(click.ParamType):
 )
 @click.version_option(version=version, prog_name="Firestarter")
 @click.pass_context
+@map_typed_errors
 def cli(ctx: click.Context, verbose: bool, port: Optional[str]) -> None:
     """EPROM programmer for Arduino and Relatively-Universal-ROM-Programmer shield."""
     # CliRunner tests pass a pre-built AppContext via `runner.invoke(cli, ..., obj=app)`;
@@ -297,6 +309,7 @@ def cli(ctx: click.Context, verbose: bool, port: Optional[str]) -> None:
 @cli.command(name="list")
 @click.option("-v", "--verified", is_flag=True, help="Only shows verified EPROMs")
 @click.pass_obj
+@map_typed_errors
 def _list_cmd(app: AppContext, verified: bool) -> None:
     """List all EPROMs in the database."""
     eprom_data_list = app.db.get_eproms(verified=verified)
@@ -311,6 +324,7 @@ def _list_cmd(app: AppContext, verified: bool) -> None:
 @click.option("-c", "--config", is_flag=True, help="Show EPROM config.")
 @click.option("-a", "--adapter", is_flag=True, help="Show adapter pin wiring table.")
 @click.pass_obj
+@map_typed_errors
 def info(app: AppContext, eprom: str, config: bool, adapter: bool) -> None:
     """EPROM info."""
     eprom_details = app.db.get_eprom(eprom)
@@ -343,6 +357,7 @@ def info(app: AppContext, eprom: str, config: bool, adapter: bool) -> None:
 @cli.command(name="search")
 @click.argument("text")
 @click.pass_obj
+@map_typed_errors
 def search(app: AppContext, text: str) -> None:
     """Search for EPROMs in the database."""
     search_results = app.db.search_eprom(text, include_unverified=True)
@@ -353,9 +368,11 @@ def search(app: AppContext, text: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Chip-op commands (Wave 3 / Plan 41-03 / D-12 step 1)
-# Each: resolve chip via _resolve_or_exit → call app.eprom_operator.<op> →
-# sys.exit(0 if ok else 1). Per-option help text byte-identical to argparse.
+# Chip-op commands (Wave 3 / Plan 41-03 / D-12 step 1; Plan 42-02 / D-03/D-05)
+# Each: resolve chip via resolve_chip(eprom, db=app.db) → call
+# app.eprom_operator.<op> → sys.exit(0 if ok else 1). The @map_typed_errors
+# decorator catches ChipNotFoundError at the Click boundary and re-raises as
+# click.ClickException → exit 1. Per-option help text byte-identical to argparse.
 # ---------------------------------------------------------------------------
 
 
@@ -368,6 +385,7 @@ def search(app: AppContext, text: str) -> None:
 @click.option("-a", "--address", default=None, help="Read start address in dec/hex")
 @click.option("-s", "--size", default=None, help="Size of the data to read in dec/hex")
 @click.pass_obj
+@map_typed_errors
 def read(
     app: AppContext,
     eprom: str,
@@ -377,9 +395,7 @@ def read(
     size: Optional[str],
 ) -> None:
     """Reads the content from an EPROM."""
-    eprom_data = _resolve_or_exit(eprom, app.db)
-    if not eprom_data:
-        sys.exit(1)
+    eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.read_eprom(
         eprom,
         eprom_data,
@@ -412,6 +428,7 @@ def read(
 @click.option("-a", "--address", default=None, help="Write start address in dec/hex")
 @click.option("--vpe-as-vpp", "vpe_as_vpp", is_flag=True, help="Use VPE as VPP voltage")
 @click.pass_obj
+@map_typed_errors
 def write(
     app: AppContext,
     eprom: str,
@@ -429,9 +446,7 @@ def write(
     The inverse ``--blank-check`` polarity lives on the ``erase`` command —
     both polarities coexist verbatim per the rationale lock.
     """
-    eprom_data = _resolve_or_exit(eprom, app.db)
-    if not eprom_data:
-        sys.exit(1)
+    eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.write_eprom(
         eprom,
         eprom_data,
@@ -455,6 +470,7 @@ def write(
     help="Force, even if the VPP or chip id doesn't match.",
 )
 @click.pass_obj
+@map_typed_errors
 def verify(
     app: AppContext,
     eprom: str,
@@ -463,9 +479,7 @@ def verify(
     force: bool,
 ) -> None:
     """Verifies the content of an EPROM."""
-    eprom_data = _resolve_or_exit(eprom, app.db)
-    if not eprom_data:
-        sys.exit(1)
+    eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.verify_eprom(
         eprom,
         eprom_data,
@@ -485,11 +499,10 @@ def verify(
     help="Force, even if the VPP or chip id doesn't match.",
 )
 @click.pass_obj
+@map_typed_errors
 def blank(app: AppContext, eprom: str, force: bool) -> None:
     """Checks if an EPROM is blank."""
-    eprom_data = _resolve_or_exit(eprom, app.db)
-    if not eprom_data:
-        sys.exit(1)
+    eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.check_eprom_blank(
         eprom, eprom_data, operation_flags=_build_op_flags(force=force)
     )
@@ -521,6 +534,7 @@ def blank(app: AppContext, eprom: str, force: bool) -> None:
     help="Sector address for sector erase (hex e.g. 0x10000). Omit for chip erase.",
 )
 @click.pass_obj
+@map_typed_errors
 def erase(
     app: AppContext,
     eprom: str,
@@ -534,9 +548,7 @@ def erase(
     (``is_flag=True default=False``) — opposite of ``write``'s
     ``--no-blank-check``. Both polarities coexist verbatim from argparse.
     """
-    eprom_data = _resolve_or_exit(eprom, app.db)
-    if not eprom_data:
-        sys.exit(1)
+    eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.erase_eprom(
         eprom,
         eprom_data,
@@ -555,11 +567,10 @@ def erase(
     help="Force, even if the VPP is not correct.",
 )
 @click.pass_obj
+@map_typed_errors
 def chip_id(app: AppContext, eprom: str, force: bool) -> None:
     """Checks an EPROM, if supported."""
-    eprom_data = _resolve_or_exit(eprom, app.db)
-    if not eprom_data:
-        sys.exit(1)
+    eprom_data = resolve_chip(eprom, db=app.db)
     res, detected_id_value = app.eprom_operator.check_eprom_id(
         eprom, eprom_data, operation_flags=_build_op_flags(force=force)
     )
@@ -596,6 +607,7 @@ def chip_id(app: AppContext, eprom: str, force: bool) -> None:
 @cli.command(name="vpp")
 @click.option("-t", "--timeout", type=int, default=None, hidden=True)
 @click.pass_obj
+@map_typed_errors
 def vpp(app: AppContext, timeout: Optional[int]) -> None:
     """VPP voltage."""
     ok = app.hardware_manager.read_vpp_voltage(
@@ -607,6 +619,7 @@ def vpp(app: AppContext, timeout: Optional[int]) -> None:
 @cli.command(name="vpe")
 @click.option("-t", "--timeout", type=int, default=None, hidden=True)
 @click.pass_obj
+@map_typed_errors
 def vpe(app: AppContext, timeout: Optional[int]) -> None:
     """VPE voltage."""
     ok = app.hardware_manager.read_vpe_voltage(
@@ -622,6 +635,7 @@ def vpe(app: AppContext, timeout: Optional[int]) -> None:
 
 @cli.command(name="hw")
 @click.pass_obj
+@map_typed_errors
 def hw(app: AppContext) -> None:
     """Hardware revision."""
     ok = app.hardware_manager.get_hardware_revision(flags=_build_op_flags())
@@ -652,6 +666,7 @@ def hw(app: AppContext) -> None:
     help="Set R14/R15 resistance, resistors connected to GND",
 )
 @click.pass_obj
+@map_typed_errors
 def config(
     app: AppContext,
     rev: Optional[float],
@@ -760,6 +775,7 @@ def _maybe_auto_route_to_pre_click(
     help="Output --list results as JSON array (only with --list).",
 )
 @click.pass_context
+@map_typed_errors
 def fw(
     ctx: click.Context,
     install: bool,
@@ -867,6 +883,7 @@ def fw(
 
 
 @cli.group(name="dev")
+@map_typed_errors
 def dev() -> None:
     """Debug command for development purposes.
 
@@ -885,6 +902,7 @@ def dev() -> None:
     help="Force read, even if the chip id doesn't match.",
 )
 @click.pass_obj
+@map_typed_errors
 def dev_read(
     app: AppContext,
     eprom: str,
@@ -893,9 +911,7 @@ def dev_read(
     force: bool,
 ) -> None:
     """Reads the content from an EPROM and prints data to console."""
-    eprom_data = _resolve_or_exit(eprom, app.db)
-    if not eprom_data:
-        sys.exit(1)
+    eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.dev_read_eprom(
         eprom,
         eprom_data,
@@ -947,6 +963,7 @@ def dev_read(
     ),
 )
 @click.pass_obj
+@map_typed_errors
 def dev_reg(
     app: AppContext,
     msb: str,
@@ -985,6 +1002,7 @@ def dev_reg(
     help="Disable, pulls CE pin high.",
 )
 @click.pass_obj
+@map_typed_errors
 def dev_addr(
     app: AppContext,
     eprom: str,
@@ -993,9 +1011,7 @@ def dev_addr(
     chip_disable: bool,
 ) -> None:
     """Direct access to address lines and control register."""
-    eprom_data = _resolve_or_exit(eprom, app.db)
-    if not eprom_data:
-        sys.exit(1)
+    eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.dev_set_address_mode(
         eprom,
         eprom_data,
@@ -1043,6 +1059,7 @@ def dev_addr(
     help="Force read, even if the chip id doesn't match (e.g. Shield-3 missing-chip case).",  # noqa: E501
 )
 @click.pass_obj
+@map_typed_errors
 def dev_consistency_check(
     app: AppContext,
     eprom: str,
@@ -1062,9 +1079,7 @@ def dev_consistency_check(
     The bool-to-int wrap would collapse the 2=hardware-error case to 1=FAIL,
     breaking the v1.6 RCA diagnostic.
     """
-    eprom_data = _resolve_or_exit(eprom, app.db)
-    if not eprom_data:
-        sys.exit(1)
+    eprom_data = resolve_chip(eprom, db=app.db)
     verdict_int = app.eprom_operator.consistency_check_eprom(
         eprom,
         eprom_data,
