@@ -593,6 +593,43 @@ class SerialCommunicator:
             return False  # If parsing fails, assume it's not sufficient.
 
     @staticmethod
+    def _validate_firmware_version(
+        version_str: str, allow_pre_v12: bool = False
+    ) -> None:
+        """Pure-policy version guard. Raises FirmwareOutdatedError on reject.
+
+        Owns the complete version-guard policy (D-01 / D-03): strips trailing
+        alpha suffix (e.g. ``"3.0.0-dev"`` -> ``"3.0.0"``) per RESEARCH §7
+        Option A, parses the major version (``ValueError``/``IndexError`` ->
+        ``major=0``), refuses pre-v1.2 (``major < 3``) unless ``allow_pre_v12``,
+        then enforces the 2.0.0 floor via ``_is_version_sufficient``. Never
+        reads ``os.environ`` (D-02 — env-var I/O is ``_probe_port``'s job).
+        """
+        # RESEARCH §7 Option A: strip trailing alpha suffix before parsing so
+        # direct callers (and future test harnesses) match production wire
+        # behavior, which is already handled by the _probe_port regex
+        # r"FW:\s*([\d.x]+)" stripping "-dev" before this method ever sees it.
+        version_str = re.sub(r"-.*$", "", version_str)
+        try:
+            major = int(version_str.split(".")[0])
+        except (ValueError, IndexError):
+            major = 0
+        if major < 3 and not allow_pre_v12:
+            raise FirmwareOutdatedError(
+                f"Firmware version {version_str} is pre-v1.2 (text-format logging). "  # noqa: E501
+                f"This host expects v1.2+ firmware emitting ID-encoded log frames. "  # noqa: E501
+                f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "  # noqa: E501
+                f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "  # noqa: E501
+                f'see PROJECT.md "Constraints".)'
+            )
+        if not SerialCommunicator._is_version_sufficient(version_str, "2.0.0"):
+            raise FirmwareOutdatedError(
+                f"Firmware version {version_str} is outdated. "
+                f"Version 2.0.0 or higher is required. "
+                f"Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
+            )
+
+    @staticmethod
     def _probe_port(
         port_name: str,
         baud_rate: int,
