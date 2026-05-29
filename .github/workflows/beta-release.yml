@@ -36,19 +36,26 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install package + test deps
+        run: pip install -e .[test]
+
       - name: Catalog validity check
         run: python3 tools/catalog/codegen.py --catalog tools/catalog/messages.toml --check
 
       - name: Codegen drift gate (messages.py)
+        # messages.py is generated from the catalog, then ruff-normalized like
+        # all repo source (ruff format + the Phase 37 TOOL-01 --add-noqa
+        # baseline). Apply the SAME normalization to the regenerated output
+        # before diffing, otherwise the raw codegen text reports false drift
+        # against the committed, ruff-normalized file.
         run: |
           python3 tools/catalog/codegen.py \
             --catalog tools/catalog/messages.toml \
             --target firestarter/messages.py \
             --language python
+          python3 -m ruff format firestarter/messages.py
+          python3 -m ruff check --add-noqa firestarter/messages.py
           git diff --exit-code firestarter/messages.py
-
-      - name: Install package + dev deps
-        run: pip install -e .[dev]
 
       - name: Run pytest
         run: pytest tests/ -v
