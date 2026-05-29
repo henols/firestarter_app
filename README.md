@@ -355,6 +355,70 @@ firestarter config [options]
 * `-r1, --r16 <resistance>`: Set R16 resistance, resistor connected to VPE.
 * `-r2, --r14r15 <resistance>`: Set R14/R15 resistance, resistors connected to GND.
 
+## Architecture
+
+The `firestarter_app` host CLI uses a flat module layout under `firestarter/`. The 21 modules are organised by layer; the layer-boundary rules (below) describe how data flows between them.
+
+### Module map
+
+**Click handlers (user-facing CLI surface):**
+- `main.py` — Click entry point (`main = cli` re-export); `exit_gracefully` SIGINT handler; ABI-preserving `firestarter.main:main` symbol per Phase 41 D-08.
+- `cli_handlers.py` — 14 `@cli.command()` callbacks + `dev` `@cli.group()` with 4 sub-commands; `AppContext` dataclass; `@map_typed_errors` decorator at the Click boundary mapping typed exceptions to stable exit codes.
+
+**Service layer (business logic, runs in-process between Click handlers and transport):**
+- `chip_resolver.py` — `resolve_chip(name, db) -> programmer_config`; single source of truth replacing the 9× chip-lookup copy-paste shipped in v1.7.
+- `eprom_operations.py` — read / write / verify / erase / blank-check / id (`_run_state_machine`, `_main_phase_read_data`); the read-loop body is ring-fenced for v1.9 RCA per GATE-1.8d.
+- `hardware.py` — VPP / VPE voltage control (read-side coverage in tests; write-side untested by safety boundary).
+- `firmware.py` — `firestarter fw -i` / `--pre` / `firmware list` (Phase 18 INST-01..04 + Phase 22 REL-01/02 beta channel integration).
+- `eprom_info.py` — `firestarter info <chip>` data preparation (pure helpers; full path exercised once the upstream `ic_layout` TypeError is fixed in a future milestone).
+- `ic_layout.py` — DIP socket pin-to-signal rendering for `firestarter info`.
+
+**Transport (serial framing + codec):**
+- `serial_comm.py` — `SerialCommunicator` port discovery + command dispatch; `_read_and_parse_lines` generator (DO NOT MODIFY — v1.9 RCA territory per Phase 40 SERIAL-03); `_validate_firmware_version` `@staticmethod`.
+- `frame_parser.py` — CRC8, `_decode_param`, `_decode_id_frame`, `Response` / `LogMessage` structured types; testable without serial I/O.
+- `codec.py` — `format_message`, revision-silkscreen rendering; isolated from frame parsing and logging side effects.
+
+**Data layer (chip database + configuration):**
+- `database.py` — `EpromDatabase` (`skip_local_override` seam per Phase 36 D-06): lookup, pin translation, command building. No singleton; constructor-injectable for testability.
+- `config.py` — `ConfigManager` get/set/persist; `get_local_database` + `pin_maps`.
+- `constants.py` — wire-protocol constants (`COMMAND_*`, `FLAG_*`, `CTRL_*`, `REVISION_*`); kept in sync with `firestarter/include/firestarter.h` + `rurp_shield.h` + `rurp_pinout.h` per firmware-contract parity tests.
+- `messages.py` — codegen output for the v1.2 1-byte-message-ID catalog (`tools/catalog/messages.toml`).
+- `exceptions.py` — consolidated typed hierarchy: `ChipNotFoundError`, `FirmwareOutdatedError`, `SerialError`, `SerialTimeoutError`, `EpromOperationError`, `HardwareOperationError`; flows upward to the Click boundary.
+
+**Address / value parsing:**
+- `address_parser.py` — hex / decimal address + size parsing with explicit validation; consumed by `_setup_operation`.
+
+**Utility / system:**
+- `avr_tool.py` — `avrdude` wrapper for firmware sideload (`firestarter fw -i` / `firestarter fw -i --pre`).
+- `logging_utils.py` — logger configuration; verbosity levels; serial-debug channel handling.
+- `utils.py` — small shared helpers (hex dump, byte formatting, etc.).
+- `__init__.py` — package marker.
+
+### Layer-boundary rules
+
+Click handlers in `cli_handlers.py` are the user-facing entry. Each command callback is wrapped by `@map_typed_errors` (defined in `cli_handlers.py` per Phase 42 D-03) which catches the typed exceptions raised by lower layers and re-raises each as `click.ClickException` with a stable prefix → exit code 1. Handlers call the service layer (`chip_resolver.resolve_chip`, `eprom_operations.*`, `hardware.*`, `firmware.*`) directly — no central dispatcher. Service-layer code calls the transport layer (`serial_comm.SerialCommunicator`, helpers from `frame_parser` + `codec`) to exchange JSON-over-serial commands at 250000 baud. The `_read_and_parse_lines` generator body inside `serial_comm.py` is **ring-fenced for the v1.9 read-bug RCA** (GATE-1.8d) — structural-only changes; any non-structural edit reopens the v1.6 baseline binaries.
+
+Typed exceptions (`exceptions.py`) flow upward from any layer; the `@map_typed_errors` decorator at the Click boundary is the single mapping point. Service-layer code does NOT translate exceptions to exit codes — that responsibility is concentrated at the Click boundary per Phase 42 ERR-01.
+
+The 3-way verdict contract for `firestarter dev consistency-check` (0=PASS, 1=FAIL, 2=hardware-error) is preserved end-to-end via `sys.exit(verdict_int)` inside `cli_handlers.py:dev_consistency_check`; this `SystemExit` falls outside the `@map_typed_errors` decorator's except list, so the verdict integer is honoured verbatim (see Phase 42 Plan 42-02 D-12 step 5).
+
+### Tooling workflow
+
+The v1.8 quality gate runs locally and in CI:
+
+- **Lint:** `ruff check firestarter/ tests/` — categories E, F, I (+ UP); no `select = ["ALL"]`. Baseline accepted via `--add-noqa` on legacy lines per Phase 37 TOOL-01.
+- **Format:** `ruff format firestarter/ tests/` — `ruff format --check` is the CI assertion; the formatter is the canonical source per Phase 37.
+- **Type check:** `mypy` runs gradually across the tree (watermark gate); strict mode (`disallow_untyped_defs = true` + `check_untyped_defs = true`) is enabled on 8 modules per Phase 42 D-06: `main.py`, `cli_handlers.py`, `chip_resolver.py`, `frame_parser.py`, `codec.py`, `address_parser.py`, `exceptions.py`, `serial_comm.py`. `eprom_operations.py` is deliberately excluded from the strict list per Phase 42 D-07 (GATE-1.8d read-path ring-fence; deferred to v1.9 post-RCA).
+- **Tests + coverage:** `pytest --cov=firestarter --cov-fail-under=70` — 70% floor enforced since Phase 42 Plan 42-03 raised the gate from the earlier 50% floor.
+
+Enforcement points:
+
+- **CI:** `.github/workflows/ci.yml` runs ruff check + ruff format --check + mypy + pytest --cov-fail-under=70 + the `pip install -e . && firestarter --help` entry-point smoke step on every PR (Phase 41 CLI-04 SC#4).
+- **Pre-commit:** the `pre-commit` config (Phase 37 TOOL-03) wires the same hook order locally: ruff-check → ruff-format → mypy. Operator can install via `pre-commit install` from the `firestarter_app/` root.
+- **Snapshot tests:** the 29 syrupy snapshots under `tests/__snapshots__/` pin the CLI surface (Phase 36 TEST-01); updating them requires explicit `pytest --snapshot-update` plus a documented rationale per Phase 41 Plan 41-04 deviation Rule 4.
+
+---
+
 ## Examples
 ### Read
 To read an EPROM named W27C512 and save the output to output.bin:

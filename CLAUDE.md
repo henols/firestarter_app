@@ -35,9 +35,15 @@ serial_comm.py                      # send over serial, handle response
 
 - `firestarter/data/chip_database.json` — generated chip database (do NOT edit by hand)
 - `firestarter/data/pinouts.json` — physical DIP pin → RURP bus line mappings
-- `firestarter/database.py` — `EpromDatabase` singleton: lookup, pin translation, command building
+- `firestarter/database.py` — `EpromDatabase` (`skip_local_override` seam, see Phase 36 D-06): lookup, pin translation, command building
 - `firestarter/eprom_operations.py` — high-level operations (read, write, erase, verify, blank check)
 - `firestarter/serial_comm.py` — serial protocol implementation (INIT/MAIN/END state machine)
+- `firestarter/frame_parser.py` — CRC8 + `_decode_param` + `_decode_id_frame` + `Response`/`LogMessage` structured types (Phase 38 STRUCT-01; testable without serial I/O)
+- `firestarter/codec.py` — `format_message` + revision-silkscreen rendering (Phase 38 STRUCT-02)
+- `firestarter/address_parser.py` — hex/decimal address + size parsing (Phase 38 STRUCT-03)
+- `firestarter/chip_resolver.py` — `resolve_chip(name, db) -> programmer_config` (Phase 39 DATA-01; replaces 9× chip-lookup copy-paste)
+- `firestarter/cli_handlers.py` — Click command handlers (14 `@cli.command()` + `dev` group with 4 sub-commands) + `@map_typed_errors` decorator + `AppContext` dataclass (Phase 41 CLI-01..04 + Phase 42 ERR-01)
+- `firestarter/exceptions.py` — consolidated typed-exception hierarchy: `ChipNotFoundError`, `FirmwareOutdatedError`, `SerialError`, `SerialTimeoutError`, `EpromOperationError`, `HardwareOperationError` (Phase 38 STRUCT-04)
 - `firestarter/main.py` — Click CLI entry point
 - `tools/build_db.py` — database pipeline: parses the upstream `infoic.xml`, outputs JSON
 
@@ -98,3 +104,5 @@ Regression guard: `tools/check_dispatch.py` asserts no chip with
 ### Constants
 
 `firestarter/constants.py` must stay in sync with `firestarter/include/firestarter.h` in the firmware sub-repo. Both define the same flag bit values and command codes. Additionally, the `RURP_CONTROL_REGISTER_BITS` block in `constants.py` (CTRL_* names) mirrors the control-register-bit declarations in `firestarter/include/rurp_pinout.h` (Phase 33 / v1.7 — silkscreen-label code-alias migration). Keep CTRL_* names + hex values in sync with the firmware header. Additionally, the `RURP_HARDWARE_REVISIONS` block in `constants.py` (REVISION_* names) mirrors the hardware-revision enum declarations in `firestarter/include/rurp_shield.h` (Phase 34 / v1.7 — shield-version-detect design + firmware plumbing). Keep REVISION_* names + byte values in sync with the firmware enum; `0xFF` is reserved as the EEPROM-override-absent sentinel and `0xFE` (`REVISION_UNKNOWN`) is reserved for the ADC-band-gap fall-through. Additionally, the sub-repo `firestarter/doc/SHIELD-REVISIONS.md` operator-facing doc is a subset clone of meta-repo `.planning/v1.7-SHIELD-REVS.md` sections §1 (inventory) / §6 (per-rev capability matrix) / §7 (silkscreen → code alias table) / §9 (per-rev ADC band table) (Phase 35 / v1.7 — close); if any of those four sections change in the meta-repo, update the sub-repo doc in lockstep.
+
+**Tooling gate (v1.8):** `ruff check` + `ruff format --check` + `mypy` (strict on 8 modules per Phase 42 D-06: `main.py`, `cli_handlers.py`, `chip_resolver.py`, `frame_parser.py`, `codec.py`, `address_parser.py`, `exceptions.py`, `serial_comm.py`) + `pytest --cov-fail-under=70` — all enforced by `.github/workflows/ci.yml` on every PR; `pre-commit` config wires the same hook order locally.
