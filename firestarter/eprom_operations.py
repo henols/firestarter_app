@@ -7,28 +7,47 @@ Permission is hereby granted under MIT license.
 EPROM Operations Module (Refactored)
 """
 
-import os
-import time
-import hashlib
-import shutil
 import functools
-import operator
+import hashlib
 import logging
+import operator
+import os
+import shutil
+import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Callable
-from contextlib import contextmanager
+from typing import Callable, Dict, Optional, Tuple  # noqa: UP035
+
 import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-from firestarter.constants import *
-from firestarter.serial_comm import (
-    SerialCommunicator,
+from firestarter.address_parser import parse_address, parse_size
+from firestarter.config import ConfigManager
+from firestarter.constants import (
+    BUFFER_SIZE,
+    COMMAND_BLANK_CHECK,
+    COMMAND_CHECK_CHIP_ID,
+    COMMAND_DEV_ADDRESS,
+    COMMAND_DEV_REGISTERS,
+    COMMAND_ERASE,
+    COMMAND_NAMES,
+    COMMAND_READ,
+    COMMAND_VERIFY,
+    COMMAND_WRITE,
+    FLAG_FORCE,
+    FLAG_SKIP_BLANK_CHECK,
+    FLAG_SKIP_ERASE,
+    FLAG_VERBOSE,
+    FLAG_VPE_AS_VPP,
+)
+from firestarter.exceptions import (
+    EpromOperationError,
     ProgrammerNotFoundError,
     SerialError,
     SerialTimeoutError,
 )
-from firestarter.config import ConfigManager
+from firestarter.serial_comm import SerialCommunicator
 from firestarter.utils import extract_hex_to_decimal
 
 logger = logging.getLogger("EpromOperator")
@@ -36,7 +55,9 @@ logger = logging.getLogger("EpromOperator")
 bar_format = "{l_bar}{bar}| {n:#06x}/{total:#06x} bytes "
 
 
-def build_flags(blank_check=True, force=False, vpe_as_vpp=False, verbose=False, skip_erase=False):
+def build_flags(
+    blank_check=True, force=False, vpe_as_vpp=False, verbose=False, skip_erase=False
+):
     flags = 0
     if not blank_check:
         flags |= FLAG_SKIP_BLANK_CHECK
@@ -75,13 +96,7 @@ def hexdump(address, data, width=16):
         hex_str = " ".join(hex_parts)
         ascii_str = "".join(ascii_parts)
 
-        logger.info(f"{address+i:08x}: {hex_str:<{width * 3}} {ascii_str}")
-
-
-class EpromOperationError(Exception):
-    """Custom exception for EPROM operation failures."""
-
-    pass
+        logger.info(f"{address + i:08x}: {hex_str:<{width * 3}} {ascii_str}")
 
 
 class ClassProgressHandler:
@@ -109,13 +124,11 @@ class ClassProgressHandler:
         if self.pbar:
             self.pbar.update(completed_steps)
         else:
-            # If no progress bar, we can't do much with incremental updates without a total.
+            # If no progress bar, we can't do much with incremental updates without a total.  # noqa: E501
             logger.info(f"Progress: +{completed_steps} steps")
 
     def set_progress(self, current, total):
-        if self.total_steps != total or (
-            not self.pbar and not self.progress_callback
-        ):
+        if self.total_steps != total or (not self.pbar and not self.progress_callback):
             self.start(total)
 
         self.current_step = current
@@ -139,19 +152,21 @@ class EpromOperator:
     for interacting with the EPROM programmer hardware.
     """
 
-    def __init__(self, config: ConfigManager, progress_callback: Optional[Callable] = None):
+    def __init__(
+        self, config: ConfigManager, progress_callback: Optional[Callable] = None
+    ):
         self.comm: SerialCommunicator | None = None
         self.config = config
         self.progress_callback = progress_callback
-    
+
     def _calculate_buffer_size(self) -> int:
         # For write/verify, we now use a "pull" protocol where the Arduino
         # requests a data block when it's ready. This means we can send a full
         # page at a time, matching the firmware's internal buffer size,
-         # without worrying about overflowing the serial buffer.
+        # without worrying about overflowing the serial buffer.
         return BUFFER_SIZE  # This is 512 in constants.py
 
-    def _setup_operation( # Remains largely the same, as it's a prerequisite for the context manager
+    def _setup_operation(  # Remains largely the same, as it's a prerequisite for the context manager  # noqa: E501
         self,
         eprom_name: str,  # For logging
         eprom_data_dict: dict,  # Pre-fetched EPROM data
@@ -159,14 +174,12 @@ class EpromOperator:
         operation_flags: int = 0,
         address: Optional[str] = None,
         size: Optional[str] = None,
-    ) -> Tuple[Optional[Dict], int]:
+    ) -> Tuple[Optional[Dict], int]:  # noqa: UP006
         """
         Prepares for an EPROM operation: uses pre-fetched EPROM data, sets up command, and connects.
         Returns (eprom_data_for_command, buffer_size) or (None, 0) on failure.
-        """
-        operation = [k for k, v in globals().items() if v == cmd][0].replace(
-            "COMMAND_", ""
-        )  # Get command name
+        """  # noqa: E501
+        operation = COMMAND_NAMES[cmd]  # Get command name
         logger.debug(f"Performing {operation} for {eprom_name.upper()}")
 
         start_time = time.time()
@@ -179,7 +192,7 @@ class EpromOperator:
         addr = 0
         if address:
             try:
-                addr = int(address, 16) if "0x" in address.lower() else int(address)
+                addr = parse_address(address) or 0
                 command_dict["address"] = addr
             except ValueError:
                 logger.error(f"Invalid address format: {address}")
@@ -188,7 +201,7 @@ class EpromOperator:
         # Special handling for read operation size
         if cmd == COMMAND_READ and size:
             try:
-                read_size = int(size, 16) if "0x" in size.lower() else int(size)
+                read_size = parse_size(size) or 0
                 # 'memory-size' in command_dict will define the end address for read
 
                 command_dict["memory-size"] = addr + read_size
@@ -200,7 +213,7 @@ class EpromOperator:
             self.comm = SerialCommunicator.find_and_connect(command_dict, self.config)
             buffer_size = self._calculate_buffer_size()
             logger.debug(
-                f"Operation {operation} setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s). Buffer size: {buffer_size}"
+                f"Operation {operation} setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s). Buffer size: {buffer_size}"  # noqa: E501
             )
             return command_dict, buffer_size
         except (ProgrammerNotFoundError, SerialError) as e:
@@ -209,16 +222,24 @@ class EpromOperator:
             return None, 0
 
     @contextmanager
-    def _operation_context(self, eprom_name: str, eprom_data_dict: dict, cmd: int, operation_flags: int = 0, address: Optional[str] = None, size: Optional[str] = None):
+    def _operation_context(
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        cmd: int,
+        operation_flags: int = 0,
+        address: Optional[str] = None,
+        size: Optional[str] = None,
+    ):
         """A context manager to handle EPROM operation setup and teardown."""
         command_dict, buffer_size = self._setup_operation(
             eprom_name, eprom_data_dict, cmd, operation_flags, address, size
         )
         if not command_dict or not self.comm:
-            yield None, None, None # Yield None to indicate setup failure
+            yield None, None, None  # Yield None to indicate setup failure
             return
 
-        operation_name = [k for k, v in globals().items() if v == cmd][0].replace("COMMAND_", "")
+        operation_name = COMMAND_NAMES[cmd]
         try:
             # Yield the necessary data to the 'with' block
             yield command_dict, buffer_size, operation_name
@@ -233,7 +254,12 @@ class EpromOperator:
 
     # --- Unified State Machine ---
 
-    def _run_state_machine(self, operation_name: str, main_phase_handler: Optional[Callable] = None, **handler_kwargs) -> Tuple[bool, Optional[str]]:
+    def _run_state_machine(
+        self,
+        operation_name: str,
+        main_phase_handler: Optional[Callable] = None,
+        **handler_kwargs,
+    ) -> Tuple[bool, Optional[str]]:  # noqa: UP006
         """A unified state machine driver for all operations."""
         if not self.comm:
             return False, "Not connected"
@@ -257,18 +283,23 @@ class EpromOperator:
                 logger.debug("Main complete.")
 
                 # --- END Phase ---
-                end_msg = self._execute_phase("END", progress)
+                end_msg = self._execute_phase("END", progress)  # noqa: F841
 
                 # --- Final ACK to complete transaction ---
                 self.comm.send_ack()
                 return True, final_msg
-        except (SerialError, SerialTimeoutError, EpromOperationError) as e:
+        except (SerialError, SerialTimeoutError) as e:
             logger.error(f"Communication error during {operation_name}: {e}")
+            return False, str(e)
+        except EpromOperationError as e:
+            logger.error(f"Programmer error during {operation_name}: {e}")
             return False, str(e)
         finally:
             progress.close()
 
-    def _execute_phase(self, phase_name: str, progress: ClassProgressHandler) -> Optional[str]:
+    def _execute_phase(
+        self, phase_name: str, progress: ClassProgressHandler
+    ) -> Optional[str]:
         """Executes a single phase (INIT or END) of the state machine."""
         self.comm.send_ack()
         logger.debug(f"{phase_name.lower()} start")
@@ -279,7 +310,9 @@ class EpromOperator:
                 final_msg = response.message
                 break
             if response.type == "ERROR":
-                raise EpromOperationError(f"Programmer error during {phase_name.lower()}: {response.message}")
+                raise EpromOperationError(
+                    f"Programmer error during {phase_name.lower()}: {response.message}"
+                )
             self._handle_progress_response(response, progress)
         logger.debug(f"{phase_name.lower()} complete.")
         return final_msg
@@ -289,12 +322,13 @@ class EpromOperator:
         if response.type == "DATA":
             try:
                 if response.message and "/" in response.message:
-                    current, total = map(int, response.message.split('/'))
-                    if progress: progress.set_progress(current, total)
+                    current, total = map(int, response.message.split("/"))
+                    if progress:
+                        progress.set_progress(current, total)
                 elif response.message:
                     progress.update(int(response.message))
             except (ValueError, TypeError):
-                pass # Not a parsable progress update
+                pass  # Not a parsable progress update
             self.comm.send_ack()
         elif response.type == "WARN":
             logger.warning(f"Programmer warning: {response.message}")
@@ -314,11 +348,13 @@ class EpromOperator:
             if response.type == "ERROR":
                 raise EpromOperationError(response.message)
             if response.type == "OK" and final_msg is None:
-                final_msg = response.message # Capture final message from MAIN's OK
+                final_msg = response.message  # Capture final message from MAIN's OK
             self._handle_progress_response(response, progress)
         return final_msg
 
-    def _main_phase_send_data(self, progress: ClassProgressHandler, input_file_path: str, buffer_size: int) -> None:
+    def _main_phase_send_data(
+        self, progress: ClassProgressHandler, input_file_path: str, buffer_size: int
+    ) -> None:
         """Main phase handler for writing or verifying data."""
         if not os.path.exists(input_file_path):
             raise EpromOperationError(f"Input file {input_file_path} not found.")
@@ -326,18 +362,22 @@ class EpromOperator:
         with open(input_file_path, "rb") as file_handle:
             file_size = os.path.getsize(input_file_path)
             progress.start(file_size)
-            
+
             while True:
                 response = self.comm.get_response()
                 if response.type == "MAIN":
-                    break # Main phase is complete
+                    break  # Main phase is complete
                 if response.type != "OK":
-                    raise EpromOperationError(f"Programmer did not request data chunk, got {response.type}: {response.message}")
+                    raise EpromOperationError(
+                        f"Programmer did not request data chunk, got {response.type}: {response.message}"  # noqa: E501
+                    )
 
                 if file_handle.tell() < file_size:
                     data_chunk = file_handle.read(buffer_size)
                     checksum = functools.reduce(operator.xor, data_chunk, 0)
-                    header = b"#" + len(data_chunk).to_bytes(2, "big") + checksum.to_bytes(1)
+                    header = (
+                        b"#" + len(data_chunk).to_bytes(2, "big") + checksum.to_bytes(1)
+                    )
 
                     # Firmware reads header + payload as one synchronous flow via
                     # rurp_communication_read_data (rurp_serial_utils.cpp): 2-byte size,
@@ -350,7 +390,13 @@ class EpromOperator:
                 else:
                     self.comm.send_done()
 
-    def _main_phase_read_data(self, progress: ClassProgressHandler, start_addr: int, end_addr: int, process_data_chunk_callback: Callable):
+    def _main_phase_read_data(
+        self,
+        progress: ClassProgressHandler,
+        start_addr: int,
+        end_addr: int,
+        process_data_chunk_callback: Callable,
+    ):
         """Main phase handler for reading data.
 
         Phase 8 W-04: the firmware now wraps each chip-byte chunk inside a
@@ -360,7 +406,10 @@ class EpromOperator:
           - DATA response with no payload  → MSG_DATA_SENDING (zero-param batch
             starter, which arrives before the chunk frame); skip and continue.
         """
-        from firestarter.messages import MSG_DATA_CHUNK  # local import avoids circular
+        from firestarter.messages import (
+            MSG_DATA_CHUNK,  # local import avoids circular  # noqa: F401
+        )
+
         data_size = end_addr - start_addr
         if data_size > 0:
             progress.start(data_size)
@@ -371,7 +420,9 @@ class EpromOperator:
                 logger.info("EPROM read complete.")
                 break
             if response.type == "ERROR":
-                raise EpromOperationError(f"Programmer error during read: {response.message}")
+                raise EpromOperationError(
+                    f"Programmer error during read: {response.message}"
+                )
             if response.type == "DATA":
                 if response.payload is not None:
                     # MSG_DATA_CHUNK: the raw chip bytes are in response.payload.
@@ -386,7 +437,9 @@ class EpromOperator:
                 else:
                     # MSG_DATA_SENDING (zero-param batch-start ack): no data yet;
                     # the MSG_DATA_CHUNK frame follows immediately.
-                    logger.debug(f"Received DATA signal (no payload): {response.message}")
+                    logger.debug(
+                        f"Received DATA signal (no payload): {response.message}"
+                    )
             else:
                 self._handle_progress_response(response, progress)
 
@@ -401,15 +454,26 @@ class EpromOperator:
         address_str: Optional[str] = None,
         size_str: Optional[str] = None,
     ) -> bool:
-        with self._operation_context(eprom_name, eprom_data_dict, COMMAND_READ, operation_flags, address_str, size_str) as (cmd_data, _, op_name):
-            if not cmd_data: return False
+        with self._operation_context(
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_READ,
+            operation_flags,
+            address_str,
+            size_str,
+        ) as (cmd_data, _, op_name):
+            if not cmd_data:
+                return False
 
             actual_output_file = output_file or f"{eprom_name.upper()}.bin"
-            logger.info(f"Reading EPROM {eprom_name.upper()}, saving to {actual_output_file}")
+            logger.info(
+                f"Reading EPROM {eprom_name.upper()}, saving to {actual_output_file}"
+            )
             start_time = time.time()
 
             try:
                 with open(actual_output_file, "wb") as file_handle:
+
                     def _write_to_file(address, data_chunk):
                         file_handle.seek(address)
                         file_handle.write(data_chunk)
@@ -419,12 +483,14 @@ class EpromOperator:
                         main_phase_handler=self._main_phase_read_data,
                         start_addr=cmd_data.get("address", 0),
                         end_addr=cmd_data.get("memory-size", 0),
-                        process_data_chunk_callback=_write_to_file
+                        process_data_chunk_callback=_write_to_file,
                     )
                 if is_ok:
-                    logger.info(f"Read complete ({time.time() - start_time:.2f}s). Data saved to {actual_output_file}")
+                    logger.info(
+                        f"Read complete ({time.time() - start_time:.2f}s). Data saved to {actual_output_file}"  # noqa: E501
+                    )
                 return is_ok
-            except IOError as e:
+            except IOError as e:  # noqa: UP024
                 logger.error(f"File I/O error with {actual_output_file}: {e}")
                 return False
 
@@ -507,9 +573,15 @@ class EpromOperator:
                             return 2  # D-05 hardware error
                         try:
                             with open(run_path, "wb") as fh:
-                                def _writer(address, data_chunk, _fh=fh, _start=cmd_data.get("address", 0)):
+
+                                def _writer(
+                                    address,
+                                    data_chunk,
+                                    _fh=fh,
+                                    _start=cmd_data.get("address", 0),
+                                ):
                                     # Mirror read_eprom's _write_to_file inner closure
-                                    # (eprom_operations.py:408-411). Use relative-from-start
+                                    # (eprom_operations.py:408-411). Use relative-from-start  # noqa: E501
                                     # offset so the file fills from byte 0 regardless of
                                     # absolute start_addr.
                                     _fh.seek(address - _start)
@@ -522,7 +594,7 @@ class EpromOperator:
                                     end_addr=cmd_data.get("memory-size", 0),
                                     process_data_chunk_callback=_writer,
                                 )
-                        except IOError as e:
+                        except IOError as e:  # noqa: UP024
                             logger.error(f"Run {i}: file I/O error on {run_path}: {e}")
                             return 2
 
@@ -531,7 +603,9 @@ class EpromOperator:
                     # exceptions and returns (False, str(e)) rather than
                     # propagating).
                     if not is_ok:
-                        logger.error(f"Run {i}: hardware/serial error -- read incomplete.")
+                        logger.error(
+                            f"Run {i}: hardware/serial error -- read incomplete."
+                        )
                         return 2
 
                 except EpromOperationError as e:
@@ -542,7 +616,7 @@ class EpromOperator:
                 sha = hashlib.sha256(run_path.read_bytes()).hexdigest()
                 elapsed = time.time() - start_t
                 results.append((i, sha, bytes_written))
-                total_size = bytes_written
+                total_size = bytes_written  # noqa: F841
                 logger.info(
                     f"Run {i}/{runs}: SHA-256 {sha}  "
                     f"bytes={bytes_written}  elapsed={elapsed:.2f}s"
@@ -555,7 +629,11 @@ class EpromOperator:
             # Print verdict block (D-04 -- exact substrings pinned by
             # Phase 29 forward-compat regex test_stdout_verdict_block_format).
             verdict = "PASS" if exit_code == 0 else "FAIL"
-            port = self.config.get_value("port") if hasattr(self.config, "get_value") else "?"
+            port = (
+                self.config.get_value("port")
+                if hasattr(self.config, "get_value")
+                else "?"
+            )
             print(f"\nConsistency check: {verdict}")
             print(f"Chip: {eprom_name}  Board: unknown-board  Port: {port}")
             print(f"Runs: N={runs}")
@@ -576,7 +654,7 @@ class EpromOperator:
                     first = diff_offsets[0]
                     # 4-hex-digit format guaranteed for 64KB chips; widen
                     # automatically for larger payloads. Use %04X minimum.
-                    width = max(4, len(f"{cmp_len-1:X}"))
+                    width = max(4, len(f"{cmp_len - 1:X}"))
                     print(
                         f"First divergence: offset 0x{first:0{width}X}  "
                         f"(run_1=0x{run1_bytes[first]:02X}, "
@@ -612,12 +690,22 @@ class EpromOperator:
         size_str: str = "256",
         operation_flags: int = 0,
     ) -> bool:
-        with self._operation_context(eprom_name, eprom_data_dict, COMMAND_READ, operation_flags, address_str, size_str or "256") as (cmd_data, _, op_name):
-            if not cmd_data: return False
+        with self._operation_context(
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_READ,
+            operation_flags,
+            address_str,
+            size_str or "256",
+        ) as (cmd_data, _, op_name):
+            if not cmd_data:
+                return False
 
             start_addr = cmd_data.get("address", 0)
             end_addr = cmd_data.get("memory-size", start_addr)
-            logger.info(f"Reading {end_addr - start_addr} bytes from address 0x{start_addr:04X} of {eprom_name.upper()}")
+            logger.info(
+                f"Reading {end_addr - start_addr} bytes from address 0x{start_addr:04X} of {eprom_name.upper()}"  # noqa: E501
+            )
             start_time = time.time()
 
             is_ok, _ = self._run_state_machine(
@@ -625,7 +713,7 @@ class EpromOperator:
                 main_phase_handler=self._main_phase_read_data,
                 start_addr=start_addr,
                 end_addr=end_addr,
-                process_data_chunk_callback=hexdump
+                process_data_chunk_callback=hexdump,
             )
             if is_ok:
                 logger.info(f"Read complete ({time.time() - start_time:.2f}s)")
@@ -673,7 +761,7 @@ class EpromOperator:
             return False
 
         logger.info(
-            f"Setting registers: MSB: 0x{msb:02X}, LSB: 0x{lsb:02X}, CTRL: 0x{ctrl_reg:02X}"
+            f"Setting registers: MSB: 0x{msb:02X}, LSB: 0x{lsb:02X}, CTRL: 0x{ctrl_reg:02X}"  # noqa: E501
         )
         try:
             self.comm.send_ack()  # Tell programmer to expect register data
@@ -697,14 +785,22 @@ class EpromOperator:
             self._disconnect_programmer()
 
     def dev_set_address_mode(
-        self, eprom_name: str, eprom_data_dict: dict, address_str: Optional[str], flags: int = 0
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        address_str: Optional[str],
+        flags: int = 0,
     ) -> bool:
         try:
             # This command sets the RURP into a mode where it holds a specific address
             # based on the EPROM's pin map.
             # eprom_data_dict is pre-fetched and validated by the caller (main.py)
             command_eprom_data, _ = self._setup_operation(
-                eprom_name, eprom_data_dict, COMMAND_DEV_ADDRESS, flags, address_str
+                eprom_name,
+                eprom_data_dict,
+                COMMAND_DEV_ADDRESS,
+                flags,
+                address_str,
             )
             if not command_eprom_data or not self.comm:
                 return False  # Setup failed, error already logged by _setup_operation
@@ -732,16 +828,30 @@ class EpromOperator:
         operation_flags: int = 0,
         address_str: Optional[str] = None,
     ) -> bool:
-        with self._operation_context(eprom_name, eprom_data_dict, COMMAND_WRITE, operation_flags, address_str) as (cmd_data, buf_size, op_name):
-            if not cmd_data: return False
+        with self._operation_context(
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_WRITE,
+            operation_flags,
+            address_str,
+        ) as (cmd_data, buf_size, op_name):
+            if not cmd_data:
+                return False
 
             logger.info(f"Writing {input_file_path} to {eprom_name.upper()}")
             start_time = time.time()
 
-            is_ok, _ = self._run_state_machine(op_name, main_phase_handler=self._main_phase_send_data, input_file_path=input_file_path, buffer_size=buf_size)
-            
+            is_ok, _ = self._run_state_machine(
+                op_name,
+                main_phase_handler=self._main_phase_send_data,
+                input_file_path=input_file_path,
+                buffer_size=buf_size,
+            )
+
             if is_ok:
-                logger.info(f"Write to {eprom_name.upper()} successful ({time.time() - start_time:.2f}s).")
+                logger.info(
+                    f"Write to {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
+                )
             else:
                 logger.error(f"Write to {eprom_name.upper()} failed.")
             return is_ok
@@ -754,50 +864,90 @@ class EpromOperator:
         operation_flags: int = 0,
         address_str: Optional[str] = None,
     ) -> bool:
-        with self._operation_context(eprom_name, eprom_data_dict, COMMAND_VERIFY, operation_flags, address_str) as (cmd_data, buf_size, op_name):
-            if not cmd_data: return False
+        with self._operation_context(
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_VERIFY,
+            operation_flags,
+            address_str,
+        ) as (cmd_data, buf_size, op_name):
+            if not cmd_data:
+                return False
 
             logger.info(f"Verifying {input_file_path} against {eprom_name.upper()}")
             start_time = time.time()
 
-            is_ok, _ = self._run_state_machine(op_name, main_phase_handler=self._main_phase_send_data, input_file_path=input_file_path, buffer_size=buf_size)
+            is_ok, _ = self._run_state_machine(
+                op_name,
+                main_phase_handler=self._main_phase_send_data,
+                input_file_path=input_file_path,
+                buffer_size=buf_size,
+            )
 
             if is_ok:
-                logger.info(f"Verify for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s).")
+                logger.info(
+                    f"Verify for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
+                )
             else:
                 logger.error(f"Verify for {eprom_name.upper()} failed.")
             return is_ok
 
     def erase_eprom(
-        self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0,
-        address_str: Optional[str] = None
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        operation_flags: int = 0,
+        address_str: Optional[str] = None,
     ) -> bool:
-        with self._operation_context(eprom_name, eprom_data_dict, COMMAND_ERASE, operation_flags, address_str) as (cmd_data, _, op_name):
-            if not cmd_data: return False
+        with self._operation_context(
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_ERASE,
+            operation_flags,
+            address_str,
+        ) as (cmd_data, _, op_name):
+            if not cmd_data:
+                return False
             logger.info(f"Erasing EPROM {eprom_name.upper()}")
             start_time = time.time()
             is_ok, final_msg = self._run_state_machine(op_name)
             if is_ok:
-                logger.info(f"Erase for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {final_msg or ''}")
+                logger.info(
+                    f"Erase for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {final_msg or ''}"  # noqa: E501
+                )
             return is_ok
 
     def check_eprom_blank(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
     ) -> bool:
-        with self._operation_context(eprom_name, eprom_data_dict, COMMAND_BLANK_CHECK, operation_flags) as (cmd_data, _, op_name):
-            if not cmd_data: return False
+        with self._operation_context(
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_BLANK_CHECK,
+            operation_flags,
+        ) as (cmd_data, _, op_name):
+            if not cmd_data:
+                return False
             logger.info(f"Blank checking EPROM {eprom_name.upper()}")
             start_time = time.time()
             is_ok, final_msg = self._run_state_machine(op_name)
             if is_ok:
-                logger.info(f"Blank check for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {final_msg or ''}")
+                logger.info(
+                    f"Blank check for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {final_msg or ''}"  # noqa: E501
+                )
             return is_ok
 
     def check_eprom_id(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
-    ) -> Tuple[bool, Optional[int]]:
-        with self._operation_context(eprom_name, eprom_data_dict, COMMAND_CHECK_CHIP_ID, operation_flags) as (cmd_data, _, op_name):
-            if not cmd_data: return False, None
+    ) -> Tuple[bool, Optional[int]]:  # noqa: UP006
+        with self._operation_context(
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_CHECK_CHIP_ID,
+            operation_flags,
+        ) as (cmd_data, _, op_name):
+            if not cmd_data:
+                return False, None
 
             logger.info(f"Checking chip ID for {eprom_name.upper()}")
             start_time = time.time()
@@ -805,15 +955,23 @@ class EpromOperator:
             is_ok, final_msg = self._run_state_machine(op_name)
             detected_chip_id_value = None
             if is_ok:
-                logger.info(f"Chip ID check passed for {eprom_name.upper()}: {final_msg} ({time.time() - start_time:.2f}s)")
+                logger.info(
+                    f"Chip ID check passed for {eprom_name.upper()}: {final_msg} ({time.time() - start_time:.2f}s)"  # noqa: E501
+                )
                 detected_chip_id_value = cmd_data.get("chip-id")
             else:
-                logger.warning(f"Chip ID check for {eprom_name.upper()} did not return OK. Programmer response: {final_msg}")
+                logger.warning(
+                    f"Chip ID check for {eprom_name.upper()} did not return OK. Programmer response: {final_msg}"  # noqa: E501
+                )
                 detected_chip_id_value = extract_hex_to_decimal(final_msg or "")
                 if detected_chip_id_value is not None:
-                    logger.info(f"Programmer reported chip ID: 0x{detected_chip_id_value:X}")
+                    logger.info(
+                        f"Programmer reported chip ID: 0x{detected_chip_id_value:X}"
+                    )
                 else:
-                    logger.error(f"Failed to extract a valid chip ID from programmer response: {final_msg}")
+                    logger.error(
+                        f"Failed to extract a valid chip ID from programmer response: {final_msg}"  # noqa: E501
+                    )
             return is_ok, detected_chip_id_value
 
 

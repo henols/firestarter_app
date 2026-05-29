@@ -49,18 +49,17 @@ References:
     §Pitfall 4 (state-machine exception -> (False, msg) return contract)
   - .planning/phases/26-cross-board-reproduction-diagnostic-tooling/26-VALIDATION.md
     §"Cross-tool Forward Compatibility" (stdout verdict block regex pin)
-"""
+"""  # noqa: E501
 
 import hashlib
 import re
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path  # noqa: F401
 
-import pytest
+import pytest  # noqa: F401
 
-from firestarter.eprom_operations import EpromOperator, EpromOperationError
 from firestarter.config import ConfigManager
-
+from firestarter.eprom_operations import EpromOperationError, EpromOperator
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -193,7 +192,7 @@ class TestConsistencyCheck:
 
         Asserts Distinct SHAs: 3 and that the first-divergence offset is 0x0000
         (the very first byte differs across runs 1 and 2).
-        """
+        """  # noqa: E501
         p1 = bytes([0x00] * _PAYLOAD_SIZE)
         p2 = bytes([0xAA] * _PAYLOAD_SIZE)
         p3 = bytes([0x55] * _PAYLOAD_SIZE)
@@ -276,7 +275,7 @@ class TestConsistencyCheck:
         assert rc2 == 2, "EpromOperationError must map to exit 2 (D-05)."
 
     def test_no_keep_files_removes_output_dir(self, tmp_path, monkeypatch):
-        """D-10 Test 5 (REPRO-03): keep_files=False removes the output dir after verdict."""
+        """D-10 Test 5 (REPRO-03): keep_files=False removes the output dir after verdict."""  # noqa: E501
         identical = _identical_payload()
         fake_sm, _ = _make_fake_state_machine_with_payloads(
             [identical, identical, identical]
@@ -301,7 +300,7 @@ class TestConsistencyCheck:
         )
 
     def test_runs_boundary_rejected(self, tmp_path, monkeypatch, caplog):
-        """D-10 Test 6 (REPRO-03): runs < 2 rejected with exit 2 BEFORE state machine."""
+        """D-10 Test 6 (REPRO-03): runs < 2 rejected with exit 2 BEFORE state machine."""  # noqa: E501
         # Track that the state machine is NEVER called for invalid runs
         sm_call_count = {"i": 0}
 
@@ -433,8 +432,8 @@ class TestDispatchChain:
         import sys
 
         from firestarter import main as main_mod
-        from firestarter.eprom_operations import EpromOperator
         from firestarter.database import EpromDatabase
+        from firestarter.eprom_operations import EpromOperator
 
         captured = {}
 
@@ -476,6 +475,9 @@ class TestDispatchChain:
         )
 
         # Inject argv and run main()
+        # Phase 41 / Wave 4 (D-08): main is re-exported as Click's `cli`. Click
+        # invokes sys.exit(...) at the end of every command, so we catch the
+        # SystemExit instead of relying on a return value from main_mod.main().
         argv_saved = sys.argv
         try:
             sys.argv = [
@@ -489,11 +491,15 @@ class TestDispatchChain:
                 "3",
                 "--no-keep-files",
             ]
-            rc = main_mod.main()
+            with pytest.raises(SystemExit) as exc_info:
+                main_mod.main()
+            rc = exc_info.value.code
         finally:
             sys.argv = argv_saved
 
-        assert rc == 0, "main() must return the operator method's exit code (0 here)."
+        assert rc == 0, (
+            "main() must exit with the operator method's exit code (0 here)."
+        )
         assert captured.get("eprom_name") == "TEST_CHIP"
         assert captured.get("runs") == 3
         assert captured.get("keep_files") is False

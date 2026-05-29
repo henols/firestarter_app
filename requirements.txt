@@ -1,6 +1,6 @@
-argparse
-pyserial
-requests
-tqdm
-argcomplete
-rich
+pyserial>=3.5
+requests>=2.20
+tqdm>=4.60
+click>=8.1
+rich>=14.0
+packaging>=21.0

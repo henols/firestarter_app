@@ -22,14 +22,15 @@ Key data structures:
 Module-level constants:
 - `pin_conversions`: A hardcoded dictionary mapping standard EPROM pin numbers
   (for 24, 28, 32-pin DIP packages) to the RURP's internal address/control lines.
-"""
+"""  # noqa: E501
 
-import os
 import json
 import logging
+import os
 from pathlib import Path
+
 from firestarter.config import get_local_database, get_local_pin_maps
-from firestarter.constants import *
+from firestarter.constants import FLAG_CAN_ERASE
 
 PROTOCOL_MAP = {
     0x05: "FLASH_AMD_STD",
@@ -45,26 +46,32 @@ PROTOCOL_MAP = {
 # Algorithm integer (upstream protocol_id from infoic.xml) → firmware mem_type integer.
 # Firmware dispatches on protocol first; mem_type is kept consistent for fallback paths.
 _ALGO_MEM_TYPE = {
-    0x05: 5,   # FLASH_AMD_STD     → TYPE_FLASH_TYPE_4
-    0x06: 3,   # FLASH_AMD_ALT     → TYPE_FLASH_TYPE_3
-    0x07: 1,   # EPROM_STD         → TYPE_EPROM
-    0x08: 1,   # EPROM_QUICK       → TYPE_EPROM
-    0x0B: 1,   # EPROM_LEGACY      → TYPE_EPROM
-    0x0D: 1,   # EEPROM_POLL       → TYPE_EPROM (firmware dispatches on protocol prefix)
-    0x0E: 4,   # SRAM_32PIN        → TYPE_SRAM
-    0x10: 1,   # FLASH_INTEL       → TYPE_EPROM (firmware dispatches on protocol prefix)
-    0x27: 4,   # SRAM_24PIN        → TYPE_SRAM
-    0x28: 4,   # SRAM_STD          → TYPE_SRAM
-    0x29: 4,   # SRAM_512K_1M      → TYPE_SRAM
-    0x35: 5,   # FLASH_EEPROM_LIKE → TYPE_FLASH_TYPE_4
-    0x39: 5,   # FLASH_INTEL_ALT   → TYPE_FLASH_TYPE_4 (no DB chips; future-proofed)
+    0x05: 5,  # FLASH_AMD_STD     → TYPE_FLASH_TYPE_4
+    0x06: 3,  # FLASH_AMD_ALT     → TYPE_FLASH_TYPE_3
+    0x07: 1,  # EPROM_STD         → TYPE_EPROM
+    0x08: 1,  # EPROM_QUICK       → TYPE_EPROM
+    0x0B: 1,  # EPROM_LEGACY      → TYPE_EPROM
+    0x0D: 1,  # EEPROM_POLL       → TYPE_EPROM (firmware dispatches on protocol prefix)
+    0x0E: 4,  # SRAM_32PIN        → TYPE_SRAM
+    0x10: 1,  # FLASH_INTEL       → TYPE_EPROM (firmware dispatches on protocol prefix)
+    0x27: 4,  # SRAM_24PIN        → TYPE_SRAM
+    0x28: 4,  # SRAM_STD          → TYPE_SRAM
+    0x29: 4,  # SRAM_512K_1M      → TYPE_SRAM
+    0x35: 5,  # FLASH_EEPROM_LIKE → TYPE_FLASH_TYPE_4
+    0x39: 5,  # FLASH_INTEL_ALT   → TYPE_FLASH_TYPE_4 (no DB chips; future-proofed)
 }
 
 # Module-level constants
 types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
 ROM_CE = 0x100
 ROM_OE = 0x101
-# eprom pins to rurp conversion
+# pin_conversions: RURP board-wiring layer.
+# Maps DIP socket pin number → RURP bus line number (hardware-specific).
+# This is DISTINCT from pinouts.json (loaded as self.pin_maps), which maps
+# chip pin function → DIP socket pin number (chip-specific).
+# They COMPOSE in get_bus_config(): pinouts.json gives function→socket-pin,
+# pin_conversions gives socket-pin→bus-line. There is ONE source of truth
+# per layer, not duplication.
 pin_conversions = {
     # Maps EPROM pin number to RURP hardware line number
     24: {
@@ -158,49 +165,42 @@ class EpromDatabase:
     """
     Manages the EPROM and pin map database for the Firestarter application.
     It loads, merges, and provides access to EPROM definitions and pin map
-    configurations. Implemented as a singleton to ensure a single, consistent
-    database instance throughout the application.
+    configurations. Each call to EpromDatabase() returns a fresh instance;
+    pass skip_local_override=True to skip loading ~/.firestarter/database.json
+    and ~/.firestarter/pinmaps.json (useful in tests for deterministic results).
     """
 
-    _instance = None
-    _initialized = False
-
-    def __new__(cls, *args, **kwargs):
-        if not cls._instance:
-            cls._instance = super(EpromDatabase, cls).__new__(cls, *args, **kwargs)
-        return cls._instance
-
-    def __init__(self):
-        if EpromDatabase._initialized:
-            return
-
+    def __init__(self, skip_local_override: bool = False):
         self.proms = {}
         self.pin_maps = {}
-        self._initialize_database_core()
-        EpromDatabase._initialized = True
+        self._initialize_database_core(skip_local_override=skip_local_override)
         logger.debug("EpromDatabase initialized.")
 
-    def _initialize_database_core(self):
+    def _initialize_database_core(self, skip_local_override: bool = False):
         """
         Loads and merges EPROM and pin map data.
+        When skip_local_override=True, only the packaged chip_database.json and
+        pinouts.json are loaded; ~/.firestarter user overrides are skipped.
         """
         self.proms = _read_config_file("chip_database.json")
 
-        # Load and merge local user EPROM database (~/.firestarter/database.json).
-        # Per-user corrections live there — the shipped chip_database.json is
-        # generated from upstream infoic.xml via tools/build_db.py and should
-        # not be hand-edited.
-        local_db = get_local_database()
-        if local_db:
-            self.proms = self._merge_databases(self.proms, local_db)
+        if not skip_local_override:
+            # Load and merge local user EPROM database (~/.firestarter/database.json).
+            # Per-user corrections live there — the shipped chip_database.json is
+            # generated from upstream infoic.xml via tools/build_db.py and should
+            # not be hand-edited.
+            local_db = get_local_database()
+            if local_db:
+                self.proms = self._merge_databases(self.proms, local_db)
 
         # Load base pin maps
         self.pin_maps = _read_config_file("pinouts.json")
 
-        # Load and merge local user pin maps
-        local_pin_maps = get_local_pin_maps()
-        if local_pin_maps:
-            self.pin_maps = self._merge_pin_maps(self.pin_maps, local_pin_maps)
+        if not skip_local_override:
+            # Load and merge local user pin maps
+            local_pin_maps = get_local_pin_maps()
+            if local_pin_maps:
+                self.pin_maps = self._merge_pin_maps(self.pin_maps, local_pin_maps)
 
     def _merge_databases(self, db: dict, manual_db: dict) -> dict:
         """
@@ -233,7 +233,7 @@ class EpromDatabase:
         """
         Merges two pin map configuration dictionaries. `manual_pin_map` takes precedence.
         Modifies and returns the `pin_maps_base` dictionary.
-        """
+        """  # noqa: E501
         for key, sub_map in manual_pin_map.items():
             if key not in pin_maps_base:
                 # Add new top-level key entirely if it doesn't exist
@@ -241,9 +241,9 @@ class EpromDatabase:
             else:
                 # Replace sub-objects in the existing key
                 for sub_key, sub_value in sub_map.items():
-                    pin_maps_base[key][
-                        sub_key
-                    ] = sub_value  # Replace existing or add new
+                    pin_maps_base[key][sub_key] = (
+                        sub_value  # Replace existing or add new
+                    )
         return pin_maps_base
 
     def get_pin_map(self, pins: int, pin_map_id: str):
@@ -271,7 +271,7 @@ class EpromDatabase:
                     bus.append(pin_conversions[pins][pin])
                 else:
                     logger.warning(
-                        f"Pin {pin} not in pin_conversions for {pins}-pin EPROM during bus config."
+                        f"Pin {pin} not in pin_conversions for {pins}-pin EPROM during bus config."  # noqa: E501
                     )
             map_config["bus"] = bus
         else:
@@ -291,11 +291,11 @@ class EpromDatabase:
                 if pin_to_check in pin_conversions.get(pins, {}):
                     resolved = pin_conversions[pins][pin_to_check]
                     if pin_func == "vpp-pin" and resolved in (ROM_CE, ROM_OE):
-                        continue  # No dedicated VPP pin; firmware defaults vpp_line=0xFF (VPE path)
+                        continue  # No dedicated VPP pin; firmware defaults vpp_line=0xFF (VPE path)  # noqa: E501
                     map_config[pin_func] = resolved
                 else:
                     logger.warning(
-                        f"Pin function '{pin_func}' with pin number {pin_to_check} not in pin_conversions for {pins}-pin EPROM."
+                        f"Pin function '{pin_func}' with pin number {pin_to_check} not in pin_conversions for {pins}-pin EPROM."  # noqa: E501
                     )
 
         if "static-high-pins" in pin_map_data and pins in pin_conversions:
@@ -305,7 +305,7 @@ class EpromDatabase:
                     static_high.append(pin_conversions[pins][pin])
                 else:
                     logger.warning(
-                        f"static-high-pin {pin} not in pin_conversions for {pins}-pin EPROM."
+                        f"static-high-pin {pin} not in pin_conversions for {pins}-pin EPROM."  # noqa: E501
                     )
             if static_high:
                 map_config["static-high"] = static_high
@@ -317,7 +317,7 @@ class EpromDatabase:
         Returns [(pin_number, signal_name), ...] for every physical DIP pin 1..pin_count.
         Derived directly from pinouts.json. Returns [] if the pinout key is unknown.
         Used to display adapter wiring via `firestarter info --adapter`.
-        """
+        """  # noqa: E501
         pin_map_data = self.get_pin_map(pin_count, pinout_key)
         if not pin_map_data:
             return []
@@ -325,7 +325,7 @@ class EpromDatabase:
         pin_signals = {}
 
         def _assign(pins_val, signal):
-            for p in (pins_val if isinstance(pins_val, list) else [pins_val]):
+            for p in pins_val if isinstance(pins_val, list) else [pins_val]:
                 if p in pin_signals and signal not in pin_signals[p]:
                     pin_signals[p] = pin_signals[p] + "/" + signal
                 else:
@@ -336,7 +336,9 @@ class EpromDatabase:
         _assign(pin_map_data.get("ce-pin", []), "CE")
         _assign(pin_map_data.get("oe-pin", []), "OE")
         _assign(pin_map_data.get("pgm-pin", []), "PGM")
-        _assign(pin_map_data.get("vpp-pin", []), "VPP")  # may append "/VPP" to OE if shared
+        _assign(
+            pin_map_data.get("vpp-pin", []), "VPP"
+        )  # may append "/VPP" to OE if shared
 
         for i, p in enumerate(pin_map_data.get("address-bus-pins", [])):
             if p not in pin_signals:
@@ -347,6 +349,17 @@ class EpromDatabase:
                 pin_signals[p] = f"D{i}"
 
         return [(p, pin_signals.get(p, "NC")) for p in range(1, pin_count + 1)]
+
+    def map_chip_record(self, ic: dict, manufacturer: str) -> dict:
+        """Public alias for `_map_data` — stable surface for callers outside this module.
+
+        Phase 41 / WR-05: the `id` command in cli_handlers.py previously reached into
+        `db._map_data` directly to render `search_chip_id` results. That coupled the CLI
+        to a private name; this thin wrapper decouples the surface without changing
+        behaviour. Future refactors can rework `_map_data`'s signature freely as long
+        as this public alias keeps the (ic, manufacturer) -> dict contract.
+        """
+        return self._map_data(ic, manufacturer)
 
     def _map_data(self, ic: dict, manufacturer: str) -> dict:
         """
@@ -370,12 +383,12 @@ class EpromDatabase:
             vpp = float(vpp_str)
         except (ValueError, TypeError):
             None
-            # logger.warning(f"Invalid VPP value for {ic.get('part_number')}: {vpp_str}")
+            # logger.warning(f"Invalid VPP value for {ic.get('part_number')}: {vpp_str}")  # noqa: E501
         try:
             vcc = float(vcc_str)
         except (ValueError, TypeError):
             None
-            # logger.warning(f"Invalid VCC value for {ic.get('part_number')}: {vcc_str}")
+            # logger.warning(f"Invalid VCC value for {ic.get('part_number')}: {vcc_str}")  # noqa: E501
         vpp_mv = electrical.get("vpp_mv", 0)
 
         # Read algorithm integer directly — set by build_db.py from upstream protocol_id
@@ -409,7 +422,7 @@ class EpromDatabase:
             "vpp_volts": vpp,
             "vpp_mv": vpp_mv,
             "vcc": vcc,
-            "pulse-delay": 0,  # Not directly available in new format, may need parsing from string
+            "pulse-delay": 0,  # Not directly available in new format, may need parsing from string  # noqa: E501
             "verified": bool(ic.get("verified", False)),
             "info-flags": info_flags,
             "flags": 0,
@@ -437,7 +450,7 @@ class EpromDatabase:
 
         Returns:
             list: A list of dictionaries, where each dictionary represents an EPROM's data.
-        """
+        """  # noqa: E501
         selected_proms = []
         for manufacturer, ics in self.proms.items():
             for ic_config in ics:
@@ -468,6 +481,7 @@ class EpromDatabase:
         is normalized to match against the paren-stripped alias.
         """
         import re
+
         def _strip_paren(s):
             # "DS1245AB(RW)" -> "DS1245AB"; preserves the canonical chip name.
             return re.sub(r"\([^)]*\)", "", s).strip().lower()
@@ -528,7 +542,9 @@ class EpromDatabase:
             return {}
 
         # Use vpp_mv directly when available (integer millivolts from build_db.py)
-        vpp_mv = full_eprom_data.get("vpp_mv") or int(full_eprom_data.get("vpp_volts", 0) * 1000)
+        vpp_mv = full_eprom_data.get("vpp_mv") or int(
+            full_eprom_data.get("vpp_volts", 0) * 1000
+        )
 
         # Keys to keep from the full data
         programmer_data = {
@@ -548,8 +564,8 @@ class EpromDatabase:
             programmer_data["bus-config"] = full_eprom_data["bus-config"]
 
         # Calculate the simple 'flags' key for the programmer
-        # Inferring from mapped 'type': Type 2 (Flash 2) and Type 3 (Flash 3) are electrically erasable.
-        # New requirement: FLAG_CAN_ERASE should be set if info-flags has the 0x00000010 bit.
+        # Inferring from mapped 'type': Type 2 (Flash 2) and Type 3 (Flash 3) are electrically erasable.  # noqa: E501
+        # New requirement: FLAG_CAN_ERASE should be set if info-flags has the 0x00000010 bit.  # noqa: E501
         simple_flags = 0
         if (
             full_eprom_data.get("info-flags", 0) & 0x00000010
@@ -598,7 +614,7 @@ class EpromDatabase:
                             selected_proms.append(ic_copy)
                     except ValueError:
                         logger.warning(
-                            f"Invalid chip-id format for {ic_config.get('part_number', 'Unknown EPROM')}: {programming.get('chip_id_value')}"
+                            f"Invalid chip-id format for {ic_config.get('part_number', 'Unknown EPROM')}: {programming.get('chip_id_value')}"  # noqa: E501
                         )
         return selected_proms
 
@@ -653,7 +669,7 @@ def main():  # Test function
         variant = None
         pin_count = config.get("pin-count")
         variant = config.get("pin-map", config.get("variant"))
-        if pin_count and not variant is None:
+        if pin_count and not variant is None:  # noqa: E714
             print("\n--- Pin Map ---")
             pin_map_details = db.get_pin_map(pin_count, variant)
             print(json.dumps(pin_map_details, indent=2))

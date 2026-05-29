@@ -19,18 +19,17 @@ Wave 0 contract:
 - TestUpdateVersionStable tests are also authored against the Wave-1 4-tuple shape (D-24)
   and fail today with ValueError (too many values to unpack / 3-tuple from get_version).
 - Import succeeds against the current 60-line script (no ImportError at collection time).
-"""
+"""  # noqa: E501
 
-import sys
 import subprocess
+import sys
 from pathlib import Path
 
-# Self-contained sys.path injection — NOT in conftest.py per 15-PATTERNS.md Critical Note 4.
+# Self-contained sys.path injection — NOT in conftest.py per 15-PATTERNS.md Critical Note 4.  # noqa: E501
 # Both sub-repos have the script at .github/scripts/update_version.py.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / ".github" / "scripts"))
-import update_version  # noqa: E402
-
 import pytest
+import update_version  # noqa: E402
 
 
 class TestUpdateVersionStable:
@@ -67,7 +66,7 @@ class TestUpdateVersionStable:
         with the Wave-1 4-tuple unpack is what this test calls.
 
         Decisions: D-17 (byte-identity), D-24 (4-tuple return), D-25 (dev-suffix ignored).
-        """
+        """  # noqa: E501
         golden_dir = Path(__file__).resolve().parent / "golden"
         baseline = golden_dir / "stable-baseline.py"
         expected = golden_dir / "stable-expected.py"
@@ -80,7 +79,7 @@ class TestUpdateVersionStable:
         monkeypatch.setenv("GITHUB_OUTPUT", str(output_file))
         monkeypatch.setattr(update_version, "version_file", str(version_file))
 
-        # Wave 1 contract: parse_args() exists and returns an object with dry_run=False, beta=False.
+        # Wave 1 contract: parse_args() exists and returns an object with dry_run=False, beta=False.  # noqa: E501
         args = update_version.parse_args()
         assert not update_version.is_beta_mode(args)
         update_version.calculate_version()
@@ -100,7 +99,7 @@ class TestUpdateVersionStable:
 
         RED today: Wave 1 needed for 4-tuple unpack and parse_args/is_beta_mode.
         Decisions: D-17 (preserved typo), D-24 (4-tuple from get_version).
-        """
+        """  # noqa: E501
         version_file = tmp_path / "__init__.py"
         version_file.write_text('__version__ = "1.2.3"\n')
         monkeypatch.setattr(update_version, "version_file", str(version_file))
@@ -113,8 +112,9 @@ class TestUpdateVersionStable:
         args = update_version.parse_args()
         assert not update_version.is_beta_mode(args)
 
-        import io
         import contextlib
+        import io
+
         stdout_capture = io.StringIO()
         with contextlib.redirect_stdout(stdout_capture):
             update_version.calculate_version()
@@ -126,7 +126,7 @@ class TestUpdateVersionStable:
 
         stdout_text = stdout_capture.getvalue()
         assert "New versin created:" in stdout_text, (
-            f"Expected preserved typo 'New versin created:' in stdout. Got:\n{stdout_text}"
+            f"Expected preserved typo 'New versin created:' in stdout. Got:\n{stdout_text}"  # noqa: E501
         )
 
 
@@ -140,7 +140,7 @@ class TestUpdateVersionBeta:
     Decisions: D-04 (GITHUB_REF detection), D-05 (--beta flag), D-06 (BETA_VERSION env),
                D-07 (verbatim acceptance), D-08 (git-tag fallback), D-09 (first beta = b1),
                D-21 (PEP 440 regex validation).
-    """
+    """  # noqa: E501
 
     @pytest.fixture(autouse=True)
     def _isolate_env(self, monkeypatch):
@@ -159,7 +159,7 @@ class TestUpdateVersionBeta:
 
         RED today: beta path (is_beta_mode, compute_beta_version) does not exist.
         Decisions: D-04 (GITHUB_REF), D-06 (BETA_VERSION env), D-07 (verbatim write).
-        """
+        """  # noqa: E501
         version_file = tmp_path / "__init__.py"
         version_file.write_text('__version__ = "1.2.3"\n')
         monkeypatch.setattr(update_version, "version_file", str(version_file))
@@ -172,13 +172,15 @@ class TestUpdateVersionBeta:
 
         # Wave 1 contract: parse_args() and is_beta_mode() exist; main script entry.
         args = update_version.parse_args()
-        assert update_version.is_beta_mode(args), "GITHUB_REF=refs/heads/beta must trigger beta mode"
+        assert update_version.is_beta_mode(args), (
+            "GITHUB_REF=refs/heads/beta must trigger beta mode"
+        )
 
         update_version.calculate_version()
 
         content = version_file.read_text()
         assert content.endswith('__version__ = "1.2.3b1"\n'), (
-            f"Beta version file must end with __version__ = \"1.2.3b1\"\\n. Got: {content!r}"
+            f'Beta version file must end with __version__ = "1.2.3b1"\\n. Got: {content!r}'  # noqa: E501
         )
         output_text = output_file.read_text()
         assert "version=1.2.3b1" in output_text, (
@@ -197,7 +199,7 @@ class TestUpdateVersionBeta:
 
         RED today: BETA_VERSION validation does not exist.
         Decisions: D-21 (PEP 440 regex ^[0-9]+[.][0-9]+[.][0-9]+(b|rc)[0-9]+$), T-15-01-02.
-        """
+        """  # noqa: E501
         original_content = '__version__ = "1.2.3"\n'
         version_file = tmp_path / "__init__.py"
         version_file.write_text(original_content)
@@ -225,7 +227,7 @@ class TestUpdateVersionBeta:
 
         RED today: git-tag-scan fallback (compute_beta_version) does not exist.
         Decisions: D-08 (git-tag-scan fallback), D-09 (monotonic b increment), T-15-01-03.
-        """
+        """  # noqa: E501
         version_file = tmp_path / "__init__.py"
         version_file.write_text('__version__ = "1.2.3"\n')
         monkeypatch.setattr(update_version, "version_file", str(version_file))
@@ -240,7 +242,9 @@ class TestUpdateVersionBeta:
         fake_result = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="1.2.3b1\n1.2.3b2\n", stderr=""
         )
-        monkeypatch.setattr(update_version.subprocess, "run", lambda *a, **kw: fake_result)
+        monkeypatch.setattr(
+            update_version.subprocess, "run", lambda *a, **kw: fake_result
+        )
 
         update_version.calculate_version()
 
@@ -257,7 +261,7 @@ class TestUpdateVersionBeta:
 
         RED today: compute_beta_version fallback does not exist.
         Decisions: D-09 (first beta resets to b1), D-08 (empty tag list).
-        """
+        """  # noqa: E501
         version_file = tmp_path / "__init__.py"
         version_file.write_text('__version__ = "1.2.3"\n')
         monkeypatch.setattr(update_version, "version_file", str(version_file))
@@ -272,7 +276,9 @@ class TestUpdateVersionBeta:
         fake_result = subprocess.CompletedProcess(
             args=[], returncode=0, stdout="", stderr=""
         )
-        monkeypatch.setattr(update_version.subprocess, "run", lambda *a, **kw: fake_result)
+        monkeypatch.setattr(
+            update_version.subprocess, "run", lambda *a, **kw: fake_result
+        )
 
         update_version.calculate_version()
 
@@ -289,7 +295,7 @@ class TestUpdateVersionDryRun:
     Wave 1 adds argparse with --dry-run to make these tests GREEN.
 
     Decisions: D-13 (--dry-run flag), D-28 (DRY_RUN: {version} stdout format).
-    """
+    """  # noqa: E501
 
     @pytest.fixture(autouse=True)
     def _isolate_env(self, monkeypatch):
@@ -308,7 +314,7 @@ class TestUpdateVersionDryRun:
 
         RED today: --dry-run and argparse do not exist.
         Decisions: D-13 (no file write), D-28 (DRY_RUN: format).
-        """
+        """  # noqa: E501
         original_content = '__version__ = "1.2.3"\n'
         version_file = tmp_path / "__init__.py"
         version_file.write_text(original_content)
@@ -322,7 +328,9 @@ class TestUpdateVersionDryRun:
         assert args.dry_run, "--dry-run arg must set args.dry_run = True"
         assert update_version.is_beta_mode(args)
 
-        import io, contextlib
+        import contextlib
+        import io
+
         stdout_capture = io.StringIO()
         with contextlib.redirect_stdout(stdout_capture):
             update_version.calculate_version(args)
@@ -338,7 +346,7 @@ class TestUpdateVersionDryRun:
             f"--dry-run stdout must start with 'DRY_RUN: '. Got: {captured_out!r}"
         )
         assert "1.2.3b1" in captured_out, (
-            f"--dry-run stdout must contain the proposed version '1.2.3b1'. Got: {captured_out!r}"
+            f"--dry-run stdout must contain the proposed version '1.2.3b1'. Got: {captured_out!r}"  # noqa: E501
         )
 
     def test_dry_run_stable_path(self, tmp_path, monkeypatch, capsys):
@@ -350,7 +358,7 @@ class TestUpdateVersionDryRun:
 
         RED today: --dry-run and argparse do not exist.
         Decisions: D-13 (no file write on dry-run), D-28 (DRY_RUN: {version} format).
-        """
+        """  # noqa: E501
         original_content = '__version__ = "1.2.3"\n'
         version_file = tmp_path / "__init__.py"
         version_file.write_text(original_content)
@@ -360,7 +368,9 @@ class TestUpdateVersionDryRun:
         # Wave 1 contract: parse_args(['--dry-run']) works.
         args = update_version.parse_args(["--dry-run"])
         assert args.dry_run, "--dry-run arg must set args.dry_run = True"
-        assert not update_version.is_beta_mode(args), "Stable dry-run must not be in beta mode"
+        assert not update_version.is_beta_mode(args), (
+            "Stable dry-run must not be in beta mode"
+        )
 
         update_version.calculate_version(args)
         captured = capsys.readouterr()
@@ -375,5 +385,5 @@ class TestUpdateVersionDryRun:
             f"--dry-run stdout must start with 'DRY_RUN: '. Got: {captured.out!r}"
         )
         assert "1.2.4" in captured.out, (
-            f"--dry-run stable path stdout must contain proposed version '1.2.4'. Got: {captured.out!r}"
+            f"--dry-run stable path stdout must contain proposed version '1.2.4'. Got: {captured.out!r}"  # noqa: E501
         )

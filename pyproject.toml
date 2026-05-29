@@ -47,7 +47,7 @@ dependencies = [
     "pyserial>=3.5",
     "requests>=2.20",
     "tqdm>=4.60",
-    "argcomplete>=3.6.2",
+    "click>=8.1",
     "rich>=14.0",
     "packaging>=21.0",
 ]
@@ -57,6 +57,15 @@ urls = { "Homepage" = "https://github.com/henols/firestarter_app" }
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
+]
+test = [
+    "pytest>=8.0",
+    "syrupy>=5.0",
+    # Phase 37 additions:
+    "ruff>=0.15.14",
+    "mypy>=2.1.0",
+    "pytest-cov>=7.1.0",
+    "types-pyserial>=3.5.0.20260519",
 ]
 
 [project.scripts]
@@ -78,3 +87,86 @@ version = { attr = "firestarter.__version__" }
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra -q"
+
+[tool.ruff]
+target-version = "py39"
+line-length = 88
+
+[tool.ruff.lint]
+# E: pycodestyle errors (style violations that ruff-format does not fix)
+# F: pyflakes (undefined names, unused imports)
+# I: isort (import ordering)
+# UP: pyupgrade (modernise syntax within py39 bounds — UP007/UP045 no-ops on py39)
+# No select = ["ALL"] — broadening to B/SIM/C4 deferred to Phase 42.
+# E501 excluded: ruff-format enforces line length; including E501 causes a
+# noqa-adds-noqa-on-long-lines cycle (443 violations pre-format → 3 post-format).
+select = ["E", "F", "I", "UP"]
+extend-ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.mypy]
+python_version = "3.9"          # Must be in config file — mypy 2.1.0 rejects --python-version 3.9 via CLI flag
+ignore_missing_imports = true   # needed for tqdm, rich (no stubs)
+disallow_untyped_defs = false   # gradual adoption — global stays lenient (D-10)
+check_untyped_defs = false
+# mypy_error_watermark = 26   # Updated Phase 42 D-08 post-strict-overrides addition. Old floor: 44 (Phase 37 tip).
+
+[[tool.mypy.overrides]]
+# Phase 36 test modules — strict-island: check bodies of untyped test functions.
+# "Strict" here means check_untyped_defs = true, NOT disallow_untyped_defs = true
+# (the latter would require -> None on every test function and would break the suite).
+module = [
+    "tests.test_characterization",
+    "tests.test_serial_characterization",
+    "tests.test_bug_characterization",
+    "tests.test_eprom_database",
+    "tests.test_revision_constants_parity",
+    "tests.test_decoder",
+]
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# Phase 42 D-06: strict-island for the 8 modules touched in v1.8.
+# eprom_operations.py DELIBERATELY EXCLUDED per D-07 (GATE-1.8d read-path ring-fence; deferred to v1.9 post-RCA).
+module = [
+    "firestarter.main",
+    "firestarter.cli_handlers",
+    "firestarter.chip_resolver",
+    "firestarter.frame_parser",
+    "firestarter.codec",
+    "firestarter.address_parser",
+    "firestarter.exceptions",
+    "firestarter.serial_comm",
+]
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# Phase 42 D-06 / D-07: non-strict modules — silence transitively-imported
+# errors so `mypy <strict-list>` exits 0. The full mypy gate
+# (tools/check_mypy_watermark.py) still tracks these via the watermark count.
+module = [
+    "firestarter.eprom_operations",
+    "firestarter.firmware",
+    "firestarter.hardware",
+    "firestarter.database",
+    "firestarter.config",
+    "firestarter.ic_layout",
+    "firestarter.eprom_info",
+    "firestarter.utils",
+    "firestarter.logging_utils",
+    "firestarter.avr_tool",
+]
+follow_imports = "silent"
+
+[tool.coverage.run]
+source = ["firestarter"]
+# Phase 42 D-13: avr_tool.py omitted — subprocess wrapper for avrdude;
+# meaningful coverage would require real avrdude binary in CI.
+omit = ["firestarter/data/*", "firestarter/avr_tool.py"]
+
+[tool.coverage.report]
+show_missing = true

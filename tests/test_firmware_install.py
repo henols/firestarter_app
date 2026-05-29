@@ -25,15 +25,15 @@ Wave 0 contract:
   matching the Phase 15 / Phase 6 monkeypatch.setattr style.
 """
 
-import json
+import json  # noqa: F401
 import logging
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 import requests as _requests
 
 from firestarter import firmware
 from firestarter.firmware import FirmwareManager
-
 
 # ---------------------------------------------------------------------------
 # Module-local helpers — NOT in conftest.py (per VALIDATION.md line 60)
@@ -48,7 +48,7 @@ def mock_releases_factory(releases, next_url=None):
         next_url: if set, includes a Link: rel="next" header to simulate pagination.
 
     Returns a MagicMock with .json(), .raise_for_status(), .headers, .iter_content() set.
-    """
+    """  # noqa: E501
     mock = MagicMock()
     mock.json.return_value = releases
     mock.raise_for_status.return_value = None
@@ -58,7 +58,7 @@ def mock_releases_factory(releases, next_url=None):
 
 
 def mock_404_response():
-    """Build a MagicMock that raises HTTPError(status_code=404) on raise_for_status()."""
+    """Build a MagicMock that raises HTTPError(status_code=404) on raise_for_status()."""  # noqa: E501
     mock = MagicMock()
     mock.raise_for_status.side_effect = _requests.exceptions.HTTPError(
         response=MagicMock(status_code=404)
@@ -82,7 +82,7 @@ class _FakeAvrdude:
         self.baud_rate = baud_rate
         self.port = port
         self.command = "/fake/avrdude"  # str — _install_with_avrdude saves this
-        self.config = None              # avrdude>=7 path (no -C arg)
+        self.config = None  # avrdude>=7 path (no -C arg)
 
     def flash_firmware(self, hex_file_path):
         return ("", 0)  # (stderr, returncode) — 0 = success
@@ -420,9 +420,9 @@ class TestFirmwareInstallPreRelease:
         assert url is not None
         # Must log something about falling back to stable
         lower_records = [r.message.lower() for r in caplog.records]
-        assert any("fall" in m or "stable" in m or "no pre" in m for m in lower_records), (
-            f"Expected a fallback log record; got: {[r.message for r in caplog.records]}"
-        )
+        assert any(
+            "fall" in m or "stable" in m or "no pre" in m for m in lower_records
+        ), f"Expected a fallback log record; got: {[r.message for r in caplog.records]}"
 
     def test_pre_filters_draft_releases(self, monkeypatch):
         """INST-02 / D-03 — draft releases are excluded from pre-release candidates.
@@ -473,7 +473,7 @@ class TestFirmwareInstallPreRelease:
 
         RED today: FirmwareManager has no fetch_release_info — AttributeError.
         """
-        release_on_page = lambda n: [
+        release_on_page = lambda n: [  # noqa: E731
             {
                 "tag_name": f"3.{n}.0b1",
                 "prerelease": True,
@@ -491,7 +491,7 @@ class TestFirmwareInstallPreRelease:
         pages = [
             mock_releases_factory(
                 release_on_page(i),
-                next_url=f"https://api.github.com/repos/henols/firestarter/releases?page={i+1}",
+                next_url=f"https://api.github.com/repos/henols/firestarter/releases?page={i + 1}",  # noqa: E501
             )
             for i in range(1, 7)  # 6 pages, last has a next_url too
         ]
@@ -512,7 +512,7 @@ class TestFirmwareInstallPreRelease:
         )
         lower_records = [r.message.lower() for r in caplog.records]
         assert any("cap" in m or "page" in m or "150" in m for m in lower_records), (
-            f"Expected a pagination cap INFO log; got: {[r.message for r in caplog.records]}"
+            f"Expected a pagination cap INFO log; got: {[r.message for r in caplog.records]}"  # noqa: E501
         )
 
 
@@ -612,12 +612,14 @@ class TestFirmwareInstallPinned:
                  latest (not a version), X.Y.Z.A.B (too many components)
 
         RED today: FIRMWARE_VERSION_RE does not exist in firestarter.firmware — ImportError.
-        """
+        """  # noqa: E501
         from firestarter.firmware import FIRMWARE_VERSION_RE
 
         valid = ["3.1.0", "3.1.0b2", "3.1.0rc1", "0.0.1b1", "3.0.0", "10.20.30rc99"]
         for v in valid:
-            assert FIRMWARE_VERSION_RE.match(v), f"Expected {v!r} to match FIRMWARE_VERSION_RE"
+            assert FIRMWARE_VERSION_RE.match(v), (
+                f"Expected {v!r} to match FIRMWARE_VERSION_RE"
+            )
 
         invalid = ["3.1.0-dev", "3.1.0beta2", "3.1", "latest", "3.1.0.4.5", "", "abc"]
         for v in invalid:
@@ -715,7 +717,7 @@ class TestFirmwareList:
         Each returned element must have keys: version, tag, channel, published, asset_url.
 
         RED today: FirmwareManager has no list_releases method — AttributeError.
-        """
+        """  # noqa: E501
         mock = mock_releases_factory(self._mixed_releases())
         monkeypatch.setattr(firmware.requests, "get", lambda *a, **kw: mock)
         fm = FirmwareManager(config_manager=MagicMock())
@@ -737,7 +739,7 @@ class TestFirmwareList:
         """INST-04 / D-11 — releases without a matching board asset are silently omitted.
 
         RED today: FirmwareManager has no list_releases — AttributeError.
-        """
+        """  # noqa: E501
         releases = [
             {
                 "tag_name": "3.0.0",
@@ -869,6 +871,7 @@ class TestMagicDefault:
     def _isolate_env(self, monkeypatch):
         """Restore firestarter.__version__ after each test."""
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", _pkg.__version__)
 
     def test_dev_suffix_is_prerelease(self, monkeypatch):
@@ -878,10 +881,12 @@ class TestMagicDefault:
         The helper must set args.pre = True.
 
         RED today: _maybe_auto_route_to_pre does not exist in firestarter.main — ImportError.
-        """
+        """  # noqa: E501
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
-        from firestarter.main import _maybe_auto_route_to_pre
+        from firestarter.cli_handlers import _maybe_auto_route_to_pre
+
         args = MagicMock()
         args.install = True
         args.pre = False
@@ -897,10 +902,12 @@ class TestMagicDefault:
         args.pre must remain False after calling the helper.
 
         RED today: _maybe_auto_route_to_pre does not exist in firestarter.main — ImportError.
-        """
+        """  # noqa: E501
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", "2.0.7")
-        from firestarter.main import _maybe_auto_route_to_pre
+        from firestarter.cli_handlers import _maybe_auto_route_to_pre
+
         args = MagicMock()
         args.install = True
         args.pre = False
@@ -918,8 +925,10 @@ class TestMagicDefault:
         RED today: _maybe_auto_route_to_pre does not exist — ImportError.
         """
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
-        from firestarter.main import _maybe_auto_route_to_pre
+        from firestarter.cli_handlers import _maybe_auto_route_to_pre
+
         args = MagicMock()
         args.install = True
         args.pre = True  # already set by user
@@ -941,8 +950,10 @@ class TestMagicDefault:
         RED today: _maybe_auto_route_to_pre does not exist — ImportError.
         """
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
-        from firestarter.main import _maybe_auto_route_to_pre
+        from firestarter.cli_handlers import _maybe_auto_route_to_pre
+
         args = MagicMock()
         args.install = True
         args.pre = False
@@ -961,8 +972,10 @@ class TestMagicDefault:
         is True, even on a pre-release-installed app.
         """
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")  # prerelease
-        from firestarter.main import _maybe_auto_route_to_pre
+        from firestarter.cli_handlers import _maybe_auto_route_to_pre
+
         args = MagicMock()
         args.install = True
         args.pre = False
@@ -983,8 +996,10 @@ class TestMagicDefault:
         RED today: _maybe_auto_route_to_pre does not exist — ImportError.
         """
         import firestarter as _pkg
+
         monkeypatch.setattr(_pkg, "__version__", "2.0.7_dev")
-        from firestarter.main import _maybe_auto_route_to_pre
+        from firestarter.cli_handlers import _maybe_auto_route_to_pre
+
         args = MagicMock()
         args.install = True
         args.pre = False
@@ -1002,118 +1017,58 @@ class TestMagicDefault:
 
 
 # ===========================================================================
-# TestArgparseMutex — D-19 / D-20 three-way channel mutex + install/list mutex
+# TestFirmwareCommandDispatch — --json without --list post-parse validation
 # ===========================================================================
+#
+# Phase 41 / Wave 4 (CLI-01..04) note: this class previously held 5
+# argparse-form mutex/validator tests that imported `create_firmware_args`
+# from `firestarter.main`. With the entry-point swap to Click, that argparse
+# factory + its 14 sibling `create_*_args` factories are deleted outright.
+# The equivalent Click-form contracts are pinned in
+# `tests/test_cli_handlers.py` (W3 / Plan 41-03):
+#   - test_fw_mutex_pre_and_firmware_version
+#   - test_fw_mutex_stable_and_pre
+#   - test_fw_mutex_firmware_version_and_stable
+#   - test_fw_invalid_firmware_version
+#   - (also): the Click `click.Choice` enforcement on --board renders
+#     `test_argparse_accepts_uno328pb_board_choice` redundant — `click.Choice`
+#     ships the contract structurally instead of via a per-value test.
+# Only the sys.argv-driven `test_json_without_list_post_parse_error` survives
+# here: it still pins the documented `--json requires --list` UsageError
+# contract end-to-end through the Click entry point (the test invokes
+# `from firestarter.main import main; main()`; `main = cli` re-export keeps
+# the call shape valid through D-08).
 
 
-class TestArgparseMutex:
-    """INST-02, INST-03 — argparse mutex groups enforce contradictory-intent rejection.
+class TestFirmwareCommandDispatch:
+    """INST-02 / D-14 — `--json` without `--list` is rejected at dispatch time.
 
-    Tests build the parser INLINE using create_firmware_args (no _build_root_parser
-    helper — revision blocker #3). create_firmware_args must RETURN fw_parser
-    (revision Open Q2 resolution, RESEARCH.md Pitfall 5).
-
-    Three-way channel mutex: --pre / --firmware-version / --stable all in one
-    add_mutually_exclusive_group (revision blocker #1 — CLEANEST option).
-    Two-way install/list mutex: --list / -i/--install in one group (D-20).
-
-    Decisions pinned: D-19 (--pre / --firmware-version mutex),
-                      D-20 (--list / --install mutex),
-                      D-13 (--pre / --stable / --all channel filter for list).
+    The sole surviving argparse-era test in this class: it drives the real
+    `main` entry point (re-exported as `cli` per D-08) via sys.argv
+    monkeypatching, so the post-parse UsageError still raises SystemExit (
+    `click.UsageError`'s exit_code=2). Phase 41 D-14 narrow upgrade replaces
+    the argparse `fw_parser.error(...)` form with `raise click.UsageError(...)`.
     """
 
     @pytest.fixture(autouse=True)
     def _isolate_env(self, monkeypatch):
         pass
 
-    def _build_parser(self):
-        """Build an argparse parser using create_firmware_args inline.
-
-        create_firmware_args must return fw_parser (Wave 1 contract).
-        """
-        import argparse
-        from firestarter.main import create_firmware_args
-        p = argparse.ArgumentParser()
-        sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)  # MUST return fw_parser per RESEARCH Open Q2
-        return p, fw_parser
-
-    def test_pre_and_firmware_version_mutex(self):
-        """D-19 — --pre and --firmware-version are mutually exclusive.
-
-        Providing both must cause argparse to exit with code 2.
-
-        RED today: create_firmware_args does not accept --pre / --firmware-version — SystemExit
-        or: create_firmware_args returns None (no return statement yet) — TypeError.
-        """
-        import argparse
-        from firestarter.main import create_firmware_args
-        p = argparse.ArgumentParser()
-        sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)
-        with pytest.raises(SystemExit):
-            p.parse_args(["fw", "-i", "--pre", "--firmware-version", "3.1.0"])
-
-    def test_list_and_install_mutex(self):
-        """D-20 — --list and -i/--install are mutually exclusive.
-
-        RED today: create_firmware_args returns None or --list does not exist.
-        """
-        import argparse
-        from firestarter.main import create_firmware_args
-        p = argparse.ArgumentParser()
-        sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)
-        with pytest.raises(SystemExit):
-            p.parse_args(["fw", "-i", "--list"])
-
-    def test_stable_and_pre_mutex(self):
-        """D-13 / revision blocker #1 — --stable and --pre are mutually exclusive
-        (both in the same 3-way channel_group alongside --firmware-version).
-
-        RED today: create_firmware_args does not have --stable / --pre flags.
-        """
-        import argparse
-        from firestarter.main import create_firmware_args
-        p = argparse.ArgumentParser()
-        sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)
-        with pytest.raises(SystemExit):
-            p.parse_args(["fw", "--list", "--pre", "--stable"])
-
     def test_json_without_list_post_parse_error(self, monkeypatch):
-        """D-12 / RESEARCH.md Pattern 3 — --json without --list must be rejected.
+        """D-14 — --json without --list must be rejected with SystemExit.
 
-        argparse accepts --json at parse time, but dispatch calls fw_parser.error(...)
-        for the post-parse validation. This test verifies the dispatch path exits 2.
-
-        Uses sys.argv monkeypatching to drive the real main() entry point.
-
-        RED today: The new --json flag and dispatch logic do not exist — SystemExit(1)
-        or AttributeError, not SystemExit(2).
+        Uses sys.argv monkeypatching to drive the real `main` (== `cli`) entry
+        point. Click's `raise click.UsageError("--json requires --list")` maps
+        to SystemExit(2), matching the prior argparse `fw_parser.error(...)`
+        exit code.
         """
         import sys
+
         monkeypatch.setattr(sys, "argv", ["firestarter", "fw", "--json"])
         from firestarter.main import main
+
         with pytest.raises(SystemExit):
             main()
-
-    def test_firmware_version_regex_validation_at_argparse(self):
-        """D-07 — invalid --firmware-version string is rejected by argparse type= validator.
-
-        'not-a-version' does not match FIRMWARE_VERSION_RE; the type= validator
-        raises ArgumentTypeError which argparse converts to SystemExit(2).
-
-        RED today: --firmware-version flag does not exist — SystemExit(2) for
-        unrecognized argument, or no exit at all.
-        """
-        import argparse
-        from firestarter.main import create_firmware_args
-        p = argparse.ArgumentParser()
-        sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)
-        with pytest.raises(SystemExit):
-            p.parse_args(["fw", "-i", "--firmware-version", "not-a-version"])
 
 
 # ===========================================================================
@@ -1153,9 +1108,7 @@ class TestUno328pbResolution:
         # Override json() to return a single release dict — /releases/latest
         # returns a single object, not a list (Pitfall 4).
         stable_mock.json.return_value = _STABLE_RELEASE_UNO328PB
-        monkeypatch.setattr(
-            firmware.requests, "get", lambda url, **kw: stable_mock
-        )
+        monkeypatch.setattr(firmware.requests, "get", lambda url, **kw: stable_mock)
         fm = FirmwareManager(config_manager=MagicMock())
         v, url = fm.fetch_release_info(channel="stable", board="uno328pb")
         assert v == "3.0.1"
@@ -1299,36 +1252,241 @@ class TestUno328pbResolution:
         )
         assert captured["baud_rate"] == 115200
 
-    def test_argparse_accepts_uno328pb_board_choice(self, monkeypatch):
-        """INST-03 listing-flag path / revised D-10 — main.py --board allowlist
-        must accept 'uno328pb'.
+    # Phase 41 / Wave 4 note: `test_argparse_accepts_uno328pb_board_choice`
+    # deleted on the entry-point swap. The Click form uses
+    # `@click.option("-b", "--board", type=click.Choice(["uno", "uno328pb",
+    # "leonardo"]))` which structurally enforces the allowlist — the contract
+    # ships in cli_handlers.py (verified by `firestarter fw --help`) without
+    # a separate test.
 
-        Today: argparse `choices=["uno", "leonardo"]` rejects 'uno328pb' with
-        `error: argument -b/--board: invalid choice: 'uno328pb'` → SystemExit.
-        Wave 2 widens the choices tuple to `["uno", "uno328pb", "leonardo"]`
-        (Phase 21 D-08 section-order discipline).
 
-        Positive assertion: --board uno328pb does NOT raise SystemExit and
-                            args.board == 'uno328pb'.
-        Negative control:   --board ungabunga STILL raises SystemExit (proves
-                            choices= was widened, not removed entirely).
-        """
-        import argparse
-        from firestarter.main import create_firmware_args
+# ---------------------------------------------------------------------------
+# Phase 42 / ERR-03 coverage lift (D-14.3)
+# Adds tests for _fetch_all_releases pagination/JSON parsing + _compare_versions
+# PEP 440 edge cases not pinned by the TestVersionComparator block above.
+# ---------------------------------------------------------------------------
 
-        # Positive: uno328pb must be accepted (currently FAILS — SystemExit).
-        p = argparse.ArgumentParser()
-        sp = p.add_subparsers(dest="command")
-        fw_parser = create_firmware_args(sp)
-        args = p.parse_args(["fw", "--list", "--board", "uno328pb"])
-        assert args.board == "uno328pb", (
-            f"Expected args.board='uno328pb'; got {args.board!r}. "
-            f"Wave 2 must widen choices= to include 'uno328pb'."
+
+class TestFetchAllReleasesJsonParsing:
+    """D-14.3 — _fetch_all_releases parses the GitHub Releases API JSON shape."""
+
+    def test_fetch_all_releases_single_page(self, monkeypatch):
+        """Returns the page's release list when no pagination header is present."""
+        releases = [{"tag_name": "v3.0.0", "prerelease": False, "draft": False}]
+        monkeypatch.setattr(
+            firmware.requests,
+            "get",
+            lambda *a, **kw: mock_releases_factory(releases),
+        )
+        fm = FirmwareManager(config_manager=MagicMock())
+        result = fm._fetch_all_releases()
+        assert result == releases
+
+    def test_fetch_all_releases_follows_pagination(self, monkeypatch):
+        """Follows Link: rel='next' to assemble multi-page results."""
+        page1 = [{"tag_name": "v3.0.0", "prerelease": False, "draft": False}]
+        page2 = [{"tag_name": "v2.9.0", "prerelease": False, "draft": False}]
+        responses = [
+            mock_releases_factory(page1, next_url="https://api.example.com/page2"),
+            mock_releases_factory(page2),
+        ]
+        call_count = {"n": 0}
+
+        def mock_get(*_args, **_kwargs):
+            r = responses[call_count["n"]]
+            call_count["n"] += 1
+            return r
+
+        monkeypatch.setattr(firmware.requests, "get", mock_get)
+        fm = FirmwareManager(config_manager=MagicMock())
+        result = fm._fetch_all_releases()
+        assert len(result) == 2
+        assert result[0]["tag_name"] == "v3.0.0"
+        assert result[1]["tag_name"] == "v2.9.0"
+
+    def test_fetch_all_releases_pagination_cap_logs_truncation(
+        self, monkeypatch, caplog
+    ):
+        """Stops at max_pages and logs an INFO message about truncation."""
+        # Every page returns a Link to itself (i.e. infinite pagination)
+        page = [{"tag_name": "v1.0.0", "prerelease": False, "draft": False}]
+
+        def mock_get(*_args, **_kwargs):
+            return mock_releases_factory(page, next_url="https://api.example.com/next")
+
+        monkeypatch.setattr(firmware.requests, "get", mock_get)
+        fm = FirmwareManager(config_manager=MagicMock())
+        with caplog.at_level(logging.INFO, logger="FirmwareManager"):
+            result = fm._fetch_all_releases(max_pages=2)
+        assert len(result) == 2  # 2 pages × 1 release each
+        assert any("capped" in r.message.lower() for r in caplog.records)
+
+
+class TestCompareVersionsAdditionalBranches:
+    """D-14.3 — additional _compare_versions branch coverage.
+
+    The TestVersionComparator class above covers the basic cases. These tests
+    add coverage for the boundary conditions specifically called out in D-14.3:
+    None inputs, mixed pre/stable ordering, and the InvalidVersion fall-through.
+    """
+
+    def test_compare_versions_none_current_returns_false(self):
+        """current_version_str=None returns False (cannot compare)."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        assert fm._compare_versions(None, "3.0.0") is False
+
+    def test_compare_versions_none_latest_returns_false(self):
+        """latest_version_str=None returns False."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        assert fm._compare_versions("3.0.0", None) is False
+
+    def test_compare_versions_both_none_returns_false(self):
+        """Both None returns False."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        assert fm._compare_versions(None, None) is False
+
+    def test_compare_versions_pre_lower_than_stable(self):
+        """A pre-release is considered LOWER than the stable form (PEP 440)."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        # 3.1.0b2 < 3.1.0 per PEP 440
+        assert fm._compare_versions("3.1.0b2", "3.1.0") is False
+        assert fm._compare_versions("3.1.0", "3.1.0b2") is True
+
+    def test_compare_versions_rc_higher_than_beta(self):
+        """rc > b > a in pre-release ordering."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        assert fm._compare_versions("3.1.0rc1", "3.1.0b9") is True
+
+    def test_compare_versions_returns_false_on_invalid_strings_logs_warning(
+        self, caplog
+    ):
+        """When both strings are unparseable, returns False and logs warning."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        with caplog.at_level(logging.WARNING, logger="FirmwareManager"):
+            result = fm._compare_versions("garbage_string", "another_garbage")
+        assert result is False
+        # The warning text references the strings being compared.
+        assert any(
+            "Could not parse" in r.message or "parse" in r.message.lower()
+            for r in caplog.records
         )
 
-        # Negative control: unknown board values must still be rejected.
-        p2 = argparse.ArgumentParser()
-        sp2 = p2.add_subparsers(dest="command")
-        fw_parser2 = create_firmware_args(sp2)
-        with pytest.raises(SystemExit):
-            p2.parse_args(["fw", "--list", "--board", "ungabunga"])
+
+# Keep `pytest` referenced to avoid an unused-import lint after Phase 42's
+# extension (the original Phase 18 module imports pytest unconditionally for
+# the @pytest.fixture decorators used in earlier blocks).
+_ = pytest
+
+
+class TestDownloadFirmwareFile:
+    """D-14.3 fallback — _download_firmware_file network branch coverage."""
+
+    def test_download_success_writes_file(self, monkeypatch, tmp_path):
+        """A successful download writes the streamed content to ~/.firestarter/<name>.hex."""
+        monkeypatch.setattr("firestarter.firmware.HOME_PATH", str(tmp_path))
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.iter_content.return_value = iter([b"fake ", b"hex ", b"data"])
+        monkeypatch.setattr(firmware.requests, "get", lambda *a, **kw: mock_resp)
+
+        fm = FirmwareManager(config_manager=MagicMock())
+        path = fm._download_firmware_file("https://example.com/firestarter_uno.hex")
+        assert path is not None
+        with open(path, "rb") as f:
+            assert f.read() == b"fake hex data"
+
+    def test_download_request_exception_returns_none(self, monkeypatch, tmp_path):
+        """A requests.RequestException returns None instead of crashing."""
+        monkeypatch.setattr("firestarter.firmware.HOME_PATH", str(tmp_path))
+
+        def mock_get(*_args, **_kwargs):
+            raise _requests.RequestException("network down")
+
+        monkeypatch.setattr(firmware.requests, "get", mock_get)
+        fm = FirmwareManager(config_manager=MagicMock())
+        path = fm._download_firmware_file("https://example.com/no.hex")
+        assert path is None
+
+
+class TestCheckCurrentFirmware:
+    """D-14.3 fallback — check_current_firmware command + handshake parsing."""
+
+    def test_check_current_firmware_programmer_not_found(self, monkeypatch):
+        """ProgrammerNotFoundError → returns (None, None, None) without raising."""
+        from firestarter.exceptions import ProgrammerNotFoundError
+
+        def mock_connect(*_args, **_kwargs):
+            raise ProgrammerNotFoundError("no port")
+
+        monkeypatch.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            mock_connect,
+        )
+        fm = FirmwareManager(config_manager=MagicMock())
+        port, version, board = fm.check_current_firmware()
+        assert port is None
+        assert version is None
+        assert board is None
+
+    def test_check_current_firmware_serial_error_returns_none_tuple(self, monkeypatch):
+        """SerialError → returns the all-None tuple."""
+        from firestarter.exceptions import SerialError
+
+        def mock_connect(*_args, **_kwargs):
+            raise SerialError("transport broke")
+
+        monkeypatch.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            mock_connect,
+        )
+        fm = FirmwareManager(config_manager=MagicMock())
+        assert fm.check_current_firmware() == (None, None, None)
+
+
+class TestManageFirmwareUpdate:
+    """D-14.3 fallback — manage_firmware_update high-level branches."""
+
+    def test_manage_no_port_returns_false(self, monkeypatch):
+        """When neither override nor detected port is available, returns False."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        monkeypatch.setattr(
+            fm, "check_current_firmware", lambda **kw: (None, None, None)
+        )
+        # No port_override, no detected port → returns False.
+        result = fm.manage_firmware_update(install_flag=True)
+        assert result is False
+
+    def test_manage_already_up_to_date_returns_true(self, monkeypatch):
+        """When current_version >= latest_version (and not --force), returns True."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        monkeypatch.setattr(
+            fm, "check_current_firmware", lambda **kw: ("/dev/ttyACM0", "3.1.0", "uno")
+        )
+        monkeypatch.setattr(
+            fm,
+            "fetch_release_info",
+            lambda channel="stable", version=None, board="uno": (
+                "3.1.0",
+                "https://example.com/firestarter_uno.hex",
+            ),
+        )
+        result = fm.manage_firmware_update(install_flag=True)
+        assert result is True
+
+    def test_manage_no_current_no_install_intent_returns_false(self, monkeypatch):
+        """No current version + no --install + no --force → returns False."""
+        fm = FirmwareManager(config_manager=MagicMock())
+        monkeypatch.setattr(
+            fm, "check_current_firmware", lambda **kw: ("/dev/ttyACM0", None, "uno")
+        )
+        monkeypatch.setattr(
+            fm,
+            "fetch_release_info",
+            lambda channel="stable", version=None, board="uno": (
+                "3.1.0",
+                "https://example.com/firestarter_uno.hex",
+            ),
+        )
+        # install_flag=False + no FLAG_FORCE in flags=0 → returns False
+        result = fm.manage_firmware_update(install_flag=False, flags=0)
+        assert result is False

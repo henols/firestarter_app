@@ -6,27 +6,26 @@ Permission is hereby granted under MIT license.
 Hardware Management Module
 """
 
-import time
-from typing import Optional, Tuple
 import logging
+import time
+from typing import Optional, Tuple  # noqa: UP035
 
-from firestarter.constants import *
-from firestarter.serial_comm import (
-    SerialCommunicator,
+from firestarter.config import ConfigManager
+from firestarter.constants import (
+    COMMAND_CONFIG,
+    COMMAND_HW_VERSION,
+    COMMAND_READ_VPE,
+    COMMAND_READ_VPP,
+)
+from firestarter.exceptions import (
+    HardwareOperationError,
     ProgrammerNotFoundError,
     SerialError,
     SerialTimeoutError,
 )
-from firestarter.config import ConfigManager
-
+from firestarter.serial_comm import SerialCommunicator
 
 logger = logging.getLogger("Hardware")
-
-
-class HardwareOperationError(Exception):
-    """Custom exception for hardware operation failures."""
-
-    pass
 
 
 class HardwareManager:
@@ -42,7 +41,7 @@ class HardwareManager:
 
     def _execute_simple_command(
         self, command_dict: dict, operation_name: str
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> Tuple[bool, Optional[str]]:  # noqa: UP006
         """
         Connects, sends a command, expects an OK, and disconnects.
         Returns (success_status, message_from_programmer).
@@ -51,7 +50,7 @@ class HardwareManager:
         try:
             comm = SerialCommunicator.find_and_connect(command_dict, self.config)
             # The command_dict itself is the initial command sent by find_and_connect.
-            # If find_and_connect succeeds, it means the programmer acknowledged the command.
+            # If find_and_connect succeeds, it means the programmer acknowledged the command.  # noqa: E501
             # The 'msg' from find_and_connect's expect_ack is the programmer_info.
             # For simple state commands, the programmer_info IS the response.
 
@@ -60,7 +59,7 @@ class HardwareManager:
             # then we'd do:
             # comm.send_json_command(actual_data_command_dict)
             # is_ok, msg = comm.expect_ack()
-            # For HW_VERSION, FW_VERSION, CONFIG, the initial command IS the data command.
+            # For HW_VERSION, FW_VERSION, CONFIG, the initial command IS the data command.  # noqa: E501
 
             # The `find_and_connect` already sends `command_dict` and expects an OK.
             # The `comm.programmer_info` holds the message part of that OK response.
@@ -68,7 +67,7 @@ class HardwareManager:
                 logger.info(f"{operation_name}: {comm.programmer_info}")
                 return True, comm.programmer_info
             else:
-                # This case should ideally be caught by find_and_connect if expect_ack fails.
+                # This case should ideally be caught by find_and_connect if expect_ack fails.  # noqa: E501
                 logger.error(f"Failed to {operation_name.lower()}. No valid response.")
                 return False, None
         except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
@@ -91,7 +90,7 @@ class HardwareManager:
         comm = None
         try:
             comm = SerialCommunicator.find_and_connect(command, self.config)
-            # The first OK is handled by find_and_connect. Now wait for the second response with the data.
+            # The first OK is handled by find_and_connect. Now wait for the second response with the data.  # noqa: E501
             is_ok, msg = comm.expect_ack()
             if is_ok:
                 logger.info(f"Hardware revision: {msg}")
@@ -188,15 +187,17 @@ class HardwareManager:
         try:
             comm = SerialCommunicator.find_and_connect(command_for_connect, self.config)
 
-            # Wait for the firmware to signal it's ready before we start the reading loop.
+            # Wait for the firmware to signal it's ready before we start the reading loop.  # noqa: E501
             # This establishes a handshake and prevents a race condition.
             is_ok, msg = comm.expect_ack()
             if not is_ok:
-                logger.error(f"Firmware did not signal ready for voltage reading: {msg}")
+                logger.error(
+                    f"Firmware did not signal ready for voltage reading: {msg}"
+                )
                 return False
             logger.debug(f"Firmware ready for voltage reading: {msg}")
 
-            # After receiving ready, send an ACK to start the reading loop on the firmware.
+            # After receiving ready, send an ACK to start the reading loop on the firmware.  # noqa: E501
             comm.send_ack()
 
             start_time = time.time()
@@ -210,13 +211,17 @@ class HardwareManager:
 
                     if timeout_seconds and (time.time() - start_time > timeout_seconds):
                         print()  # Newline after continuous printing
-                        logger.info(f"{voltage_type_str} reading timed out after {timeout_seconds}s.")
+                        logger.info(
+                            f"{voltage_type_str} reading timed out after {timeout_seconds}s."  # noqa: E501
+                        )
                         return True
 
                     comm.send_ack()  # Acknowledge data and request next reading
                 elif response_type == "OK":
                     print()
-                    logger.info(f"{voltage_type_str} reading finished by programmer: {message or 'OK'}")
+                    logger.info(
+                        f"{voltage_type_str} reading finished by programmer: {message or 'OK'}"  # noqa: E501
+                    )
                     return True
                 elif response_type == "ERROR":
                     print()
@@ -224,7 +229,9 @@ class HardwareManager:
                     return False
                 else:  # Timeout or unexpected
                     print()
-                    logger.error(f"Unexpected response or timeout reading {voltage_type_str}: {response_type} - {message}")
+                    logger.error(
+                        f"Unexpected response or timeout reading {voltage_type_str}: {response_type} - {message}"  # noqa: E501
+                    )
                     return False
         except (
             ProgrammerNotFoundError,
@@ -243,10 +250,14 @@ class HardwareManager:
             if comm:
                 comm.disconnect()
 
-    def read_vpp_voltage(self, timeout_seconds: Optional[int] = None, flags: int = 0) -> bool:
+    def read_vpp_voltage(
+        self, timeout_seconds: Optional[int] = None, flags: int = 0
+    ) -> bool:
         """Reads the VPP voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPP, "VPP", timeout_seconds, flags)
 
-    def read_vpe_voltage(self, timeout_seconds: Optional[int] = None, flags: int = 0) -> bool:
+    def read_vpe_voltage(
+        self, timeout_seconds: Optional[int] = None, flags: int = 0
+    ) -> bool:
         """Reads the VPE voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds, flags)

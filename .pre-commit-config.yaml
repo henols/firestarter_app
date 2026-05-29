@@ -1,0 +1,16 @@
+# Hook order per D-07: ruff-check -> ruff-format -> mypy
+# Pinned to versions verified against PyPI/GitHub on 2026-05-27.
+# Update with: pre-commit autoupdate
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.14
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.1.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - "types-pyserial>=3.5.0.20260519"

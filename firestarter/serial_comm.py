@@ -7,135 +7,54 @@ Permission is hereby granted under MIT license.
 Serial Communication Module
 """
 
-import os
-import serial
-import serial.tools.list_ports
-import serial.serialutil
-import time
-import re
-import struct
-import functools
-import operator
 import json
 import logging
-from collections import namedtuple
-from typing import Any, Optional, Generator, Tuple, List
+import os
+import re
+import struct
+import time
+from typing import Generator, List, Optional, Tuple  # noqa: UP035
 
-from firestarter.constants import *
+import serial
+import serial.serialutil
+import serial.tools.list_ports
+
+import firestarter.codec as codec
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
-from firestarter.constants import COMMAND_NAMES
-from firestarter.messages import (
-    CATALOG,
-    DEBUG_CATALOG,
-    SEVERITY_LABEL,
-    MSG_OK_REV,
-    MSG_OK_CFG,
-    MSG_INFO_CMD,
-    MSG_INFO_HW,
-    MSG_INFO_PHYSICAL_HW,
-    MSG_DATA_CHUNK,
-    MSG_DEBUG,
-    DBG_CMD,
+from firestarter.constants import (
+    BAUD_RATE,
+    COMMAND_FW_VERSION,
+    FLAG_CAN_ERASE,
+    FLAG_CHIP_ENABLE,
+    FLAG_FORCE,
+    FLAG_OUTPUT_ENABLE,
+    FLAG_SKIP_BLANK_CHECK,
+    FLAG_SKIP_ERASE,
+    FLAG_VPE_AS_VPP,
+)
+from firestarter.exceptions import (
+    FirmwareOutdatedError,
+    ProgrammerNotFoundError,
+    SerialError,
+    SerialTimeoutError,
+)
+
+# Re-exports for backward compatibility — test_decoder.py imports MAGIC_PREAMBLE,
+# LogMessage, Response, _crc8_ccitt directly from firestarter.serial_comm and must
+# keep passing UNCHANGED (SC#2 / D-07). The canonical definitions now live in
+# frame_parser.py (D-05). _decode_param is also pulled in so _format_message /
+# _decode_id_frame in this module resolve it via the new leaf.
+from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_decoder.py
+    MAGIC_PREAMBLE,
+    LogMessage,
+    Response,
+    _crc8_ccitt,
+    _decode_param,
 )
 
 logger = logging.getLogger("SerialComm")
 rurp_logger = logging.getLogger("RURP")
 
-# Define a structured object for responses to improve clarity over tuples.
-# `payload` carries raw bytes for MSG_DATA_CHUNK frames (W-04); None otherwise.
-Response = namedtuple('Response', ['type', 'message', 'payload'], defaults=[None])
-
-# Phase 6: ID-encoded wire frame primitives. MAGIC_PREAMBLE locked by
-# CONTEXT §D-02; LogMessage is the decoded-frame value type per D-06.
-# `payload` carries raw bytes for MSG_DATA_CHUNK (W-04); None for all others.
-LogMessage = namedtuple('LogMessage', ['severity', 'text', 'id', 'payload'], defaults=[None])
-MAGIC_PREAMBLE: bytes = b'\xAA\x55\xAA\x55'
-
-
-def _build_crc8_table() -> bytes:
-    """Precompute the 256-byte CRC8-CCITT lookup table.
-
-    Algorithm pinned by CONTEXT §D-03: polynomial 0x07, seed 0x00,
-    no reflection, no final XOR. Same algorithm the firmware Unity suite
-    asserts (firestarter test_messages/test_rurp_log_id.cpp).
-    """
-    table = bytearray(256)
-    for byte in range(256):
-        crc = byte
-        for _ in range(8):
-            if crc & 0x80:
-                crc = ((crc << 1) ^ 0x07) & 0xFF
-            else:
-                crc = (crc << 1) & 0xFF
-        table[byte] = crc
-    return bytes(table)
-
-
-_CRC8_CCITT_TABLE: bytes = _build_crc8_table()
-
-
-def _crc8_ccitt(data: bytes) -> int:
-    """Compute CRC8-CCITT (poly 0x07, seed 0x00) over `data` via lookup table."""
-    crc = 0
-    for byte in data:
-        crc = _CRC8_CCITT_TABLE[crc ^ byte]
-    return crc
-
-
-def _decode_param(ptype: str, buf: bytes, cursor: int) -> Tuple[Any, int]:
-    """Decode one MSB-first parameter starting at `buf[cursor]`.
-
-    Returns `(value, new_cursor)`. Raises ValueError on unknown ptype or
-    out-of-range cursor.
-
-    Param types match the canonical catalog grammar (see catalog/codegen.py
-    validator rule 5): u8, i8, u16, i16, u24, u32, i32, ascii_str.
-
-    ascii_str is a 1-byte length prefix followed by N data bytes; decoded
-    with `errors='replace'` so a tampered/truncated string surfaces visibly
-    rather than crashing the read loop.
-    """
-    if ptype == "u8":
-        return buf[cursor], cursor + 1
-    if ptype == "i8":
-        return struct.unpack_from(">b", buf, cursor)[0], cursor + 1
-    if ptype == "u16":
-        return struct.unpack_from(">H", buf, cursor)[0], cursor + 2
-    if ptype == "i16":
-        return struct.unpack_from(">h", buf, cursor)[0], cursor + 2
-    if ptype == "u24":
-        b0, b1, b2 = buf[cursor], buf[cursor + 1], buf[cursor + 2]
-        return (b0 << 16) | (b1 << 8) | b2, cursor + 3
-    if ptype == "u32":
-        return struct.unpack_from(">I", buf, cursor)[0], cursor + 4
-    if ptype == "i32":
-        return struct.unpack_from(">i", buf, cursor)[0], cursor + 4
-    if ptype == "ascii_str":
-        # WR-04: bounds-check the length prefix against the remaining buffer
-        # BEFORE slicing. Python slicing silently truncates when end >
-        # len(buf), which would advance the cursor past the end of the buffer
-        # and leave a mangled string in the rendered output if ascii_str is
-        # the last param in a catalog entry. The CRC check upstream catches
-        # truncated wire frames; this guards against a malformed length-prefix
-        # byte inside an otherwise-correctly-CRC'd payload.
-        length = buf[cursor]
-        start = cursor + 1
-        end = start + length
-        if end > len(buf):
-            raise ValueError(
-                f"ascii_str length {length} exceeds remaining buffer "
-                f"({len(buf) - start} bytes available at cursor={cursor})"
-            )
-        return buf[start:end].decode("ascii", errors="replace"), end
-    if ptype == "bytes":
-        # Variable-length raw payload (W-04 MSG_DATA_CHUNK): consume all
-        # remaining bytes from cursor to end of params_bytes. No length-prefix
-        # wire encoding — the frame's u16 len field already delimits the body.
-        raw = buf[cursor:]
-        return raw, len(buf)
-    raise ValueError(f"Unknown param type: {ptype}")
-
-# Compile regex for parsing prefixes once for efficiency
 
 DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
@@ -164,45 +83,7 @@ EXPECTED_PREFIXES = [
 # than any false-positive embedded in the garbage.
 PREFIX_REGEX = re.compile(rf"({'|'.join(EXPECTED_PREFIXES)}):(.*)")
 
-STATE_MACHINE_PREFIXES = []  # W-01: state-machine acks now arrive as ID frames; catalog format strings own the rendering.
 NON_RESPONSE_PREFIXES = ["INFO", "DEBUG"]
-
-# Phase 34: REVISION_* byte → silkscreen-string mapping for MSG_OK_REV rendering.
-# Mirrors firmware enum at firestarter/include/rurp_shield.h. Lookup-via-dict.get()
-# so unknown bytes fall back to "Rev{n}" instead of raising.
-_REVISION_SILKSCREEN = {
-    REVISION_0:       "Rev 0",
-    REVISION_1:       "Rev 1",
-    REVISION_2_0:     "Rev 2.0-class",   # broad bucket per Phase 34 D-04
-    REVISION_2_1:     "Rev 2.1 (override)",
-    REVISION_2_2:     "Rev 2.2 (override)",
-    REVISION_2_3:     "Rev 2.3",
-    REVISION_UNKNOWN: "rev_unknown",
-}
-
-
-class SerialError(Exception):
-    """Custom exception for serial communication errors."""
-
-    pass
-
-
-class SerialTimeoutError(SerialError):
-    """Custom exception for serial timeouts."""
-
-    pass
-
-
-class ProgrammerNotFoundError(SerialError):
-    """Custom exception when no programmer is found."""
-
-    pass
-
-
-class FirmwareOutdatedError(SerialError):
-    """Custom exception for outdated firmware."""
-
-    pass
 
 
 class SerialCommunicator:
@@ -219,7 +100,7 @@ class SerialCommunicator:
         port: str,
         baud_rate: int = int(BAUD_RATE),
         timeout: float = DEFAULT_SERIAL_TIMEOUT,
-    ):
+    ) -> None:
         self.port_name = port
         self.baud_rate = baud_rate
         self.timeout = timeout
@@ -247,40 +128,35 @@ class SerialCommunicator:
             raise SerialError(f"Could not connect to {self.port_name}: {e}") from e
 
     def is_connected(self) -> bool:
+        """Return True if the underlying serial port is open."""
         return self.connection is not None and self.connection.is_open
 
     def send_bytes(self, data_bytes: bytes) -> int:
+        """Write raw bytes to the serial port and return the byte count written."""
         if not self.is_connected():
             raise SerialError("Not connected.")
+        assert self.connection is not None  # narrow for mypy strict (D-06)
         try:
             written_bytes = self.connection.write(data_bytes)
             self.connection.flush()
             logger.debug(f"Sent {written_bytes} bytes to {self.port_name}.")
-            return written_bytes
+            # pyserial's write returns Optional[int]; treat None as 0 for our int contract.
+            return written_bytes if written_bytes is not None else 0
         except serial.SerialTimeoutException as e:
             raise SerialTimeoutError(f"Timeout writing to {self.port_name}: {e}") from e
         except serial.SerialException as e:
             raise SerialError(f"Serial error writing to {self.port_name}: {e}") from e
 
     def send_string(self, data_string: str, encoding: str = "ascii") -> int:
+        """Encode `data_string` and send it over the serial port."""
         logger.debug(f"Sending string: {data_string}")
         return self.send_bytes(data_string.encode(encoding))
 
     def send_json_command(self, command_dict: dict) -> int:
+        """Serialise `command_dict` as compact JSON and send it over the serial port."""
         self._log_command_details(command_dict)
         json_data = json.dumps(command_dict, separators=(",", ":"))
-        # json_data = json.dumps(command_dict)
         return self.send_string(json_data)
-
-    def read_line_bytes(self) -> Optional[bytes]:
-        if not self.is_connected():
-            raise SerialError("Not connected.")
-        try:
-            if self.connection.in_waiting > 0:
-                return self.connection.readline()
-            return None
-        except serial.SerialException as e:
-            raise SerialError(f"Serial error reading from {self.port_name}: {e}") from e
 
     def _parse_response_line(self, line_bytes: bytes) -> Optional[Response]:
         """
@@ -309,16 +185,12 @@ class SerialCommunicator:
         # No known prefix found, return the raw line as a message with no type
         return Response(type=None, message=line_str)
 
-    def _log_rurp_feedback(self, response: Response):
+    def _log_rurp_feedback(self, response: Response) -> None:
         """Logs feedback from the programmer based on the parsed Response object."""
         if not response or not response.type:
             return
 
         message = response.message
-        # W-01: STATE_MACHINE_PREFIXES is now empty; the old "Done" rewrite for
-        # INIT/MAIN/END is removed — catalog format strings own the rendering for
-        # ID frames. The conditional is kept but is a no-op ([] never matches).
-
         level = logging.DEBUG
         if response.type == "ERROR":
             level = logging.ERROR
@@ -328,221 +200,30 @@ class SerialCommunicator:
         # Shorten prefix for debug, full for others
         log_prefix = (
             response.type[:1]
-            if rurp_logger.isEnabledFor(logging.DEBUG) and response.type in NON_RESPONSE_PREFIXES
+            if rurp_logger.isEnabledFor(logging.DEBUG)
+            and response.type in NON_RESPONSE_PREFIXES
             else response.type
         )
         rurp_logger.log(level, f"{log_prefix}: {message}")
 
-    def _format_message(self, msg_id: int, params: list, entry) -> Optional[str]:
-        """Sentinel-aware message renderer for P-02/P-03 shaped IDs and
-        MSG_DEBUG sub-payloads (currently DBG_CMD gets symbolic-name
-        annotation; other DBG_* sub_ids render via DEBUG_CATALOG).
-
-        Returns the rendered string for sentinel-byte IDs where the catalog
-        format string cannot express the conditional (0xFF = no override),
-        and for the silkscreen-aware INFO surfaces that share the same
-        revision byte as MSG_OK_REV (Phase 35 D-03 / D-04 — close WR-01 + WR-02).
-
-        Returns None for all other IDs (caller falls through to generic rendering).
-
-        P-02 MSG_OK_REV  — params[0]=physical u8, params[1]=effective u8
-          effective==0xFF → "Rev{physical}" (no override)
-          effective!=0xFF → "Rev{effective}, Override HW: Rev{physical}"
-
-        P-03 MSG_OK_CFG  — params[0]=r1 u32, params[1]=r2 u32, params[2]=override u8
-          override==0xFF → "R1: {r1}, R2: {r2}"
-          override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: {silkscreen_str}"
-          Phase 35 D-04 / WR-02 close: override clause now routes through
-          _REVISION_SILKSCREEN so the same byte that surfaces as "Rev 2.0-class"
-          via MSG_OK_REV no longer surfaces as "Rev2" on the adjacent ack line.
-
-        MSG_INFO_HW (0x5B) — single u8 revision byte; renders
-          "HW: {silkscreen_str}" via _REVISION_SILKSCREEN.get(byte, "Rev{byte}").
-          Phase 35 D-03 / WR-01 close: was rendering catalog-default
-          "HW: Rev%u" (e.g. "HW: Rev254" for REVISION_UNKNOWN=0xFE) — directly
-          contradicting Phase 34 D-09 (host displays silkscreen strings; wire
-          carries raw byte).
-
-        MSG_INFO_PHYSICAL_HW (0x5C) — same shape as MSG_INFO_HW with the
-          "Physical HW: " prefix. Phase 35 D-03 / WR-01 close.
-        """
-        if msg_id == MSG_OK_REV and len(params) == 2:
-            physical, effective = params[0], params[1]
-            phys_str = _REVISION_SILKSCREEN.get(physical, f"Rev{physical}")
-            if effective == 0xFF:
-                return phys_str
-            eff_str = _REVISION_SILKSCREEN.get(effective, f"Rev{effective}")
-            return f"{eff_str}, Override HW: {phys_str}"
-
-        if msg_id == MSG_OK_CFG and len(params) == 3:
-            r1, r2, override = params[0], params[1], params[2]
-            if override == 0xFF:
-                return f"R1: {r1}, R2: {r2}"
-            # Phase 35 D-04 / WR-02 close: route the override byte through
-            # _REVISION_SILKSCREEN so the same byte that renders "Rev 2.0-class"
-            # on MSG_OK_REV no longer renders "Rev2" on this adjacent ack line.
-            # No-space "Rev{n}" fallback mirrors the MSG_OK_REV branch shape.
-            override_str = _REVISION_SILKSCREEN.get(override, f"Rev{override}")
-            return f"R1: {r1}, R2: {r2}, Override HW: {override_str}"
-
-        # Phase 35 D-03 / WR-01 close — silkscreen-aware rendering for the two
-        # boot-time INFO surfaces that carry the same revision byte as
-        # MSG_OK_REV. Mirror of the MSG_OK_REV branch shape above: lookup via
-        # _REVISION_SILKSCREEN.get() with no-space "Rev{n}" fallback.
-        if msg_id == MSG_INFO_HW and len(params) == 1:
-            byte = params[0]
-            return f"HW: {_REVISION_SILKSCREEN.get(byte, f'Rev{byte}')}"
-
-        if msg_id == MSG_INFO_PHYSICAL_HW and len(params) == 1:
-            byte = params[0]
-            return f"Physical HW: {_REVISION_SILKSCREEN.get(byte, f'Rev{byte}')}"
-
-        if msg_id == MSG_INFO_CMD and len(params) == 1:
-            cmd = params[0]
-            name = COMMAND_NAMES.get(cmd)
-            return f"Cmd: 0x{cmd:02x} ({name})" if name else f"Cmd: 0x{cmd:02x}"
-
-        if msg_id == MSG_DEBUG and len(params) == 2:
-            sub_id = params[0]
-            sub_body = params[1] if isinstance(params[1], (bytes, bytearray)) else b""
-            sub_entry = DEBUG_CATALOG.get(sub_id)
-            # Special-case DBG_CMD: annotate the cmd byte with its symbolic
-            # name from COMMAND_NAMES so verbose logs read e.g. "Cmd: 0x02 (WRITE)".
-            if sub_id == DBG_CMD and len(sub_body) >= 1:
-                cmd = sub_body[0]
-                name = COMMAND_NAMES.get(cmd)
-                return f"Cmd: 0x{cmd:02x} ({name})" if name else f"Cmd: 0x{cmd:02x}"
-            # Generic DBG render: walk sub_entry.params and format. Falls back
-            # to the standard "[debug:N]" string for sub_ids the catalog hasn't
-            # seen yet so unknown debug emits still appear in the log.
-            if sub_entry is not None:
-                try:
-                    values: list = []
-                    cursor = 0
-                    for ptype, _prender in sub_entry.params:
-                        value, cursor = _decode_param(ptype, sub_body, cursor)
-                        values.append(value)
-                    fmt_values = [v for v in values if not isinstance(v, (bytes, bytearray))]
-                    return sub_entry.format % tuple(fmt_values) if fmt_values else sub_entry.format
-                except (IndexError, struct.error, ValueError):
-                    return None  # fall through to generic [debug:N] render
-            return None
-
-        if msg_id == MSG_DATA_CHUNK and len(params) == 1 and isinstance(params[0], (bytes, bytearray)):
-            # W-04: return a short summary so log lines don't dump 512 raw bytes.
-            return f"<chunk: {len(params[0])} bytes>"
-
-        return None  # fall through to generic catalog format-string rendering
-
     def _decode_id_frame(self, frame_len: int, body: bytes) -> Optional[LogMessage]:
-        """
-        Decode an ID-encoded wire frame body (the bytes between the length
-        byte and the trailing 0x0A re-sync anchor).
+        """Compatibility wrapper — see codec.decode_id_frame."""
+        return codec.decode_id_frame(frame_len, body)
 
-        `body` carries `id | params | crc` exactly `frame_len` bytes long
-        (length is authoritative per CONTEXT §D-03; CRC8 covers `[id, params]`
-        but not the length byte nor the terminator).
-
-        Returns a LogMessage on success. Returns None (with a `logger.warning`)
-        on shape mismatch / CRC fail / unknown ID / format-render error — the
-        outer read loop continues to the next byte (DoS resilience per T-06-12).
-        """
-        if frame_len < 2 or len(body) != frame_len:
-            logger.warning(
-                f"Frame too short or truncated: declared len={frame_len}, "
-                f"actual body len={len(body)}"
-            )
-            return None
-
-        msg_id = body[0]
-        crc_received = body[-1]
-        params_bytes = bytes(body[1:-1])
-
-        crc_expected = _crc8_ccitt(bytes([msg_id]) + params_bytes)
-        if crc_expected != crc_received:
-            logger.warning(
-                f"CRC mismatch for ID 0x{msg_id:02x}: "
-                f"expected 0x{crc_expected:02x}, got 0x{crc_received:02x}"
-            )
-            return None
-
-        entry = CATALOG.get(msg_id)
-        if entry is None:
-            logger.warning(
-                f"Unknown message ID 0x{msg_id:02x} — catalog out of date?"
-            )
-            return None
-
-        # WR-03: reject id-frame payloads for catalog entries flagged
-        # wire_format="text". MSG_OK_FW_VERSION (0x03) is expected to arrive
-        # over the legacy text channel only (LFW-05). A buggy or malicious
-        # peer emitting id=0x03 as a binary frame would otherwise render via
-        # the catalog format string and bypass the host's pre-v1.2 firmware-
-        # version guard in _probe_port (which only inspects the text path).
-        if entry.wire_format != "id_frame":
-            logger.warning(
-                f"Rejected id-frame for catalog entry with "
-                f"wire_format={entry.wire_format!r}: id=0x{msg_id:02x} "
-                f"({entry.name})"
-            )
-            return None
-
-        # Shape check for fixed-width entries. Variable-length (ascii_str)
-        # entries carry param_bytes == -1 in the catalog; for those we
-        # cannot pre-validate, but _decode_param will surface any overrun
-        # via IndexError below.
-        if entry.param_bytes >= 0 and len(params_bytes) != entry.param_bytes:
-            logger.warning(
-                f"Param shape mismatch for ID 0x{msg_id:02x} ({entry.name}): "
-                f"expected {entry.param_bytes} bytes, got {len(params_bytes)}"
-            )
-            return None
-
-        # Decode each param per the catalog grammar.
-        values: list = []
-        cursor = 0
-        try:
-            for ptype, _prender in entry.params:
-                value, cursor = _decode_param(ptype, params_bytes, cursor)
-                values.append(value)
-        except (IndexError, struct.error, ValueError) as exc:
-            logger.warning(
-                f"Param decode failed for ID 0x{msg_id:02x} ({entry.name}): {exc}"
-            )
-            return None
-
-        # Sentinel-aware rendering for P-02/P-03 shaped IDs (W-02).
-        # _format_message returns a string for MSG_OK_REV/CFG,
-        # or None to fall through to the generic catalog format-string path.
-        text = self._format_message(msg_id, values, entry)
-        if text is None:
-            # Generic render via the catalog format string. Format errors fall
-            # back to a tagged placeholder so the read loop continues yielding
-            # subsequent frames (T-06-12).
-            # Filter out raw-bytes values (bytes-type params, e.g. MSG_DATA_CHUNK)
-            # before printf-style substitution — they have no corresponding %
-            # specifier in the format string.
-            fmt_values = [v for v in values if not isinstance(v, (bytes, bytearray))]
-            try:
-                text = entry.format % tuple(fmt_values) if fmt_values else entry.format
-            except (TypeError, ValueError) as exc:
-                logger.warning(
-                    f"Format-error rendering ID 0x{msg_id:02x} ({entry.name}): {exc}"
-                )
-                text = f"<format-error: {entry.name}>"
-
-        # Extract raw-bytes payload for MSG_DATA_CHUNK (W-04) so the chip-read
-        # loop can obtain the chip data without a second read call.
-        chunk_payload = None
-        if msg_id == MSG_DATA_CHUNK and values and isinstance(values[0], (bytes, bytearray)):
-            chunk_payload = bytes(values[0])
-
-        severity_label = SEVERITY_LABEL.get(entry.severity, f"SEV{entry.severity}")
-        return LogMessage(severity=severity_label, text=text, id=msg_id, payload=chunk_payload)
-
+    # =================================================================
+    # DO NOT MODIFY — v1.9 RCA territory (GATE-1.8d)
+    # The body of this generator is the host-side baseline for v1.9's
+    # read-bug RCA. Phase 26 baseline binaries (.planning/v1.6/
+    # consistency-check-runs/W27C512-leonardo-20260526-*-v2*/) were
+    # captured against this exact body. Structural-only changes here
+    # (e.g. type hints on the signature) are OK; any change to the
+    # byte-by-byte read loop, the magic-preamble dispatch, the
+    # frame-length read, or the timeout reset semantics MUST be
+    # flagged and deferred to v1.9 alongside binary re-validation.
+    # =================================================================
     def _read_and_parse_lines(self, timeout: float) -> Generator[Response, None, None]:
         """
-        Always-on byte-stream reader (Phase 6 D-05). A single generator
+        [ring-fenced — v1.9 RCA territory; see header comment] Always-on byte-stream reader (Phase 6 D-05). A single generator
         handles BOTH legacy text lines (terminated by 0x0A) AND binary
         ID-encoded frames (4-byte magic preamble + length-authoritative
         body + CRC + 0x0A re-sync anchor) through the same yield surface.
@@ -570,7 +251,7 @@ class SerialCommunicator:
         magic_len = len(MAGIC_PREAMBLE)
         while time.time() - start_time < timeout:
             try:
-                chunk = self.connection.read(1)
+                chunk = self.connection.read(1)  # type: ignore[union-attr]  # Phase 42 D-06: GATE-1.8d ring-fence — narrow body untouched
             except serial.SerialException as e:
                 raise SerialError(
                     f"Serial error reading from {self.port_name}: {e}"
@@ -602,7 +283,7 @@ class SerialCommunicator:
 
                 # Read length field (u16 big-endian, W-04: 2 bytes MSB then LSB).
                 try:
-                    len_bytes = self.connection.read(2)
+                    len_bytes = self.connection.read(2)  # type: ignore[union-attr]  # Phase 42 D-06
                 except serial.SerialException as e:
                     raise SerialError(
                         f"Serial error reading from {self.port_name}: {e}"
@@ -617,7 +298,7 @@ class SerialCommunicator:
 
                 # Read body (`frame_len` bytes: id + params + crc).
                 try:
-                    body = self.connection.read(frame_len)
+                    body = self.connection.read(frame_len)  # type: ignore[union-attr]  # Phase 42 D-06
                 except serial.SerialException as e:
                     raise SerialError(
                         f"Serial error reading from {self.port_name}: {e}"
@@ -632,7 +313,7 @@ class SerialCommunicator:
                 # Consume the trailing terminator (D-04: anchor, not
                 # delimiter — present but its identity is not enforced).
                 try:
-                    _terminator = self.connection.read(1)
+                    _terminator = self.connection.read(1)  # type: ignore[union-attr]  # Phase 42 D-06
                 except serial.SerialException as e:
                     raise SerialError(
                         f"Serial error reading from {self.port_name}: {e}"
@@ -658,18 +339,16 @@ class SerialCommunicator:
             if b == 0x0A:
                 line_bytes = bytes(accumulator)
                 accumulator.clear()
-                response = self._parse_response_line(line_bytes)
-                if response is not None:
-                    self._log_rurp_feedback(response)
-                    yield response
+                text_resp = self._parse_response_line(line_bytes)
+                if text_resp is not None:
+                    self._log_rurp_feedback(text_resp)
+                    yield text_resp
                     start_time = time.time()
                 continue
 
             # Otherwise: keep accumulating; the byte is already appended.
 
-    def get_response(
-        self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
-    ) -> Response:
+    def get_response(self, timeout: float = DEFAULT_RESPONSE_TIMEOUT) -> Response:
         """
         Waits for and returns the next significant (i.e., not INFO or DEBUG)
         response from the programmer.
@@ -678,7 +357,7 @@ class SerialCommunicator:
             if response.type and response.type not in NON_RESPONSE_PREFIXES:
                 return response
 
-        # If the generator finishes without yielding a significant response, it's a timeout.
+        # If the generator finishes without yielding a significant response, it's a timeout.  # noqa: E501
         logger.warning(f"Timeout waiting for a response from {self.port_name}.")
         raise SerialTimeoutError(
             f"Timeout waiting for a significant response from {self.port_name}."
@@ -686,7 +365,7 @@ class SerialCommunicator:
 
     def expect_ack(
         self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> Tuple[bool, Optional[str]]:  # noqa: UP006
         """
         Waits for an 'OK' or 'ERROR' response from the programmer.
         """
@@ -696,18 +375,21 @@ class SerialCommunicator:
                 return True, response.message
             elif response.type == "ERROR":
                 return False, response.message
-            # Other significant responses are ignored by this loop, which is the intended behavior.
+            # Other significant responses are ignored by this loop, which is the intended behavior.  # noqa: E501
 
-    def send_ack(self):
+    def send_ack(self) -> None:
+        """Send the 'OK' acknowledgement string to the programmer."""
         self.send_string("OK")
 
-    def send_done(self):
+    def send_done(self) -> None:
+        """Send the 'DONE' completion string to the programmer."""
         self.send_string("DONE")
 
-    def consume_remaining_input(self, timeout: float = 0.5):
+    def consume_remaining_input(self, timeout: float = 0.5) -> None:
         """Consumes and logs any pending input from the serial buffer."""
         if not self.is_connected():
             return
+        assert self.connection is not None  # narrow for mypy strict (D-06)
 
         # Temporarily set a short timeout for the underlying serial read
         original_timeout = self.connection.timeout
@@ -719,11 +401,12 @@ class SerialCommunicator:
         finally:
             self.connection.timeout = original_timeout  # Restore original timeout
 
-    def disconnect(self):
+    def disconnect(self) -> None:
+        """Close the serial port and clear cached programmer info."""
         if self.is_connected():
             try:
                 self.consume_remaining_input()
-                self.connection.close()
+                self.connection.close()  # type: ignore[union-attr]
                 logger.debug(f"Disconnected from {self.port_name}.")
             except serial.SerialException as e:
                 logger.error(f"Error closing port {self.port_name}: {e}")
@@ -731,7 +414,7 @@ class SerialCommunicator:
                 self.connection = None
                 self.programmer_info = None
 
-    def _log_command_details(self, command_dict: dict):
+    def _log_command_details(self, command_dict: dict) -> None:
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug(f"Sending command to programmer: {command_dict}")
             flags = command_dict.get("flags", 0)
@@ -757,9 +440,7 @@ class SerialCommunicator:
                     )
 
     @staticmethod
-    def _list_potential_ports(
-        preferred_port: Optional[str] = None
-    ) -> List[str]:
+    def _list_potential_ports(preferred_port: Optional[str] = None) -> List[str]:  # noqa: UP006
         ports = []
         if preferred_port:
             ports.append(preferred_port)
@@ -782,19 +463,63 @@ class SerialCommunicator:
         return ports
 
     @staticmethod
-    def _is_version_sufficient(current_version_str: str, required_version_str: str) -> bool:
+    def _is_version_sufficient(
+        current_version_str: str, required_version_str: str
+    ) -> bool:
         """Compares two version strings. Returns True if current >= required."""
         if not current_version_str or not required_version_str:
             return False
         try:
             # Replace 'x' with a high number for comparison purposes
-            current = tuple(map(int, current_version_str.lower().replace('x', '999').split('.')))
-            required = tuple(map(int, required_version_str.lower().replace('x', '999').split('.')))
+            current = tuple(
+                map(int, current_version_str.lower().replace("x", "999").split("."))
+            )
+            required = tuple(
+                map(int, required_version_str.lower().replace("x", "999").split("."))
+            )
             return current >= required
         except (ValueError, AttributeError):
-            logger.warning(f"Could not parse version string for comparison: '{current_version_str}'")
-            return False # If parsing fails, assume it's not sufficient.
+            logger.warning(
+                f"Could not parse version string for comparison: '{current_version_str}'"  # noqa: E501
+            )
+            return False  # If parsing fails, assume it's not sufficient.
 
+    @staticmethod
+    def _validate_firmware_version(
+        version_str: str, allow_pre_v12: bool = False
+    ) -> None:
+        """Pure-policy version guard. Raises FirmwareOutdatedError on reject.
+
+        Owns the complete version-guard policy (D-01 / D-03): strips trailing
+        alpha suffix (e.g. ``"3.0.0-dev"`` -> ``"3.0.0"``) per RESEARCH §7
+        Option A, parses the major version (``ValueError``/``IndexError`` ->
+        ``major=0``), refuses pre-v1.2 (``major < 3``) unless ``allow_pre_v12``,
+        then enforces the 2.0.0 floor via ``_is_version_sufficient``. Never
+        reads ``os.environ`` (D-02 — env-var I/O is ``_probe_port``'s job).
+        """
+        # RESEARCH §7 Option A: strip trailing alpha suffix before parsing so
+        # direct callers (and future test harnesses) match production wire
+        # behavior, which is already handled by the _probe_port regex
+        # r"FW:\s*([\d.x]+)" stripping "-dev" before this method ever sees it.
+        version_str = re.sub(r"-.*$", "", version_str)
+        try:
+            major = int(version_str.split(".")[0])
+        except (ValueError, IndexError):
+            major = 0
+        if major < 3 and not allow_pre_v12:
+            raise FirmwareOutdatedError(
+                f"Firmware version {version_str} is pre-v1.2 (text-format logging). "  # noqa: E501
+                f"This host expects v1.2+ firmware emitting ID-encoded log frames. "  # noqa: E501
+                f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "  # noqa: E501
+                f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "  # noqa: E501
+                f'see PROJECT.md "Constraints".)'
+            )
+        if not SerialCommunicator._is_version_sufficient(version_str, "2.0.0"):
+            raise FirmwareOutdatedError(
+                f"Firmware version {version_str} is outdated. "
+                f"Version 2.0.0 or higher is required. "
+                f"Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
+            )
 
     @staticmethod
     def _probe_port(
@@ -828,7 +553,9 @@ class SerialCommunicator:
                 # Discard the first; parse the second for version validation.
                 pre_is_ok, _pre_msg = communicator.expect_ack()
                 if not pre_is_ok:
-                    logger.debug(f"Port {port_name}: FW-probe setup-ack not OK: {_pre_msg}")
+                    logger.debug(
+                        f"Port {port_name}: FW-probe setup-ack not OK: {_pre_msg}"
+                    )
                     communicator.disconnect()
                     return None
                 fw_is_ok, fw_msg = communicator.expect_ack()
@@ -843,40 +570,24 @@ class SerialCommunicator:
                         if match:
                             current_version = match.group(1).strip()
 
-                            # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped
-                            # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when
-                            # bench-testing a current host against a historical (v2.x) firmware build.
-                            try:
-                                major = int(current_version.split(".")[0])
-                            except (ValueError, IndexError):
-                                major = 0
-                            if (
-                                major < 3
-                                and os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") != "1"
-                            ):
-                                raise FirmwareOutdatedError(
-                                    f"Firmware version {current_version} is pre-v1.2 (text-format logging). "
-                                    f"This host expects v1.2+ firmware emitting ID-encoded log frames. "
-                                    f"Please upgrade the firmware to v3.0.0 or later using 'firestarter fw --install'. "
-                                    f"(No fallback to text-format protocol — the host and firmware must be upgraded together; "
-                                    f"see PROJECT.md \"Constraints\".)"
-                                )
-
-                            if not SerialCommunicator._is_version_sufficient(current_version, "2.0.0"):
-                                raise FirmwareOutdatedError(
-                                    f"Firmware version {current_version} is outdated. "
-                                    f"Version 2.0.0 or higher is required. "
-                                    f"Please upgrade the firmware using 'firestarter fw --install'."
-                                )
+                            # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
+                            # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
+                            # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
+                            allow_pre_v12 = (
+                                os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") == "1"
+                            )
+                            SerialCommunicator._validate_firmware_version(
+                                current_version, allow_pre_v12=allow_pre_v12
+                            )
                         else:
                             raise FirmwareOutdatedError(
-                                "Could not parse firmware version from programmer response. "
-                                "Please upgrade the firmware using 'firestarter fw --install'."
+                                "Could not parse firmware version from programmer response. "  # noqa: E501
+                                "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
                             )
                     else:
                         raise FirmwareOutdatedError(
                             "Firmware is outdated (pre-2.0.0). "
-                            "Please upgrade the firmware using 'firestarter fw --install'."
+                            "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
                         )
                 except (IndexError, AttributeError):
                     raise FirmwareOutdatedError(
@@ -942,59 +653,24 @@ class SerialCommunicator:
 
         for port_name in potential_ports:
             try:
-                communicator = cls._probe_port(port_name, baud_rate, command_to_send, config_manager)
+                communicator = cls._probe_port(
+                    port_name, baud_rate, command_to_send, config_manager
+                )
                 if communicator:
                     if status_update_active:
                         logger.info("Connecting... OK      ", extra={"status": "end"})
-                    # The "Programmer found on..." message is logged by _probe_port on a new line.
+                    # The "Programmer found on..." message is logged by _probe_port on a new line.  # noqa: E501
                     return communicator
             except FirmwareOutdatedError as e:
                 if status_update_active:
                     logger.info("Connecting... Failed  ", extra={"status": "end"})
-                # If firmware is outdated on a port, stop probing and raise the specific error.
+                # If firmware is outdated on a port, stop probing and raise the specific error.  # noqa: E501
                 raise e
 
         # If the loop completes without finding a programmer, it's a failure.
         if status_update_active:
             logger.info("Connecting... Failed  ", extra={"status": "end"})
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
-
-    def read_data_block(self) -> bytes:
-        """Reads a specific number of bytes, typically after a DATA: response."""
-        if not self.is_connected():
-            raise SerialError("Not connected.")
-        try:
-            num_bytes = int.from_bytes(self.connection.read(2), "big")
-            checksum_rcvd = self.connection.read(1)
-
-            data = b''
-            bytes_to_read = num_bytes
-            while bytes_to_read > 0:
-                # read() will block until timeout or all bytes are received.
-                chunk = self.connection.read(bytes_to_read)
-                if not chunk:
-                    # Timeout occurred before all bytes were received
-                    break
-                data += chunk
-                bytes_to_read -= len(chunk)
-
-            checksum = functools.reduce(operator.xor, data, 0)
-            if checksum_rcvd[0] != checksum:
-                raise SerialError("Data corruption detected (checksum mismatch).")
-
-            if len(data) < num_bytes:
-                logger.warning(
-                    f"Expected {num_bytes} bytes, but received {len(data)} from {self.port_name}"
-                )
-            return data
-        except serial.SerialTimeoutException as e:
-            raise SerialTimeoutError(
-                f"Timeout reading data block from {self.port_name}: {e}"
-            ) from e
-        except serial.SerialException as e:
-            raise SerialError(
-                f"Serial error reading data block from {self.port_name}: {e}"
-            ) from e
 
 
 # Example usage (for testing this module directly)
@@ -1011,11 +687,11 @@ if __name__ == "__main__":
     comm = None
     try:
         # To test, you might need to specify a port if auto-detection is tricky
-        # comm = SerialCommunicator.find_and_connect(test_command, config, preferred_port="/dev/ttyACM0")
+        # comm = SerialCommunicator.find_and_connect(test_command, config, preferred_port="/dev/ttyACM0")  # noqa: E501
         comm = SerialCommunicator.find_and_connect(test_command, config)
 
         logger.info(
-            f"Successfully connected to programmer: {comm.programmer_info} on {comm.port_name}"
+            f"Successfully connected to programmer: {comm.programmer_info} on {comm.port_name}"  # noqa: E501
         )
 
         # Example: Send another command after connection
