@@ -447,6 +447,8 @@ class TestDispatchChain:
             max_diffs=10,
             quiet=False,
             operation_flags=0,
+            read_settling_us=0,
+            read_strobe_us=0,
         ):
             captured["eprom_name"] = eprom_name
             captured["eprom_data_dict"] = eprom_data_dict
@@ -456,6 +458,8 @@ class TestDispatchChain:
             captured["max_diffs"] = max_diffs
             captured["quiet"] = quiet
             captured["operation_flags"] = operation_flags
+            captured["read_settling_us"] = read_settling_us
+            captured["read_strobe_us"] = read_strobe_us
             return 0
 
         monkeypatch.setattr(

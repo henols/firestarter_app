@@ -69,6 +69,13 @@ FLAG_CHIP_ENABLE = 0x40
 
 FLAG_VERBOSE = 0x80
 
+# Dev sweep knobs — Firmware sync: json_parser.c (key_read_settling, key_read_strobe)
+# JSON key name strings for host-tunable read-timing parameters.
+# MUST stay in sync with the PROGMEM key strings in firmware json_parser.c.
+# Used by consistency_check_eprom() to emit knob values in per-read JSON commands.
+JSON_KEY_READ_SETTLING_DELAY = "read-settling-delay"
+JSON_KEY_READ_STROBE_US = "read-strobe-us"
+
 # RURP Control Register Bits — mirror of firestarter/include/rurp_pinout.h
 # Documentary only — Python does not write the control register directly
 # (firmware owns that). Used by `firestarter dev registers --firestarter`

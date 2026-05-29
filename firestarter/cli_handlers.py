@@ -1064,6 +1064,20 @@ def dev_addr(
     is_flag=True,
     help="Force read, even if the chip id doesn't match (e.g. Shield-3 missing-chip case).",  # noqa: E501
 )
+@click.option(
+    "--read-settling",
+    "read_settling_us",
+    type=int,
+    default=0,
+    help="Address-settling delay before /CE assert (µs; 0=firmware default 0µs).",
+)
+@click.option(
+    "--read-strobe",
+    "read_strobe_us",
+    type=int,
+    default=0,
+    help="/CE read-strobe pulse width (µs; 0=firmware default 3µs).",
+)
 @click.pass_obj
 @map_typed_errors
 def dev_consistency_check(
@@ -1075,6 +1089,8 @@ def dev_consistency_check(
     max_diffs: int,
     quiet: bool,
     force: bool,
+    read_settling_us: int,
+    read_strobe_us: int,
 ) -> None:
     """Read EPROM N consecutive times and report SHA-256 divergence.
 
@@ -1095,5 +1111,7 @@ def dev_consistency_check(
         max_diffs=max_diffs,
         quiet=quiet,
         operation_flags=_build_op_flags(force=force),
+        read_settling_us=read_settling_us,
+        read_strobe_us=read_strobe_us,
     )
     sys.exit(verdict_int)

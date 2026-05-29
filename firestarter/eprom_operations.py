@@ -40,6 +40,8 @@ from firestarter.constants import (
     FLAG_SKIP_ERASE,
     FLAG_VERBOSE,
     FLAG_VPE_AS_VPP,
+    JSON_KEY_READ_SETTLING_DELAY,
+    JSON_KEY_READ_STROBE_US,
 )
 from firestarter.exceptions import (
     EpromOperationError,
@@ -504,6 +506,8 @@ class EpromOperator:
         max_diffs: int = 10,
         quiet: bool = False,
         operation_flags: int = 0,
+        read_settling_us: int = 0,  # address-settling delay (µs; 0=firmware default)
+        read_strobe_us: int = 0,  # /CE read-strobe pulse width (µs; 0=firmware default)
     ) -> int:
         """Run N consecutive read_eprom passes and report SHA-256 divergence.
 
@@ -551,6 +555,19 @@ class EpromOperator:
                 output_dir = f"consistency-check-{eprom_name}-unknown-board-{timestamp}"
             output_path = Path(output_dir)
             output_path.mkdir(parents=True, exist_ok=True)
+
+            # Merge read-timing knobs into eprom_data_dict copy so they ride
+            # into _setup_operation via command_dict = eprom_data_dict.copy().
+            # Emit each key only when non-zero (firmware defaults apply when absent).
+            # Pattern: consistent with how pulse-delay already travels via the DB dict.
+            if read_settling_us or read_strobe_us:
+                eprom_data_dict = dict(
+                    eprom_data_dict
+                )  # shallow copy — never mutate caller's dict
+                if read_settling_us:
+                    eprom_data_dict[JSON_KEY_READ_SETTLING_DELAY] = read_settling_us
+                if read_strobe_us:
+                    eprom_data_dict[JSON_KEY_READ_STROBE_US] = read_strobe_us
 
             # Run loop: N reads through the production state machine
             results = []  # list of (run_i, sha_hex, bytes_written)
