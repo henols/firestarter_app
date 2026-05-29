@@ -1139,7 +1139,7 @@
 # ---
 # name: test_version
   '''
-  Firestarter, version 3.0.0b5
+  Firestarter, version <VERSION>
   
   '''
 # ---

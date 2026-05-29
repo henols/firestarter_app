@@ -73,9 +73,15 @@ def normalize_output(s: str) -> str:
     - ``/dev/tty...``                 → ``/dev/ttyXXX``
     - Absolute paths in tracebacks and elsewhere (handles quoted paths too)
     """
-    # Version string (--version output and debug log lines)
+    # Version string (debug log lines): "Firestarter version: X"
     s = re.sub(
         r"Firestarter version: [\d.a-zA-Z+]+", "Firestarter version: <VERSION>", s
+    )
+    # Click --version output: "Firestarter, version X" (comma separator, distinct
+    # from the "Firestarter version: X" debug-log format above). Scrubbing both
+    # keeps the snapshot version-agnostic across beta bumps (e.g. b5 → b6 → b7).
+    s = re.sub(
+        r"Firestarter, version [\d.a-zA-Z+]+", "Firestarter, version <VERSION>", s
     )
     # Serial port device names
     s = re.sub(r"/dev/tty\w+", "/dev/ttyXXX", s)
