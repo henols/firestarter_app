@@ -8,9 +8,17 @@ not edited beyond Plan 42-01's BUG-2 fix; deferred to v1.9 post-RCA).
 WARNING 10: this file contains NO BUG-2 regression test — that contract lives
 at ``tests/test_bug_characterization.py::test_eprom_operation_error_not_labeled_as_communication_error``
 (flipped to PASSED by Plan 42-01). Happy-path coverage only.
+
+Phase 44 Plan 03 additions (read_timing block):
+    test_read_settling_key_constant — JSON_KEY_READ_SETTLING_DELAY string match
+    test_read_strobe_key_constant — JSON_KEY_READ_STROBE_US string match
+    test_consistency_check_emits_read_settling_in_command — settling param flows into JSON
+    test_consistency_check_emits_read_strobe_in_command — strobe param flows into JSON
+    test_consistency_check_default_params_absent_from_command — no extra keys when 0
 """
 
 import logging
+from unittest.mock import patch
 
 from firestarter.config import ConfigManager
 from firestarter.eprom_operations import EpromOperator
@@ -209,3 +217,144 @@ def test_class_progress_handler_set_progress() -> None:
     h.set_progress(50, 100)
     h.close()
     assert (50, 100) in captured
+
+
+# ---------------------------------------------------------------------------
+# Phase 44 Plan 03 — read_timing block
+# Tests for host-side read-timing knob params in consistency_check_eprom.
+# Selectable with: pytest -k "read_timing"
+# ---------------------------------------------------------------------------
+
+# Minimal eprom_data_dict that consistency_check_eprom accepts without real DB.
+_MINIMAL_EPROM_DATA: dict = {
+    "memory-size": 65536,
+    "flags": 0,
+    "cmd": 1,
+}
+
+
+def _make_captured_setup_operation(captured: list):
+    """Return a _setup_operation mock that records eprom_data_dict and returns
+    a fake (command_dict, buffer_size) pair that lets consistency_check_eprom
+    proceed to the first run's _operation_context without real serial I/O.
+
+    Yields (None, None) via _operation_context by returning None so the inner
+    loop exits immediately with return 2 (hardware error) — we only care about
+    what was passed IN, not the output.
+    """
+
+    def _fake_setup_operation(self_op, eprom_name, eprom_data_dict, cmd, *args, **kwargs):  # noqa: ANN001
+        captured.append(dict(eprom_data_dict))
+        # Return None so _operation_context yields (None, None, None) and
+        # consistency_check_eprom returns 2 (hardware error) on first run.
+        return None, 0
+
+    return _fake_setup_operation
+
+
+def test_read_timing_settling_key_constant() -> None:
+    """JSON_KEY_READ_SETTLING_DELAY must equal the firmware PROGMEM key string.
+
+    The firmware declares: const char key_read_settling[] PROGMEM = "read-settling-delay";
+    (json_parser.c). If the host string drifts, the firmware silently ignores the param
+    (Pitfall 2 — RESEARCH.md). This test pins the constant to the firmware source of truth.
+
+    Selected by `pytest -k read_timing`.
+    """
+    from firestarter.constants import JSON_KEY_READ_SETTLING_DELAY  # type: ignore[attr-defined]
+
+    assert JSON_KEY_READ_SETTLING_DELAY == "read-settling-delay"
+
+
+def test_read_timing_strobe_key_constant() -> None:
+    """JSON_KEY_READ_STROBE_US must equal the firmware PROGMEM key string.
+
+    The firmware declares: const char key_read_strobe[] PROGMEM = "read-strobe-us";
+    (json_parser.c). If the host string drifts, the firmware silently ignores the param.
+
+    Selected by `pytest -k read_timing`.
+    """
+    from firestarter.constants import JSON_KEY_READ_STROBE_US  # type: ignore[attr-defined]
+
+    assert JSON_KEY_READ_STROBE_US == "read-strobe-us"
+
+
+def test_read_timing_settling_emitted_in_command() -> None:
+    """consistency_check_eprom(..., read_settling_us=50) puts "read-settling-delay"
+    in the JSON command dict sent to _setup_operation.
+
+    Selected by `pytest -k read_timing`.
+    """
+    captured: list = []
+    config = ConfigManager()
+    operator = EpromOperator(config)
+
+    with patch.object(
+        EpromOperator,
+        "_setup_operation",
+        _make_captured_setup_operation(captured),
+    ):
+        operator.consistency_check_eprom(
+            "W27C512",
+            dict(_MINIMAL_EPROM_DATA),
+            runs=2,
+            read_settling_us=50,  # type: ignore[call-arg]
+        )
+
+    assert len(captured) >= 1, "Expected _setup_operation to be called at least once"
+    assert captured[0].get("read-settling-delay") == 50
+
+
+def test_read_timing_strobe_emitted_in_command() -> None:
+    """consistency_check_eprom(..., read_strobe_us=25) puts "read-strobe-us"
+    in the JSON command dict sent to _setup_operation.
+
+    Selected by `pytest -k read_timing`.
+    """
+    captured: list = []
+    config = ConfigManager()
+    operator = EpromOperator(config)
+
+    with patch.object(
+        EpromOperator,
+        "_setup_operation",
+        _make_captured_setup_operation(captured),
+    ):
+        operator.consistency_check_eprom(
+            "W27C512",
+            dict(_MINIMAL_EPROM_DATA),
+            runs=2,
+            read_strobe_us=25,  # type: ignore[call-arg]
+        )
+
+    assert len(captured) >= 1, "Expected _setup_operation to be called at least once"
+    assert captured[0].get("read-strobe-us") == 25
+
+
+def test_read_timing_default_params_absent_from_command() -> None:
+    """With both params == 0 (default), neither "read-settling-delay" nor
+    "read-strobe-us" appears in the JSON command sent to _setup_operation.
+
+    Firmware defaults apply when these keys are absent from the JSON.
+
+    Selected by `pytest -k read_timing`.
+    """
+    captured: list = []
+    config = ConfigManager()
+    operator = EpromOperator(config)
+
+    with patch.object(
+        EpromOperator,
+        "_setup_operation",
+        _make_captured_setup_operation(captured),
+    ):
+        operator.consistency_check_eprom(
+            "W27C512",
+            dict(_MINIMAL_EPROM_DATA),
+            runs=2,
+            # read_settling_us and read_strobe_us default to 0 — not passed
+        )
+
+    assert len(captured) >= 1, "Expected _setup_operation to be called at least once"
+    assert "read-settling-delay" not in captured[0]
+    assert "read-strobe-us" not in captured[0]
