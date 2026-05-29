@@ -98,6 +98,12 @@ def normalize_output(s: str) -> str:
     )
     # Windows absolute paths (e.g. C:\Users\...\firestarter.exe)
     s = re.sub(r'[A-Za-z]:\\(?:[^\s",\')]+\\?)+', "<PATH>", s)
+    # Traceback frame line numbers: "File "<PATH>", line 1514, in main" — the
+    # line numbers point into third-party library internals (click, the console
+    # entry-point shim) and shift between dependency versions, so they are not
+    # portable across CI/dev environments. Scrub them so characterization
+    # snapshots that pin a traceback depend only on the meaningful error type.
+    s = re.sub(r'(File "<PATH>", line )\d+', r"\1N", s)
     return s
 
 

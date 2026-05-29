@@ -314,40 +314,40 @@
 # name: test_info_known_chip[test_info_known_chip_stderr]
   '''
   Traceback (most recent call last):
-    File "<PATH>", line 8, in <module>
+    File "<PATH>", line N, in <module>
       sys.exit(main())
                ^^^^^^
-    File "<PATH>", line 1514, in __call__
+    File "<PATH>", line N, in __call__
       return self.main(*args, **kwargs)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 1435, in main
+    File "<PATH>", line N, in main
       rv = self.invoke(ctx)
            ^^^^^^^^^^^^^^^^
-    File "<PATH>", line 1902, in invoke
+    File "<PATH>", line N, in invoke
       return _process_result(sub_ctx.command.invoke(sub_ctx))
                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 1298, in invoke
+    File "<PATH>", line N, in invoke
       return ctx.invoke(self.callback, **ctx.params)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 853, in invoke
+    File "<PATH>", line N, in invoke
       return callback(*args, **kwargs)
              ^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 46, in new_func
+    File "<PATH>", line N, in new_func
       return f(get_current_context().obj, *args, **kwargs)
              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 112, in wrapper
+    File "<PATH>", line N, in wrapper
       return f(*args, **kwargs)
              ^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 338, in info
+    File "<PATH>", line N, in info
       structured_details = app.eprom_presenter.prepare_detailed_eprom_data(
                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 122, in prepare_detailed_eprom_data
+    File "<PATH>", line N, in prepare_detailed_eprom_data
       eprom_specifications = self.spec_builder.build_specifications(eprom_details)
                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 506, in build_specifications
+    File "<PATH>", line N, in build_specifications
       display_pin_names = self._generate_pin_names_for_display(eprom_data)
                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line 396, in _generate_pin_names_for_display
+    File "<PATH>", line N, in _generate_pin_names_for_display
       if "vpp-pin" in pin_map_details and pin_map_details["vpp-pin"] <= pin_count:
                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   TypeError: '<=' not supported between instances of 'list' and 'int'
