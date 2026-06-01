@@ -310,7 +310,9 @@ class TestCobsResync:
         crc_byte = decoded[-1]
 
         assert _crc8_ccitt(recovered_payload) == crc_byte, "CRC must match after resync"
-        assert recovered_payload == good_payload, "Recovered payload must equal good_payload"
+        assert recovered_payload == good_payload, (
+            "Recovered payload must equal good_payload"
+        )
 
     def test_no_blocking_on_corrupt_crc(self) -> None:
         """Decoding a corrupt frame completes fast — no blocking 2 s hang.
