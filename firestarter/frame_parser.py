@@ -55,6 +55,79 @@ def _crc8_ccitt(data: bytes) -> int:
     return crc
 
 
+def cobs_encode(payload: bytes) -> bytes:
+    """Encode ``payload`` using Consistent Overhead Byte Stuffing (COBS).
+
+    Returns the encoded body **without** a trailing ``0x00`` delimiter.
+    The caller is responsible for appending the delimiter so that the
+    full atomic frame can be assembled as::
+
+        b"#" + cobs_encode(payload + bytes([crc8])) + b"\\x00"
+
+    Algorithm (ADR §4.1):
+    - Scan for runs of ≤ 254 non-zero bytes.
+    - Emit a run-length+1 code byte followed by the run bytes.
+    - A zero byte in the input is represented by a code byte of ``0x01``
+      (zero-length run) with no subsequent data byte.
+    - A run of exactly 254 non-zero bytes emits code ``0xFF`` and the
+      254 bytes but does NOT consume an implicit zero (Pitfall 2 /
+      254-run phantom-zero edge).
+
+    The output contains no ``0x00`` byte by construction (FRAME-04).
+    """
+    out = bytearray()
+    i = 0
+    n = len(payload)
+    while i <= n:
+        # Find the end of the next non-zero run (or end of payload)
+        run_start = i
+        while i < n and payload[i] != 0x00 and (i - run_start) < 254:
+            i += 1
+        run_len = i - run_start
+        # Emit the code byte and the run bytes
+        out.append(run_len + 1)
+        out.extend(payload[run_start:i])
+        if i < n and payload[i] == 0x00:
+            # Consumed the zero; move past it
+            i += 1
+        elif run_len == 254:
+            # 254-run: no implicit zero — loop continues without consuming a zero
+            # The next iteration starts a new run from the same position
+            pass
+        else:
+            # End of payload reached; we're done
+            break
+    return bytes(out)
+
+
+def cobs_decode(encoded: bytes) -> bytes:
+    """Decode a COBS body (NO trailing ``0x00`` delimiter).
+
+    Raises ``ValueError`` on malformed input:
+    - A ``0x00`` byte inside the body (the delimiter must not appear in the body).
+    - A run length that would read beyond the end of the encoded buffer.
+
+    This implements the bounded-decode control (ADR §4.1 / T-50-02):
+    callers should treat any ``ValueError`` as a resync signal — drain to
+    the next ``0x00`` delimiter and attempt the next frame.
+    """
+    out = bytearray()
+    i, n = 0, len(encoded)
+    while i < n:
+        code = encoded[i]
+        if code == 0:
+            raise ValueError("0x00 inside COBS body")
+        i += 1
+        end = i + code - 1
+        if end > n:
+            raise ValueError("COBS run exceeds buffer")
+        out.extend(encoded[i:end])
+        i = end
+        if code < 0xFF and i < n:
+            out.append(0)  # implicit zero, except after a 254-run or at stream end
+    return bytes(out)
+
+
 def _decode_param(ptype: str, buf: bytes, cursor: int) -> Tuple[Any, int]:  # noqa: UP006
     """Decode one MSB-first parameter starting at `buf[cursor]`.
 
