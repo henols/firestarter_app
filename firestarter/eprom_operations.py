@@ -7,10 +7,8 @@ Permission is hereby granted under MIT license.
 EPROM Operations Module (Refactored)
 """
 
-import functools
 import hashlib
 import logging
-import operator
 import os
 import shutil
 import time
@@ -49,6 +47,7 @@ from firestarter.exceptions import (
     SerialError,
     SerialTimeoutError,
 )
+from firestarter.frame_parser import _crc8_ccitt, cobs_encode
 from firestarter.serial_comm import SerialCommunicator
 from firestarter.utils import extract_hex_to_decimal
 
@@ -376,18 +375,17 @@ class EpromOperator:
 
                 if file_handle.tell() < file_size:
                     data_chunk = file_handle.read(buffer_size)
-                    checksum = functools.reduce(operator.xor, data_chunk, 0)
-                    header = (
-                        b"#" + len(data_chunk).to_bytes(2, "big") + checksum.to_bytes(1)
-                    )
+                    crc = _crc8_ccitt(data_chunk)
+                    body = cobs_encode(data_chunk + bytes([crc]))
+                    frame = b"#" + body + b"\x00"
 
-                    # Firmware reads header + payload as one synchronous flow via
-                    # rurp_communication_read_data (rurp_serial_utils.cpp): 2-byte size,
-                    # 1-byte checksum, then the payload bytes. There is no ACK between
-                    # header and payload — sending one (and waiting for an OK that
-                    # never comes) trips the firmware's 2-second data-block timeout
-                    # and returns Data err -3.
-                    self.comm.send_bytes(header + data_chunk)
+                    # Firmware decodes the COBS frame via rurp_communication_read_data
+                    # (rurp_serial_utils.cpp): reads bytes until the 0x00 delimiter,
+                    # COBS-decodes in place, verifies CRC8-CCITT over the payload.
+                    # Frame layout (ADR §4.3): b"#" + COBS(payload + CRC8) + b"\x00".
+                    # Assembled as ONE bytes object and sent in a single send_bytes call
+                    # (atomic-write mandate, ADR §4.1 / T-50-05 SAFE-01 timing guard).
+                    self.comm.send_bytes(frame)
                     progress.update(len(data_chunk))
                 else:
                     self.comm.send_done()
