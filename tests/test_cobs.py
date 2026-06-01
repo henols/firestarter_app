@@ -120,6 +120,31 @@ class TestCobsRoundtrip:
         encoded = cobs_encode(payload)
         assert b"\x00" not in encoded, "COBS body must not contain 0x00"
 
+    def test_254_run_boundary_followed_by_zero(self) -> None:
+        """254 consecutive nonzero bytes immediately followed by 0x00 round-trips.
+
+        Regression test for CR-01: the old branch order silently dropped the
+        0x00 that landed exactly on the 254-run boundary.
+        """
+        payload = bytes([0x01] * 254 + [0x00] + [0x02, 0x03])
+        assert cobs_decode(cobs_encode(payload)) == payload
+
+    def test_254_run_boundary_followed_by_zero_in_frame(self) -> None:
+        """Host-encoded frame with 254-run+zero round-trips through COBS.
+
+        Verifies the encoded body contains no 0x00, then verifies the CRC
+        survives the full encode → decode round-trip (CR-01 regression).
+        """
+        payload = bytes([0x01] * 254 + [0x00] + [0x02, 0x03])
+        crc = _crc8_ccitt(payload)
+        body = cobs_encode(payload + bytes([crc]))
+        # Encoded body must contain no 0x00
+        assert b"\x00" not in body
+        # Full decode must recover payload + CRC
+        decoded_logical = cobs_decode(body)
+        assert decoded_logical[:-1] == payload
+        assert decoded_logical[-1] == crc
+
 
 # ---------------------------------------------------------------------------
 # FRAME-04 / full-buffer round-trip

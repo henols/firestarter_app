@@ -87,13 +87,13 @@ def cobs_encode(payload: bytes) -> bytes:
         # Emit the code byte and the run bytes
         out.append(run_len + 1)
         out.extend(payload[run_start:i])
-        if i < n and payload[i] == 0x00:
-            # Consumed the zero; move past it
-            i += 1
-        elif run_len == 254:
+        if run_len == 254:
             # 254-run: no implicit zero — loop continues without consuming a zero
             # The next iteration starts a new run from the same position
             pass
+        elif i < n and payload[i] == 0x00:
+            # Consumed the zero; move past it
+            i += 1
         else:
             # End of payload reached; we're done
             break
