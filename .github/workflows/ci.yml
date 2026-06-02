@@ -42,6 +42,17 @@ jobs:
             --language python
           git diff --exit-code firestarter/messages.py
 
+      - name: Vector catalog validity check
+        run: python3 tools/catalog/codegen_vectors.py --catalog tools/catalog/frame-vectors.toml --check
+
+      - name: Codegen drift gate (frame_vectors.py)
+        run: |
+          python3 tools/catalog/codegen_vectors.py \
+            --catalog tools/catalog/frame-vectors.toml \
+            --target firestarter/frame_vectors.py \
+            --language python-vectors
+          git diff --exit-code firestarter/frame_vectors.py
+
       - name: Install package + test deps
         run: pip install -e .[test]
 
