@@ -593,3 +593,79 @@ def test_dev_consistency_check_hardware_error_verdict(runner: CliRunner) -> None
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["dev", "consistency-check", "W27C512"], obj=app)
     assert result.exit_code == 2
+
+
+# ---------------------------------------------------------------------------
+# Phase-53 Plan 01 Task 3: RED smoke tests for dev write-cycle + dev fault-inject
+#
+# All four tests MUST FAIL until 53-02 registers the subcommands. Click will
+# report "No such command 'write-cycle'" / "No such command 'fault-inject'",
+# producing exit code 2 (usage error) instead of the expected 0 or 2 (hw-error).
+# ---------------------------------------------------------------------------
+
+
+def test_dev_write_cycle_pass(runner: CliRunner, tmp_path) -> None:
+    """dev write-cycle W27C512 <source>: write_cycle_eprom returns 0 -> exit 0.
+
+    FAILS RED until 53-02 registers the dev write-cycle subcommand
+    (Click: 'No such command').
+    """
+    operator = Mock(spec=EpromOperator)
+    operator.write_cycle_eprom.return_value = 0  # type: ignore[attr-defined]
+    app = make_app_context(eprom_operator=operator)
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"\xaa" * 65536)
+    result = runner.invoke(cli, ["dev", "write-cycle", "W27C512", str(source)], obj=app)
+    assert result.exit_code == 0, (
+        f"Expected exit 0 (PASS), got {result.exit_code}. Output: {result.output!r}"
+    )
+
+
+def test_dev_write_cycle_hardware_error(runner: CliRunner, tmp_path) -> None:
+    """dev write-cycle W27C512 <source>: write_cycle_eprom returns 2 -> exit 2.
+
+    CRITICAL: exit 2 (hw-error) must NOT be collapsed to 1 (mismatch) —
+    the 3-way verdict is load-bearing for the v1.6 RCA diagnostic.
+
+    FAILS RED until 53-02 registers the dev write-cycle subcommand.
+    """
+    operator = Mock(spec=EpromOperator)
+    operator.write_cycle_eprom.return_value = 2  # type: ignore[attr-defined]
+    app = make_app_context(eprom_operator=operator)
+    source = tmp_path / "source.bin"
+    source.write_bytes(b"\xaa" * 65536)
+    result = runner.invoke(cli, ["dev", "write-cycle", "W27C512", str(source)], obj=app)
+    assert result.exit_code == 2, (
+        f"Expected exit 2 (hw-error), got {result.exit_code}. Output: {result.output!r}"
+    )
+
+
+def test_dev_fault_inject_pass(runner: CliRunner) -> None:
+    """dev fault-inject W27C512: fault_inject_cycle returns True -> exit 0.
+
+    FAILS RED until 53-02 registers the dev fault-inject subcommand
+    (Click: 'No such command').
+    """
+    operator = Mock(spec=EpromOperator)
+    operator.fault_inject_cycle.return_value = True  # type: ignore[attr-defined]
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["dev", "fault-inject", "W27C512"], obj=app)
+    assert result.exit_code == 0, (
+        f"Expected exit 0 (fault-inject passed), got {result.exit_code}. "
+        f"Output: {result.output!r}"
+    )
+
+
+def test_dev_fault_inject_fail(runner: CliRunner) -> None:
+    """dev fault-inject W27C512: fault_inject_cycle returns False -> exit 1.
+
+    FAILS RED until 53-02 registers the dev fault-inject subcommand.
+    """
+    operator = Mock(spec=EpromOperator)
+    operator.fault_inject_cycle.return_value = False  # type: ignore[attr-defined]
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["dev", "fault-inject", "W27C512"], obj=app)
+    assert result.exit_code == 1, (
+        f"Expected exit 1 (fault-inject failed), got {result.exit_code}. "
+        f"Output: {result.output!r}"
+    )
