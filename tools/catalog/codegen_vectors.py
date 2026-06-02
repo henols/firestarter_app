@@ -242,6 +242,7 @@ Re-run codegen after editing the canonical catalog.
 Catalog version: {version}
 Total vectors: {count}
 """
+
 '''
 
 _PY_IMPORTS = """\
@@ -259,11 +260,41 @@ class FrameVector(NamedTuple):
 
 
 def _bytes_to_py_literal(data: bytes) -> str:
-    """Emit a Python bytes literal: bytes([0x01, 0x02, ...]) or b''"""
+    """Emit a Python bytes literal suitable for inline use in a FrameVector arg.
+
+    Uses bytes.fromhex with UPPER-CASE hex (LCAT-05 determinism contract).
+    Returns just the hex string — the caller wraps it in the correct
+    bytes.fromhex(...) call form (inline or wrapped) based on line length.
+    """
+    return data.hex().upper()
+
+
+def _bytes_to_py_field(field_name: str, data: bytes, indent: str = "        ") -> str:
+    """Emit one FrameVector keyword argument line (or wrapped block).
+
+    Chooses between:
+      {indent}{field_name}=b"",
+      {indent}{field_name}=bytes.fromhex("SHORT"),
+      {indent}{field_name}=bytes.fromhex(
+      {indent}    "LONG_HEX_STRING"
+      {indent}),
+    so that the emitted text is ruff-format-stable at line-length=88.
+    """
     if not data:
-        return "b\"\""
-    parts = ["0x%02X" % b for b in data]
-    return "bytes([" + ", ".join(parts) + "])"
+        return f'{indent}{field_name}=b"",\n'
+    hex_str = _bytes_to_py_literal(data)
+    # Test if the single-line form fits within 88 chars.
+    # Line: '{indent}{field_name}=bytes.fromhex("{hex_str}"),'
+    single_line = f'{indent}{field_name}=bytes.fromhex("{hex_str}"),'
+    if len(single_line) <= 88:
+        return single_line + "\n"
+    # Wrapped form: ruff wraps long args to the next line with 4 extra spaces.
+    inner_indent = indent + "    "
+    return (
+        f'{indent}{field_name}=bytes.fromhex(\n'
+        f'{inner_indent}"{hex_str}"\n'
+        f'{indent}),\n'
+    )
 
 
 def emit_python_vectors(catalog: dict) -> str:
@@ -280,13 +311,17 @@ def emit_python_vectors(catalog: dict) -> str:
     for vec in vectors:
         payload_bytes = _parse_hex_bytes(vec["payload_hex"], "payload_hex", vec["id"])
         frame_bytes   = _parse_hex_bytes(vec["frame_hex"],   "frame_hex",   vec["id"])
-        payload_lit   = _bytes_to_py_literal(payload_bytes)
-        frame_lit     = _bytes_to_py_literal(frame_bytes)
-        lines.append(
-            f"    FrameVector(id=0x{vec['id']:02X}, name={vec['name']!r},\n"
-            f"                payload={payload_lit},\n"
-            f"                frame={frame_lit}),\n"
+        # Emit trailing-comma multi-line style — ruff-format-stable at any
+        # line length.  Use double-quoted name to satisfy quote-style="double".
+        entry = (
+            f"    FrameVector(\n"
+            f"        id=0x{vec['id']:02X},\n"
+            f"        name=\"{vec['name']}\",\n"
+            + _bytes_to_py_field("payload", payload_bytes)
+            + _bytes_to_py_field("frame", frame_bytes)
+            + "    ),\n"
         )
+        lines.append(entry)
 
     lines.append("]\n")
 
