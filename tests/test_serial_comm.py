@@ -241,3 +241,153 @@ def test_send_json_command_version_probe_is_framed(make_comm, fake_serial) -> No
     assert not written.startswith(b"{"), (
         "Version probe must not start with '{' — it must be COBS-encoded, not raw JSON"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase-53 Plan 01 Task 2: RED tests for fault-inject hooks + ring-fence
+#
+# Four tests MUST FAIL until 53-02 adds:
+#   - SerialCommunicator._fault_inject_outgoing attribute
+#   - FaultInjectingSerialCommunicator subclass
+# One ring-fence test is GREEN now (snapshot captured from current body).
+# ---------------------------------------------------------------------------
+
+
+def test_fault_inject_outgoing_none(make_comm, monkeypatch) -> None:
+    """With _fault_inject_outgoing=None (the default), send_json_command emits an
+    unmodified frame.
+
+    The trailing byte must be 0x00 (COBS delimiter), and cobs_decode(frame[:-1])
+    must yield a payload+CRC where CRC == _crc8_ccitt(payload).
+
+    FAILS RED until 53-02 adds the _fault_inject_outgoing attribute to
+    SerialCommunicator.__init__ so it can be inspected via getattr in send_json_command.
+    This test asserts the attribute exists on the instance by checking that the hook
+    path is reachable (i.e., the attribute is declared, not just dynamically set).
+    """
+    comm = make_comm()
+    # Assert the attribute is formally declared (will fail RED until 53-02 sets it in __init__)
+    assert hasattr(comm, "_fault_inject_outgoing"), (
+        "_fault_inject_outgoing must be declared in SerialCommunicator.__init__ "
+        "(53-02 adds it); this test is RED until then."
+    )
+    assert comm._fault_inject_outgoing is None, (  # type: ignore[attr-defined]
+        "_fault_inject_outgoing must default to None"
+    )
+    sent: list = []
+    monkeypatch.setattr(comm, "send_bytes", lambda b: sent.append(b) or len(b))
+    comm.send_json_command({"cmd": 1})
+
+    assert sent, "send_bytes must have been called"
+    frame = sent[0]
+    assert frame[-1] == 0x00, "Delimiter must be 0x00"
+    body = cobs_decode(frame[:-1])
+    crc = body[-1]
+    payload = body[:-1]
+    assert crc == _crc8_ccitt(payload), "CRC8 must be intact when hook is None"
+
+
+def test_fault_inject_outgoing_corrupt_crc8(make_comm, monkeypatch) -> None:
+    """With a hook flipping frame[-2], the decoded CRC no longer matches the payload.
+
+    Hook: frame[:-2] + bytes([frame[-2] ^ 0x01]) + b"\\x00"
+
+    FAILS RED until 53-02 adds the _fault_inject_outgoing hook path in
+    send_json_command.
+    """
+    comm = make_comm()
+    comm._fault_inject_outgoing = (  # type: ignore[attr-defined]  # RED: attribute absent until 53-02
+        lambda f: f[:-2] + bytes([f[-2] ^ 0x01]) + b"\x00"
+    )
+    sent: list = []
+    monkeypatch.setattr(comm, "send_bytes", lambda b: sent.append(b) or len(b))
+    comm.send_json_command({"cmd": 1})
+
+    assert sent, "send_bytes must have been called"
+    frame = sent[0]
+    body = cobs_decode(frame[:-1])
+    crc = body[-1]
+    payload = body[:-1]
+    assert crc != _crc8_ccitt(payload), (
+        "Corrupt-CRC8 hook must produce a frame where decoded CRC != _crc8_ccitt(payload)"
+    )
+
+
+def test_fault_inject_outgoing_drop_delimiter(make_comm, monkeypatch) -> None:
+    """With a hook returning frame[:-1], the emitted bytes have no trailing 0x00.
+
+    FAILS RED until 53-02 adds the _fault_inject_outgoing hook path in
+    send_json_command.
+    """
+    comm = make_comm()
+    comm._fault_inject_outgoing = lambda f: f[:-1]  # type: ignore[attr-defined]  # RED
+    sent: list = []
+    monkeypatch.setattr(comm, "send_bytes", lambda b: sent.append(b) or len(b))
+    comm.send_json_command({"cmd": 1})
+
+    assert sent, "send_bytes must have been called"
+    frame = sent[0]
+    assert frame[-1] != 0x00, (
+        "Drop-delimiter hook must produce a frame without trailing 0x00"
+    )
+
+
+def test_fault_inject_incoming_subclass(make_comm) -> None:
+    """FaultInjectingSerialCommunicator flips the last body byte exactly once.
+
+    The one-shot flip fires on the first _decode_id_frame call; subsequent
+    calls pass through unmodified (_fault_fired flag guards re-entry).
+
+    FAILS RED until 53-02 adds the FaultInjectingSerialCommunicator subclass.
+    """
+    from firestarter.serial_comm import (  # type: ignore[attr-defined]  # RED: class absent until 53-02
+        FaultInjectingSerialCommunicator,
+    )
+
+    comm = FaultInjectingSerialCommunicator.__new__(FaultInjectingSerialCommunicator)
+    comm._corrupt_incoming_once = True
+    comm._fault_fired = False
+
+    # Build a minimal body (id + params + CRC) for _decode_id_frame
+    from firestarter.frame_parser import _crc8_ccitt as _inner_crc8
+
+    test_body = bytes([0x01, 0x00, 0x00])  # minimal: id + 2 params
+    crc_byte = _inner_crc8(test_body)
+    body_with_crc = test_body + bytes([crc_byte])
+
+    # First call — the one-shot flip must fire and set _fault_fired
+    comm._decode_id_frame(len(body_with_crc), body_with_crc)
+    assert comm._fault_fired, "One-shot flag must be set after first call"
+
+    # Second call — flip must NOT fire again; flag stays True
+    comm._decode_id_frame(len(body_with_crc), body_with_crc)
+    assert comm._fault_fired, "One-shot flag must remain True (no re-flip on 2nd call)"
+
+
+def test_read_and_parse_lines_ringfence_unchanged() -> None:
+    """Ring-fence compliance: _read_and_parse_lines body source is byte-identical
+    to the GATE-1.8d pinned snapshot.
+
+    This test is GREEN today — the snapshot is captured from the current body.
+    It goes RED if ANY change is made to the generator body (per GATE-1.8d:
+    any change must be flagged and deferred to v1.9 alongside binary re-validation).
+
+    Pinned SHA-256 (2026-06-02): 544433068cb14ac14677939435cb4f0ea78783b503315ed645b5f88c5c44a444
+    """
+    import hashlib
+    import inspect
+
+    from firestarter.serial_comm import SerialCommunicator
+
+    _PINNED_SHA256 = "544433068cb14ac14677939435cb4f0ea78783b503315ed645b5f88c5c44a444"
+
+    src = inspect.getsource(SerialCommunicator._read_and_parse_lines)
+    actual_digest = hashlib.sha256(src.encode("utf-8")).hexdigest()
+
+    assert actual_digest == _PINNED_SHA256, (
+        f"GATE-1.8d VIOLATION: _read_and_parse_lines body has changed!\n"
+        f"  Pinned digest:  {_PINNED_SHA256}\n"
+        f"  Actual digest:  {actual_digest}\n"
+        "Any change to this generator body must be flagged and deferred to v1.9 "
+        "per the ring-fence protocol (see serial_comm.py header comment)."
+    )
