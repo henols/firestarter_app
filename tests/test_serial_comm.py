@@ -7,16 +7,22 @@ branches), ``_log_command_details`` (flag-decoding), and the ``_parse_response_l
 prefix-matching surface.
 """
 
+import json as _json
 import logging
 
 import pytest
 
 from firestarter.constants import (
+    COMMAND_FW_VERSION,
     FLAG_CAN_ERASE,
     FLAG_FORCE,
     FLAG_OUTPUT_ENABLE,
 )
 from firestarter.exceptions import FirmwareOutdatedError
+from firestarter.frame_parser import (
+    _crc8_ccitt,
+    cobs_decode,
+)
 from firestarter.serial_comm import SerialCommunicator
 
 
@@ -148,15 +154,6 @@ def test_send_json_command_routes_through_send_string(make_comm) -> None:
 # ---------------------------------------------------------------------------
 # Phase-51 plan-02: COBS-framed command emission tests (FRAME-05 / T-51-04/05/06)
 # ---------------------------------------------------------------------------
-
-import json as _json  # noqa: E402 — import after existing block; used locally
-
-from firestarter.frame_parser import (  # noqa: E402
-    _crc8_ccitt,
-    cobs_decode,
-    cobs_encode,
-)
-from firestarter.constants import COMMAND_FW_VERSION  # noqa: E402
 
 
 def test_send_json_command_emits_cobs_frame(make_comm, fake_serial) -> None:

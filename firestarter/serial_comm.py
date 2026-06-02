@@ -50,6 +50,7 @@ from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_de
     Response,
     _crc8_ccitt,
     _decode_param,
+    cobs_encode,
 )
 
 logger = logging.getLogger("SerialComm")
@@ -153,10 +154,25 @@ class SerialCommunicator:
         return self.send_bytes(data_string.encode(encoding))
 
     def send_json_command(self, command_dict: dict) -> int:
-        """Serialise `command_dict` as compact JSON and send it over the serial port."""
+        """Serialise ``command_dict`` as a COBS+CRC8 framed command and send it.
+
+        Frame layout (ADR §4.3, FRAME-05, CRC-01):
+            COBS(json_bytes + CRC8(json_bytes)) + 0x00
+
+        Encode order is LOAD-BEARING: CRC8 is computed over the RAW json_bytes
+        FIRST, then the (json_bytes + crc_byte) stream is COBS-encoded as a unit.
+        Never COBS-encode first then CRC the body — that would silently break the
+        firmware's CRC8 verify (RESEARCH Pitfall 2).
+
+        The full frame is assembled as a single ``bytes`` object and passed to
+        ``send_bytes()`` in ONE call (SAFE-01 sub-claim B — split-write forbidden).
+        """
         self._log_command_details(command_dict)
-        json_data = json.dumps(command_dict, separators=(",", ":"))
-        return self.send_string(json_data)
+        json_bytes = json.dumps(command_dict, separators=(",", ":")).encode("ascii")
+        crc = _crc8_ccitt(json_bytes)
+        body = cobs_encode(json_bytes + bytes([crc]))
+        frame = body + b"\x00"
+        return self.send_bytes(frame)
 
     def _parse_response_line(self, line_bytes: bytes) -> Optional[Response]:
         """
