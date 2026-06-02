@@ -183,3 +183,31 @@ def test_ctrl_values_match_firmware():
     assert (
         CTRL_VPP_VPE_DROP_ENABLE == 0x100
     )  # CTRL_VPP_VPE_DROP_ENABLE (wide layout, differs from legacy 0x01)
+
+
+@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+def test_cmd_frame_max_parity() -> None:
+    """Assert host CMD_FRAME_MAX == firmware Uno DATA_BUFFER_SIZE floor (512).
+
+    Design decision D-07: firmware defines CMD_FRAME_MAX via a board-parameterized
+    macro:
+
+        #define CMD_FRAME_MAX DATA_BUFFER_SIZE
+
+    On Uno/uno328pb: DATA_BUFFER_SIZE == 512 (the compile-time default in
+    firestarter.h).
+    On Leonardo: DATA_BUFFER_SIZE may be 1024 via platformio.ini build_flags;
+    CMD_FRAME_MAX on that board would be 1024. BUT 512 is the binding minimum —
+    a command frame >512 B is not a legitimate use case in v1.10, and the host
+    must never send a frame larger than the Uno floor.
+
+    Host hardcodes CMD_FRAME_MAX = 512 in firestarter/constants.py. This is
+    ACCEPTED for v1.10 (D-07 acceptance decision — not a bug to fix).
+
+    The skipif guard keys on firmware-header presence (same FW_ABSENT proxy used
+    by the other parity tests in this file). When firmware checkout is absent
+    (host-only CI), this test skips cleanly.
+    """
+    from firestarter.constants import CMD_FRAME_MAX
+
+    assert CMD_FRAME_MAX == 512  # == Uno DATA_BUFFER_SIZE floor (D-07)
