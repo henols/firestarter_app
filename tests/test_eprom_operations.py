@@ -536,3 +536,134 @@ class TestWriteCycleEprom:
             output_dir=str(tmp_path / "out"),
         )
         assert rc == 2, "Erase failure must return 2 (hw-error)."
+
+
+# ---------------------------------------------------------------------------
+# Phase-53 Plan 02: unit tests for fault_inject_cycle (coverage gate)
+#
+# These tests exercise fault_inject_cycle directly to keep total coverage
+# at >=70%. The CLI smoke tests (test_cli_handlers.py) only mock the method,
+# so direct unit tests are required for coverage. XACT-02 / Phase 53 Plan 02.
+# ---------------------------------------------------------------------------
+
+
+class _MockComm:
+    """Minimal SerialCommunicator stand-in for fault_inject_cycle tests."""
+
+    def __init__(self) -> None:
+        self._fault_inject_outgoing = None
+
+
+def _make_fake_ctx_for_fault_inject(memory_size: int = 65536):
+    """@contextmanager fake _operation_context for fault_inject_cycle tests."""
+    from contextlib import contextmanager
+
+    @contextmanager
+    def fake_ctx(self, eprom_name, eprom_data_dict, cmd, *a, **kw):
+        yield {"address": 0, "memory-size": memory_size}, 512, "READ"
+
+    return fake_ctx
+
+
+def _make_fault_inject_state_machine(corrupted_fails: bool = True):
+    """Fake _run_state_machine for fault_inject_cycle:
+
+    First call (corrupted transfer): returns (not corrupted_fails, None) — i.e.
+    if corrupted_fails=True, returns (False, "error") to simulate failure.
+    Second call (clean transfer): always returns (True, None).
+    """
+    counter = {"n": 0}
+
+    def fake_sm(self, op_name, **kwargs):
+        cb = kwargs.get("process_data_chunk_callback")
+        if cb is not None:
+            cb(0, b"\xaa" * 16)
+        counter["n"] += 1
+        if counter["n"] == 1:
+            return (not corrupted_fails, None)  # first call
+        return (True, None)  # subsequent calls
+
+    return fake_sm
+
+
+class TestFaultInjectCycle:
+    """Phase-53 Plan 02 unit tests for fault_inject_cycle (coverage gate)."""
+
+    _MEMORY_SIZE = 65536
+
+    def test_fault_inject_cycle_outgoing_pass(self, tmp_path, monkeypatch):
+        """Outgoing path: corrupted transfer fails, clean follow-on succeeds -> True."""
+        monkeypatch.setattr(
+            EpromOperator,
+            "_operation_context",
+            _make_fake_ctx_for_fault_inject(self._MEMORY_SIZE),
+        )
+        monkeypatch.setattr(
+            EpromOperator,
+            "_run_state_machine",
+            _make_fault_inject_state_machine(corrupted_fails=True),
+        )
+
+        op = EpromOperator(ConfigManager())
+        op.comm = _MockComm()  # type: ignore[assignment]
+        result = op.fault_inject_cycle(
+            "TEST_CHIP",
+            {"memory-size": self._MEMORY_SIZE},
+            direction="outgoing",
+            fault_form="corrupt-crc8",
+            output_dir=str(tmp_path / "fi_out"),
+        )
+        assert result is True, "Corrupted-then-clean cycle must return True."
+
+    def test_fault_inject_cycle_outgoing_drop_delimiter(self, tmp_path, monkeypatch):
+        """Outgoing path with drop-delimiter form -> True (same verdict logic)."""
+        monkeypatch.setattr(
+            EpromOperator,
+            "_operation_context",
+            _make_fake_ctx_for_fault_inject(self._MEMORY_SIZE),
+        )
+        monkeypatch.setattr(
+            EpromOperator,
+            "_run_state_machine",
+            _make_fault_inject_state_machine(corrupted_fails=True),
+        )
+
+        op = EpromOperator(ConfigManager())
+        op.comm = _MockComm()  # type: ignore[assignment]
+        result = op.fault_inject_cycle(
+            "TEST_CHIP",
+            {"memory-size": self._MEMORY_SIZE},
+            direction="outgoing",
+            fault_form="drop-delimiter",
+            output_dir=str(tmp_path / "fi_out"),
+        )
+        assert result is True, "Drop-delimiter cycle must return True."
+
+    def test_fault_inject_cycle_corrupted_succeeds_returns_false(
+        self, tmp_path, monkeypatch
+    ):
+        """If the corrupted transfer unexpectedly succeeds -> returns False."""
+        monkeypatch.setattr(
+            EpromOperator,
+            "_operation_context",
+            _make_fake_ctx_for_fault_inject(self._MEMORY_SIZE),
+        )
+        monkeypatch.setattr(
+            EpromOperator,
+            "_run_state_machine",
+            # corrupted_fails=False means first call returns (True, None) -> unexpected success
+            _make_fault_inject_state_machine(corrupted_fails=False),
+        )
+
+        op = EpromOperator(ConfigManager())
+        op.comm = _MockComm()  # type: ignore[assignment]
+        result = op.fault_inject_cycle(
+            "TEST_CHIP",
+            {"memory-size": self._MEMORY_SIZE},
+            direction="outgoing",
+            fault_form="corrupt-crc8",
+            output_dir=str(tmp_path / "fi_out"),
+        )
+        assert result is False, (
+            "Unexpectedly successful corrupted transfer must return False."
+        )

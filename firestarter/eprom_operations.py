@@ -695,7 +695,275 @@ class EpromOperator:
             # operations are unaffected by --quiet for THIS invocation.
             self.progress_callback = prior_callback
 
+    def write_cycle_eprom(
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        source_image_path: str,
+        runs: int = 5,
+        output_dir: Optional[str] = None,
+        operation_flags: int = 0,
+    ) -> int:
+        """Erase → write source image → read-back N times; compare each read-back
+        against source image SHA-256 (D-06 independent host-side compare).
+
+        Returns:
+            0 -- all N read-backs match source image SHA-256 (PASS)
+            1 -- any read-back SHA-256 != source image SHA-256 (FAIL / mismatch)
+            2 -- erase_eprom or write_eprom returned False, read-back state machine
+                 returned is_ok=False, or EpromOperationError raised (hw-error)
+
+        The 3-way verdict (PASS / FAIL / hw-error) mirrors consistency_check_eprom.
+        hw-error is NEVER collapsed to mismatch (verdict 2 != verdict 1).
+
+        Reuses _operation_context + _run_state_machine + _main_phase_read_data
+        verbatim from consistency_check_eprom (per reuse-not-duplicate rule).
+        Do NOT refactor the read-back block into a parallel read implementation.
+
+        XACT-01 / Phase 53 Plan 02.
+        """
+        source_sha = hashlib.sha256(Path(source_image_path).read_bytes()).hexdigest()
+
+        if output_dir is None:
+            timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+            output_dir = f"write-cycle-{eprom_name}-unknown-board-{timestamp}"
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        for i in range(1, runs + 1):
+            # (a) Erase
+            if not self.erase_eprom(eprom_name, eprom_data_dict, operation_flags):
+                logger.error(f"Cycle {i}: erase failed.")
+                return 2
+
+            # (b) Write
+            if not self.write_eprom(
+                eprom_name, eprom_data_dict, source_image_path, operation_flags
+            ):
+                logger.error(f"Cycle {i}: write failed.")
+                return 2
+
+            # (c) Read-back — verbatim reuse of the consistency_check_eprom read block
+            # (reuse-not-duplicate rule: this block must not be reimplemented separately)
+            cycle_path = output_path / f"cycle_{i:02d}_readback.bin"
+            logger.info(f"Cycle {i}/{runs}: read-back {eprom_name} -> {cycle_path}")
+
+            try:
+                with self._operation_context(
+                    eprom_name,
+                    eprom_data_dict,
+                    COMMAND_READ,
+                    operation_flags,
+                ) as (cmd_data, _, op_name):
+                    if not cmd_data:
+                        logger.error(f"Cycle {i}: failed to set up read operation.")
+                        return 2
+                    try:
+                        with open(cycle_path, "wb") as fh:
+
+                            def _writer(
+                                address,
+                                data_chunk,
+                                _fh=fh,
+                                _start=cmd_data.get("address", 0),
+                            ):
+                                _fh.seek(address - _start)
+                                _fh.write(data_chunk)
+
+                            is_ok, _ = self._run_state_machine(
+                                op_name,
+                                main_phase_handler=self._main_phase_read_data,
+                                start_addr=cmd_data.get("address", 0),
+                                end_addr=cmd_data.get("memory-size", 0),
+                                process_data_chunk_callback=_writer,
+                            )
+                    except IOError as e:  # noqa: UP024
+                        logger.error(f"Cycle {i}: file I/O error on {cycle_path}: {e}")
+                        return 2
+
+                # Map _run_state_machine (False, msg) -> exit 2 (Pitfall 3:
+                # timeout/serial errors return (False, str(e)), never raise).
+                if not is_ok:
+                    logger.error(
+                        f"Cycle {i}: hardware/serial error -- read-back incomplete."
+                    )
+                    return 2
+
+            except EpromOperationError as e:
+                logger.error(f"Cycle {i}: {e}")
+                return 2
+
+            # (d) Host-side SHA-256 compare against source image (D-06)
+            readback_sha = hashlib.sha256(cycle_path.read_bytes()).hexdigest()
+            if readback_sha != source_sha:
+                logger.error(
+                    f"Cycle {i}: SHA-256 mismatch -- "
+                    f"source={source_sha}  readback={readback_sha}"
+                )
+                return 1
+
+        return 0
+
     # --- DEV Methods ---
+
+    def fault_inject_cycle(
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        direction: str = "outgoing",
+        fault_form: str = "corrupt-crc8",
+        output_dir: Optional[str] = None,
+    ) -> bool:
+        """Demonstrate COBS resync by injecting a corrupted frame and asserting
+        recovery on the next transfer over the same open connection (Pitfall 2:
+        the connection MUST remain open across both transfers).
+
+        Returns:
+            True  -- corrupted transfer surfaced a clean error AND the
+                     subsequent clean transfer succeeded byte-exact.
+            False -- unexpected success on the corrupted transfer, or the
+                     clean follow-on transfer failed.
+
+        direction="outgoing": corrupt host→fw frame via _fault_inject_outgoing hook
+            set on self.comm after connection is established inside _operation_context.
+        direction="incoming": corrupt fw→host frame via FaultInjectingSerialCommunicator.
+
+        XACT-02 / Phase 53 Plan 02.
+        """
+        from firestarter.serial_comm import FaultInjectingSerialCommunicator
+
+        if output_dir is None:
+            timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+            output_dir = f"fault-inject-{eprom_name}-{direction}-{timestamp}"
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        # Build fault hooks for the outgoing path (D-02 fault forms)
+        def _corrupt_crc8(frame: bytes) -> bytes:
+            """Flip the CRC8 byte (frame[-2]) — frame[-1] is the 0x00 delimiter."""
+            return frame[:-2] + bytes([frame[-2] ^ 0x01]) + b"\x00"
+
+        def _drop_delimiter(frame: bytes) -> bytes:
+            """Drop trailing 0x00 delimiter — firmware inter-byte timeout fires."""
+            return frame[:-1]
+
+        fault_hooks: dict = {
+            "corrupt-crc8": _corrupt_crc8,
+            "drop-delimiter": _drop_delimiter,
+        }
+        hook = fault_hooks.get(fault_form, _corrupt_crc8)
+
+        # --- Corrupted transfer ---
+        corrupted_ok = False
+        try:
+            with self._operation_context(
+                eprom_name,
+                eprom_data_dict,
+                COMMAND_READ,
+                0,
+            ) as (cmd_data, _, op_name):
+                if not cmd_data:
+                    return False
+                # Apply fault after connection is established (self.comm is now set).
+                # For outgoing: set the hook on self.comm; it fires on the next
+                # send_json_command call (inside _run_state_machine).
+                # For incoming: swap self.comm to FaultInjectingSerialCommunicator.
+                if direction == "outgoing":
+                    assert self.comm is not None  # noqa: S101  # set by _setup_operation
+                    self.comm._fault_inject_outgoing = hook  # type: ignore[attr-defined]
+                else:
+                    assert self.comm is not None  # noqa: S101
+                    fault_comm = FaultInjectingSerialCommunicator.__new__(
+                        FaultInjectingSerialCommunicator
+                    )
+                    fault_comm.__dict__.update(self.comm.__dict__)
+                    fault_comm._corrupt_incoming_once = True  # type: ignore[attr-defined]
+                    fault_comm._fault_fired = False  # type: ignore[attr-defined]
+                    self.comm = fault_comm  # type: ignore[assignment]
+
+                corrupted_path = output_path / "corrupted_transfer.bin"
+                try:
+                    with open(corrupted_path, "wb") as fh:
+
+                        def _writer_corrupt(
+                            address,
+                            data_chunk,
+                            _fh=fh,
+                            _start=cmd_data.get("address", 0),
+                        ):
+                            _fh.seek(address - _start)
+                            _fh.write(data_chunk)
+
+                        is_ok_corrupt, _ = self._run_state_machine(
+                            op_name,
+                            main_phase_handler=self._main_phase_read_data,
+                            start_addr=cmd_data.get("address", 0),
+                            end_addr=cmd_data.get("memory-size", 0),
+                            process_data_chunk_callback=_writer_corrupt,
+                        )
+                except IOError as e:  # noqa: UP024
+                    logger.error(f"fault_inject_cycle: file I/O error: {e}")
+                    return False
+                finally:
+                    # Clear the hook / restore comm regardless of outcome
+                    if direction == "outgoing" and self.comm is not None:
+                        self.comm._fault_inject_outgoing = None  # type: ignore[attr-defined]
+                # The corrupted transfer should have failed (is_ok_corrupt == False)
+                corrupted_ok = not is_ok_corrupt
+        except EpromOperationError:
+            # EpromOperationError on the corrupted transfer is expected
+            corrupted_ok = True
+
+        if not corrupted_ok:
+            logger.error(
+                "fault_inject_cycle: corrupted transfer unexpectedly succeeded."
+            )
+            return False
+
+        # --- Clean follow-on transfer on the same connection ---
+        clean_path = output_path / "clean_transfer.bin"
+        try:
+            with self._operation_context(
+                eprom_name,
+                eprom_data_dict,
+                COMMAND_READ,
+                0,
+            ) as (cmd_data_clean, _, op_name_clean):
+                if not cmd_data_clean:
+                    return False
+                try:
+                    with open(clean_path, "wb") as fh2:
+
+                        def _writer_clean(
+                            address,
+                            data_chunk,
+                            _fh=fh2,
+                            _start=cmd_data_clean.get("address", 0),
+                        ):
+                            _fh.seek(address - _start)
+                            _fh.write(data_chunk)
+
+                        is_ok_clean, _ = self._run_state_machine(
+                            op_name_clean,
+                            main_phase_handler=self._main_phase_read_data,
+                            start_addr=cmd_data_clean.get("address", 0),
+                            end_addr=cmd_data_clean.get("memory-size", 0),
+                            process_data_chunk_callback=_writer_clean,
+                        )
+                except IOError as e:  # noqa: UP024
+                    logger.error(
+                        f"fault_inject_cycle: clean-transfer file I/O error: {e}"
+                    )
+                    return False
+
+            if not is_ok_clean:
+                logger.error("fault_inject_cycle: clean follow-on transfer failed.")
+                return False
+        except EpromOperationError as e:
+            logger.error(f"fault_inject_cycle: clean transfer raised: {e}")
+            return False
+
+        return True
 
     def dev_read_eprom(
         self,
