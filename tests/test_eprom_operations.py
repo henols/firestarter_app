@@ -358,3 +358,181 @@ def test_read_timing_default_params_absent_from_command() -> None:
     assert len(captured) >= 1, "Expected _setup_operation to be called at least once"
     assert "read-settling-delay" not in captured[0]
     assert "read-strobe-us" not in captured[0]
+
+
+# ---------------------------------------------------------------------------
+# Phase-53 Plan 01 Task 1: RED tests for write_cycle_eprom 3-way verdict
+#
+# These tests MUST FAIL until 53-02 adds EpromOperator.write_cycle_eprom.
+# They pin the 3-way verdict contract: 0=all cycles match source / 1=mismatch
+# / 2=hw-error. D-06: independent host-side SHA-256 compare, NOT firmware
+# built-in verify. Monkeypatch pattern mirrors test_consistency_check.py.
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_ctx_write(memory_size: int = 65536):
+    """@contextmanager fake for _operation_context used by write_cycle tests."""
+    from contextlib import contextmanager
+
+    @contextmanager
+    def fake_ctx(self, eprom_name, eprom_data_dict, cmd, *a, **kw):
+        yield {"address": 0, "memory-size": memory_size}, 512, "READ"
+
+    return fake_ctx
+
+
+def _make_fake_state_machine_for_write_cycle(payload):
+    """Fake _run_state_machine that feeds a single payload to the callback.
+
+    Returns (True, None) — for hardware-error variants, a separate helper
+    returning (False, "timeout") is provided below.
+    """
+
+    def fake_state_machine(self, op_name, **kwargs):
+        cb = kwargs.get("process_data_chunk_callback")
+        if cb is not None:
+            cb(0, payload)
+        return (True, None)
+
+    return fake_state_machine
+
+
+def _make_fake_state_machine_hw_error():
+    """Fake _run_state_machine that returns (False, "timeout") — hw-error path."""
+
+    def fake_state_machine(self, op_name, **kwargs):
+        return (False, "timeout")
+
+    return fake_state_machine
+
+
+class TestWriteCycleEprom:
+    """Phase-53 RED tests for EpromOperator.write_cycle_eprom (D-06 / XACT-01).
+
+    All four tests MUST FAIL until 53-02 implements write_cycle_eprom.
+    """
+
+    _MEMORY_SIZE = 65536  # 64 KB canonical EPROM payload
+
+    def test_write_cycle_eprom_pass(self, tmp_path, monkeypatch):
+        """Pass: erase ok, write ok, read-back matches source image -> return 0.
+
+        Source image written to tmp_path. _run_state_machine feeds back the
+        identical bytes. erase_eprom and write_eprom both return True.
+        Expected: write_cycle_eprom returns 0 (PASS).
+        """
+        source_path = tmp_path / "source.bin"
+        payload = bytes(range(256)) * 256  # deterministic 64 KB
+        source_path.write_bytes(payload)
+
+        monkeypatch.setattr(EpromOperator, "erase_eprom", lambda self, *a, **kw: True)
+        monkeypatch.setattr(EpromOperator, "write_eprom", lambda self, *a, **kw: True)
+        monkeypatch.setattr(
+            EpromOperator,
+            "_operation_context",
+            _make_fake_ctx_write(self._MEMORY_SIZE),
+        )
+        monkeypatch.setattr(
+            EpromOperator,
+            "_run_state_machine",
+            _make_fake_state_machine_for_write_cycle(payload),
+        )
+
+        op = EpromOperator(ConfigManager())
+        rc = op.write_cycle_eprom(
+            "TEST_CHIP",
+            eprom_data_dict={"memory-size": self._MEMORY_SIZE},
+            source_image_path=str(source_path),
+            runs=1,
+            output_dir=str(tmp_path / "out"),
+        )
+        assert rc == 0, "Matching read-back must return 0 (PASS)."
+
+    def test_write_cycle_eprom_mismatch(self, tmp_path, monkeypatch):
+        """Mismatch: read-back payload differs from source image -> return 1.
+
+        Source image is all-0xAA; read-back payload is all-0x55.
+        Expected: write_cycle_eprom returns 1 (FAIL / mismatch).
+        """
+        source_path = tmp_path / "source.bin"
+        source_payload = bytes([0xAA]) * self._MEMORY_SIZE
+        readback_payload = bytes([0x55]) * self._MEMORY_SIZE
+        source_path.write_bytes(source_payload)
+
+        monkeypatch.setattr(EpromOperator, "erase_eprom", lambda self, *a, **kw: True)
+        monkeypatch.setattr(EpromOperator, "write_eprom", lambda self, *a, **kw: True)
+        monkeypatch.setattr(
+            EpromOperator,
+            "_operation_context",
+            _make_fake_ctx_write(self._MEMORY_SIZE),
+        )
+        monkeypatch.setattr(
+            EpromOperator,
+            "_run_state_machine",
+            _make_fake_state_machine_for_write_cycle(readback_payload),
+        )
+
+        op = EpromOperator(ConfigManager())
+        rc = op.write_cycle_eprom(
+            "TEST_CHIP",
+            eprom_data_dict={"memory-size": self._MEMORY_SIZE},
+            source_image_path=str(source_path),
+            runs=1,
+            output_dir=str(tmp_path / "out"),
+        )
+        assert rc == 1, "Differing read-back must return 1 (FAIL / mismatch)."
+
+    def test_write_cycle_eprom_hw_error(self, tmp_path, monkeypatch):
+        """HW-error: _run_state_machine returns (False, 'timeout') -> return 2.
+
+        CRITICAL: hw-error MUST NOT be collapsed to 1 (mismatch). The 3-way
+        verdict is load-bearing for the v1.6 RCA diagnostic.
+        Expected: write_cycle_eprom returns 2 (hw-error), NOT 1.
+        """
+        source_path = tmp_path / "source.bin"
+        source_path.write_bytes(bytes([0xAA]) * self._MEMORY_SIZE)
+
+        monkeypatch.setattr(EpromOperator, "erase_eprom", lambda self, *a, **kw: True)
+        monkeypatch.setattr(EpromOperator, "write_eprom", lambda self, *a, **kw: True)
+        monkeypatch.setattr(
+            EpromOperator,
+            "_operation_context",
+            _make_fake_ctx_write(self._MEMORY_SIZE),
+        )
+        monkeypatch.setattr(
+            EpromOperator,
+            "_run_state_machine",
+            _make_fake_state_machine_hw_error(),
+        )
+
+        op = EpromOperator(ConfigManager())
+        rc = op.write_cycle_eprom(
+            "TEST_CHIP",
+            eprom_data_dict={"memory-size": self._MEMORY_SIZE},
+            source_image_path=str(source_path),
+            runs=1,
+            output_dir=str(tmp_path / "out"),
+        )
+        assert rc == 2, "State machine failure must return 2 (hw-error), NOT 1."
+
+    def test_write_cycle_eprom_erase_fail(self, tmp_path, monkeypatch):
+        """Erase failure: erase_eprom returns False -> return 2 (hw-error).
+
+        An erase failure is a hardware-operation failure, not a data mismatch.
+        Expected: write_cycle_eprom returns 2 (hw-error).
+        """
+        source_path = tmp_path / "source.bin"
+        source_path.write_bytes(bytes([0xAA]) * self._MEMORY_SIZE)
+
+        monkeypatch.setattr(EpromOperator, "erase_eprom", lambda self, *a, **kw: False)
+        monkeypatch.setattr(EpromOperator, "write_eprom", lambda self, *a, **kw: True)
+
+        op = EpromOperator(ConfigManager())
+        rc = op.write_cycle_eprom(
+            "TEST_CHIP",
+            eprom_data_dict={"memory-size": self._MEMORY_SIZE},
+            source_image_path=str(source_path),
+            runs=1,
+            output_dir=str(tmp_path / "out"),
+        )
+        assert rc == 2, "Erase failure must return 2 (hw-error)."
