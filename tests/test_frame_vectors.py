@@ -72,9 +72,10 @@ class TestFrameVectorsEncodeLeg:
         for vec in FRAME_VECTORS:
             crc = _crc8_ccitt(vec.payload)
             encoded = cobs_encode(vec.payload + bytes([crc]))
-            assert encoded + b"\x00" == vec.frame, (
+            actual_frame = encoded + b"\x00"
+            assert actual_frame == vec.frame, (
                 f"Vector {vec.name} (id=0x{vec.id:02X}): encode leg failed — "
-                f"got {(encoded + b'\\x00').hex()!r}, expected {vec.frame.hex()!r}"
+                f"got {actual_frame.hex()!r}, expected {vec.frame.hex()!r}"
             )
 
 
