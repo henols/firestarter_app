@@ -13,7 +13,7 @@ import os
 import re
 import struct
 import time
-from typing import Generator, List, Optional, Tuple  # noqa: UP035
+from typing import Any, Callable, Generator, List, Optional, Tuple  # noqa: UP035
 
 import serial
 import serial.serialutil
@@ -107,6 +107,10 @@ class SerialCommunicator:
         self.timeout = timeout
         self.connection: Optional[serial.Serial] = None
         self.programmer_info: str | None = None
+        # Phase-53 fault-injection hook — None by default; production path is byte-identical.
+        # Set only within dev fault-inject scope; cleared after the single corrupted transfer.
+        # T-53-03: getattr-guarded in send_json_command; this attribute is the formal default.
+        self._fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None
 
         try:
             logger.debug(
@@ -172,6 +176,13 @@ class SerialCommunicator:
         crc = _crc8_ccitt(json_bytes)
         body = cobs_encode(json_bytes + bytes([crc]))
         frame = body + b"\x00"
+        # PHASE-53 FAULT INJECTION — only active when _fault_inject_outgoing is set.
+        # Production path: attribute is None by default → no-op (T-53-03).
+        # Hook is set only within fault_inject_cycle / dev fault-inject scope and
+        # cleared after the single corrupted transfer (D-01 / D-02).
+        _hook = getattr(self, "_fault_inject_outgoing", None)
+        if _hook is not None:
+            frame = _hook(frame)
         return self.send_bytes(frame)
 
     def _parse_response_line(self, line_bytes: bytes) -> Optional[Response]:
@@ -687,6 +698,46 @@ class SerialCommunicator:
         if status_update_active:
             logger.info("Connecting... Failed  ", extra={"status": "end"})
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
+
+
+class FaultInjectingSerialCommunicator(SerialCommunicator):
+    """Dev-only subclass for fw→host fault injection.
+
+    NOT imported in production code. Used only within the dev fault-inject
+    subcommand scope. Overrides _decode_id_frame to corrupt the body bytes
+    before codec decode — exercising the host decoder's resync path (bounded-
+    desync + fail-fast per Phase 50 D-01).
+
+    The body of _read_and_parse_lines() is UNCHANGED (ring-fence preserved,
+    GATE-1.8d). Only _decode_id_frame is overridden — this is the correct
+    injection point that does NOT touch the generator body (Pitfall 4 / T-53-04).
+
+    XACT-02 / Phase 53 Plan 02.
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        corrupt_incoming_once: bool = False,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self._corrupt_incoming_once = corrupt_incoming_once
+        self._fault_fired = False
+
+    def _decode_id_frame(self, frame_len: int, body: bytes) -> Optional[LogMessage]:
+        """One-shot incoming-frame fault injection: flip last body byte exactly once.
+
+        After the first call, _fault_fired is set and subsequent calls pass
+        through unmodified (one-shot guard). This causes codec.decode_id_frame's
+        CRC8 check to fail on the first call, which surfaces as None →
+        _read_and_parse_lines re-syncs without touching its body (GATE-1.8d).
+        """
+        if self._corrupt_incoming_once and not self._fault_fired:
+            self._fault_fired = True
+            # Flip last byte (CRC8 position) before decode — causes CRC8 mismatch.
+            body = body[:-1] + bytes([body[-1] ^ 0x01])
+        return super()._decode_id_frame(frame_len, body)
 
 
 # Example usage (for testing this module directly)

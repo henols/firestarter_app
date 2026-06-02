@@ -140,6 +140,8 @@ def make_comm(fake_serial):
         instance.baud_rate = 250000
         instance.timeout = 0.1
         instance.programmer_info = None
+        # Phase-53: mirror SerialCommunicator.__init__ attribute (T-53-03 default)
+        instance._fault_inject_outgoing = None
         return instance
 
     return _factory
