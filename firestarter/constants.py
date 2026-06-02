@@ -21,6 +21,12 @@ BAUD_RATE = "250000"
 BUFFER_SIZE = 512
 LEONARDO_BUFFER_SIZE = 1024
 
+# Command-channel frame size limit — Firmware sync: firestarter.h CMD_FRAME_MAX
+# Largest legitimate JSON command (~422 B) + headroom = 512; equals BUFFER_SIZE.
+# Firmware parity: firestarter.h #define CMD_FRAME_MAX DATA_BUFFER_SIZE
+# per CLAUDE.md constant-parity rule (FRAME-05 / D-06).
+CMD_FRAME_MAX = 512
+
 
 # Wire-protocol command codes — Firmware sync: firestarter.h
 # cmd field values sent in JSON commands to the Arduino firmware.

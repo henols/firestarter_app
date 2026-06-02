@@ -143,3 +143,104 @@ def test_send_json_command_routes_through_send_string(make_comm) -> None:
     n = comm.send_json_command({"cmd": 2, "value": 42})
     # JSON output is at least len("{\"cmd\":2,\"value\":42}") bytes
     assert n > 10
+
+
+# ---------------------------------------------------------------------------
+# Phase-51 plan-02: COBS-framed command emission tests (FRAME-05 / T-51-04/05/06)
+# ---------------------------------------------------------------------------
+
+import json as _json  # noqa: E402 — import after existing block; used locally
+
+from firestarter.frame_parser import (  # noqa: E402
+    _crc8_ccitt,
+    cobs_decode,
+    cobs_encode,
+)
+from firestarter.constants import COMMAND_FW_VERSION  # noqa: E402
+
+
+def test_send_json_command_emits_cobs_frame(make_comm, fake_serial) -> None:
+    """send_json_command emits a valid COBS+CRC8 frame terminated by 0x00.
+
+    Contract (FRAME-05 / T-51-05):
+    - The entire write ends with b"\\x00" (the COBS delimiter).
+    - The body (everything before the trailing 0x00) contains no 0x00 byte.
+    - cobs_decode(body) produces payload + crc_byte where
+      crc_byte == _crc8_ccitt(payload) and json.loads(payload) matches
+      the original command dict (round-trip integrity).
+    """
+    comm = make_comm()
+    cmd = {"cmd": 2, "value": 42}
+    comm.send_json_command(cmd)
+
+    # Read what was written to the fake serial
+    fake_serial._buf.seek(0)
+    written = fake_serial._buf.read()
+
+    # Must end with the COBS delimiter
+    assert written[-1:] == b"\x00", "Frame must end with 0x00 delimiter"
+
+    body = written[:-1]
+    assert b"\x00" not in body, "COBS body must contain no 0x00 bytes"
+
+    # COBS decode → payload + crc_byte
+    decoded = cobs_decode(body)
+    assert len(decoded) >= 2, "Decoded frame must have at least payload + CRC byte"
+    payload = decoded[:-1]
+    crc_byte = decoded[-1]
+
+    # CRC8 over the raw JSON bytes (BEFORE COBS encode — ADR §4.3)
+    expected_crc = _crc8_ccitt(payload)
+    assert crc_byte == expected_crc, (
+        f"CRC8 mismatch: got 0x{crc_byte:02X}, expected 0x{expected_crc:02X}"
+    )
+
+    # Payload must be the compact JSON of the original command
+    assert _json.loads(payload) == cmd
+
+
+def test_send_json_command_atomic_frame(make_comm, fake_serial, monkeypatch) -> None:
+    """connection.write() is called exactly once per command (SAFE-01 sub-claim B / T-51-04).
+
+    Split-write (e.g. send_bytes(body) then send_bytes(b"\\x00")) is forbidden —
+    it opens a timing window during the programmer↔communication mode transition.
+    """
+    write_calls: list = []
+    original_write = fake_serial.write
+
+    def _counting_write(data: bytes) -> int:
+        write_calls.append(data)
+        return original_write(data)
+
+    monkeypatch.setattr(fake_serial, "write", _counting_write)
+
+    comm = make_comm()
+    comm.send_json_command({"cmd": 2, "value": 42})
+
+    assert len(write_calls) == 1, (
+        f"Expected exactly 1 write() call (atomic frame), got {len(write_calls)}"
+    )
+    # The single write must be the full frame including the trailing 0x00
+    assert write_calls[0][-1:] == b"\x00", (
+        "The single write must carry the full frame including the trailing 0x00"
+    )
+
+
+def test_send_json_command_version_probe_is_framed(make_comm, fake_serial) -> None:
+    """CMD_FW_VERSION probe is emitted as a COBS frame, NOT as raw JSON (D-04 / T-51-06).
+
+    No unframed send_string bypass exists — every command including the version probe
+    carries CRC8.  Asserted by checking:
+    - The write ends with b"\\x00" (framed).
+    - The write does NOT start with b"{" (not raw JSON text).
+    """
+    comm = make_comm()
+    comm.send_json_command({"state": COMMAND_FW_VERSION})
+
+    fake_serial._buf.seek(0)
+    written = fake_serial._buf.read()
+
+    assert written[-1:] == b"\x00", "Version probe must end with 0x00 (framed)"
+    assert not written.startswith(b"{"), (
+        "Version probe must not start with '{' — it must be COBS-encoded, not raw JSON"
+    )
