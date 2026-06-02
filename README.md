@@ -58,6 +58,26 @@ Support and discussions forum at [Discord](https://discord.com/invite/kmhbxAjQc3
 - [Support me](#support-me)
 
 
+## Breaking Changes (v1.10)
+
+### Command-channel wire protocol — COBS framing + CRC8 (breaking change)
+
+The host→firmware JSON command channel now uses COBS framing with a CRC8-CCITT integrity byte.
+Every command — including the firmware version probe — is wrapped as `[COBS(JSON + CRC8)][0x00]`
+and written to the serial port in a single atomic call. The firmware verifies CRC8 **before** the
+JSON parser sees any byte; the previous command channel had no checksum. The legacy `{`-peek
+plaintext command path has been removed entirely from the firmware — there is no plaintext fallback.
+
+**This is a breaking wire-protocol change with no mixed-version interop.** A new host CLI cannot
+drive old (unframed) firmware, and an old host CLI cannot drive new firmware. A mismatched pair
+simply fails (timeout or decode error). **Upgrade both the firmware and the host CLI together
+(lockstep)** — exactly as required by the v1.2 Message-ID rework.
+
+**Upgrade:** `pip install --pre firestarter && firestarter fw -i --pre` — reflash firmware **and**
+upgrade the CLI at the same time.
+
+This change is beta-only (v1.10). Nothing is promoted to stable without operator authorization.
+
 ## Installation
 To install the Firestarter Python program and the firmware on the Arduino, follow the steps below:
 
