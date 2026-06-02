@@ -1115,3 +1115,103 @@ def dev_consistency_check(
         read_strobe_us=read_strobe_us,
     )
     sys.exit(verdict_int)
+
+
+@dev.command(name="write-cycle")
+@click.argument("eprom", shell_complete=_complete_eprom)
+@click.argument("source_image", type=click.Path(exists=True))
+@click.option(
+    "--runs",
+    type=int,
+    default=5,
+    help="Number of write→read-back cycles (default 5).",
+)
+@click.option(
+    "--output-dir",
+    "output_dir",
+    type=str,
+    default=None,
+    help="Output dir for per-cycle binaries (default write-cycle-<chip>-<board>-<TS>/).",
+)
+@click.option(
+    "-f",
+    "--force",
+    is_flag=True,
+    help="Force write, even if the chip id doesn't match.",
+)
+@click.pass_obj
+@map_typed_errors
+def dev_write_cycle(
+    app: AppContext,
+    eprom: str,
+    source_image: str,
+    runs: int,
+    output_dir: Optional[str],
+    force: bool,
+) -> None:
+    """Erase → write source image → read-back N times; assert SHA-256 == source SHA.
+
+    3-way verdict contract (mirrors dev consistency-check):
+        verdict_int = write_cycle_eprom(...)  # 0=PASS, 1=mismatch, 2=hw-error
+        sys.exit(verdict_int)  # NOT bool-to-int wrap — preserves 0/1/2
+
+    The bool-to-int wrap would collapse the 2=hardware-error case to 1=mismatch,
+    breaking the v1.6 RCA diagnostic. XACT-01 / Phase 53 Plan 02.
+    """
+    eprom_data = resolve_chip(eprom, db=app.db)
+    verdict_int = app.eprom_operator.write_cycle_eprom(
+        eprom,
+        eprom_data,
+        source_image_path=source_image,
+        runs=runs,
+        output_dir=output_dir,
+        operation_flags=_build_op_flags(force=force),
+    )
+    sys.exit(verdict_int)
+
+
+@dev.command(name="fault-inject")
+@click.argument("eprom", shell_complete=_complete_eprom)
+@click.option(
+    "--direction",
+    type=click.Choice(["outgoing", "incoming"]),
+    default="outgoing",
+    help="outgoing = corrupt host→fw frame; incoming = mutate fw→host frame.",
+)
+@click.option(
+    "--fault-form",
+    "fault_form",
+    type=click.Choice(["corrupt-crc8", "drop-delimiter"]),
+    default="corrupt-crc8",
+    help="Fault form: corrupt-crc8 (flip CRC8 byte) or drop-delimiter (drop 0x00).",
+)
+@click.option(
+    "--output-dir",
+    "output_dir",
+    type=str,
+    default=None,
+    help="Output dir for transfer binaries.",
+)
+@click.pass_obj
+@map_typed_errors
+def dev_fault_inject(
+    app: AppContext,
+    eprom: str,
+    direction: str,
+    fault_form: str,
+    output_dir: Optional[str],
+) -> None:
+    """Demonstrate COBS resync: inject a corrupted frame and assert recovery on the next.
+
+    Performs one corrupted transfer then asserts the same connection recovers
+    on a clean follow-on transfer (XACT-02 / Phase 53 Plan 02).
+    """
+    eprom_data = resolve_chip(eprom, db=app.db)
+    ok = app.eprom_operator.fault_inject_cycle(
+        eprom,
+        eprom_data,
+        direction=direction,
+        fault_form=fault_form,
+        output_dir=output_dir,
+    )
+    sys.exit(0 if ok else 1)
