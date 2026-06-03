@@ -172,3 +172,54 @@ class TestCrc8KnownAnswer:
         """
         vec = next(v for v in FRAME_VECTORS if v.name == "VEC_JSON_STATE13")
         assert _crc8_ccitt(vec.payload) == _ref_crc8_ccitt(vec.payload)
+
+
+class TestHostChunkFitsFirmwareDecodeCap:
+    """Phase 53 (LOCK-02 regression): the host's MAX DATA chunk must DECODE within
+    the firmware's 511-byte cap.
+
+    The vector decode leg above SKIPS payloads >511 bytes (VEC_512_*), so it never
+    caught that the host was still sending full 512-byte write/verify chunks — a
+    513-byte payload (512 data + CRC8) the firmware decoder rejects with
+    "Data error: -2" (rurp_communication_read_data commits at most
+    DATA_BUFFER_SIZE-1 = 511 bytes; CR-01 NUL-slot reservation). Bench-confirmed on
+    BOTH Uno and Leonardo (Phase 53). Fix: host MAX_DATA_CHUNK = BUFFER_SIZE - 2.
+    These tests pin the host chunk size to the firmware decode cap so write/verify
+    never overflow.
+    """
+
+    # rurp_communication_read_data commits at most DATA_BUFFER_SIZE-1 payload bytes.
+    FW_DECODE_CAP = 511
+
+    def test_max_data_chunk_payload_fits_firmware_decode_cap(self) -> None:
+        """data_chunk + CRC8 must fit the 511-byte firmware decode cap."""
+        from firestarter.constants import MAX_DATA_CHUNK
+
+        payload_len = MAX_DATA_CHUNK + 1  # + CRC8
+        assert payload_len <= self.FW_DECODE_CAP, (
+            f"MAX_DATA_CHUNK={MAX_DATA_CHUNK} -> payload {payload_len} exceeds firmware "
+            f"decode cap {self.FW_DECODE_CAP}; write/verify will overflow with Data error: -2"
+        )
+
+    def test_calculate_buffer_size_respects_decode_cap(self) -> None:
+        """EpromOperator._calculate_buffer_size() must never exceed the cap-safe size."""
+        from firestarter.config import ConfigManager
+        from firestarter.eprom_operations import EpromOperator
+
+        op = EpromOperator(ConfigManager())
+        assert op._calculate_buffer_size() + 1 <= self.FW_DECODE_CAP
+
+    def test_max_chunk_decode_leg_round_trips(self) -> None:
+        """The decode leg the old suite skipped: a full MAX_DATA_CHUNK + CRC8 frame
+        COBS round-trips and its decoded payload is within the firmware cap."""
+        from firestarter.constants import MAX_DATA_CHUNK
+
+        data = bytes((i * 7 + 3) & 0xFF for i in range(MAX_DATA_CHUNK))
+        crc = _crc8_ccitt(data)
+        payload = data + bytes([crc])
+        assert len(payload) <= self.FW_DECODE_CAP
+        frame = cobs_encode(payload) + b"\x00"
+        decoded = cobs_decode(frame[:-1])
+        assert decoded == payload
+        assert decoded[:-1] == data
+        assert decoded[-1] == crc

@@ -23,7 +23,6 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from firestarter.address_parser import parse_address, parse_size
 from firestarter.config import ConfigManager
 from firestarter.constants import (
-    BUFFER_SIZE,
     COMMAND_BLANK_CHECK,
     COMMAND_CHECK_CHIP_ID,
     COMMAND_DEV_ADDRESS,
@@ -40,6 +39,7 @@ from firestarter.constants import (
     FLAG_VPE_AS_VPP,
     JSON_KEY_READ_SETTLING_DELAY,
     JSON_KEY_READ_STROBE_US,
+    MAX_DATA_CHUNK,
 )
 from firestarter.exceptions import (
     EpromOperationError,
@@ -161,11 +161,15 @@ class EpromOperator:
         self.progress_callback = progress_callback
 
     def _calculate_buffer_size(self) -> int:
-        # For write/verify, we now use a "pull" protocol where the Arduino
-        # requests a data block when it's ready. This means we can send a full
-        # page at a time, matching the firmware's internal buffer size,
-        # without worrying about overflowing the serial buffer.
-        return BUFFER_SIZE  # This is 512 in constants.py
+        # For write/verify, we use a "pull" protocol where the Arduino requests a
+        # data block when it's ready. The chunk must fit the firmware COBS decoder's
+        # committed-payload cap: the decoded payload is data_chunk + CRC8, and
+        # rurp_communication_read_data commits at most DATA_BUFFER_SIZE-1 bytes
+        # (CR-01 NUL-slot reservation). A full BUFFER_SIZE (512) chunk yields a
+        # 513-byte payload that overflows -> "Data error: -2" (bench-confirmed,
+        # Phase 53). Cap the chunk at MAX_DATA_CHUNK = BUFFER_SIZE - 2 (510) so
+        # 510 data + 1 CRC = 511 == the decoder cap.
+        return MAX_DATA_CHUNK
 
     def _setup_operation(  # Remains largely the same, as it's a prerequisite for the context manager  # noqa: E501
         self,

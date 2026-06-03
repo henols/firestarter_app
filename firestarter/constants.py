@@ -21,6 +21,15 @@ BAUD_RATE = "250000"
 BUFFER_SIZE = 512
 LEONARDO_BUFFER_SIZE = 1024
 
+# Max host->fw DATA chunk (write/verify pull-protocol). LOCKSTEP CONTRACT with the
+# firmware COBS decoder rurp_communication_read_data: it commits at most
+# DATA_BUFFER_SIZE-1 payload bytes (CR-01 guard reserves the NUL-terminator slot;
+# Phase 51 P04). The decoded payload is data_chunk + CRC8, so the data chunk must
+# satisfy len(data) + 1 (CRC) <= DATA_BUFFER_SIZE - 1, i.e. len(data) <= BUFFER_SIZE - 2.
+# Sending a full BUFFER_SIZE (512) chunk overflows the decoder -> "Data error: -2"
+# and breaks write/verify on every board (bench-confirmed Phase 53, both Uno + Leonardo).
+MAX_DATA_CHUNK = BUFFER_SIZE - 2  # 510
+
 # Command-channel frame size limit — Firmware sync: firestarter.h CMD_FRAME_MAX
 # Largest legitimate JSON command (~422 B) + headroom = 512; equals BUFFER_SIZE.
 # Firmware parity: firestarter.h #define CMD_FRAME_MAX DATA_BUFFER_SIZE
