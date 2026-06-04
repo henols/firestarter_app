@@ -165,10 +165,17 @@ class EpromOperator:
         # data block when it's ready. The chunk must fit the firmware COBS decoder's
         # committed-payload cap: the decoded payload is data_chunk + CRC8, and
         # rurp_communication_read_data commits at most DATA_BUFFER_SIZE-1 bytes
-        # (CR-01 NUL-slot reservation). A full BUFFER_SIZE (512) chunk yields a
-        # 513-byte payload that overflows -> "Data error: -2" (bench-confirmed,
-        # Phase 53). Cap the chunk at MAX_DATA_CHUNK = BUFFER_SIZE - 2 (510) so
-        # 510 data + 1 CRC = 511 == the decoder cap.
+        # (CR-01 NUL-slot reservation). A full-buffer chunk overflows -> "Data
+        # error: -2" (bench-confirmed, Phase 53).
+        #
+        # The firmware advertises its DATA_BUFFER_SIZE in the FW identity string;
+        # _probe_port stores it on the communicator. Size the chunk to that board's
+        # actual capacity (e.g. Leonardo 1024 -> 1022, Uno 512 -> 510), so the host
+        # is self-correcting with no hardcoded per-board map. Fall back to the safe
+        # MAX_DATA_CHUNK (BUFFER_SIZE - 2 = 510) for pre-advertise firmware.
+        fw_buf = getattr(self.comm, "firmware_buffer_size", None) if self.comm else None
+        if fw_buf is not None and fw_buf >= 3:
+            return fw_buf - 2  # reserve 1 byte CRC8 + 1 byte decoder NUL slot
         return MAX_DATA_CHUNK
 
     def _setup_operation(  # Remains largely the same, as it's a prerequisite for the context manager  # noqa: E501

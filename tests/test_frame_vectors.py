@@ -223,3 +223,39 @@ class TestHostChunkFitsFirmwareDecodeCap:
         assert decoded == payload
         assert decoded[:-1] == data
         assert decoded[-1] == crc
+
+
+class TestPerBoardBufferNegotiation:
+    """Phase 53 (Leonardo 1K): the host sizes host->fw data chunks from the
+    firmware-advertised DATA_BUFFER_SIZE (FW identity "<ver>:<board>:<bufsize>"),
+    so each board uses its real capacity (Uno 512->510, Leonardo 1024->1022) with
+    no hardcoded per-board map. For ANY advertised buffer B, the chunk (B-2) plus
+    the CRC8 byte must fit the firmware decode cap (B-1)."""
+
+    def test_chunk_plus_crc_fits_cap_for_each_buffer(self) -> None:
+        for buffer in (512, 1024):
+            chunk = buffer - 2
+            cap = (
+                buffer - 1
+            )  # rurp_communication_read_data commits <= DATA_BUFFER_SIZE-1
+            assert chunk + 1 <= cap, (
+                f"buffer={buffer}: chunk {chunk} + CRC exceeds decode cap {cap}"
+            )
+
+    def test_calculate_buffer_size_uses_advertised(self) -> None:
+        from types import SimpleNamespace
+
+        from firestarter.config import ConfigManager
+        from firestarter.constants import MAX_DATA_CHUNK
+        from firestarter.eprom_operations import EpromOperator
+
+        op = EpromOperator(ConfigManager())
+        # Leonardo advertises 1024 -> 1022-byte chunks.
+        op.comm = SimpleNamespace(firmware_buffer_size=1024)  # type: ignore[assignment]
+        assert op._calculate_buffer_size() == 1022
+        # Uno advertises 512 -> 510.
+        op.comm = SimpleNamespace(firmware_buffer_size=512)  # type: ignore[assignment]
+        assert op._calculate_buffer_size() == 510
+        # Pre-advertise firmware (None) -> safe fallback.
+        op.comm = SimpleNamespace(firmware_buffer_size=None)  # type: ignore[assignment]
+        assert op._calculate_buffer_size() == MAX_DATA_CHUNK
