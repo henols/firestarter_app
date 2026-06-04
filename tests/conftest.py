@@ -142,6 +142,10 @@ def make_comm(fake_serial):
         instance.programmer_info = None
         # Phase-53: mirror SerialCommunicator.__init__ attribute (T-53-03 default)
         instance._fault_inject_outgoing = None
+        # Phase-53: firmware-advertised DATA_BUFFER_SIZE (None until probed)
+        instance.firmware_buffer_size = None
+        # Phase-54 (EVEN-01): firmware-advertised MAIN-path decode capacity (None until probed)
+        instance.firmware_max_chunk = None
         return instance
 
     return _factory

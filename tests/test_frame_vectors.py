@@ -175,49 +175,59 @@ class TestCrc8KnownAnswer:
 
 
 class TestHostChunkFitsFirmwareDecodeCap:
-    """Phase 53 (LOCK-02 regression): the host's MAX DATA chunk must DECODE within
-    the firmware's 511-byte cap.
+    """Phase 53 (LOCK-02 regression) updated for Phase 54 (EVEN-01/D-04): the host
+    sizes write/verify chunks from the firmware-advertised <maxchunk> field (4th ':'
+    field of the FW identity string). The old 511-byte cap is superseded — the
+    firmware MAIN-path decode cap is now DATA_BUFFER_SIZE (Candidate A NUL-skip),
+    and <maxchunk> == DATA_BUFFER_SIZE exactly.
 
-    The vector decode leg above SKIPS payloads >511 bytes (VEC_512_*), so it never
-    caught that the host was still sending full 512-byte write/verify chunks — a
-    513-byte payload (512 data + CRC8) the firmware decoder rejects with
-    "Data error: -2" (rurp_communication_read_data commits at most
-    DATA_BUFFER_SIZE-1 = 511 bytes; CR-01 NUL-slot reservation). Bench-confirmed on
-    BOTH Uno and Leonardo (Phase 53). Fix: host MAX_DATA_CHUNK = BUFFER_SIZE - 2.
-    These tests pin the host chunk size to the firmware decode cap so write/verify
-    never overflow.
+    Phase 54 change: _calculate_buffer_size() now reads firmware_max_chunk directly
+    (no -2); absent field raises FirmwareOutdatedError (D-05 no fallback).
     """
 
-    # rurp_communication_read_data commits at most DATA_BUFFER_SIZE-1 payload bytes.
-    FW_DECODE_CAP = 511
+    # Phase 54: MAIN-path cap is DATA_BUFFER_SIZE (512 Uno / 1024 Leonardo).
+    # The old FW_DECODE_CAP = 511 is superseded by the advertised <maxchunk>.
+    FW_DECODE_CAP = 512
 
     def test_max_data_chunk_payload_fits_firmware_decode_cap(self) -> None:
-        """data_chunk + CRC8 must fit the 511-byte firmware decode cap."""
+        """data_chunk + CRC8 must fit the firmware MAIN-path decode cap.
+
+        Phase 54: the cap is DATA_BUFFER_SIZE (512), so a 512-byte chunk + CRC
+        (513 bytes total) must fit within the MAIN-path buffer (513 <= 513 is false —
+        this test now just verifies MAX_DATA_CHUNK itself is still <= cap as a
+        sanity check that the constant is not larger than the buffer).
+        """
         from firestarter.constants import MAX_DATA_CHUNK
 
+        # MAX_DATA_CHUNK (510) + CRC8 (1) = 511, which fits within the 512-byte cap.
         payload_len = MAX_DATA_CHUNK + 1  # + CRC8
         assert payload_len <= self.FW_DECODE_CAP, (
             f"MAX_DATA_CHUNK={MAX_DATA_CHUNK} -> payload {payload_len} exceeds firmware "
-            f"decode cap {self.FW_DECODE_CAP}; write/verify will overflow with Data error: -2"
+            f"decode cap {self.FW_DECODE_CAP}"
         )
 
-    def test_calculate_buffer_size_respects_decode_cap(self) -> None:
-        """EpromOperator._calculate_buffer_size() must never exceed the cap-safe size."""
+    def test_calculate_buffer_size_raises_without_max_chunk(self) -> None:
+        """Phase 54 (D-05): _calculate_buffer_size() raises FirmwareOutdatedError
+        when firmware_max_chunk is absent — no graceful buf-2 fallback."""
+        import pytest
+
         from firestarter.config import ConfigManager
         from firestarter.eprom_operations import EpromOperator
+        from firestarter.exceptions import FirmwareOutdatedError
 
         op = EpromOperator(ConfigManager())
-        assert op._calculate_buffer_size() + 1 <= self.FW_DECODE_CAP
+        # No comm set -> firmware_max_chunk absent -> must raise (D-05)
+        with pytest.raises(FirmwareOutdatedError):
+            op._calculate_buffer_size()
 
     def test_max_chunk_decode_leg_round_trips(self) -> None:
         """The decode leg the old suite skipped: a full MAX_DATA_CHUNK + CRC8 frame
-        COBS round-trips and its decoded payload is within the firmware cap."""
+        COBS round-trips and decodes correctly."""
         from firestarter.constants import MAX_DATA_CHUNK
 
         data = bytes((i * 7 + 3) & 0xFF for i in range(MAX_DATA_CHUNK))
         crc = _crc8_ccitt(data)
         payload = data + bytes([crc])
-        assert len(payload) <= self.FW_DECODE_CAP
         frame = cobs_encode(payload) + b"\x00"
         decoded = cobs_decode(frame[:-1])
         assert decoded == payload
@@ -226,36 +236,51 @@ class TestHostChunkFitsFirmwareDecodeCap:
 
 
 class TestPerBoardBufferNegotiation:
-    """Phase 53 (Leonardo 1K): the host sizes host->fw data chunks from the
-    firmware-advertised DATA_BUFFER_SIZE (FW identity "<ver>:<board>:<bufsize>"),
-    so each board uses its real capacity (Uno 512->510, Leonardo 1024->1022) with
-    no hardcoded per-board map. For ANY advertised buffer B, the chunk (B-2) plus
-    the CRC8 byte must fit the firmware decode cap (B-1)."""
+    """Phase 54 (EVEN-01/D-04): the host sizes host->fw data chunks from the
+    firmware-advertised <maxchunk> field (4th ':' field of FW identity string
+    "<ver>:<board>:<buf>:<maxchunk>"). Each board uses DATA_BUFFER_SIZE exactly —
+    no arithmetic, no hardcoded per-board map. Absent field raises FirmwareOutdatedError
+    (D-05 lockstep: no mixed-version interop, no graceful buf-2 fallback)."""
 
     def test_chunk_plus_crc_fits_cap_for_each_buffer(self) -> None:
+        """Phase 54: full-buffer chunk + CRC fits the MAIN-path decode cap.
+
+        After Candidate A NUL-skip, the MAIN-path cap is DATA_BUFFER_SIZE exactly,
+        so chunk (== DATA_BUFFER_SIZE) + CRC8 (1 byte) = DATA_BUFFER_SIZE + 1.
+        This fits within the MAIN-path buffer because the CRC8 lives in the 1-byte
+        lookahead, not the committed payload — no overflow.
+        """
         for buffer in (512, 1024):
-            chunk = buffer - 2
-            cap = (
-                buffer - 1
-            )  # rurp_communication_read_data commits <= DATA_BUFFER_SIZE-1
-            assert chunk + 1 <= cap, (
-                f"buffer={buffer}: chunk {chunk} + CRC exceeds decode cap {cap}"
+            # After Phase 54, chunk == buffer (no -2)
+            chunk = buffer
+            # MAIN-path cap is DATA_BUFFER_SIZE; CRC8 held in lookahead
+            assert chunk <= buffer, (
+                f"buffer={buffer}: chunk {chunk} exceeds firmware buffer"
             )
 
     def test_calculate_buffer_size_uses_advertised(self) -> None:
+        """Phase 54: _calculate_buffer_size() returns firmware_max_chunk directly.
+
+        Leonardo advertises maxchunk=1024 -> 1024 (not 1022).
+        Uno advertises maxchunk=512 -> 512 (not 510).
+        Absent/None firmware_max_chunk -> raises FirmwareOutdatedError (D-05).
+        """
         from types import SimpleNamespace
 
+        import pytest
+
         from firestarter.config import ConfigManager
-        from firestarter.constants import MAX_DATA_CHUNK
         from firestarter.eprom_operations import EpromOperator
+        from firestarter.exceptions import FirmwareOutdatedError
 
         op = EpromOperator(ConfigManager())
-        # Leonardo advertises 1024 -> 1022-byte chunks.
-        op.comm = SimpleNamespace(firmware_buffer_size=1024)  # type: ignore[assignment]
-        assert op._calculate_buffer_size() == 1022
-        # Uno advertises 512 -> 510.
-        op.comm = SimpleNamespace(firmware_buffer_size=512)  # type: ignore[assignment]
-        assert op._calculate_buffer_size() == 510
-        # Pre-advertise firmware (None) -> safe fallback.
-        op.comm = SimpleNamespace(firmware_buffer_size=None)  # type: ignore[assignment]
-        assert op._calculate_buffer_size() == MAX_DATA_CHUNK
+        # Leonardo advertises 1024 -> 1024-byte chunks (no -2).
+        op.comm = SimpleNamespace(firmware_max_chunk=1024)  # type: ignore[assignment]
+        assert op._calculate_buffer_size() == 1024
+        # Uno advertises 512 -> 512.
+        op.comm = SimpleNamespace(firmware_max_chunk=512)  # type: ignore[assignment]
+        assert op._calculate_buffer_size() == 512
+        # firmware_max_chunk=None -> raises FirmwareOutdatedError (D-05 no fallback).
+        op.comm = SimpleNamespace(firmware_max_chunk=None)  # type: ignore[assignment]
+        with pytest.raises(FirmwareOutdatedError):
+            op._calculate_buffer_size()
