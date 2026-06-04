@@ -104,13 +104,18 @@ class FirmwareManager:
             # Firmware emits the legacy text line "OK: FW: <version>:<board>"
             # (LFW-05). _parse_response_line strips the "OK:" prefix, so the
             # payload reaching us here is "FW: <version>:<board>". Strip the
-            # secondary "FW:" tag before splitting on the version/board colon.
+            # secondary "FW:" tag before splitting on the colons.
             payload = None
             if is_ok and msg:
                 payload = msg[3:].lstrip() if msg.startswith("FW:") else msg
 
             if payload and ":" in payload:
-                parts = payload.split(":", 1)
+                # Identity is "<version>:<board>[:<buf>[:<maxchunk>]]". Only the
+                # version and board are user-facing / release-relevant; <buf> and
+                # <maxchunk> are wire-negotiation fields (Phase 53/54) that must
+                # not leak into the printout or the firmware-release asset lookup
+                # (firestarter_<board>.hex). Take only the first two fields.
+                parts = payload.split(":")
                 current_version = parts[0].strip()
                 board_name = parts[1].strip()
 
