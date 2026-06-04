@@ -28,6 +28,9 @@ LEONARDO_BUFFER_SIZE = 1024
 # satisfy len(data) + 1 (CRC) <= DATA_BUFFER_SIZE - 1, i.e. len(data) <= BUFFER_SIZE - 2.
 # Sending a full BUFFER_SIZE (512) chunk overflows the decoder -> "Data error: -2"
 # and breaks write/verify on every board (bench-confirmed Phase 53, both Uno + Leonardo).
+# OBSOLETE (Phase 54/EVEN-01): _calculate_buffer_size now reads firmware_max_chunk
+# directly; this constant is no longer used as the chunk-size default. Retained to
+# avoid breaking external references.
 MAX_DATA_CHUNK = BUFFER_SIZE - 2  # 510
 
 # Command-channel frame size limit — Firmware sync: firestarter.h CMD_FRAME_MAX

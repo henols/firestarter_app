@@ -116,6 +116,11 @@ class SerialCommunicator:
         # can size host->fw data chunks to the board's actual decode capacity
         # (chunk + CRC8 <= bufsize-1). None until probed / for pre-advertise firmware.
         self.firmware_buffer_size: Optional[int] = None
+        # Phase 54 (EVEN-01): firmware advertises effective MAIN-path decode capacity in
+        # field 4 ("<ver>:<board>:<buf>:<maxchunk>"). Host uses this value directly as
+        # the write/verify chunk size — no arithmetic. None until probed (D-05: no
+        # fallback to buf-2; old firmware raises FirmwareOutdatedError in _calculate_buffer_size).
+        self.firmware_max_chunk: Optional[int] = None
 
         try:
             logger.debug(
@@ -621,6 +626,10 @@ class SerialCommunicator:
                             if len(fw_fields) >= 3 and fw_fields[2].strip().isdigit():
                                 communicator.firmware_buffer_size = int(
                                     fw_fields[2].strip()
+                                )
+                            if len(fw_fields) >= 4 and fw_fields[3].strip().isdigit():
+                                communicator.firmware_max_chunk = int(
+                                    fw_fields[3].strip()
                                 )
                         else:
                             raise FirmwareOutdatedError(

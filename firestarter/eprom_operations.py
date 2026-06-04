@@ -39,10 +39,10 @@ from firestarter.constants import (
     FLAG_VPE_AS_VPP,
     JSON_KEY_READ_SETTLING_DELAY,
     JSON_KEY_READ_STROBE_US,
-    MAX_DATA_CHUNK,
 )
 from firestarter.exceptions import (
     EpromOperationError,
+    FirmwareOutdatedError,
     ProgrammerNotFoundError,
     SerialError,
     SerialTimeoutError,
@@ -161,22 +161,20 @@ class EpromOperator:
         self.progress_callback = progress_callback
 
     def _calculate_buffer_size(self) -> int:
-        # For write/verify, we use a "pull" protocol where the Arduino requests a
-        # data block when it's ready. The chunk must fit the firmware COBS decoder's
-        # committed-payload cap: the decoded payload is data_chunk + CRC8, and
-        # rurp_communication_read_data commits at most DATA_BUFFER_SIZE-1 bytes
-        # (CR-01 NUL-slot reservation). A full-buffer chunk overflows -> "Data
-        # error: -2" (bench-confirmed, Phase 53).
-        #
-        # The firmware advertises its DATA_BUFFER_SIZE in the FW identity string;
-        # _probe_port stores it on the communicator. Size the chunk to that board's
-        # actual capacity (e.g. Leonardo 1024 -> 1022, Uno 512 -> 510), so the host
-        # is self-correcting with no hardcoded per-board map. Fall back to the safe
-        # MAX_DATA_CHUNK (BUFFER_SIZE - 2 = 510) for pre-advertise firmware.
-        fw_buf = getattr(self.comm, "firmware_buffer_size", None) if self.comm else None
-        if fw_buf is not None and fw_buf >= 3:
-            return fw_buf - 2  # reserve 1 byte CRC8 + 1 byte decoder NUL slot
-        return MAX_DATA_CHUNK
+        # Phase 54 (EVEN-01/D-04): read the firmware-advertised max-chunk field
+        # (4th ':' field of "<ver>:<board>:<buf>:<maxchunk>") — no arithmetic, no
+        # per-board constant. The firmware MAIN-path decode cap is DATA_BUFFER_SIZE
+        # (Candidate A NUL-skip); <maxchunk> == DATA_BUFFER_SIZE exactly.
+        # D-05: no fallback; host and firmware must be upgraded together (lockstep).
+        max_chunk = (
+            getattr(self.comm, "firmware_max_chunk", None) if self.comm else None
+        )
+        if max_chunk is not None and max_chunk >= 1:
+            return max_chunk
+        raise FirmwareOutdatedError(
+            "Firmware does not advertise a max-chunk capacity field. "
+            "Please upgrade the firmware using 'firestarter fw --install'."
+        )
 
     def _setup_operation(  # Remains largely the same, as it's a prerequisite for the context manager  # noqa: E501
         self,
