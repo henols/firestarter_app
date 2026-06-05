@@ -364,6 +364,65 @@ def test_fault_inject_incoming_subclass(make_comm) -> None:
     assert comm._fault_fired, "One-shot flag must remain True (no re-flip on 2nd call)"
 
 
+def test_find_and_connect_threads_fault_inject_outgoing(monkeypatch) -> None:
+    """53-04 fix: find_and_connect MUST forward fault_inject_outgoing to _probe_port.
+
+    The outgoing fault has to be armed at connection time (before the setup command's
+    send_json_command), since a READ sends no further framed command. This test pins
+    the threading seam without opening a real serial port.
+    """
+    from firestarter.config import ConfigManager
+    from firestarter.serial_comm import SerialCommunicator
+
+    captured: dict = {}
+    sentinel = object()
+
+    def fake_probe(port_name, baud_rate, command_to_send, config_manager, **kwargs):
+        captured["fault_inject_outgoing"] = kwargs.get("fault_inject_outgoing")
+        return sentinel  # truthy -> find_and_connect returns it immediately
+
+    monkeypatch.setattr(
+        SerialCommunicator,
+        "_list_potential_ports",
+        staticmethod(lambda p=None: ["/dev/fake0"]),
+    )
+    monkeypatch.setattr(SerialCommunicator, "_probe_port", staticmethod(fake_probe))
+
+    hook = lambda f: f[:-1]  # noqa: E731  (drop-delimiter sample)
+    result = SerialCommunicator.find_and_connect(
+        {"cmd": 1}, ConfigManager(), fault_inject_outgoing=hook
+    )
+
+    assert result is sentinel
+    assert captured["fault_inject_outgoing"] is hook, (
+        "find_and_connect must forward the outgoing fault hook to _probe_port (53-04)."
+    )
+
+
+def test_find_and_connect_default_no_fault_inject(monkeypatch) -> None:
+    """Production default: fault_inject_outgoing is None (path byte-identical, T-53-03)."""
+    from firestarter.config import ConfigManager
+    from firestarter.serial_comm import SerialCommunicator
+
+    captured: dict = {}
+
+    def fake_probe(port_name, baud_rate, command_to_send, config_manager, **kwargs):
+        captured["fault_inject_outgoing"] = kwargs.get(
+            "fault_inject_outgoing", "MISSING"
+        )
+        return object()
+
+    monkeypatch.setattr(
+        SerialCommunicator,
+        "_list_potential_ports",
+        staticmethod(lambda p=None: ["/dev/fake0"]),
+    )
+    monkeypatch.setattr(SerialCommunicator, "_probe_port", staticmethod(fake_probe))
+
+    SerialCommunicator.find_and_connect({"cmd": 1}, ConfigManager())
+    assert captured["fault_inject_outgoing"] is None
+
+
 def test_read_and_parse_lines_ringfence_unchanged() -> None:
     """Ring-fence compliance: _read_and_parse_lines body source is byte-identical
     to the GATE-1.8d pinned snapshot.

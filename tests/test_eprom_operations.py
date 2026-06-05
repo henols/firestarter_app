@@ -243,7 +243,9 @@ def _make_captured_setup_operation(captured: list):
     what was passed IN, not the output.
     """
 
-    def _fake_setup_operation(self_op, eprom_name, eprom_data_dict, cmd, *args, **kwargs):  # noqa: ANN001
+    def _fake_setup_operation(
+        self_op, eprom_name, eprom_data_dict, cmd, *args, **kwargs
+    ):  # noqa: ANN001
         captured.append(dict(eprom_data_dict))
         # Return None so _operation_context yields (None, None, None) and
         # consistency_check_eprom returns 2 (hardware error) on first run.
@@ -261,7 +263,9 @@ def test_read_timing_settling_key_constant() -> None:
 
     Selected by `pytest -k read_timing`.
     """
-    from firestarter.constants import JSON_KEY_READ_SETTLING_DELAY  # type: ignore[attr-defined]
+    from firestarter.constants import (
+        JSON_KEY_READ_SETTLING_DELAY,  # type: ignore[attr-defined]
+    )
 
     assert JSON_KEY_READ_SETTLING_DELAY == "read-settling-delay"
 
@@ -274,7 +278,9 @@ def test_read_timing_strobe_key_constant() -> None:
 
     Selected by `pytest -k read_timing`.
     """
-    from firestarter.constants import JSON_KEY_READ_STROBE_US  # type: ignore[attr-defined]
+    from firestarter.constants import (
+        JSON_KEY_READ_STROBE_US,  # type: ignore[attr-defined]
+    )
 
     assert JSON_KEY_READ_STROBE_US == "read-strobe-us"
 
@@ -667,3 +673,127 @@ class TestFaultInjectCycle:
         assert result is False, (
             "Unexpectedly successful corrupted transfer must return False."
         )
+
+    # ----- 53-04 harness-fix regression tests (the false-negative fix) ---------
+
+    def test_outgoing_threads_hook_to_operation_context(self, tmp_path, monkeypatch):
+        """The outgoing fault MUST be threaded into _operation_context (i.e. armed at
+        connection time) for the corrupted leg, and NOT for the clean follow-on leg.
+
+        This is the core 53-04 fix: the old code set the hook AFTER setup, so a READ
+        (whose MAIN phase sends only plaintext acks) never fired it -> false negative.
+        """
+        from contextlib import contextmanager
+
+        seen_hooks: list = []
+        mem = self._MEMORY_SIZE
+
+        @contextmanager
+        def capturing_ctx(
+            self, eprom_name, eprom_data_dict, cmd, *a, fault_inject_outgoing=None, **kw
+        ):
+            seen_hooks.append(fault_inject_outgoing)
+            # First call = corrupted leg: simulate firmware rejecting the corrupt
+            # setup frame -> connection did not establish (cmd_data is None).
+            if len(seen_hooks) == 1:
+                yield None, None, None
+            else:
+                yield {"address": 0, "memory-size": mem}, 512, "READ"
+
+        monkeypatch.setattr(EpromOperator, "_operation_context", capturing_ctx)
+        monkeypatch.setattr(
+            EpromOperator,
+            "_run_state_machine",
+            _make_fault_inject_state_machine(corrupted_fails=False),  # clean leg PASSES
+        )
+
+        op = EpromOperator(ConfigManager())
+        op.comm = _MockComm()  # type: ignore[assignment]
+        result = op.fault_inject_cycle(
+            "TEST_CHIP",
+            {"memory-size": self._MEMORY_SIZE},
+            direction="outgoing",
+            fault_form="corrupt-crc8",
+            output_dir=str(tmp_path / "fi_thread"),
+        )
+
+        assert result is True, "Bounded connect failure + clean recovery -> True."
+        assert len(seen_hooks) == 2, "Expected a corrupted leg and a clean leg."
+        assert seen_hooks[0] is not None, (
+            "Corrupted leg MUST arm the outgoing hook at connection time (53-04 fix)."
+        )
+        assert seen_hooks[1] is None, "Clean follow-on leg MUST NOT arm the hook."
+
+    def test_outgoing_connect_failure_writes_latency_log(self, tmp_path, monkeypatch):
+        """A rejected setup frame (connect fails) is the expected outcome and writes a
+        fault-inject log carrying the measured error latency + sub-2s cascade verdict."""
+        from contextlib import contextmanager
+
+        calls = {"n": 0}
+        mem = self._MEMORY_SIZE
+
+        @contextmanager
+        def ctx(self, eprom_name, eprom_data_dict, cmd, *a, **kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                yield None, None, None  # corrupted setup -> connect failed
+            else:
+                yield {"address": 0, "memory-size": mem}, 512, "READ"
+
+        monkeypatch.setattr(EpromOperator, "_operation_context", ctx)
+        monkeypatch.setattr(
+            EpromOperator,
+            "_run_state_machine",
+            _make_fault_inject_state_machine(corrupted_fails=False),
+        )
+
+        out = tmp_path / "fi_log"
+        op = EpromOperator(ConfigManager())
+        op.comm = _MockComm()  # type: ignore[assignment]
+        result = op.fault_inject_cycle(
+            "TEST_CHIP",
+            {"memory-size": self._MEMORY_SIZE},
+            direction="outgoing",
+            fault_form="corrupt-crc8",
+            output_dir=str(out),
+        )
+
+        assert result is True
+        log = (out / "fault-inject-outgoing-log.txt").read_text()
+        assert "corrupted_transfer_surfaced_clean_error: True" in log
+        assert "error_latency:" in log
+        assert "sub_second_clean_error_no_2s_cascade:" in log
+        assert "clean follow-on transfer PASSED" in log
+
+    def test_corrupt_crc8_and_drop_delimiter_hooks_mutate_frame(self):
+        """The fault hooks must produce a frame that differs from the original (so the
+        injection is real, not a no-op). Guards against a silent identity hook."""
+        op = EpromOperator(ConfigManager())
+        op.comm = _MockComm()  # type: ignore[assignment]
+        captured: dict = {}
+
+        # Capture the hooks by intercepting _operation_context and reading the armed
+        # hook off a throwaway comm via send_json_command behavior is covered in
+        # test_serial_comm; here we assert the hook transforms a sample frame.
+        from contextlib import contextmanager
+
+        @contextmanager
+        def ctx(self, *a, fault_inject_outgoing=None, **kw):
+            if fault_inject_outgoing is not None:
+                captured["hook"] = fault_inject_outgoing
+            yield None, None, None  # force the bounded-failure path
+
+        # The ctx yields None for every leg (clean leg then returns False), but this
+        # test only needs to capture the armed hook to assert it mutates a frame.
+        with patch.object(EpromOperator, "_operation_context", ctx):
+            op.fault_inject_cycle(
+                "TEST_CHIP",
+                {"memory-size": self._MEMORY_SIZE},
+                direction="outgoing",
+                fault_form="corrupt-crc8",
+                output_dir="/tmp/fi_hook_crc8",
+            )
+        sample = b"\x03ABC\x55\x00"  # body + crc + delimiter
+        mutated = captured["hook"](sample)
+        assert mutated != sample, "corrupt-crc8 hook must change the frame."
+        assert mutated[-1:] == b"\x00", "corrupt-crc8 keeps the 0x00 delimiter."

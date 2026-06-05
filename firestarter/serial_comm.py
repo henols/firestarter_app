@@ -592,6 +592,7 @@ class SerialCommunicator:
         baud_rate: int,
         command_to_send: dict,
         config_manager: ConfigManager,
+        fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None,
     ) -> Optional["SerialCommunicator"]:
         """
         Attempts to connect to and validate a programmer on a single port.
@@ -601,6 +602,10 @@ class SerialCommunicator:
         try:
             logger.debug(f"Probing for programmer on {port_name}...")
             communicator = SerialCommunicator(port=port_name, baud_rate=baud_rate)
+            # Phase 53-04 / XACT-02 (dev-only): arm the outgoing-frame fault BEFORE
+            # the first send_json_command below. Default None => production no-op.
+            if fault_inject_outgoing is not None:
+                communicator._fault_inject_outgoing = fault_inject_outgoing
             communicator.consume_remaining_input()
 
             # FW-version handshake (independent of the user's command). Firmware
@@ -702,9 +707,18 @@ class SerialCommunicator:
         config_manager: ConfigManager,
         preferred_port: Optional[str] = None,
         baud_rate: int = int(BAUD_RATE),
+        fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None,
     ) -> "SerialCommunicator":
         """
         Finds a compatible programmer by probing potential serial ports.
+
+        ``fault_inject_outgoing`` (Phase 53-04 / XACT-02, dev-only) installs an
+        outgoing-frame mutation hook on each probed communicator BEFORE the first
+        ``send_json_command`` (the setup/handshake command). It defaults to None, so
+        the production path is byte-identical (T-53-03). It exists because a READ's
+        MAIN phase emits only plaintext acks (``send_string``) — the setup command
+        sent here is the ONLY corruptible host→fw command frame, so the outgoing
+        fault MUST be injected at connection time, not after setup.
         """
         if not preferred_port:
             preferred_port = config_manager.get_value("port")
@@ -723,7 +737,11 @@ class SerialCommunicator:
         for port_name in potential_ports:
             try:
                 communicator = cls._probe_port(
-                    port_name, baud_rate, command_to_send, config_manager
+                    port_name,
+                    baud_rate,
+                    command_to_send,
+                    config_manager,
+                    fault_inject_outgoing=fault_inject_outgoing,
                 )
                 if communicator:
                     if status_update_active:
