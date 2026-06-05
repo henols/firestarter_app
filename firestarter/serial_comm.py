@@ -52,6 +52,7 @@ from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_de
     _decode_param,
     cobs_encode,
 )
+from firestarter.messages import MSG_OK_READY
 
 logger = logging.getLogger("SerialComm")
 rurp_logger = logging.getLogger("RURP")
@@ -244,8 +245,34 @@ class SerialCommunicator:
         rurp_logger.log(level, f"{log_prefix}: {message}")
 
     def _decode_id_frame(self, frame_len: int, body: bytes) -> Optional[LogMessage]:
-        """Compatibility wrapper — see codec.decode_id_frame."""
-        return codec.decode_id_frame(frame_len, body)
+        """Compatibility wrapper — see codec.decode_id_frame.
+
+        CAP-01 (Phase 55): after decoding, when the message is MSG_OK_READY and
+        the param region is exactly 2 bytes, extract the big-endian u16 and store
+        it as firmware_max_chunk (buffer-size advertisement relocated from the FW
+        identity string to the operation-setup ack). A plausibility clamp rejects
+        values outside [1, 4096] so a hostile/corrupt ack cannot over-size chunks
+        (T-55-05 / T-55-06). 0-byte param region (old firmware) leaves
+        firmware_max_chunk unchanged (graceful degradation, T-55-07).
+
+        The GATE-1.8d ring-fenced _read_and_parse_lines body is not touched —
+        only this override seam is used (Pitfall 4 / Open Question 3).
+        """
+        result = codec.decode_id_frame(frame_len, body)
+        # body layout: [id_byte][params_bytes...][crc_byte]
+        if result is not None and len(body) >= 2:
+            msg_id = body[0]
+            if msg_id == MSG_OK_READY:
+                params_bytes = body[1:-1]  # strip id byte and trailing CRC
+                if len(params_bytes) == 2:
+                    value = struct.unpack(">H", params_bytes)[0]
+                    # Plausibility clamp: reject values outside [1, 4096].
+                    # No real board exceeds the 1024-byte Leonardo buffer; 4096
+                    # is a generous ceiling. Values outside this range leave
+                    # firmware_max_chunk unset so the 512 floor applies (T-55-06).
+                    if 1 <= value <= 4096:
+                        self.firmware_max_chunk = value
+        return result
 
     # =================================================================
     # DO NOT MODIFY — v1.9 RCA territory (GATE-1.8d)

@@ -42,7 +42,6 @@ from firestarter.constants import (
 )
 from firestarter.exceptions import (
     EpromOperationError,
-    FirmwareOutdatedError,
     ProgrammerNotFoundError,
     SerialError,
     SerialTimeoutError,
@@ -161,20 +160,19 @@ class EpromOperator:
         self.progress_callback = progress_callback
 
     def _calculate_buffer_size(self) -> int:
-        # Phase 54 (EVEN-01/D-04): read the firmware-advertised max-chunk field
-        # (4th ':' field of "<ver>:<board>:<buf>:<maxchunk>") — no arithmetic, no
-        # per-board constant. The firmware MAIN-path decode cap is DATA_BUFFER_SIZE
-        # (Candidate A NUL-skip); <maxchunk> == DATA_BUFFER_SIZE exactly.
-        # D-05: no fallback; host and firmware must be upgraded together (lockstep).
+        # CAP-01 (Phase 55): firmware_max_chunk is now populated by the
+        # _decode_id_frame MSG_OK_READY ack override in serial_comm.py, not
+        # by parsing the FW identity string (Phase 54 mechanism removed).
+        # Phase 54 D-05 is reversed: when the field is absent (old firmware
+        # or ack with 0 param bytes), return 512 — the Uno floor, universally
+        # safe minimum — instead of raising FirmwareOutdatedError.
         max_chunk = (
             getattr(self.comm, "firmware_max_chunk", None) if self.comm else None
         )
         if max_chunk is not None and max_chunk >= 1:
             return max_chunk
-        raise FirmwareOutdatedError(
-            "Firmware does not advertise a max-chunk capacity field. "
-            "Please upgrade the firmware using 'firestarter fw --install'."
-        )
+        # CAP-01 safe Uno-floor default: absent advertisement -> 512.
+        return 512
 
     def _setup_operation(  # Remains largely the same, as it's a prerequisite for the context manager  # noqa: E501
         self,
