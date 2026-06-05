@@ -12,9 +12,9 @@ Pins three properties:
    whole even blocks at both Uno (512) and Leonardo (1024) sizes — no partial
    last-chunk round trip.
 
-2. firmware_max_chunk parse contract (D-04): _calculate_buffer_size() returns
-   firmware_max_chunk directly (no -2 arithmetic); absent field raises
-   FirmwareOutdatedError (D-05 lockstep, no fallback).
+2. firmware_max_chunk parse contract (CAP-01): _calculate_buffer_size() returns
+   firmware_max_chunk directly (no -2 arithmetic); absent field returns 512
+   (Uno-floor safe default — Phase 54 D-05 reversed, NO FirmwareOutdatedError).
 
 3. Frame cap boundary (D-07 regression): a 512-byte data block + CRC8 COBS
    round-trips to the original 512 bytes, confirming the MAIN-path decode cap
@@ -69,9 +69,10 @@ class TestEvenBlockNoRemainder:
 
 
 class TestFirmwareMaxChunkParse:
-    """firmware_max_chunk contract: _calculate_buffer_size() returns the
-    firmware-advertised value directly (no -2 arithmetic), and raises
-    FirmwareOutdatedError when the field is absent (D-05 no fallback).
+    """firmware_max_chunk contract (CAP-01): _calculate_buffer_size() returns the
+    firmware-advertised value directly (no -2 arithmetic), and returns 512 (the
+    Uno-floor safe default) when the field is absent — Phase 54 D-05 reversed,
+    NO FirmwareOutdatedError.
     """
 
     def test_calculate_buffer_size_uses_max_chunk_512(self) -> None:
@@ -86,7 +87,7 @@ class TestFirmwareMaxChunkParse:
         op.comm = SimpleNamespace(firmware_max_chunk=1024)  # type: ignore[assignment]
         assert op._calculate_buffer_size() == 1024
 
-    def test_calculate_buffer_size_raises_without_max_chunk(self) -> None:
+    def test_calculate_buffer_size_returns_512_without_max_chunk(self) -> None:
         """Absent firmware_max_chunk -> 512 safe default (CAP-01 — no FirmwareOutdatedError).
 
         Phase 54 D-05 is reversed by Phase 55 CAP-01: the host no longer raises when

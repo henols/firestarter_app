@@ -423,7 +423,9 @@ def test_decode_id_frame_sets_firmware_max_chunk_from_2_byte_param(make_comm) ->
     frame_len = len(body)
 
     result = comm._decode_id_frame(frame_len, body)
-    assert result is not None, "_decode_id_frame must return a LogMessage for a valid body"
+    assert result is not None, (
+        "_decode_id_frame must return a LogMessage for a valid body"
+    )
     assert comm.firmware_max_chunk == 512, (
         f"Expected firmware_max_chunk=512 from 2-byte param, got {comm.firmware_max_chunk}"
     )
@@ -450,7 +452,48 @@ def test_decode_id_frame_leaves_firmware_max_chunk_none_for_0_byte_param(
     frame_len = len(body)
 
     result = comm._decode_id_frame(frame_len, body)
-    assert result is not None, "_decode_id_frame must return a LogMessage for a valid body"
+    assert result is not None, (
+        "_decode_id_frame must return a LogMessage for a valid body"
+    )
     assert comm.firmware_max_chunk is None, (
         f"Expected firmware_max_chunk=None for 0-byte param, got {comm.firmware_max_chunk}"
+    )
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        (b"\x00\x00", None),  # 0 -> below floor, rejected (T-55-06)
+        (b"\x00\x01", 1),  # 1 -> accepted (lower boundary)
+        (b"\x10\x00", 4096),  # 4096 -> accepted (upper boundary)
+        (b"\x10\x01", None),  # 4097 -> above ceiling, rejected (T-55-06)
+        (b"\xff\xff", None),  # 65535 -> hostile over-large, rejected (T-55-06)
+    ],
+)
+def test_decode_id_frame_clamps_implausible_max_chunk(make_comm, raw, expected) -> None:
+    """CAP-01 V5 (T-55-05/T-55-06): the [1, 4096] plausibility clamp rejects
+    out-of-range advertised capacities so a hostile/corrupt MSG_OK_READY ack
+    cannot over-size firmware_max_chunk; out-of-range values leave it unset
+    (so _calculate_buffer_size falls back to the 512 Uno floor).
+
+    This pins the only defensive control on the ack-sourced buffer size — a
+    future refactor that widens or drops the clamp must fail here.
+    """
+    comm = make_comm()
+    assert comm.firmware_max_chunk is None, "firmware_max_chunk must start None"
+
+    from firestarter.frame_parser import _crc8_ccitt
+    from firestarter.messages import MSG_OK_READY
+
+    msg_id_byte = bytes([MSG_OK_READY])
+    crc = _crc8_ccitt(msg_id_byte + raw)
+    body = msg_id_byte + raw + bytes([crc])
+
+    result = comm._decode_id_frame(len(body), body)
+    assert result is not None, (
+        "_decode_id_frame must return a LogMessage for a valid body"
+    )
+    assert comm.firmware_max_chunk == expected, (
+        f"param {raw!r}: expected firmware_max_chunk={expected}, "
+        f"got {comm.firmware_max_chunk} (clamp [1, 4096])"
     )
