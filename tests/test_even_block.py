@@ -23,11 +23,8 @@ Pins three properties:
 
 from types import SimpleNamespace
 
-import pytest
-
 from firestarter.config import ConfigManager
 from firestarter.eprom_operations import EpromOperator
-from firestarter.exceptions import FirmwareOutdatedError
 from firestarter.frame_parser import (  # type: ignore[attr-defined]
     _crc8_ccitt,
     cobs_decode,
@@ -90,11 +87,19 @@ class TestFirmwareMaxChunkParse:
         assert op._calculate_buffer_size() == 1024
 
     def test_calculate_buffer_size_raises_without_max_chunk(self) -> None:
-        """Absent firmware_max_chunk -> FirmwareOutdatedError (D-05 no fallback)."""
+        """Absent firmware_max_chunk -> 512 safe default (CAP-01 — no FirmwareOutdatedError).
+
+        Phase 54 D-05 is reversed by Phase 55 CAP-01: the host no longer raises when
+        firmware_max_chunk is absent; it returns 512 (the Uno floor / universally safe
+        minimum). Old-firmware acks carrying 0 param bytes are accepted gracefully.
+        """
         op = EpromOperator(ConfigManager())
-        # No comm set -> firmware_max_chunk absent -> must raise
-        with pytest.raises(FirmwareOutdatedError):
-            op._calculate_buffer_size()
+        # No comm set -> firmware_max_chunk absent -> must return 512, NOT raise
+        result = op._calculate_buffer_size()
+        assert result == 512, (
+            f"Expected 512 (Uno-floor safe default), got {result}. "
+            "CAP-01: absent firmware_max_chunk must NOT raise FirmwareOutdatedError."
+        )
 
     def test_max_chunk_replaces_fw_buf_minus_2(self) -> None:
         """The result is NOT firmware_buffer_size - 2 (pins the -2 removal, EVEN-01).
@@ -150,3 +155,43 @@ class TestEvenBlockFrameVectorsCapBoundary:
         assert decoded[:-1] == data
         assert decoded[-1] == crc
         assert len(decoded[:-1]) == 512
+
+
+class TestCapSafeDefault:
+    """CAP-01 safe-default contract: _calculate_buffer_size() returns 512 when
+    firmware_max_chunk is absent (old firmware ack carries 0 param bytes), and
+    returns the advertised value directly when present.
+
+    These tests are RED now — Phase 55 Plan 03 turns them GREEN by implementing
+    the safe-default logic in eprom_operations._calculate_buffer_size().
+
+    Phase 54 D-05 reversed: no FirmwareOutdatedError on absent chunk field.
+    """
+
+    def test_absent_firmware_max_chunk_returns_512(self) -> None:
+        """No comm set -> _calculate_buffer_size() returns 512, raises NO exception.
+
+        CAP-01 safe default: when firmware does not advertise max_chunk (old firmware
+        or ack with 0 param bytes), the host falls back to 512 — the Uno floor,
+        universally safe minimum. This reverses Phase 54 D-05.
+        """
+        op = EpromOperator(ConfigManager())
+        # No comm set -> firmware_max_chunk absent -> must return 512, no exception
+        result = op._calculate_buffer_size()
+        assert result == 512, (
+            f"Expected 512 (Uno-floor safe default), got {result}. "
+            "CAP-01: absent firmware_max_chunk MUST NOT raise FirmwareOutdatedError; "
+            "512 is the universally-safe Uno floor."
+        )
+
+    def test_512_ok_ready_ack_sets_firmware_max_chunk(self) -> None:
+        """comm.firmware_max_chunk=512 -> _calculate_buffer_size() == 512 (Uno)."""
+        op = EpromOperator(ConfigManager())
+        op.comm = SimpleNamespace(firmware_max_chunk=512)  # type: ignore[assignment]
+        assert op._calculate_buffer_size() == 512
+
+    def test_1024_ok_ready_ack_sets_firmware_max_chunk(self) -> None:
+        """comm.firmware_max_chunk=1024 -> _calculate_buffer_size() == 1024 (Leonardo)."""
+        op = EpromOperator(ConfigManager())
+        op.comm = SimpleNamespace(firmware_max_chunk=1024)  # type: ignore[assignment]
+        assert op._calculate_buffer_size() == 1024
