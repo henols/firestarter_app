@@ -28,6 +28,7 @@ from firestarter.constants import (
     COMMAND_DEV_ADDRESS,
     COMMAND_DEV_REGISTERS,
     COMMAND_ERASE,
+    COMMAND_FW_VERSION,
     COMMAND_NAMES,
     COMMAND_READ,
     COMMAND_VERIFY,
@@ -1100,6 +1101,164 @@ class EpromOperator:
                     fh.write(f"{line}\n")
             except IOError as e:  # noqa: UP024
                 logger.error(f"fault_inject_cycle: could not append fault log: {e}")
+
+    def measure_command_nak_latency(
+        self,
+        fault_form: str = "corrupt-crc8",
+        output_dir: Optional[str] = None,
+        port: Optional[str] = None,
+    ) -> bool:
+        """XACT-02 outgoing PER-FRAME latency measurement on an ESTABLISHED single-port
+        connection (53-04 harness refinement).
+
+        Unlike fault_inject_cycle (which corrupts the connection-SETUP frame and so
+        triggers find_and_connect's multi-port retry — inflating the latency), this opens
+        ONE pinned port directly, then on the SAME open connection:
+          1. sends a clean CMD_FW_VERSION (baseline — firmware alive + at IDLE),
+          2. sends ONE corrupted CMD_FW_VERSION frame, timed precisely from send to the
+             firmware's error response (the real per-frame NAK latency),
+          3. sends a clean CMD_FW_VERSION (recovery on the SAME connection).
+
+        CMD_FW_VERSION is used because it is self-contained: the firmware answers and
+        returns to CMD_IDLE, so three commands run back-to-back on one connection without
+        a chip, VPP, or the read state machine.
+
+        Returns True iff baseline OK AND the corrupted frame surfaced an error (no silent
+        accept) AND the clean recovery transfer succeeded. Writes
+        fault-inject-<fault_form>-latency.txt with the precise per-frame latency.
+        """
+        if port is None:
+            port = self.config.get_value("port")
+        if not port:
+            logger.error(
+                "measure_command_nak_latency: no serial port resolved "
+                "(pass -p <port> or set config.port)."
+            )
+            return False
+
+        if output_dir is None:
+            timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+            output_dir = f"fault-inject-latency-{fault_form}-{timestamp}"
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        def _corrupt_crc8(frame: bytes) -> bytes:
+            return frame[:-2] + bytes([frame[-2] ^ 0x01]) + b"\x00"
+
+        def _drop_delimiter(frame: bytes) -> bytes:
+            return frame[:-1]
+
+        hook = {"corrupt-crc8": _corrupt_crc8, "drop-delimiter": _drop_delimiter}.get(
+            fault_form, _corrupt_crc8
+        )
+
+        fw_cmd = {"state": COMMAND_FW_VERSION}
+        comm = None
+        baseline_ok = False
+        corrupted_surfaced_error = False
+        recovery_ok = False
+        nak_latency_s: Optional[float] = None
+        detail = ""
+        try:
+            comm = SerialCommunicator(port=port)
+            comm.consume_remaining_input()
+
+            # 1. Baseline clean command on the open connection.
+            comm.send_json_command(fw_cmd)
+            baseline_ok, _ = comm.expect_ack()
+            comm.consume_remaining_input()
+            if not baseline_ok:
+                detail = "baseline clean command did not ack OK; aborting measurement"
+            else:
+                # 2. One corrupted command frame, timed to the firmware error response.
+                comm._fault_inject_outgoing = hook  # type: ignore[attr-defined]
+                _t0 = time.monotonic()
+                comm.send_json_command(fw_cmd)
+                try:
+                    corrupt_is_ok, corrupt_msg = comm.expect_ack()
+                except SerialTimeoutError as e:
+                    corrupt_is_ok, corrupt_msg = False, f"host read timeout: {e}"
+                nak_latency_s = time.monotonic() - _t0
+                comm._fault_inject_outgoing = None  # type: ignore[attr-defined]
+                comm.consume_remaining_input()
+                corrupted_surfaced_error = not corrupt_is_ok
+                detail = (
+                    f"corrupted frame response: ok={corrupt_is_ok} msg={corrupt_msg}"
+                )
+
+                # 3. Recovery: clean command on the SAME open connection.
+                comm.send_json_command(fw_cmd)
+                try:
+                    recovery_ok, _ = comm.expect_ack()
+                except SerialTimeoutError:
+                    recovery_ok = False
+                comm.consume_remaining_input()
+        except (SerialError, SerialTimeoutError) as e:
+            detail = f"{type(e).__name__}: {e}"
+            logger.error(f"measure_command_nak_latency: {detail}")
+        finally:
+            if comm is not None:
+                comm.disconnect()
+
+        verdict = baseline_ok and corrupted_surfaced_error and recovery_ok
+        self._write_nak_latency_log(
+            output_path,
+            fault_form,
+            port,
+            baseline_ok,
+            corrupted_surfaced_error,
+            recovery_ok,
+            nak_latency_s,
+            detail,
+        )
+        if not verdict:
+            logger.error(
+                "measure_command_nak_latency: verdict FAIL "
+                f"(baseline_ok={baseline_ok}, corrupted_surfaced_error="
+                f"{corrupted_surfaced_error}, recovery_ok={recovery_ok})"
+            )
+        return verdict
+
+    @staticmethod
+    def _write_nak_latency_log(
+        output_path: Path,
+        fault_form: str,
+        port: str,
+        baseline_ok: bool,
+        corrupted_surfaced_error: bool,
+        recovery_ok: bool,
+        nak_latency_s: Optional[float],
+        detail: str,
+    ) -> None:
+        """Write the per-frame NAK latency log (53-04 harness refinement)."""
+        log_path = output_path / f"fault-inject-{fault_form}-latency.txt"
+        latency_str = (
+            f"{nak_latency_s:.3f}s" if nak_latency_s is not None else "unmeasured"
+        )
+        # Sub-second is the XACT-02 fast-fail bar for a complete corrupt frame; a
+        # drop-delimiter frame is bounded by the firmware inter-byte deadline (~1 s).
+        if nak_latency_s is None:
+            verdict = "UNKNOWN"
+        elif nak_latency_s < 1.0:
+            verdict = "SUB-SECOND (fast-fail)"
+        elif nak_latency_s < 2.0:
+            verdict = "SUB-2s (bounded; ~inter-byte deadline)"
+        else:
+            verdict = ">=2s (cascade — investigate)"
+        try:
+            with open(log_path, "w") as fh:
+                fh.write(
+                    "# XACT-02 per-frame NAK latency (established single-port connection)\n"
+                    f"# port: {port}  fault_form: {fault_form}\n"
+                    f"baseline_clean_command_ok: {baseline_ok}\n"
+                    f"corrupted_frame_surfaced_error_no_silent_accept: {corrupted_surfaced_error}\n"
+                    f"per_frame_nak_latency: {latency_str}\n"
+                    f"latency_verdict: {verdict}\n"
+                    f"recovery_clean_command_same_connection_ok: {recovery_ok}\n"
+                    f"detail: {detail}\n"
+                )
+        except IOError as e:  # noqa: UP024
+            logger.error(f"measure_command_nak_latency: could not write log: {e}")
 
     def dev_read_eprom(
         self,

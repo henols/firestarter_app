@@ -1186,6 +1186,13 @@ def dev_write_cycle(
     help="Fault form: corrupt-crc8 (flip CRC8 byte) or drop-delimiter (drop 0x00).",
 )
 @click.option(
+    "--mode",
+    type=click.Choice(["cycle", "latency"]),
+    default="cycle",
+    help="cycle = read-cycle resync demo (default); latency = per-frame firmware NAK "
+    "latency on an established single-port connection (53-04 refinement; no chip needed).",
+)
+@click.option(
     "--output-dir",
     "output_dir",
     type=str,
@@ -1199,13 +1206,25 @@ def dev_fault_inject(
     eprom: str,
     direction: str,
     fault_form: str,
+    mode: str,
     output_dir: Optional[str],
 ) -> None:
     """Demonstrate COBS resync: inject a corrupted frame and assert recovery on the next.
 
-    Performs one corrupted transfer then asserts the same connection recovers
-    on a clean follow-on transfer (XACT-02 / Phase 53 Plan 02).
+    cycle mode: one corrupted transfer then asserts the same connection recovers on a
+    clean follow-on transfer (XACT-02 / Phase 53 Plan 02).
+
+    latency mode: opens ONE pinned port and times the firmware's per-frame NAK on a
+    corrupt CMD_FW_VERSION frame (established connection — avoids the multi-port
+    connect-retry that inflates cycle-mode's outgoing latency). Use with -p <port>.
     """
+    if mode == "latency":
+        ok = app.eprom_operator.measure_command_nak_latency(
+            fault_form=fault_form,
+            output_dir=output_dir,
+        )
+        sys.exit(0 if ok else 1)
+
     eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.fault_inject_cycle(
         eprom,

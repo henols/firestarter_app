@@ -797,3 +797,77 @@ class TestFaultInjectCycle:
         mutated = captured["hook"](sample)
         assert mutated != sample, "corrupt-crc8 hook must change the frame."
         assert mutated[-1:] == b"\x00", "corrupt-crc8 keeps the 0x00 delimiter."
+
+
+# ---------------------------------------------------------------------------
+# Phase 53-04 harness refinement: measure_command_nak_latency
+# Per-frame firmware NAK latency on an established single-port connection.
+# ---------------------------------------------------------------------------
+
+
+class _FakeNakComm:
+    """SerialCommunicator stand-in for measure_command_nak_latency tests.
+
+    Scripts expect_ack: baseline OK, corrupted ERROR, recovery OK. Records the
+    armed-hook state at each send so the test can assert the hook is set ONLY for
+    the corrupted (2nd) send.
+    """
+
+    def __init__(self, *a, **kw) -> None:
+        self._fault_inject_outgoing = None
+        self.sends: list = []
+        self._ack_seq = [(True, "Ready"), (False, "Empty input"), (True, "Ready")]
+        self._ack_i = 0
+        self.disconnected = False
+
+    def consume_remaining_input(self, *a, **kw) -> None:
+        pass
+
+    def send_json_command(self, cmd) -> int:
+        self.sends.append(self._fault_inject_outgoing is not None)
+        return 1
+
+    def expect_ack(self, *a, **kw):
+        r = self._ack_seq[self._ack_i]
+        self._ack_i += 1
+        return r
+
+    def disconnect(self) -> None:
+        self.disconnected = True
+
+
+class TestMeasureCommandNakLatency:
+    def test_pass_arms_hook_only_for_corrupt_send(self, tmp_path, monkeypatch):
+        fake = _FakeNakComm()
+        monkeypatch.setattr(
+            "firestarter.eprom_operations.SerialCommunicator",
+            lambda *a, **kw: fake,
+        )
+        op = EpromOperator(ConfigManager())
+        out = tmp_path / "nak"
+        result = op.measure_command_nak_latency(
+            fault_form="corrupt-crc8",
+            output_dir=str(out),
+            port="/dev/fake0",
+        )
+        assert result is True, "baseline OK + corrupt ERROR + recovery OK -> True"
+        # 3 sends: baseline, corrupt, recovery
+        assert fake.sends == [False, True, False], (
+            "hook must be armed ONLY for the corrupted (2nd) send, cleared after"
+        )
+        assert fake.disconnected is True
+        log = (out / "fault-inject-corrupt-crc8-latency.txt").read_text()
+        assert "corrupted_frame_surfaced_error_no_silent_accept: True" in log
+        assert "per_frame_nak_latency:" in log
+        assert "recovery_clean_command_same_connection_ok: True" in log
+
+    def test_no_port_returns_false(self, tmp_path, monkeypatch):
+        # Empty config -> no port resolvable -> graceful False (no connection attempt).
+        monkeypatch.setattr(ConfigManager, "get_value", lambda self, *a, **kw: None)
+        op = EpromOperator(ConfigManager())
+        result = op.measure_command_nak_latency(
+            fault_form="corrupt-crc8",
+            output_dir=str(tmp_path / "nak_noport"),
+            port=None,
+        )
+        assert result is False
