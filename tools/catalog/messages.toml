@@ -35,7 +35,7 @@ id          = 0x01
 name        = "MSG_OK_READY"
 severity    = "OK"
 format      = "Ready"
-params      = []
+params      = [{ type = "bytes" }]
 wire_format = "id_frame"
 
 [[messages]]
@@ -919,7 +919,6 @@ format = "Check chip ID (28C)"
 params = []
 
 # ---------------------------------------------------------------------------
-# Verbose-build per-command diagnostics (replaces the EXTRA_INFO_LOGGING
 # INFO emits in firestarter.cpp init_programmer + parse_json). Each is
 # wrapped at the macro level by the SERIAL_DEBUG-gated LOG_DEBUG_ID_SUB_*
 # family — zero wire bytes in production builds.
