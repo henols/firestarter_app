@@ -112,15 +112,16 @@ class SerialCommunicator:
         # Set only within dev fault-inject scope; cleared after the single corrupted transfer.
         # T-53-03: getattr-guarded in send_json_command; this attribute is the formal default.
         self._fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None
-        # Phase 53: the firmware advertises its DATA_BUFFER_SIZE in the FW identity
-        # string ("<ver>:<board>:<bufsize>"); _probe_port populates this so the host
-        # can size host->fw data chunks to the board's actual decode capacity
-        # (chunk + CRC8 <= bufsize-1). None until probed / for pre-advertise firmware.
+        # DEPRECATED (Phase 55 CAP-01): firmware_buffer_size was set by the Phase 53
+        # identity-string parse (3rd colon-field). That parse block is removed; capacity
+        # now comes from the MSG_OK_READY ack via firmware_max_chunk. Declaration kept
+        # so conftest.py make_comm factory mirrors __init__ without breakage.
         self.firmware_buffer_size: Optional[int] = None
-        # Phase 54 (EVEN-01): firmware advertises effective MAIN-path decode capacity in
-        # field 4 ("<ver>:<board>:<buf>:<maxchunk>"). Host uses this value directly as
-        # the write/verify chunk size — no arithmetic. None until probed (D-05: no
-        # fallback to buf-2; old firmware raises FirmwareOutdatedError in _calculate_buffer_size).
+        # CAP-01 (Phase 55): firmware advertises effective MAIN-path decode capacity
+        # via the MSG_OK_READY operation-setup ack (2-byte big-endian u16 param).
+        # Populated by _decode_id_frame override; None until the first MSG_OK_READY
+        # with a 2-byte param is decoded. _calculate_buffer_size returns 512 (safe
+        # Uno floor) when None (Phase 54 D-05 reversed; no FirmwareOutdatedError).
         self.firmware_max_chunk: Optional[int] = None
 
         try:
@@ -643,21 +644,10 @@ class SerialCommunicator:
                             SerialCommunicator._validate_firmware_version(
                                 current_version, allow_pre_v12=allow_pre_v12
                             )
-                            # Phase 53: capture the firmware-advertised DATA_BUFFER_SIZE
-                            # (3rd ':' field of "<ver>:<board>:<bufsize>") so the host can
-                            # size host->fw data chunks to the board's decode capacity
-                            # (chunk + CRC8 <= bufsize-1). Absent on pre-advertise firmware
-                            # -> stays None -> host falls back to the safe default.
-                            fw_payload = fw_msg.split("FW:", 1)[-1].strip()
-                            fw_fields = fw_payload.split(":")
-                            if len(fw_fields) >= 3 and fw_fields[2].strip().isdigit():
-                                communicator.firmware_buffer_size = int(
-                                    fw_fields[2].strip()
-                                )
-                            if len(fw_fields) >= 4 and fw_fields[3].strip().isdigit():
-                                communicator.firmware_max_chunk = int(
-                                    fw_fields[3].strip()
-                                )
+                            # CAP-01 (Phase 55): buffer-size advertisement moved from the
+                            # FW identity string to the MSG_OK_READY operation-setup ack.
+                            # The identity string is now "<ver>:<board>" only.
+                            # firmware_max_chunk is populated by _decode_id_frame override.
                         else:
                             raise FirmwareOutdatedError(
                                 "Could not parse firmware version from programmer response. "  # noqa: E501

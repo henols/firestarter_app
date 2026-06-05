@@ -206,19 +206,19 @@ class TestHostChunkFitsFirmwareDecodeCap:
             f"decode cap {self.FW_DECODE_CAP}"
         )
 
-    def test_calculate_buffer_size_raises_without_max_chunk(self) -> None:
-        """Phase 54 (D-05): _calculate_buffer_size() raises FirmwareOutdatedError
-        when firmware_max_chunk is absent — no graceful buf-2 fallback."""
-        import pytest
-
+    def test_calculate_buffer_size_safe_default_without_max_chunk(self) -> None:
+        """CAP-01 (Phase 55): _calculate_buffer_size() returns 512 (safe Uno floor)
+        when firmware_max_chunk is absent — Phase 54 D-05 reversed, no FirmwareOutdatedError."""
         from firestarter.config import ConfigManager
         from firestarter.eprom_operations import EpromOperator
-        from firestarter.exceptions import FirmwareOutdatedError
 
         op = EpromOperator(ConfigManager())
-        # No comm set -> firmware_max_chunk absent -> must raise (D-05)
-        with pytest.raises(FirmwareOutdatedError):
-            op._calculate_buffer_size()
+        # No comm set -> firmware_max_chunk absent -> must return 512 (CAP-01 safe default)
+        result = op._calculate_buffer_size()
+        assert result == 512, (
+            f"Expected 512 (Uno-floor safe default), got {result}. "
+            "CAP-01: absent firmware_max_chunk must NOT raise FirmwareOutdatedError."
+        )
 
     def test_max_chunk_decode_leg_round_trips(self) -> None:
         """The decode leg the old suite skipped: a full MAX_DATA_CHUNK + CRC8 frame
@@ -259,19 +259,16 @@ class TestPerBoardBufferNegotiation:
             )
 
     def test_calculate_buffer_size_uses_advertised(self) -> None:
-        """Phase 54: _calculate_buffer_size() returns firmware_max_chunk directly.
+        """CAP-01 (Phase 55): _calculate_buffer_size() returns firmware_max_chunk directly.
 
         Leonardo advertises maxchunk=1024 -> 1024 (not 1022).
         Uno advertises maxchunk=512 -> 512 (not 510).
-        Absent/None firmware_max_chunk -> raises FirmwareOutdatedError (D-05).
+        Absent/None firmware_max_chunk -> 512 safe default (CAP-01; Phase 54 D-05 reversed).
         """
         from types import SimpleNamespace
 
-        import pytest
-
         from firestarter.config import ConfigManager
         from firestarter.eprom_operations import EpromOperator
-        from firestarter.exceptions import FirmwareOutdatedError
 
         op = EpromOperator(ConfigManager())
         # Leonardo advertises 1024 -> 1024-byte chunks (no -2).
@@ -280,7 +277,6 @@ class TestPerBoardBufferNegotiation:
         # Uno advertises 512 -> 512.
         op.comm = SimpleNamespace(firmware_max_chunk=512)  # type: ignore[assignment]
         assert op._calculate_buffer_size() == 512
-        # firmware_max_chunk=None -> raises FirmwareOutdatedError (D-05 no fallback).
+        # firmware_max_chunk=None -> 512 safe default (CAP-01; no FirmwareOutdatedError).
         op.comm = SimpleNamespace(firmware_max_chunk=None)  # type: ignore[assignment]
-        with pytest.raises(FirmwareOutdatedError):
-            op._calculate_buffer_size()
+        assert op._calculate_buffer_size() == 512

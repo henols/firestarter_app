@@ -394,56 +394,63 @@ def test_read_and_parse_lines_ringfence_unchanged() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase-54 Plan 02 Task 2: firmware_max_chunk identity-field parse tests
-# (V5 input validation: .isdigit() guard — selectable by -k max_chunk)
+# CAP-01 (Phase 55 Plan 03 Task 2): _decode_id_frame MSG_OK_READY seam tests
+#
+# SC3b: pins that _decode_id_frame sets firmware_max_chunk from the 2-byte
+# param region of MSG_OK_READY acks, and leaves it None when params are absent.
+# Replaces the Phase 54 identity-string parse tests (now removed along with the
+# fw_fields[2]/[3] block in _probe_port).
 # ---------------------------------------------------------------------------
 
 
-def test_firmware_max_chunk_parsed_from_4_field_identity_string(make_comm) -> None:
-    """Phase 54 (EVEN-01/D-04): a 4-field FW identity string sets firmware_max_chunk.
+def test_decode_id_frame_sets_firmware_max_chunk_from_2_byte_param(make_comm) -> None:
+    """CAP-01 SC3b: a MSG_OK_READY ack with 2-byte param=512 sets firmware_max_chunk=512.
 
-    The _probe_port parse block extracts the 4th ':'-separated field and stores it
-    as an int on the communicator, matching the existing fw_fields[2] pattern.
+    Body layout: [id_byte=0x01][params_bytes=\\x02\\x00][crc8]
+    _decode_id_frame must extract big-endian u16 0x0200 == 512 and store it.
     """
     comm = make_comm()
-    # Simulate the parse the same way _probe_port does it
-    fw_payload = "3.0.0b8:uno:512:512"
-    fw_fields = fw_payload.split(":")
-    if len(fw_fields) >= 4 and fw_fields[3].strip().isdigit():
-        comm.firmware_max_chunk = int(fw_fields[3].strip())
+    assert comm.firmware_max_chunk is None, "firmware_max_chunk must start None"
+
+    from firestarter.frame_parser import _crc8_ccitt
+    from firestarter.messages import MSG_OK_READY
+
+    # Build a valid MSG_OK_READY body: id + 2-byte BE u16 (512 = 0x0200) + CRC8
+    params = b"\x02\x00"  # big-endian 512
+    msg_id_byte = bytes([MSG_OK_READY])
+    crc = _crc8_ccitt(msg_id_byte + params)
+    body = msg_id_byte + params + bytes([crc])
+    frame_len = len(body)
+
+    result = comm._decode_id_frame(frame_len, body)
+    assert result is not None, "_decode_id_frame must return a LogMessage for a valid body"
     assert comm.firmware_max_chunk == 512, (
-        f"Expected firmware_max_chunk=512 from 4-field identity, got {comm.firmware_max_chunk}"
+        f"Expected firmware_max_chunk=512 from 2-byte param, got {comm.firmware_max_chunk}"
     )
 
 
-def test_firmware_max_chunk_stays_none_for_3_field_identity_string(make_comm) -> None:
-    """Phase 54 (V5 guard): a 3-field FW identity string leaves firmware_max_chunk None.
+def test_decode_id_frame_leaves_firmware_max_chunk_none_for_0_byte_param(
+    make_comm,
+) -> None:
+    """CAP-01 SC3b: a MSG_OK_READY ack with 0 param bytes leaves firmware_max_chunk None.
 
-    The .isdigit() guard rejects absent/non-numeric field 4, so firmware_max_chunk
-    stays None, which _calculate_buffer_size() turns into FirmwareOutdatedError (D-05).
+    Old firmware emits MSG_OK_READY with no params; the host must not assign
+    firmware_max_chunk (graceful degradation — T-55-07).
     """
     comm = make_comm()
-    # 3-field identity (old firmware before Phase 54)
-    fw_payload = "3.0.0b7:uno:512"
-    fw_fields = fw_payload.split(":")
-    if len(fw_fields) >= 4 and fw_fields[3].strip().isdigit():
-        comm.firmware_max_chunk = int(fw_fields[3].strip())
+    assert comm.firmware_max_chunk is None, "firmware_max_chunk must start None"
+
+    from firestarter.frame_parser import _crc8_ccitt
+    from firestarter.messages import MSG_OK_READY
+
+    # Build a valid MSG_OK_READY body with 0 param bytes: id + CRC8 only
+    msg_id_byte = bytes([MSG_OK_READY])
+    crc = _crc8_ccitt(msg_id_byte)
+    body = msg_id_byte + bytes([crc])
+    frame_len = len(body)
+
+    result = comm._decode_id_frame(frame_len, body)
+    assert result is not None, "_decode_id_frame must return a LogMessage for a valid body"
     assert comm.firmware_max_chunk is None, (
-        f"Expected firmware_max_chunk=None for 3-field identity, got {comm.firmware_max_chunk}"
-    )
-
-
-def test_firmware_max_chunk_stays_none_for_nonnumeric_field_4(make_comm) -> None:
-    """Phase 54 (V5 guard): a non-numeric field 4 is rejected by .isdigit() guard.
-
-    This pins the integer-only validation — a firmware that emits a non-numeric
-    4th field (e.g., malformed string) does not set firmware_max_chunk.
-    """
-    comm = make_comm()
-    fw_payload = "3.0.0b8:uno:512:INVALID"
-    fw_fields = fw_payload.split(":")
-    if len(fw_fields) >= 4 and fw_fields[3].strip().isdigit():
-        comm.firmware_max_chunk = int(fw_fields[3].strip())
-    assert comm.firmware_max_chunk is None, (
-        f"Expected firmware_max_chunk=None for non-numeric field 4, got {comm.firmware_max_chunk}"
+        f"Expected firmware_max_chunk=None for 0-byte param, got {comm.firmware_max_chunk}"
     )
