@@ -15,17 +15,17 @@ Total messages: 64
 """
 
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Tuple  # noqa: UP035
 
 # --- Severity codes (mirrors firmware) ---
-SEVERITY_OK    = 0x01
-SEVERITY_INIT  = 0x02
-SEVERITY_MAIN  = 0x03
-SEVERITY_END   = 0x04
-SEVERITY_INFO  = 0x05
-SEVERITY_WARN  = 0x06
+SEVERITY_OK = 0x01
+SEVERITY_INIT = 0x02
+SEVERITY_MAIN = 0x03
+SEVERITY_END = 0x04
+SEVERITY_INFO = 0x05
+SEVERITY_WARN = 0x06
 SEVERITY_ERROR = 0x07
-SEVERITY_DATA  = 0x08
+SEVERITY_DATA = 0x08
 
 SEVERITY_LABEL = {
     SEVERITY_OK: "OK",
@@ -45,258 +45,1202 @@ class MessageDef:
     name: str
     severity: int
     format: str
-    params: Tuple[Tuple[str, str], ...]
+    params: Tuple[Tuple[str, str], ...]  # noqa: UP006
     param_bytes: int
     wire_format: str
 
 
 # --- ID constants (sorted ascending) ---
-MSG_NONE                      = 0x00
-MSG_OK_READY                  = 0x01
-MSG_OK_REQ_DATA               = 0x02
-MSG_OK_FW_VERSION             = 0x03
-MSG_OK_REV                    = 0x04
-MSG_OK_CFG                    = 0x05
-MSG_INIT_DONE                 = 0x10
-MSG_MAIN_DONE                 = 0x20
-MSG_END_DONE                  = 0x30
-MSG_INFO_MAIN_START           = 0x40
-MSG_INFO_MAIN_DONE            = 0x41
-MSG_INFO_INIT_START           = 0x42
-MSG_INFO_END_START            = 0x43
-MSG_INFO_RETRIES              = 0x51
-MSG_INFO_REG_HEADER           = 0x52
-MSG_INFO_BIT_HEADER           = 0x53
-MSG_INFO_BIT_STR              = 0x54
-MSG_INFO_CE_OE                = 0x55
-MSG_INFO_ADDR                 = 0x56
-MSG_INFO_ADDR_REMAP           = 0x57
-MSG_INFO_SKIPPING_ERASE       = 0x58
-MSG_INFO_SKIPPING_ERASE_MEM   = 0x59
-MSG_INFO_FW                   = 0x5A
-MSG_INFO_HW                   = 0x5B
-MSG_INFO_PHYSICAL_HW          = 0x5C
-MSG_INFO_CMD                  = 0x5D
+MSG_NONE = 0x00
+MSG_OK_READY = 0x01
+MSG_OK_REQ_DATA = 0x02
+MSG_OK_FW_VERSION = 0x03
+MSG_OK_REV = 0x04
+MSG_OK_CFG = 0x05
+MSG_INIT_DONE = 0x10
+MSG_MAIN_DONE = 0x20
+MSG_END_DONE = 0x30
+MSG_INFO_MAIN_START = 0x40
+MSG_INFO_MAIN_DONE = 0x41
+MSG_INFO_INIT_START = 0x42
+MSG_INFO_END_START = 0x43
+MSG_INFO_RETRIES = 0x51
+MSG_INFO_REG_HEADER = 0x52
+MSG_INFO_BIT_HEADER = 0x53
+MSG_INFO_BIT_STR = 0x54
+MSG_INFO_CE_OE = 0x55
+MSG_INFO_ADDR = 0x56
+MSG_INFO_ADDR_REMAP = 0x57
+MSG_INFO_SKIPPING_ERASE = 0x58
+MSG_INFO_SKIPPING_ERASE_MEM = 0x59
+MSG_INFO_FW = 0x5A
+MSG_INFO_HW = 0x5B
+MSG_INFO_PHYSICAL_HW = 0x5C
+MSG_INFO_CMD = 0x5D
 MSG_WARN_REV0_VPP_UNSUPPORTED = 0x80
-MSG_WARN_VPP_LOW              = 0x81
-MSG_WARN_VPP_HIGH             = 0x82
-MSG_WARN_CHIP_ID_MISMATCH     = 0x83
-MSG_WARN_MEM_SIZE_TOO_SMALL   = 0x84
-MSG_ERR_BAD_JSON              = 0xA0
-MSG_ERR_NO_CMD                = 0xA1
-MSG_ERR_SETUP                 = 0xA2
-MSG_ERR_PARSE_CFG             = 0xA3
-MSG_ERR_EMPTY_INPUT           = 0xA4
-MSG_ERR_NOT_SUPPORTED         = 0xA5
-MSG_ERR_NO_CHIP_ID            = 0xA6
-MSG_ERR_OUT_OF_RANGE          = 0xA7
-MSG_ERR_TIMEOUT               = 0xA8
-MSG_ERR_DATA_ERR_N            = 0xA9
-MSG_ERR_CMD_TIMEOUT           = 0xAA
-MSG_ERR_UNKNOWN_CMD           = 0xAB
-MSG_ERR_REV0_VPP_RD           = 0xAC
-MSG_ERR_CMD                   = 0xAD
-MSG_ERR_MEM_TYPE_UNSUPPORTED  = 0xAE
-MSG_ERR_VERIFY                = 0xAF
-MSG_ERR_NOT_BLANK             = 0xB0
-MSG_ERR_WRITE_FAILED          = 0xB1
-MSG_ERR_EEPROM_TIMEOUT        = 0xB2
-MSG_ERR_FL4_VERIFY_TIMEOUT    = 0xB3
-MSG_ERR_INTEL_VPP             = 0xB4
-MSG_ERR_INTEL_PROGRAM         = 0xB5
-MSG_ERR_INTEL_SR_TIMEOUT      = 0xB6
-MSG_ERR_OP_TIMEOUT            = 0xB7
-MSG_ERR_VPP_HIGH              = 0xB8
-MSG_ERR_CHIP_ID_MISMATCH      = 0xB9
-MSG_ERR_MEM_SIZE_TOO_SMALL    = 0xBA
-MSG_DATA_PROGRESS             = 0xE0
-MSG_DATA_SENDING              = 0xE2
-MSG_DATA_VPP_VOLTAGE          = 0xE4
-MSG_DATA_VPE_VOLTAGE          = 0xE5
-MSG_DATA_CHUNK                = 0xE6
-MSG_DEBUG                     = 0xF0
+MSG_WARN_VPP_LOW = 0x81
+MSG_WARN_VPP_HIGH = 0x82
+MSG_WARN_CHIP_ID_MISMATCH = 0x83
+MSG_WARN_MEM_SIZE_TOO_SMALL = 0x84
+MSG_ERR_BAD_JSON = 0xA0
+MSG_ERR_NO_CMD = 0xA1
+MSG_ERR_SETUP = 0xA2
+MSG_ERR_PARSE_CFG = 0xA3
+MSG_ERR_EMPTY_INPUT = 0xA4
+MSG_ERR_NOT_SUPPORTED = 0xA5
+MSG_ERR_NO_CHIP_ID = 0xA6
+MSG_ERR_OUT_OF_RANGE = 0xA7
+MSG_ERR_TIMEOUT = 0xA8
+MSG_ERR_DATA_ERR_N = 0xA9
+MSG_ERR_CMD_TIMEOUT = 0xAA
+MSG_ERR_UNKNOWN_CMD = 0xAB
+MSG_ERR_REV0_VPP_RD = 0xAC
+MSG_ERR_CMD = 0xAD
+MSG_ERR_MEM_TYPE_UNSUPPORTED = 0xAE
+MSG_ERR_VERIFY = 0xAF
+MSG_ERR_NOT_BLANK = 0xB0
+MSG_ERR_WRITE_FAILED = 0xB1
+MSG_ERR_EEPROM_TIMEOUT = 0xB2
+MSG_ERR_FL4_VERIFY_TIMEOUT = 0xB3
+MSG_ERR_INTEL_VPP = 0xB4
+MSG_ERR_INTEL_PROGRAM = 0xB5
+MSG_ERR_INTEL_SR_TIMEOUT = 0xB6
+MSG_ERR_OP_TIMEOUT = 0xB7
+MSG_ERR_VPP_HIGH = 0xB8
+MSG_ERR_CHIP_ID_MISMATCH = 0xB9
+MSG_ERR_MEM_SIZE_TOO_SMALL = 0xBA
+MSG_DATA_PROGRESS = 0xE0
+MSG_DATA_SENDING = 0xE2
+MSG_DATA_VPP_VOLTAGE = 0xE4
+MSG_DATA_VPE_VOLTAGE = 0xE5
+MSG_DATA_CHUNK = 0xE6
+MSG_DEBUG = 0xF0
 
 
 # --- Catalog lookup ---
 CATALOG: dict[int, MessageDef] = {
-    0x00: MessageDef(id=0x00, name="MSG_NONE", severity=SEVERITY_OK, format="(reserved sentinel)", params=(), param_bytes=0, wire_format="id_frame"),
-    0x01: MessageDef(id=0x01, name="MSG_OK_READY", severity=SEVERITY_OK, format="Ready", params=(("bytes", "hex"),), param_bytes=-1, wire_format="id_frame"),
-    0x02: MessageDef(id=0x02, name="MSG_OK_REQ_DATA", severity=SEVERITY_OK, format="Request data", params=(), param_bytes=0, wire_format="id_frame"),
-    0x03: MessageDef(id=0x03, name="MSG_OK_FW_VERSION", severity=SEVERITY_OK, format="FW: {0}", params=(), param_bytes=0, wire_format="text"),
-    0x04: MessageDef(id=0x04, name="MSG_OK_REV", severity=SEVERITY_OK, format="Rev%u (eff: %u)", params=(("u8", "dec"), ("u8", "dec")), param_bytes=2, wire_format="id_frame"),
-    0x05: MessageDef(id=0x05, name="MSG_OK_CFG", severity=SEVERITY_OK, format="R1: %lu, R2: %lu, Cfg: %u", params=(("u32", "hex"), ("u32", "hex"), ("u8", "dec")), param_bytes=9, wire_format="id_frame"),
-    0x10: MessageDef(id=0x10, name="MSG_INIT_DONE", severity=SEVERITY_INIT, format="(init done)", params=(), param_bytes=0, wire_format="id_frame"),
-    0x20: MessageDef(id=0x20, name="MSG_MAIN_DONE", severity=SEVERITY_MAIN, format="(main done)", params=(), param_bytes=0, wire_format="id_frame"),
-    0x30: MessageDef(id=0x30, name="MSG_END_DONE", severity=SEVERITY_END, format="(end done)", params=(), param_bytes=0, wire_format="id_frame"),
-    0x40: MessageDef(id=0x40, name="MSG_INFO_MAIN_START", severity=SEVERITY_INFO, format="Main start", params=(), param_bytes=0, wire_format="id_frame"),
-    0x41: MessageDef(id=0x41, name="MSG_INFO_MAIN_DONE", severity=SEVERITY_INFO, format="Main done", params=(), param_bytes=0, wire_format="id_frame"),
-    0x42: MessageDef(id=0x42, name="MSG_INFO_INIT_START", severity=SEVERITY_INFO, format="Init start", params=(), param_bytes=0, wire_format="id_frame"),
-    0x43: MessageDef(id=0x43, name="MSG_INFO_END_START", severity=SEVERITY_INFO, format="End start", params=(), param_bytes=0, wire_format="id_frame"),
-    0x51: MessageDef(id=0x51, name="MSG_INFO_RETRIES", severity=SEVERITY_INFO, format="Number of retries: %d", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0x52: MessageDef(id=0x52, name="MSG_INFO_REG_HEADER", severity=SEVERITY_INFO, format="%s: 0x%02X", params=(("ascii_str", "ascii_str"), ("u8", "hex_byte")), param_bytes=-1, wire_format="id_frame"),
-    0x53: MessageDef(id=0x53, name="MSG_INFO_BIT_HEADER", severity=SEVERITY_INFO, format="%s|D7|D6|D5|D4|D3|D2|D1|D0|", params=(("ascii_str", "ascii_str"),), param_bytes=-1, wire_format="id_frame"),
-    0x54: MessageDef(id=0x54, name="MSG_INFO_BIT_STR", severity=SEVERITY_INFO, format="%s", params=(("ascii_str", "ascii_str"),), param_bytes=-1, wire_format="id_frame"),
-    0x55: MessageDef(id=0x55, name="MSG_INFO_CE_OE", severity=SEVERITY_INFO, format="CE: %d, OE: %d", params=(("u8", "dec"), ("u8", "dec")), param_bytes=2, wire_format="id_frame"),
-    0x56: MessageDef(id=0x56, name="MSG_INFO_ADDR", severity=SEVERITY_INFO, format="Address: 0x%06x", params=(("u24", "hex_addr"),), param_bytes=3, wire_format="id_frame"),
-    0x57: MessageDef(id=0x57, name="MSG_INFO_ADDR_REMAP", severity=SEVERITY_INFO, format="Address: 0x%06x remapped", params=(("u24", "hex_addr"),), param_bytes=3, wire_format="id_frame"),
-    0x58: MessageDef(id=0x58, name="MSG_INFO_SKIPPING_ERASE", severity=SEVERITY_INFO, format="Skipping erase", params=(), param_bytes=0, wire_format="id_frame"),
-    0x59: MessageDef(id=0x59, name="MSG_INFO_SKIPPING_ERASE_MEM", severity=SEVERITY_INFO, format="Skipping erase of memory", params=(), param_bytes=0, wire_format="id_frame"),
-    0x5A: MessageDef(id=0x5A, name="MSG_INFO_FW", severity=SEVERITY_INFO, format="FW: %s", params=(("ascii_str", "ascii_str"),), param_bytes=-1, wire_format="id_frame"),
-    0x5B: MessageDef(id=0x5B, name="MSG_INFO_HW", severity=SEVERITY_INFO, format="HW: Rev%u", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0x5C: MessageDef(id=0x5C, name="MSG_INFO_PHYSICAL_HW", severity=SEVERITY_INFO, format="Physical HW: Rev%u", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0x5D: MessageDef(id=0x5D, name="MSG_INFO_CMD", severity=SEVERITY_INFO, format="Cmd: 0x%02x", params=(("u8", "hex_byte"),), param_bytes=1, wire_format="id_frame"),
-    0x80: MessageDef(id=0x80, name="MSG_WARN_REV0_VPP_UNSUPPORTED", severity=SEVERITY_WARN, format="Rev0 does not support reading VPP/VPE", params=(), param_bytes=0, wire_format="id_frame"),
-    0x81: MessageDef(id=0x81, name="MSG_WARN_VPP_LOW", severity=SEVERITY_WARN, format="VPP is low: %u.%uV < %u.%uV", params=(("u16", "dec"), ("u16", "dec"), ("u16", "dec"), ("u16", "dec")), param_bytes=8, wire_format="id_frame"),
-    0x82: MessageDef(id=0x82, name="MSG_WARN_VPP_HIGH", severity=SEVERITY_WARN, format="VPP is high: %u.%uV > %u.%uV", params=(("u16", "dec"), ("u16", "dec"), ("u16", "dec"), ("u16", "dec")), param_bytes=8, wire_format="id_frame"),
-    0x83: MessageDef(id=0x83, name="MSG_WARN_CHIP_ID_MISMATCH", severity=SEVERITY_WARN, format="Chip ID %#04x does not match expected ID %#04x", params=(("u16", "dec"), ("u16", "dec")), param_bytes=4, wire_format="id_frame"),
-    0x84: MessageDef(id=0x84, name="MSG_WARN_MEM_SIZE_TOO_SMALL", severity=SEVERITY_WARN, format="Memory size %lu too small for chip-id check", params=(("u32", "dec"),), param_bytes=4, wire_format="id_frame"),
-    0xA0: MessageDef(id=0xA0, name="MSG_ERR_BAD_JSON", severity=SEVERITY_ERROR, format="Bad JSON", params=(), param_bytes=0, wire_format="id_frame"),
-    0xA1: MessageDef(id=0xA1, name="MSG_ERR_NO_CMD", severity=SEVERITY_ERROR, format="No command", params=(), param_bytes=0, wire_format="id_frame"),
-    0xA2: MessageDef(id=0xA2, name="MSG_ERR_SETUP", severity=SEVERITY_ERROR, format="Setup error", params=(), param_bytes=0, wire_format="id_frame"),
-    0xA3: MessageDef(id=0xA3, name="MSG_ERR_PARSE_CFG", severity=SEVERITY_ERROR, format="Failed parsing config", params=(), param_bytes=0, wire_format="id_frame"),
-    0xA4: MessageDef(id=0xA4, name="MSG_ERR_EMPTY_INPUT", severity=SEVERITY_ERROR, format="Empty input", params=(), param_bytes=0, wire_format="id_frame"),
-    0xA5: MessageDef(id=0xA5, name="MSG_ERR_NOT_SUPPORTED", severity=SEVERITY_ERROR, format="Not supported", params=(), param_bytes=0, wire_format="id_frame"),
-    0xA6: MessageDef(id=0xA6, name="MSG_ERR_NO_CHIP_ID", severity=SEVERITY_ERROR, format="No chip ID", params=(), param_bytes=0, wire_format="id_frame"),
-    0xA7: MessageDef(id=0xA7, name="MSG_ERR_OUT_OF_RANGE", severity=SEVERITY_ERROR, format="Out of range", params=(), param_bytes=0, wire_format="id_frame"),
-    0xA8: MessageDef(id=0xA8, name="MSG_ERR_TIMEOUT", severity=SEVERITY_ERROR, format="Timeout", params=(), param_bytes=0, wire_format="id_frame"),
-    0xA9: MessageDef(id=0xA9, name="MSG_ERR_DATA_ERR_N", severity=SEVERITY_ERROR, format="Data error: %d", params=(("i16", "signed_dec"),), param_bytes=2, wire_format="id_frame"),
-    0xAA: MessageDef(id=0xAA, name="MSG_ERR_CMD_TIMEOUT", severity=SEVERITY_ERROR, format="Command %d timed out", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0xAB: MessageDef(id=0xAB, name="MSG_ERR_UNKNOWN_CMD", severity=SEVERITY_ERROR, format="Unknown command: %d", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0xAC: MessageDef(id=0xAC, name="MSG_ERR_REV0_VPP_RD", severity=SEVERITY_ERROR, format="Rev0 does not support reading VPP/VPE", params=(), param_bytes=0, wire_format="id_frame"),
-    0xAD: MessageDef(id=0xAD, name="MSG_ERR_CMD", severity=SEVERITY_ERROR, format="Command error", params=(), param_bytes=0, wire_format="id_frame"),
-    0xAE: MessageDef(id=0xAE, name="MSG_ERR_MEM_TYPE_UNSUPPORTED", severity=SEVERITY_ERROR, format="Memory type 0x%02x not supported", params=(("u8", "hex_byte"),), param_bytes=1, wire_format="id_frame"),
-    0xAF: MessageDef(id=0xAF, name="MSG_ERR_VERIFY", severity=SEVERITY_ERROR, format="0x%02x != 0x%02x at 0x%06x", params=(("u8", "hex_byte"), ("u8", "hex_byte"), ("u24", "hex_addr")), param_bytes=5, wire_format="id_frame"),
-    0xB0: MessageDef(id=0xB0, name="MSG_ERR_NOT_BLANK", severity=SEVERITY_ERROR, format="Not blank, at 0x%06x, v: 0x%02x", params=(("u24", "hex_addr"), ("u8", "hex_byte")), param_bytes=4, wire_format="id_frame"),
-    0xB1: MessageDef(id=0xB1, name="MSG_ERR_WRITE_FAILED", severity=SEVERITY_ERROR, format="Failed to write memory, 0x%06x, retries: %d, bad bytes: %d", params=(("u24", "hex_addr"), ("u8", "dec"), ("u16", "dec")), param_bytes=6, wire_format="id_frame"),
-    0xB2: MessageDef(id=0xB2, name="MSG_ERR_EEPROM_TIMEOUT", severity=SEVERITY_ERROR, format="EEPROM timeout at 0x%06lx: wrote 0x%02x got 0x%02x", params=(("u24", "hex_addr"), ("u8", "hex_byte"), ("u8", "hex_byte")), param_bytes=5, wire_format="id_frame"),
-    0xB3: MessageDef(id=0xB3, name="MSG_ERR_FL4_VERIFY_TIMEOUT", severity=SEVERITY_ERROR, format="Timeout verifying 0x%02x at 0x%06lx (got 0x%02x)", params=(("u8", "hex_byte"), ("u24", "hex_addr"), ("u8", "hex_byte")), param_bytes=5, wire_format="id_frame"),
-    0xB4: MessageDef(id=0xB4, name="MSG_ERR_INTEL_VPP", severity=SEVERITY_ERROR, format="Intel flash: VPP error", params=(), param_bytes=0, wire_format="id_frame"),
-    0xB5: MessageDef(id=0xB5, name="MSG_ERR_INTEL_PROGRAM", severity=SEVERITY_ERROR, format="Intel flash: program error", params=(), param_bytes=0, wire_format="id_frame"),
-    0xB6: MessageDef(id=0xB6, name="MSG_ERR_INTEL_SR_TIMEOUT", severity=SEVERITY_ERROR, format="Intel flash: SR timeout", params=(), param_bytes=0, wire_format="id_frame"),
-    0xB7: MessageDef(id=0xB7, name="MSG_ERR_OP_TIMEOUT", severity=SEVERITY_ERROR, format="Operation timed out", params=(), param_bytes=0, wire_format="id_frame"),
-    0xB8: MessageDef(id=0xB8, name="MSG_ERR_VPP_HIGH", severity=SEVERITY_ERROR, format="VPP is high: %u.%uV > %u.%uV", params=(("u16", "dec"), ("u16", "dec"), ("u16", "dec"), ("u16", "dec")), param_bytes=8, wire_format="id_frame"),
-    0xB9: MessageDef(id=0xB9, name="MSG_ERR_CHIP_ID_MISMATCH", severity=SEVERITY_ERROR, format="Chip ID %#04x does not match expected ID %#04x", params=(("u16", "dec"), ("u16", "dec")), param_bytes=4, wire_format="id_frame"),
-    0xBA: MessageDef(id=0xBA, name="MSG_ERR_MEM_SIZE_TOO_SMALL", severity=SEVERITY_ERROR, format="Memory size %lu too small for chip-id check", params=(("u32", "dec"),), param_bytes=4, wire_format="id_frame"),
-    0xE0: MessageDef(id=0xE0, name="MSG_DATA_PROGRESS", severity=SEVERITY_DATA, format="%lu/%lu", params=(("u32", "dec"), ("u32", "dec")), param_bytes=8, wire_format="id_frame"),
-    0xE2: MessageDef(id=0xE2, name="MSG_DATA_SENDING", severity=SEVERITY_DATA, format="Sending data", params=(), param_bytes=0, wire_format="id_frame"),
-    0xE4: MessageDef(id=0xE4, name="MSG_DATA_VPP_VOLTAGE", severity=SEVERITY_DATA, format="VPP: %u.%uV, Internal VCC: %u.%uV", params=(("u16", "dec"), ("u16", "dec"), ("u16", "dec"), ("u16", "dec")), param_bytes=8, wire_format="id_frame"),
-    0xE5: MessageDef(id=0xE5, name="MSG_DATA_VPE_VOLTAGE", severity=SEVERITY_DATA, format="VPE: %u.%uV, Internal VCC: %u.%uV", params=(("u16", "dec"), ("u16", "dec"), ("u16", "dec"), ("u16", "dec")), param_bytes=8, wire_format="id_frame"),
-    0xE6: MessageDef(id=0xE6, name="MSG_DATA_CHUNK", severity=SEVERITY_DATA, format="<data chunk>", params=(("bytes", "hex"),), param_bytes=-1, wire_format="id_frame"),
-    0xF0: MessageDef(id=0xF0, name="MSG_DEBUG", severity=SEVERITY_DATA, format="[debug:%u]", params=(("u8", "dec"), ("bytes", "hex")), param_bytes=-1, wire_format="id_frame"),
+    0x00: MessageDef(
+        id=0x00,
+        name="MSG_NONE",
+        severity=SEVERITY_OK,
+        format="(reserved sentinel)",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x01: MessageDef(
+        id=0x01,
+        name="MSG_OK_READY",
+        severity=SEVERITY_OK,
+        format="Ready",
+        params=(("bytes", "hex"),),
+        param_bytes=-1,
+        wire_format="id_frame",
+    ),
+    0x02: MessageDef(
+        id=0x02,
+        name="MSG_OK_REQ_DATA",
+        severity=SEVERITY_OK,
+        format="Request data",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x03: MessageDef(
+        id=0x03,
+        name="MSG_OK_FW_VERSION",
+        severity=SEVERITY_OK,
+        format="FW: {0}",
+        params=(),
+        param_bytes=0,
+        wire_format="text",
+    ),
+    0x04: MessageDef(
+        id=0x04,
+        name="MSG_OK_REV",
+        severity=SEVERITY_OK,
+        format="Rev%u (eff: %u)",
+        params=(("u8", "dec"), ("u8", "dec")),
+        param_bytes=2,
+        wire_format="id_frame",
+    ),
+    0x05: MessageDef(
+        id=0x05,
+        name="MSG_OK_CFG",
+        severity=SEVERITY_OK,
+        format="R1: %lu, R2: %lu, Cfg: %u",
+        params=(("u32", "hex"), ("u32", "hex"), ("u8", "dec")),
+        param_bytes=9,
+        wire_format="id_frame",
+    ),
+    0x10: MessageDef(
+        id=0x10,
+        name="MSG_INIT_DONE",
+        severity=SEVERITY_INIT,
+        format="(init done)",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x20: MessageDef(
+        id=0x20,
+        name="MSG_MAIN_DONE",
+        severity=SEVERITY_MAIN,
+        format="(main done)",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x30: MessageDef(
+        id=0x30,
+        name="MSG_END_DONE",
+        severity=SEVERITY_END,
+        format="(end done)",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x40: MessageDef(
+        id=0x40,
+        name="MSG_INFO_MAIN_START",
+        severity=SEVERITY_INFO,
+        format="Main start",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x41: MessageDef(
+        id=0x41,
+        name="MSG_INFO_MAIN_DONE",
+        severity=SEVERITY_INFO,
+        format="Main done",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x42: MessageDef(
+        id=0x42,
+        name="MSG_INFO_INIT_START",
+        severity=SEVERITY_INFO,
+        format="Init start",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x43: MessageDef(
+        id=0x43,
+        name="MSG_INFO_END_START",
+        severity=SEVERITY_INFO,
+        format="End start",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x51: MessageDef(
+        id=0x51,
+        name="MSG_INFO_RETRIES",
+        severity=SEVERITY_INFO,
+        format="Number of retries: %d",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x52: MessageDef(
+        id=0x52,
+        name="MSG_INFO_REG_HEADER",
+        severity=SEVERITY_INFO,
+        format="%s: 0x%02X",
+        params=(("ascii_str", "ascii_str"), ("u8", "hex_byte")),
+        param_bytes=-1,
+        wire_format="id_frame",
+    ),
+    0x53: MessageDef(
+        id=0x53,
+        name="MSG_INFO_BIT_HEADER",
+        severity=SEVERITY_INFO,
+        format="%s|D7|D6|D5|D4|D3|D2|D1|D0|",
+        params=(("ascii_str", "ascii_str"),),
+        param_bytes=-1,
+        wire_format="id_frame",
+    ),
+    0x54: MessageDef(
+        id=0x54,
+        name="MSG_INFO_BIT_STR",
+        severity=SEVERITY_INFO,
+        format="%s",
+        params=(("ascii_str", "ascii_str"),),
+        param_bytes=-1,
+        wire_format="id_frame",
+    ),
+    0x55: MessageDef(
+        id=0x55,
+        name="MSG_INFO_CE_OE",
+        severity=SEVERITY_INFO,
+        format="CE: %d, OE: %d",
+        params=(("u8", "dec"), ("u8", "dec")),
+        param_bytes=2,
+        wire_format="id_frame",
+    ),
+    0x56: MessageDef(
+        id=0x56,
+        name="MSG_INFO_ADDR",
+        severity=SEVERITY_INFO,
+        format="Address: 0x%06x",
+        params=(("u24", "hex_addr"),),
+        param_bytes=3,
+        wire_format="id_frame",
+    ),
+    0x57: MessageDef(
+        id=0x57,
+        name="MSG_INFO_ADDR_REMAP",
+        severity=SEVERITY_INFO,
+        format="Address: 0x%06x remapped",
+        params=(("u24", "hex_addr"),),
+        param_bytes=3,
+        wire_format="id_frame",
+    ),
+    0x58: MessageDef(
+        id=0x58,
+        name="MSG_INFO_SKIPPING_ERASE",
+        severity=SEVERITY_INFO,
+        format="Skipping erase",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x59: MessageDef(
+        id=0x59,
+        name="MSG_INFO_SKIPPING_ERASE_MEM",
+        severity=SEVERITY_INFO,
+        format="Skipping erase of memory",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x5A: MessageDef(
+        id=0x5A,
+        name="MSG_INFO_FW",
+        severity=SEVERITY_INFO,
+        format="FW: %s",
+        params=(("ascii_str", "ascii_str"),),
+        param_bytes=-1,
+        wire_format="id_frame",
+    ),
+    0x5B: MessageDef(
+        id=0x5B,
+        name="MSG_INFO_HW",
+        severity=SEVERITY_INFO,
+        format="HW: Rev%u",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x5C: MessageDef(
+        id=0x5C,
+        name="MSG_INFO_PHYSICAL_HW",
+        severity=SEVERITY_INFO,
+        format="Physical HW: Rev%u",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x5D: MessageDef(
+        id=0x5D,
+        name="MSG_INFO_CMD",
+        severity=SEVERITY_INFO,
+        format="Cmd: 0x%02x",
+        params=(("u8", "hex_byte"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x80: MessageDef(
+        id=0x80,
+        name="MSG_WARN_REV0_VPP_UNSUPPORTED",
+        severity=SEVERITY_WARN,
+        format="Rev0 does not support reading VPP/VPE",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x81: MessageDef(
+        id=0x81,
+        name="MSG_WARN_VPP_LOW",
+        severity=SEVERITY_WARN,
+        format="VPP is low: %u.%uV < %u.%uV",
+        params=(("u16", "dec"), ("u16", "dec"), ("u16", "dec"), ("u16", "dec")),
+        param_bytes=8,
+        wire_format="id_frame",
+    ),
+    0x82: MessageDef(
+        id=0x82,
+        name="MSG_WARN_VPP_HIGH",
+        severity=SEVERITY_WARN,
+        format="VPP is high: %u.%uV > %u.%uV",
+        params=(("u16", "dec"), ("u16", "dec"), ("u16", "dec"), ("u16", "dec")),
+        param_bytes=8,
+        wire_format="id_frame",
+    ),
+    0x83: MessageDef(
+        id=0x83,
+        name="MSG_WARN_CHIP_ID_MISMATCH",
+        severity=SEVERITY_WARN,
+        format="Chip ID %#04x does not match expected ID %#04x",
+        params=(("u16", "dec"), ("u16", "dec")),
+        param_bytes=4,
+        wire_format="id_frame",
+    ),
+    0x84: MessageDef(
+        id=0x84,
+        name="MSG_WARN_MEM_SIZE_TOO_SMALL",
+        severity=SEVERITY_WARN,
+        format="Memory size %lu too small for chip-id check",
+        params=(("u32", "dec"),),
+        param_bytes=4,
+        wire_format="id_frame",
+    ),
+    0xA0: MessageDef(
+        id=0xA0,
+        name="MSG_ERR_BAD_JSON",
+        severity=SEVERITY_ERROR,
+        format="Bad JSON",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xA1: MessageDef(
+        id=0xA1,
+        name="MSG_ERR_NO_CMD",
+        severity=SEVERITY_ERROR,
+        format="No command",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xA2: MessageDef(
+        id=0xA2,
+        name="MSG_ERR_SETUP",
+        severity=SEVERITY_ERROR,
+        format="Setup error",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xA3: MessageDef(
+        id=0xA3,
+        name="MSG_ERR_PARSE_CFG",
+        severity=SEVERITY_ERROR,
+        format="Failed parsing config",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xA4: MessageDef(
+        id=0xA4,
+        name="MSG_ERR_EMPTY_INPUT",
+        severity=SEVERITY_ERROR,
+        format="Empty input",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xA5: MessageDef(
+        id=0xA5,
+        name="MSG_ERR_NOT_SUPPORTED",
+        severity=SEVERITY_ERROR,
+        format="Not supported",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xA6: MessageDef(
+        id=0xA6,
+        name="MSG_ERR_NO_CHIP_ID",
+        severity=SEVERITY_ERROR,
+        format="No chip ID",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xA7: MessageDef(
+        id=0xA7,
+        name="MSG_ERR_OUT_OF_RANGE",
+        severity=SEVERITY_ERROR,
+        format="Out of range",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xA8: MessageDef(
+        id=0xA8,
+        name="MSG_ERR_TIMEOUT",
+        severity=SEVERITY_ERROR,
+        format="Timeout",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xA9: MessageDef(
+        id=0xA9,
+        name="MSG_ERR_DATA_ERR_N",
+        severity=SEVERITY_ERROR,
+        format="Data error: %d",
+        params=(("i16", "signed_dec"),),
+        param_bytes=2,
+        wire_format="id_frame",
+    ),
+    0xAA: MessageDef(
+        id=0xAA,
+        name="MSG_ERR_CMD_TIMEOUT",
+        severity=SEVERITY_ERROR,
+        format="Command %d timed out",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0xAB: MessageDef(
+        id=0xAB,
+        name="MSG_ERR_UNKNOWN_CMD",
+        severity=SEVERITY_ERROR,
+        format="Unknown command: %d",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0xAC: MessageDef(
+        id=0xAC,
+        name="MSG_ERR_REV0_VPP_RD",
+        severity=SEVERITY_ERROR,
+        format="Rev0 does not support reading VPP/VPE",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xAD: MessageDef(
+        id=0xAD,
+        name="MSG_ERR_CMD",
+        severity=SEVERITY_ERROR,
+        format="Command error",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xAE: MessageDef(
+        id=0xAE,
+        name="MSG_ERR_MEM_TYPE_UNSUPPORTED",
+        severity=SEVERITY_ERROR,
+        format="Memory type 0x%02x not supported",
+        params=(("u8", "hex_byte"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0xAF: MessageDef(
+        id=0xAF,
+        name="MSG_ERR_VERIFY",
+        severity=SEVERITY_ERROR,
+        format="0x%02x != 0x%02x at 0x%06x",
+        params=(("u8", "hex_byte"), ("u8", "hex_byte"), ("u24", "hex_addr")),
+        param_bytes=5,
+        wire_format="id_frame",
+    ),
+    0xB0: MessageDef(
+        id=0xB0,
+        name="MSG_ERR_NOT_BLANK",
+        severity=SEVERITY_ERROR,
+        format="Not blank, at 0x%06x, v: 0x%02x",
+        params=(("u24", "hex_addr"), ("u8", "hex_byte")),
+        param_bytes=4,
+        wire_format="id_frame",
+    ),
+    0xB1: MessageDef(
+        id=0xB1,
+        name="MSG_ERR_WRITE_FAILED",
+        severity=SEVERITY_ERROR,
+        format="Failed to write memory, 0x%06x, retries: %d, bad bytes: %d",
+        params=(("u24", "hex_addr"), ("u8", "dec"), ("u16", "dec")),
+        param_bytes=6,
+        wire_format="id_frame",
+    ),
+    0xB2: MessageDef(
+        id=0xB2,
+        name="MSG_ERR_EEPROM_TIMEOUT",
+        severity=SEVERITY_ERROR,
+        format="EEPROM timeout at 0x%06lx: wrote 0x%02x got 0x%02x",
+        params=(("u24", "hex_addr"), ("u8", "hex_byte"), ("u8", "hex_byte")),
+        param_bytes=5,
+        wire_format="id_frame",
+    ),
+    0xB3: MessageDef(
+        id=0xB3,
+        name="MSG_ERR_FL4_VERIFY_TIMEOUT",
+        severity=SEVERITY_ERROR,
+        format="Timeout verifying 0x%02x at 0x%06lx (got 0x%02x)",
+        params=(("u8", "hex_byte"), ("u24", "hex_addr"), ("u8", "hex_byte")),
+        param_bytes=5,
+        wire_format="id_frame",
+    ),
+    0xB4: MessageDef(
+        id=0xB4,
+        name="MSG_ERR_INTEL_VPP",
+        severity=SEVERITY_ERROR,
+        format="Intel flash: VPP error",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xB5: MessageDef(
+        id=0xB5,
+        name="MSG_ERR_INTEL_PROGRAM",
+        severity=SEVERITY_ERROR,
+        format="Intel flash: program error",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xB6: MessageDef(
+        id=0xB6,
+        name="MSG_ERR_INTEL_SR_TIMEOUT",
+        severity=SEVERITY_ERROR,
+        format="Intel flash: SR timeout",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xB7: MessageDef(
+        id=0xB7,
+        name="MSG_ERR_OP_TIMEOUT",
+        severity=SEVERITY_ERROR,
+        format="Operation timed out",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xB8: MessageDef(
+        id=0xB8,
+        name="MSG_ERR_VPP_HIGH",
+        severity=SEVERITY_ERROR,
+        format="VPP is high: %u.%uV > %u.%uV",
+        params=(("u16", "dec"), ("u16", "dec"), ("u16", "dec"), ("u16", "dec")),
+        param_bytes=8,
+        wire_format="id_frame",
+    ),
+    0xB9: MessageDef(
+        id=0xB9,
+        name="MSG_ERR_CHIP_ID_MISMATCH",
+        severity=SEVERITY_ERROR,
+        format="Chip ID %#04x does not match expected ID %#04x",
+        params=(("u16", "dec"), ("u16", "dec")),
+        param_bytes=4,
+        wire_format="id_frame",
+    ),
+    0xBA: MessageDef(
+        id=0xBA,
+        name="MSG_ERR_MEM_SIZE_TOO_SMALL",
+        severity=SEVERITY_ERROR,
+        format="Memory size %lu too small for chip-id check",
+        params=(("u32", "dec"),),
+        param_bytes=4,
+        wire_format="id_frame",
+    ),
+    0xE0: MessageDef(
+        id=0xE0,
+        name="MSG_DATA_PROGRESS",
+        severity=SEVERITY_DATA,
+        format="%lu/%lu",
+        params=(("u32", "dec"), ("u32", "dec")),
+        param_bytes=8,
+        wire_format="id_frame",
+    ),
+    0xE2: MessageDef(
+        id=0xE2,
+        name="MSG_DATA_SENDING",
+        severity=SEVERITY_DATA,
+        format="Sending data",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0xE4: MessageDef(
+        id=0xE4,
+        name="MSG_DATA_VPP_VOLTAGE",
+        severity=SEVERITY_DATA,
+        format="VPP: %u.%uV, Internal VCC: %u.%uV",
+        params=(("u16", "dec"), ("u16", "dec"), ("u16", "dec"), ("u16", "dec")),
+        param_bytes=8,
+        wire_format="id_frame",
+    ),
+    0xE5: MessageDef(
+        id=0xE5,
+        name="MSG_DATA_VPE_VOLTAGE",
+        severity=SEVERITY_DATA,
+        format="VPE: %u.%uV, Internal VCC: %u.%uV",
+        params=(("u16", "dec"), ("u16", "dec"), ("u16", "dec"), ("u16", "dec")),
+        param_bytes=8,
+        wire_format="id_frame",
+    ),
+    0xE6: MessageDef(
+        id=0xE6,
+        name="MSG_DATA_CHUNK",
+        severity=SEVERITY_DATA,
+        format="<data chunk>",
+        params=(("bytes", "hex"),),
+        param_bytes=-1,
+        wire_format="id_frame",
+    ),
+    0xF0: MessageDef(
+        id=0xF0,
+        name="MSG_DEBUG",
+        severity=SEVERITY_DATA,
+        format="[debug:%u]",
+        params=(("u8", "dec"), ("bytes", "hex")),
+        param_bytes=-1,
+        wire_format="id_frame",
+    ),
 }
 
 
 # --- Debug sub-ID constants (sorted ascending) ---
-DBG_FIRESTARTER_STARTED     = 0x00
-DBG_FIRMWARE_VERSION        = 0x01
-DBG_HARDWARE_REVISION       = 0x02
-DBG_PARSE_JSON              = 0x03
-DBG_CMD                     = 0x04
-DBG_SETUP                   = 0x05
-DBG_CMD_FINISHED            = 0x06
-DBG_WRITE_EPROM             = 0x07
-DBG_VERIFY_PROM             = 0x08
-DBG_ERASE_PROM              = 0x09
-DBG_CHECK_CHIP_ID_OP        = 0x0A
-DBG_BLANK_CHECK_PROM        = 0x0B
-DBG_INIT_READ_VOLTAGE       = 0x0C
-DBG_SETTING_UP_VPP          = 0x0D
-DBG_SETTING_UP_VPE          = 0x0E
-DBG_GET_FW_VERSION          = 0x0F
-DBG_GET_HW_VERSION          = 0x10
-DBG_GET_CONFIG              = 0x11
-DBG_CONFIGURING_EPROM       = 0x12
-DBG_CHECK_CHIP_ID           = 0x13
-DBG_ERASE                   = 0x14
-DBG_PULSE_DELAY_MISMATCH    = 0x15
-DBG_GET_CHIP_ID             = 0x16
-DBG_CHECK_VPP               = 0x17
-DBG_CHECKING_VPP_VOLTAGE    = 0x18
-DBG_INTERNAL_ERASE          = 0x19
-DBG_CHECK_VPP_INTEL         = 0x1A
+DBG_FIRESTARTER_STARTED = 0x00
+DBG_FIRMWARE_VERSION = 0x01
+DBG_HARDWARE_REVISION = 0x02
+DBG_PARSE_JSON = 0x03
+DBG_CMD = 0x04
+DBG_SETUP = 0x05
+DBG_CMD_FINISHED = 0x06
+DBG_WRITE_EPROM = 0x07
+DBG_VERIFY_PROM = 0x08
+DBG_ERASE_PROM = 0x09
+DBG_CHECK_CHIP_ID_OP = 0x0A
+DBG_BLANK_CHECK_PROM = 0x0B
+DBG_INIT_READ_VOLTAGE = 0x0C
+DBG_SETTING_UP_VPP = 0x0D
+DBG_SETTING_UP_VPE = 0x0E
+DBG_GET_FW_VERSION = 0x0F
+DBG_GET_HW_VERSION = 0x10
+DBG_GET_CONFIG = 0x11
+DBG_CONFIGURING_EPROM = 0x12
+DBG_CHECK_CHIP_ID = 0x13
+DBG_ERASE = 0x14
+DBG_PULSE_DELAY_MISMATCH = 0x15
+DBG_GET_CHIP_ID = 0x16
+DBG_CHECK_VPP = 0x17
+DBG_CHECKING_VPP_VOLTAGE = 0x18
+DBG_INTERNAL_ERASE = 0x19
+DBG_CHECK_VPP_INTEL = 0x1A
 DBG_CONFIGURING_INTEL_FLASH = 0x1B
-DBG_ERASE_COMPLETE          = 0x1C
-DBG_CONFIGURING_FLASH       = 0x1D
-DBG_SKIPPING_ERASE_MEMORY   = 0x1E
-DBG_SECTOR_ERASE            = 0x1F
-DBG_CHIP_ERASE              = 0x20
-DBG_CONFIGURING_FLASH4      = 0x21
-DBG_CONFIGURING_SRAM        = 0x22
-DBG_CONFIGURING_MEMORY      = 0x23
-DBG_ADDRESS                 = 0x24
-DBG_TOP_MSB_LSB             = 0x25
-DBG_READING_FROM_ADDRESS    = 0x26
-DBG_CONFIGURING_EEPROM_28C  = 0x27
-DBG_CHECK_CHIP_ID_28C       = 0x28
-DBG_BUF_VAL                 = 0x29
-DBG_TOKEN_COUNT             = 0x2A
-DBG_FLAG_FORCE              = 0x2B
-DBG_FLAG_CAN_ERASE          = 0x2C
-DBG_FLAG_SKIP_ERASE         = 0x2D
-DBG_FLAG_SKIP_BLANK         = 0x2E
-DBG_FLAG_VPE_AS_VPP         = 0x2F
-DBG_FLAG_OUTPUT_EN          = 0x30
-DBG_FLAG_CHIP_EN            = 0x31
-DBG_BUFFER_SIZE             = 0x32
-DBG_MEM_SIZE                = 0x33
-DBG_ADDR_MASK               = 0x34
-DBG_MATCH_LINES             = 0x35
+DBG_ERASE_COMPLETE = 0x1C
+DBG_CONFIGURING_FLASH = 0x1D
+DBG_SKIPPING_ERASE_MEMORY = 0x1E
+DBG_SECTOR_ERASE = 0x1F
+DBG_CHIP_ERASE = 0x20
+DBG_CONFIGURING_FLASH4 = 0x21
+DBG_CONFIGURING_SRAM = 0x22
+DBG_CONFIGURING_MEMORY = 0x23
+DBG_ADDRESS = 0x24
+DBG_TOP_MSB_LSB = 0x25
+DBG_READING_FROM_ADDRESS = 0x26
+DBG_CONFIGURING_EEPROM_28C = 0x27
+DBG_CHECK_CHIP_ID_28C = 0x28
+DBG_BUF_VAL = 0x29
+DBG_TOKEN_COUNT = 0x2A
+DBG_FLAG_FORCE = 0x2B
+DBG_FLAG_CAN_ERASE = 0x2C
+DBG_FLAG_SKIP_ERASE = 0x2D
+DBG_FLAG_SKIP_BLANK = 0x2E
+DBG_FLAG_VPE_AS_VPP = 0x2F
+DBG_FLAG_OUTPUT_EN = 0x30
+DBG_FLAG_CHIP_EN = 0x31
+DBG_BUFFER_SIZE = 0x32
+DBG_MEM_SIZE = 0x33
+DBG_ADDR_MASK = 0x34
+DBG_MATCH_LINES = 0x35
 
 
 # --- Debug sub-ID catalog lookup ---
 DEBUG_CATALOG: dict[int, MessageDef] = {
-    0x00: MessageDef(id=0x00, name="DBG_FIRESTARTER_STARTED", severity=SEVERITY_DATA, format="Firestarter started", params=(), param_bytes=0, wire_format="id_frame"),
-    0x01: MessageDef(id=0x01, name="DBG_FIRMWARE_VERSION", severity=SEVERITY_DATA, format="Firmware version: %s", params=(("ascii_str", "ascii_str"),), param_bytes=-1, wire_format="id_frame"),
-    0x02: MessageDef(id=0x02, name="DBG_HARDWARE_REVISION", severity=SEVERITY_DATA, format="Hardware revision: %d", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0x03: MessageDef(id=0x03, name="DBG_PARSE_JSON", severity=SEVERITY_DATA, format="Parse JSON", params=(), param_bytes=0, wire_format="id_frame"),
-    0x04: MessageDef(id=0x04, name="DBG_CMD", severity=SEVERITY_DATA, format="Cmd: 0x%02x", params=(("u8", "hex_byte"),), param_bytes=1, wire_format="id_frame"),
-    0x05: MessageDef(id=0x05, name="DBG_SETUP", severity=SEVERITY_DATA, format="Setup", params=(), param_bytes=0, wire_format="id_frame"),
-    0x06: MessageDef(id=0x06, name="DBG_CMD_FINISHED", severity=SEVERITY_DATA, format="Cmd finished", params=(), param_bytes=0, wire_format="id_frame"),
-    0x07: MessageDef(id=0x07, name="DBG_WRITE_EPROM", severity=SEVERITY_DATA, format="Write EPROM", params=(), param_bytes=0, wire_format="id_frame"),
-    0x08: MessageDef(id=0x08, name="DBG_VERIFY_PROM", severity=SEVERITY_DATA, format="Verify PROM", params=(), param_bytes=0, wire_format="id_frame"),
-    0x09: MessageDef(id=0x09, name="DBG_ERASE_PROM", severity=SEVERITY_DATA, format="Erase PROM", params=(), param_bytes=0, wire_format="id_frame"),
-    0x0A: MessageDef(id=0x0A, name="DBG_CHECK_CHIP_ID_OP", severity=SEVERITY_DATA, format="Check Chip ID", params=(), param_bytes=0, wire_format="id_frame"),
-    0x0B: MessageDef(id=0x0B, name="DBG_BLANK_CHECK_PROM", severity=SEVERITY_DATA, format="Blank check PROM", params=(), param_bytes=0, wire_format="id_frame"),
-    0x0C: MessageDef(id=0x0C, name="DBG_INIT_READ_VOLTAGE", severity=SEVERITY_DATA, format="Init read voltage", params=(), param_bytes=0, wire_format="id_frame"),
-    0x0D: MessageDef(id=0x0D, name="DBG_SETTING_UP_VPP", severity=SEVERITY_DATA, format="Setting up VPP", params=(), param_bytes=0, wire_format="id_frame"),
-    0x0E: MessageDef(id=0x0E, name="DBG_SETTING_UP_VPE", severity=SEVERITY_DATA, format="Setting up VPE", params=(), param_bytes=0, wire_format="id_frame"),
-    0x0F: MessageDef(id=0x0F, name="DBG_GET_FW_VERSION", severity=SEVERITY_DATA, format="Get FW version", params=(), param_bytes=0, wire_format="id_frame"),
-    0x10: MessageDef(id=0x10, name="DBG_GET_HW_VERSION", severity=SEVERITY_DATA, format="Get HW version", params=(), param_bytes=0, wire_format="id_frame"),
-    0x11: MessageDef(id=0x11, name="DBG_GET_CONFIG", severity=SEVERITY_DATA, format="Get config", params=(), param_bytes=0, wire_format="id_frame"),
-    0x12: MessageDef(id=0x12, name="DBG_CONFIGURING_EPROM", severity=SEVERITY_DATA, format="Configuring EPROM", params=(), param_bytes=0, wire_format="id_frame"),
-    0x13: MessageDef(id=0x13, name="DBG_CHECK_CHIP_ID", severity=SEVERITY_DATA, format="Check chip ID", params=(), param_bytes=0, wire_format="id_frame"),
-    0x14: MessageDef(id=0x14, name="DBG_ERASE", severity=SEVERITY_DATA, format="Erase", params=(), param_bytes=0, wire_format="id_frame"),
-    0x15: MessageDef(id=0x15, name="DBG_PULSE_DELAY_MISMATCH", severity=SEVERITY_DATA, format="Mismatch, retrying with increased pulse delay from %d to %d", params=(("u8", "dec"), ("u8", "dec")), param_bytes=2, wire_format="id_frame"),
-    0x16: MessageDef(id=0x16, name="DBG_GET_CHIP_ID", severity=SEVERITY_DATA, format="Get chip ID", params=(), param_bytes=0, wire_format="id_frame"),
-    0x17: MessageDef(id=0x17, name="DBG_CHECK_VPP", severity=SEVERITY_DATA, format="Check VPP", params=(), param_bytes=0, wire_format="id_frame"),
-    0x18: MessageDef(id=0x18, name="DBG_CHECKING_VPP_VOLTAGE", severity=SEVERITY_DATA, format="Checking VPP voltage %u mV", params=(("u16", "dec"),), param_bytes=2, wire_format="id_frame"),
-    0x19: MessageDef(id=0x19, name="DBG_INTERNAL_ERASE", severity=SEVERITY_DATA, format="Internal erase", params=(), param_bytes=0, wire_format="id_frame"),
-    0x1A: MessageDef(id=0x1A, name="DBG_CHECK_VPP_INTEL", severity=SEVERITY_DATA, format="Check VPP (Intel)", params=(), param_bytes=0, wire_format="id_frame"),
-    0x1B: MessageDef(id=0x1B, name="DBG_CONFIGURING_INTEL_FLASH", severity=SEVERITY_DATA, format="Configuring Intel Flash", params=(), param_bytes=0, wire_format="id_frame"),
-    0x1C: MessageDef(id=0x1C, name="DBG_ERASE_COMPLETE", severity=SEVERITY_DATA, format="Erase complete", params=(), param_bytes=0, wire_format="id_frame"),
-    0x1D: MessageDef(id=0x1D, name="DBG_CONFIGURING_FLASH", severity=SEVERITY_DATA, format="Configuring Flash", params=(), param_bytes=0, wire_format="id_frame"),
-    0x1E: MessageDef(id=0x1E, name="DBG_SKIPPING_ERASE_MEMORY", severity=SEVERITY_DATA, format="Skipping erase of memory", params=(), param_bytes=0, wire_format="id_frame"),
-    0x1F: MessageDef(id=0x1F, name="DBG_SECTOR_ERASE", severity=SEVERITY_DATA, format="Sector erase", params=(), param_bytes=0, wire_format="id_frame"),
-    0x20: MessageDef(id=0x20, name="DBG_CHIP_ERASE", severity=SEVERITY_DATA, format="Chip erase", params=(), param_bytes=0, wire_format="id_frame"),
-    0x21: MessageDef(id=0x21, name="DBG_CONFIGURING_FLASH4", severity=SEVERITY_DATA, format="Configuring Flash 4", params=(), param_bytes=0, wire_format="id_frame"),
-    0x22: MessageDef(id=0x22, name="DBG_CONFIGURING_SRAM", severity=SEVERITY_DATA, format="Configuring SRAM", params=(), param_bytes=0, wire_format="id_frame"),
-    0x23: MessageDef(id=0x23, name="DBG_CONFIGURING_MEMORY", severity=SEVERITY_DATA, format="Configuring memory", params=(), param_bytes=0, wire_format="id_frame"),
-    0x24: MessageDef(id=0x24, name="DBG_ADDRESS", severity=SEVERITY_DATA, format="Address 0x%06x", params=(("u24", "hex_addr"),), param_bytes=3, wire_format="id_frame"),
-    0x25: MessageDef(id=0x25, name="DBG_TOP_MSB_LSB", severity=SEVERITY_DATA, format="top msb lsb %02x %02x %02x", params=(("u8", "dec"), ("u8", "dec"), ("u8", "dec")), param_bytes=3, wire_format="id_frame"),
-    0x26: MessageDef(id=0x26, name="DBG_READING_FROM_ADDRESS", severity=SEVERITY_DATA, format="Reading from address 0x%06x", params=(("u24", "hex_addr"),), param_bytes=3, wire_format="id_frame"),
-    0x27: MessageDef(id=0x27, name="DBG_CONFIGURING_EEPROM_28C", severity=SEVERITY_DATA, format="Configuring EEPROM 28C", params=(), param_bytes=0, wire_format="id_frame"),
-    0x28: MessageDef(id=0x28, name="DBG_CHECK_CHIP_ID_28C", severity=SEVERITY_DATA, format="Check chip ID (28C)", params=(), param_bytes=0, wire_format="id_frame"),
-    0x29: MessageDef(id=0x29, name="DBG_BUF_VAL", severity=SEVERITY_DATA, format="Buf val: 0x%02x", params=(("u8", "hex_byte"),), param_bytes=1, wire_format="id_frame"),
-    0x2A: MessageDef(id=0x2A, name="DBG_TOKEN_COUNT", severity=SEVERITY_DATA, format="Token count: %u", params=(("u16", "dec"),), param_bytes=2, wire_format="id_frame"),
-    0x2B: MessageDef(id=0x2B, name="DBG_FLAG_FORCE", severity=SEVERITY_DATA, format="Force: %u", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0x2C: MessageDef(id=0x2C, name="DBG_FLAG_CAN_ERASE", severity=SEVERITY_DATA, format="Can erase: %u", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0x2D: MessageDef(id=0x2D, name="DBG_FLAG_SKIP_ERASE", severity=SEVERITY_DATA, format="Skip erase: %u", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0x2E: MessageDef(id=0x2E, name="DBG_FLAG_SKIP_BLANK", severity=SEVERITY_DATA, format="Skip blank check: %u", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0x2F: MessageDef(id=0x2F, name="DBG_FLAG_VPE_AS_VPP", severity=SEVERITY_DATA, format="VPE as VPP: %u", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0x30: MessageDef(id=0x30, name="DBG_FLAG_OUTPUT_EN", severity=SEVERITY_DATA, format="Output enable: %u", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0x31: MessageDef(id=0x31, name="DBG_FLAG_CHIP_EN", severity=SEVERITY_DATA, format="Chip enable: %u", params=(("u8", "dec"),), param_bytes=1, wire_format="id_frame"),
-    0x32: MessageDef(id=0x32, name="DBG_BUFFER_SIZE", severity=SEVERITY_DATA, format="Buffer size: %u", params=(("u16", "dec"),), param_bytes=2, wire_format="id_frame"),
-    0x33: MessageDef(id=0x33, name="DBG_MEM_SIZE", severity=SEVERITY_DATA, format="Memory size 0x%lx", params=(("u32", "hex"),), param_bytes=4, wire_format="id_frame"),
-    0x34: MessageDef(id=0x34, name="DBG_ADDR_MASK", severity=SEVERITY_DATA, format="Address mask 0x%lx", params=(("u32", "hex"),), param_bytes=4, wire_format="id_frame"),
-    0x35: MessageDef(id=0x35, name="DBG_MATCH_LINES", severity=SEVERITY_DATA, format="Matching lines %u", params=(("u16", "dec"),), param_bytes=2, wire_format="id_frame"),
+    0x00: MessageDef(
+        id=0x00,
+        name="DBG_FIRESTARTER_STARTED",
+        severity=SEVERITY_DATA,
+        format="Firestarter started",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x01: MessageDef(
+        id=0x01,
+        name="DBG_FIRMWARE_VERSION",
+        severity=SEVERITY_DATA,
+        format="Firmware version: %s",
+        params=(("ascii_str", "ascii_str"),),
+        param_bytes=-1,
+        wire_format="id_frame",
+    ),
+    0x02: MessageDef(
+        id=0x02,
+        name="DBG_HARDWARE_REVISION",
+        severity=SEVERITY_DATA,
+        format="Hardware revision: %d",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x03: MessageDef(
+        id=0x03,
+        name="DBG_PARSE_JSON",
+        severity=SEVERITY_DATA,
+        format="Parse JSON",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x04: MessageDef(
+        id=0x04,
+        name="DBG_CMD",
+        severity=SEVERITY_DATA,
+        format="Cmd: 0x%02x",
+        params=(("u8", "hex_byte"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x05: MessageDef(
+        id=0x05,
+        name="DBG_SETUP",
+        severity=SEVERITY_DATA,
+        format="Setup",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x06: MessageDef(
+        id=0x06,
+        name="DBG_CMD_FINISHED",
+        severity=SEVERITY_DATA,
+        format="Cmd finished",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x07: MessageDef(
+        id=0x07,
+        name="DBG_WRITE_EPROM",
+        severity=SEVERITY_DATA,
+        format="Write EPROM",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x08: MessageDef(
+        id=0x08,
+        name="DBG_VERIFY_PROM",
+        severity=SEVERITY_DATA,
+        format="Verify PROM",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x09: MessageDef(
+        id=0x09,
+        name="DBG_ERASE_PROM",
+        severity=SEVERITY_DATA,
+        format="Erase PROM",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x0A: MessageDef(
+        id=0x0A,
+        name="DBG_CHECK_CHIP_ID_OP",
+        severity=SEVERITY_DATA,
+        format="Check Chip ID",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x0B: MessageDef(
+        id=0x0B,
+        name="DBG_BLANK_CHECK_PROM",
+        severity=SEVERITY_DATA,
+        format="Blank check PROM",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x0C: MessageDef(
+        id=0x0C,
+        name="DBG_INIT_READ_VOLTAGE",
+        severity=SEVERITY_DATA,
+        format="Init read voltage",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x0D: MessageDef(
+        id=0x0D,
+        name="DBG_SETTING_UP_VPP",
+        severity=SEVERITY_DATA,
+        format="Setting up VPP",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x0E: MessageDef(
+        id=0x0E,
+        name="DBG_SETTING_UP_VPE",
+        severity=SEVERITY_DATA,
+        format="Setting up VPE",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x0F: MessageDef(
+        id=0x0F,
+        name="DBG_GET_FW_VERSION",
+        severity=SEVERITY_DATA,
+        format="Get FW version",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x10: MessageDef(
+        id=0x10,
+        name="DBG_GET_HW_VERSION",
+        severity=SEVERITY_DATA,
+        format="Get HW version",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x11: MessageDef(
+        id=0x11,
+        name="DBG_GET_CONFIG",
+        severity=SEVERITY_DATA,
+        format="Get config",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x12: MessageDef(
+        id=0x12,
+        name="DBG_CONFIGURING_EPROM",
+        severity=SEVERITY_DATA,
+        format="Configuring EPROM",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x13: MessageDef(
+        id=0x13,
+        name="DBG_CHECK_CHIP_ID",
+        severity=SEVERITY_DATA,
+        format="Check chip ID",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x14: MessageDef(
+        id=0x14,
+        name="DBG_ERASE",
+        severity=SEVERITY_DATA,
+        format="Erase",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x15: MessageDef(
+        id=0x15,
+        name="DBG_PULSE_DELAY_MISMATCH",
+        severity=SEVERITY_DATA,
+        format="Mismatch, retrying with increased pulse delay from %d to %d",
+        params=(("u8", "dec"), ("u8", "dec")),
+        param_bytes=2,
+        wire_format="id_frame",
+    ),
+    0x16: MessageDef(
+        id=0x16,
+        name="DBG_GET_CHIP_ID",
+        severity=SEVERITY_DATA,
+        format="Get chip ID",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x17: MessageDef(
+        id=0x17,
+        name="DBG_CHECK_VPP",
+        severity=SEVERITY_DATA,
+        format="Check VPP",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x18: MessageDef(
+        id=0x18,
+        name="DBG_CHECKING_VPP_VOLTAGE",
+        severity=SEVERITY_DATA,
+        format="Checking VPP voltage %u mV",
+        params=(("u16", "dec"),),
+        param_bytes=2,
+        wire_format="id_frame",
+    ),
+    0x19: MessageDef(
+        id=0x19,
+        name="DBG_INTERNAL_ERASE",
+        severity=SEVERITY_DATA,
+        format="Internal erase",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x1A: MessageDef(
+        id=0x1A,
+        name="DBG_CHECK_VPP_INTEL",
+        severity=SEVERITY_DATA,
+        format="Check VPP (Intel)",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x1B: MessageDef(
+        id=0x1B,
+        name="DBG_CONFIGURING_INTEL_FLASH",
+        severity=SEVERITY_DATA,
+        format="Configuring Intel Flash",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x1C: MessageDef(
+        id=0x1C,
+        name="DBG_ERASE_COMPLETE",
+        severity=SEVERITY_DATA,
+        format="Erase complete",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x1D: MessageDef(
+        id=0x1D,
+        name="DBG_CONFIGURING_FLASH",
+        severity=SEVERITY_DATA,
+        format="Configuring Flash",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x1E: MessageDef(
+        id=0x1E,
+        name="DBG_SKIPPING_ERASE_MEMORY",
+        severity=SEVERITY_DATA,
+        format="Skipping erase of memory",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x1F: MessageDef(
+        id=0x1F,
+        name="DBG_SECTOR_ERASE",
+        severity=SEVERITY_DATA,
+        format="Sector erase",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x20: MessageDef(
+        id=0x20,
+        name="DBG_CHIP_ERASE",
+        severity=SEVERITY_DATA,
+        format="Chip erase",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x21: MessageDef(
+        id=0x21,
+        name="DBG_CONFIGURING_FLASH4",
+        severity=SEVERITY_DATA,
+        format="Configuring Flash 4",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x22: MessageDef(
+        id=0x22,
+        name="DBG_CONFIGURING_SRAM",
+        severity=SEVERITY_DATA,
+        format="Configuring SRAM",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x23: MessageDef(
+        id=0x23,
+        name="DBG_CONFIGURING_MEMORY",
+        severity=SEVERITY_DATA,
+        format="Configuring memory",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x24: MessageDef(
+        id=0x24,
+        name="DBG_ADDRESS",
+        severity=SEVERITY_DATA,
+        format="Address 0x%06x",
+        params=(("u24", "hex_addr"),),
+        param_bytes=3,
+        wire_format="id_frame",
+    ),
+    0x25: MessageDef(
+        id=0x25,
+        name="DBG_TOP_MSB_LSB",
+        severity=SEVERITY_DATA,
+        format="top msb lsb %02x %02x %02x",
+        params=(("u8", "dec"), ("u8", "dec"), ("u8", "dec")),
+        param_bytes=3,
+        wire_format="id_frame",
+    ),
+    0x26: MessageDef(
+        id=0x26,
+        name="DBG_READING_FROM_ADDRESS",
+        severity=SEVERITY_DATA,
+        format="Reading from address 0x%06x",
+        params=(("u24", "hex_addr"),),
+        param_bytes=3,
+        wire_format="id_frame",
+    ),
+    0x27: MessageDef(
+        id=0x27,
+        name="DBG_CONFIGURING_EEPROM_28C",
+        severity=SEVERITY_DATA,
+        format="Configuring EEPROM 28C",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x28: MessageDef(
+        id=0x28,
+        name="DBG_CHECK_CHIP_ID_28C",
+        severity=SEVERITY_DATA,
+        format="Check chip ID (28C)",
+        params=(),
+        param_bytes=0,
+        wire_format="id_frame",
+    ),
+    0x29: MessageDef(
+        id=0x29,
+        name="DBG_BUF_VAL",
+        severity=SEVERITY_DATA,
+        format="Buf val: 0x%02x",
+        params=(("u8", "hex_byte"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x2A: MessageDef(
+        id=0x2A,
+        name="DBG_TOKEN_COUNT",
+        severity=SEVERITY_DATA,
+        format="Token count: %u",
+        params=(("u16", "dec"),),
+        param_bytes=2,
+        wire_format="id_frame",
+    ),
+    0x2B: MessageDef(
+        id=0x2B,
+        name="DBG_FLAG_FORCE",
+        severity=SEVERITY_DATA,
+        format="Force: %u",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x2C: MessageDef(
+        id=0x2C,
+        name="DBG_FLAG_CAN_ERASE",
+        severity=SEVERITY_DATA,
+        format="Can erase: %u",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x2D: MessageDef(
+        id=0x2D,
+        name="DBG_FLAG_SKIP_ERASE",
+        severity=SEVERITY_DATA,
+        format="Skip erase: %u",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x2E: MessageDef(
+        id=0x2E,
+        name="DBG_FLAG_SKIP_BLANK",
+        severity=SEVERITY_DATA,
+        format="Skip blank check: %u",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x2F: MessageDef(
+        id=0x2F,
+        name="DBG_FLAG_VPE_AS_VPP",
+        severity=SEVERITY_DATA,
+        format="VPE as VPP: %u",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x30: MessageDef(
+        id=0x30,
+        name="DBG_FLAG_OUTPUT_EN",
+        severity=SEVERITY_DATA,
+        format="Output enable: %u",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x31: MessageDef(
+        id=0x31,
+        name="DBG_FLAG_CHIP_EN",
+        severity=SEVERITY_DATA,
+        format="Chip enable: %u",
+        params=(("u8", "dec"),),
+        param_bytes=1,
+        wire_format="id_frame",
+    ),
+    0x32: MessageDef(
+        id=0x32,
+        name="DBG_BUFFER_SIZE",
+        severity=SEVERITY_DATA,
+        format="Buffer size: %u",
+        params=(("u16", "dec"),),
+        param_bytes=2,
+        wire_format="id_frame",
+    ),
+    0x33: MessageDef(
+        id=0x33,
+        name="DBG_MEM_SIZE",
+        severity=SEVERITY_DATA,
+        format="Memory size 0x%lx",
+        params=(("u32", "hex"),),
+        param_bytes=4,
+        wire_format="id_frame",
+    ),
+    0x34: MessageDef(
+        id=0x34,
+        name="DBG_ADDR_MASK",
+        severity=SEVERITY_DATA,
+        format="Address mask 0x%lx",
+        params=(("u32", "hex"),),
+        param_bytes=4,
+        wire_format="id_frame",
+    ),
+    0x35: MessageDef(
+        id=0x35,
+        name="DBG_MATCH_LINES",
+        severity=SEVERITY_DATA,
+        format="Matching lines %u",
+        params=(("u16", "dec"),),
+        param_bytes=2,
+        wire_format="id_frame",
+    ),
 }
