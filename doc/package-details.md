@@ -1,118 +1,68 @@
 <p align="left"><img src="https://raw.githubusercontent.com/henols/firestarter_app/refs/heads/main/images/firestarter_logo.png" alt="Firestarter EPROM Programmer" width="200"></p>
 
 ---
-### **Updated Flag Bits and Inferred Meanings**
 
-| Hex Value   | Bit Position(s)  | Inferred Meaning                                                                  |
-|-------------|------------------|-----------------------------------------------------------------------------------|
-| 0x00000008  | Bit 3            | Requires VPP (High Programming Voltage)                                           |
-| 0x00000010  | Bit 4            | Requires Write Enable Sequence                                                    |
-| 0x00000020  | Bit 5            | Has Readable Chip ID                                                              |
-| 0x00000040  | Bit 6            | Is UV-erasable EPROM                                                              |
-| 0x00000080  | Bit 7            | Is Electrically Erasable or Writable (EEPROM/Flash/SRAM)                          |
-| 0x00000200  | Bit 9            | Supports Boot Block Features                                                      |
-| 0x00004000  | Bit 14           | Software Data Protection (SDP)                                                    |
-| 0x00008000  | Bit 15           | Requires Specific Write Sequence or Hardware Protection                           |
-| 0x0000C000  | Bits 14,15       | Advanced Write Protection Mechanisms                                              |
-| 0x00400000  | Bit 22           | Supports Block Locking or Sector Protection                                       |
-| 0x00000090  | Bits 4,7         | Electrically Erasable with Write Enable Sequence                                  |
-| 0x000000E8  | Bits 3,5,6,7     | EEPROM with Special Programming Algorithm and Electrically Erasable               |
-| 0x00004278  | Bits 22,14,6,5,4,3 | Flash Memory with Advanced Protection Features (Block Locking, SDP, etc.)       |
-| 0x0040C078  | Bits 22,14,15,6,5,4,3 | Flash Memory with Block Locking and Advanced Write Protection                |
+## package_details Field Reference
+
+This document is derived from the field dictionary (`doc/infoic-field-dictionary.md`). Sources: [`database.c#L618`](https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c#L618)–[`L703`](https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c#L703) and [`database.c#L39`](https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c#L39)–[`L50`](https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c#L50) @ commit `a8efaedc236c1d9718bd28299dfbb99536b010ff`.
 
 ---
 
-### **Explanation of Updated Inferred Meanings**
+## `package_details` uint32 Layout (CONFIRMED)
 
-1. **0x00000008 (Bit 3) - Requires VPP (High Programming Voltage):**
-   - **Observation:** Consistently set in devices that require a higher programming voltage (e.g., 12V or 21V), such as UV-erasable EPROMs.
-   - **Examples:** EPROM devices like the "27C64" series.
+The `package_details` field governs physical-package filtering. `build_db.py` uses it to decide whether a chip passes the DIP filter.
 
-2. **0x00000010 (Bit 4) - Requires Write Enable Sequence:**
-   - **Observation:** Set in devices that require a specific write enable or unlock sequence during programming, common in EEPROMs and Flash memories.
-   - **Examples:** Flash memories like the "SST39SF" series.
+| Bit(s) | Mask           | Field            | Meaning                                                                       |
+|--------|----------------|------------------|-------------------------------------------------------------------------------|
+| 31     | `0x80000000`   | `is_smd`         | SMD flag — surface-mount; exclude from DIP filter                             |
+| 29-24  | `0x3F000000`   | pin count        | Raw 6-bit pin count (`build_db.py` uses `0x7F000000` — harmless for DIP)     |
+| 15-8   | `0x0000FF00`   | `is_serial`      | ICSP serial-interface index — non-zero = exclude from DIP filter              |
+| 7-0    | `0x000000FF`   | adapter type     | Adapter type: `0x00` = DIP native; other values = PLCC or other adapters      |
 
-3. **0x00000020 (Bit 5) - Has Readable Chip ID:**
-   - **Observation:** Indicates the device supports a command to read its manufacturer and device ID.
-   - **Examples:** Devices with a "chip-id" field set, such as "W27C010".
+**PLCC adapter pin-count remapping:** adapter byte `0x38` → 20 pins, `0x3E` → 28 pins, `0x3F` → 32 pins, `0x3D` → 44 pins.
 
-4. **0x00000040 (Bit 6) - Is UV-erasable EPROM:**
-   - **Observation:** Set in devices that can be erased using ultraviolet light.
-   - **Examples:** EPROMs like the "27C256" series.
-
-5. **0x00000080 (Bit 7) - Is Electrically Erasable or Writable (EEPROM/Flash/SRAM):**
-   - **Observation:** Set in devices that are electrically erasable or writable, including EEPROMs, Flash memories, and SRAMs.
-   - **Examples:** EEPROMs like "28C256", SRAMs like "6264", and Flash memories.
-
-6. **0x00000200 (Bit 9) - Supports Boot Block Features:**
-   - **Observation:** Indicates support for boot block or top/bottom boot sector features in Flash memories.
-   - **Examples:** Advanced Flash memories with boot block protection.
-
-7. **0x00004000 (Bit 14) - Software Data Protection (SDP):**
-   - **Observation:** Set in devices that implement software mechanisms to prevent inadvertent writes.
-   - **Examples:** EEPROMs like "28C64" that require specific sequences to enable writing.
-
-8. **0x00008000 (Bit 15) - Requires Specific Write Sequence or Hardware Protection:**
-   - **Observation:** Indicates the device requires a particular hardware or software sequence to enable programming, enhancing data integrity.
-   - **Examples:** EEPROMs and Flash memories with advanced write protection.
-
-9. **0x0000C000 (Bits 14,15) - Advanced Write Protection Mechanisms:**
-   - **Observation:** When both bits are set, the device supports sophisticated write protection features, possibly including both hardware and software protections.
-   - **Examples:** Devices like "M28C64A" and "X28C256" EEPROMs.
-
-10. **0x00400000 (Bit 22) - Supports Block Locking or Sector Protection:**
-    - **Observation:** Found in advanced Flash memories that allow locking specific memory blocks or sectors to prevent writing or erasure.
-    - **Examples:** Flash memories like "W29C040".
-
-11. **0x00000090 (Bits 4,7) - Electrically Erasable with Write Enable Sequence:**
-    - **Observation:** Devices that are electrically erasable and require a write enable sequence during programming.
-    - **Examples:** Certain EEPROMs and Flash memories.
-
-12. **0x000000E8 (Bits 3,5,6,7) - EEPROM with Special Programming Algorithm and Electrically Erasable:**
-    - **Observation:** Indicates EEPROMs that use a specific programming algorithm and are electrically erasable.
-    - **Examples:** "TMS87C257" from TI.
-
-13. **0x00004278 (Bits 22,14,6,5,4,3) - Flash Memory with Advanced Protection Features:**
-    - **Observation:** Indicates Flash memories with block locking, software data protection, and requiring specific write sequences.
-    - **Examples:** "S29C31004B" from SYNCMOS.
-
-14. **0x0040C078 (Bits 22,14,15,6,5,4,3) - Flash Memory with Block Locking and Advanced Write Protection:**
-    - **Observation:** Indicates devices with comprehensive protection features, combining block locking and both hardware and software write protection mechanisms.
-    - **Examples:** "W29C020" from WINBOND.
+**build_db.py DIP filter:** `24 <= pin_count <= 32`, `is_smd == 0`, `is_serial == 0`, `type_int in [1, 4]` — correct per minipro source.
 
 ---
 
-### **Additional Insights from the Complete Data**
+## `flags` Bit Reference
 
-- **Bit 7 (0x00000080):** Set in all SRAM devices and electrically erasable memories. This suggests that Bit 7 broadly indicates devices that are electrically writable, including SRAMs, EEPROMs, and Flash memories.
+The `flags` field is a separate uint32 that controls programming behavior. It is stored in `chip_database.json` and forwarded in the wire JSON to firmware. The table below covers bits relevant to Firestarter decode.
 
-- **Bits 14 and 15 (0x0000C000):** Their combination in EEPROMs and Flash memories indicates advanced write protection features, requiring specific sequences or conditions for programming.
+### Source-Confirmed Bits (CONFIRMED)
 
-- **Bit 22 (0x00400000):** Observed in Flash memories that support block locking or sector protection, enhancing security and preventing accidental modification.
+Each entry has a corresponding `MP_*` constant in `database.c` lines 39–50.
 
-- **Bits 3, 4, 5, 6, and 7 (0x000000E8):** The combination of these bits in certain devices like the "TMS87C257" suggests a specific programming algorithm, the presence of a chip ID, UV erasability, and electrical erasability, indicating a hybrid or special device.
+| Bit   | Hex Mask       | MP_* Constant                           | Meaning                                                                                   | Status    |
+|-------|----------------|-----------------------------------------|-------------------------------------------------------------------------------------------|-----------|
+| 1     | `0x00000002`   | `MP_REVERSED_PACKAGE`                   | Package pin numbering is reversed                                                         | CONFIRMED |
+| 4     | `0x00000010`   | `MP_ERASE_MASK`                         | **Can be electrically erased** — WARNING-5 discriminator (`build_db.py` uses `flags & 0x10` to derive `_etype`) | CONFIRMED |
+| 5     | `0x00000020`   | `MP_ID_MASK`                            | Has readable manufacturer/device chip ID                                                  | CONFIRMED |
+| 12    | `0x00001000`   | `MP_DATA_MEMORY_ADDRESS`                | Has data memory offset                                                                    | CONFIRMED |
+| 13    | `0x00002000`   | `MP_DATA_BUS_WIDTH` (alias `MP_DATA_ORG`) | Data bus width: 0 = 8-bit, 1 = 16-bit                                                  | CONFIRMED |
+| 14    | `0x00004000`   | `MP_OFF_PROTECT_BEFORE`                 | Off-protection before operation                                                           | CONFIRMED |
+| 15    | `0x00008000`   | `MP_PROTECT_AFTER`                      | Protect after operation                                                                   | CONFIRMED |
+| 18    | `0x00040000`   | `MP_LOCK_BIT_WRITE_ONLY`                | Lock-bit is write-only                                                                    | CONFIRMED |
+| 19    | `0x00080000`   | `MP_CALIBRATION`                        | Has calibration data                                                                      | CONFIRMED |
+| 20-21 | `0x00300000`   | `MP_SUPPORTED_PROGRAMMING`              | Programming support level                                                                 | CONFIRMED |
 
-- **Devices with Flags 0x00004278 and 0x0040C078:** These combinations are found in advanced Flash memories with extensive protection features, combining block locking, software data protection, and specific write sequences.
+### Bits Without a Defined MP_* Constant (UNKNOWN)
+
+The following bits appear in observed `flags` values but have **no** `MP_*` constant in `database.c` lines 39–50. Their meaning cannot be confirmed from the open minipro source.
+
+| Bit | Hex Mask       | Current Docs Claim                          | Correct Statement                                                                                      | Status  |
+|-----|----------------|---------------------------------------------|--------------------------------------------------------------------------------------------------------|---------|
+| 3   | `0x00000008`   | "Requires VPP (High Programming Voltage)"   | **UNKNOWN** — not a defined `MP_*` constant in `database.c` lines 39–50                               | UNKNOWN |
+| 6   | `0x00000040`   | "Is UV-erasable EPROM"                      | **UNKNOWN** — not a defined `MP_*` constant in `database.c` lines 39–50                               | UNKNOWN |
+| 7   | `0x00000080`   | "Is Electrically Erasable or Writable"      | **UNKNOWN** — not a defined `MP_*` constant in `database.c` lines 39–50; likely a TL866II+ firmware-internal bit forwarded raw | UNKNOWN |
+
+The inferred meanings for bits 3/6/7 in older documentation are derived from observed chip patterns, not source-confirmed. They must not be promoted to CONFIRMED.
 
 ---
 
-### **Conclusion**
+## build_db.py Usage
 
-The full analysis of the IC database has allowed for a more precise and detailed understanding of the flag bits:
-
-- **Bits 3 to 7** are crucial in identifying the programming and erasability characteristics of memory devices.
-  
-- **Bits 14 and 15** are significant in indicating the presence of advanced write protection mechanisms, both hardware and software-based.
-
-- **Bit 22** is associated with block locking features in modern Flash memories, providing additional security.
-
-**Device Type Indicators:**
-
-- **EPROMs:** Typically have **Bits 3** (Requires VPP), **6** (UV-erasable), and may have **Bit 5** (Has Chip ID) set.
-  
-- **EEPROMs:** Generally have **Bit 7** (Electrically Erasable) and **Bits 14 and/or 15** set, indicating write protection features.
-
-- **Flash Memories:** Often have **Bits 4** (Write Enable Sequence), **5** (Has Chip ID), and **22** (Block Locking) set, reflecting their advanced features.
-
-- **SRAMs:** Have **Bit 7** set, indicating they are writable memory devices, although they are volatile.
-
+- `_etype` derived from `flags & 0x10` (`MP_ERASE_MASK`) — correct
+- `chip_id_check` derived from `flags & 0x20` (`MP_ID_MASK`) — correct
+- Full `flags` value stored in `chip_database.json` and forwarded to firmware in wire JSON commands
+- DIP filter uses `package_details` fields: `24 <= pin_count <= 32`, `is_smd == 0`, `is_serial == 0`, `type_int in [1, 4]`
