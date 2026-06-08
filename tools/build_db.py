@@ -1,8 +1,9 @@
-import xml.etree.ElementTree as ET
 import json
 import os
-import requests
 import sys
+import xml.etree.ElementTree as ET
+
+import requests
 
 # ==========================================
 # 1. CONFIGURATION
@@ -324,19 +325,14 @@ def resolve_pinout_key(pin_count, variant, flags_int, pm_idx=None, proto_id=None
 
 
 def interpret_timing(raw_hex, protocol_id):
+    # [VERIFIED: minipro database.c#L866 @ a8efaedc]
+    # Raw pulse_delay is microseconds for ALL protocols — no multiplier.
     try:
         val = int(raw_hex, 16)
-    except:
+    except Exception:
         val = 0
 
-    # EPROM Legacy (0x0B) is roughly 100us ticks
-    if protocol_id == 0x0B:
-        return f"{val * 100} us"
-    # EPROM Standard (0x07) is roughly 100us ticks
-    if protocol_id == 0x07:
-        return f"{val * 100} us"
-    # Modern (0x08) is often 1us
-    if protocol_id == 0x08:
+    if protocol_id in (0x07, 0x08, 0x0B):
         return f"{val} us"
 
     return "Algorithm Controlled"
@@ -371,7 +367,7 @@ def main():
                     is_smd = pkg_val & 0x80000000
                     is_serial = (pkg_val & 0x0000FF00) >> 8
                     type_int = int(ic.get("type"), 16)
-                except:
+                except Exception:
                     continue
 
                 # Strict Filter: 24-32 pins, No SMD, Memory/SRAM types only
