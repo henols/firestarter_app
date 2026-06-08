@@ -27,7 +27,6 @@ DB_FILE = os.environ.get(
     "FIRESTARTER_DB_FILE",
     os.path.join(_DATA_DIR, "chip_database.json"),
 )
-_PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
 
 # Algorithm integer (upstream protocol_id from infoic.xml) → firmware mem_type integer.
 # Must mirror firestarter_app/firestarter/database.py::_ALGO_MEM_TYPE
@@ -90,15 +89,6 @@ def main():
     with open(DB_FILE, encoding="utf-8") as f:
         db_raw = json.load(f)
 
-    with open(_PINOUT_FILE, encoding="utf-8") as _pf:
-        _pinouts_raw = json.load(_pf)
-    # Dynamically build the set of pinouts that have a vpp-pin field.
-    # Using pinouts.json avoids hardcoding — Phase 58 may add new pinouts.
-    _vpp_pinouts = frozenset(
-        k for k, v in _pinouts_raw.items() if "vpp-pin" in v.get("pins", {})
-    )
-    _5v_eeprom_algos = frozenset({0x05, 0x06, 0x0D})
-
     # WIRE-02 (D-15 Shape A): host-side wire-emit round-trip surface.
     # Per-chip we call db.convert_to_programmer(db.get_eprom(part)) and assert
     # the produced wire dict contains canonical "vpp_mv" (Plan 02-01 contract)
@@ -138,13 +128,16 @@ def main():
                 eeprom28c_in_eprom.append(
                     f"{mfg}/{part} proto=0x{proto:02X} pinout={pinout}"
                 )
-            # GATE-03: full-class VPP-safety guard — any chip with a vpp-pin pinout AND
-            # a 5V-EEPROM-family algorithm (0x05/0x06/0x0D) must not route to configure_eprom.
-            if (
-                pinout in _vpp_pinouts
-                and proto in _5v_eeprom_algos
-                and handler == "configure_eprom"
-            ):
+            # GATE-03: full-class VPP-safety guard — any chip whose electrical type
+            # is Flash/EEPROM (a 5V part) must NOT route to configure_eprom, which
+            # asserts 12V P1_VPP_ENABLE. This is pinout-agnostic (so it auto-covers
+            # any pinout Phase 58 adds) and is a true superset of the WARNING-5
+            # DIP28_2764 check above. The earlier keying on a 5V-EEPROM-family
+            # *algorithm* set {0x05,0x06,0x0D} was a dead predicate: dispatch() never
+            # returns configure_eprom for those protocols, so the guard could never
+            # fire. The hazardous chips are the ones that DO reach configure_eprom
+            # (0x07/0x08/0x0B) while still being 5V Flash/EEPROM parts.
+            if etype == "Flash/EEPROM" and handler == "configure_eprom":
                 vpp_eeprom_in_eprom.append(
                     f"{mfg}/{part} proto=0x{proto:02X} pinout={pinout}"
                 )
@@ -196,8 +189,8 @@ def main():
                 print(f"  ... and {len(eeprom28c_in_eprom) - 20} more")
         if vpp_eeprom_in_eprom:
             print(
-                f"FAIL: {len(vpp_eeprom_in_eprom)} vpp-pin Flash/EEPROM chips "
-                f"route to configure_eprom (GATE-03: VPP-class hazard):"
+                f"FAIL: {len(vpp_eeprom_in_eprom)} Flash/EEPROM chips "
+                f"route to configure_eprom (GATE-03: 12V-on-5V-part hazard):"
             )
             for e in vpp_eeprom_in_eprom[:20]:
                 print(f"  {e}")
@@ -215,7 +208,7 @@ def main():
         f"PASS: all {total} chips have a valid dispatch path; "
         f"0 SRAM chips route to configure_eprom; "
         f"0 DIP28_2764 Flash/EEPROM chips route to configure_eprom; "
-        f"0 vpp-pin Flash/EEPROM chips route to configure_eprom; "
+        f"0 Flash/EEPROM chips route to configure_eprom; "
         f"0 wire-key regressions"
     )
 
