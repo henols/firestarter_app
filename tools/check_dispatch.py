@@ -14,6 +14,7 @@ Exit codes:
   1 — at least one chip would hit "Memory type 0x%02x not supported", OR a
       SRAM-protocol chip's simulated dispatch resolves to configure_eprom.
 """
+
 import json
 import os
 import sys
@@ -21,9 +22,7 @@ import sys
 from firestarter.database import EpromDatabase
 
 # Module-top path constants (mirrors firestarter_app/tools/build_db.py:11-13)
-_DATA_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "firestarter", "data"
-)
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "firestarter", "data")
 DB_FILE = os.environ.get(
     "FIRESTARTER_DB_FILE",
     os.path.join(_DATA_DIR, "chip_database.json"),
@@ -33,19 +32,17 @@ DB_FILE = os.environ.get(
 # Must mirror firestarter_app/firestarter/database.py::_ALGO_MEM_TYPE
 # (lands in Plan 03 per CONTEXT.md D3).
 _ALGO_MEM_TYPE = {
-    0x05: 5,   # FLASH_AMD_STD     → TYPE_FLASH_TYPE_4
-    0x06: 3,   # FLASH_AMD_ALT     → TYPE_FLASH_TYPE_3
-    0x07: 1,   # EPROM_STD         → TYPE_EPROM
-    0x08: 1,   # EPROM_QUICK       → TYPE_EPROM
-    0x0B: 1,   # EPROM_LEGACY      → TYPE_EPROM
-    0x0D: 1,   # EEPROM_POLL       → TYPE_EPROM (firmware dispatches on protocol prefix)
-    0x0E: 4,   # SRAM_32PIN        → TYPE_SRAM
-    0x10: 1,   # FLASH_INTEL       → TYPE_EPROM (firmware dispatches on protocol prefix)
-    0x27: 4,   # SRAM_24PIN        → TYPE_SRAM
-    0x28: 4,   # SRAM_STD          → TYPE_SRAM
-    0x29: 4,   # SRAM_512K_1M      → TYPE_SRAM
-    0x35: 5,   # FLASH_EEPROM_LIKE → TYPE_FLASH_TYPE_4
-    0x39: 5,   # FLASH_INTEL_ALT   → TYPE_FLASH_TYPE_4
+    0x05: 5,  # FLASH_AMD_STD     → TYPE_FLASH_TYPE_4
+    0x06: 3,  # FLASH_AMD_ALT     → TYPE_FLASH_TYPE_3
+    0x07: 1,  # EPROM_STD         → TYPE_EPROM
+    0x08: 1,  # EPROM_QUICK       → TYPE_EPROM
+    0x0B: 1,  # EPROM_LEGACY      → TYPE_EPROM
+    0x0D: 1,  # EEPROM_POLL       → TYPE_EPROM (firmware dispatches on protocol prefix)
+    0x0E: 4,  # SRAM_32PIN        → TYPE_SRAM
+    0x10: 1,  # FLASH_INTEL       → TYPE_EPROM (firmware dispatches on protocol prefix)
+    0x27: 4,  # SRAM_24PIN        → TYPE_SRAM
+    0x28: 4,  # SRAM_STD          → TYPE_SRAM
+    0x29: 4,  # SRAM_512K_1M      → TYPE_SRAM
 }
 
 # SRAM protocol set — these MUST route to configure_sram, never configure_eprom
@@ -66,12 +63,18 @@ _28C_EEPROM_HAZARD_PINOUT = "DIP28_2764"
 
 def dispatch(protocol, mem_type):
     """Mirror firmware D2 dispatch order in memory.cpp::configure_memory."""
-    if protocol == 0x10:                                   return "configure_flash_intel"
-    if protocol == 0x0D:                                   return "configure_eeprom28c"
-    if protocol == 0x06:                                   return "configure_flash3"
-    if protocol in (0x05, 0x35, 0x39):                     return "configure_flash4"
-    if protocol in (0x07, 0x08, 0x0B):                     return "configure_eprom"
-    if protocol in (0x0E, 0x27, 0x28, 0x29):               return "configure_sram"
+    if protocol == 0x10:
+        return "configure_flash_intel"
+    if protocol == 0x0D:
+        return "configure_eeprom28c"
+    if protocol == 0x06:
+        return "configure_flash3"
+    if protocol == 0x05:
+        return "configure_flash4"
+    if protocol in (0x07, 0x08, 0x0B):
+        return "configure_eprom"
+    if protocol in (0x0E, 0x27, 0x28, 0x29):
+        return "configure_sram"
     # mem_type fallback chain (matches memory.cpp:83-95)
     return {
         1: "configure_eprom",
@@ -107,15 +110,11 @@ def main():
             handler = dispatch(proto, mt)
             part = chip.get("part_number", "<unknown>")
             if handler == "ERROR":
-                errors.append(
-                    f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}"
-                )
+                errors.append(f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}")
                 continue
             # BLOCKER-2 safety: SRAM protocol must never resolve to configure_eprom
             if proto in _SRAM_PROTOCOLS and handler == "configure_eprom":
-                sram_in_eprom.append(
-                    f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}"
-                )
+                sram_in_eprom.append(f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}")
             # WARNING-5 safety: DIP28_2764 + Flash/EEPROM chips must NOT route to
             # configure_eprom (12V P1_VPP_ENABLE would hit A14 on the 5V part).
             pinout = chip.get("pinout", "")
@@ -137,9 +136,7 @@ def main():
             if mapped:
                 wire = db.convert_to_programmer(mapped)
                 if "vpp_mv" not in wire:
-                    wire_regressions.append(
-                        f"{mfg}/{part} — missing vpp_mv on wire"
-                    )
+                    wire_regressions.append(f"{mfg}/{part} — missing vpp_mv on wire")
                 if "vpp" in wire:
                     wire_regressions.append(
                         f"{mfg}/{part} — legacy vpp key still emitted on wire"
@@ -147,9 +144,7 @@ def main():
 
     if errors or sram_in_eprom or eeprom28c_in_eprom or wire_regressions:
         if errors:
-            print(
-                f"FAIL: {len(errors)} of {total} chips have no valid dispatch path:"
-            )
+            print(f"FAIL: {len(errors)} of {total} chips have no valid dispatch path:")
             for e in errors[:20]:
                 print(f"  {e}")
             if len(errors) > 20:
@@ -173,9 +168,7 @@ def main():
             if len(eeprom28c_in_eprom) > 20:
                 print(f"  ... and {len(eeprom28c_in_eprom) - 20} more")
         if wire_regressions:
-            print(
-                f"FAIL: {len(wire_regressions)} wire-key regressions:"
-            )
+            print(f"FAIL: {len(wire_regressions)} wire-key regressions:")
             for e in wire_regressions[:20]:
                 print(f"  {e}")
             if len(wire_regressions) > 20:
