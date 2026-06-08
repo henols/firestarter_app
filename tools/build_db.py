@@ -23,25 +23,27 @@ PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
 
 # This map translates the numeric protocol ID from upstream's XML
 # into a human-readable string that Firestarter's database uses.
+# [VERIFIED: minipro database.h#L24-L77 @ a8efaedc — IC2_ALG_* constants]
 PROTOCOL_MAP = {
-    0x05: "FLASH_AMD_STD",
-    0x06: "FLASH_AMD_ALT",
-    0x07: "EPROM_STD",
-    0x08: "EPROM_QUICK",
-    0x0B: "EPROM_LEGACY",
-    0x0E: "SRAM_32PIN",
-    0x0D: "EEPROM_POLL",
-    0x10: "FLASH_INTEL",
-    0x11: "FLASH_FWH",
-    0x27: "SRAM_24PIN",
-    0x28: "SRAM_STD",
-    0x29: "SRAM_512K_1M",
-    0x2A: "NVRAM_32PIN",
-    0x2C: "NVRAM_TIMEKEEPER",
-    0x2E: "NVRAM_512K",
-    0x35: "FLASH_EEPROM_LIKE",
-    0x39: "FLASH_INTEL_ALT",
-    0x3C: "FLASH_4MB",
+    0x05: "FLASH_AMD_STD",  # IC2_ALG_F29EE
+    0x06: "FLASH_AMD_ALT",  # IC2_ALG_W29F32P
+    0x07: "EPROM_STD",  # IC2_ALG_ROM28P_1
+    0x08: "EPROM_QUICK",  # IC2_ALG_ROM32P
+    0x0B: "EPROM_LEGACY",  # IC2_ALG_ROM24P_1
+    0x0D: "EEPROM_POLL",  # IC2_ALG_EE28C32P
+    0x0E: "SRAM_32PIN",  # IC2_ALG_RAM32_1
+    0x10: "FLASH_INTEL",  # IC2_ALG_28F32P
+    0x27: "SRAM_24PIN",  # IC2_ALG_ROM24P_2
+    0x28: "SRAM_STD",  # IC2_ALG_ROM28P_2
+    0x29: "SRAM_512K_1M",  # IC2_ALG_RAM32_2
+    # Excluded IDs documented here for traceability:
+    # 0x11: IC2_ALG_FWH  — LPC 4-wire serial bus + 3.3V; infeasible on RURP
+    # 0x2A: IC2_ALG_GAL16  — GAL16V8 PLD (type=3); no DIP memory chips
+    # 0x2C: IC2_ALG_GAL22  — GAL22V10 PLD (type=3); no DIP memory chips
+    # 0x2E: IC2_ALG_PIC32X_2 — PIC32 MCU (type=2); no DIP memory chips
+    # 0x35: IC2_ALG_ITE  — ITE EC MCU TQFP128 (type=2); no DIP memory chips
+    # 0x39: NO IC2_ALG CONSTANT — phantom; INFOIC2PLUS-unreachable
+    # 0x3C: NOT IN MINIPRO SOURCE — invented; remove entirely
 }
 
 # Upstream infoic.xml caps VPP at 18V (0xF0), but a handful of antique
@@ -93,6 +95,9 @@ VPP_MV = {
     0xF0: 18000,
 }
 
+# [VERIFIED: canonical IC2_ALG_* constants from database.h#L24-L77 @ a8efaedc]
+# 0x35 (IC2_ALG_ITE) and 0x39 (phantom — no IC2_ALG constant) removed:
+# neither produces chips in the INFOIC2PLUS DIP-24..32 filter.
 KNOWN_PROTOCOLS = {
     0x05,
     0x06,
@@ -105,8 +110,6 @@ KNOWN_PROTOCOLS = {
     0x27,
     0x28,
     0x29,
-    0x35,
-    0x39,
 }
 
 # [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
@@ -533,7 +536,7 @@ def main():
                 # Re-derive electrical.type protocol-aware after all algorithm
                 # overrides have run. The firmware dispatch is the ground truth:
                 #   - 0x07/0x08/0x0B → configure_eprom (12V VPP) → UV-EPROM
-                #   - 0x0D / 0x05 / 0x06 / 0x10 / 0x35 / 0x39 → Flash/EEPROM family
+                #   - 0x0D / 0x05 / 0x06 / 0x10 → Flash/EEPROM family
                 #   - 0x0E/0x27/0x28/0x29 → SRAM
                 # This keeps the in-DB type consistent with ic_layout.py's
                 # protocol-aware Type/Can-be-erased display, eliminating the
@@ -545,7 +548,7 @@ def main():
                     _etype = "SRAM"
                 elif proto_id in {0x07, 0x08, 0x0B}:
                     _etype = "UV-EPROM"
-                elif proto_id in {0x05, 0x06, 0x0D, 0x10, 0x35, 0x39}:
+                elif proto_id in {0x05, 0x06, 0x0D, 0x10}:
                     _etype = "Flash/EEPROM"
                 # else: leave _etype at the flags-based value (uncommon path —
                 # any new proto_id added to KNOWN_PROTOCOLS but not classified
