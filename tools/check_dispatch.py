@@ -27,6 +27,7 @@ DB_FILE = os.environ.get(
     "FIRESTARTER_DB_FILE",
     os.path.join(_DATA_DIR, "chip_database.json"),
 )
+_PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
 
 # Algorithm integer (upstream protocol_id from infoic.xml) → firmware mem_type integer.
 # Must mirror firestarter_app/firestarter/database.py::_ALGO_MEM_TYPE
@@ -89,6 +90,15 @@ def main():
     with open(DB_FILE, encoding="utf-8") as f:
         db_raw = json.load(f)
 
+    with open(_PINOUT_FILE, encoding="utf-8") as _pf:
+        _pinouts_raw = json.load(_pf)
+    # Dynamically build the set of pinouts that have a vpp-pin field.
+    # Using pinouts.json avoids hardcoding — Phase 58 may add new pinouts.
+    _vpp_pinouts = frozenset(
+        k for k, v in _pinouts_raw.items() if "vpp-pin" in v.get("pins", {})
+    )
+    _5v_eeprom_algos = frozenset({0x05, 0x06, 0x0D})
+
     # WIRE-02 (D-15 Shape A): host-side wire-emit round-trip surface.
     # Per-chip we call db.convert_to_programmer(db.get_eprom(part)) and assert
     # the produced wire dict contains canonical "vpp_mv" (Plan 02-01 contract)
@@ -98,6 +108,7 @@ def main():
     errors = []
     sram_in_eprom = []
     eeprom28c_in_eprom = []
+    vpp_eeprom_in_eprom = []
     wire_regressions = []
     total = 0
     for mfg, chips in db_raw.items():
@@ -127,6 +138,16 @@ def main():
                 eeprom28c_in_eprom.append(
                     f"{mfg}/{part} proto=0x{proto:02X} pinout={pinout}"
                 )
+            # GATE-03: full-class VPP-safety guard — any chip with a vpp-pin pinout AND
+            # a 5V-EEPROM-family algorithm (0x05/0x06/0x0D) must not route to configure_eprom.
+            if (
+                pinout in _vpp_pinouts
+                and proto in _5v_eeprom_algos
+                and handler == "configure_eprom"
+            ):
+                vpp_eeprom_in_eprom.append(
+                    f"{mfg}/{part} proto=0x{proto:02X} pinout={pinout}"
+                )
 
             # WIRE-02 (D-15 Shape A): assert wire emits "vpp_mv" and no legacy
             # "vpp" for every chip. Chips not registered in EpromDatabase's
@@ -142,7 +163,13 @@ def main():
                         f"{mfg}/{part} — legacy vpp key still emitted on wire"
                     )
 
-    if errors or sram_in_eprom or eeprom28c_in_eprom or wire_regressions:
+    if (
+        errors
+        or sram_in_eprom
+        or eeprom28c_in_eprom
+        or vpp_eeprom_in_eprom
+        or wire_regressions
+    ):
         if errors:
             print(f"FAIL: {len(errors)} of {total} chips have no valid dispatch path:")
             for e in errors[:20]:
@@ -167,6 +194,15 @@ def main():
                 print(f"  {e}")
             if len(eeprom28c_in_eprom) > 20:
                 print(f"  ... and {len(eeprom28c_in_eprom) - 20} more")
+        if vpp_eeprom_in_eprom:
+            print(
+                f"FAIL: {len(vpp_eeprom_in_eprom)} vpp-pin Flash/EEPROM chips "
+                f"route to configure_eprom (GATE-03: VPP-class hazard):"
+            )
+            for e in vpp_eeprom_in_eprom[:20]:
+                print(f"  {e}")
+            if len(vpp_eeprom_in_eprom) > 20:
+                print(f"  ... and {len(vpp_eeprom_in_eprom) - 20} more")
         if wire_regressions:
             print(f"FAIL: {len(wire_regressions)} wire-key regressions:")
             for e in wire_regressions[:20]:
@@ -179,6 +215,7 @@ def main():
         f"PASS: all {total} chips have a valid dispatch path; "
         f"0 SRAM chips route to configure_eprom; "
         f"0 DIP28_2764 Flash/EEPROM chips route to configure_eprom; "
+        f"0 vpp-pin Flash/EEPROM chips route to configure_eprom; "
         f"0 wire-key regressions"
     )
 
