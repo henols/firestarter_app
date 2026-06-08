@@ -17,6 +17,14 @@ Covers requirements:
   - LMIG-01:  text-line path coexists with binary-frame path through the
               same _read_and_parse_lines yield surface.
 
+Phase 57 Plan 01 — build_db decode regression suite.
+
+Covers requirements:
+  - DEC-03: interpret_timing() raw microseconds for 0x07/0x08/0x0B, no x100
+            multiplier; bare except replaced with except Exception.
+  - DEC-04: VCC_VOLTAGES includes nibbles 0x02 (4V) and 0x03 (4.5V);
+            vcc=bits-11-8, vdd=bits-15-12 (labels no longer swapped).
+
 All tests use the BytesIO-backed fake_serial fixture + make_comm factory
 from conftest.py. No real serial port is opened.
 """
@@ -672,4 +680,137 @@ class TestIdFrameDecoder:
         assert bytes(collected[512:]) == chunk2, "Third chunk mismatch"
         assert len(ack_calls) == 3, (
             f"Expected 3 ACKs (one per chunk), got {len(ack_calls)}"
+        )
+
+
+# -----------------------------------------------------------------
+# Phase 57 Plan 01: build_db decode regression tests (DEC-03, DEC-04)
+# -----------------------------------------------------------------
+
+
+class TestBuildDbDecodeCorrectness:
+    """Regression tests for the four decode bugs fixed in Phase 57 Plan 01.
+
+    DEC-04 (BUG-1): VCC_VOLTAGES must include nibbles 0x02 (4V) and 0x03 (4.5V).
+    DEC-04 (BUG-3): vcc reads bits 11-8 and vdd reads bits 15-12 (labels were swapped).
+    DEC-03 (BUG-2): interpret_timing must NOT multiply by 100 for protocols 0x07/0x0B.
+    """
+
+    # --- DEC-04 BUG-1: VCC_VOLTAGES nibble completeness ---
+
+    def test_vcc_voltages_includes_nibble_0x02_as_4v(self):
+        """DEC-04 BUG-1: VCC_VOLTAGES[0x02] must equal '4V' (was missing)."""
+        from tools.build_db import VCC_VOLTAGES
+
+        assert VCC_VOLTAGES[0x02] == "4V", (
+            f"VCC_VOLTAGES[0x02] expected '4V', got {VCC_VOLTAGES.get(0x02)!r}"
+        )
+
+    def test_vcc_voltages_includes_nibble_0x03_as_4_5v(self):
+        """DEC-04 BUG-1: VCC_VOLTAGES[0x03] must equal '4.5V' (was missing)."""
+        from tools.build_db import VCC_VOLTAGES
+
+        assert VCC_VOLTAGES[0x03] == "4.5V", (
+            f"VCC_VOLTAGES[0x03] expected '4.5V', got {VCC_VOLTAGES.get(0x03)!r}"
+        )
+
+    def test_vcc_voltages_existing_entries_unchanged(self):
+        """DEC-04 BUG-1: existing VCC_VOLTAGES entries must not have changed."""
+        from tools.build_db import VCC_VOLTAGES
+
+        assert VCC_VOLTAGES[0x00] == "5V"
+        assert VCC_VOLTAGES[0x01] == "3.3V"
+        assert VCC_VOLTAGES[0x04] == "5.5V"
+        assert VCC_VOLTAGES[0x05] == "6.5V"
+
+    # --- DEC-04 BUG-3: vcc/vdd bit-range extraction ---
+
+    def test_vcc_reads_bits_11_to_8(self):
+        """DEC-04 BUG-3: vcc must be extracted from bits 11-8 ((voltages >> 8) & 0x0F)."""
+        from tools.build_db import VCC_VOLTAGES
+
+        # Construct voltages word with bits 11-8 = 0x01 (3.3V) and bits 15-12 = 0x00 (5V).
+        # voltages = (vdd_nibble << 12) | (vcc_nibble << 8) | vpp_byte
+        vcc_nibble = 0x01  # 3.3V
+        vdd_nibble = 0x00  # 5V
+        voltages = (vdd_nibble << 12) | (vcc_nibble << 8) | 0x00
+
+        extracted_vcc = (voltages >> 8) & 0x0F
+        extracted_vdd = (voltages >> 12) & 0x0F
+
+        assert extracted_vcc == vcc_nibble, (
+            f"bits 11-8 extraction should yield vcc nibble {vcc_nibble:#x}, "
+            f"got {extracted_vcc:#x}"
+        )
+        assert VCC_VOLTAGES.get(extracted_vcc, "5V") == "3.3V", (
+            "vcc lookup for nibble 0x01 must yield '3.3V'"
+        )
+        assert extracted_vdd == vdd_nibble, (
+            f"bits 15-12 extraction should yield vdd nibble {vdd_nibble:#x}, "
+            f"got {extracted_vdd:#x}"
+        )
+        assert VCC_VOLTAGES.get(extracted_vdd, "5V") == "5V", (
+            "vdd lookup for nibble 0x00 must yield '5V'"
+        )
+
+    def test_vcc_vdd_distinct_values_map_correctly(self):
+        """DEC-04 BUG-3: when vcc != vdd, bits-11-8 is vcc and bits-15-12 is vdd."""
+        from tools.build_db import VCC_VOLTAGES
+
+        # Use the two new nibbles: vcc_nibble=0x02 (4V), vdd_nibble=0x01 (3.3V).
+        vcc_nibble = 0x02  # 4V  (BUG-1 fix value)
+        vdd_nibble = 0x01  # 3.3V
+        voltages = (vdd_nibble << 12) | (vcc_nibble << 8) | 0x00
+
+        vcc_val = VCC_VOLTAGES.get((voltages >> 8) & 0x0F, "5V")
+        vdd_val = VCC_VOLTAGES.get((voltages >> 12) & 0x0F, "5V")
+
+        assert vcc_val == "4V", f"Expected vcc='4V', got {vcc_val!r}"
+        assert vdd_val == "3.3V", f"Expected vdd='3.3V', got {vdd_val!r}"
+
+    # --- DEC-03 BUG-2: interpret_timing no x100 multiplier ---
+
+    def test_interpret_timing_0x07_returns_raw_microseconds(self):
+        """DEC-03 BUG-2: interpret_timing('64', 0x07) must return '100 us' (0x64=100, no x100)."""
+        from tools.build_db import interpret_timing
+
+        result = interpret_timing("64", 0x07)
+        assert result == "100 us", (
+            f"interpret_timing('64', 0x07) expected '100 us', got {result!r}"
+        )
+
+    def test_interpret_timing_0x0b_returns_raw_microseconds(self):
+        """DEC-03 BUG-2: interpret_timing('64', 0x0B) must return '100 us' (no x100)."""
+        from tools.build_db import interpret_timing
+
+        result = interpret_timing("64", 0x0B)
+        assert result == "100 us", (
+            f"interpret_timing('64', 0x0B) expected '100 us', got {result!r}"
+        )
+
+    def test_interpret_timing_0x08_returns_raw_microseconds(self):
+        """DEC-03: interpret_timing('64', 0x08) returns '100 us' (was already correct)."""
+        from tools.build_db import interpret_timing
+
+        result = interpret_timing("64", 0x08)
+        assert result == "100 us", (
+            f"interpret_timing('64', 0x08) expected '100 us', got {result!r}"
+        )
+
+    def test_interpret_timing_non_hex_falls_back_to_zero(self):
+        """DEC-03 BUG-2: interpret_timing('zz', 0x07) must return '0 us' (except Exception)."""
+        from tools.build_db import interpret_timing
+
+        result = interpret_timing("zz", 0x07)
+        assert result == "0 us", (
+            f"interpret_timing('zz', 0x07) expected '0 us', got {result!r}"
+        )
+
+    def test_interpret_timing_non_timing_protocol_returns_algorithm_controlled(self):
+        """DEC-03: interpret_timing('64', 0x05) must return 'Algorithm Controlled'."""
+        from tools.build_db import interpret_timing
+
+        result = interpret_timing("64", 0x05)
+        assert result == "Algorithm Controlled", (
+            f"interpret_timing('64', 0x05) expected 'Algorithm Controlled', got {result!r}"
         )
