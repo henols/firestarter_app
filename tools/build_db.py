@@ -74,21 +74,55 @@ VPP_VOLTAGES = {
 }
 
 VPP_MV = {
-    0x00: 12000, 0x10: 9000, 0x20: 9500, 0x30: 10000,
-    0x40: 11000, 0x50: 11500, 0x60: 12500, 0x70: 13000,
-    0x80: 13500, 0x90: 14000, 0xA0: 14500, 0xB0: 15500,
-    0xC0: 16000, 0xD0: 16500, 0xE0: 17000, 0xF0: 18000,
+    0x00: 12000,
+    0x10: 9000,
+    0x20: 9500,
+    0x30: 10000,
+    0x40: 11000,
+    0x50: 11500,
+    0x60: 12500,
+    0x70: 13000,
+    0x80: 13500,
+    0x90: 14000,
+    0xA0: 14500,
+    0xB0: 15500,
+    0xC0: 16000,
+    0xD0: 16500,
+    0xE0: 17000,
+    0xF0: 18000,
 }
 
-KNOWN_PROTOCOLS = {0x05, 0x06, 0x07, 0x08, 0x0B, 0x0D, 0x0E, 0x10, 0x27, 0x28, 0x29, 0x35, 0x39}
+KNOWN_PROTOCOLS = {
+    0x05,
+    0x06,
+    0x07,
+    0x08,
+    0x0B,
+    0x0D,
+    0x0E,
+    0x10,
+    0x27,
+    0x28,
+    0x29,
+    0x35,
+    0x39,
+}
 
-VCC_VOLTAGES = {0x00: "5V", 0x01: "3.3V", 0x04: "5.5V", 0x05: "6.5V"}
+# [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
+VCC_VOLTAGES = {
+    0x00: "5V",
+    0x01: "3.3V",
+    0x02: "4V",  # BUG-1 fix: was missing
+    0x03: "4.5V",  # BUG-1 fix: was missing
+    0x04: "5.5V",
+    0x05: "6.5V",
+}
 
 DIP28_VARIANT_MAP = {
-    0x10: "DIP28_27512",   # 27C512 — VPP on pin 22 (OE pin), 19 address lines
-    0x11: "DIP28_27256",   # 27C256 — VPP on pin 1, 15 address lines
-    0x12: "DIP28_2764",    # 27C128
-    0x13: "DIP28_2764",    # 27C64/2764A
+    0x10: "DIP28_27512",  # 27C512 — VPP on pin 22 (OE pin), 19 address lines
+    0x11: "DIP28_27256",  # 27C256 — VPP on pin 1, 15 address lines
+    0x12: "DIP28_2764",  # 27C128
+    0x13: "DIP28_2764",  # 27C64/2764A
 }
 
 # fm1608-db-mismatch: pm_idx is the upstream pin_map low byte (chip-family
@@ -111,22 +145,40 @@ DIP28_VARIANT_MAP = {
 PIN_MAP_TO_PINOUT = {
     # (pin_count, pm_idx): pinout_key  (None = use sub-discriminator)
     # Tuple variants below override based on protocol_id (see resolve_pinout_key).
-    (28, 21): "DIP28_2764",        # 27C64 family — 8K UV-EPROM with PGM on pin 27 (one-rom verified)
-    (28, 22): None,                 # 27C128/256/512 family — variant_lo discriminates
-    (28, 0):  None,                 # SRAM/FRAM (type=4) handled via override below
-    (28, 20): "DIP28_28C256",      # 28C256 EEPROM family (A14 at pin 1, WE at pin 27, no VPP — one-rom verified)
-    (28, 19): "DIP28_28C64",       # 28C64 EEPROM family (8K, WE at pin 27, no VPP — one-rom verified)
-    (28, 18): "DIP28_28C64",       # 28C16/17 EEPROM family (2K-class; same DIP28 5V layout as 28C64, smaller addr range)
-    (32, 13): None,                 # 5V flash vs UV-EPROM at same pm_idx — protocol_id discriminates
-    (32, 12): None,                 # 27C020/040 vs 5V flash at same pm_idx — protocol_id discriminates
-    (32, 11): None,                 # AM29F002 5V flash vs Intel-flash vs 28C-family — protocol_id discriminates
-    (32, 10): None,                 # 27C010 UV-EPROM vs Intel-flash — protocol_id discriminates
-    (32, 9):  None,                 # 1Mbit mix — proto_id discriminates (5V flash / Intel-flash / 28C-EEPROM)
-    (32, 7):  None,                 # Small 32-pin mix
-    (32, 5):  "DIP32_STD",         # 32-pin Intel-flash variants (12V VPP at pin 1)
-    (32, 0):  None,                 # 32-pin SRAM/NVRAM/EEPROM — protocol_id discriminates
-    (24, 23): None,                 # 2716/2732 — variant_lo discriminates
-    (24, 0):  None,                 # 24-pin SRAM (6116) — protocol_id discriminates
+    (
+        28,
+        21,
+    ): "DIP28_2764",  # 27C64 family — 8K UV-EPROM with PGM on pin 27 (one-rom verified)
+    (28, 22): None,  # 27C128/256/512 family — variant_lo discriminates
+    (28, 0): None,  # SRAM/FRAM (type=4) handled via override below
+    (
+        28,
+        20,
+    ): "DIP28_28C256",  # 28C256 EEPROM family (A14 at pin 1, WE at pin 27, no VPP — one-rom verified)
+    (
+        28,
+        19,
+    ): "DIP28_28C64",  # 28C64 EEPROM family (8K, WE at pin 27, no VPP — one-rom verified)
+    (
+        28,
+        18,
+    ): "DIP28_28C64",  # 28C16/17 EEPROM family (2K-class; same DIP28 5V layout as 28C64, smaller addr range)
+    (32, 13): None,  # 5V flash vs UV-EPROM at same pm_idx — protocol_id discriminates
+    (32, 12): None,  # 27C020/040 vs 5V flash at same pm_idx — protocol_id discriminates
+    (
+        32,
+        11,
+    ): None,  # AM29F002 5V flash vs Intel-flash vs 28C-family — protocol_id discriminates
+    (32, 10): None,  # 27C010 UV-EPROM vs Intel-flash — protocol_id discriminates
+    (
+        32,
+        9,
+    ): None,  # 1Mbit mix — proto_id discriminates (5V flash / Intel-flash / 28C-EEPROM)
+    (32, 7): None,  # Small 32-pin mix
+    (32, 5): "DIP32_STD",  # 32-pin Intel-flash variants (12V VPP at pin 1)
+    (32, 0): None,  # 32-pin SRAM/NVRAM/EEPROM — protocol_id discriminates
+    (24, 23): None,  # 2716/2732 — variant_lo discriminates
+    (24, 0): None,  # 24-pin SRAM (6116) — protocol_id discriminates
 }
 
 # Per-protocol overrides for chips that share pm_idx but have different layouts.
@@ -145,10 +197,10 @@ PIN_MAP_PROTO_TO_PINOUT = {
     # All route to DIP32_SST39SF040 (5V flash family — no VPP, WE on pin 31).
     # Address bus is over-allocated to 19 pins; firmware uses memory-size to
     # restrict driving for smaller variants.
-    (32,  7, 0x05): "DIP32_SST39SF040",
-    (32,  7, 0x06): "DIP32_SST39SF040",
-    (32,  9, 0x05): "DIP32_SST39SF040",
-    (32,  9, 0x06): "DIP32_SST39SF040",
+    (32, 7, 0x05): "DIP32_SST39SF040",
+    (32, 7, 0x06): "DIP32_SST39SF040",
+    (32, 9, 0x05): "DIP32_SST39SF040",
+    (32, 9, 0x06): "DIP32_SST39SF040",
     (32, 10, 0x06): "DIP32_SST39SF040",
     (32, 11, 0x05): "DIP32_SST39SF040",
     (32, 11, 0x06): "DIP32_SST39SF040",
@@ -157,20 +209,20 @@ PIN_MAP_PROTO_TO_PINOUT = {
     (32, 13, 0x06): "DIP32_SST39SF040",  # one-rom verified for SST39SF040 + AM29F040
     # ---- 32-pin UV-EPROM (proto 0x08 EPROM_QUICK) ----
     # All route to DIP32_STD (UV-EPROM family — 12V VPP at pin 1, PGM/A18 at pin 31).
-    (32,  7, 0x08): "DIP32_STD",
-    (32, 10, 0x08): "DIP32_STD",         # one-rom verified for 27C010
-    (32, 12, 0x08): "DIP32_STD",         # one-rom verified for 27C020/27C040
+    (32, 7, 0x08): "DIP32_STD",
+    (32, 10, 0x08): "DIP32_STD",  # one-rom verified for 27C010
+    (32, 12, 0x08): "DIP32_STD",  # one-rom verified for 27C020/27C040
     (32, 13, 0x08): "DIP32_STD",
     # ---- 32-pin 5V EEPROM (proto 0x0D EEPROM_POLL) ----
     # All route to DIP32_28C512_EEPROM (one-rom verified for 28C512 family).
-    (32,  9, 0x0D): "DIP32_28C512_EEPROM",
+    (32, 9, 0x0D): "DIP32_28C512_EEPROM",
     (32, 11, 0x0D): "DIP32_28C512_EEPROM",
     (32, 13, 0x0D): "DIP32_28C512_EEPROM",
     # ---- 32-pin Intel-flash (proto 0x10) ----
     # All route to DIP32_STD (Intel-flash uses 12V VPP at pin 1, similar physical
     # layout to UV-EPROM though programming algorithm is command-register based).
-    (32,  7, 0x10): "DIP32_STD",
-    (32,  9, 0x10): "DIP32_STD",
+    (32, 7, 0x10): "DIP32_STD",
+    (32, 9, 0x10): "DIP32_STD",
     (32, 10, 0x10): "DIP32_STD",
     (32, 11, 0x10): "DIP32_STD",
     (32, 12, 0x10): "DIP32_STD",
@@ -193,10 +245,10 @@ PIN_MAP_PROTO_TO_PINOUT = {
     #
     # Previous routing to DIP32_28C512_EEPROM (WE=30) was WRONG — DIP32_SST39SF040
     # is the correct JEDEC SRAM-family pinout.
-    (32,  0, 0x0E): "DIP32_SST39SF040",
-    (32,  0, 0x29): "DIP32_SST39SF040",
+    (32, 0, 0x0E): "DIP32_SST39SF040",
+    (32, 0, 0x29): "DIP32_SST39SF040",
     # ---- 24-pin 5V SRAM (proto 0x27 SRAM_24PIN) ----
-    (24, 0,  0x27): "DIP24_6116",        # one-rom verified for 6116
+    (24, 0, 0x27): "DIP24_6116",  # one-rom verified for 6116
 }
 
 with open(PINOUT_FILE) as _f:
@@ -231,7 +283,10 @@ def resolve_pinout_key(pin_count, variant, flags_int, pm_idx=None, proto_id=None
         if key is not None:
             if key in VALID_PINOUT_KEYS:
                 return key
-            print(f"WARN: PIN_MAP_PROTO_TO_PINOUT[{pin_count},{pm_idx},0x{proto_id:02X}] = '{key}' not in pinouts.json", file=sys.stderr)
+            print(
+                f"WARN: PIN_MAP_PROTO_TO_PINOUT[{pin_count},{pm_idx},0x{proto_id:02X}] = '{key}' not in pinouts.json",
+                file=sys.stderr,
+            )
 
     # Tier 2: (pin_count, pm_idx)
     if pm_idx is not None and (pin_count, pm_idx) in PIN_MAP_TO_PINOUT:
@@ -239,7 +294,10 @@ def resolve_pinout_key(pin_count, variant, flags_int, pm_idx=None, proto_id=None
         if key is not None:
             if key in VALID_PINOUT_KEYS:
                 return key
-            print(f"WARN: PIN_MAP_TO_PINOUT[{pin_count},{pm_idx}] = '{key}' not in pinouts.json", file=sys.stderr)
+            print(
+                f"WARN: PIN_MAP_TO_PINOUT[{pin_count},{pm_idx}] = '{key}' not in pinouts.json",
+                file=sys.stderr,
+            )
 
     # Tier 3: variant-based fall-through
     if pin_count == 24:
@@ -338,7 +396,10 @@ def main():
 
                 # Skip chips with unknown protocol_id
                 if proto_id not in KNOWN_PROTOCOLS:
-                    print(f"WARN: skipping {name} — unknown protocol_id 0x{proto_id:02X}", file=sys.stderr)
+                    print(
+                        f"WARN: skipping {name} — unknown protocol_id 0x{proto_id:02X}",
+                        file=sys.stderr,
+                    )
                     continue
 
                 # SAFETY SKIP: 24-pin 5V parallel EEPROMs routed via EPROM
@@ -356,9 +417,11 @@ def main():
                 # dispatch lands, these chips are unsafe to expose.
                 # Discriminator: pin_count == 24 AND proto_id in EPROM-family
                 # AND flags has the "electrically erasable" bit (0x10).
-                if (pin_count == 24
-                        and proto_id in (0x07, 0x08, 0x0B)
-                        and (flags & 0x10)):
+                if (
+                    pin_count == 24
+                    and proto_id in (0x07, 0x08, 0x0B)
+                    and (flags & 0x10)
+                ):
                     print(
                         f"WARN: skipping {mfg_name}/{name} — 24-pin 5V EEPROM with "
                         f"EPROM-family algo 0x{proto_id:02X} (damage hazard: 12V VPP "
@@ -370,7 +433,9 @@ def main():
                     continue
 
                 # --- SYNTHESIZE "COMPLETE" DATA ---
-                pinout_key = resolve_pinout_key(pin_count, variant, flags, pm_idx=pm_idx, proto_id=proto_id)
+                pinout_key = resolve_pinout_key(
+                    pin_count, variant, flags, pm_idx=pm_idx, proto_id=proto_id
+                )
 
                 # Derive electrical.type — FLAGS-BASED (used by WARNING-5 trigger).
                 # The "electrically erasable" flag distinguishes 5V parallel
@@ -412,9 +477,11 @@ def main():
                 # Phase 12 Plan 04 SRAM-detection precedent above.
                 # References: WARNING-5 in .planning/v1.0-MILESTONE-AUDIT.md
                 # and .planning/INTEGRATION-CHECK.md.
-                if (pinout_key in ("DIP28_2764", "DIP28_28C256")
-                        and proto_id == 0x07
-                        and _etype == "Flash/EEPROM"):
+                if (
+                    pinout_key in ("DIP28_2764", "DIP28_28C256")
+                    and proto_id == 0x07
+                    and _etype == "Flash/EEPROM"
+                ):
                     print(
                         f"INFO: {mfg_name}/{name} algorithm override 0x07->0x0D "
                         f"(WARNING-5: 5V EEPROM with non-EPROM pinout — route through configure_eeprom28c)",
@@ -456,10 +523,10 @@ def main():
                             size_label = "8K"
                         else:
                             pinout_key = "DIP28_28C256"
-                            size_label = f"{mem_size//1024}K"
+                            size_label = f"{mem_size // 1024}K"
                         print(
                             f"INFO: {mfg_name}/{name} type=4 SRAM override "
-                            f"algorithm 0x{proto_id-0x21:02X}->0x28 + pinout->{pinout_key} "
+                            f"algorithm 0x{proto_id - 0x21:02X}->0x28 + pinout->{pinout_key} "
                             f"(SRAM/FRAM {size_label}; configure_sram dispatch)",
                             file=sys.stderr,
                         )
@@ -498,17 +565,26 @@ def main():
                     # @-suffix from each piece, dedupe, rejoin. Combined with
                     # database.py's alias-aware get_eprom_config lookup, this
                     # makes `firestarter info <alias>` work for every alias.
-                    "part_number": ",".join(dict.fromkeys(
-                        a.split("@")[0].strip() for a in name.split(",") if a.split("@")[0].strip()
-                    )),
+                    "part_number": ",".join(
+                        dict.fromkeys(
+                            a.split("@")[0].strip()
+                            for a in name.split(",")
+                            if a.split("@")[0].strip()
+                        )
+                    ),
                     "electrical": {
                         "type": _etype,
                         "size_bytes": mem_size,
                         "pin_count": pin_count,
                         "vpp": VPP_VOLTAGES.get(voltages & 0xFF, "Unknown"),
                         "vpp_mv": VPP_MV.get(voltages & 0xFF, 0),
-                        "vdd": VCC_VOLTAGES.get((voltages >> 8) & 0x0F, "5V"),
-                        "vcc": VCC_VOLTAGES.get((voltages >> 12) & 0x0F, "5V"),
+                        # [VERIFIED: minipro database.c#L921-L923 @ a8efaedc]
+                        "vcc": VCC_VOLTAGES.get(
+                            (voltages >> 8) & 0x0F, "5V"
+                        ),  # bits 11-8
+                        "vdd": VCC_VOLTAGES.get(
+                            (voltages >> 12) & 0x0F, "5V"
+                        ),  # bits 15-12
                     },
                     "programming": {
                         "algorithm": proto_id,
