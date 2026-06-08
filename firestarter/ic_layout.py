@@ -119,6 +119,17 @@ class EpromSpecBuilder:
     def __init__(self, db_instance: EpromDatabase):
         self.db = db_instance
 
+    @staticmethod
+    def _first_pin(pin_field: list) -> int:
+        """Extract a scalar pin number from a single-element list pin field.
+
+        Pin map fields like vpp-pin, oe-pin, and rw-pin are stored as
+        single-element lists in pinouts.json (e.g. [22]).  This helper
+        returns the first element so the caller can use it as an integer
+        index or in arithmetic comparisons.
+        """
+        return pin_field[0]
+
     def _select_jumper_label(self, jp_setting: int, label1: str, label2: str) -> str:
         if jp_setting == 1:
             return label1
@@ -391,21 +402,32 @@ class EpromSpecBuilder:
         )
 
         if pin_map_details:
-            if "rw-pin" in pin_map_details and pin_map_details["rw-pin"] <= pin_count:
-                pin_names[pin_map_details["rw-pin"] - 1] = "R/W(WE)"
-            if "vpp-pin" in pin_map_details and pin_map_details["vpp-pin"] <= pin_count:
-                pin_names[pin_map_details["vpp-pin"] - 1] = "VPP"
+            # Single-pin fields in pinouts.json are stored as single-element
+            # lists (e.g. "vpp-pin": [22]).  Extract scalars before comparison.
+            rw_pin = (
+                self._first_pin(pin_map_details["rw-pin"])
+                if "rw-pin" in pin_map_details
+                else None
+            )  # noqa: E501
+            vpp_pin = (
+                self._first_pin(pin_map_details["vpp-pin"])
+                if "vpp-pin" in pin_map_details
+                else None
+            )  # noqa: E501
+            oe_pin = (
+                self._first_pin(pin_map_details["oe-pin"])
+                if "oe-pin" in pin_map_details
+                else None
+            )  # noqa: E501
+            if rw_pin is not None and rw_pin <= pin_count:
+                pin_names[rw_pin - 1] = "R/W(WE)"
+            if vpp_pin is not None and vpp_pin <= pin_count:
+                pin_names[vpp_pin - 1] = "VPP"
                 # If VPP is defined, and there's an OE pin, ensure OE is also labeled if it's different  # noqa: E501
-                if (
-                    "oe-pin" in pin_map_details
-                    and pin_map_details["oe-pin"] != pin_map_details["vpp-pin"]
-                    and pin_map_details["oe-pin"] <= pin_count
-                ):
-                    pin_names[pin_map_details["oe-pin"] - 1] = "OE"
-            elif (
-                "oe-pin" in pin_map_details and pin_map_details["oe-pin"] <= pin_count
-            ):  # Only OE, no separate VPP
-                pin_names[pin_map_details["oe-pin"] - 1] = "OE"
+                if oe_pin is not None and oe_pin != vpp_pin and oe_pin <= pin_count:
+                    pin_names[oe_pin - 1] = "OE"
+            elif oe_pin is not None and oe_pin <= pin_count:  # Only OE, no separate VPP
+                pin_names[oe_pin - 1] = "OE"
 
             if "address-bus-pins" in pin_map_details:
                 for i, pin_num in enumerate(pin_map_details["address-bus-pins"]):

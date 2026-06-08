@@ -311,48 +311,51 @@
   '''
 # ---
 # name: test_info_known_chip
-  ''
-# ---
-# name: test_info_known_chip[test_info_known_chip_stderr]
   '''
-  Traceback (most recent call last):
-    File "<PATH>", line N, in <module>
-      sys.exit(main())
-               ^^^^^^
-    File "<PATH>", line N, in __call__
-      return self.main(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line N, in main
-      rv = self.invoke(ctx)
-           ^^^^^^^^^^^^^^^^
-    File "<PATH>", line N, in invoke
-      return _process_result(sub_ctx.command.invoke(sub_ctx))
-                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line N, in invoke
-      return ctx.invoke(self.callback, **ctx.params)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line N, in invoke
-      return callback(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line N, in new_func
-      return f(get_current_context().obj, *args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line N, in wrapper
-      return f(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line N, in info
-      structured_details = app.eprom_presenter.prepare_detailed_eprom_data(
-                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line N, in prepare_detailed_eprom_data
-      eprom_specifications = self.spec_builder.build_specifications(eprom_details)
-                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line N, in build_specifications
-      display_pin_names = self._generate_pin_names_for_display(eprom_data)
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    File "<PATH>", line N, in _generate_pin_names_for_display
-      if "vpp-pin" in pin_map_details and pin_map_details["vpp-pin"] <= pin_count:
-                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  TypeError: '<=' not supported between instances of 'list' and 'int'
+  Eprom Info          -- NOT VERIFIED --
+  Name:               W27C512,W27E512
+  Manufacturer:       WINBOND
+  Number of pins:     28
+  Memory size         0x10000
+  Type:               UV-EPROM / MTP-Flash (12V VPP)
+  Can be erased:      false (UV erase only)
+  VCC:                5.0v
+  Chip ID:            0xda08
+  Pulse delay:        100µS
+  
+         28-DIP package
+          -----v-----
+    A15 -|  1     28 |- VCC   
+    A12 -|  2     27 |- A14   
+    A7  -|  3     26 |- A13   
+    A6  -|  4     25 |- A8    
+    A5  -|  5     24 |- A9    
+    A4  -|  6     23 |- A11   
+    A3  -|  7     22 |- VPP   
+    A2  -|  8     21 |- A10   
+    A1  -|  9     20 |- CE    
+    A0  -| 10     19 |- D7    
+    D0  -| 11     18 |- D6    
+    D1  -| 12     17 |- D5    
+    D2  -| 13     16 |- D4    
+    GND -| 14     15 |- D3    
+          -----------
+  
+  Jumper config (Rev 0.1 & 1.0):
+    JP1:  ●(● ●) (5V, A13 = A13)
+    JP2: (● ●)●  (5V, A17 = VCC)
+    JP3: (● ●)●  (28pin, 32pin = 28pin)
+  
+  Jumper config (Rev 2.0 & 2.1):
+    JP4: (● ●)   (28pin, 32pin = Closed)
+  
+  Protocol: EPROM/EEPROM (ID: 0x07)
+    - JEDEC 28-pin EPROM algorithm (also covers compatible 28C parts)
+    - Requires VPP on OE/VPP pin and byte-program style pulses
+    - Vendors may enable software data protection/unlock cycles
+  
+  Flags: 0x00000020
+    - Provides readable manufacturer/device ID
   
   '''
 # ---

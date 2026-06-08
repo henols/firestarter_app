@@ -142,6 +142,24 @@ pin_conversions = {
 logger = logging.getLogger("Database")
 
 
+def _parse_pulse_duration(pulse_str: str) -> int:
+    """Parse a pulse_duration string from chip_database.json into microseconds.
+
+    Accepts values like "100 us", "1000 us", "Algorithm Controlled", or "".
+    Returns the integer microsecond value, or 0 for unknown / algorithm-controlled.
+    """
+    if not pulse_str:
+        return 0
+    # Format: "<integer> us"
+    parts = pulse_str.split()
+    if len(parts) == 2 and parts[1] == "us":
+        try:
+            return int(parts[0])
+        except ValueError:
+            pass
+    return 0
+
+
 def _read_config_file(filename: str) -> dict:
     """
     Reads a JSON configuration file from the 'data' subdirectory.
@@ -422,7 +440,7 @@ class EpromDatabase:
             "vpp_volts": vpp,
             "vpp_mv": vpp_mv,
             "vcc": vcc,
-            "pulse-delay": 0,  # Not directly available in new format, may need parsing from string  # noqa: E501
+            "pulse-delay": _parse_pulse_duration(programming.get("pulse_duration", "")),  # noqa: E501
             "verified": bool(ic.get("verified", False)),
             "info-flags": info_flags,
             "flags": 0,
