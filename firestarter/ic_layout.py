@@ -225,8 +225,8 @@ class EpromSpecBuilder:
                 0x27: "SRAM (24-pin)",
                 0x28: "SRAM (28-pin)",
                 0x29: "SRAM/NVRAM (32-pin)",
-                0x35: "Flash (EEPROM-like)",
-                0x39: "Flash (Intel-alt)",
+                # 0x35 (ITE EC MCU) and 0x39 (phantom) removed in Phase 57 (DEC-05);
+                # they are not memory protocols and no DB chip uses them.
             }
             if protocol_id in proto_display:
                 return proto_display[protocol_id]
@@ -507,7 +507,7 @@ class EpromSpecBuilder:
         if eprom_data.get("type") == 1 or eprom_data.get("type") == 3:
             if proto in (0x07, 0x08, 0x0B):
                 output_data["can_erase_str"] = "false (UV erase only)"
-            elif proto in (0x05, 0x06, 0x0D, 0x10, 0x35, 0x39):
+            elif proto in (0x05, 0x06, 0x0D, 0x10):
                 output_data["can_erase_str"] = "true (firmware-supported)"
             else:
                 output_data["can_erase_str"] = (

@@ -57,8 +57,9 @@ _ALGO_MEM_TYPE = {
     0x27: 4,  # SRAM_24PIN        → TYPE_SRAM
     0x28: 4,  # SRAM_STD          → TYPE_SRAM
     0x29: 4,  # SRAM_512K_1M      → TYPE_SRAM
-    0x35: 5,  # FLASH_EEPROM_LIKE → TYPE_FLASH_TYPE_4
-    0x39: 5,  # FLASH_INTEL_ALT   → TYPE_FLASH_TYPE_4 (no DB chips; future-proofed)
+    # 0x35 (IC2_ALG_ITE — an ITE EC MCU, not a memory algorithm) and 0x39 (phantom —
+    # no IC2_ALG constant) removed in Phase 57 (DEC-05) to match build_db.py's
+    # canonical allowlist; no DB chip uses either protocol.
 }
 
 # Module-level constants
