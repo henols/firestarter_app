@@ -514,7 +514,7 @@ def main():
                 complete_db[mfg_name] = chips
 
     with open(OUTPUT_FILE, "w") as f:
-        json.dump(complete_db, f, indent=2)
+        json.dump(complete_db, f, indent=2, sort_keys=True)
 
     print(f"Done! {total_chips} chips processed. Saved to {OUTPUT_FILE}")
 
