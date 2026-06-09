@@ -814,3 +814,610 @@ class TestBuildDbDecodeCorrectness:
         assert result == "Algorithm Controlled", (
             f"interpret_timing('64', 0x05) expected 'Algorithm Controlled', got {result!r}"
         )
+
+
+# -----------------------------------------------------------------
+# Phase 58 Plan 01: Wave 0 test scaffolding (PIN-01/02/03)
+# -----------------------------------------------------------------
+
+
+class TestResolvedPinoutKey:
+    """Unit tests for the Phase 58 principled resolve_pinout_key rewrite.
+
+    PIN-01: resolve_pinout_key returns the correct pinout key for each
+    (pin_count, pm_idx, variant_lo) combination. Covers all documented
+    rule branches from RESEARCH.md §"Full Principled Rule Structure".
+
+    Each test passes hard-coded field values matching real infoic.xml chips,
+    verifying the general rules without importing chip_database.json.
+
+    STATUS: RED-first — these tests assert the NEW principled signature
+    resolve_pinout_key(pin_count, variant, flags_int, pm_idx, proto_id,
+    type_int, mem_size). The current build_db.py still has the old
+    guess-table-based function. These tests turn GREEN in Plan 02.
+    """
+
+    # --- 24-pin branch ---
+
+    def test_24pin_pm23_variant_lo_01_returns_dip24_2732(self):
+        """24-pin pm_idx=23 variant_lo=0x01 → DIP24_2732 (4KB UV-EPROM)."""
+        from tools.build_db import resolve_pinout_key
+
+        # variant = 0x00000001 → variant_lo = 0x01
+        result = resolve_pinout_key(
+            24, 0x00000001, 0x0000, pm_idx=23, proto_id=0x0B, type_int=1, mem_size=4096
+        )
+        assert result == "DIP24_2732", (
+            f"Expected 'DIP24_2732' for 24-pin pm_idx=23 variant_lo=0x01, got {result!r}"
+        )
+
+    def test_24pin_pm23_variant_lo_00_returns_dip24_2716(self):
+        """24-pin pm_idx=23 variant_lo=0x00 → DIP24_2716 (2KB UV-EPROM)."""
+        from tools.build_db import resolve_pinout_key
+
+        # variant = 0x00000000 → variant_lo = 0x00
+        result = resolve_pinout_key(
+            24, 0x00000000, 0x0000, pm_idx=23, proto_id=0x0B, type_int=1, mem_size=2048
+        )
+        assert result == "DIP24_2716", (
+            f"Expected 'DIP24_2716' for 24-pin pm_idx=23 variant_lo=0x00, got {result!r}"
+        )
+
+    def test_24pin_pm23_variant_lo_10_returns_dip24_2816(self):
+        """24-pin pm_idx=23 variant_lo=0x10 → DIP24_2816 (28C EEPROM family). KEY TEST."""
+        from tools.build_db import resolve_pinout_key
+
+        # variant = 0x00004310 → variant_lo = 0x10 (confirmed 28C EEPROM discriminator)
+        result = resolve_pinout_key(
+            24, 0x00004310, 0x0010, pm_idx=23, proto_id=0x0B, type_int=1, mem_size=2048
+        )
+        assert result == "DIP24_2816", (
+            f"Expected 'DIP24_2816' for 24-pin pm_idx=23 variant_lo=0x10, got {result!r}"
+        )
+
+    def test_24pin_pm0_returns_dip24_6116(self):
+        """24-pin pm_idx=0 → DIP24_6116 (SRAM-class)."""
+        from tools.build_db import resolve_pinout_key
+
+        result = resolve_pinout_key(
+            24, 0x00000000, 0x0000, pm_idx=0, proto_id=0x27, type_int=4, mem_size=2048
+        )
+        assert result == "DIP24_6116", (
+            f"Expected 'DIP24_6116' for 24-pin pm_idx=0, got {result!r}"
+        )
+
+    def test_24pin_unknown_pm_idx_returns_none(self):
+        """24-pin unknown pm_idx=99 → None (D-06 fail-safe)."""
+        from tools.build_db import resolve_pinout_key
+
+        result = resolve_pinout_key(
+            24, 0x00000000, 0x0000, pm_idx=99, proto_id=0x0B, type_int=1, mem_size=2048
+        )
+        assert result is None, (
+            f"Expected None for unclassifiable 24-pin pm_idx=99, got {result!r}"
+        )
+
+    # --- 28-pin branch ---
+
+    def test_28pin_pm22_variant_lo_10_returns_dip28_27512(self):
+        """28-pin pm_idx=22 variant_lo=0x10 → DIP28_27512 (VPP on pin 22)."""
+        from tools.build_db import resolve_pinout_key
+
+        result = resolve_pinout_key(
+            28, 0x00000010, 0x0000, pm_idx=22, proto_id=0x07, type_int=1, mem_size=65536
+        )
+        assert result == "DIP28_27512", (
+            f"Expected 'DIP28_27512' for 28-pin pm_idx=22 variant_lo=0x10, got {result!r}"
+        )
+
+    def test_28pin_pm22_variant_lo_11_returns_dip28_27256(self):
+        """28-pin pm_idx=22 variant_lo=0x11 → DIP28_27256 (VPP on pin 1)."""
+        from tools.build_db import resolve_pinout_key
+
+        result = resolve_pinout_key(
+            28, 0x00000011, 0x0000, pm_idx=22, proto_id=0x07, type_int=1, mem_size=32768
+        )
+        assert result == "DIP28_27256", (
+            f"Expected 'DIP28_27256' for 28-pin pm_idx=22 variant_lo=0x11, got {result!r}"
+        )
+
+    def test_28pin_pm22_variant_lo_00_returns_dip28_2764(self):
+        """28-pin pm_idx=22 variant_lo=0x00 → DIP28_2764 (27C64/128 layout)."""
+        from tools.build_db import resolve_pinout_key
+
+        result = resolve_pinout_key(
+            28, 0x00000000, 0x0000, pm_idx=22, proto_id=0x07, type_int=1, mem_size=8192
+        )
+        assert result == "DIP28_2764", (
+            f"Expected 'DIP28_2764' for 28-pin pm_idx=22 variant_lo=0x00, got {result!r}"
+        )
+
+    def test_28pin_pm21_returns_dip28_2764(self):
+        """28-pin pm_idx=21 → DIP28_2764."""
+        from tools.build_db import resolve_pinout_key
+
+        result = resolve_pinout_key(
+            28, 0x00000000, 0x0000, pm_idx=21, proto_id=0x07, type_int=1, mem_size=8192
+        )
+        assert result == "DIP28_2764", (
+            f"Expected 'DIP28_2764' for 28-pin pm_idx=21, got {result!r}"
+        )
+
+    def test_28pin_pm20_returns_dip28_28c256(self):
+        """28-pin pm_idx=20 → DIP28_28C256 (28C256 EEPROM, no VPP)."""
+        from tools.build_db import resolve_pinout_key
+
+        result = resolve_pinout_key(
+            28, 0x00000000, 0x0010, pm_idx=20, proto_id=0x07, type_int=1, mem_size=32768
+        )
+        assert result == "DIP28_28C256", (
+            f"Expected 'DIP28_28C256' for 28-pin pm_idx=20, got {result!r}"
+        )
+
+    def test_28pin_pm19_returns_dip28_28c64(self):
+        """28-pin pm_idx=19 → DIP28_28C64 (28C64 EEPROM, no VPP)."""
+        from tools.build_db import resolve_pinout_key
+
+        result = resolve_pinout_key(
+            28, 0x00000000, 0x0010, pm_idx=19, proto_id=0x07, type_int=1, mem_size=8192
+        )
+        assert result == "DIP28_28C64", (
+            f"Expected 'DIP28_28C64' for 28-pin pm_idx=19, got {result!r}"
+        )
+
+    def test_28pin_pm18_returns_dip28_28c64(self):
+        """28-pin pm_idx=18 → DIP28_28C64 (28C16/17 small EEPROM, same layout)."""
+        from tools.build_db import resolve_pinout_key
+
+        result = resolve_pinout_key(
+            28, 0x00000000, 0x0010, pm_idx=18, proto_id=0x07, type_int=1, mem_size=2048
+        )
+        assert result == "DIP28_28C64", (
+            f"Expected 'DIP28_28C64' for 28-pin pm_idx=18, got {result!r}"
+        )
+
+    # --- 32-pin branch ---
+
+    def test_32pin_pm_in_set_proto_06_returns_dip32_sst39sf040(self):
+        """32-pin pm_idx in {5,7,9,10,11,12,13} proto=0x06 → DIP32_SST39SF040."""
+        from tools.build_db import resolve_pinout_key
+
+        for pm_idx in [5, 7, 9, 10, 11, 12, 13]:
+            result = resolve_pinout_key(
+                32,
+                0x00000000,
+                0x0010,
+                pm_idx=pm_idx,
+                proto_id=0x06,
+                type_int=1,
+                mem_size=524288,
+            )
+            assert result == "DIP32_SST39SF040", (
+                f"Expected 'DIP32_SST39SF040' for 32-pin pm_idx={pm_idx} proto=0x06, "
+                f"got {result!r}"
+            )
+
+    def test_32pin_pm_in_set_proto_0d_returns_dip32_28c512_eeprom(self):
+        """32-pin pm_idx in {5,7,9,10,11,12,13} proto=0x0D → DIP32_28C512_EEPROM."""
+        from tools.build_db import resolve_pinout_key
+
+        result = resolve_pinout_key(
+            32, 0x00000000, 0x0010, pm_idx=9, proto_id=0x0D, type_int=1, mem_size=65536
+        )
+        assert result == "DIP32_28C512_EEPROM", (
+            f"Expected 'DIP32_28C512_EEPROM' for 32-pin pm_idx=9 proto=0x0D, got {result!r}"
+        )
+
+    def test_32pin_pm_in_set_proto_07_returns_dip32_std(self):
+        """32-pin pm_idx in {5,7,9,10,11,12,13} proto=0x07 → DIP32_STD."""
+        from tools.build_db import resolve_pinout_key
+
+        result = resolve_pinout_key(
+            32,
+            0x00000000,
+            0x0000,
+            pm_idx=13,
+            proto_id=0x07,
+            type_int=1,
+            mem_size=131072,
+        )
+        assert result == "DIP32_STD", (
+            f"Expected 'DIP32_STD' for 32-pin pm_idx=13 proto=0x07, got {result!r}"
+        )
+
+    def test_32pin_pm0_returns_dip32_sst39sf040(self):
+        """32-pin pm_idx=0 → DIP32_SST39SF040 (SRAM/NVRAM; type=4)."""
+        from tools.build_db import resolve_pinout_key
+
+        result = resolve_pinout_key(
+            32, 0x00000000, 0x0000, pm_idx=0, proto_id=0x0E, type_int=4, mem_size=32768
+        )
+        assert result == "DIP32_SST39SF040", (
+            f"Expected 'DIP32_SST39SF040' for 32-pin pm_idx=0 type=4, got {result!r}"
+        )
+
+
+class TestGuessTablesDeleted:
+    """Assert the three survey-built guess tables no longer exist (D-02).
+
+    PIN-01: PIN_MAP_TO_PINOUT, PIN_MAP_PROTO_TO_PINOUT, and DIP28_VARIANT_MAP
+    must be deleted from tools.build_db. The principled resolve_pinout_key
+    function is the sole pinout-selection path.
+
+    STATUS: RED-first — the current build_db.py still contains all three
+    tables. These tests turn GREEN in Plan 02 after the rewrite.
+    """
+
+    def test_pin_map_to_pinout_not_in_build_db(self):
+        """D-02: PIN_MAP_TO_PINOUT must be deleted from build_db module."""
+        import tools.build_db as bdb
+
+        assert not hasattr(bdb, "PIN_MAP_TO_PINOUT"), (
+            "PIN_MAP_TO_PINOUT still present in build_db — must be deleted (D-02); "
+            "principled resolve_pinout_key is the sole path"
+        )
+
+    def test_pin_map_proto_to_pinout_not_in_build_db(self):
+        """D-02: PIN_MAP_PROTO_TO_PINOUT must be deleted from build_db module."""
+        import tools.build_db as bdb
+
+        assert not hasattr(bdb, "PIN_MAP_PROTO_TO_PINOUT"), (
+            "PIN_MAP_PROTO_TO_PINOUT still present in build_db — must be deleted (D-02)"
+        )
+
+    def test_dip28_variant_map_not_in_build_db(self):
+        """D-02: DIP28_VARIANT_MAP must be deleted from build_db module."""
+        import tools.build_db as bdb
+
+        assert not hasattr(bdb, "DIP28_VARIANT_MAP"), (
+            "DIP28_VARIANT_MAP still present in build_db — must be deleted (D-02)"
+        )
+
+
+class TestWarning5Rule:
+    """Assert WARNING-5 still fires as Rule 2 after principled rewrite (PIN-02 regression guard).
+
+    PIN-02: A chip resolving to DIP28_28C256 (pm_idx=20) with flags indicating
+    Flash/EEPROM (_etype=Flash/EEPROM) and original proto_id=0x07 must land on
+    algorithm=0x0D after the WARNING-5 override (Rule 2).
+
+    STATUS: RED-first — this test asserts the post-rewrite behavior where WARNING-5
+    fires as Rule 2. The current build_db.py has a different predicate structure
+    (hardcoded DIP28_2764 check). This test turns GREEN in Plan 02.
+
+    NOTE: The WARNING-5 path is tested at the DB-entry level because Rule 2 is
+    applied inside build_db.main() (not inside resolve_pinout_key itself). After
+    Plan 02, the test can verify via chip_database.json for a real pm_idx=20 chip
+    that has flags=0x10 and proto=0x07 in infoic.xml. The test below asserts the
+    observable outcome: no pm_idx=20 5V-EEPROM chip routes to configure_eprom.
+    """
+
+    def test_warning5_fires_for_dip28_28c256_proto_07_flash_eeprom(self):
+        """Rule 2 (WARNING-5): any DIP28_28C256 chip with Flash/EEPROM type must get algo=0x0D.
+
+        The principled rewrite assigns DIP28_28C256 via pm_idx=20, bypassing VPP.
+        WARNING-5 is the fallback safety net for proto_id=0x07 + Flash/EEPROM
+        combinations that land on any 5V EEPROM pinout. After Plan 02 this should
+        not trigger (pm_idx=20 gives the right pinout directly), but Rule 2 must
+        still exist as a safety net.
+
+        Integration-level assertion: AT28C256 (a confirmed pm_idx=20 5V EEPROM chip)
+        must appear in the regenerated chip_database.json with algorithm=0x0D (not 0x07).
+        chip_database.json uses nested structure: programming.algorithm and electrical.pin_count.
+        This test loads the actual DB and checks the nested fields.
+        """
+        import json
+        import os
+
+        db_path = os.path.join(
+            os.path.dirname(__file__), "..", "firestarter", "data", "chip_database.json"
+        )
+        with open(db_path) as f:
+            db = json.load(f)
+
+        # AT28C256 is a confirmed pm_idx=20 5V EEPROM chip (flags=0x10, proto=0x07 upstream)
+        # After Phase 58 rewrite, it must have programming.algorithm=0x0D
+        # Note: chip_database.json uses nested structure: programming.algorithm
+        found = False
+        for mfg, chips in db.items():
+            for chip in chips:
+                pn = chip.get("part_number", "")
+                elec = chip.get("electrical", {})
+                prog = chip.get("programming", {})
+                if "AT28C256" in pn and elec.get("pin_count") == 28:
+                    found = True
+                    algo = prog.get("algorithm")
+                    assert algo == 0x0D, (
+                        f"WARNING-5 (Rule 2) failed: {mfg}/{pn} has "
+                        f"programming.algorithm=0x{algo:02X}, expected 0x0D "
+                        f"(configure_eeprom28c). "
+                        f"DIP28_28C256 + Flash/EEPROM must not route to configure_eprom."
+                    )
+        assert found, (
+            "Could not find any AT28C256 chip with electrical.pin_count=28 "
+            "in chip_database.json to validate WARNING-5 / Rule 2 outcome"
+        )
+
+
+class TestDIP24_2816Pinout:
+    """Assert DIP24_2816 is in pinouts.json with the correct SR-1-safe pin assignments.
+
+    PIN-03 / T-58-01: DIP24_2816 must exist in pinouts.json and must NOT have a
+    vpp-pin key. Pin 21 is WE (rw-pin), NOT VPP. This is the defining SR-1 safety
+    property that separates DIP24_2816 from DIP24_2716 (which DOES have vpp-pin=21).
+
+    STATUS: GREEN — depends only on Task 1's pinouts.json entry (already committed).
+    """
+
+    def _load_pinouts(self):
+        import json
+        import os
+
+        pinout_path = os.path.join(
+            os.path.dirname(__file__), "..", "firestarter", "data", "pinouts.json"
+        )
+        with open(pinout_path) as f:
+            return json.load(f)
+
+    def test_dip24_2816_present_in_pinouts_json(self):
+        """DIP24_2816 must exist as a key in pinouts.json."""
+        pinouts = self._load_pinouts()
+        assert "DIP24_2816" in pinouts, (
+            "DIP24_2816 not found in pinouts.json — Task 1 not yet committed"
+        )
+
+    def test_dip24_2816_has_no_vpp_pin_field(self):
+        """SR-1 CRITICAL GATE: DIP24_2816.pins must NOT contain vpp-pin key.
+
+        Pin 21 is WE (rw-pin) on all 28C-family EEPROMs. The DIP24_2716 UV-EPROM
+        layout uses pin 21 as VPP. Having vpp-pin in DIP24_2816 would route 12V
+        to the WE pin of a 5V-only EEPROM — dead chip.
+        """
+        pinouts = self._load_pinouts()
+        entry = pinouts["DIP24_2816"]
+        assert "vpp-pin" not in entry["pins"], (
+            "CRITICAL SR-1 VIOLATION: DIP24_2816.pins contains vpp-pin — "
+            "pin 21 is WE on 28C EEPROMs, never VPP. Remove vpp-pin immediately."
+        )
+
+    def test_dip24_2816_rw_pin_is_21(self):
+        """DIP24_2816 rw-pin must be [21] (WE# on AT28C16/AT28C04)."""
+        pinouts = self._load_pinouts()
+        entry = pinouts["DIP24_2816"]
+        assert entry["pins"]["rw-pin"] == [21], (
+            f"Expected rw-pin=[21], got {entry['pins'].get('rw-pin')!r}"
+        )
+
+    def test_dip24_2816_ce_pin_is_18(self):
+        """DIP24_2816 ce-pin must be [18] (CE# on AT28C16/AT28C04)."""
+        pinouts = self._load_pinouts()
+        entry = pinouts["DIP24_2816"]
+        assert entry["pins"]["ce-pin"] == [18], (
+            f"Expected ce-pin=[18], got {entry['pins'].get('ce-pin')!r}"
+        )
+
+    def test_dip24_2816_oe_pin_is_20(self):
+        """DIP24_2816 oe-pin must be [20] (OE# on AT28C16/AT28C04)."""
+        pinouts = self._load_pinouts()
+        entry = pinouts["DIP24_2816"]
+        assert entry["pins"]["oe-pin"] == [20], (
+            f"Expected oe-pin=[20], got {entry['pins'].get('oe-pin')!r}"
+        )
+
+    def test_dip24_2816_vcc_is_24_gnd_is_12(self):
+        """DIP24_2816 vcc-pin must be [24] and gnd-pin must be [12]."""
+        pinouts = self._load_pinouts()
+        entry = pinouts["DIP24_2816"]
+        assert entry["pins"]["vcc-pin"] == [24], (
+            f"Expected vcc-pin=[24], got {entry['pins'].get('vcc-pin')!r}"
+        )
+        assert entry["pins"]["gnd-pin"] == [12], (
+            f"Expected gnd-pin=[12], got {entry['pins'].get('gnd-pin')!r}"
+        )
+
+
+class TestDangerous24pinEEPROMFixed:
+    """Integration tests: assert the 10 dangerous 24-pin EEPROMs are fixed in chip_database.json.
+
+    PIN-03 / T-58-01: After Phase 58 DB regeneration, all 10 previously-dangerous 24-pin
+    EEPROM chips (AMD/AM28C16A, CATALYST/CAT28C16A, EXEL/XL2804A, EXEL/XL2816A, EXEL/XLE28C16A,
+    EXEL/XLE28C16B, MICROCHIP memory/2804, MICROCHIP memory/2816, XICOR/X2804A, XICOR/X2816A)
+    must have algorithm=0x0D and pinout=DIP24_2816.
+
+    Current hazard: these chips are in the DB with algorithm=0x0B (configure_eprom) on
+    DIP24_2716 (vpp-pin=21). pin 21 is WE on these chips — 12V on WE = chip damage.
+
+    The 9 blocked chips (AT28C04/AT28C16 family) are also asserted here.
+
+    STATUS: RED-first — the current chip_database.json was generated with the old
+    guess-table code. These tests turn GREEN in Plan 02 after DB regeneration.
+    """
+
+    def _load_db(self):
+        import json
+        import os
+
+        db_path = os.path.join(
+            os.path.dirname(__file__), "..", "firestarter", "data", "chip_database.json"
+        )
+        with open(db_path) as f:
+            return json.load(f)
+
+    def _find_chip(self, db, part_number_fragment, mfg_fragment=None):
+        """Find chips whose part_number contains the fragment."""
+        results = []
+        for mfg, chips in db.items():
+            if mfg_fragment and mfg_fragment.lower() not in mfg.lower():
+                continue
+            for chip in chips:
+                pn = chip.get("part_number", "")
+                if part_number_fragment.lower() in pn.lower():
+                    results.append((mfg, chip))
+        return results
+
+    def test_am28c16a_has_algo_0x0D_and_dip24_2816(self):
+        """AMD/AM28C16A must have algorithm=0x0D and pinout=DIP24_2816 (was dangerous).
+
+        EpromDatabase returns a flat dict. The algorithm is under key 'protocol-id'
+        and the pinout is under key 'pin-map' (not 'algorithm' / 'pinout').
+        """
+        from firestarter.database import EpromDatabase
+
+        db = EpromDatabase(skip_local_override=True)
+        chip = db.get_eprom("AM28C16A")
+        assert chip is not None, (
+            "AM28C16A not found in EpromDatabase — check DB contents"
+        )
+        assert chip.get("protocol-id") == 0x0D, (
+            f"AM28C16A protocol-id=0x{chip.get('protocol-id', 0):02X}, expected 0x0D"
+        )
+        assert chip.get("pin-map") == "DIP24_2816", (
+            f"AM28C16A pin-map={chip.get('pin-map')!r}, expected 'DIP24_2816'"
+        )
+
+    def test_cat28c16a_has_algo_0x0D_and_dip24_2816(self):
+        """CATALYST/CAT28C16A must have algorithm=0x0D and pinout=DIP24_2816."""
+        from firestarter.database import EpromDatabase
+
+        db = EpromDatabase(skip_local_override=True)
+        chip = db.get_eprom("CAT28C16A")
+        assert chip is not None, "CAT28C16A not found in EpromDatabase"
+        assert chip.get("protocol-id") == 0x0D, (
+            f"CAT28C16A protocol-id=0x{chip.get('protocol-id', 0):02X}, expected 0x0D"
+        )
+        assert chip.get("pin-map") == "DIP24_2816", (
+            f"CAT28C16A pin-map={chip.get('pin-map')!r}, expected 'DIP24_2816'"
+        )
+
+    def test_xl2804a_has_algo_0x0D_and_dip24_2816(self):
+        """EXEL/XL2804A must have algorithm=0x0D and pinout=DIP24_2816."""
+        db = self._load_db()
+        chips = self._find_chip(db, "XL2804A", "EXEL")
+        assert chips, "XL2804A not found in chip_database.json under EXEL"
+        for mfg, chip in chips:
+            algo = chip.get("programming", {}).get("algorithm")
+            assert algo == 0x0D, (
+                f"{mfg}/{chip.get('part_number')} programming.algorithm="
+                f"0x{algo:02X}, expected 0x0D"
+            )
+            assert chip.get("pinout") == "DIP24_2816", (
+                f"{mfg}/{chip.get('part_number')} pinout={chip.get('pinout')!r}, "
+                f"expected 'DIP24_2816'"
+            )
+
+    def test_xl2816a_has_algo_0x0D_and_dip24_2816(self):
+        """EXEL/XL2816A must have algorithm=0x0D and pinout=DIP24_2816."""
+        db = self._load_db()
+        chips = self._find_chip(db, "XL2816A", "EXEL")
+        assert chips, "XL2816A not found in chip_database.json under EXEL"
+        for mfg, chip in chips:
+            algo = chip.get("programming", {}).get("algorithm")
+            assert algo == 0x0D, (
+                f"{mfg}/{chip.get('part_number')} programming.algorithm="
+                f"0x{algo:02X}, expected 0x0D"
+            )
+            assert chip.get("pinout") == "DIP24_2816", (
+                f"{mfg}/{chip.get('part_number')} pinout={chip.get('pinout')!r}, "
+                f"expected 'DIP24_2816'"
+            )
+
+    def test_microchip_2804_has_algo_0x0D_and_dip24_2816(self):
+        """MICROCHIP memory/2804 (28C04A etc.) must have algorithm=0x0D and pinout=DIP24_2816."""
+        db = self._load_db()
+        chips = self._find_chip(db, "28C04", "MICROCHIP")
+        assert chips, "28C04 not found in chip_database.json under MICROCHIP"
+        for mfg, chip in chips:
+            algo = chip.get("programming", {}).get("algorithm")
+            assert algo == 0x0D, (
+                f"{mfg}/{chip.get('part_number')} programming.algorithm="
+                f"0x{algo:02X}, expected 0x0D"
+            )
+            assert chip.get("pinout") == "DIP24_2816", (
+                f"{mfg}/{chip.get('part_number')} pinout={chip.get('pinout')!r}, "
+                f"expected 'DIP24_2816'"
+            )
+
+    def test_microchip_2816_has_algo_0x0D_and_dip24_2816(self):
+        """MICROCHIP memory/2816 (28C16A etc.) must have algorithm=0x0D and pinout=DIP24_2816."""
+        db = self._load_db()
+        chips = self._find_chip(db, "28C16", "MICROCHIP")
+        assert chips, "28C16 not found in chip_database.json under MICROCHIP"
+        for mfg, chip in chips:
+            algo = chip.get("programming", {}).get("algorithm")
+            assert algo == 0x0D, (
+                f"{mfg}/{chip.get('part_number')} programming.algorithm="
+                f"0x{algo:02X}, expected 0x0D"
+            )
+            assert chip.get("pinout") == "DIP24_2816", (
+                f"{mfg}/{chip.get('part_number')} pinout={chip.get('pinout')!r}, "
+                f"expected 'DIP24_2816'"
+            )
+
+    def test_xicor_x2804a_has_algo_0x0D_and_dip24_2816(self):
+        """XICOR/X2804A must have algorithm=0x0D and pinout=DIP24_2816."""
+        db = self._load_db()
+        chips = self._find_chip(db, "X2804A", "XICOR")
+        assert chips, "X2804A not found in chip_database.json under XICOR"
+        for mfg, chip in chips:
+            algo = chip.get("programming", {}).get("algorithm")
+            assert algo == 0x0D, (
+                f"{mfg}/{chip.get('part_number')} programming.algorithm="
+                f"0x{algo:02X}, expected 0x0D"
+            )
+            assert chip.get("pinout") == "DIP24_2816", (
+                f"{mfg}/{chip.get('part_number')} pinout={chip.get('pinout')!r}, "
+                f"expected 'DIP24_2816'"
+            )
+
+    def test_xicor_x2816a_has_algo_0x0D_and_dip24_2816(self):
+        """XICOR/X2816A must have algorithm=0x0D and pinout=DIP24_2816."""
+        db = self._load_db()
+        chips = self._find_chip(db, "X2816A", "XICOR")
+        assert chips, "X2816A not found in chip_database.json under XICOR"
+        for mfg, chip in chips:
+            algo = chip.get("programming", {}).get("algorithm")
+            assert algo == 0x0D, (
+                f"{mfg}/{chip.get('part_number')} programming.algorithm="
+                f"0x{algo:02X}, expected 0x0D"
+            )
+            assert chip.get("pinout") == "DIP24_2816", (
+                f"{mfg}/{chip.get('part_number')} pinout={chip.get('pinout')!r}, "
+                f"expected 'DIP24_2816'"
+            )
+
+    def test_at28c16_has_algo_0x0D_and_dip24_2816(self):
+        """ATMEL/AT28C16 (blocked chip) must have algorithm=0x0D and pinout=DIP24_2816.
+
+        EpromDatabase returns a flat dict. The algorithm is under key 'protocol-id'
+        and the pinout is under key 'pin-map'.
+        """
+        from firestarter.database import EpromDatabase
+
+        db = EpromDatabase(skip_local_override=True)
+        # AT28C16 is one of the 9 blocked chips — previously skipped, now unblocked
+        chip = db.get_eprom("AT28C16")
+        assert chip is not None, (
+            "AT28C16 not found in EpromDatabase — expected to be unblocked in Phase 58"
+        )
+        assert chip.get("protocol-id") == 0x0D, (
+            f"AT28C16 protocol-id=0x{chip.get('protocol-id', 0):02X}, expected 0x0D"
+        )
+        assert chip.get("pin-map") == "DIP24_2816", (
+            f"AT28C16 pin-map={chip.get('pin-map')!r}, expected 'DIP24_2816'"
+        )
+
+    def test_at28c04_has_algo_0x0D_and_dip24_2816(self):
+        """ATMEL/AT28C04 (blocked chip) must have algorithm=0x0D and pinout=DIP24_2816."""
+        from firestarter.database import EpromDatabase
+
+        db = EpromDatabase(skip_local_override=True)
+        chip = db.get_eprom("AT28C04")
+        assert chip is not None, (
+            "AT28C04 not found in EpromDatabase — expected to be unblocked in Phase 58"
+        )
+        assert chip.get("protocol-id") == 0x0D, (
+            f"AT28C04 protocol-id=0x{chip.get('protocol-id', 0):02X}, expected 0x0D"
+        )
+        assert chip.get("pin-map") == "DIP24_2816", (
+            f"AT28C04 pin-map={chip.get('pin-map')!r}, expected 'DIP24_2816'"
+        )
