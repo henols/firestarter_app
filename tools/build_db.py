@@ -252,7 +252,8 @@ def interpret_timing(raw_hex, protocol_id):
 def main():
     print(f"Fetching database from: {MINIPRO_XML_URL}")
     try:
-        r = requests.get(MINIPRO_XML_URL)
+        r = requests.get(MINIPRO_XML_URL, timeout=30)
+        r.raise_for_status()
         root = ET.fromstring(r.content)
     except Exception as e:
         print(f"Error: {e}")
