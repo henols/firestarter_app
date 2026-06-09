@@ -1421,3 +1421,146 @@ class TestDangerous24pinEEPROMFixed:
         assert chip.get("pin-map") == "DIP24_2816", (
             f"AT28C04 pin-map={chip.get('pin-map')!r}, expected 'DIP24_2816'"
         )
+
+
+class TestGate03StructuralVppGuard:
+    """Regression tests for the GATE-03 structural no-vpp-pin guard in check_dispatch.py.
+
+    GATE-03 (Phase 59): The real structural hazard is configure_eprom routed to a
+    pinout that has no vpp-pin. This guard is type-string-independent — it fires on
+    the pinout structure alone, so it auto-covers future electrical.type label changes
+    (EEPROM, Flash/EEPROM, or any future string) without needing predicate updates.
+
+    Test cases:
+      1. Synthetic chip on DIP28_28C256 (no vpp-pin) + algo 0x07 (configure_eprom)
+         → MUST be flagged by the structural guard.
+      2. W27C512 on DIP28_27512 (has vpp-pin) + algo 0x07, type "EEPROM"
+         → MUST NOT be flagged (legitimate 12 V chip).
+      3. _build_no_vpp_pin_set returns the expected no-vpp-pin pinout names from
+         the real pinouts.json.
+    """
+
+    @staticmethod
+    def _make_chip(pinout, algo, etype="EEPROM"):
+        """Build a minimal chip dict as it appears in chip_database.json."""
+        return {
+            "part_number": f"SYNTHETIC_{pinout}_{algo:02X}",
+            "pinout": pinout,
+            "electrical": {"type": etype},
+            "programming": {"algorithm": algo},
+        }
+
+    def test_novpp_pin_pinout_with_configure_eprom_is_flagged(self, tmp_path):
+        """A chip on DIP28_28C256 (no vpp-pin) + algo 0x07 must be caught by GATE-03.
+
+        This is the primary regression: the structural guard must fire regardless of
+        what electrical.type string is used. We test with type="EEPROM" (the
+        post-cca7d62 type string) to confirm type-string-independence.
+        """
+        import os
+        import sys
+
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
+        from check_dispatch import _build_no_vpp_pin_set, dispatch
+
+        pinouts_path = os.path.join(
+            os.path.dirname(__file__), "..", "firestarter", "data", "pinouts.json"
+        )
+        no_vpp_pinouts = _build_no_vpp_pin_set(pinouts_path)
+
+        chip = self._make_chip("DIP28_28C256", 0x07, etype="EEPROM")
+        pinout = chip["pinout"]
+        proto = chip["programming"]["algorithm"]
+        handler = dispatch(proto, None)
+
+        assert handler == "configure_eprom", (
+            f"Expected algo 0x07 → configure_eprom, got {handler!r}"
+        )
+        assert pinout in no_vpp_pinouts, (
+            f"DIP28_28C256 must be in the no-vpp-pin set; got set={no_vpp_pinouts!r}"
+        )
+        # The guard predicate: this combination MUST be flagged.
+        flagged = handler == "configure_eprom" and pinout in no_vpp_pinouts
+        assert flagged, (
+            "GATE-03 structural guard: DIP28_28C256 + configure_eprom must be flagged"
+        )
+
+    def test_w27c512_on_dip28_27512_is_not_flagged(self):
+        """W27C512 (EEPROM type, algo 0x07) on DIP28_27512 (has vpp-pin) must NOT be flagged.
+
+        DIP28_27512 has a real vpp-pin (pin 22), so configure_eprom asserting the
+        12 V regulator on it is correct. The structural guard must not fire here.
+        """
+        import os
+        import sys
+
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
+        from check_dispatch import _build_no_vpp_pin_set, dispatch
+
+        pinouts_path = os.path.join(
+            os.path.dirname(__file__), "..", "firestarter", "data", "pinouts.json"
+        )
+        no_vpp_pinouts = _build_no_vpp_pin_set(pinouts_path)
+
+        # W27C512: algo 0x07, type "EEPROM", pinout DIP28_27512 (real vpp-pin=22)
+        chip = self._make_chip("DIP28_27512", 0x07, etype="EEPROM")
+        pinout = chip["pinout"]
+        proto = chip["programming"]["algorithm"]
+        handler = dispatch(proto, None)
+
+        assert handler == "configure_eprom", (
+            f"Expected algo 0x07 → configure_eprom, got {handler!r}"
+        )
+        assert pinout not in no_vpp_pinouts, (
+            f"DIP28_27512 has a real vpp-pin and must NOT be in the no-vpp-pin set; "
+            f"unexpectedly found in: {no_vpp_pinouts!r}"
+        )
+        # The guard predicate must NOT fire.
+        flagged = handler == "configure_eprom" and pinout in no_vpp_pinouts
+        assert not flagged, (
+            "GATE-03 structural guard: DIP28_27512 + configure_eprom must NOT be flagged"
+        )
+
+    def test_no_vpp_pin_set_contains_expected_pinouts(self):
+        """_build_no_vpp_pin_set must include all known no-vpp-pin pinouts and exclude all
+        known vpp-pin pinouts from pinouts.json.
+        """
+        import os
+        import sys
+
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
+        from check_dispatch import _build_no_vpp_pin_set
+
+        pinouts_path = os.path.join(
+            os.path.dirname(__file__), "..", "firestarter", "data", "pinouts.json"
+        )
+        no_vpp = _build_no_vpp_pin_set(pinouts_path)
+
+        # These pinouts have no vpp-pin and must be in the set.
+        expected_no_vpp = {
+            "DIP28_28C256",
+            "DIP24_2816",
+            "DIP28_28C64",
+            "DIP32_28C512_EEPROM",
+            "DIP24_6116",
+            "DIP28_JEDEC_SRAM_8K",
+            "DIP32_SST39SF040",
+        }
+        for name in expected_no_vpp:
+            assert name in no_vpp, (
+                f"{name} should be in the no-vpp-pin set but is missing"
+            )
+
+        # These pinouts have a real vpp-pin and must NOT be in the set.
+        expected_has_vpp = {
+            "DIP24_2716",
+            "DIP24_2732",
+            "DIP28_2764",
+            "DIP28_27256",
+            "DIP28_27512",
+            "DIP32_STD",
+        }
+        for name in expected_has_vpp:
+            assert name not in no_vpp, (
+                f"{name} has a real vpp-pin and must NOT be in the no-vpp-pin set"
+            )
