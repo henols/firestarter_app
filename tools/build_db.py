@@ -57,6 +57,15 @@ PROTOCOL_MAP = {
 # generic 2716/2732 entries — operator must override via ~/.firestarter/database.json
 # before programming an original-NMOS Intel part. RURP shield max is ~22V so
 # the 25V variants cannot be programmed on this hardware regardless.
+#
+# KEY DECODE NOTE: The VPP lookup key is (voltages & 0xF0), NOT (voltages & 0xFF).
+# The low byte of the voltages field encodes:
+#   bits 7-4 (high nibble): VPP voltage index — matches these table keys
+#   bits 3-0 (low nibble):  option flags (powerdown-enable, T48 sub-options, etc.)
+# All valid TL866II/RURP VPP codes are multiples of 0x10 (0x00=12V, 0x10=9V, etc.).
+# Using the full byte (0xFF mask) causes a 0mV/Unknown result whenever bits 3-0 are
+# nonzero (e.g. SST27VF512 voltages=0x0001: 0x01 not in table → was 0mV, now 12V).
+# [VERIFIED: minipro/src/database.c + tl866a.c + tl866ii_vpp_voltages[] table]
 VPP_VOLTAGES = {
     0x00: "12V",
     0x10: "9V",
@@ -380,7 +389,7 @@ def main():
                 # (EPROM_STD) would route to configure_eprom (12V VPP on pin 1/27) —
                 # hardware damage. Flip to 0x0D. Named Rule 2 per D-05.
                 #
-                # Two sub-cases require different discriminators:
+                # Three sub-cases require different discriminators:
                 #   DIP28_28C256 (pm_idx=20): always an EEPROM pinout — no UV-EPROM
                 #     can land here via the principled rules. The flags & 0x10 guard is
                 #     omitted because some 28C256-class chips have flags=0xC000 with no
@@ -391,21 +400,32 @@ def main():
                 #   DIP28_2764 (pm_idx=21 or pm_idx=22 else): genuine UV-EPROMs DO land
                 #     here (27C64/27C128). Use _etype == "Flash/EEPROM" from Pass 1 to
                 #     identify mistagged 5V EEPROMs that slipped through.
+                #   DIP28_28C64 (pm_idx=18 or pm_idx=19): the entire 28C64/28C17 family
+                #     is 5V EEPROMs with no VPP pin (pin 1 = NC on the 28C64 layout).
+                #     No genuine UV-EPROM uses this pinout cluster, so the guard is
+                #     unconditional (no flags check needed).
+                #     [VERIFIED: exhaustive infoic.xml survey — all pm_idx=18/19 DIP28
+                #      chips are AT28C/BV/LV, AM28C, CAT28C/LV, M28C/LV, X28C families;
+                #      datasheet cross-check confirms no VPP pin on 28C64 layout]
                 #
                 # References: WARNING-5 in .planning/v1.0-MILESTONE-AUDIT.md
                 # and .planning/INTEGRATION-CHECK.md.
                 if (
-                    pinout_key == "DIP28_28C256"
-                    and proto_id == 0x07
-                    and type_int != 4  # SRAM-class chips handled by Rule 3
-                ) or (
-                    pinout_key == "DIP28_2764"
-                    and proto_id == 0x07
-                    and _etype == "Flash/EEPROM"
+                    (
+                        pinout_key == "DIP28_28C256"
+                        and proto_id == 0x07
+                        and type_int != 4  # SRAM-class chips handled by Rule 3
+                    )
+                    or (
+                        pinout_key == "DIP28_2764"
+                        and proto_id == 0x07
+                        and _etype == "Flash/EEPROM"
+                    )
+                    or (pinout_key == "DIP28_28C64" and proto_id == 0x07)
                 ):
                     print(
                         f"INFO: {mfg_name}/{name} algorithm override 0x07->0x0D "
-                        f"(Rule 2 WARNING-5: 5V EEPROM on EPROM pinout — "
+                        f"(Rule 2 WARNING-5: 5V EEPROM on EPROM pinout ({pinout_key}) — "
                         f"route through configure_eeprom28c)",
                         file=sys.stderr,
                     )
@@ -447,10 +467,21 @@ def main():
 
                 # Step 7: Pass 2 — PROTOCOL-AWARE _etype re-derivation.
                 # Re-derive electrical.type after ALL algorithm overrides have run.
-                # The firmware dispatch is the ground truth:
-                #   - 0x07/0x08/0x0B → configure_eprom (12V VPP) → UV-EPROM
+                # The firmware dispatch is the ground truth for ERASE capability:
+                #   - 0x07/0x08/0x0B → configure_eprom (12V VPP)
+                #       flags & 0x10 = True  → "EEPROM"   (electrically erasable)
+                #       flags & 0x10 = False → "UV-EPROM" (UV erase only)
                 #   - 0x0D / 0x05 / 0x06 / 0x10 → Flash/EEPROM family
                 #   - 0x0E/0x27/0x28/0x29 → SRAM
+                # For proto=0x07/0x08/0x0B, the flags bit 0x10 discriminates CMOS
+                # electrically-erasable EEPROMs (W27C512, SST27SF/VF512, W27C257, etc.)
+                # from genuine UV-EPROMs. Both share the configure_eprom dispatch and
+                # 12V VPP, but EEPROMs support electrical erase while UV-EPROMs require
+                # UV light. Without this check, Pass 2 would overwrite the correct
+                # flags-based _etype from Pass 1 with "UV-EPROM" for all 0x07 chips.
+                # [VERIFIED: infoic.xml survey — all DIP28_27512/27256 chips with
+                #  flags & 0x10 set (W27C*, SST27*F*) are CMOS EEPROMs per datasheet;
+                #  all genuine UV-EPROMs on these pinouts have flags & 0x10 = False]
                 # This keeps the in-DB type consistent with ic_layout.py's
                 # protocol-aware Type/Can-be-erased display. Must run AFTER all
                 # overrides (Rules 1/2/3) because those rely on the flags-based
@@ -459,7 +490,13 @@ def main():
                 if proto_id in {0x0E, 0x27, 0x28, 0x29}:
                     _etype = "SRAM"
                 elif proto_id in {0x07, 0x08, 0x0B}:
-                    _etype = "UV-EPROM"
+                    # Preserve flags-based EEPROM classification for electrically-
+                    # erasable chips that share the configure_eprom (0x07/0x08/0x0B)
+                    # dispatch and 12V VPP but are NOT UV-erasable.
+                    if flags & 0x10:
+                        _etype = "EEPROM"
+                    else:
+                        _etype = "UV-EPROM"
                 elif proto_id in {0x05, 0x06, 0x0D, 0x10}:
                     _etype = "Flash/EEPROM"
                 # else: leave _etype at the flags-based value (uncommon path —
@@ -487,8 +524,20 @@ def main():
                         "type": _etype,
                         "size_bytes": mem_size,
                         "pin_count": pin_count,
-                        "vpp": VPP_VOLTAGES.get(voltages & 0xFF, "Unknown"),
-                        "vpp_mv": VPP_MV.get(voltages & 0xFF, 0),
+                        # VPP code occupies bits 7-4 of the 16-bit voltages field
+                        # (the HIGH nibble of the low byte). Bits 3-0 carry option
+                        # flags (e.g. powerdown-enable for ATF GAL parts per
+                        # minipro.h LAST_JEDEC_BIT_IS_POWERDOWN_ENABLE=0x1000, and
+                        # T48-specific sub-options). Masking with 0xF0 extracts only
+                        # the VPP nibble and avoids misidentifying a flags-bit as a
+                        # VPP code. E.g. SST27VF512 voltages=0x0001: 0x01&0xF0=0x00
+                        # correctly resolves to 12V; without the mask 0x01 is absent
+                        # from the table and produces 0mV/Unknown.
+                        # [VERIFIED: minipro/src/tl866a.c msg[5]=voltages.vpp<<4 and
+                        #  database.c voltages.vpp=voltages&0xff with all tl866ii VPP
+                        #  codes being multiples of 0x10 (high-nibble indices)]
+                        "vpp": VPP_VOLTAGES.get(voltages & 0xF0, "Unknown"),
+                        "vpp_mv": VPP_MV.get(voltages & 0xF0, 0),
                         # [VERIFIED: minipro database.c#L921-L923 @ a8efaedc]
                         "vcc": VCC_VOLTAGES.get(
                             (voltages >> 8) & 0x0F, "5V"

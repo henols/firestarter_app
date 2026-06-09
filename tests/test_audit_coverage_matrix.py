@@ -111,11 +111,14 @@ class TestAuditCoverageMatrix:
             ]
 
         all_rows = _data_rows(s3_body)
-        assert len(all_rows) == 332, (
-            f"§3 enumerated row count: expected 332, got {len(all_rows)}"
+        assert len(all_rows) == 297, (
+            f"§3 enumerated row count: expected 297, got {len(all_rows)}"
         )
 
-        # Per-sub-table breakdown — 205 algo-0x07, 127 algo-0x08.
+        # Per-sub-table breakdown — 170 algo-0x07, 127 algo-0x08.
+        # Phase 59 BUG-C fix: 35 DIP28_28C64 chips (AT28C64, AM28C64, M28C64,
+        # etc.) corrected from algo=0x07 → 0x0D (configure_eeprom28c, 5V-only,
+        # no VPP assertion). These are no longer in the algo-0x07 audit scope.
         algo7_start = s3_body.index("### algo-0x07")
         algo8_start = s3_body.index("### algo-0x08")
         algo7_body = s3_body[algo7_start:algo8_start]
@@ -123,8 +126,8 @@ class TestAuditCoverageMatrix:
 
         algo7_rows = _data_rows(algo7_body)
         algo8_rows = _data_rows(algo8_body)
-        assert len(algo7_rows) == 205, (
-            f"algo-0x07 sub-table row count: expected 205, got {len(algo7_rows)}"
+        assert len(algo7_rows) == 170, (
+            f"algo-0x07 sub-table row count: expected 170, got {len(algo7_rows)}"
         )
         assert len(algo8_rows) == 127, (
             f"algo-0x08 sub-table row count: expected 127, got {len(algo8_rows)}"
@@ -223,16 +226,16 @@ class TestAuditCoverageMatrix:
     # Wave 3 — defect findings + ledger semantics (COV-02)
     # ------------------------------------------------------------------
 
-    def test_hazard_cluster_42_rows(self, tmp_path):
-        """COV-02 / D-12 / D-15: §4 reports the 42-row pinout/algorithm HAZARD.
+    def test_hazard_cluster_resolved(self, tmp_path):
+        """COV-02 / D-12 / D-15: §4 DIP28_28C64 HAZARD is RESOLVED in Phase 59.
 
-        Asserts the §4 body contains a HAZARD-tier finding whose signature
-        covers (("DIP28_28C64", "DIP28_28C256"), 0x07, "UV-EPROM") and whose
-        `affected_chips == 42`. This is the post-re-derivation cluster — the
-        WARNING-5 override predicate at build_db.py:397-423 is structurally
-        unreachable for these rows because `_etype` is re-derived to
-        "UV-EPROM" at build_db.py:483-484 AFTER the override fires
-        (PATTERNS.md §"_etype re-derivation pattern").
+        The previous 42-row HAZARD covering (("DIP28_28C64", "DIP28_28C256"),
+        0x07, "UV-EPROM") is resolved by the Phase 59 BUG-C fix. Rule 2 in
+        build_db.py now unconditionally flips DIP28_28C64 chips from
+        proto_id=0x07 → 0x0D (configure_eeprom28c, 5V-only, no VPP assertion).
+        These 35 chips are no longer in the algo-0x07 audit scope, so the HAZARD
+        detection cluster no longer fires for them. §4 should report NO hazard
+        mentioning DIP28_28C64.
         """
         from tools.audit_coverage_matrix import generate_matrix
 
@@ -248,12 +251,12 @@ class TestAuditCoverageMatrix:
         s5_start = body.index("## §5:")
         s4_body = body[s4_start:s5_start]
 
-        # Required literals: the 42-row HAZARD must surface the row count, the
-        # two pinout keys, and the HAZARD tier label inside §4.
-        assert "HAZARD" in s4_body, "HAZARD tier missing from §4"
-        assert "DIP28_28C64" in s4_body, "DIP28_28C64 pinout missing from §4"
-        assert "DIP28_28C256" in s4_body, "DIP28_28C256 pinout missing from §4"
-        assert "42" in s4_body, "affected_chips=42 missing from §4"
+        # BUG-C fix resolved the DIP28_28C64 hazard — it must NOT appear in §4
+        # as a HAZARD pinout anymore (chips are correctly on algo=0x0D now).
+        assert "DIP28_28C64" not in s4_body, (
+            "DIP28_28C64 pinout unexpectedly still present in §4 HAZARD cluster — "
+            "BUG-C fix (Rule 2 extended to DIP28_28C64) should have resolved this"
+        )
 
     def test_ledger_idempotent(self, tmp_path):
         """COV-02 / D-13: ledger is byte-identical on a second run.
@@ -301,7 +304,6 @@ class TestAuditCoverageMatrix:
         import json
 
         from tools.audit_coverage_matrix import (
-            detect_hazard,
             finding_hash,  # noqa: F401
             generate_matrix,
             iter_in_scope_rows,
@@ -327,12 +329,16 @@ class TestAuditCoverageMatrix:
                 f"hash {h} re-minted: {defect_id} -> {parsed_2[h]}"
             )
 
-        # Step 3: pre-seed scenario — seed the HAZARD-42 finding hash with
-        # DEFECT-COV-99 in a fresh ledger; assert the next run reuses NN=99.
-        # Compute the HAZARD-42 hash by inspecting the real detector against
-        # the live DB (Pitfall 5 — derive expected hashes from the tool surface,
-        # not from hard-coded literals).
+        # Step 3: pre-seed scenario — seed the first CORRECTNESS finding hash
+        # with DEFECT-COV-99 in a fresh ledger; assert the next run reuses NN=99.
+        # Note: the DIP28_28C64 HAZARD cluster is resolved by Phase 59 BUG-C fix
+        # (Rule 2 extended to cover DIP28_28C64 unconditionally → algo=0x0D).
+        # Use the first CORRECTNESS finding for the pre-seed stability test since
+        # HAZARD findings are now 0. Pitfall 5 — derive expected hashes from the
+        # tool surface, not from hard-coded literals.
         import json as _json
+
+        from tools.audit_coverage_matrix import detect_correctness
 
         with open(
             __import__("tools.audit_coverage_matrix", fromlist=["DB_FILE"]).DB_FILE,
@@ -340,23 +346,22 @@ class TestAuditCoverageMatrix:
         ) as f:
             db_raw = _json.load(f)
         live_rows = list(iter_in_scope_rows(db_raw))
-        hazard_findings = list(detect_hazard(live_rows))
-        assert hazard_findings, "expected at least one HAZARD finding"
-        hazard_hash = hazard_findings[0]["hash"]
+        correctness_findings = list(detect_correctness(live_rows))
+        assert correctness_findings, "expected at least one CORRECTNESS finding"
+        seed_hash = correctness_findings[0]["hash"]
         # Sanity: confirm the freshly minted ledger contains that hash.
-        assert hazard_hash in parsed_1
+        assert seed_hash in parsed_1
 
         seeded_ledger_path = tmp_path / "seeded.json"
         seeded_ledger_path.write_text(
-            _json.dumps({hazard_hash: "DEFECT-COV-99"}, indent=2, sort_keys=True)
-            + "\n",
+            _json.dumps({seed_hash: "DEFECT-COV-99"}, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         out3 = tmp_path / "m3.md"
         rc3 = generate_matrix(output=out3, ledger_path=seeded_ledger_path)
         assert rc3 == 0
         seeded_parsed = _json.loads(seeded_ledger_path.read_text(encoding="utf-8"))
-        assert seeded_parsed[hazard_hash] == "DEFECT-COV-99", (
+        assert seeded_parsed[seed_hash] == "DEFECT-COV-99", (
             "pre-seeded DEFECT-COV-99 must be reused, not overwritten"
         )
 
@@ -396,9 +401,12 @@ class TestAuditCoverageMatrix:
         assert "## §2: DB Count Reconciliation" in body, "§2 header missing"
 
         # Live counts must appear in §1 — these are the regression anchors.
+        # Phase 59 BUG-C fix: 35 DIP28_28C64 chips moved from algo=0x07 to
+        # algo=0x0D (Rule 2 extended); in-scope count drops from 332→297,
+        # algo-0x07 count drops from 205→170.
         assert "743" in body, "total_chips=743 missing from matrix body"
-        assert "332" in body, "in_scope=332 missing from matrix body"
-        assert "205" in body, "algo_0x07=205 missing from matrix body"
+        assert "297" in body, "in_scope=297 missing from matrix body"
+        assert "170" in body, "algo_0x07=170 missing from matrix body"
         assert "127" in body, "algo_0x08=127 missing from matrix body"
 
     def test_exit_codes(self, tmp_path):

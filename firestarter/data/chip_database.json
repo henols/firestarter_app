@@ -4,7 +4,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -372,8 +372,8 @@
         "type": "UV-EPROM",
         "vcc": "5V",
         "vdd": "6.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AM27LV010",
       "pinout": "DIP32_STD",
@@ -391,8 +391,8 @@
         "type": "UV-EPROM",
         "vcc": "5V",
         "vdd": "6.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AM27LV020,AM27LV020B",
       "pinout": "DIP32_STD",
@@ -410,8 +410,8 @@
         "type": "UV-EPROM",
         "vcc": "5V",
         "vdd": "6.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AM27LV040",
       "pinout": "DIP32_STD",
@@ -429,8 +429,8 @@
         "type": "UV-EPROM",
         "vcc": "5V",
         "vdd": "6.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AM27LV080",
       "pinout": "DIP32_STD",
@@ -502,7 +502,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -511,17 +511,17 @@
       "part_number": "AM28C17A",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -530,10 +530,10 @@
       "part_number": "AM28C64A,AM28C64AE,AM28C64B,AM28C64BE",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -1096,8 +1096,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "9V",
+        "vpp_mv": 9000
       },
       "part_number": "A29L040,A29L040A",
       "pinout": "DIP32_SST39SF040",
@@ -1690,38 +1690,38 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT28BV64,AT28LV64",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "3000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT28BV64B,AT28LV64B",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -1731,8 +1731,8 @@
         "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT28BV256,AT28LV256",
       "pinout": "DIP28_28C256",
@@ -1861,7 +1861,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1870,17 +1870,17 @@
       "part_number": "AT28C17",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "1000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1889,10 +1889,10 @@
       "part_number": "AT28C17E,AT28C17F",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "200 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -1918,7 +1918,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1927,17 +1927,17 @@
       "part_number": "AT28C64,AT28C64B(Non-Standard),AT28HC64,AT28HC64L",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "1000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1946,17 +1946,17 @@
       "part_number": "AT28C64B,AT28HC64B,AT28HC64BF",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1965,10 +1965,10 @@
       "part_number": "AT28C64E,AT28C64F",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "200 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -1978,8 +1978,8 @@
         "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT28LV010",
       "pinout": "DIP32_28C512_EEPROM",
@@ -2051,7 +2051,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2060,10 +2060,10 @@
       "part_number": "AT28PC64,AT28PC64E",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -2073,8 +2073,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT29BV010A,AT29LV010A",
       "pinout": "DIP32_SST39SF040",
@@ -2092,8 +2092,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT29BV020,AT29LV020",
       "pinout": "DIP32_SST39SF040",
@@ -2111,8 +2111,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT29BV040,AT29LV040",
       "pinout": "DIP32_SST39SF040",
@@ -2130,8 +2130,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT29BV040A,AT29LV040A",
       "pinout": "DIP32_SST39SF040",
@@ -2244,8 +2244,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT29C040",
       "pinout": "DIP32_SST39SF040",
@@ -2263,8 +2263,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT29C040A",
       "pinout": "DIP32_SST39SF040",
@@ -2282,8 +2282,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT29LV256",
       "pinout": "DIP28_28C256",
@@ -2301,8 +2301,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT29LV512",
       "pinout": "DIP32_SST39SF040",
@@ -2320,8 +2320,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV001,AT49BV001A,AT49LV001",
       "pinout": "DIP32_SST39SF040",
@@ -2339,8 +2339,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV001AN,AT49BV001N,AT49LV001N",
       "pinout": "DIP32_SST39SF040",
@@ -2358,8 +2358,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV001ANT,AT49BV001NT,AT49LV001NT",
       "pinout": "DIP32_SST39SF040",
@@ -2377,8 +2377,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV001AT,AT49BV001T,AT49LV001T",
       "pinout": "DIP32_SST39SF040",
@@ -2396,8 +2396,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV002,AT49BV002A,AT49LV002",
       "pinout": "DIP32_SST39SF040",
@@ -2415,8 +2415,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV002AN,AT49BV002N,AT49LV002N",
       "pinout": "DIP32_SST39SF040",
@@ -2434,8 +2434,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV002ANT,AT49BV002NT,AT49LV002NT",
       "pinout": "DIP32_SST39SF040",
@@ -2453,8 +2453,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV002AT,AT49BV002T,AT49LV002T",
       "pinout": "DIP32_SST39SF040",
@@ -2472,8 +2472,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV010,AT49HBV010,AT49HLV010,AT49LV010",
       "pinout": "DIP32_SST39SF040",
@@ -2491,8 +2491,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV020,AT49LV020",
       "pinout": "DIP32_SST39SF040",
@@ -2510,8 +2510,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV040,AT49BV040A,AT49BV040B,AT49LV040",
       "pinout": "DIP32_SST39SF040",
@@ -2529,8 +2529,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV040T,AT49LV040T",
       "pinout": "DIP32_SST39SF040",
@@ -2548,8 +2548,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "AT49BV512,AT49LV512",
       "pinout": "DIP32_SST39SF040",
@@ -2965,7 +2965,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2974,10 +2974,10 @@
       "part_number": "CAT28C17A",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -3003,7 +3003,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3012,17 +3012,17 @@
       "part_number": "CAT28C64A,CAT28C65",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3031,10 +3031,10 @@
       "part_number": "CAT28C64B",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -3117,19 +3117,19 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "CAT28LV64,CAT28LV65",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -3139,8 +3139,8 @@
         "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "CAT28LV256",
       "pinout": "DIP28_28C256",
@@ -3407,8 +3407,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "EN29LV040A",
       "pinout": "DIP32_SST39SF040",
@@ -3715,8 +3715,8 @@
         "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "FM28V020",
       "pinout": "DIP28_28C256",
@@ -3736,8 +3736,8 @@
         "type": "SRAM",
         "vcc": "4V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "DS1220(RW)",
       "pinout": "DIP24_6116",
@@ -3774,8 +3774,8 @@
         "type": "SRAM",
         "vcc": "3.3V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "DS1225(RW)",
       "pinout": "DIP28_JEDEC_SRAM_8K",
@@ -3793,8 +3793,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "DS1225(TEST)",
       "pinout": "DIP28_JEDEC_SRAM_8K",
@@ -3850,8 +3850,8 @@
         "type": "SRAM",
         "vcc": "3.3V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "DS1230W(RW3.3V)",
       "pinout": "DIP28_28C256",
@@ -3869,8 +3869,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "DS1230W(TEST3.3V)",
       "pinout": "DIP28_28C256",
@@ -3926,8 +3926,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "DS1245W(RW3.3V)",
       "pinout": "DIP32_SST39SF040",
@@ -3945,8 +3945,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "DS1245W(TEST3.3V)",
       "pinout": "DIP32_SST39SF040",
@@ -4002,8 +4002,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "DS1249W(RW3.3V)",
       "pinout": "DIP32_SST39SF040",
@@ -4021,8 +4021,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "DS1249W(TEST3.3V)",
       "pinout": "DIP32_SST39SF040",
@@ -4078,8 +4078,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "DS1250W(RW3.3V)",
       "pinout": "DIP32_SST39SF040",
@@ -4097,8 +4097,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "DS1250W(TEST3.3V)",
       "pinout": "DIP32_SST39SF040",
@@ -4331,8 +4331,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "EN29LV040A",
       "pinout": "DIP32_SST39SF040",
@@ -4387,7 +4387,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4396,10 +4396,10 @@
       "part_number": "XLE2865A,XLS2865A",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -4425,7 +4425,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4434,17 +4434,17 @@
       "part_number": "XLE28C64A,XLS28C64A",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4453,10 +4453,10 @@
       "part_number": "XLE28C64B,XLS28C64B",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -4774,8 +4774,8 @@
         "type": "Flash/EEPROM",
         "vcc": "3.3V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "MB85R256H",
       "pinout": "DIP28_28C256",
@@ -5559,8 +5559,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "5.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "HT27LC010",
       "pinout": "DIP32_STD",
@@ -5578,8 +5578,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "5.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "HT27LC020",
       "pinout": "DIP32_STD",
@@ -5597,8 +5597,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "5.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "HT27LC040",
       "pinout": "DIP32_STD",
@@ -5616,8 +5616,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "5.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "HT27LC512",
       "pinout": "DIP28_27512",
@@ -6008,8 +6008,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "IM29LV004B",
       "pinout": "DIP32_SST39SF040",
@@ -6027,8 +6027,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "IM29LV004T",
       "pinout": "DIP32_SST39SF040",
@@ -6714,7 +6714,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -6733,7 +6733,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -6752,7 +6752,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -6832,7 +6832,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -6851,7 +6851,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -6870,7 +6870,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -6892,8 +6892,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "MX26LV004B",
       "pinout": "DIP32_SST39SF040",
@@ -6911,8 +6911,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "MX26LV004T",
       "pinout": "DIP32_SST39SF040",
@@ -6930,8 +6930,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "MX26LV040",
       "pinout": "DIP32_SST39SF040",
@@ -7139,8 +7139,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "6.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "13V",
+        "vpp_mv": 13000
       },
       "part_number": "MX27L1000",
       "pinout": "DIP32_STD",
@@ -7158,8 +7158,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "6.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "13V",
+        "vpp_mv": 13000
       },
       "part_number": "MX27L2000",
       "pinout": "DIP32_STD",
@@ -7177,8 +7177,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "6.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "13V",
+        "vpp_mv": 13000
       },
       "part_number": "MX27L256",
       "pinout": "DIP28_27256",
@@ -7196,8 +7196,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "6.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "13V",
+        "vpp_mv": 13000
       },
       "part_number": "MX27L4000",
       "pinout": "DIP32_STD",
@@ -7215,8 +7215,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "6.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "13V",
+        "vpp_mv": 13000
       },
       "part_number": "MX27L512",
       "pinout": "DIP28_27512",
@@ -7538,8 +7538,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "MX29LV002CB",
       "pinout": "DIP32_SST39SF040",
@@ -7557,8 +7557,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "MX29LV002NCB",
       "pinout": "DIP32_SST39SF040",
@@ -7576,8 +7576,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "MX29LV002NCT",
       "pinout": "DIP32_SST39SF040",
@@ -7595,8 +7595,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "MX29LV002CT",
       "pinout": "DIP32_SST39SF040",
@@ -7824,7 +7824,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -7833,10 +7833,10 @@
       "part_number": "2817",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "5000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -7919,7 +7919,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -7928,17 +7928,17 @@
       "part_number": "28C17A",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "1000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -7947,10 +7947,10 @@
       "part_number": "28C17AF",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "200 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -7976,7 +7976,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -7985,17 +7985,17 @@
       "part_number": "28C64A",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "1000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8004,17 +8004,17 @@
       "part_number": "28C64AF",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "200 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8023,29 +8023,29 @@
       "part_number": "28C64B",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "5000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "28LV64A",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "1000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     }
   ],
@@ -8154,8 +8154,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "V29C31001B",
       "pinout": "DIP32_SST39SF040",
@@ -8173,8 +8173,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "V29C31001T",
       "pinout": "DIP32_SST39SF040",
@@ -8192,8 +8192,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "V29C31002B",
       "pinout": "DIP32_SST39SF040",
@@ -8211,8 +8211,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "V29C31002T",
       "pinout": "DIP32_SST39SF040",
@@ -8230,8 +8230,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "V29C31004B",
       "pinout": "DIP32_SST39SF040",
@@ -8249,8 +8249,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "V29C31004T",
       "pinout": "DIP32_SST39SF040",
@@ -8685,7 +8685,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -8694,10 +8694,10 @@
       "part_number": "UPD28C64",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     }
   ],
@@ -8901,8 +8901,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "5.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "13V",
+        "vpp_mv": 13000
       },
       "part_number": "NM27LV010",
       "pinout": "DIP32_STD",
@@ -8920,8 +8920,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "5.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "13V",
+        "vpp_mv": 13000
       },
       "part_number": "NM27LV020",
       "pinout": "DIP32_STD",
@@ -8939,8 +8939,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "5.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "13V",
+        "vpp_mv": 13000
       },
       "part_number": "NM27LV040",
       "pinout": "DIP32_STD",
@@ -8958,8 +8958,8 @@
         "type": "UV-EPROM",
         "vcc": "3.3V",
         "vdd": "5.5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "13V",
+        "vpp_mv": 13000
       },
       "part_number": "NM27LV512",
       "pinout": "DIP28_27512",
@@ -9419,7 +9419,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -9438,7 +9438,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -9457,7 +9457,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -9519,8 +9519,8 @@
         "type": "SRAM",
         "vcc": "3.3V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "FM16W08",
       "pinout": "DIP28_JEDEC_SRAM_8K",
@@ -9557,8 +9557,8 @@
         "type": "SRAM",
         "vcc": "3.3V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "FM18L08",
       "pinout": "DIP28_28C256",
@@ -9575,7 +9575,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -9584,17 +9584,17 @@
       "part_number": "KM28C64",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -9603,10 +9603,10 @@
       "part_number": "KM28C64A,KM28C65A",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     }
   ],
@@ -9976,7 +9976,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -9985,29 +9985,29 @@
       "part_number": "M28C64,M28C64A",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "M28C64-xxW",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -10416,8 +10416,8 @@
         "type": "SRAM",
         "vcc": "3.3V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "M48T35AV,M48Z35V,M48Z35AV",
       "pinout": "DIP28_28C256",
@@ -10454,8 +10454,8 @@
         "type": "SRAM",
         "vcc": "3.3V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "M48T59V,M48Z59V",
       "pinout": "DIP28_JEDEC_SRAM_8K",
@@ -10492,8 +10492,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "M48T128V,M48T129V,M48Z128V,M48Z129V",
       "pinout": "DIP32_SST39SF040",
@@ -10530,8 +10530,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "M48T512V,M48T513V,M48Z512V",
       "pinout": "DIP32_SST39SF040",
@@ -10721,7 +10721,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -10740,7 +10740,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -10759,7 +10759,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -10778,7 +10778,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 65536,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -10797,11 +10797,11 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST27VF010",
       "pinout": "DIP32_STD",
@@ -10816,11 +10816,11 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST27VF020",
       "pinout": "DIP32_STD",
@@ -10835,11 +10835,11 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST27VF256",
       "pinout": "DIP28_27256",
@@ -10854,11 +10854,11 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 65536,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST27VF512",
       "pinout": "DIP28_27512",
@@ -10876,8 +10876,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST28LF040,SST28LF040A,SST28VF040,SST28VF040A",
       "pinout": "DIP32_STD",
@@ -10971,8 +10971,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST29LE010,SST29VE010",
       "pinout": "DIP32_SST39SF040",
@@ -10990,8 +10990,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST29LE020,SST29VE020",
       "pinout": "DIP32_SST39SF040",
@@ -11009,8 +11009,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST29LE512,SST29VE512",
       "pinout": "DIP32_SST39SF040",
@@ -11104,8 +11104,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST29VF010",
       "pinout": "DIP32_SST39SF040",
@@ -11123,8 +11123,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST29VF020",
       "pinout": "DIP32_SST39SF040",
@@ -11142,8 +11142,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST29VF040",
       "pinout": "DIP32_SST39SF040",
@@ -11161,8 +11161,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST29VF512",
       "pinout": "DIP32_SST39SF040",
@@ -11177,11 +11177,11 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "3.3V",
         "vdd": "3.3V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST37VF010",
       "pinout": "DIP32_STD",
@@ -11196,11 +11196,11 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "3.3V",
         "vdd": "3.3V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST37VF020",
       "pinout": "DIP32_STD",
@@ -11215,11 +11215,11 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "3.3V",
         "vdd": "3.3V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST37VF040",
       "pinout": "DIP32_STD",
@@ -11234,11 +11234,11 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 65536,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "3.3V",
         "vdd": "3.3V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST37VF512",
       "pinout": "DIP32_STD",
@@ -11256,8 +11256,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST39LH010,SST39VF010",
       "pinout": "DIP32_SST39SF040",
@@ -11275,8 +11275,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST39LH020,SST39VF020",
       "pinout": "DIP32_SST39SF040",
@@ -11294,8 +11294,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST39LH040",
       "pinout": "DIP32_SST39SF040",
@@ -11313,8 +11313,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST39LH512,SST39VF512",
       "pinout": "DIP32_SST39SF040",
@@ -11408,8 +11408,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "SST39VF040,SST39VF040A",
       "pinout": "DIP32_SST39SF040",
@@ -11749,7 +11749,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -11758,29 +11758,29 @@
       "part_number": "M28C64,M28C64A",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "M28C64-xxW",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -11863,19 +11863,19 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "M28LV64",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -12227,8 +12227,8 @@
         "type": "SRAM",
         "vcc": "3.3V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "M48T35AV",
       "pinout": "DIP28_28C256",
@@ -12265,8 +12265,8 @@
         "type": "SRAM",
         "vcc": "3.3V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "M48T59V",
       "pinout": "DIP28_JEDEC_SRAM_8K",
@@ -12303,8 +12303,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "M48T128V,M48T129V",
       "pinout": "DIP32_SST39SF040",
@@ -12341,8 +12341,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "M48T512V,M48T513V",
       "pinout": "DIP32_SST39SF040",
@@ -12362,8 +12362,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "F29C31004B,S29C31004B",
       "pinout": "DIP32_SST39SF040",
@@ -12381,8 +12381,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "F29C31004T,S29C31004T",
       "pinout": "DIP32_SST39SF040",
@@ -12571,8 +12571,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "S29C31001B",
       "pinout": "DIP32_SST39SF040",
@@ -12590,8 +12590,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "S29C31001T",
       "pinout": "DIP32_SST39SF040",
@@ -12609,8 +12609,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "S29C31002B",
       "pinout": "DIP32_SST39SF040",
@@ -12628,8 +12628,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "S29C31002T",
       "pinout": "DIP32_SST39SF040",
@@ -13126,8 +13126,8 @@
         "type": "SRAM",
         "vcc": "3.3V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "BQ4011LYMA(RW3.3V)",
       "pinout": "DIP28_28C256",
@@ -13145,8 +13145,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "BQ4011LYMA(TEST3.3V)",
       "pinout": "DIP28_28C256",
@@ -13202,8 +13202,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "BQ4013LYMA(RW3.3V)",
       "pinout": "DIP32_SST39SF040",
@@ -13221,8 +13221,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "BQ4013LYMA(TEST3.3V)",
       "pinout": "DIP32_SST39SF040",
@@ -13278,8 +13278,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "BQ4014LYMA(RW3.3V)",
       "pinout": "DIP32_SST39SF040",
@@ -13297,8 +13297,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "BQ4014LYMA(TEST3.3V)",
       "pinout": "DIP32_SST39SF040",
@@ -13354,8 +13354,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "BQ4015LYMA(RW3.3V)",
       "pinout": "DIP32_SST39SF040",
@@ -13373,8 +13373,8 @@
         "type": "SRAM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "BQ4015LYMA(TEST3.3V)",
       "pinout": "DIP32_SST39SF040",
@@ -13528,7 +13528,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 131072,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -13547,7 +13547,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 262144,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -13566,7 +13566,7 @@
       "electrical": {
         "pin_count": 32,
         "size_bytes": 524288,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -13585,7 +13585,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -13604,7 +13604,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 65536,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -13623,7 +13623,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "13.5V",
@@ -13683,8 +13683,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "W29C040,W29C042",
       "pinout": "DIP32_SST39SF040",
@@ -13759,8 +13759,8 @@
         "type": "Flash/EEPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "Unknown",
-        "vpp_mv": 0
+        "vpp": "12V",
+        "vpp_mv": 12000
       },
       "part_number": "W39L040A",
       "pinout": "DIP32_SST39SF040",
@@ -14159,7 +14159,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14168,10 +14168,10 @@
       "part_number": "X2864AP",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
@@ -14197,7 +14197,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14206,17 +14206,17 @@
       "part_number": "X28C64,X28HC64",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "10000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14225,10 +14225,10 @@
       "part_number": "X28C64(NonStandard),X28HC64(NonStandard)",
       "pinout": "DIP28_28C64",
       "programming": {
-        "algorithm": 7,
+        "algorithm": 13,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "1000 us"
+        "pulse_duration": "Algorithm Controlled"
       }
     }
   ]

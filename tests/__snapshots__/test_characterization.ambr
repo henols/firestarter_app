@@ -383,10 +383,10 @@
   | AM27C128     | AMD              |   28 | 0x0116     | EPROM       | 13.0v|
   | AM27C256     | AMD              |   28 | 0x0110     | EPROM       | 13.0v|
   | AM27C512     | AMD              |   28 | 0x0191     | EPROM       | 13.0v|
-  | AM27LV010    | AMD              |   32 | 0x010E     | EPROM       |   0v|
-  | AM27LV020,AM27LV020B| AMD              |   32 | 0x0197     | EPROM       |   0v|
-  | AM27LV040    | AMD              |   32 | 0x019B     | EPROM       |   0v|
-  | AM27LV080    | AMD              |   32 | 0x011C     | EPROM       |   0v|
+  | AM27LV010    | AMD              |   32 | 0x010E     | EPROM       | 12.0v|
+  | AM27LV020,AM27LV020B| AMD              |   32 | 0x0197     | EPROM       | 12.0v|
+  | AM27LV040    | AMD              |   32 | 0x019B     | EPROM       | 12.0v|
+  | AM27LV080    | AMD              |   32 | 0x011C     | EPROM       | 12.0v|
   | AM27H010,AM27HB010| AMD              |   32 | 0x010E     | EPROM       | 13.0v|
   | AM27H256     | AMD              |   28 | 0x0110     | EPROM       | 13.0v|
   | AM28C16A     | AMD              |   24 |            | EPROM       | 12.0v|
@@ -452,9 +452,9 @@
   | AT27BV040,AT27LV040,AT27LV040A| ATMEL            |   32 | 0x1E0B     | EPROM       | 12.0v|
   | AT27BV256,AT27LV256A,AT27LV256R| ATMEL            |   28 | 0x1E8C     | EPROM       | 12.0v|
   | AT27BV512,AT27LV512A,AT27LV512R| ATMEL            |   28 | 0x1E0D     | EPROM       | 12.0v|
-  | AT28BV64,AT28LV64| ATMEL            |   28 |            | EPROM       |   0v|
-  | AT28BV64B,AT28LV64B| ATMEL            |   28 |            | EPROM       |   0v|
-  | AT28BV256,AT28LV256| ATMEL            |   28 |            | EPROM       |   0v|
+  | AT28BV64,AT28LV64| ATMEL            |   28 |            | EPROM       | 12.0v|
+  | AT28BV64B,AT28LV64B| ATMEL            |   28 |            | EPROM       | 12.0v|
+  | AT28BV256,AT28LV256| ATMEL            |   28 |            | EPROM       | 12.0v|
   | AT28C010,AT28C010E| ATMEL            |   32 |            | EPROM       | 12.0v|
   | AT28C04,AT28HC04| ATMEL            |   24 |            | EPROM       | 12.0v|
   | AT28C04E,AT28C04F| ATMEL            |   24 |            | EPROM       | 12.0v|
@@ -467,7 +467,7 @@
   | AT28C64,AT28C64B(Non-Standard),AT28HC64,AT28HC64L| ATMEL            |   28 |            | EPROM       | 12.0v|
   | AT28C64B,AT28HC64B,AT28HC64BF| ATMEL            |   28 |            | EPROM       | 12.0v|
   | AT28C64E,AT28C64F| ATMEL            |   28 |            | EPROM       | 12.0v|
-  | AT28LV010    | ATMEL            |   32 |            | EPROM       |   0v|
+  | AT28LV010    | ATMEL            |   32 |            | EPROM       | 12.0v|
   | AT28MC010    | ATMEL            |   32 |            | EPROM       | 12.0v|
   | AT28MC020    | ATMEL            |   32 |            | EPROM       | 12.0v|
   | AT28MC040    | ATMEL            |   32 |            | EPROM       | 12.0v|
@@ -527,8 +527,8 @@
   | CAT28C010    | CATALYST(CSI)    |   32 |            | EPROM       | 12.0v|
   | CAT28C020    | CATALYST(CSI)    |   32 |            | EPROM       | 12.0v|
   | CAT28C040    | CATALYST(CSI)    |   32 |            | EPROM       | 12.0v|
-  | CAT28LV64,CAT28LV65| CATALYST(CSI)    |   28 |            | EPROM       |   0v|
-  | CAT28LV256   | CATALYST(CSI)    |   28 |            | EPROM       |   0v|
+  | CAT28LV64,CAT28LV65| CATALYST(CSI)    |   28 |            | EPROM       | 12.0v|
+  | CAT28LV256   | CATALYST(CSI)    |   28 |            | EPROM       | 12.0v|
   | CAT28F001P-B | CATALYST(CSI)    |   32 | 0x3195     | EPROM       | 12.0v|
   | CAT28F001P-T | CATALYST(CSI)    |   32 | 0x3194     | EPROM       | 12.0v|
   | CAT28F256    | CATALYST(CSI)    |   32 | 0x31B9     | EPROM       | 12.0v|
@@ -558,7 +558,7 @@
   | CY27C512     | CYPRESS          |   28 |            | EPROM       | 12.0v|
   | CY27H256     | CYPRESS          |   28 | 0x3421     | EPROM       | 12.0v|
   | CY27H512     | CYPRESS          |   28 | 0x341F     | EPROM       | 12.0v|
-  | FM28V020     | CYPRESS          |   28 |            | EPROM       |   0v|
+  | FM28V020     | CYPRESS          |   28 |            | EPROM       | 12.0v|
   | DS1220(RW)   | DALLAS           |   24 |            | SRAM        |   - |
   | DS1220(TEST) | DALLAS           |   24 |            | SRAM        |   - |
   | DS1225(RW)   | DALLAS           |   28 |            | SRAM        |   - |
@@ -613,7 +613,7 @@
   | NMC27C16Q    | FAIRCHILD        |   24 |            | EPROM       | 18.0v|
   | NMC27C32,NMC27C32E,NMC27C32EH,NMC27C32H,NMC27C32Q| FAIRCHILD        |   24 |            | EPROM       | 18.0v|
   | NMC27C32B,NMC27C32BQ| FAIRCHILD        |   24 |            | EPROM       | 13.0v|
-  | MB85R256H    | FUJITSU          |   28 |            | EPROM       |   0v|
+  | MB85R256H    | FUJITSU          |   28 |            | EPROM       | 12.0v|
   | MBM2716      | FUJITSU          |   24 |            | EPROM       | 12.0v|
   | MBM27128     | FUJITSU          |   28 |            | EPROM       | 18.0v|
   | MBM27256     | FUJITSU          |   28 |            | EPROM       | 12.0v|
@@ -654,10 +654,10 @@
   | HT27C020     | HOLTEK           |   32 |            | EPROM       | 12.0v|
   | HT27C040     | HOLTEK           |   32 |            | EPROM       | 12.0v|
   | HT27C512     | HOLTEK           |   28 |            | EPROM       | 12.0v|
-  | HT27LC010    | HOLTEK           |   32 |            | EPROM       |   0v|
-  | HT27LC020    | HOLTEK           |   32 |            | EPROM       |   0v|
-  | HT27LC040    | HOLTEK           |   32 |            | EPROM       |   0v|
-  | HT27LC512    | HOLTEK           |   28 |            | EPROM       |   0v|
+  | HT27LC010    | HOLTEK           |   32 |            | EPROM       | 12.0v|
+  | HT27LC020    | HOLTEK           |   32 |            | EPROM       | 12.0v|
+  | HT27LC040    | HOLTEK           |   32 |            | EPROM       | 12.0v|
+  | HT27LC512    | HOLTEK           |   28 |            | EPROM       | 12.0v|
   | HY27C64      | HYNIX            |   28 | 0x08A7     | EPROM       | 13.0v|
   | HY29F002T    | HYNIX            |   32 | 0xADB0     | Flash type 3|   - |
   | HY29F040     | HYNIX            |   32 | 0xAD40     | Flash type 3|   - |
@@ -736,11 +736,11 @@
   | MX27C512     | MACRONIX(MXIC)   |   28 | 0xC291     | EPROM       | 13.0v|
   | MX27C8000    | MACRONIX(MXIC)   |   32 | 0xC280     | EPROM       | 13.0v|
   | MX27C8000A   | MACRONIX(MXIC)   |   32 | 0xC202     | EPROM       | 13.0v|
-  | MX27L1000    | MACRONIX(MXIC)   |   32 | 0xC20E     | EPROM       |   0v|
-  | MX27L2000    | MACRONIX(MXIC)   |   32 | 0xC220     | EPROM       |   0v|
-  | MX27L256     | MACRONIX(MXIC)   |   28 | 0xC210     | EPROM       |   0v|
-  | MX27L4000    | MACRONIX(MXIC)   |   32 | 0xC240     | EPROM       |   0v|
-  | MX27L512     | MACRONIX(MXIC)   |   28 | 0xC291     | EPROM       |   0v|
+  | MX27L1000    | MACRONIX(MXIC)   |   32 | 0xC20E     | EPROM       | 13.0v|
+  | MX27L2000    | MACRONIX(MXIC)   |   32 | 0xC220     | EPROM       | 13.0v|
+  | MX27L256     | MACRONIX(MXIC)   |   28 | 0xC210     | EPROM       | 13.0v|
+  | MX27L4000    | MACRONIX(MXIC)   |   32 | 0xC240     | EPROM       | 13.0v|
+  | MX27L512     | MACRONIX(MXIC)   |   28 | 0xC291     | EPROM       | 13.0v|
   | MX28F1000P   | MACRONIX(MXIC)   |   32 | 0xC21A     | EPROM       | 12.0v|
   | MX28F2000P   | MACRONIX(MXIC)   |   32 | 0xC22A     | EPROM       | 12.0v|
   | MX28F2000T   | MACRONIX(MXIC)   |   32 | 0xC23C     | EPROM       | 12.0v|
@@ -783,7 +783,7 @@
   | 28C64A       | MICROCHIP memory |   28 |            | EPROM       | 12.0v|
   | 28C64AF      | MICROCHIP memory |   28 |            | EPROM       | 12.0v|
   | 28C64B       | MICROCHIP memory |   28 |            | EPROM       | 12.0v|
-  | 28LV64A      | MICROCHIP memory |   28 |            | EPROM       |   0v|
+  | 28LV64A      | MICROCHIP memory |   28 |            | EPROM       | 12.0v|
   | M5L27256K    | MITSUBISHI       |   28 |            | EPROM       | 12.0v|
   | M5M27C101K   | MITSUBISHI       |   32 | 0x1C83     | EPROM       | 12.5v|
   | M5M27C128    | MITSUBISHI       |   28 |            | EPROM       | 18.0v|
@@ -828,10 +828,10 @@
   | NM27C512,NM27LC512,NM27P512,NMC27C512A,NMC27C512Q| NSC              |   28 | 0x8F85     | EPROM       | 13.0v|
   | NM27LC010,NM27P010,NMC27C010| NSC              |   32 | 0x8F86     | EPROM       | 13.0v|
   | NM27LC64     | NSC              |   28 | 0x8FC2     | EPROM       | 13.0v|
-  | NM27LV010    | NSC              |   32 | 0x8F86     | EPROM       |   0v|
-  | NM27LV020    | NSC              |   32 | 0x8F07     | EPROM       |   0v|
-  | NM27LV040    | NSC              |   32 | 0x8F08     | EPROM       |   0v|
-  | NM27LV512    | NSC              |   28 | 0x8F85     | EPROM       |   0v|
+  | NM27LV010    | NSC              |   32 | 0x8F86     | EPROM       | 13.0v|
+  | NM27LV020    | NSC              |   32 | 0x8F07     | EPROM       | 13.0v|
+  | NM27LV040    | NSC              |   32 | 0x8F08     | EPROM       | 13.0v|
+  | NM27LV512    | NSC              |   28 | 0x8F85     | EPROM       | 13.0v|
   | NM27P020     | NSC              |   32 | 0x8F07     | EPROM       | 13.0v|
   | NM27P040     | NSC              |   32 | 0x8F08     | EPROM       | 13.0v|
   | NMC2732      | NSC              |   24 |            | EPROM       | 12.0v|
@@ -885,7 +885,7 @@
   | M27C801      | SGS-THOMSON      |   32 | 0x2042     | EPROM       | 13.0v|
   | M28010       | SGS-THOMSON      |   32 |            | EPROM       | 12.0v|
   | M28C64,M28C64A| SGS-THOMSON      |   28 |            | EPROM       | 12.0v|
-  | M28C64-xxW   | SGS-THOMSON      |   28 |            | EPROM       |   0v|
+  | M28C64-xxW   | SGS-THOMSON      |   28 |            | EPROM       | 12.0v|
   | M28F101      | SGS-THOMSON      |   32 | 0x2007     | EPROM       | 12.0v|
   | M28F201      | SGS-THOMSON      |   32 | 0x20F4     | EPROM       | 12.0v|
   | M28F256      | SGS-THOMSON      |   32 | 0x20A8     | EPROM       | 12.0v|
@@ -927,11 +927,11 @@
   | SST27SF020   | SST              |   32 | 0xBFA6     | EPROM       | 12.0v|
   | SST27SF256   | SST              |   28 | 0xBFA3     | EPROM       | 12.0v|
   | SST27SF512   | SST              |   28 | 0xBFA4     | EPROM       | 12.0v|
-  | SST27VF010   | SST              |   32 | 0xBFA9     | EPROM       |   0v|
-  | SST27VF020   | SST              |   32 | 0xBFAA     | EPROM       |   0v|
-  | SST27VF256   | SST              |   28 | 0xBFA7     | EPROM       |   0v|
-  | SST27VF512   | SST              |   28 | 0xBFA8     | EPROM       |   0v|
-  | SST28LF040,SST28LF040A,SST28VF040,SST28VF040A| SST              |   32 | 0xBF04     | EPROM       |   0v|
+  | SST27VF010   | SST              |   32 | 0xBFA9     | EPROM       | 12.0v|
+  | SST27VF020   | SST              |   32 | 0xBFAA     | EPROM       | 12.0v|
+  | SST27VF256   | SST              |   28 | 0xBFA7     | EPROM       | 12.0v|
+  | SST27VF512   | SST              |   28 | 0xBFA8     | EPROM       | 12.0v|
+  | SST28LF040,SST28LF040A,SST28VF040,SST28VF040A| SST              |   32 | 0xBF04     | EPROM       | 12.0v|
   | SST28SF040,SST28SF040A| SST              |   32 | 0xBF04     | EPROM       | 12.0v|
   | SST29EE010   | SST              |   32 | 0xBF07     | Unknown (5) |   - |
   | SST29EE020   | SST              |   32 | 0xBF10     | Unknown (5) |   - |
@@ -947,10 +947,10 @@
   | SST29VF020   | SST              |   32 | 0xBF25     | Flash type 3|   - |
   | SST29VF040   | SST              |   32 | 0xBF14     | Flash type 3|   - |
   | SST29VF512   | SST              |   32 | 0xBF21     | Flash type 3|   - |
-  | SST37VF010   | SST              |   32 | 0xBFC5     | EPROM       |   0v|
-  | SST37VF020   | SST              |   32 | 0xBFC6     | EPROM       |   0v|
-  | SST37VF040   | SST              |   32 | 0xBFC2     | EPROM       |   0v|
-  | SST37VF512   | SST              |   32 | 0xBFC4     | EPROM       |   0v|
+  | SST37VF010   | SST              |   32 | 0xBFC5     | EPROM       | 12.0v|
+  | SST37VF020   | SST              |   32 | 0xBFC6     | EPROM       | 12.0v|
+  | SST37VF040   | SST              |   32 | 0xBFC2     | EPROM       | 12.0v|
+  | SST37VF512   | SST              |   32 | 0xBFC4     | EPROM       | 12.0v|
   | SST39LH010,SST39VF010| SST              |   32 | 0xBFD5     | Flash type 3|   - |
   | SST39LH020,SST39VF020| SST              |   32 | 0xBFD6     | Flash type 3|   - |
   | SST39LH040   | SST              |   32 | 0xBFD7     | Flash type 3|   - |
@@ -978,12 +978,12 @@
   | M28010       | ST               |   32 |            | EPROM       | 12.0v|
   | M28256       | ST               |   28 |            | EPROM       | 12.0v|
   | M28C64,M28C64A| ST               |   28 |            | EPROM       | 12.0v|
-  | M28C64-xxW   | ST               |   28 |            | EPROM       |   0v|
+  | M28C64-xxW   | ST               |   28 |            | EPROM       | 12.0v|
   | M28F101      | ST               |   32 | 0x2007     | EPROM       | 12.0v|
   | M28F201      | ST               |   32 | 0x20F4     | EPROM       | 12.0v|
   | M28F256      | ST               |   32 | 0x20A8     | EPROM       | 12.0v|
   | M28F512,M28F512B,M28F010| ST               |   32 | 0x2002     | EPROM       | 12.0v|
-  | M28LV64      | ST               |   28 |            | EPROM       |   0v|
+  | M28LV64      | ST               |   28 |            | EPROM       | 12.0v|
   | M29F002B,M29F002BB| ST               |   32 | 0x2034     | Flash type 3|   - |
   | M29F002BT,M29F002T| ST               |   32 | 0x20B0     | Flash type 3|   - |
   | M29F002BNT,M29F002NT| ST               |   32 | 0x20B0     | Flash type 3|   - |
