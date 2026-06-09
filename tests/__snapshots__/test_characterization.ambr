@@ -1024,6 +1024,13 @@
   | S29C31001T   | SYNCMOS          |   32 |            | Flash type 3|   - |
   | S29C31002B   | SYNCMOS          |   32 |            | Flash type 3|   - |
   | S29C31002T   | SYNCMOS          |   32 |            | Flash type 3|   - |
+  | 6116         | Standard SRAM    |   24 |            | SRAM        |   - |
+  | 6164,6264    | Standard SRAM    |   28 |            | SRAM        |   - |
+  | 61256,62256  | Standard SRAM    |   28 |            | SRAM        |   - |
+  | 61512,62512  | Standard SRAM    |   32 |            | SRAM        |   - |
+  | 628128       | Standard SRAM    |   32 |            | SRAM        |   - |
+  | 628256       | Standard SRAM    |   32 |            | SRAM        |   - |
+  | 628512       | Standard SRAM    |   32 |            | SRAM        |   - |
   | SMJ27C128,TMS27C128,TMS27PC128| TI               |   28 | 0x9783     | EPROM       | 13.0v|
   | SMJ27C256,TMS27C256,TMS27PC256| TI               |   28 | 0x9704     | EPROM       | 13.0v|
   | SMJ27C512,TMS27C512,TMS27PC512| TI               |   28 | 0x9785     | EPROM       | 13.0v|
@@ -1100,13 +1107,6 @@
   | X28C010      | XICOR            |   32 |            | EPROM       | 12.0v|
   | X28C64,X28HC64| XICOR            |   28 |            | EPROM       | 12.0v|
   | X28C64(NonStandard),X28HC64(NonStandard)| XICOR            |   28 |            | EPROM       | 12.0v|
-  | 6116         | Standard SRAM    |   24 |            | SRAM        |   - |
-  | 6164,6264    | Standard SRAM    |   28 |            | SRAM        |   - |
-  | 61256,62256  | Standard SRAM    |   28 |            | SRAM        |   - |
-  | 61512,62512  | Standard SRAM    |   32 |            | SRAM        |   - |
-  | 628128       | Standard SRAM    |   32 |            | SRAM        |   - |
-  | 628256       | Standard SRAM    |   32 |            | SRAM        |   - |
-  | 628512       | Standard SRAM    |   32 |            | SRAM        |   - |
   +--------------+------------------+------+------------+-------------+-----+
   
   '''
