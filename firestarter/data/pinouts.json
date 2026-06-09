@@ -101,6 +101,16 @@
             "ce-pin": [18], "oe-pin": [20], "rw-pin": [21]
         }
     },
+    "DIP24_2816": {
+        "name": "JEDEC 24-pin 5V parallel EEPROM (AT28C16/AT28C04 family)",
+        "comment": "AT28C16/AT28C04/28C16A-class 24-pin 5V single-supply parallel EEPROMs. Same physical layout as DIP24_6116 SRAM (WE=pin 21, OE=pin 20, CE=pin 18, VCC=pin 24, GND=pin 12). NO vpp-pin — configure_eeprom28c is 5V-only (SDP-disable + DQ7 page-write polling; VPP regulator is never asserted). Over-allocated to A0-A10 (11 address bits = AT28C16 maximum); AT28C04 has 9 address lines and firmware restricts driving via mem_size. Source: Atmel AT28C16 datasheet Table 1 (pin description). Pin 21=WE, NOT VPP — the DIP24_2716 (UV-EPROM) layout has VPP=pin 21; this layout does NOT.",
+        "pins": {
+            "vcc-pin": [24], "gnd-pin": [12],
+            "address-bus-pins": [8, 7, 6, 5, 4, 3, 2, 1, 23, 22, 19],
+            "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
+            "ce-pin": [18], "oe-pin": [20], "rw-pin": [21]
+        }
+    },
     "DIP28_28C64": {
         "name": "JEDEC 28-pin 5V parallel EEPROM 8K (28C64 family)",
         "comment": "Per piersfinlayson/one-rom (datasheet-verified): 28C64 has 13 address pins (A0-A12, same as 2764 EPROM), CE=20, OE=22, WE=27, pin 1=NC (or /busy on some variants). 5V single-supply, no programming voltage. Distinct from DIP28_2764 (UV-EPROM layout) — pin 27 is WE (not PGM), pin 1 is NC (not VPP). Covers (pin_count=28, pm_idx=19, protocol_id=0x07) group: AM28C64A/B/E, etc. Routes through configure_eeprom28c via WARNING-5 algo flip.",
