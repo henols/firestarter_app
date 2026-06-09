@@ -482,7 +482,7 @@
     {
       "part_number": "AM28C16A",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -491,12 +491,12 @@
         "vdd": "3.3V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "AM28C17A",
@@ -1763,6 +1763,44 @@
       "pinout": "DIP32_28C512_EEPROM"
     },
     {
+      "part_number": "AT28C04,AT28HC04",
+      "electrical": {
+        "type": "Flash/EEPROM",
+        "size_bytes": 512,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vcc": "4V",
+        "vdd": "5V"
+      },
+      "programming": {
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2816"
+    },
+    {
+      "part_number": "AT28C04E,AT28C04F",
+      "electrical": {
+        "type": "Flash/EEPROM",
+        "size_bytes": 512,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vcc": "4V",
+        "vdd": "5V"
+      },
+      "programming": {
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2816"
+    },
+    {
       "part_number": "AT28C040,AT28C040E",
       "electrical": {
         "type": "Flash/EEPROM",
@@ -1780,6 +1818,44 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP32_28C512_EEPROM"
+    },
+    {
+      "part_number": "AT28C16,AT28HC16,AT28HC16L",
+      "electrical": {
+        "type": "Flash/EEPROM",
+        "size_bytes": 2048,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vcc": "4V",
+        "vdd": "5V"
+      },
+      "programming": {
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2816"
+    },
+    {
+      "part_number": "AT28C16E,AT28C16F",
+      "electrical": {
+        "type": "Flash/EEPROM",
+        "size_bytes": 2048,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vcc": "4V",
+        "vdd": "5V"
+      },
+      "programming": {
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "AT28C17",
@@ -2083,7 +2159,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fdc"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "AT29C257",
@@ -2216,7 +2292,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fdc"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "AT29LV512",
@@ -2869,7 +2945,7 @@
     {
       "part_number": "CAT28C16A,CAT28C16AI",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -2878,12 +2954,12 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "CAT28C17A",
@@ -2907,7 +2983,7 @@
     {
       "part_number": "CAT28C256,CAT28C257",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "12V",
@@ -2916,8 +2992,8 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -3059,7 +3135,7 @@
     {
       "part_number": "CAT28LV256",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -3068,8 +3144,8 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -3635,7 +3711,7 @@
     {
       "part_number": "FM28V020",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -3644,8 +3720,8 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -3670,7 +3746,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_6116"
     },
     {
       "part_number": "DS1220(TEST)",
@@ -3727,7 +3803,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "DS1230AB(RW),DS1230Y(RW)",
@@ -3765,7 +3841,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "DS1230W(RW3.3V)",
@@ -3803,7 +3879,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "DS1245AB(RW),DS1245Y(RW)",
@@ -4272,7 +4348,7 @@
     {
       "part_number": "XL2804A",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 512,
         "pin_count": 24,
         "vpp": "12V",
@@ -4281,17 +4357,17 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "XL2816A,XLE28C16A,XLS28C16A",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -4300,12 +4376,12 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "XLE2865A,XLS2865A",
@@ -4329,7 +4405,7 @@
     {
       "part_number": "XLE28C16B,XLS28C16B",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -4338,12 +4414,12 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "XLE28C64A,XLS28C64A",
@@ -4386,7 +4462,7 @@
     {
       "part_number": "XLE28C256,XLS28C256",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "12V",
@@ -4395,8 +4471,8 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -4694,7 +4770,7 @@
     {
       "part_number": "MB85R256H",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "Unknown",
@@ -4703,8 +4779,8 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "1 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -5382,7 +5458,7 @@
     {
       "part_number": "HN58C256AP",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "12V",
@@ -5391,8 +5467,8 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -7709,7 +7785,7 @@
     {
       "part_number": "2804",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 512,
         "pin_count": 24,
         "vpp": "12V",
@@ -7718,17 +7794,17 @@
         "vdd": "3.3V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "5000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "2816",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -7737,12 +7813,12 @@
         "vdd": "3.3V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "5000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "2817",
@@ -7762,6 +7838,82 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP28_28C64"
+    },
+    {
+      "part_number": "28C04A",
+      "electrical": {
+        "type": "Flash/EEPROM",
+        "size_bytes": 512,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vcc": "5.5V",
+        "vdd": "3.3V"
+      },
+      "programming": {
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2816"
+    },
+    {
+      "part_number": "28C04AF",
+      "electrical": {
+        "type": "Flash/EEPROM",
+        "size_bytes": 512,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vcc": "5.5V",
+        "vdd": "3.3V"
+      },
+      "programming": {
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2816"
+    },
+    {
+      "part_number": "28C16A",
+      "electrical": {
+        "type": "Flash/EEPROM",
+        "size_bytes": 2048,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vcc": "5.5V",
+        "vdd": "3.3V"
+      },
+      "programming": {
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2816"
+    },
+    {
+      "part_number": "28C16AF",
+      "electrical": {
+        "type": "Flash/EEPROM",
+        "size_bytes": 2048,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vcc": "5.5V",
+        "vdd": "3.3V"
+      },
+      "programming": {
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "28C17A",
@@ -8490,6 +8642,25 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP32_STD"
+    },
+    {
+      "part_number": "UPD28C04",
+      "electrical": {
+        "type": "Flash/EEPROM",
+        "size_bytes": 512,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vcc": "4V",
+        "vdd": "5V"
+      },
+      "programming": {
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "UPD28C256",
@@ -9320,7 +9491,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_6116"
     },
     {
       "part_number": "FM1608",
@@ -10198,7 +10369,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_6116"
     },
     {
       "part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
@@ -12009,7 +12180,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_6116"
     },
     {
       "part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y",
@@ -12773,7 +12944,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "BQ4011YMA(RW)",
@@ -12811,7 +12982,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "BQ4011LYMA(RW3.3V)",
@@ -12849,7 +13020,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "BQ4013YMA(RW)",
@@ -13577,7 +13748,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "W24512",
@@ -13615,7 +13786,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     }
   ],
   "WSI": [
@@ -13776,7 +13947,7 @@
     {
       "part_number": "X2804A,X2804AI",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 512,
         "pin_count": 24,
         "vpp": "12V",
@@ -13785,17 +13956,17 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "X2816A",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -13804,17 +13975,17 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "X2816B,X2816C",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -13823,17 +13994,17 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2816"
     },
     {
       "part_number": "X28256,X28C256",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 32768,
         "pin_count": 28,
         "vpp": "12V",
@@ -13842,8 +14013,8 @@
         "vdd": "5V"
       },
       "programming": {
-        "algorithm": 7,
-        "pulse_duration": "10000 us",
+        "algorithm": 13,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -13963,7 +14134,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "61256,62256",
@@ -13982,7 +14153,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "61512,62512",

@@ -375,15 +375,30 @@ def main():
                     )
 
                 # Step 5: Rule 2 — WARNING-5 generalised safety net.
-                # A chip that resolves to a 5V EEPROM pinout (DIP28_2764 or DIP28_28C256)
-                # but still carries proto_id=0x07 (EPROM_STD) AND _etype=Flash/EEPROM
-                # would route to configure_eprom (12V VPP on pin 1/27) — hardware damage.
-                # Flip to 0x0D. Uses flags-based _etype from Pass 1 (needed BEFORE
-                # any protocol-aware re-derivation). Named Rule 2 per D-05.
+                # A chip that resolves to a 5V EEPROM pinout but carries proto_id=0x07
+                # (EPROM_STD) would route to configure_eprom (12V VPP on pin 1/27) —
+                # hardware damage. Flip to 0x0D. Named Rule 2 per D-05.
+                #
+                # Two sub-cases require different discriminators:
+                #   DIP28_28C256 (pm_idx=20): always an EEPROM pinout — no UV-EPROM
+                #     can land here via the principled rules. The flags & 0x10 guard is
+                #     omitted because some 28C256-class chips have flags=0xC000 with no
+                #     erasable bit (e.g. CAT28C256). Pinout is the discriminator.
+                #     Exception: type=4 SRAM/NVRAM chips (e.g. DS1230, M48T35) that
+                #     resolve to DIP28_28C256 via pm_idx=0 mem_size>8K must NOT be
+                #     caught by Rule 2 — Rule 3 handles them (proto → 0x28 SRAM_STD).
+                #   DIP28_2764 (pm_idx=21 or pm_idx=22 else): genuine UV-EPROMs DO land
+                #     here (27C64/27C128). Use _etype == "Flash/EEPROM" from Pass 1 to
+                #     identify mistagged 5V EEPROMs that slipped through.
+                #
                 # References: WARNING-5 in .planning/v1.0-MILESTONE-AUDIT.md
                 # and .planning/INTEGRATION-CHECK.md.
                 if (
-                    pinout_key in ("DIP28_2764", "DIP28_28C256")
+                    pinout_key == "DIP28_28C256"
+                    and proto_id == 0x07
+                    and type_int != 4  # SRAM-class chips handled by Rule 3
+                ) or (
+                    pinout_key == "DIP28_2764"
                     and proto_id == 0x07
                     and _etype == "Flash/EEPROM"
                 ):

@@ -456,7 +456,11 @@
   | AT28BV64B,AT28LV64B| ATMEL            |   28 |            | EPROM       |   0v|
   | AT28BV256,AT28LV256| ATMEL            |   28 |            | EPROM       |   0v|
   | AT28C010,AT28C010E| ATMEL            |   32 |            | EPROM       | 12.0v|
+  | AT28C04,AT28HC04| ATMEL            |   24 |            | EPROM       | 12.0v|
+  | AT28C04E,AT28C04F| ATMEL            |   24 |            | EPROM       | 12.0v|
   | AT28C040,AT28C040E| ATMEL            |   32 |            | EPROM       | 12.0v|
+  | AT28C16,AT28HC16,AT28HC16L| ATMEL            |   24 |            | EPROM       | 12.0v|
+  | AT28C16E,AT28C16F| ATMEL            |   24 |            | EPROM       | 12.0v|
   | AT28C17      | ATMEL            |   28 |            | EPROM       | 12.0v|
   | AT28C17E,AT28C17F| ATMEL            |   28 |            | EPROM       | 12.0v|
   | AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L| ATMEL            |   28 |            | EPROM       | 12.0v|
@@ -769,6 +773,10 @@
   | 2804         | MICROCHIP memory |   24 |            | EPROM       | 12.0v|
   | 2816         | MICROCHIP memory |   24 |            | EPROM       | 12.0v|
   | 2817         | MICROCHIP memory |   28 |            | EPROM       | 12.0v|
+  | 28C04A       | MICROCHIP memory |   24 |            | EPROM       | 12.0v|
+  | 28C04AF      | MICROCHIP memory |   24 |            | EPROM       | 12.0v|
+  | 28C16A       | MICROCHIP memory |   24 |            | EPROM       | 12.0v|
+  | 28C16AF      | MICROCHIP memory |   24 |            | EPROM       | 12.0v|
   | 28C17A       | MICROCHIP memory |   28 |            | EPROM       | 12.0v|
   | 28C17AF      | MICROCHIP memory |   28 |            | EPROM       | 12.0v|
   | 28C256,28C256F| MICROCHIP memory |   28 |            | EPROM       | 12.0v|
@@ -807,6 +815,7 @@
   | UPD27C4001   | NEC              |   32 |            | EPROM       | 12.0v|
   | UPD27C512    | NEC              |   28 |            | EPROM       | 12.0v|
   | UPD27C8001   | NEC              |   32 |            | EPROM       | 12.0v|
+  | UPD28C04     | NEC              |   24 |            | EPROM       | 12.0v|
   | UPD28C256    | NEC              |   28 |            | EPROM       | 12.0v|
   | UPD28C64     | NEC              |   28 |            | EPROM       | 12.0v|
   | NX29F010     | NEXFLASH         |   32 | 0x0120     | Flash type 3|   - |
