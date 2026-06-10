@@ -463,57 +463,78 @@ class EpromSpecBuilder:
             )
         return layout_data
 
-    def build_specifications(self, eprom_data: dict) -> Optional[Dict]:  # noqa: UP006
+    # Curated map from electrical.type DB ground truth to display label (D-01).
+    # These are the four distinct values present in chip_database.json.
+    # Falls back to get_chip_type_string (protocol-based) when electrical_type
+    # is absent or empty (legacy user-override entries without electrical.type).
+    _ELECTRICAL_TYPE_LABEL = {
+        "EEPROM": "EEPROM",
+        "Flash/EEPROM": "Flash/EEPROM",
+        "SRAM": "SRAM",
+        "UV-EPROM": "UV-EPROM",
+    }
+
+    def build_specifications(  # noqa: UP006
+        self,
+        eprom_data: dict,
+        electrical_type: Optional[str] = None,  # noqa: UP006
+    ) -> Optional[Dict]:  # noqa: UP006
+        """Build a dictionary of comprehensive technical specifications for the EPROM.
+
+        This includes basic properties, pin names for layout, jumper settings,
+        protocol information, and flag interpretations.
+
+        ``eprom_data`` should be the fully mapped data from
+        ``EpromDatabase.get_eprom(..., full=True)``.
+
+        ``electrical_type`` is the raw ``electrical.type`` string from the DB record
+        (e.g. ``"EEPROM"``, ``"UV-EPROM"``, ``"Flash/EEPROM"``, ``"SRAM"``).  When
+        provided it is used as the sole source of the Type label (D-01) and the
+        "Can be erased" derivation (D-02).  Pass ``None`` for legacy user-override
+        entries that do not carry ``electrical.type``.
         """
-        Builds a dictionary containing comprehensive technical specifications
-        for the given EPROM data. This includes basic properties, pin names for layout,
-        jumper settings, protocol information, and flag interpretations.
-        `eprom_data` should be the fully mapped data from `EpromDatabase.get_eprom(..., full=True)`.
-        """  # noqa: E501
         if not eprom_data:
             logger.error("No EPROM data provided to display.")
             return None
 
+        # D-01: type label sourced from electrical.type curated map.
+        # Fall back to protocol-based label when electrical_type is absent/empty.
+        etype = electrical_type or ""
+        if etype in self._ELECTRICAL_TYPE_LABEL:
+            chip_type_str = self._ELECTRICAL_TYPE_LABEL[etype]
+        else:
+            chip_type_str = self.get_chip_type_string(
+                eprom_data.get("type", 0), eprom_data.get("protocol-id")
+            )
+
+        # D-05: verified_str marker removed entirely (no marker shown).
+        # The presenter reads chip_data.get("verified_str", "") so omitting the
+        # key is safe and produces no visible marker.
         output_data = {
             "name": eprom_data.get("name", "N/A"),
             "manufacturer": eprom_data.get("manufacturer", "N/A"),
             "pin_count": eprom_data.get("pin-count", "N/A"),
             "memory_size_hex": hex(eprom_data.get("memory-size", 0)),
-            "type_str": self.get_chip_type_string(
-                eprom_data.get("type", 0), eprom_data.get("protocol-id")
-            ),
+            "type_str": chip_type_str,
             "vcc_str": f"{eprom_data.get('vcc', 'N/A')}v",
             "pulse_delay_us_str": f"{eprom_data.get('pulse-delay', 'N/A')}µS",
-            "verified_str": ""
-            if eprom_data.get("verified", False)
-            else "-- NOT VERIFIED --",
             "dip_layout": None,  # Will store the structured DIP layout data
             "jumpers": {},
             "protocol_info": None,
             "flags_info": None,
         }
 
-        chip_type_str = self.get_chip_type_string(
-            eprom_data.get("type", 0), eprom_data.get("protocol-id")
-        )
-        output_data["type_str"] = chip_type_str
+        # D-02: "Can be erased" derived from electrical.type, NOT protocol_id.
+        # EEPROM/Flash/EEPROM → electrically erasable; UV-EPROM → UV-only;
+        # SRAM → omit row (volatile); absent/unknown → omit row (safe fallback).
+        if etype == "EEPROM" or etype == "Flash/EEPROM":
+            output_data["can_erase_str"] = "yes (electrically erasable)"
+        elif etype == "UV-EPROM":
+            output_data["can_erase_str"] = "no (UV erase only)"
+        # SRAM and absent/unknown: no can_erase_str row
 
-        # `Can be erased` semantic: "does firestarter have an erase command for
-        # this chip family". Protocol-aware derivation per firestarter/CLAUDE.md.
-        proto = eprom_data.get("protocol-id")
-        if eprom_data.get("type") == 1 or eprom_data.get("type") == 3:
-            if proto in (0x07, 0x08, 0x0B):
-                output_data["can_erase_str"] = "false (UV erase only)"
-            elif proto in (0x05, 0x06, 0x0D, 0x10):
-                output_data["can_erase_str"] = "true (firmware-supported)"
-            else:
-                output_data["can_erase_str"] = (
-                    "true" if eprom_data.get("info-flags", 0) & 0x00000010 else "false"
-                )
-
-        if (
-            eprom_data.get("flags", 0) & 0x00000008
-        ):  # Assumes this flag means VPP is relevant
+        # D-07-VPP: gate on vpp_mv > 0, not the always-zero flags & 0x08.
+        if eprom_data.get("vpp_mv", 0) > 0:
             output_data["vpp_str"] = f"{eprom_data.get('vpp_volts', 'N/A')}v"
 
         if "chip-id" in eprom_data:

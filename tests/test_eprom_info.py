@@ -231,9 +231,9 @@ SYNTH_SRAM_RAW = {
 }
 
 
-def _map_synth(db: EpromDatabase, raw: dict) -> dict:
+def _map_synth(db: EpromDatabase, raw: dict, manufacturer: str = "SYNTH_MFR") -> dict:
     """Call _map_data on a synthetic raw record via the internal API."""
-    return db._map_data(raw)
+    return db._map_data(raw, manufacturer)
 
 
 def test_synthetic_eeprom_type_label(

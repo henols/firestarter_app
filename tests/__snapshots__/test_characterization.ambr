@@ -312,14 +312,15 @@
 # ---
 # name: test_info_known_chip
   '''
-  Eprom Info          -- NOT VERIFIED --
+  Eprom Info          
   Name:               W27C512,W27E512
   Manufacturer:       WINBOND
   Number of pins:     28
   Memory size         0x10000
-  Type:               UV-EPROM / MTP-Flash (12V VPP)
-  Can be erased:      false (UV erase only)
+  Type:               EEPROM
+  Can be erased:      yes (electrically erasable)
   VCC:                5.0v
+  VPP:                12.0v
   Chip ID:            0xda08
   Pulse delay:        100µS
   
@@ -354,7 +355,8 @@
     - Requires VPP on OE/VPP pin and byte-program style pulses
     - Vendors may enable software data protection/unlock cycles
   
-  Flags: 0x00000020
+  Flags: 0x00000030
+    - Electrically erasable
     - Provides readable manufacturer/device ID
   
   '''

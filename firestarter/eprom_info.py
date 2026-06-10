@@ -117,9 +117,16 @@ class EpromConsolePresenter:
             logger.error(f"EPROM '{eprom_name}' not found in the database.")
             return None
 
-        # Get base specifications from EpromSpecBuilder
-        # eprom_details_full is the fully mapped data expected by build_specifications
-        eprom_specifications = self.spec_builder.build_specifications(eprom_details)
+        # Get base specifications from EpromSpecBuilder.
+        # Pass electrical_type from the raw config so D-01/D-02 use ground-truth.
+        electrical_type = None
+        if raw_config_data:
+            electrical_type = (
+                raw_config_data.get("electrical", {}).get("type") or None
+            )
+        eprom_specifications = self.spec_builder.build_specifications(
+            eprom_details, electrical_type=electrical_type
+        )
         if not eprom_specifications:
             logger.error(f"Could not generate layout data for {eprom_name}.")
             return None  # Should not happen if eprom_details_full was valid
