@@ -318,28 +318,71 @@ class EpromConsolePresenter:
 
 # --- Helper function for printing EPROM list (for testing/CLI) ---
 def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
-    """Prints a list of EPROM data in a table format. For CLI/testing."""
+    """Prints a list of EPROM data in a table format. For CLI/testing.
+
+    Column layout (D-01, D-02, D-03, D-04 — Phase 61):
+    - Name: dynamic width clamped to [13, 20]; names longer than 20 chars are
+      truncated with a trailing ellipsis ('…') that counts toward the 20-char cap.
+    - Manufacturer: fixed 17; Pins: fixed 5; Chip ID: fixed 11; Type: fixed 12.
+    - VPP: fixed 5 (every voltage string is 5 chars; '-' padded to 5).
+    - Type is sourced from electrical-type via spec_builder.resolve_type_label (D-04).
+    - VPP shown only when vpp_mv > 0 AND electrical-type != 'SRAM' (D-03 parity gate).
+    """
     if not eproms_data:
         logger.info("No EPROMs to display.")
         return
 
-    divider = f"+{'':-<14}+{'':-<18}+{'':-<6}+{'':-<12}+{'':-<13}+{'':-<5}+"  # Adjusted type column width  # noqa: E501
+    # D-01: dynamic Name column width clamped to [13, 20].
+    # Compute the widest rendered name (including any [!] suffix) across all rows,
+    # then clamp to the [13, 20] range.  Names that would exceed 20 chars are
+    # truncated to 19 chars + '…' (ellipsis counts toward the 20-char cap).
+    def _render_name(raw_name: str, has_bus_config: bool) -> str:
+        """Return the name string as it will be rendered in the table cell."""
+        name = raw_name
+        if not has_bus_config:
+            name = (name[:11] + "[!]") if len(name) > 11 else f"{name}[!]"
+        if len(name) > 20:
+            name = name[:19] + "…"  # ellipsis counts toward the 20-char cap
+        return name
+
+    rendered_names = [
+        _render_name(ic.get("name", ""), bool(ic.get("bus-config")))
+        for ic in eproms_data
+    ]
+    name_w = max(13, min(20, max((len(n) for n in rendered_names), default=13)))
+
+    divider = f"+{'':-<{name_w + 1}}+{'':-<18}+{'':-<6}+{'':-<12}+{'':-<13}+{'':-<6}+"
     logger.info(divider)
     logger.info(
-        f"| {'Name': <13}| {'Manufacturer': <17}| {'Pins': <5}| {'Chip ID': <11}| {'Type': <12}| {'VPP': <4}|"  # noqa: E501
+        f"| {'Name': <{name_w}}| {'Manufacturer': <17}| {'Pins': <5}| {'Chip ID': <11}| {'Type': <12}| {'VPP': <5}|"  # noqa: E501
     )
     logger.info(divider)
-    for ic in eproms_data:
+    for name, ic in zip(rendered_names, eproms_data):
         chip_id_str = f"0x{ic.get('chip-id', 0):04X}" if ic.get("chip-id") else ""
-        vpp_str = (
-            f"{ic.get('vpp_volts', '-')}v" if ic.get("type") == 1 else "- "
-        )  # EPROM type
-        type_str = spec_builder.get_chip_type_string(ic.get("type", 0))
-        name = ic.get("name", "")
-        if not ic.get("bus-config"):
-            name = (name[:11] + "[!]") if len(name) > 11 else f"{name}[!]"
+
+        # D-03: VPP gate mirrors info view — show voltage only when
+        # vpp_mv > 0 AND electrical-type != "SRAM".
+        # Defensive int() coercion matches build_specifications (user-override entries
+        # may store vpp_mv as a string).
+        try:
+            _vpp_mv = int(ic.get("vpp_mv", 0) or 0)
+        except (TypeError, ValueError):
+            _vpp_mv = 0
+        _etype = ic.get("electrical-type", "")
+        if _etype != "SRAM" and _vpp_mv > 0:
+            vpp_str = f"{ic.get('vpp_volts', '-')}v"
+        else:
+            vpp_str = "-"
+
+        # D-04: Type via the single shared helper (resolve_type_label).
+        type_str = spec_builder.resolve_type_label(
+            ic.get("electrical-type"),
+            ic.get("type", 0),
+            ic.get("protocol-id"),
+        )
+
         logger.info(
-            f"| {name: <13}| {ic.get('manufacturer', ''): <17}|{ic.get('pin-count', 0): >5} | {chip_id_str: <11}| {type_str: <12}| {vpp_str: >4}|"  # noqa: E501
+            f"| {name: <{name_w}}| {ic.get('manufacturer', ''): <17}|{ic.get('pin-count', 0): >5} | {chip_id_str: <11}| {type_str: <12}| {vpp_str: <5}|"  # noqa: E501
         )
     logger.info(divider)
 
