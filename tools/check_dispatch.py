@@ -102,6 +102,7 @@ def main():
     db = EpromDatabase()
 
     errors = []
+    not_implemented = []
     sram_in_eprom = []
     eeprom28c_in_eprom = []
     wire_regressions = []
@@ -118,6 +119,9 @@ def main():
             if handler == "ERROR":
                 errors.append(f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}")
                 continue
+            if handler == "not_implemented":
+                not_implemented.append(f"{mfg}/{part} proto=0x{proto:02X}")
+                continue  # skip VPP/wire checks — no real handler to evaluate
             # BLOCKER-2 safety: SRAM protocol must never resolve to configure_eprom
             if proto in _SRAM_PROTOCOLS and handler == "configure_eprom":
                 sram_in_eprom.append(f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}")
@@ -148,13 +152,28 @@ def main():
                         f"{mfg}/{part} — legacy vpp key still emitted on wire"
                     )
 
-    if errors or sram_in_eprom or eeprom28c_in_eprom or wire_regressions:
+    if (
+        errors
+        or not_implemented
+        or sram_in_eprom
+        or eeprom28c_in_eprom
+        or wire_regressions
+    ):
         if errors:
             print(f"FAIL: {len(errors)} of {total} chips have no valid dispatch path:")
             for e in errors[:20]:
                 print(f"  {e}")
             if len(errors) > 20:
                 print(f"  ... and {len(errors) - 20} more")
+        if not_implemented:
+            print(
+                f"FAIL: {len(not_implemented)} chips route to not_implemented "
+                f"(protocol != 0, not in KNOWN_PROTOCOLS):"
+            )
+            for e in not_implemented[:20]:
+                print(f"  {e}")
+            if len(not_implemented) > 20:
+                print(f"  ... and {len(not_implemented) - 20} more")
         if sram_in_eprom:
             print(
                 f"FAIL: {len(sram_in_eprom)} SRAM chips route to "
@@ -183,6 +202,7 @@ def main():
 
     print(
         f"PASS: all {total} chips have a valid dispatch path; "
+        f"0 not-implemented chips; "
         f"0 SRAM chips route to configure_eprom; "
         f"0 DIP28_2764 Flash/EEPROM chips route to configure_eprom; "
         f"0 wire-key regressions"
