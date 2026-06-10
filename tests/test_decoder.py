@@ -673,3 +673,71 @@ class TestIdFrameDecoder:
         assert len(ack_calls) == 3, (
             f"Expected 3 ACKs (one per chunk), got {len(ack_calls)}"
         )
+
+
+class TestDispatchGate02:
+    """GATE-02: check_dispatch.dispatch() models the Phase-64 fail-closed guard.
+
+    Phase 62 — D-03: two distinct failure buckets:
+      - protocol != 0 + unrecognized protocol → "not_implemented"
+      - protocol == 0 + unknown mem_type → "ERROR"
+    Phase 62 — dispatch mirror gap: 0x35/0x39 must now route to configure_flash4
+    (not fall through to "ERROR" via the mem_type dict).
+
+    Test cases:
+      1. dispatch(0x35, None) → "configure_flash4"
+      2. dispatch(0x39, None) → "configure_flash4"
+      3. dispatch(0x99, None) → "not_implemented"  (unknown non-zero protocol)
+      4. dispatch(0, 99)     → "ERROR"            (protocol=0, unknown mem_type)
+      5. dispatch(0, 1)      → "configure_eprom"  (legacy fallback intact)
+    """
+
+    def test_dispatch_0x35_routes_configure_flash4(self):
+        """0x35 (FLASH_EEPROM) must route to configure_flash4 — explicit arm, not mem_type fallback."""
+        import os
+        import sys
+
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
+        from check_dispatch import dispatch
+
+        assert dispatch(0x35, None) == "configure_flash4"
+
+    def test_dispatch_0x39_routes_configure_flash4(self):
+        """0x39 (FLASH_EEPROM2) must route to configure_flash4 — explicit arm, not mem_type fallback."""
+        import os
+        import sys
+
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
+        from check_dispatch import dispatch
+
+        assert dispatch(0x39, None) == "configure_flash4"
+
+    def test_dispatch_unknown_nonzero_proto_routes_not_implemented(self):
+        """protocol != 0 with unrecognized protocol → not_implemented (D-03)."""
+        import os
+        import sys
+
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
+        from check_dispatch import dispatch
+
+        assert dispatch(0x99, None) == "not_implemented"
+
+    def test_dispatch_protocol_zero_unknown_memtype_routes_error(self):
+        """protocol == 0, unknown mem_type → ERROR (D-03 — distinct bucket from not_implemented)."""
+        import os
+        import sys
+
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
+        from check_dispatch import dispatch
+
+        assert dispatch(0, 99) == "ERROR"
+
+    def test_dispatch_protocol_zero_memtype_eprom_routes_eprom(self):
+        """Legacy fallback intact: protocol=0, mem_type=1 → configure_eprom."""
+        import os
+        import sys
+
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
+        from check_dispatch import dispatch
+
+        assert dispatch(0, 1) == "configure_eprom"
