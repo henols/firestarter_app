@@ -96,10 +96,10 @@ class EpromConsolePresenter:
         eprom_name: str,  # For logging and titles
         eprom_details: Optional[
             Dict  # noqa: UP006
-        ],  # Pre-fetched from db.get_eprom(name, full=True)  # noqa: UP006
+        ],  # Pre-fetched from db.get_eprom(name)  # noqa: UP006
         eprom_data_for_programmer: Optional[
             Dict  # noqa: UP006
-        ],  # Pre-fetched from db.get_eprom(name, full=False)
+        ],  # Pre-fetched from db.get_eprom(name)
         raw_config_data: Optional[
             Dict  # noqa: UP006
         ],  # Pre-fetched from db.get_eprom_config()  # noqa: UP006

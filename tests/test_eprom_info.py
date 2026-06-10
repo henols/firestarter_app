@@ -221,7 +221,7 @@ SYNTH_SRAM_RAW = {
         "type": "SRAM",
         "vcc": "5V",
         "vpp": "0V",
-        "vpp_mv": 0,
+        "vpp_mv": 12000,  # mirrors live DB: all 76 SRAMs carry vpp_mv=12000 (infoic.xml artifact)
     },
     "part_number": "SYNTH_SRAM",
     "pinout": "DIP28_27512",
@@ -301,7 +301,8 @@ def test_synthetic_uv_eprom_can_erase_uv_only(
 def test_synthetic_sram_no_can_erase_row(
     db: EpromDatabase, presenter: EpromConsolePresenter
 ) -> None:
-    """D-02: SRAM synthetic record must produce no can_erase_str row (SRAM is volatile)."""
+    """D-02/D-07-VPP: SRAM synthetic record must produce no can_erase_str row (volatile)
+    and no vpp_str row (vpp_mv=12000 in live DB is an infoic.xml artifact, not real VPP)."""
     mapped = _map_synth(db, SYNTH_SRAM_RAW)
     result = presenter.prepare_detailed_eprom_data(
         "SYNTH_SRAM", mapped, None, SYNTH_SRAM_RAW, "SYNTH_MFR"
@@ -309,6 +310,10 @@ def test_synthetic_sram_no_can_erase_row(
     assert result is not None
     assert "can_erase_str" not in result, (
         f"SRAM must NOT have a can_erase_str row; got: {result.get('can_erase_str')}"
+    )
+    assert "vpp_str" not in result, (
+        f"SRAM must NOT have a vpp_str row (no programming voltage); "
+        f"got: {result.get('vpp_str')!r}"
     )
 
 

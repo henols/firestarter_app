@@ -485,7 +485,7 @@ class EpromSpecBuilder:
         protocol information, and flag interpretations.
 
         ``eprom_data`` should be the fully mapped data from
-        ``EpromDatabase.get_eprom(..., full=True)``.
+        ``EpromDatabase.get_eprom(name)``.
 
         ``electrical_type`` is the raw ``electrical.type`` string from the DB record
         (e.g. ``"EEPROM"``, ``"UV-EPROM"``, ``"Flash/EEPROM"``, ``"SRAM"``).  When
@@ -527,14 +527,21 @@ class EpromSpecBuilder:
         # D-02: "Can be erased" derived from electrical.type, NOT protocol_id.
         # EEPROM/Flash/EEPROM → electrically erasable; UV-EPROM → UV-only;
         # SRAM → omit row (volatile); absent/unknown → omit row (safe fallback).
-        if etype == "EEPROM" or etype == "Flash/EEPROM":
+        if etype in ("EEPROM", "Flash/EEPROM"):
             output_data["can_erase_str"] = "yes (electrically erasable)"
         elif etype == "UV-EPROM":
             output_data["can_erase_str"] = "no (UV erase only)"
         # SRAM and absent/unknown: no can_erase_str row
 
         # D-07-VPP: gate on vpp_mv > 0, not the always-zero flags & 0x08.
-        if eprom_data.get("vpp_mv", 0) > 0:
+        # Coerce defensively: user-override entries may supply vpp_mv as a string.
+        # Exclude SRAM: volatile, no programming voltage; vpp_mv=12000 is an
+        # upstream infoic.xml decode artifact for SRAM entries, not a real VPP.
+        try:
+            _vpp_mv = int(eprom_data.get("vpp_mv", 0) or 0)
+        except (TypeError, ValueError):
+            _vpp_mv = 0
+        if etype != "SRAM" and _vpp_mv > 0:
             output_data["vpp_str"] = f"{eprom_data.get('vpp_volts', 'N/A')}v"
 
         if "chip-id" in eprom_data:
