@@ -11,6 +11,7 @@ and invalid inputs that must raise ValueError.
 """
 
 import pytest
+
 from firestarter.address_parser import parse_address, parse_size
 
 

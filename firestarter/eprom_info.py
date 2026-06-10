@@ -121,9 +121,7 @@ class EpromConsolePresenter:
         # Pass electrical_type from the raw config so D-01/D-02 use ground-truth.
         electrical_type = None
         if raw_config_data:
-            electrical_type = (
-                raw_config_data.get("electrical", {}).get("type") or None
-            )
+            electrical_type = raw_config_data.get("electrical", {}).get("type") or None
         eprom_specifications = self.spec_builder.build_specifications(
             eprom_details, electrical_type=electrical_type
         )

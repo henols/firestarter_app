@@ -164,9 +164,7 @@ def test_interpret_flags_dead_entries_absent(
     """D-07: dead flag entries (0x08/0x40/0x80/0x200/0x4000/0x8000/0x400000) must produce no output."""
     dead_bits = 0x08 | 0x40 | 0x80 | 0x200 | 0x4000 | 0x8000 | 0x400000
     props = spec_builder._interpret_flags(dead_bits)
-    assert props == [], (
-        f"Dead flag entries must produce no properties; got: {props}"
-    )
+    assert props == [], f"Dead flag entries must produce no properties; got: {props}"
 
 
 # ---------------------------------------------------------------------------
@@ -377,7 +375,9 @@ def test_type_label_and_erase_smoke(
     assert data is not None, f"{chip_name} not found in DB"
     raw, mfr = db.get_eprom_config(chip_name)
     result = presenter.prepare_detailed_eprom_data(chip_name, data, None, raw, mfr)
-    assert result is not None, f"prepare_detailed_eprom_data returned None for {chip_name}"
+    assert result is not None, (
+        f"prepare_detailed_eprom_data returned None for {chip_name}"
+    )
 
     # D-01: type label
     assert expected_type_keyword in result["type_str"], (
