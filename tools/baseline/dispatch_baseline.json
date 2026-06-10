@@ -1,0 +1,5881 @@
+{
+  "meta": {
+    "generated": "2026-06-10",
+    "db_chip_count": 734,
+    "description": "Dispatch baseline: protocol -> handler mapping for every DB chip, captured before Phase 64 fail-closed guard lands."
+  },
+  "chips": [
+    {
+      "manufacturer": "ALI(Acer)",
+      "part": "M8720",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ALLIANCE",
+      "part": "AS29F002B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ALLIANCE",
+      "part": "AS29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27128A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM2716",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM2716B",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM2732,AM2732A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM2732B",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM2764A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27C010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27C020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27C040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27C080",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27C128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27C64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27H010,AM27HB010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27H256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27LV010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27LV020,AM27LV020B",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27LV040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM27LV080",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM28C16A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM28C17A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM28C64A,AM28C64AE,AM28C64B,AM28C64BE",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM28F010",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM28F010A",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM28F020",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM28F020A",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM28F256",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM28F512",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM29F002B,AM29F002BB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM29F002BT,AM29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM29F002NB,AM29F002NBB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM29F002NBT,AM29F002NT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM29F010,AM29F010B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMD",
+      "part": "AM29F040,AM29F040B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A27020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A276308",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A276308A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A278308",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A278308A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A290011T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A290011U",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A29001T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A29001U",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A290021T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A290021U",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A29002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A29002U",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A29010",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A29040,A29040A,A29040B,A29040C",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A29512",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A29512A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "AMIC",
+      "part": "A29L040,A29L040A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ANACHIP",
+      "part": "27CX010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ANACHIP",
+      "part": "27CX256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ASD",
+      "part": "AE29F1008",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ASD",
+      "part": "AE29F2008",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ASD",
+      "part": "AE29F4008",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ASD",
+      "part": "AE49F2008",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ASI Semic",
+      "part": "SMJ27C010A",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ASI Semic",
+      "part": "SMJ27C040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ASI Semic",
+      "part": "SMJ27C128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ASI Semic",
+      "part": "SMJ27C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ASI Semic",
+      "part": "SMJ27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT2732A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27BV010,AT27LV010,AT27LV010A",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27BV020,AT27LV020,AT27LV020A",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27BV040,AT27LV040,AT27LV040A",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27BV256,AT27LV256A,AT27LV256R",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27BV512,AT27LV512A,AT27LV512R",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27C010,AT27C010L",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27C011",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27C020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27C040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27C080",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27C128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27C256R",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27C512R",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27HC256,AT27HC256L",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT27HC256R,AT27HC256RL",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28BV256,AT28LV256",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28BV64,AT28LV64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28BV64B,AT28LV64B",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28C010,AT28C010E",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28C040,AT28C040E",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28C17",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28C17E,AT28C17F",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28C64,AT28C64B(Non-Standard),AT28HC64,AT28HC64L",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28C64B,AT28HC64B,AT28HC64BF",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28C64E,AT28C64F",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28LV010",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28MC010",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28MC020",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28MC040",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28PC64,AT28PC64E",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29BV010A,AT29LV010A",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29BV020,AT29LV020",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29BV040,AT29LV040",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29BV040A,AT29LV040A",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29C010A",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29C020",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29C040",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29C040A",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29C256",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29C257",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29C512",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29LV256",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT29LV512",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV001,AT49BV001A,AT49LV001",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV001AN,AT49BV001N,AT49LV001N",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV001ANT,AT49BV001NT,AT49LV001NT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV001AT,AT49BV001T,AT49LV001T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV002,AT49BV002A,AT49LV002",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV002AN,AT49BV002N,AT49LV002N",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV002ANT,AT49BV002NT,AT49LV002NT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV002AT,AT49BV002T,AT49LV002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV010,AT49HBV010,AT49HLV010,AT49LV010",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV020,AT49LV020",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV040,AT49BV040A,AT49BV040B,AT49LV040",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV040T,AT49LV040T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49BV512,AT49LV512",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F001,AT49F001A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F001AN,AT49F001N",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F001ANT,AT49F001NT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F001AT,AT49F001T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F002,AT49F002A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F002AN,AT49F002N",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F002ANT,AT49F002NT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F002AT,AT49F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F010,AT49HF010",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F020",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F040,AT49F040A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F040T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT49F512",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT27010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT27128A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT27256,CAT27HC256I",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT27512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT2764A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT27C16",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT27HC256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28C010",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28C020",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28C040",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28C16A,CAT28C16AI",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28C17A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28C256,CAT28C257",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28C512",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28C64A,CAT28C65",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28C64B",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28F001P-B",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28F001P-T",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28F010",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28F020",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28F256",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28F512",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28LV256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CATALYST(CSI)",
+      "part": "CAT28LV64,CAT28LV65",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CFEON",
+      "part": "EN29F002AB,EN29F002B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CFEON",
+      "part": "EN29F002ANB,EN29F002NB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CFEON",
+      "part": "EN29F002ANT,EN29F002NT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CFEON",
+      "part": "EN29F002AT,EN29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CFEON",
+      "part": "EN29F010",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CFEON",
+      "part": "EN29F040,EN29F040A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CFEON",
+      "part": "EN29F512",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CFEON",
+      "part": "EN29LV040A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CHINGIS",
+      "part": "PM29F002B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CHINGIS",
+      "part": "PM29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CHINGIS",
+      "part": "PM29F004B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CHINGIS",
+      "part": "PM29F004T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CHINGIS",
+      "part": "PM39F010",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CHINGIS",
+      "part": "PM39F020",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CHINGIS",
+      "part": "PM39F040",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "CYPRESS",
+      "part": "CY27C010,CY27H010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CYPRESS",
+      "part": "CY27C020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CYPRESS",
+      "part": "CY27C040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CYPRESS",
+      "part": "CY27C128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CYPRESS",
+      "part": "CY27C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CYPRESS",
+      "part": "CY27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CYPRESS",
+      "part": "CY27H256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CYPRESS",
+      "part": "CY27H512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "CYPRESS",
+      "part": "FM28V020",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1220(RW)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1220(TEST)",
+      "algorithm": "SRAM_24PIN",
+      "algorithm_id": "0x27",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1225(RW)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1225(TEST)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1230AB(RW),DS1230Y(RW)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1230AB(TEST),DS1230Y(TEST)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1230W(RW3.3V)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1230W(TEST3.3V)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1245AB(RW),DS1245Y(RW)",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1245AB(TEST),DS1245Y(TEST)",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1245W(RW3.3V)",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1245W(TEST3.3V)",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1249AB(RW),DS1249Y(RW)",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1249AB(TEST),DS1249Y(TEST)",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1249W(RW3.3V)",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1249W(TEST3.3V)",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1250AB(RW),DS1250Y(RW)",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1250AB(TEST),DS1250Y(TEST)",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1250W(RW3.3V)",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DALLAS",
+      "part": "DS1250W(TEST3.3V)",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "DENSE-PAC",
+      "part": "DPV27C101",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "DENSE-PAC",
+      "part": "DPV27C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "DENSE-PAC",
+      "part": "DPV27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "EFST",
+      "part": "F49B002UA",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "EON",
+      "part": "EN27C010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "EON",
+      "part": "EN27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "EON",
+      "part": "EN29F002AB,EN29F002ANB,EN29F002B,EN29F002NB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "EON",
+      "part": "EN29F002ANT,EN29F002AT,EN29F002NT,EN29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "EON",
+      "part": "EN29F010",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "EON",
+      "part": "EN29F040,EN29F040A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "EON",
+      "part": "EN29F512",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "EON",
+      "part": "EN29LV040A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "EXEL",
+      "part": "XL2804A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "EXEL",
+      "part": "XL2816A,XLE28C16A,XLS28C16A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "EXEL",
+      "part": "XLE2865A,XLS2865A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "EXEL",
+      "part": "XLE28C16B,XLS28C16B",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "EXEL",
+      "part": "XLE28C256,XLS28C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "EXEL",
+      "part": "XLE28C64A,XLS28C64A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "EXEL",
+      "part": "XLE28C64B,XLS28C64B",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "FM27C010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "FM27C040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "FM27C256,NM27C256,NM27LC256,NMC27C256B,NMC27C256Q,NMC87C257Q,NMC87C257V",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "FM27C512,NM27C512,NM27LC512,NM27LV512,NM27P512,NMC27C512A,NMC27C512Q",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "NM27C010,NM27LC010,NM27LV010,NM27P010,NMC27C010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "NM27C020,NM27LV020,NM27P020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "NM27C040,NM27LV040,NM27P040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "NM27C128,NMC27C128B,NMC27C128C",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "NM27C64Q,NM27LC64,NMC27C64Q",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "NMC2732",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "NMC27C16",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "NMC27C16B,NMC27C16BQ",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "NMC27C16Q",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "NMC27C32,NMC27C32E,NMC27C32EH,NMC27C32H,NMC27C32Q",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FAIRCHILD",
+      "part": "NMC27C32B,NMC27C32BQ",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MB85R256H",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM27128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM2716",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM27256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM2732,MBM2732A,MBM27C32,MBM27C32A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM2764",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM27C1000P,MBM27C1000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM27C1001",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM27C128P",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM27C2000P,MBM27C2000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM27C2001",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM27C256A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM27C4001",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM27C64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM28F010",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM29F002B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "FUJITSU",
+      "part": "MBM29F040",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "GREENWICH",
+      "part": "GR27128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "GREENWICH",
+      "part": "GR27256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "GREENWICH",
+      "part": "GR27512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "GREENWICH",
+      "part": "GR2764",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN27128AG,HN27128AP",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN27256G,HN27256P",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN27512G,HN27512P",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN27C101AG,HN27C101AP,HN27C101AFP,HN27C101ATT,HN27C101G,HN27C101P",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN27C256AG,HN27C256AFP,HN27C256AP,HN27C256HG,HN27C256HP,HN27C256HFP",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN27C256G",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN27C301AG,HN27C301AP,HN27C301AFP",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN27C301G",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN27C4001G",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN27C512G",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN27C64FP",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN27C64G",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN28F101P,HN28F101FP",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "HITACHI",
+      "part": "HN58C256AP",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HOLTEK",
+      "part": "HT27C010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HOLTEK",
+      "part": "HT27C020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HOLTEK",
+      "part": "HT27C040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HOLTEK",
+      "part": "HT27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HOLTEK",
+      "part": "HT27LC010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HOLTEK",
+      "part": "HT27LC020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HOLTEK",
+      "part": "HT27LC040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HOLTEK",
+      "part": "HT27LC512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HYNIX",
+      "part": "HY27C64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HYNIX",
+      "part": "HY29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "HYNIX",
+      "part": "HY29F040",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "HYNIX",
+      "part": "HY29F040A,HY29F040T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "HYUNDAI",
+      "part": "HY27C64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "HYUNDAI",
+      "part": "HY29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "HYUNDAI",
+      "part": "HY29F040",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "HYUNDAI",
+      "part": "HY29F040A,HY29F040T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ICE",
+      "part": "ICE27C010,ICE27LC010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ICE",
+      "part": "ICE27C020,ICE27LC020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ICE",
+      "part": "ICE27C512,ICE27LC512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ICMIC",
+      "part": "27CX010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ICMIC",
+      "part": "27CX256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ICT",
+      "part": "27CX010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ICT",
+      "part": "27CX256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "IMT",
+      "part": "IM29F001B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "IMT",
+      "part": "IM29F001T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "IMT",
+      "part": "IM29F002B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "IMT",
+      "part": "IM29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "IMT",
+      "part": "IM29LV004B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "IMT",
+      "part": "IM29LV004T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "27128,D27128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "27128A,D27128A,D27128B",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "2732,2732A,M2732,M2732A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "27512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "2764",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "2764A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "27C010,27C010A",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "27C020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "27C040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "27C128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "27C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "87C257",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "D27011",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "D27256,M27256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "D27C011",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "M2716,M2716M",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "M28F256",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "P27256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "P28F001BX-B",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "P28F001BX-T",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "P28F010",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "P28F020",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "P28F256A",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "INTEL",
+      "part": "P28F512",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "ISSI",
+      "part": "IS27C010,IS27HC010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ISSI",
+      "part": "IS27C020,IS27HC020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ISSI",
+      "part": "IS27C256,IS27HC256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ISSI",
+      "part": "IS27C512,IS27HC512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ISSI",
+      "part": "IS27LV010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ISSI",
+      "part": "IS27LV020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ISSI",
+      "part": "IS27LV256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ISSI",
+      "part": "IS27LV512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ISSI",
+      "part": "IS28F010",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "ISSI",
+      "part": "IS28F020",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "LINKAGE",
+      "part": "LG28C010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "LINKAGE",
+      "part": "LG28C020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "LINKAGE",
+      "part": "LG28C040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "LINKSMART",
+      "part": "LST28001",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "LINKSMART",
+      "part": "LST28002",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "LINKSMART",
+      "part": "LST28004",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX26C1000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX26C2000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX26C4000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX26LV004B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX26LV004T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX26LV040",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27C1000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27C1000A",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27C2000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27C2000A",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27C4000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27C4000A",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27C8000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27C8000A",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27L1000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27L2000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27L256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27L4000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX27L512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX28F1000P",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX28F2000P",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX28F2000T",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F001B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F001T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F002B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F002NB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F002NT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F004B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F004T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F022B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F022NB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F022NT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F022T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29F040,MX29F040C",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29LV002CB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29LV002CT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29LV002NCB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MACRONIX(MXIC)",
+      "part": "MX29LV002NCT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MAXWELL",
+      "part": "28C010,28C010T,28C011,28C011T",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "27C128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "27C256,27LV256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "27C32A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "27C512A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "27C64,27LV64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "27HC256,27HC256L",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "27HC64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "2804",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "2816",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "2817",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "28C17A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "28C17AF",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "28C256,28C256F",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "28C64A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "28C64AF",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "28C64B",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "28LV64A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MITSUBISHI",
+      "part": "M5L27256K",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MITSUBISHI",
+      "part": "M5M27C101K",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MITSUBISHI",
+      "part": "M5M27C128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MITSUBISHI",
+      "part": "M5M27C256K",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MITSUBISHI",
+      "part": "M5M28F101,M5M28F101A",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29C31001B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29C31001T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29C31002B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29C31002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29C31004B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29C31004T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29C51001B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29C51001T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29C51002B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29C51002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29C51004B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29C51004T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29LC51000",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29LC51001",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "MOSEL VITELIC",
+      "part": "V29LC51002",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD27128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD27256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD27512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD2764,UPD2764C,UPD2764D",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD27C1001A",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD27C128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD27C2001",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD27C256A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD27C4001",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD27C8001",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD28C256",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD28C64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEXFLASH",
+      "part": "NX29F010",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27C010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27C020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27C040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27C128,NMC27C128B,NMC27C128C",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27C256,NM27LC256,NMC27C256B,NMC27C256Q,NMC87C257Q,NMC87C257V",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27C512,NM27LC512,NM27P512,NMC27C512A,NMC27C512Q",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27C64Q,NMC27C64Q",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27LC010,NM27P010,NMC27C010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27LC64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27LV010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27LV020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27LV040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27LV512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27P020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NM27P040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NMC2732",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NMC27C16",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NMC27C16B",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NMC27C16Q",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NSC",
+      "part": "NMC27C32B",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "OKI",
+      "part": "MSM27C1000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "OKI",
+      "part": "MSM27C2000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "OKI",
+      "part": "MSM27C201",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "OKI",
+      "part": "MSM27C401",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "OKI",
+      "part": "MSM27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "PHILIPS",
+      "part": "27C010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "PHILIPS",
+      "part": "27C040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "PHILIPS",
+      "part": "27C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "PHILIPS",
+      "part": "27C512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "PMC",
+      "part": "PM29F002B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "PMC",
+      "part": "PM29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "PMC",
+      "part": "PM29F004B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "PMC",
+      "part": "PM29F004T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "PMC",
+      "part": "PM39F010",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "PMC",
+      "part": "PM39F020",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "PMC",
+      "part": "PM39F040",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "PTC",
+      "part": "PT28C010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "PTC",
+      "part": "PT28C020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "PTC",
+      "part": "PT28C040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "RAMTRON",
+      "part": "FM1208",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "RAMTRON",
+      "part": "FM1608",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "RAMTRON",
+      "part": "FM16W08",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "RAMTRON",
+      "part": "FM1808,FM1808B,FM18W08",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "RAMTRON",
+      "part": "FM18L08",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "SAMSUNG",
+      "part": "KM28C64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SAMSUNG",
+      "part": "KM28C64A,KM28C65A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "ETC2716,M2716",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "ETC2732",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M23C1001",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M23C2001",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M23C4001",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M27128A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M27256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M2732A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M27512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M2764A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M27C1000",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M27C1001,M27V101",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M27C2001,M27V201,M27W201",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M27C256B",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M27C4001,M27V401",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M27C512,M27V512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M27C64A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M27C801",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M28010",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M28C64,M28C64A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M28C64-xxW",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M28F101",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M28F201",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M28F256",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M28F512,M28F512B,M28F010",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M29F002B,M29F002BB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M29F002BNB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M29F002BNT,M29F002NT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M29F002BT,M29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M29F010B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M29F040B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M29F512B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M48T02,M48T12,M48Z02,M48Z12",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M48T128V,M48T129V,M48Z128V,M48Z129V",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M48T128Y,M48T129Y,M48Z128Y,M48Z129Y",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M48T35AV,M48Z35V,M48Z35AV",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M48T35AY,M48Z35,M48Z35Y,M48Z35AY",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M48T512V,M48T513V,M48Z512V",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M48T512Y,M48T513Y,M48Z512Y",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M48T59,M48T59Y,M48Z59,M48Z59Y",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M48T59V,M48Z59V",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M87C257",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "M87C257(8D)",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "ST27128A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "ST27256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "ST2764A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "ST27C256,TS27C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SGS-THOMSON",
+      "part": "TS27C64A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SPANSION(1)",
+      "part": "AM29F002B,AM29F002BB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SPANSION(1)",
+      "part": "AM29F002BT,AM29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SPANSION(1)",
+      "part": "AM29F002NB,AM29F002NBB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SPANSION(1)",
+      "part": "AM29F002NBT,AM29F002NT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SPANSION(1)",
+      "part": "AM29F010,AM29F010B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SPANSION(1)",
+      "part": "AM29F040,AM29F040B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SPANSION(1)",
+      "part": "MBM29F002B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SPANSION(1)",
+      "part": "MBM29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SPANSION(1)",
+      "part": "MBM29F040",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST27SF010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST27SF020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST27SF256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST27SF512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST27VF010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST27VF020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST27VF256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST27VF512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST28LF040,SST28LF040A,SST28VF040,SST28VF040A",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST28SF040,SST28SF040A",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29EE010",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29EE020",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29EE512",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29LE010,SST29VE010",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29LE020,SST29VE020",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29LE512,SST29VE512",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29SF010",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29SF020",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29SF040",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29SF512",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29VF010",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29VF020",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29VF040",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST29VF512",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST37VF010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST37VF020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST37VF040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST37VF512",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST39LH010,SST39VF010",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST39LH020,SST39VF020",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST39LH040",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST39LH512,SST39VF512",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST39SF010,SST39SF010A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST39SF020,SST39SF020A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST39SF040",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST39SF512,SST39SF512A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SST",
+      "part": "SST39VF040,SST39VF040A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "ETC2716,M2716",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "ETC2732",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M27128A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M27256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M2732A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M27512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M2764A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M27C1001,M27V101,M27W101",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M27C2001,M27V201,M27W201",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M27C256B",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M27C256B(2)",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M27C4001,M27V401,M27W401",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M27C512,M27V512,M27W512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M27C64A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M27C801",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M28010",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M28256",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M28C64,M28C64A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M28C64-xxW",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M28F101",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M28F201",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M28F256",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M28F512,M28F512B,M28F010",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M28LV64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M29F002B,M29F002BB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M29F002BNB",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M29F002BNT,M29F002NT",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M29F002BT,M29F002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M29F010B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M29F040B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M29F512B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M48T02,M48T12",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M48T128V,M48T129V",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M48T128Y,M48T129Y",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M48T35AV",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M48T35AY",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M48T512V,M48T513V",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M48T512Y,M48T513Y",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M48T59,M48T59Y",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M48T59V",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M87C257",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "M87C257(8D)",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "ST27128A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "ST27256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "ST2764A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "ST27C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "TS27C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ST",
+      "part": "TS27C64A",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "F29C31004B,S29C31004B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "F29C31004T,S29C31004T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "F29C51001B,S29C51001B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "F29C51001T,S29C51001T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "F29C51002B,S29C51002B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "F29C51002T,S29C51002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "F29C51004B,S29C51004B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "F29C51004T,S29C51004T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "F29LC51000",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "F29LC51001",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "F29LC51002",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "S29C31001B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "S29C31001T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "S29C31002B",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "SYNCMOS",
+      "part": "S29C31002T",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "Standard SRAM",
+      "part": "6116",
+      "algorithm": "SRAM_24PIN",
+      "algorithm_id": "0x27",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "Standard SRAM",
+      "part": "61256,62256",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "Standard SRAM",
+      "part": "61512,62512",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "Standard SRAM",
+      "part": "6164,6264",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "Standard SRAM",
+      "part": "628128",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "Standard SRAM",
+      "part": "628256",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "Standard SRAM",
+      "part": "628512",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4010YMA(RW)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4010YMA(TEST)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4011LYMA(RW3.3V)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4011LYMA(TEST3.3V)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4011YMA(RW)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4011YMA(TEST)",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4013LYMA(RW3.3V)",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4013LYMA(TEST3.3V)",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4013YMA(RW)",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4013YMA(TEST)",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4014LYMA(RW3.3V)",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4014LYMA(TEST3.3V)",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4014YMA(RW)",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4014YMA(TEST)",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4015LYMA(RW3.3V)",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4015LYMA(TEST3.3V)",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4015YMA(RW)",
+      "algorithm": "SRAM_32PIN",
+      "algorithm_id": "0x0E",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "BQ4015YMA(TEST)",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "SMJ27C128,TMS27C128,TMS27PC128",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "SMJ27C256,TMS27C256,TMS27PC256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "SMJ27C512,TMS27C512,TMS27PC512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "TMS2716",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "TMS2732A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "TMS2764",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "TMS27C010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "TMS27C010A,TMS27PC010A",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "TMS27C020,TMS27PC020",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "TMS27C040,TMS27PC040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "TMS27C64,TMS27PC64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "TMS28F010,TMS28F010A,TMS28F010B",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "TMS28F020",
+      "algorithm": "FLASH_INTEL",
+      "algorithm_id": "0x10",
+      "mem_type": 1,
+      "resolved_handler": "configure_flash_intel"
+    },
+    {
+      "manufacturer": "TI",
+      "part": "TMS87C257",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TOSHIBA/KIOXIA",
+      "part": "TC54256AF,TC54256AP",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TOSHIBA/KIOXIA",
+      "part": "TC57256D",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "TOSHIBA/KIOXIA",
+      "part": "TC57512AD",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WED",
+      "part": "WE128K8",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "WED",
+      "part": "WE256K8",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "WED",
+      "part": "WE512K8",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "WED",
+      "part": "WME128K8",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W24010",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W24020",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W24040",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W24256,W24257A",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W24512",
+      "algorithm": "SRAM_512K_1M",
+      "algorithm_id": "0x29",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W2464,W2465",
+      "algorithm": "SRAM_STD",
+      "algorithm_id": "0x28",
+      "mem_type": 4,
+      "resolved_handler": "configure_sram"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W27C01,W27C010,W27E01,W27E010,W27L01,W27L010",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W27C02,W27C020,W27E02,W27E020,W27L02",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W27C04,W27C040,W27E040",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W27C257",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W27C512,W27E512",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W27E257",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W29C010,W29C011,W29C011A,W29EE010,W29EE012",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W29C020,W29C020C,W29C022",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W29C040,W29C042",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W29C512,W29EE512",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W29EE011",
+      "algorithm": "FLASH_AMD_STD",
+      "algorithm_id": "0x05",
+      "mem_type": 5,
+      "resolved_handler": "configure_flash4"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W39F010",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W39L040A",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W49F002,W49F002A,W49F002B,W49F002U",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "WINBOND",
+      "part": "W49F020",
+      "algorithm": "FLASH_AMD_ALT",
+      "algorithm_id": "0x06",
+      "mem_type": 3,
+      "resolved_handler": "configure_flash3"
+    },
+    {
+      "manufacturer": "WSI",
+      "part": "WS27C010F",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WSI",
+      "part": "WS27C010L",
+      "algorithm": "EPROM_QUICK",
+      "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WSI",
+      "part": "WS27C128F",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WSI",
+      "part": "WS27C256L",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WSI",
+      "part": "WS27C512F,WS27C512L",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WSI",
+      "part": "WS27C64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WSI",
+      "part": "WS57C128FB",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "WSI",
+      "part": "WS57C256F",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "XICOR",
+      "part": "X2804A,X2804AI",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "XICOR",
+      "part": "X2816A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "XICOR",
+      "part": "X2816B,X2816C",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "XICOR",
+      "part": "X28256,X28C256",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "XICOR",
+      "part": "X2864AP",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "XICOR",
+      "part": "X28C010",
+      "algorithm": "EEPROM_POLL",
+      "algorithm_id": "0x0D",
+      "mem_type": 1,
+      "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "XICOR",
+      "part": "X28C64(NonStandard),X28HC64(NonStandard)",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "XICOR",
+      "part": "X28C64,X28HC64",
+      "algorithm": "EPROM_STD",
+      "algorithm_id": "0x07",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    }
+  ]
+}
