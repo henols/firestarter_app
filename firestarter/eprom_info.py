@@ -370,7 +370,11 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
             _vpp_mv = 0
         _etype = ic.get("electrical-type", "")
         if _etype != "SRAM" and _vpp_mv > 0:
-            vpp_str = f"{ic.get('vpp_volts', '-')}v"
+            # WR-02: mirror the info view's fallback ('N/A') so the two views
+            # produce identical output when vpp_mv > 0 but vpp_volts is absent
+            # (e.g. operator-override entries). Previously the list view fell
+            # back to '-' here, diverging from info's 'N/A' (D-03 parity).
+            vpp_str = f"{ic.get('vpp_volts', 'N/A')}v"
         else:
             vpp_str = "-"
 
