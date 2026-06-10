@@ -557,6 +557,22 @@ def main():
                     "pinout": pinout_key,
                 }
 
+                # SRAM/FRAM/NVRAM vcc normalization.
+                # Static-memory parts have a single supply rail — there is no
+                # separate elevated programming voltage, so the minipro "vcc"
+                # (read-rail) vs "vdd" (program-rail) split is meaningless here.
+                # Upstream infoic.xml records a lower vcc test-rail (3.3V/4V) for
+                # these 5V NVRAM/FRAM families (FM16xx, DS1230, M48Txx, BQ40xx),
+                # which misrepresents the chip's nominal supply. The RURP shield
+                # supplies a fixed 5V VCC for SRAM-class parts regardless, so the
+                # operating voltage firestarter actually applies is vdd. Align
+                # vcc to vdd so `firestarter info` reports the true supply.
+                # Type-keyed (SRAM only): UV-EPROM and Flash/EEPROM keep their
+                # vcc as the correct read voltage (vdd there is the elevated
+                # program rail, e.g. 6.5V — must NOT be surfaced as operating Vcc).
+                if _etype == "SRAM":
+                    chip_entry["electrical"]["vcc"] = chip_entry["electrical"]["vdd"]
+
                 chips.append(chip_entry)
                 total_chips += 1
 

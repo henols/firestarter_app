@@ -3734,7 +3734,7 @@
         "pin_count": 24,
         "size_bytes": 2048,
         "type": "SRAM",
-        "vcc": "4V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -3772,7 +3772,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -3810,7 +3810,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -3848,7 +3848,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -9479,7 +9479,7 @@
         "pin_count": 24,
         "size_bytes": 2048,
         "type": "SRAM",
-        "vcc": "4V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -9498,7 +9498,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -9517,7 +9517,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -9536,7 +9536,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -9555,7 +9555,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -10357,7 +10357,7 @@
         "pin_count": 24,
         "size_bytes": 2048,
         "type": "SRAM",
-        "vcc": "4V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -10376,7 +10376,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -10395,7 +10395,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -10414,7 +10414,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -10433,7 +10433,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -10452,7 +10452,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -12168,7 +12168,7 @@
         "pin_count": 24,
         "size_bytes": 2048,
         "type": "SRAM",
-        "vcc": "4V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -12187,7 +12187,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -12206,7 +12206,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -12225,7 +12225,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -12244,7 +12244,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -12263,7 +12263,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -13048,7 +13048,7 @@
         "pin_count": 28,
         "size_bytes": 8192,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -13086,7 +13086,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -13124,7 +13124,7 @@
         "pin_count": 28,
         "size_bytes": 32768,
         "type": "SRAM",
-        "vcc": "3.3V",
+        "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
