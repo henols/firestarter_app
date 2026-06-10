@@ -238,7 +238,10 @@ class EpromConsolePresenter:
             logger.info(f"{'VPP:': <{pos}}{chip_data.get('vpp_str')}")
         if "chip_id_hex" in chip_data:
             logger.info(f"{'Chip ID:': <{pos}}{chip_data.get('chip_id_hex')}")
-        logger.info(f"{'Pulse delay:': <{pos}}{chip_data.get('pulse_delay_us_str')}")
+        if "pulse_delay_us_str" in chip_data:
+            logger.info(
+                f"{'Pulse delay:': <{pos}}{chip_data.get('pulse_delay_us_str')}"
+            )
 
         if chip_data.get("no_pinout_warning"):
             logger.warning("")

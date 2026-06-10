@@ -730,3 +730,66 @@ def test_width_floor_and_no_overflow(
                 f"Col {col_idx} cell overflows width {max_w} (visible={visible}): "
                 f"{cell!r} in row: {body_line!r}"
             )
+
+
+# ---------------------------------------------------------------------------
+# Info-view field-presence correctness (FM1608 review follow-up)
+#   - Pulse delay row omitted when 0 / algorithm-controlled
+#   - Chip ID shows "-" when absent or a 0x00000000 placeholder
+#   - SRAM/FRAM vcc normalized to vdd in the DB (build_db.py) → reports 5V
+# ---------------------------------------------------------------------------
+
+
+def test_pulse_delay_row_omitted_when_zero(spec_builder: EpromSpecBuilder) -> None:
+    """A 0/algorithm-controlled pulse delay produces no pulse_delay_us_str key."""
+    spec = spec_builder.build_specifications(dict(SYNTH_SRAM_MAPPED), "SRAM")
+    assert spec is not None
+    assert "pulse_delay_us_str" not in spec
+
+
+def test_pulse_delay_row_present_when_nonzero(spec_builder: EpromSpecBuilder) -> None:
+    """A non-zero pulse delay is still rendered (regression guard)."""
+    mapped = dict(SYNTH_SRAM_MAPPED, **{"pulse-delay": 100})
+    spec = spec_builder.build_specifications(mapped, "SRAM")
+    assert spec is not None
+    assert spec.get("pulse_delay_us_str") == "100µS"
+
+
+def test_chip_id_dash_for_zero_placeholder(spec_builder: EpromSpecBuilder) -> None:
+    """A 0x00000000 placeholder chip-id renders as '-' (not '0x0')."""
+    mapped = dict(SYNTH_SRAM_MAPPED, **{"chip-id": 0})
+    spec = spec_builder.build_specifications(mapped, "SRAM")
+    assert spec is not None
+    assert spec.get("chip_id_hex") == "-"
+
+
+def test_chip_id_dash_when_absent(spec_builder: EpromSpecBuilder) -> None:
+    """A missing chip-id key renders as '-' (row always present)."""
+    mapped = dict(SYNTH_SRAM_MAPPED)
+    mapped.pop("chip-id", None)
+    spec = spec_builder.build_specifications(mapped, "SRAM")
+    assert spec is not None
+    assert spec.get("chip_id_hex") == "-"
+
+
+def test_chip_id_hex_for_real_id(spec_builder: EpromSpecBuilder) -> None:
+    """A genuine non-zero chip-id renders as hex (regression guard)."""
+    mapped = dict(SYNTH_SRAM_MAPPED, **{"chip-id": 0xDA08})
+    spec = spec_builder.build_specifications(mapped, "SRAM")
+    assert spec is not None
+    assert spec.get("chip_id_hex") == "0xda08"
+
+
+@pytest.mark.parametrize("chip_name", ["FM1608", "DS1230AB", "M48T08", "BQ4010YMA"])
+def test_sram_vcc_normalized_to_5v(chip_name: str, db: EpromDatabase) -> None:
+    """SRAM/FRAM/NVRAM entries carry vcc == 5 (build_db.py normalizes vcc→vdd).
+
+    Upstream infoic.xml records a lower vcc test-rail (3.3V/4V) for these 5V
+    static-memory families; build_db.py aligns vcc to vdd so `firestarter info`
+    reports the true supply the RURP shield applies.
+    """
+    rows = [r for r in db.search_eprom(chip_name) if r["name"].startswith(chip_name)]
+    assert rows, f"{chip_name} not found in DB"
+    assert rows[0]["vcc"] == 5.0, (
+        f"{chip_name} vcc should be normalized to 5V; got {rows[0]['vcc']}"
+    )

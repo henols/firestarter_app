@@ -550,7 +550,6 @@ class EpromSpecBuilder:
             "memory_size_hex": hex(eprom_data.get("memory-size", 0)),
             "type_str": chip_type_str,
             "vcc_str": f"{eprom_data.get('vcc', 'N/A')}v",
-            "pulse_delay_us_str": f"{eprom_data.get('pulse-delay', 'N/A')}µS",
             "dip_layout": None,  # Will store the structured DIP layout data
             "jumpers": {},
             "protocol_info": None,
@@ -577,8 +576,18 @@ class EpromSpecBuilder:
         if etype != "SRAM" and _vpp_mv > 0:
             output_data["vpp_str"] = f"{eprom_data.get('vpp_volts', 'N/A')}v"
 
-        if "chip-id" in eprom_data:
-            output_data["chip_id_hex"] = hex(eprom_data.get("chip-id", 0))
+        # Chip ID: always render a row, but show "-" when the chip has no
+        # real/readable ID — i.e. the key is absent, or it is a 0x00000000
+        # placeholder from a chip_id_check=false entry (e.g. SRAM/FRAM such as
+        # FM1608). A genuine chip ID is always non-zero.
+        chip_id = eprom_data.get("chip-id")
+        output_data["chip_id_hex"] = hex(chip_id) if chip_id else "-"
+
+        # Pulse delay: omit the row when 0 / algorithm-controlled (no fixed
+        # programming pulse to report, e.g. SRAM/FRAM).
+        _pulse_delay = eprom_data.get("pulse-delay", 0) or 0
+        if _pulse_delay:
+            output_data["pulse_delay_us_str"] = f"{_pulse_delay}µS"
 
         # Generate DIP layout data
         pin_count = eprom_data.get("pin-count")
