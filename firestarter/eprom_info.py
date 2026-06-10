@@ -384,9 +384,18 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
             ic.get("type", 0),
             ic.get("protocol-id"),
         )
+        # WR-01: the Type column is a fixed-width 12-char cell. The
+        # protocol-based fallback in resolve_type_label can return labels of
+        # 13-39 chars (e.g. legacy/operator-override entries lacking
+        # electrical-type), which would rupture table alignment. Clamp to 12
+        # so the column stays aligned. The info view (present_eprom_details)
+        # is a free-form line and intentionally shows the full label, so it
+        # is NOT clamped — D-04 parity is about the shared label *source*,
+        # not the per-view presentation width.
+        type_str_display = type_str[:12]
 
         logger.info(
-            f"| {name: <{name_w}}| {ic.get('manufacturer', ''): <17}|{ic.get('pin-count', 0): >5} | {chip_id_str: <11}| {type_str: <12}| {vpp_str: <5}|"  # noqa: E501
+            f"| {name: <{name_w}}| {ic.get('manufacturer', ''): <17}|{ic.get('pin-count', 0): >5} | {chip_id_str: <11}| {type_str_display: <12}| {vpp_str: <5}|"  # noqa: E501
         )
     logger.info(divider)
 
