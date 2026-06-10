@@ -429,7 +429,7 @@ class EpromDatabase:
         info_flags = 0
         if programming.get("chip_id_check"):
             info_flags |= 0x00000020  # Has Readable Chip ID
-        if electrical.get("type") == "Flash/EEPROM":
+        if electrical.get("type") in ("EEPROM", "Flash/EEPROM"):
             info_flags |= 0x00000010  # Can be electrically erased
 
         data = {

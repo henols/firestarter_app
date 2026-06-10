@@ -204,6 +204,43 @@ class TestDipToRurpPinTranslation:
         assert result is None
 
 
+class TestErasableFlag:
+    """D-03 — info-flags bit 0x10 (electrically erasable) must fire for EEPROM family.
+
+    W27C512 has electrical.type="EEPROM" (not "Flash/EEPROM").  Before the fix
+    the condition in _map_data was an exact match against "Flash/EEPROM" only, so
+    W27C512 never got the erasable bit.  After the fix the condition must cover
+    both "EEPROM" and "Flash/EEPROM".
+    """
+
+    def test_w27c512_info_flags_has_erasable_bit(self):
+        """W27C512 (electrical.type='EEPROM') must have info-flags bit 0x10 set."""
+        db = EpromDatabase(skip_local_override=True)
+        eprom = db.get_eprom("W27C512")
+        assert eprom is not None
+        assert eprom.get("info-flags", 0) & 0x10, (
+            "W27C512 info-flags bit 0x10 (electrically erasable) must be set"
+        )
+
+    def test_2764_info_flags_no_erasable_bit(self):
+        """2764 (electrical.type='UV-EPROM') must NOT have info-flags bit 0x10."""
+        db = EpromDatabase(skip_local_override=True)
+        eprom = db.get_eprom("2764")
+        assert eprom is not None
+        assert not (eprom.get("info-flags", 0) & 0x10), (
+            "2764 UV-EPROM info-flags bit 0x10 must NOT be set"
+        )
+
+    def test_27c256_info_flags_no_erasable_bit(self):
+        """27C256 (electrical.type='UV-EPROM') must NOT have info-flags bit 0x10."""
+        db = EpromDatabase(skip_local_override=True)
+        eprom = db.get_eprom("27C256")
+        assert eprom is not None
+        assert not (eprom.get("info-flags", 0) & 0x10), (
+            "27C256 UV-EPROM info-flags bit 0x10 must NOT be set"
+        )
+
+
 class TestConstructionSeam:
     """Tests for the skip_local_override constructor seam (D-06).
 

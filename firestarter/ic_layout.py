@@ -234,23 +234,20 @@ class EpromSpecBuilder:
         return type_map.get(chip_type_int, f"Unknown ({chip_type_int})")
 
     def _interpret_flags(self, flags: int) -> list[str]:
-        """
-        Interpret the flags value and return a list of properties.
+        """Interpret the info-flags value and return a list of properties.
+
+        Only two bits are derivable from the current chip_database.json pipeline:
+          0x10 — electrically erasable (set for EEPROM and Flash/EEPROM families)
+          0x20 — provides readable manufacturer/device ID (set when chip_id_check=True)
+
+        All other bits (0x08, 0x40, 0x80, 0x200, 0x4000, 0x8000, 0x400000) are not
+        produced by _map_data from the current DB and are omitted to avoid misleading
+        output.  Re-add them if a future DB revision carries those signals.
         """
         properties = []
         flag_definitions = [
-            (0x00000008, "Requires elevated VPP for programming"),
-            (0x00000010, "Needs software write-enable/unlock sequence"),
+            (0x00000010, "Electrically erasable"),
             (0x00000020, "Provides readable manufacturer/device ID"),
-            (0x00000040, "UV-erasable EPROM timing"),
-            (0x00000080, "Electrically erasable/writable device (EEPROM/Flash/SRAM)"),
-            (0x00000200, "Supports boot-block or sector-protection features"),
-            (0x00004000, "Implements software data protection (SDP)"),
-            (
-                0x00008000,
-                "Requires additional write-protection sequence or hardware condition",
-            ),
-            (0x00400000, "Supports per-block lock / sector lock commands"),
         ]
         for bitmask, description in flag_definitions:
             if flags & bitmask:
