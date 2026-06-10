@@ -432,6 +432,10 @@ class EpromDatabase:
         if electrical.get("type") in ("EEPROM", "Flash/EEPROM"):
             info_flags |= 0x00000010  # Can be electrically erased
 
+        # D-04 (Phase 61): carry the raw electrical.type string through so the
+        # list/search view (print_eprom_list_table) can reach the same ground-truth
+        # field that the info view (build_specifications) uses, via the shared
+        # resolve_type_label helper.  Key "electrical-type" consumed by eprom_info.py.
         data = {
             "name": ic.get("part_number"),
             "manufacturer": manufacturer,
@@ -447,6 +451,7 @@ class EpromDatabase:
             "flags": 0,
             "protocol-id": protocol_id,
             "pin-map": pinout_key,
+            "electrical-type": electrical.get("type", ""),
         }
 
         chip_id_val = programming.get("chip_id_value")

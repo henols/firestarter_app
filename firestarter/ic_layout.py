@@ -474,6 +474,40 @@ class EpromSpecBuilder:
         "UV-EPROM": "UV-EPROM",
     }
 
+    def resolve_type_label(
+        self,
+        electrical_type: Optional[str],  # noqa: UP006
+        type_int: int = 0,
+        protocol_id: Optional[int] = None,  # noqa: UP006
+    ) -> str:
+        """Return the user-facing chip-type display label (D-04 single source of truth).
+
+        Looks up ``electrical_type`` in ``_ELECTRICAL_TYPE_LABEL`` (the curated
+        ground-truth map from the DB ``electrical.type`` field).  When
+        ``electrical_type`` is absent or empty — e.g. legacy user-override DB
+        entries that predate the ``electrical.type`` field (D-05 fallback) — falls
+        back to the protocol-based label via ``get_chip_type_string``.
+
+        Both ``build_specifications`` (info view) and ``print_eprom_list_table``
+        (list/search view) call this helper so the label is computed in exactly one
+        place, preventing future info-vs-list divergence (IN-01 fix).
+
+        Args:
+            electrical_type: Raw ``electrical.type`` string from the DB record
+                (e.g. ``"EEPROM"``, ``"UV-EPROM"``, ``"Flash/EEPROM"``, ``"SRAM"``).
+                Pass ``None`` or ``""`` for legacy entries.
+            type_int: The mapped ``type`` integer (mem_type) — used by the fallback.
+            protocol_id: The mapped ``protocol-id`` integer — used by the fallback
+                for more precise disambiguation.
+
+        Returns:
+            A non-empty display label string (never raises).
+        """
+        etype = electrical_type or ""
+        if etype in self._ELECTRICAL_TYPE_LABEL:
+            return self._ELECTRICAL_TYPE_LABEL[etype]
+        return self.get_chip_type_string(type_int, protocol_id)
+
     def build_specifications(  # noqa: UP006
         self,
         eprom_data: dict,
@@ -497,15 +531,14 @@ class EpromSpecBuilder:
             logger.error("No EPROM data provided to display.")
             return None
 
-        # D-01: type label sourced from electrical.type curated map.
-        # Fall back to protocol-based label when electrical_type is absent/empty.
+        # D-01/D-04: type label via single shared helper (resolve_type_label).
+        # Falls back to protocol-based label when electrical_type is absent/empty.
         etype = electrical_type or ""
-        if etype in self._ELECTRICAL_TYPE_LABEL:
-            chip_type_str = self._ELECTRICAL_TYPE_LABEL[etype]
-        else:
-            chip_type_str = self.get_chip_type_string(
-                eprom_data.get("type", 0), eprom_data.get("protocol-id")
-            )
+        chip_type_str = self.resolve_type_label(
+            electrical_type,
+            eprom_data.get("type", 0),
+            eprom_data.get("protocol-id"),
+        )
 
         # D-05: verified_str marker removed entirely (no marker shown).
         # The presenter reads chip_data.get("verified_str", "") so omitting the
