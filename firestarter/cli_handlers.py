@@ -36,6 +36,7 @@ from firestarter.exceptions import (
     EpromOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
+    ProtocolNotImplementedError,
     SerialError,
     SerialTimeoutError,
 )
@@ -116,6 +117,10 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
             raise click.ClickException(f"Firmware outdated: {e}") from e
         except (SerialError, SerialTimeoutError) as e:
             raise click.ClickException(f"Communication error: {e}") from e
+        except ProtocolNotImplementedError as e:
+            raise click.ClickException(
+                f"Unsupported protocol: {e} — this protocol is recognized but not yet implemented in the firmware."
+            ) from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
         except HardwareOperationError as e:

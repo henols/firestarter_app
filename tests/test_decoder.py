@@ -197,7 +197,7 @@ class TestIdFrameDecoder:
         second = next(gen)
 
         assert first == Response(type="INFO", message="Boot")
-        assert second == Response(type="OK", message="Ready")
+        assert second == Response(type="OK", message="Ready", id=MSG_OK_READY)
 
     def test_data_progress_u32_pair(self, fake_serial, make_comm):
         """Extra: MSG_DATA_PROGRESS (id 0xE0, two u32 params) — exercises

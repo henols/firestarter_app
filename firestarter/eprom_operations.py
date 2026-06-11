@@ -45,6 +45,7 @@ from firestarter.exceptions import (
     EpromOperationError,
     FirmwareOutdatedError,
     ProgrammerNotFoundError,
+    ProtocolNotImplementedError,
     SerialError,
     SerialTimeoutError,
 )
@@ -55,6 +56,25 @@ from firestarter.utils import extract_hex_to_decimal
 logger = logging.getLogger("EpromOperator")
 
 bar_format = "{l_bar}{bar}| {n:#06x}/{total:#06x} bytes "
+
+
+def _raise_for_error_response(response, message: str) -> None:
+    """Raise ProtocolNotImplementedError for id 0xBB, EpromOperationError otherwise.
+
+    Centralises typed-exception dispatch for all ERROR-branch sites in the
+    state machine so id-keyed detection is not duplicated per raise site.
+
+    `response` is read for its `id` field to dispatch to the typed subclass.
+    `message` is the already-composed exception message string (callers may
+    prepend a phase-name prefix for EpromOperationError framing; the raw
+    firmware text is passed through unchanged for ProtocolNotImplementedError
+    so firmware owns rendering per D-02).
+    """
+    from firestarter.messages import MSG_ERR_PROTOCOL_NOT_IMPLEMENTED
+
+    if response.id == MSG_ERR_PROTOCOL_NOT_IMPLEMENTED:
+        raise ProtocolNotImplementedError(response.message)
+    raise EpromOperationError(message)
 
 
 def build_flags(
@@ -337,8 +357,9 @@ class EpromOperator:
                 final_msg = response.message
                 break
             if response.type == "ERROR":
-                raise EpromOperationError(
-                    f"Programmer error during {phase_name.lower()}: {response.message}"
+                _raise_for_error_response(
+                    response,
+                    f"Programmer error during {phase_name.lower()}: {response.message}",
                 )
             self._handle_progress_response(response, progress)
         logger.debug(f"{phase_name.lower()} complete.")
@@ -373,7 +394,7 @@ class EpromOperator:
                 final_msg = response.message
                 break
             if response.type == "ERROR":
-                raise EpromOperationError(response.message)
+                _raise_for_error_response(response, response.message)
             if response.type == "OK" and final_msg is None:
                 final_msg = response.message  # Capture final message from MAIN's OK
             self._handle_progress_response(response, progress)
