@@ -547,11 +547,10 @@ def emit_python(catalog):
     parts.append(PY_BANNER_TEMPLATE.format(version=version, count=count))
     parts.append("\n")
     parts.append("from dataclasses import dataclass\n")
-    parts.append("from typing import Tuple\n")
     parts.append("\n")
     parts.append("# --- Severity codes (mirrors firmware) ---\n")
     for sev in VALID_SEVERITIES:
-        parts.append(f"SEVERITY_{sev:<6}= 0x{SEVERITY_CODES[sev]:02X}\n")
+        parts.append(f"SEVERITY_{sev} = 0x{SEVERITY_CODES[sev]:02X}\n")
     parts.append("\n")
     parts.append("SEVERITY_LABEL = {\n")
     for sev in VALID_SEVERITIES:
@@ -565,16 +564,14 @@ def emit_python(catalog):
     parts.append("    name: str\n")
     parts.append("    severity: int\n")
     parts.append("    format: str\n")
-    parts.append("    params: Tuple[Tuple[str, str], ...]\n")
+    parts.append("    params: tuple[tuple[str, str], ...]\n")
     parts.append("    param_bytes: int\n")
     parts.append("    wire_format: str\n")
     parts.append("\n")
     parts.append("\n")
     parts.append("# --- ID constants (sorted ascending) ---\n")
-    max_name_len = max(len(m["name"]) for m in messages)
-    name_col = max_name_len + 1
     for m in messages:
-        parts.append(f"{m['name']:<{name_col}}= 0x{m['id']:02X}\n")
+        parts.append(f"{m['name']} = 0x{m['id']:02X}\n")
     parts.append("\n")
     parts.append("\n")
     parts.append("# --- Catalog lookup ---\n")
@@ -605,14 +602,15 @@ def emit_python(catalog):
         # no smart-quotes or non-ascii expected.
         fmt_escaped = m["format"].replace("\\", "\\\\").replace('"', '\\"')
         parts.append(
-            f"    0x{m['id']:02X}: MessageDef("
-            f"id=0x{m['id']:02X}, "
-            f'name="{m["name"]}", '
-            f"severity=SEVERITY_{sev}, "
-            f'format="{fmt_escaped}", '
-            f"params={params_repr}, "
-            f"param_bytes={param_bytes_int}, "
-            f'wire_format="{m.get("wire_format", "id_frame")}"),\n'
+            f"    0x{m['id']:02X}: MessageDef(\n"
+            f"        id=0x{m['id']:02X},\n"
+            f'        name="{m["name"]}",\n'
+            f"        severity=SEVERITY_{sev},\n"
+            f'        format="{fmt_escaped}",\n'
+            f"        params={params_repr},\n"
+            f"        param_bytes={param_bytes_int},\n"
+            f'        wire_format="{m.get("wire_format", "id_frame")}",\n'
+            f"    ),\n"
         )
     parts.append("}\n")
 
@@ -620,10 +618,8 @@ def emit_python(catalog):
     if debug_messages:
         parts.append("\n\n")
         parts.append("# --- Debug sub-ID constants (sorted ascending) ---\n")
-        max_dbg_name_len = max(len(d["name"]) for d in debug_messages)
-        dbg_name_col = max_dbg_name_len + 1
         for d in debug_messages:
-            parts.append(f"{d['name']:<{dbg_name_col}}= 0x{d['id']:02X}\n")
+            parts.append(f"{d['name']} = 0x{d['id']:02X}\n")
 
         parts.append("\n\n")
         parts.append("# --- Debug sub-ID catalog lookup ---\n")
@@ -647,14 +643,15 @@ def emit_python(catalog):
             # DEBUG_CATALOG uses severity=SEVERITY_DATA (MSG_DEBUG band) and
             # wire_format="id_frame" implicitly for all debug entries.
             parts.append(
-                f"    0x{d['id']:02X}: MessageDef("
-                f"id=0x{d['id']:02X}, "
-                f'name="{d["name"]}", '
-                f"severity=SEVERITY_DATA, "
-                f'format="{dfmt_escaped}", '
-                f"params={dparams_repr}, "
-                f"param_bytes={dparam_bytes_int}, "
-                f'wire_format="id_frame"),\n'
+                f"    0x{d['id']:02X}: MessageDef(\n"
+                f"        id=0x{d['id']:02X},\n"
+                f'        name="{d["name"]}",\n'
+                f"        severity=SEVERITY_DATA,\n"
+                f'        format="{dfmt_escaped}",\n'
+                f"        params={dparams_repr},\n"
+                f"        param_bytes={dparam_bytes_int},\n"
+                f'        wire_format="id_frame",\n'
+                f"    ),\n"
             )
         parts.append("}\n")
 
