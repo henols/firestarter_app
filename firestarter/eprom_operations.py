@@ -415,6 +415,8 @@ class EpromOperator:
                 response = self.comm.get_response()
                 if response.type == "MAIN":
                     break  # Main phase is complete
+                if response.type == "ERROR":
+                    _raise_for_error_response(response, response.message)
                 if response.type != "OK":
                     raise EpromOperationError(
                         f"Programmer did not request data chunk, got {response.type}: {response.message}"  # noqa: E501
@@ -467,8 +469,8 @@ class EpromOperator:
                 logger.info("EPROM read complete.")
                 break
             if response.type == "ERROR":
-                raise EpromOperationError(
-                    f"Programmer error during read: {response.message}"
+                _raise_for_error_response(
+                    response, f"Programmer error during read: {response.message}"
                 )
             if response.type == "DATA":
                 if response.payload is not None:
