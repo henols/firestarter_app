@@ -40,6 +40,12 @@ class EpromOperationError(Exception):
     pass
 
 
+class ProtocolNotImplementedError(EpromOperationError):
+    """Raised when firmware reports a protocol is not yet implemented (id 0xBB)."""
+
+    pass
+
+
 class HardwareOperationError(Exception):
     """Custom exception for hardware operation failures."""
 

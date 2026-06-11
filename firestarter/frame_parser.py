@@ -14,7 +14,9 @@ from typing import Any, Tuple  # noqa: UP035
 
 # Define a structured object for responses to improve clarity over tuples.
 # `payload` carries raw bytes for MSG_DATA_CHUNK frames (W-04); None otherwise.
-Response = namedtuple("Response", ["type", "message", "payload"], defaults=[None])
+Response = namedtuple(
+    "Response", ["type", "message", "payload", "id"], defaults=[None, None]
+)
 
 # Phase 6: ID-encoded wire frame primitives. MAGIC_PREAMBLE locked by
 # CONTEXT §D-02; LogMessage is the decoded-frame value type per D-06.

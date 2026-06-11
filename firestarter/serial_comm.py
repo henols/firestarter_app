@@ -394,6 +394,7 @@ class SerialCommunicator:
                         type=decoded.severity,
                         message=decoded.text,
                         payload=decoded.payload,
+                        id=decoded.id,
                     )
                     self._log_rurp_feedback(response)
                     yield response
