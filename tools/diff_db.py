@@ -86,6 +86,18 @@ _RATIONALES = {
         "  based on mem_size. The old DIP28_VARIANT_MAP guess table was deleted.\n"
         "  [CITED: Phase 58 principled resolve_pinout_key — pm_idx=0 28-pin SRAM chips]"
     ),
+    "RULE_PHASE66": (
+        "Phase 66 DB inclusion + VPP correction changes.\n"
+        "  DB-01: New chips with support_status=protocol-not-implemented included\n"
+        "    (previously silently skipped). New top-level key: support_status + unsupported_reason.\n"
+        "  DB-02: 9 damage-hazard 24-pin EEPROMs included as support_status=adapter-required\n"
+        "    (previously silently skipped; DIP24 form only).\n"
+        "  DB-03: NMOS high-VPP entries corrected: M2716/M2732=25V (vpp-exceeds-max),\n"
+        "    M2732A=21V (supported at corrected voltage). vpp/vpp_mv fields updated.\n"
+        "  DB-05: All chips gain explicit support_status=supported (majority, mechanical change).\n"
+        "  [VERIFIED: .planning/phases/66-db-inclusion-vpp-correction-dispatch-gate/66-CONTEXT.md"
+        " D-04/D-06/D-07]"
+    ),
 }
 
 
@@ -168,6 +180,15 @@ _RULE_FIELD_PATHS = {
         ("electrical", "type"),  # SRAM re-route re-derives type (Pass-2)
         ("programming", "algorithm"),  # Rule 3 SRAM override flips algorithm
     },
+    # Phase 66: support_status + unsupported_reason (new top-level keys) + NMOS vpp/vpp_mv corrections.
+    # Every existing chip gains support_status=supported (a bare support_status diff);
+    # NMOS entries also gain corrected vpp/vpp_mv; non-supported chips gain unsupported_reason.
+    "RULE_PHASE66": {
+        ("support_status",),
+        ("unsupported_reason",),
+        ("electrical", "vpp"),
+        ("electrical", "vpp_mv"),
+    },
 }
 
 
@@ -218,6 +239,7 @@ def _classify_diff(bl_chip, cu_chip):
       3. BUG2_TIMING   — timing changed only
       4. BUG3_VCC_VDD  — voltage (vcc/vdd) changed only
       5. SRAM_PINOUT   — pinout changed only
+      6. RULE_PHASE66  — only support_status/unsupported_reason/vpp/vpp_mv changed
       -> None          — no rule matched (UNEXPLAINED = D-03 BLOCK)
     """
     bl_prog = bl_chip.get("programming", {})
@@ -230,6 +252,13 @@ def _classify_diff(bl_chip, cu_chip):
     vcc_diff = bl_elec.get("vcc") != cu_elec.get("vcc")
     vdd_diff = bl_elec.get("vdd") != cu_elec.get("vdd")
     pinout_diff = bl_chip.get("pinout") != cu_chip.get("pinout")
+    # Phase 66: support_status and/or unsupported_reason added; vpp/vpp_mv corrected for NMOS.
+    phase66_diff = (
+        bl_chip.get("support_status") != cu_chip.get("support_status")
+        or bl_chip.get("unsupported_reason") != cu_chip.get("unsupported_reason")
+        or bl_elec.get("vpp") != cu_elec.get("vpp")
+        or bl_elec.get("vpp_mv") != cu_elec.get("vpp_mv")
+    )
 
     voltage_diff = vcc_diff or vdd_diff
 
@@ -245,6 +274,11 @@ def _classify_diff(bl_chip, cu_chip):
         label = "BUG3_VCC_VDD"
     elif pinout_diff and not algo_diff and not timing_diff:
         label = "SRAM_PINOUT"
+    elif phase66_diff and not algo_diff and not timing_diff and not voltage_diff and not pinout_diff:
+        # RULE_PHASE66: only Phase 66 fields changed (support_status, unsupported_reason,
+        # electrical.vpp, electrical.vpp_mv). Does NOT shadow RULE_ALGO/SRAM_PINOUT/BUG
+        # buckets — those always have a co-occurring algo/timing/voltage/pinout delta.
+        label = "RULE_PHASE66"
 
     diff_paths = _diff_field_paths(bl_chip, cu_chip)
 
