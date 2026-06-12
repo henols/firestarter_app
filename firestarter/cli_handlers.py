@@ -33,6 +33,7 @@ from firestarter.eprom_info import EpromConsolePresenter, print_eprom_list_table
 from firestarter.eprom_operations import EpromOperator, build_flags
 from firestarter.exceptions import (
     ChipNotFoundError,
+    ChipNotImplementedError,
     EpromOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
@@ -121,6 +122,8 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
             raise click.ClickException(
                 f"Unsupported protocol: {e} — this protocol is recognized but not yet implemented in the firmware."
             ) from e
+        except ChipNotImplementedError as e:
+            raise click.ClickException(f"Chip not usable: {e}") from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
         except HardwareOperationError as e:
