@@ -2,6 +2,7 @@
   "ALI(Acer)": [
     {
       "part_number": "M8720",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -23,6 +24,7 @@
   "ALLIANCE": [
     {
       "part_number": "AS29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -42,6 +44,7 @@
     },
     {
       "part_number": "AS29F002B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -63,6 +66,7 @@
   "AMD": [
     {
       "part_number": "AM2716",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -82,6 +86,7 @@
     },
     {
       "part_number": "AM2716B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -101,6 +106,7 @@
     },
     {
       "part_number": "AM2732,AM2732A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -120,6 +126,7 @@
     },
     {
       "part_number": "AM2732B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -139,6 +146,7 @@
     },
     {
       "part_number": "AM2764A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -158,6 +166,7 @@
     },
     {
       "part_number": "AM27128A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -177,6 +186,7 @@
     },
     {
       "part_number": "AM27256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -196,6 +206,7 @@
     },
     {
       "part_number": "AM27512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -215,6 +226,7 @@
     },
     {
       "part_number": "AM27C64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -234,6 +246,7 @@
     },
     {
       "part_number": "AM27C010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -253,6 +266,7 @@
     },
     {
       "part_number": "AM27C020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -272,6 +286,7 @@
     },
     {
       "part_number": "AM27C040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -291,6 +306,7 @@
     },
     {
       "part_number": "AM27C080",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 1048576,
@@ -310,6 +326,7 @@
     },
     {
       "part_number": "AM27C128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -329,6 +346,7 @@
     },
     {
       "part_number": "AM27C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -348,6 +366,7 @@
     },
     {
       "part_number": "AM27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -367,6 +386,7 @@
     },
     {
       "part_number": "AM27LV010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -386,6 +406,7 @@
     },
     {
       "part_number": "AM27LV020,AM27LV020B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -405,6 +426,7 @@
     },
     {
       "part_number": "AM27LV040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -424,6 +446,7 @@
     },
     {
       "part_number": "AM27LV080",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 1048576,
@@ -443,6 +466,7 @@
     },
     {
       "part_number": "AM27H010,AM27HB010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -462,6 +486,7 @@
     },
     {
       "part_number": "AM27H256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -481,6 +506,7 @@
     },
     {
       "part_number": "AM28C16A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -500,6 +526,7 @@
     },
     {
       "part_number": "AM28C17A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -519,6 +546,7 @@
     },
     {
       "part_number": "AM28C64A,AM28C64AE,AM28C64B,AM28C64BE",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -538,6 +566,7 @@
     },
     {
       "part_number": "AM28F256",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -557,6 +586,7 @@
     },
     {
       "part_number": "AM28F512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -576,6 +606,7 @@
     },
     {
       "part_number": "AM28F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -595,6 +626,7 @@
     },
     {
       "part_number": "AM28F010A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -614,6 +646,7 @@
     },
     {
       "part_number": "AM28F020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -633,6 +666,7 @@
     },
     {
       "part_number": "AM28F020A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -652,6 +686,7 @@
     },
     {
       "part_number": "AM29F002B,AM29F002BB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -671,6 +706,7 @@
     },
     {
       "part_number": "AM29F002BT,AM29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -690,6 +726,7 @@
     },
     {
       "part_number": "AM29F002NB,AM29F002NBB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -709,6 +746,7 @@
     },
     {
       "part_number": "AM29F002NBT,AM29F002NT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -728,6 +766,7 @@
     },
     {
       "part_number": "AM29F010,AM29F010B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -747,6 +786,7 @@
     },
     {
       "part_number": "AM29F040,AM29F040B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -768,6 +808,7 @@
   "AMIC": [
     {
       "part_number": "A27020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -787,6 +828,7 @@
     },
     {
       "part_number": "A276308",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -806,6 +848,7 @@
     },
     {
       "part_number": "A276308A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -825,6 +868,7 @@
     },
     {
       "part_number": "A278308",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -844,6 +888,7 @@
     },
     {
       "part_number": "A278308A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -863,6 +908,7 @@
     },
     {
       "part_number": "A29001T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -882,6 +928,7 @@
     },
     {
       "part_number": "A29001U",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -901,6 +948,7 @@
     },
     {
       "part_number": "A290011T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -920,6 +968,7 @@
     },
     {
       "part_number": "A290011U",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -939,6 +988,7 @@
     },
     {
       "part_number": "A29002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -958,6 +1008,7 @@
     },
     {
       "part_number": "A29002U",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -977,6 +1028,7 @@
     },
     {
       "part_number": "A290021T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -996,6 +1048,7 @@
     },
     {
       "part_number": "A290021U",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -1015,6 +1068,7 @@
     },
     {
       "part_number": "A29512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -1034,6 +1088,7 @@
     },
     {
       "part_number": "A29512A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -1053,6 +1108,7 @@
     },
     {
       "part_number": "A29010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -1072,6 +1128,7 @@
     },
     {
       "part_number": "A29040,A29040A,A29040B,A29040C",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -1091,6 +1148,7 @@
     },
     {
       "part_number": "A29L040,A29L040A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -1112,6 +1170,7 @@
   "ANACHIP": [
     {
       "part_number": "27CX010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -1131,6 +1190,7 @@
     },
     {
       "part_number": "27CX256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -1152,6 +1212,7 @@
   "ASD": [
     {
       "part_number": "AE29F1008",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -1171,6 +1232,7 @@
     },
     {
       "part_number": "AE29F2008",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -1190,6 +1252,7 @@
     },
     {
       "part_number": "AE29F4008",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -1209,6 +1272,7 @@
     },
     {
       "part_number": "AE49F2008",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -1230,6 +1294,7 @@
   "ASI Semic": [
     {
       "part_number": "SMJ27C010A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -1249,6 +1314,7 @@
     },
     {
       "part_number": "SMJ27C040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -1268,6 +1334,7 @@
     },
     {
       "part_number": "SMJ27C128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -1287,6 +1354,7 @@
     },
     {
       "part_number": "SMJ27C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -1306,6 +1374,7 @@
     },
     {
       "part_number": "SMJ27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -1327,6 +1396,7 @@
   "ATMEL": [
     {
       "part_number": "AT2732A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -1346,6 +1416,7 @@
     },
     {
       "part_number": "AT27256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -1365,6 +1436,7 @@
     },
     {
       "part_number": "AT27C010,AT27C010L",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -1384,6 +1456,7 @@
     },
     {
       "part_number": "AT27C011",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -1403,6 +1476,7 @@
     },
     {
       "part_number": "AT27C020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -1422,6 +1496,7 @@
     },
     {
       "part_number": "AT27C040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -1441,6 +1516,7 @@
     },
     {
       "part_number": "AT27C080",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 1048576,
@@ -1460,6 +1536,7 @@
     },
     {
       "part_number": "AT27C128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -1479,6 +1556,7 @@
     },
     {
       "part_number": "AT27C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -1498,6 +1576,7 @@
     },
     {
       "part_number": "AT27C256R",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -1517,6 +1596,7 @@
     },
     {
       "part_number": "AT27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -1536,6 +1616,7 @@
     },
     {
       "part_number": "AT27C512R",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -1555,6 +1636,7 @@
     },
     {
       "part_number": "AT27HC256,AT27HC256L",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -1574,6 +1656,7 @@
     },
     {
       "part_number": "AT27HC256R,AT27HC256RL",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -1593,6 +1676,7 @@
     },
     {
       "part_number": "AT27BV010,AT27LV010,AT27LV010A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -1612,6 +1696,7 @@
     },
     {
       "part_number": "AT27BV020,AT27LV020,AT27LV020A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -1631,6 +1716,7 @@
     },
     {
       "part_number": "AT27BV040,AT27LV040,AT27LV040A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -1650,6 +1736,7 @@
     },
     {
       "part_number": "AT27BV256,AT27LV256A,AT27LV256R",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -1669,6 +1756,7 @@
     },
     {
       "part_number": "AT27BV512,AT27LV512A,AT27LV512R",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -1688,6 +1776,7 @@
     },
     {
       "part_number": "AT28BV64,AT28LV64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -1707,6 +1796,7 @@
     },
     {
       "part_number": "AT28BV64B,AT28LV64B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -1726,6 +1816,7 @@
     },
     {
       "part_number": "AT28BV256,AT28LV256",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -1745,6 +1836,7 @@
     },
     {
       "part_number": "AT28C010,AT28C010E",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -1763,7 +1855,50 @@
       "pinout": "DIP32_28C512_EEPROM"
     },
     {
+      "part_number": "AT28C04,AT28HC04",
+      "support_status": "adapter-required",
+      "electrical": {
+        "type": "UV-EPROM",
+        "size_bytes": 512,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vdd": "5V",
+        "vcc": "5V"
+      },
+      "programming": {
+        "algorithm": 11,
+        "pulse_duration": "100000 us",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+    },
+    {
+      "part_number": "AT28C04E,AT28C04F",
+      "support_status": "adapter-required",
+      "electrical": {
+        "type": "UV-EPROM",
+        "size_bytes": 512,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vdd": "5V",
+        "vcc": "5V"
+      },
+      "programming": {
+        "algorithm": 11,
+        "pulse_duration": "20000 us",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+    },
+    {
       "part_number": "AT28C040,AT28C040E",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -1782,7 +1917,50 @@
       "pinout": "DIP32_28C512_EEPROM"
     },
     {
+      "part_number": "AT28C16,AT28HC16,AT28HC16L",
+      "support_status": "adapter-required",
+      "electrical": {
+        "type": "UV-EPROM",
+        "size_bytes": 2048,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vdd": "5V",
+        "vcc": "5V"
+      },
+      "programming": {
+        "algorithm": 11,
+        "pulse_duration": "100000 us",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+    },
+    {
+      "part_number": "AT28C16E,AT28C16F",
+      "support_status": "adapter-required",
+      "electrical": {
+        "type": "UV-EPROM",
+        "size_bytes": 2048,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vdd": "5V",
+        "vcc": "5V"
+      },
+      "programming": {
+        "algorithm": 11,
+        "pulse_duration": "20000 us",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+    },
+    {
       "part_number": "AT28C17",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -1802,6 +1980,7 @@
     },
     {
       "part_number": "AT28C17E,AT28C17F",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -1821,6 +2000,7 @@
     },
     {
       "part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -1840,6 +2020,7 @@
     },
     {
       "part_number": "AT28C64,AT28C64B(Non-Standard),AT28HC64,AT28HC64L",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -1859,6 +2040,7 @@
     },
     {
       "part_number": "AT28C64B,AT28HC64B,AT28HC64BF",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -1878,6 +2060,7 @@
     },
     {
       "part_number": "AT28C64E,AT28C64F",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -1897,6 +2080,7 @@
     },
     {
       "part_number": "AT28LV010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -1916,6 +2100,7 @@
     },
     {
       "part_number": "AT28MC010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -1935,6 +2120,7 @@
     },
     {
       "part_number": "AT28MC020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -1954,6 +2140,7 @@
     },
     {
       "part_number": "AT28MC040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -1973,6 +2160,7 @@
     },
     {
       "part_number": "AT28PC64,AT28PC64E",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -1992,6 +2180,7 @@
     },
     {
       "part_number": "AT29BV010A,AT29LV010A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -2011,6 +2200,7 @@
     },
     {
       "part_number": "AT29BV020,AT29LV020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -2030,6 +2220,7 @@
     },
     {
       "part_number": "AT29BV040,AT29LV040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -2049,6 +2240,7 @@
     },
     {
       "part_number": "AT29BV040A,AT29LV040A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -2068,6 +2260,7 @@
     },
     {
       "part_number": "AT29C256",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -2087,6 +2280,7 @@
     },
     {
       "part_number": "AT29C257",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -2106,6 +2300,7 @@
     },
     {
       "part_number": "AT29C512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -2125,6 +2320,7 @@
     },
     {
       "part_number": "AT29C010A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -2144,6 +2340,7 @@
     },
     {
       "part_number": "AT29C020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -2163,6 +2360,7 @@
     },
     {
       "part_number": "AT29C040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -2182,6 +2380,7 @@
     },
     {
       "part_number": "AT29C040A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -2201,6 +2400,7 @@
     },
     {
       "part_number": "AT29LV256",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -2220,6 +2420,7 @@
     },
     {
       "part_number": "AT29LV512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -2239,6 +2440,7 @@
     },
     {
       "part_number": "AT49BV001,AT49BV001A,AT49LV001",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -2258,6 +2460,7 @@
     },
     {
       "part_number": "AT49BV001AN,AT49BV001N,AT49LV001N",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -2277,6 +2480,7 @@
     },
     {
       "part_number": "AT49BV001ANT,AT49BV001NT,AT49LV001NT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -2296,6 +2500,7 @@
     },
     {
       "part_number": "AT49BV001AT,AT49BV001T,AT49LV001T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -2315,6 +2520,7 @@
     },
     {
       "part_number": "AT49BV002,AT49BV002A,AT49LV002",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -2334,6 +2540,7 @@
     },
     {
       "part_number": "AT49BV002AN,AT49BV002N,AT49LV002N",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -2353,6 +2560,7 @@
     },
     {
       "part_number": "AT49BV002ANT,AT49BV002NT,AT49LV002NT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -2372,6 +2580,7 @@
     },
     {
       "part_number": "AT49BV002AT,AT49BV002T,AT49LV002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -2391,6 +2600,7 @@
     },
     {
       "part_number": "AT49BV010,AT49HBV010,AT49HLV010,AT49LV010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -2410,6 +2620,7 @@
     },
     {
       "part_number": "AT49BV020,AT49LV020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -2429,6 +2640,7 @@
     },
     {
       "part_number": "AT49BV040,AT49BV040A,AT49BV040B,AT49LV040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -2448,6 +2660,7 @@
     },
     {
       "part_number": "AT49BV040T,AT49LV040T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -2467,6 +2680,7 @@
     },
     {
       "part_number": "AT49BV512,AT49LV512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -2486,6 +2700,7 @@
     },
     {
       "part_number": "AT49F001,AT49F001A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -2505,6 +2720,7 @@
     },
     {
       "part_number": "AT49F001AN,AT49F001N",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -2524,6 +2740,7 @@
     },
     {
       "part_number": "AT49F001ANT,AT49F001NT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -2543,6 +2760,7 @@
     },
     {
       "part_number": "AT49F001AT,AT49F001T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -2562,6 +2780,7 @@
     },
     {
       "part_number": "AT49F002,AT49F002A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -2581,6 +2800,7 @@
     },
     {
       "part_number": "AT49F002AN,AT49F002N",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -2600,6 +2820,7 @@
     },
     {
       "part_number": "AT49F002ANT,AT49F002NT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -2619,6 +2840,7 @@
     },
     {
       "part_number": "AT49F002AT,AT49F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -2638,6 +2860,7 @@
     },
     {
       "part_number": "AT49F010,AT49HF010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -2657,6 +2880,7 @@
     },
     {
       "part_number": "AT49F020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -2676,6 +2900,7 @@
     },
     {
       "part_number": "AT49F040,AT49F040A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -2695,6 +2920,7 @@
     },
     {
       "part_number": "AT49F040T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -2714,6 +2940,7 @@
     },
     {
       "part_number": "AT49F512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -2735,6 +2962,7 @@
   "CATALYST(CSI)": [
     {
       "part_number": "CAT27010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -2754,6 +2982,7 @@
     },
     {
       "part_number": "CAT2764A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -2773,6 +3002,7 @@
     },
     {
       "part_number": "CAT27128A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -2792,6 +3022,7 @@
     },
     {
       "part_number": "CAT27256,CAT27HC256I",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -2811,6 +3042,7 @@
     },
     {
       "part_number": "CAT27512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -2830,6 +3062,7 @@
     },
     {
       "part_number": "CAT27C16",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -2849,6 +3082,7 @@
     },
     {
       "part_number": "CAT27HC256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -2868,6 +3102,7 @@
     },
     {
       "part_number": "CAT28C16A,CAT28C16AI",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -2887,6 +3122,7 @@
     },
     {
       "part_number": "CAT28C17A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -2906,6 +3142,7 @@
     },
     {
       "part_number": "CAT28C256,CAT28C257",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -2925,6 +3162,7 @@
     },
     {
       "part_number": "CAT28C64A,CAT28C65",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -2944,6 +3182,7 @@
     },
     {
       "part_number": "CAT28C64B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -2963,6 +3202,7 @@
     },
     {
       "part_number": "CAT28C512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -2982,6 +3222,7 @@
     },
     {
       "part_number": "CAT28C010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -3001,6 +3242,7 @@
     },
     {
       "part_number": "CAT28C020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -3020,6 +3262,7 @@
     },
     {
       "part_number": "CAT28C040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -3039,6 +3282,7 @@
     },
     {
       "part_number": "CAT28LV64,CAT28LV65",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -3058,6 +3302,7 @@
     },
     {
       "part_number": "CAT28LV256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -3077,6 +3322,7 @@
     },
     {
       "part_number": "CAT28F001P-B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -3096,6 +3342,7 @@
     },
     {
       "part_number": "CAT28F001P-T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -3115,6 +3362,7 @@
     },
     {
       "part_number": "CAT28F256",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -3134,6 +3382,7 @@
     },
     {
       "part_number": "CAT28F512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -3153,6 +3402,7 @@
     },
     {
       "part_number": "CAT28F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -3172,6 +3422,7 @@
     },
     {
       "part_number": "CAT28F020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -3193,6 +3444,7 @@
   "CFEON": [
     {
       "part_number": "EN29F002AB,EN29F002B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -3212,6 +3464,7 @@
     },
     {
       "part_number": "EN29F002ANT,EN29F002NT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -3231,6 +3484,7 @@
     },
     {
       "part_number": "EN29F002ANB,EN29F002NB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -3250,6 +3504,7 @@
     },
     {
       "part_number": "EN29F002AT,EN29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -3269,6 +3524,7 @@
     },
     {
       "part_number": "EN29F512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -3288,6 +3544,7 @@
     },
     {
       "part_number": "EN29F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -3307,6 +3564,7 @@
     },
     {
       "part_number": "EN29F040,EN29F040A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -3326,6 +3584,7 @@
     },
     {
       "part_number": "EN29LV040A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -3347,6 +3606,7 @@
   "CHINGIS": [
     {
       "part_number": "PM29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -3366,6 +3626,7 @@
     },
     {
       "part_number": "PM29F002B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -3385,6 +3646,7 @@
     },
     {
       "part_number": "PM29F004T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -3404,6 +3666,7 @@
     },
     {
       "part_number": "PM29F004B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -3423,6 +3686,7 @@
     },
     {
       "part_number": "PM39F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -3442,6 +3706,7 @@
     },
     {
       "part_number": "PM39F020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -3461,6 +3726,7 @@
     },
     {
       "part_number": "PM39F040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -3482,6 +3748,7 @@
   "CYPRESS": [
     {
       "part_number": "CY27C010,CY27H010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -3501,6 +3768,7 @@
     },
     {
       "part_number": "CY27C020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -3520,6 +3788,7 @@
     },
     {
       "part_number": "CY27C040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -3539,6 +3808,7 @@
     },
     {
       "part_number": "CY27C128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -3558,6 +3828,7 @@
     },
     {
       "part_number": "CY27C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -3577,6 +3848,7 @@
     },
     {
       "part_number": "CY27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -3596,6 +3868,7 @@
     },
     {
       "part_number": "CY27H256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -3615,6 +3888,7 @@
     },
     {
       "part_number": "CY27H512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -3634,6 +3908,7 @@
     },
     {
       "part_number": "FM28V020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -3655,6 +3930,7 @@
   "DALLAS": [
     {
       "part_number": "DS1220(RW)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 2048,
@@ -3674,6 +3950,7 @@
     },
     {
       "part_number": "DS1220(TEST)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 2048,
@@ -3693,6 +3970,7 @@
     },
     {
       "part_number": "DS1225(RW)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -3712,6 +3990,7 @@
     },
     {
       "part_number": "DS1225(TEST)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -3731,6 +4010,7 @@
     },
     {
       "part_number": "DS1230AB(RW),DS1230Y(RW)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -3750,6 +4030,7 @@
     },
     {
       "part_number": "DS1230AB(TEST),DS1230Y(TEST)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -3769,6 +4050,7 @@
     },
     {
       "part_number": "DS1230W(RW3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -3788,6 +4070,7 @@
     },
     {
       "part_number": "DS1230W(TEST3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -3807,6 +4090,7 @@
     },
     {
       "part_number": "DS1245AB(RW),DS1245Y(RW)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -3826,6 +4110,7 @@
     },
     {
       "part_number": "DS1245AB(TEST),DS1245Y(TEST)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -3845,6 +4130,7 @@
     },
     {
       "part_number": "DS1245W(RW3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -3864,6 +4150,7 @@
     },
     {
       "part_number": "DS1245W(TEST3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -3883,6 +4170,7 @@
     },
     {
       "part_number": "DS1249AB(RW),DS1249Y(RW)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 262144,
@@ -3902,6 +4190,7 @@
     },
     {
       "part_number": "DS1249AB(TEST),DS1249Y(TEST)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 262144,
@@ -3921,6 +4210,7 @@
     },
     {
       "part_number": "DS1249W(RW3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 262144,
@@ -3940,6 +4230,7 @@
     },
     {
       "part_number": "DS1249W(TEST3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 262144,
@@ -3959,6 +4250,7 @@
     },
     {
       "part_number": "DS1250AB(RW),DS1250Y(RW)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -3978,6 +4270,7 @@
     },
     {
       "part_number": "DS1250AB(TEST),DS1250Y(TEST)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -3997,6 +4290,7 @@
     },
     {
       "part_number": "DS1250W(RW3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -4016,6 +4310,7 @@
     },
     {
       "part_number": "DS1250W(TEST3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -4037,6 +4332,7 @@
   "DENSE-PAC": [
     {
       "part_number": "DPV27C101",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -4056,6 +4352,7 @@
     },
     {
       "part_number": "DPV27C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -4075,6 +4372,7 @@
     },
     {
       "part_number": "DPV27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -4096,6 +4394,7 @@
   "EFST": [
     {
       "part_number": "F49B002UA",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -4117,6 +4416,7 @@
   "EON": [
     {
       "part_number": "EN27C010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -4136,6 +4436,7 @@
     },
     {
       "part_number": "EN27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -4155,6 +4456,7 @@
     },
     {
       "part_number": "EN29F002AB,EN29F002ANB,EN29F002B,EN29F002NB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -4174,6 +4476,7 @@
     },
     {
       "part_number": "EN29F002ANT,EN29F002AT,EN29F002NT,EN29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -4193,6 +4496,7 @@
     },
     {
       "part_number": "EN29F512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -4212,6 +4516,7 @@
     },
     {
       "part_number": "EN29F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -4231,6 +4536,7 @@
     },
     {
       "part_number": "EN29F040,EN29F040A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -4250,6 +4556,7 @@
     },
     {
       "part_number": "EN29LV040A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -4271,6 +4578,7 @@
   "EXEL": [
     {
       "part_number": "XL2804A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 512,
@@ -4290,6 +4598,7 @@
     },
     {
       "part_number": "XL2816A,XLE28C16A,XLS28C16A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -4309,6 +4618,7 @@
     },
     {
       "part_number": "XLE2865A,XLS2865A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -4328,6 +4638,7 @@
     },
     {
       "part_number": "XLE28C16B,XLS28C16B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -4347,6 +4658,7 @@
     },
     {
       "part_number": "XLE28C64A,XLS28C64A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -4366,6 +4678,7 @@
     },
     {
       "part_number": "XLE28C64B,XLS28C64B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -4385,6 +4698,7 @@
     },
     {
       "part_number": "XLE28C256,XLS28C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -4406,6 +4720,7 @@
   "FAIRCHILD": [
     {
       "part_number": "FM27C010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -4425,6 +4740,7 @@
     },
     {
       "part_number": "FM27C040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -4444,6 +4760,7 @@
     },
     {
       "part_number": "FM27C256,NM27C256,NM27LC256,NMC27C256B,NMC27C256Q,NMC87C257Q,NMC87C257V",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -4463,6 +4780,7 @@
     },
     {
       "part_number": "FM27C512,NM27C512,NM27LC512,NM27LV512,NM27P512,NMC27C512A,NMC27C512Q",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -4482,6 +4800,7 @@
     },
     {
       "part_number": "NM27C010,NM27LC010,NM27LV010,NM27P010,NMC27C010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -4501,6 +4820,7 @@
     },
     {
       "part_number": "NM27C020,NM27LV020,NM27P020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -4520,6 +4840,7 @@
     },
     {
       "part_number": "NM27C040,NM27LV040,NM27P040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -4539,6 +4860,7 @@
     },
     {
       "part_number": "NM27C64Q,NM27LC64,NMC27C64Q",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -4558,6 +4880,7 @@
     },
     {
       "part_number": "NM27C128,NMC27C128B,NMC27C128C",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -4577,6 +4900,7 @@
     },
     {
       "part_number": "NMC2732",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -4596,6 +4920,7 @@
     },
     {
       "part_number": "NMC27C16",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -4615,6 +4940,7 @@
     },
     {
       "part_number": "NMC27C16B,NMC27C16BQ",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -4634,6 +4960,7 @@
     },
     {
       "part_number": "NMC27C16Q",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -4653,6 +4980,7 @@
     },
     {
       "part_number": "NMC27C32,NMC27C32E,NMC27C32EH,NMC27C32H,NMC27C32Q",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -4672,6 +5000,7 @@
     },
     {
       "part_number": "NMC27C32B,NMC27C32BQ",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -4693,6 +5022,7 @@
   "FUJITSU": [
     {
       "part_number": "MB85R256H",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -4712,6 +5042,7 @@
     },
     {
       "part_number": "MBM2716",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -4731,6 +5062,7 @@
     },
     {
       "part_number": "MBM27128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -4750,6 +5082,7 @@
     },
     {
       "part_number": "MBM27256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -4769,6 +5102,7 @@
     },
     {
       "part_number": "MBM2732,MBM2732A,MBM27C32,MBM27C32A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -4788,6 +5122,7 @@
     },
     {
       "part_number": "MBM2764",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -4807,6 +5142,7 @@
     },
     {
       "part_number": "MBM27C1000P,MBM27C1000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -4826,6 +5162,7 @@
     },
     {
       "part_number": "MBM27C1001",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -4845,6 +5182,7 @@
     },
     {
       "part_number": "MBM27C128P",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -4864,6 +5202,7 @@
     },
     {
       "part_number": "MBM27C2000P,MBM27C2000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -4883,6 +5222,7 @@
     },
     {
       "part_number": "MBM27C2001",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -4902,6 +5242,7 @@
     },
     {
       "part_number": "MBM27C256A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -4921,6 +5262,7 @@
     },
     {
       "part_number": "MBM27C4001",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -4940,6 +5282,7 @@
     },
     {
       "part_number": "MBM27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -4959,6 +5302,7 @@
     },
     {
       "part_number": "MBM27C64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -4978,6 +5322,7 @@
     },
     {
       "part_number": "MBM28F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -4997,6 +5342,7 @@
     },
     {
       "part_number": "MBM29F002B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -5016,6 +5362,7 @@
     },
     {
       "part_number": "MBM29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -5035,6 +5382,7 @@
     },
     {
       "part_number": "MBM29F040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -5056,6 +5404,7 @@
   "GREENWICH": [
     {
       "part_number": "GR2764",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -5075,6 +5424,7 @@
     },
     {
       "part_number": "GR27128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -5094,6 +5444,7 @@
     },
     {
       "part_number": "GR27256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -5113,6 +5464,7 @@
     },
     {
       "part_number": "GR27512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -5134,6 +5486,7 @@
   "HITACHI": [
     {
       "part_number": "HN27128AG,HN27128AP",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -5153,6 +5506,7 @@
     },
     {
       "part_number": "HN27256G,HN27256P",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -5172,6 +5526,7 @@
     },
     {
       "part_number": "HN27512G,HN27512P",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -5191,6 +5546,7 @@
     },
     {
       "part_number": "HN27C101AG,HN27C101AP,HN27C101AFP,HN27C101ATT,HN27C101G,HN27C101P",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -5210,6 +5566,7 @@
     },
     {
       "part_number": "HN27C301AG,HN27C301AP,HN27C301AFP",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -5229,6 +5586,7 @@
     },
     {
       "part_number": "HN27C301G",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -5248,6 +5606,7 @@
     },
     {
       "part_number": "HN27C256AG,HN27C256AFP,HN27C256AP,HN27C256HG,HN27C256HP,HN27C256HFP",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -5267,6 +5626,7 @@
     },
     {
       "part_number": "HN27C256G",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -5286,6 +5646,7 @@
     },
     {
       "part_number": "HN27C4001G",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -5305,6 +5666,7 @@
     },
     {
       "part_number": "HN27C512G",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -5324,6 +5686,7 @@
     },
     {
       "part_number": "HN27C64G",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -5343,6 +5706,7 @@
     },
     {
       "part_number": "HN27C64FP",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -5362,6 +5726,7 @@
     },
     {
       "part_number": "HN28F101P,HN28F101FP",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -5381,6 +5746,7 @@
     },
     {
       "part_number": "HN58C256AP",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -5402,6 +5768,7 @@
   "HOLTEK": [
     {
       "part_number": "HT27C010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -5421,6 +5788,7 @@
     },
     {
       "part_number": "HT27C020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -5440,6 +5808,7 @@
     },
     {
       "part_number": "HT27C040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -5459,6 +5828,7 @@
     },
     {
       "part_number": "HT27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -5478,6 +5848,7 @@
     },
     {
       "part_number": "HT27LC010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -5497,6 +5868,7 @@
     },
     {
       "part_number": "HT27LC020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -5516,6 +5888,7 @@
     },
     {
       "part_number": "HT27LC040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -5535,6 +5908,7 @@
     },
     {
       "part_number": "HT27LC512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -5556,6 +5930,7 @@
   "HYNIX": [
     {
       "part_number": "HY27C64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -5575,6 +5950,7 @@
     },
     {
       "part_number": "HY29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -5594,6 +5970,7 @@
     },
     {
       "part_number": "HY29F040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -5613,6 +5990,7 @@
     },
     {
       "part_number": "HY29F040A,HY29F040T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -5634,6 +6012,7 @@
   "HYUNDAI": [
     {
       "part_number": "HY27C64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -5653,6 +6032,7 @@
     },
     {
       "part_number": "HY29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -5672,6 +6052,7 @@
     },
     {
       "part_number": "HY29F040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -5691,6 +6072,7 @@
     },
     {
       "part_number": "HY29F040A,HY29F040T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -5712,6 +6094,7 @@
   "ICE": [
     {
       "part_number": "ICE27C010,ICE27LC010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -5731,6 +6114,7 @@
     },
     {
       "part_number": "ICE27C020,ICE27LC020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -5750,6 +6134,7 @@
     },
     {
       "part_number": "ICE27C512,ICE27LC512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -5771,6 +6156,7 @@
   "ICMIC": [
     {
       "part_number": "27CX010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -5790,6 +6176,7 @@
     },
     {
       "part_number": "27CX256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -5811,6 +6198,7 @@
   "ICT": [
     {
       "part_number": "27CX010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -5830,6 +6218,7 @@
     },
     {
       "part_number": "27CX256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -5851,6 +6240,7 @@
   "IMT": [
     {
       "part_number": "IM29F001B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -5870,6 +6260,7 @@
     },
     {
       "part_number": "IM29F001T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -5889,6 +6280,7 @@
     },
     {
       "part_number": "IM29F002B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -5908,6 +6300,7 @@
     },
     {
       "part_number": "IM29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -5927,6 +6320,7 @@
     },
     {
       "part_number": "IM29LV004B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -5946,6 +6340,7 @@
     },
     {
       "part_number": "IM29LV004T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -5967,6 +6362,7 @@
   "INTEL": [
     {
       "part_number": "D27011",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -5986,6 +6382,7 @@
     },
     {
       "part_number": "D27C011",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -6005,12 +6402,13 @@
     },
     {
       "part_number": "2732,2732A,M2732,M2732A",
+      "support_status": "vpp-exceeds-max",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
         "pin_count": 24,
-        "vpp": "18V",
-        "vpp_mv": 18000,
+        "vpp": "25V",
+        "vpp_mv": 25000,
         "vdd": "5V",
         "vcc": "5.5V"
       },
@@ -6020,10 +6418,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2732"
+      "pinout": "DIP24_2732",
+      "unsupported_reason": "VPP 25V exceeds RURP ceiling (22V); cannot program on this hardware"
     },
     {
       "part_number": "2764",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -6043,6 +6443,7 @@
     },
     {
       "part_number": "2764A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -6062,6 +6463,7 @@
     },
     {
       "part_number": "27128,D27128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -6081,6 +6483,7 @@
     },
     {
       "part_number": "27128A,D27128A,D27128B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -6100,6 +6503,7 @@
     },
     {
       "part_number": "D27256,M27256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -6119,12 +6523,13 @@
     },
     {
       "part_number": "M2716,M2716M",
+      "support_status": "vpp-exceeds-max",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
         "pin_count": 24,
-        "vpp": "18V",
-        "vpp_mv": 18000,
+        "vpp": "25V",
+        "vpp_mv": 25000,
         "vdd": "5V",
         "vcc": "5V"
       },
@@ -6134,10 +6539,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "VPP 25V exceeds RURP ceiling (22V); cannot program on this hardware"
     },
     {
       "part_number": "P27256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -6157,6 +6564,7 @@
     },
     {
       "part_number": "27512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -6176,6 +6584,7 @@
     },
     {
       "part_number": "27C010,27C010A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -6195,6 +6604,7 @@
     },
     {
       "part_number": "27C020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -6214,6 +6624,7 @@
     },
     {
       "part_number": "27C040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -6233,6 +6644,7 @@
     },
     {
       "part_number": "27C128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -6252,6 +6664,7 @@
     },
     {
       "part_number": "27C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -6271,6 +6684,7 @@
     },
     {
       "part_number": "27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -6290,6 +6704,7 @@
     },
     {
       "part_number": "87C257",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -6309,6 +6724,7 @@
     },
     {
       "part_number": "M28F256",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -6328,6 +6744,7 @@
     },
     {
       "part_number": "P28F001BX-T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -6347,6 +6764,7 @@
     },
     {
       "part_number": "P28F001BX-B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -6366,6 +6784,7 @@
     },
     {
       "part_number": "P28F256A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -6385,6 +6804,7 @@
     },
     {
       "part_number": "P28F512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -6404,6 +6824,7 @@
     },
     {
       "part_number": "P28F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -6423,6 +6844,7 @@
     },
     {
       "part_number": "P28F020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -6444,6 +6866,7 @@
   "ISSI": [
     {
       "part_number": "IS27C010,IS27HC010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -6463,6 +6886,7 @@
     },
     {
       "part_number": "IS27C020,IS27HC020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -6482,6 +6906,7 @@
     },
     {
       "part_number": "IS27C256,IS27HC256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -6501,6 +6926,7 @@
     },
     {
       "part_number": "IS27C512,IS27HC512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -6520,6 +6946,7 @@
     },
     {
       "part_number": "IS27LV010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -6539,6 +6966,7 @@
     },
     {
       "part_number": "IS27LV020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -6558,6 +6986,7 @@
     },
     {
       "part_number": "IS27LV256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -6577,6 +7006,7 @@
     },
     {
       "part_number": "IS27LV512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -6596,6 +7026,7 @@
     },
     {
       "part_number": "IS28F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -6615,6 +7046,7 @@
     },
     {
       "part_number": "IS28F020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -6636,6 +7068,7 @@
   "LINKAGE": [
     {
       "part_number": "LG28C010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -6655,6 +7088,7 @@
     },
     {
       "part_number": "LG28C020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -6674,6 +7108,7 @@
     },
     {
       "part_number": "LG28C040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -6695,6 +7130,7 @@
   "LINKSMART": [
     {
       "part_number": "LST28001",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -6714,6 +7150,7 @@
     },
     {
       "part_number": "LST28002",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -6733,6 +7170,7 @@
     },
     {
       "part_number": "LST28004",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -6754,6 +7192,7 @@
   "MACRONIX(MXIC)": [
     {
       "part_number": "MX26C1000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -6773,6 +7212,7 @@
     },
     {
       "part_number": "MX26C2000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -6792,6 +7232,7 @@
     },
     {
       "part_number": "MX26C4000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -6811,6 +7252,7 @@
     },
     {
       "part_number": "MX26LV004B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -6830,6 +7272,7 @@
     },
     {
       "part_number": "MX26LV004T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -6849,6 +7292,7 @@
     },
     {
       "part_number": "MX26LV040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -6868,6 +7312,7 @@
     },
     {
       "part_number": "MX27C1000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -6887,6 +7332,7 @@
     },
     {
       "part_number": "MX27C1000A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -6906,6 +7352,7 @@
     },
     {
       "part_number": "MX27C2000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -6925,6 +7372,7 @@
     },
     {
       "part_number": "MX27C2000A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -6944,6 +7392,7 @@
     },
     {
       "part_number": "MX27C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -6963,6 +7412,7 @@
     },
     {
       "part_number": "MX27C4000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -6982,6 +7432,7 @@
     },
     {
       "part_number": "MX27C4000A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -7001,6 +7452,7 @@
     },
     {
       "part_number": "MX27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -7020,6 +7472,7 @@
     },
     {
       "part_number": "MX27C8000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 1048576,
@@ -7039,6 +7492,7 @@
     },
     {
       "part_number": "MX27C8000A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 1048576,
@@ -7058,6 +7512,7 @@
     },
     {
       "part_number": "MX27L1000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -7077,6 +7532,7 @@
     },
     {
       "part_number": "MX27L2000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -7096,6 +7552,7 @@
     },
     {
       "part_number": "MX27L256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -7115,6 +7572,7 @@
     },
     {
       "part_number": "MX27L4000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -7134,6 +7592,7 @@
     },
     {
       "part_number": "MX27L512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -7153,6 +7612,7 @@
     },
     {
       "part_number": "MX28F1000P",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -7172,6 +7632,7 @@
     },
     {
       "part_number": "MX28F2000P",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7191,6 +7652,7 @@
     },
     {
       "part_number": "MX28F2000T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7210,6 +7672,7 @@
     },
     {
       "part_number": "MX29F001B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -7229,6 +7692,7 @@
     },
     {
       "part_number": "MX29F001T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -7248,6 +7712,7 @@
     },
     {
       "part_number": "MX29F002B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7267,6 +7732,7 @@
     },
     {
       "part_number": "MX29F002NB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7286,6 +7752,7 @@
     },
     {
       "part_number": "MX29F002NT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7305,6 +7772,7 @@
     },
     {
       "part_number": "MX29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7324,6 +7792,7 @@
     },
     {
       "part_number": "MX29F004B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -7343,6 +7812,7 @@
     },
     {
       "part_number": "MX29F004T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -7362,6 +7832,7 @@
     },
     {
       "part_number": "MX29F022B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7381,6 +7852,7 @@
     },
     {
       "part_number": "MX29F022NB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7400,6 +7872,7 @@
     },
     {
       "part_number": "MX29F022NT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7419,6 +7892,7 @@
     },
     {
       "part_number": "MX29F022T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7438,6 +7912,7 @@
     },
     {
       "part_number": "MX29F040,MX29F040C",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -7457,6 +7932,7 @@
     },
     {
       "part_number": "MX29LV002CB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7476,6 +7952,7 @@
     },
     {
       "part_number": "MX29LV002NCB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7495,6 +7972,7 @@
     },
     {
       "part_number": "MX29LV002NCT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7514,6 +7992,7 @@
     },
     {
       "part_number": "MX29LV002CT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -7535,6 +8014,7 @@
   "MAXWELL": [
     {
       "part_number": "28C010,28C010T,28C011,28C011T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -7556,6 +8036,7 @@
   "MICROCHIP memory": [
     {
       "part_number": "27C128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -7575,6 +8056,7 @@
     },
     {
       "part_number": "27C256,27LV256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -7594,6 +8076,7 @@
     },
     {
       "part_number": "27C32A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -7613,6 +8096,7 @@
     },
     {
       "part_number": "27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -7632,6 +8116,7 @@
     },
     {
       "part_number": "27C512A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -7651,6 +8136,7 @@
     },
     {
       "part_number": "27C64,27LV64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -7670,6 +8156,7 @@
     },
     {
       "part_number": "27HC256,27HC256L",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -7689,6 +8176,7 @@
     },
     {
       "part_number": "27HC64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -7708,6 +8196,7 @@
     },
     {
       "part_number": "2804",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 512,
@@ -7727,6 +8216,7 @@
     },
     {
       "part_number": "2816",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -7746,6 +8236,7 @@
     },
     {
       "part_number": "2817",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -7764,7 +8255,92 @@
       "pinout": "DIP28_28C64"
     },
     {
+      "part_number": "28C04A",
+      "support_status": "adapter-required",
+      "electrical": {
+        "type": "UV-EPROM",
+        "size_bytes": 512,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vdd": "5.5V",
+        "vcc": "3.3V"
+      },
+      "programming": {
+        "algorithm": 11,
+        "pulse_duration": "100000 us",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+    },
+    {
+      "part_number": "28C04AF",
+      "support_status": "adapter-required",
+      "electrical": {
+        "type": "UV-EPROM",
+        "size_bytes": 512,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vdd": "5.5V",
+        "vcc": "3.3V"
+      },
+      "programming": {
+        "algorithm": 11,
+        "pulse_duration": "20000 us",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+    },
+    {
+      "part_number": "28C16A",
+      "support_status": "adapter-required",
+      "electrical": {
+        "type": "UV-EPROM",
+        "size_bytes": 2048,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vdd": "5.5V",
+        "vcc": "3.3V"
+      },
+      "programming": {
+        "algorithm": 11,
+        "pulse_duration": "100000 us",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+    },
+    {
+      "part_number": "28C16AF",
+      "support_status": "adapter-required",
+      "electrical": {
+        "type": "UV-EPROM",
+        "size_bytes": 2048,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vdd": "5.5V",
+        "vcc": "3.3V"
+      },
+      "programming": {
+        "algorithm": 11,
+        "pulse_duration": "20000 us",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+    },
+    {
       "part_number": "28C17A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -7784,6 +8360,7 @@
     },
     {
       "part_number": "28C17AF",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -7803,6 +8380,7 @@
     },
     {
       "part_number": "28C256,28C256F",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -7822,6 +8400,7 @@
     },
     {
       "part_number": "28C64A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -7841,6 +8420,7 @@
     },
     {
       "part_number": "28C64AF",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -7860,6 +8440,7 @@
     },
     {
       "part_number": "28C64B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -7879,6 +8460,7 @@
     },
     {
       "part_number": "28LV64A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -7900,6 +8482,7 @@
   "MITSUBISHI": [
     {
       "part_number": "M5L27256K",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -7919,6 +8502,7 @@
     },
     {
       "part_number": "M5M27C101K",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -7938,6 +8522,7 @@
     },
     {
       "part_number": "M5M27C128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -7957,6 +8542,7 @@
     },
     {
       "part_number": "M5M27C256K",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -7976,6 +8562,7 @@
     },
     {
       "part_number": "M5M28F101,M5M28F101A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -7997,6 +8584,7 @@
   "MOSEL VITELIC": [
     {
       "part_number": "V29C31001B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -8016,6 +8604,7 @@
     },
     {
       "part_number": "V29C31001T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -8035,6 +8624,7 @@
     },
     {
       "part_number": "V29C31002B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -8054,6 +8644,7 @@
     },
     {
       "part_number": "V29C31002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -8073,6 +8664,7 @@
     },
     {
       "part_number": "V29C31004B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -8092,6 +8684,7 @@
     },
     {
       "part_number": "V29C31004T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -8111,6 +8704,7 @@
     },
     {
       "part_number": "V29C51001B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -8130,6 +8724,7 @@
     },
     {
       "part_number": "V29C51001T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -8149,6 +8744,7 @@
     },
     {
       "part_number": "V29C51002B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -8168,6 +8764,7 @@
     },
     {
       "part_number": "V29C51002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -8187,6 +8784,7 @@
     },
     {
       "part_number": "V29C51004B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -8206,6 +8804,7 @@
     },
     {
       "part_number": "V29C51004T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -8225,6 +8824,7 @@
     },
     {
       "part_number": "V29LC51000",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -8244,6 +8844,7 @@
     },
     {
       "part_number": "V29LC51001",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -8263,6 +8864,7 @@
     },
     {
       "part_number": "V29LC51002",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -8284,6 +8886,7 @@
   "NEC": [
     {
       "part_number": "UPD27128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -8303,6 +8906,7 @@
     },
     {
       "part_number": "UPD27256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -8322,6 +8926,7 @@
     },
     {
       "part_number": "UPD27512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -8341,6 +8946,7 @@
     },
     {
       "part_number": "UPD2764,UPD2764C,UPD2764D",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -8360,6 +8966,7 @@
     },
     {
       "part_number": "UPD27C1001A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -8379,6 +8986,7 @@
     },
     {
       "part_number": "UPD27C128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -8398,6 +9006,7 @@
     },
     {
       "part_number": "UPD27C2001",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -8417,6 +9026,7 @@
     },
     {
       "part_number": "UPD27C256A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -8436,6 +9046,7 @@
     },
     {
       "part_number": "UPD27C4001",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -8455,6 +9066,7 @@
     },
     {
       "part_number": "UPD27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -8474,6 +9086,7 @@
     },
     {
       "part_number": "UPD27C8001",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 1048576,
@@ -8492,7 +9105,29 @@
       "pinout": "DIP32_STD"
     },
     {
+      "part_number": "UPD28C04",
+      "support_status": "adapter-required",
+      "electrical": {
+        "type": "UV-EPROM",
+        "size_bytes": 512,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vdd": "5V",
+        "vcc": "5V"
+      },
+      "programming": {
+        "algorithm": 11,
+        "pulse_duration": "100000 us",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+    },
+    {
       "part_number": "UPD28C256",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -8512,6 +9147,7 @@
     },
     {
       "part_number": "UPD28C64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -8533,6 +9169,7 @@
   "NEXFLASH": [
     {
       "part_number": "NX29F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -8554,6 +9191,7 @@
   "NSC": [
     {
       "part_number": "NM27C010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -8573,6 +9211,7 @@
     },
     {
       "part_number": "NM27C020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -8592,6 +9231,7 @@
     },
     {
       "part_number": "NM27C040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -8611,6 +9251,7 @@
     },
     {
       "part_number": "NM27C64Q,NMC27C64Q",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -8630,6 +9271,7 @@
     },
     {
       "part_number": "NM27C128,NMC27C128B,NMC27C128C",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -8649,6 +9291,7 @@
     },
     {
       "part_number": "NM27C256,NM27LC256,NMC27C256B,NMC27C256Q,NMC87C257Q,NMC87C257V",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -8668,6 +9311,7 @@
     },
     {
       "part_number": "NM27C512,NM27LC512,NM27P512,NMC27C512A,NMC27C512Q",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -8687,6 +9331,7 @@
     },
     {
       "part_number": "NM27LC010,NM27P010,NMC27C010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -8706,6 +9351,7 @@
     },
     {
       "part_number": "NM27LC64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -8725,6 +9371,7 @@
     },
     {
       "part_number": "NM27LV010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -8744,6 +9391,7 @@
     },
     {
       "part_number": "NM27LV020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -8763,6 +9411,7 @@
     },
     {
       "part_number": "NM27LV040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -8782,6 +9431,7 @@
     },
     {
       "part_number": "NM27LV512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -8801,6 +9451,7 @@
     },
     {
       "part_number": "NM27P020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -8820,6 +9471,7 @@
     },
     {
       "part_number": "NM27P040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -8839,6 +9491,7 @@
     },
     {
       "part_number": "NMC2732",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -8858,6 +9511,7 @@
     },
     {
       "part_number": "NMC27C16",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -8877,6 +9531,7 @@
     },
     {
       "part_number": "NMC27C16B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -8896,6 +9551,7 @@
     },
     {
       "part_number": "NMC27C16Q",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -8915,6 +9571,7 @@
     },
     {
       "part_number": "NMC27C32B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -8936,6 +9593,7 @@
   "OKI": [
     {
       "part_number": "MSM27C201",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -8955,6 +9613,7 @@
     },
     {
       "part_number": "MSM27C401",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -8974,6 +9633,7 @@
     },
     {
       "part_number": "MSM27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -8993,6 +9653,7 @@
     },
     {
       "part_number": "MSM27C1000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -9012,6 +9673,7 @@
     },
     {
       "part_number": "MSM27C2000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -9033,6 +9695,7 @@
   "PHILIPS": [
     {
       "part_number": "27C010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -9052,6 +9715,7 @@
     },
     {
       "part_number": "27C040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -9071,6 +9735,7 @@
     },
     {
       "part_number": "27C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -9090,6 +9755,7 @@
     },
     {
       "part_number": "27C512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -9111,6 +9777,7 @@
   "PMC": [
     {
       "part_number": "PM29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -9130,6 +9797,7 @@
     },
     {
       "part_number": "PM29F002B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -9149,6 +9817,7 @@
     },
     {
       "part_number": "PM29F004T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -9168,6 +9837,7 @@
     },
     {
       "part_number": "PM29F004B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -9187,6 +9857,7 @@
     },
     {
       "part_number": "PM39F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -9206,6 +9877,7 @@
     },
     {
       "part_number": "PM39F020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -9225,6 +9897,7 @@
     },
     {
       "part_number": "PM39F040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -9246,6 +9919,7 @@
   "PTC": [
     {
       "part_number": "PT28C010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -9265,6 +9939,7 @@
     },
     {
       "part_number": "PT28C020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -9284,6 +9959,7 @@
     },
     {
       "part_number": "PT28C040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -9305,6 +9981,7 @@
   "RAMTRON": [
     {
       "part_number": "FM1208",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 2048,
@@ -9324,6 +10001,7 @@
     },
     {
       "part_number": "FM1608",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -9343,6 +10021,7 @@
     },
     {
       "part_number": "FM16W08",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -9362,6 +10041,7 @@
     },
     {
       "part_number": "FM1808,FM1808B,FM18W08",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -9381,6 +10061,7 @@
     },
     {
       "part_number": "FM18L08",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -9402,6 +10083,7 @@
   "SAMSUNG": [
     {
       "part_number": "KM28C64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -9421,6 +10103,7 @@
     },
     {
       "part_number": "KM28C64A,KM28C65A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -9442,12 +10125,13 @@
   "SGS-THOMSON": [
     {
       "part_number": "ETC2716,M2716",
+      "support_status": "vpp-exceeds-max",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
         "pin_count": 24,
-        "vpp": "18V",
-        "vpp_mv": 18000,
+        "vpp": "25V",
+        "vpp_mv": 25000,
         "vdd": "5V",
         "vcc": "5V"
       },
@@ -9457,10 +10141,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "VPP 25V exceeds RURP ceiling (22V); cannot program on this hardware"
     },
     {
       "part_number": "ETC2732",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -9480,6 +10166,7 @@
     },
     {
       "part_number": "M23C1001",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -9499,6 +10186,7 @@
     },
     {
       "part_number": "M23C2001",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -9518,6 +10206,7 @@
     },
     {
       "part_number": "M23C4001",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -9537,6 +10226,7 @@
     },
     {
       "part_number": "M27128A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -9556,6 +10246,7 @@
     },
     {
       "part_number": "M27256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -9575,12 +10266,13 @@
     },
     {
       "part_number": "M2732A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
         "pin_count": 24,
-        "vpp": "18V",
-        "vpp_mv": 18000,
+        "vpp": "21V",
+        "vpp_mv": 21000,
         "vdd": "5V",
         "vcc": "5V"
       },
@@ -9594,6 +10286,7 @@
     },
     {
       "part_number": "M27512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -9613,6 +10306,7 @@
     },
     {
       "part_number": "M2764A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -9632,6 +10326,7 @@
     },
     {
       "part_number": "M27C1000",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -9651,6 +10346,7 @@
     },
     {
       "part_number": "M27C1001,M27V101",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -9670,6 +10366,7 @@
     },
     {
       "part_number": "M27C2001,M27V201,M27W201",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -9689,6 +10386,7 @@
     },
     {
       "part_number": "M27C256B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -9708,6 +10406,7 @@
     },
     {
       "part_number": "M27C4001,M27V401",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -9727,6 +10426,7 @@
     },
     {
       "part_number": "M27C512,M27V512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -9746,6 +10446,7 @@
     },
     {
       "part_number": "M27C64A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -9765,6 +10466,7 @@
     },
     {
       "part_number": "M27C801",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 1048576,
@@ -9784,6 +10486,7 @@
     },
     {
       "part_number": "M28010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -9803,6 +10506,7 @@
     },
     {
       "part_number": "M28C64,M28C64A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -9822,6 +10526,7 @@
     },
     {
       "part_number": "M28C64-xxW",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -9841,6 +10546,7 @@
     },
     {
       "part_number": "M28F101",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -9860,6 +10566,7 @@
     },
     {
       "part_number": "M28F201",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -9879,6 +10586,7 @@
     },
     {
       "part_number": "M28F256",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -9898,6 +10606,7 @@
     },
     {
       "part_number": "M28F512,M28F512B,M28F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -9917,6 +10626,7 @@
     },
     {
       "part_number": "M29F002B,M29F002BB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -9936,6 +10646,7 @@
     },
     {
       "part_number": "M29F002BT,M29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -9955,6 +10666,7 @@
     },
     {
       "part_number": "M29F002BNT,M29F002NT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -9974,6 +10686,7 @@
     },
     {
       "part_number": "M29F002BNB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -9993,6 +10706,7 @@
     },
     {
       "part_number": "M29F010B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -10012,6 +10726,7 @@
     },
     {
       "part_number": "M29F040B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -10031,6 +10746,7 @@
     },
     {
       "part_number": "M29F512B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -10050,6 +10766,7 @@
     },
     {
       "part_number": "M87C257",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -10069,6 +10786,7 @@
     },
     {
       "part_number": "M87C257(8D)",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -10088,6 +10806,7 @@
     },
     {
       "part_number": "ST27128A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -10107,6 +10826,7 @@
     },
     {
       "part_number": "ST27256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -10126,6 +10846,7 @@
     },
     {
       "part_number": "ST2764A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -10145,6 +10866,7 @@
     },
     {
       "part_number": "ST27C256,TS27C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -10164,6 +10886,7 @@
     },
     {
       "part_number": "TS27C64A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -10183,6 +10906,7 @@
     },
     {
       "part_number": "M48T02,M48T12,M48Z02,M48Z12",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 2048,
@@ -10202,6 +10926,7 @@
     },
     {
       "part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -10221,6 +10946,7 @@
     },
     {
       "part_number": "M48T35AY,M48Z35,M48Z35Y,M48Z35AY",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -10240,6 +10966,7 @@
     },
     {
       "part_number": "M48T35AV,M48Z35V,M48Z35AV",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -10259,6 +10986,7 @@
     },
     {
       "part_number": "M48T59,M48T59Y,M48Z59,M48Z59Y",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -10278,6 +11006,7 @@
     },
     {
       "part_number": "M48T59V,M48Z59V",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -10297,6 +11026,7 @@
     },
     {
       "part_number": "M48T128Y,M48T129Y,M48Z128Y,M48Z129Y",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -10316,6 +11046,7 @@
     },
     {
       "part_number": "M48T128V,M48T129V,M48Z128V,M48Z129V",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -10335,6 +11066,7 @@
     },
     {
       "part_number": "M48T512Y,M48T513Y,M48Z512Y",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -10354,6 +11086,7 @@
     },
     {
       "part_number": "M48T512V,M48T513V,M48Z512V",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -10375,6 +11108,7 @@
   "SPANSION(1)": [
     {
       "part_number": "AM29F002B,AM29F002BB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -10394,6 +11128,7 @@
     },
     {
       "part_number": "AM29F002BT,AM29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -10413,6 +11148,7 @@
     },
     {
       "part_number": "AM29F002NB,AM29F002NBB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -10432,6 +11168,7 @@
     },
     {
       "part_number": "AM29F002NBT,AM29F002NT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -10451,6 +11188,7 @@
     },
     {
       "part_number": "AM29F010,AM29F010B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -10470,6 +11208,7 @@
     },
     {
       "part_number": "AM29F040,AM29F040B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -10489,6 +11228,7 @@
     },
     {
       "part_number": "MBM29F002B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -10508,6 +11248,7 @@
     },
     {
       "part_number": "MBM29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -10527,6 +11268,7 @@
     },
     {
       "part_number": "MBM29F040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -10548,6 +11290,7 @@
   "SST": [
     {
       "part_number": "SST27SF010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -10567,6 +11310,7 @@
     },
     {
       "part_number": "SST27SF020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -10586,6 +11330,7 @@
     },
     {
       "part_number": "SST27SF256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -10605,6 +11350,7 @@
     },
     {
       "part_number": "SST27SF512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -10624,6 +11370,7 @@
     },
     {
       "part_number": "SST27VF010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -10643,6 +11390,7 @@
     },
     {
       "part_number": "SST27VF020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -10662,6 +11410,7 @@
     },
     {
       "part_number": "SST27VF256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -10681,6 +11430,7 @@
     },
     {
       "part_number": "SST27VF512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -10700,6 +11450,7 @@
     },
     {
       "part_number": "SST28LF040,SST28LF040A,SST28VF040,SST28VF040A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -10719,6 +11470,7 @@
     },
     {
       "part_number": "SST28SF040,SST28SF040A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -10738,6 +11490,7 @@
     },
     {
       "part_number": "SST29EE010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -10757,6 +11510,7 @@
     },
     {
       "part_number": "SST29EE020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -10776,6 +11530,7 @@
     },
     {
       "part_number": "SST29EE512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -10795,6 +11550,7 @@
     },
     {
       "part_number": "SST29LE010,SST29VE010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -10814,6 +11570,7 @@
     },
     {
       "part_number": "SST29LE020,SST29VE020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -10833,6 +11590,7 @@
     },
     {
       "part_number": "SST29LE512,SST29VE512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -10852,6 +11610,7 @@
     },
     {
       "part_number": "SST29SF010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -10871,6 +11630,7 @@
     },
     {
       "part_number": "SST29SF020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -10890,6 +11650,7 @@
     },
     {
       "part_number": "SST29SF040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -10909,6 +11670,7 @@
     },
     {
       "part_number": "SST29SF512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -10928,6 +11690,7 @@
     },
     {
       "part_number": "SST29VF010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -10947,6 +11710,7 @@
     },
     {
       "part_number": "SST29VF020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -10966,6 +11730,7 @@
     },
     {
       "part_number": "SST29VF040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -10985,6 +11750,7 @@
     },
     {
       "part_number": "SST29VF512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -11004,6 +11770,7 @@
     },
     {
       "part_number": "SST37VF010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -11023,6 +11790,7 @@
     },
     {
       "part_number": "SST37VF020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -11042,6 +11810,7 @@
     },
     {
       "part_number": "SST37VF040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -11061,6 +11830,7 @@
     },
     {
       "part_number": "SST37VF512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -11080,6 +11850,7 @@
     },
     {
       "part_number": "SST39LH010,SST39VF010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -11099,6 +11870,7 @@
     },
     {
       "part_number": "SST39LH020,SST39VF020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -11118,6 +11890,7 @@
     },
     {
       "part_number": "SST39LH040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -11137,6 +11910,7 @@
     },
     {
       "part_number": "SST39LH512,SST39VF512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -11156,6 +11930,7 @@
     },
     {
       "part_number": "SST39SF010,SST39SF010A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -11175,6 +11950,7 @@
     },
     {
       "part_number": "SST39SF020,SST39SF020A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -11194,6 +11970,7 @@
     },
     {
       "part_number": "SST39SF040",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -11213,6 +11990,7 @@
     },
     {
       "part_number": "SST39SF512,SST39SF512A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -11232,6 +12010,7 @@
     },
     {
       "part_number": "SST39VF040,SST39VF040A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -11253,12 +12032,13 @@
   "ST": [
     {
       "part_number": "ETC2716,M2716",
+      "support_status": "vpp-exceeds-max",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
         "pin_count": 24,
-        "vpp": "18V",
-        "vpp_mv": 18000,
+        "vpp": "25V",
+        "vpp_mv": 25000,
         "vdd": "5V",
         "vcc": "5V"
       },
@@ -11268,10 +12048,12 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "VPP 25V exceeds RURP ceiling (22V); cannot program on this hardware"
     },
     {
       "part_number": "ETC2732",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -11291,6 +12073,7 @@
     },
     {
       "part_number": "M27128A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -11310,6 +12093,7 @@
     },
     {
       "part_number": "M27256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -11329,12 +12113,13 @@
     },
     {
       "part_number": "M2732A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
         "pin_count": 24,
-        "vpp": "18V",
-        "vpp_mv": 18000,
+        "vpp": "21V",
+        "vpp_mv": 21000,
         "vdd": "5V",
         "vcc": "5V"
       },
@@ -11348,6 +12133,7 @@
     },
     {
       "part_number": "M27512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -11367,6 +12153,7 @@
     },
     {
       "part_number": "M2764A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -11386,6 +12173,7 @@
     },
     {
       "part_number": "M27C1001,M27V101,M27W101",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -11405,6 +12193,7 @@
     },
     {
       "part_number": "M27C2001,M27V201,M27W201",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -11424,6 +12213,7 @@
     },
     {
       "part_number": "M27C256B",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -11443,6 +12233,7 @@
     },
     {
       "part_number": "M27C256B(2)",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -11462,6 +12253,7 @@
     },
     {
       "part_number": "M27C4001,M27V401,M27W401",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -11481,6 +12273,7 @@
     },
     {
       "part_number": "M27C512,M27V512,M27W512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -11500,6 +12293,7 @@
     },
     {
       "part_number": "M27C64A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -11519,6 +12313,7 @@
     },
     {
       "part_number": "M27C801",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 1048576,
@@ -11538,6 +12333,7 @@
     },
     {
       "part_number": "M28010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -11557,6 +12353,7 @@
     },
     {
       "part_number": "M28256",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -11576,6 +12373,7 @@
     },
     {
       "part_number": "M28C64,M28C64A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -11595,6 +12393,7 @@
     },
     {
       "part_number": "M28C64-xxW",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -11614,6 +12413,7 @@
     },
     {
       "part_number": "M28F101",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -11633,6 +12433,7 @@
     },
     {
       "part_number": "M28F201",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -11652,6 +12453,7 @@
     },
     {
       "part_number": "M28F256",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 32768,
@@ -11671,6 +12473,7 @@
     },
     {
       "part_number": "M28F512,M28F512B,M28F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -11690,6 +12493,7 @@
     },
     {
       "part_number": "M28LV64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -11709,6 +12513,7 @@
     },
     {
       "part_number": "M29F002B,M29F002BB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -11728,6 +12533,7 @@
     },
     {
       "part_number": "M29F002BT,M29F002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -11747,6 +12553,7 @@
     },
     {
       "part_number": "M29F002BNT,M29F002NT",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -11766,6 +12573,7 @@
     },
     {
       "part_number": "M29F002BNB",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -11785,6 +12593,7 @@
     },
     {
       "part_number": "M29F010B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -11804,6 +12613,7 @@
     },
     {
       "part_number": "M29F040B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -11823,6 +12633,7 @@
     },
     {
       "part_number": "M29F512B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -11842,6 +12653,7 @@
     },
     {
       "part_number": "M87C257",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -11861,6 +12673,7 @@
     },
     {
       "part_number": "M87C257(8D)",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -11880,6 +12693,7 @@
     },
     {
       "part_number": "ST27128A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -11899,6 +12713,7 @@
     },
     {
       "part_number": "ST27256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -11918,6 +12733,7 @@
     },
     {
       "part_number": "ST2764A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -11937,6 +12753,7 @@
     },
     {
       "part_number": "ST27C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -11956,6 +12773,7 @@
     },
     {
       "part_number": "TS27C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -11975,6 +12793,7 @@
     },
     {
       "part_number": "TS27C64A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -11994,6 +12813,7 @@
     },
     {
       "part_number": "M48T02,M48T12",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 2048,
@@ -12013,6 +12833,7 @@
     },
     {
       "part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -12032,6 +12853,7 @@
     },
     {
       "part_number": "M48T35AY",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -12051,6 +12873,7 @@
     },
     {
       "part_number": "M48T35AV",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -12070,6 +12893,7 @@
     },
     {
       "part_number": "M48T59,M48T59Y",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -12089,6 +12913,7 @@
     },
     {
       "part_number": "M48T59V",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -12108,6 +12933,7 @@
     },
     {
       "part_number": "M48T128Y,M48T129Y",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -12127,6 +12953,7 @@
     },
     {
       "part_number": "M48T128V,M48T129V",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -12146,6 +12973,7 @@
     },
     {
       "part_number": "M48T512Y,M48T513Y",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -12165,6 +12993,7 @@
     },
     {
       "part_number": "M48T512V,M48T513V",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -12186,6 +13015,7 @@
   "SYNCMOS": [
     {
       "part_number": "F29C31004B,S29C31004B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -12205,6 +13035,7 @@
     },
     {
       "part_number": "F29C31004T,S29C31004T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -12224,6 +13055,7 @@
     },
     {
       "part_number": "F29C51001B,S29C51001B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -12243,6 +13075,7 @@
     },
     {
       "part_number": "F29C51001T,S29C51001T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -12262,6 +13095,7 @@
     },
     {
       "part_number": "F29C51002B,S29C51002B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -12281,6 +13115,7 @@
     },
     {
       "part_number": "F29C51002T,S29C51002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -12300,6 +13135,7 @@
     },
     {
       "part_number": "F29C51004B,S29C51004B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -12319,6 +13155,7 @@
     },
     {
       "part_number": "F29C51004T,S29C51004T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -12338,6 +13175,7 @@
     },
     {
       "part_number": "F29LC51000",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -12357,6 +13195,7 @@
     },
     {
       "part_number": "F29LC51001",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -12376,6 +13215,7 @@
     },
     {
       "part_number": "F29LC51002",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -12395,6 +13235,7 @@
     },
     {
       "part_number": "S29C31001B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -12414,6 +13255,7 @@
     },
     {
       "part_number": "S29C31001T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -12433,6 +13275,7 @@
     },
     {
       "part_number": "S29C31002B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -12452,6 +13295,7 @@
     },
     {
       "part_number": "S29C31002T",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -12473,6 +13317,7 @@
   "TI": [
     {
       "part_number": "SMJ27C128,TMS27C128,TMS27PC128",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -12492,6 +13337,7 @@
     },
     {
       "part_number": "SMJ27C256,TMS27C256,TMS27PC256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -12511,6 +13357,7 @@
     },
     {
       "part_number": "SMJ27C512,TMS27C512,TMS27PC512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -12530,6 +13377,7 @@
     },
     {
       "part_number": "TMS2716",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -12549,6 +13397,7 @@
     },
     {
       "part_number": "TMS2732A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 4096,
@@ -12568,6 +13417,7 @@
     },
     {
       "part_number": "TMS2764",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -12587,6 +13437,7 @@
     },
     {
       "part_number": "TMS27C010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -12606,6 +13457,7 @@
     },
     {
       "part_number": "TMS27C010A,TMS27PC010A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -12625,6 +13477,7 @@
     },
     {
       "part_number": "TMS27C020,TMS27PC020",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -12644,6 +13497,7 @@
     },
     {
       "part_number": "TMS27C040,TMS27PC040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -12663,6 +13517,7 @@
     },
     {
       "part_number": "TMS27C64,TMS27PC64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -12682,6 +13537,7 @@
     },
     {
       "part_number": "TMS28F010,TMS28F010A,TMS28F010B",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -12701,6 +13557,7 @@
     },
     {
       "part_number": "TMS28F020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -12720,6 +13577,7 @@
     },
     {
       "part_number": "TMS87C257",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -12739,6 +13597,7 @@
     },
     {
       "part_number": "BQ4010YMA(RW)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -12758,6 +13617,7 @@
     },
     {
       "part_number": "BQ4010YMA(TEST)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -12777,6 +13637,7 @@
     },
     {
       "part_number": "BQ4011YMA(RW)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -12796,6 +13657,7 @@
     },
     {
       "part_number": "BQ4011YMA(TEST)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -12815,6 +13677,7 @@
     },
     {
       "part_number": "BQ4011LYMA(RW3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -12834,6 +13697,7 @@
     },
     {
       "part_number": "BQ4011LYMA(TEST3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -12853,6 +13717,7 @@
     },
     {
       "part_number": "BQ4013YMA(RW)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -12872,6 +13737,7 @@
     },
     {
       "part_number": "BQ4013YMA(TEST)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -12891,6 +13757,7 @@
     },
     {
       "part_number": "BQ4013LYMA(RW3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -12910,6 +13777,7 @@
     },
     {
       "part_number": "BQ4013LYMA(TEST3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -12929,6 +13797,7 @@
     },
     {
       "part_number": "BQ4014YMA(RW)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 262144,
@@ -12948,6 +13817,7 @@
     },
     {
       "part_number": "BQ4014YMA(TEST)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 262144,
@@ -12967,6 +13837,7 @@
     },
     {
       "part_number": "BQ4014LYMA(RW3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 262144,
@@ -12986,6 +13857,7 @@
     },
     {
       "part_number": "BQ4014LYMA(TEST3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 262144,
@@ -13005,6 +13877,7 @@
     },
     {
       "part_number": "BQ4015YMA(RW)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -13024,6 +13897,7 @@
     },
     {
       "part_number": "BQ4015YMA(TEST)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -13043,6 +13917,7 @@
     },
     {
       "part_number": "BQ4015LYMA(RW3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -13062,6 +13937,7 @@
     },
     {
       "part_number": "BQ4015LYMA(TEST3.3V)",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -13083,6 +13959,7 @@
   "TOSHIBA/KIOXIA": [
     {
       "part_number": "TC54256AF,TC54256AP",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -13102,6 +13979,7 @@
     },
     {
       "part_number": "TC57256D",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -13121,6 +13999,7 @@
     },
     {
       "part_number": "TC57512AD",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -13142,6 +14021,7 @@
   "WED": [
     {
       "part_number": "WE128K8",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -13161,6 +14041,7 @@
     },
     {
       "part_number": "WE256K8",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -13180,6 +14061,7 @@
     },
     {
       "part_number": "WE512K8",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -13199,6 +14081,7 @@
     },
     {
       "part_number": "WME128K8",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -13220,6 +14103,7 @@
   "WINBOND": [
     {
       "part_number": "W27C01,W27C010,W27E01,W27E010,W27L01,W27L010",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -13239,6 +14123,7 @@
     },
     {
       "part_number": "W27C02,W27C020,W27E02,W27E020,W27L02",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 262144,
@@ -13258,6 +14143,7 @@
     },
     {
       "part_number": "W27C04,W27C040,W27E040",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 524288,
@@ -13277,6 +14163,7 @@
     },
     {
       "part_number": "W27C257",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -13296,6 +14183,7 @@
     },
     {
       "part_number": "W27C512,W27E512",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -13315,6 +14203,7 @@
     },
     {
       "part_number": "W27E257",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -13334,6 +14223,7 @@
     },
     {
       "part_number": "W29C010,W29C011,W29C011A,W29EE010,W29EE012",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -13353,6 +14243,7 @@
     },
     {
       "part_number": "W29C020,W29C020C,W29C022",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -13372,6 +14263,7 @@
     },
     {
       "part_number": "W29C040,W29C042",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -13391,6 +14283,7 @@
     },
     {
       "part_number": "W29C512,W29EE512",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 65536,
@@ -13410,6 +14303,7 @@
     },
     {
       "part_number": "W29EE011",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -13429,6 +14323,7 @@
     },
     {
       "part_number": "W39F010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -13448,6 +14343,7 @@
     },
     {
       "part_number": "W39L040A",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 524288,
@@ -13467,6 +14363,7 @@
     },
     {
       "part_number": "W49F002,W49F002A,W49F002B,W49F002U",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -13486,6 +14383,7 @@
     },
     {
       "part_number": "W49F020",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 262144,
@@ -13505,6 +14403,7 @@
     },
     {
       "part_number": "W24010",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -13524,6 +14423,7 @@
     },
     {
       "part_number": "W24020",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 262144,
@@ -13543,6 +14443,7 @@
     },
     {
       "part_number": "W24040",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,
@@ -13562,6 +14463,7 @@
     },
     {
       "part_number": "W24256,W24257A",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -13581,6 +14483,7 @@
     },
     {
       "part_number": "W24512",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 65536,
@@ -13600,6 +14503,7 @@
     },
     {
       "part_number": "W2464,W2465",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -13621,6 +14525,7 @@
   "WSI": [
     {
       "part_number": "WS27C010F",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -13640,6 +14545,7 @@
     },
     {
       "part_number": "WS27C010L",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 131072,
@@ -13659,6 +14565,7 @@
     },
     {
       "part_number": "WS27C128F",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -13678,6 +14585,7 @@
     },
     {
       "part_number": "WS27C256L",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -13697,6 +14605,7 @@
     },
     {
       "part_number": "WS27C512F,WS27C512L",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 65536,
@@ -13716,6 +14625,7 @@
     },
     {
       "part_number": "WS27C64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -13735,6 +14645,7 @@
     },
     {
       "part_number": "WS57C128FB",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 16384,
@@ -13754,6 +14665,7 @@
     },
     {
       "part_number": "WS57C256F",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -13775,6 +14687,7 @@
   "XICOR": [
     {
       "part_number": "X2804A,X2804AI",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 512,
@@ -13794,6 +14707,7 @@
     },
     {
       "part_number": "X2816A",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -13813,6 +14727,7 @@
     },
     {
       "part_number": "X2816B,X2816C",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 2048,
@@ -13832,6 +14747,7 @@
     },
     {
       "part_number": "X28256,X28C256",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 32768,
@@ -13851,6 +14767,7 @@
     },
     {
       "part_number": "X2864AP",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -13870,6 +14787,7 @@
     },
     {
       "part_number": "X28C010",
+      "support_status": "supported",
       "electrical": {
         "type": "Flash/EEPROM",
         "size_bytes": 131072,
@@ -13889,6 +14807,7 @@
     },
     {
       "part_number": "X28C64,X28HC64",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -13908,6 +14827,7 @@
     },
     {
       "part_number": "X28C64(NonStandard),X28HC64(NonStandard)",
+      "support_status": "supported",
       "electrical": {
         "type": "UV-EPROM",
         "size_bytes": 8192,
@@ -13924,11 +14844,33 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP28_28C64"
+    },
+    {
+      "part_number": "X88C64P,X88C64S",
+      "support_status": "protocol-not-implemented",
+      "electrical": {
+        "type": "UV-EPROM",
+        "size_bytes": 8192,
+        "pin_count": 24,
+        "vpp": "12V",
+        "vpp_mv": 12000,
+        "vdd": "5V",
+        "vcc": "5V"
+      },
+      "programming": {
+        "algorithm": 52,
+        "pulse_duration": "Algorithm Controlled",
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000"
+      },
+      "pinout": "DIP24_2716",
+      "unsupported_reason": "Protocol 0x34 (XICOR NovRAM serial-parallel hybrid) is not implemented on this hardware"
     }
   ],
   "Standard SRAM": [
     {
       "part_number": "6116",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 2048,
@@ -13948,6 +14890,7 @@
     },
     {
       "part_number": "6164,6264",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 8192,
@@ -13967,6 +14910,7 @@
     },
     {
       "part_number": "61256,62256",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 32768,
@@ -13986,6 +14930,7 @@
     },
     {
       "part_number": "61512,62512",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 65536,
@@ -14005,6 +14950,7 @@
     },
     {
       "part_number": "628128",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 131072,
@@ -14024,6 +14970,7 @@
     },
     {
       "part_number": "628256",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 262144,
@@ -14043,6 +14990,7 @@
     },
     {
       "part_number": "628512",
+      "support_status": "supported",
       "electrical": {
         "type": "SRAM",
         "size_bytes": 524288,

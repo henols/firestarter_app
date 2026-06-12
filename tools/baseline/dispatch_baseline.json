@@ -1,8 +1,8 @@
 {
   "meta": {
-    "generated": "2026-06-10",
-    "db_chip_count": 734,
-    "description": "Dispatch baseline: protocol -> handler mapping for every DB chip, captured before Phase 64 fail-closed guard lands."
+    "generated": "2026-06-12",
+    "db_chip_count": 744,
+    "description": "Dispatch baseline: protocol -> handler mapping for every DB chip, captured after Phase 66 DB inclusion + VPP correction (D-11 authorized deviation)."
   },
   "chips": [
     {
@@ -743,11 +743,43 @@
     },
     {
       "manufacturer": "ATMEL",
+      "part": "AT28C04,AT28HC04",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
       "part": "AT28C040,AT28C040E",
       "algorithm": "EEPROM_POLL",
       "algorithm_id": "0x0D",
       "mem_type": 1,
       "resolved_handler": "configure_eeprom28c"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28C04E,AT28C04F",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28C16,AT28HC16,AT28HC16L",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "ATMEL",
+      "part": "AT28C16E,AT28C16F",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
     },
     {
       "manufacturer": "ATMEL",
@@ -3247,6 +3279,38 @@
     },
     {
       "manufacturer": "MICROCHIP memory",
+      "part": "28C04A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "28C04AF",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "28C16A",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
+      "part": "28C16AF",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "MICROCHIP memory",
       "part": "28C17A",
       "algorithm": "EPROM_STD",
       "algorithm_id": "0x07",
@@ -3546,6 +3610,14 @@
       "part": "UPD27C8001",
       "algorithm": "EPROM_QUICK",
       "algorithm_id": "0x08",
+      "mem_type": 1,
+      "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "NEC",
+      "part": "UPD28C04",
+      "algorithm": "EPROM_LEGACY",
+      "algorithm_id": "0x0B",
       "mem_type": 1,
       "resolved_handler": "configure_eprom"
     },
@@ -5876,6 +5948,14 @@
       "algorithm_id": "0x07",
       "mem_type": 1,
       "resolved_handler": "configure_eprom"
+    },
+    {
+      "manufacturer": "XICOR",
+      "part": "X88C64P,X88C64S",
+      "algorithm": "UNKNOWN_0x34",
+      "algorithm_id": "0x34",
+      "mem_type": null,
+      "resolved_handler": "not_implemented"
     }
   ]
 }

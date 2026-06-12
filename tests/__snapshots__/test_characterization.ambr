@@ -453,7 +453,11 @@
   | AT28BV64B,AT28LV64B| ATMEL            |   28 |            | EPROM       |   0v|
   | AT28BV256,AT28LV256| ATMEL            |   28 |            | EPROM       |   0v|
   | AT28C010,AT28C010E| ATMEL            |   32 |            | EPROM       | 12.0v|
+  | AT28C04,AT28HC04| ATMEL            |   24 |            | EPROM       | 12.0v|
+  | AT28C04E,AT28C04F| ATMEL            |   24 |            | EPROM       | 12.0v|
   | AT28C040,AT28C040E| ATMEL            |   32 |            | EPROM       | 12.0v|
+  | AT28C16,AT28HC16,AT28HC16L| ATMEL            |   24 |            | EPROM       | 12.0v|
+  | AT28C16E,AT28C16F| ATMEL            |   24 |            | EPROM       | 12.0v|
   | AT28C17      | ATMEL            |   28 |            | EPROM       | 12.0v|
   | AT28C17E,AT28C17F| ATMEL            |   28 |            | EPROM       | 12.0v|
   | AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L| ATMEL            |   28 |            | EPROM       | 12.0v|
@@ -674,13 +678,13 @@
   | IM29LV004T   | IMT              |   32 | 0x7FA7     | Flash type 3|   - |
   | D27011       | INTEL            |   28 | 0x8985     | EPROM       | 13.0v|
   | D27C011      | INTEL            |   28 | 0x8931     | EPROM       | 13.0v|
-  | 2732,2732A,M2732,M2732A| INTEL            |   24 |            | EPROM       | 18.0v|
+  | 2732,2732A,M2732,M2732A| INTEL            |   24 |            | EPROM       | 25.0v|
   | 2764         | INTEL            |   28 | 0x8908     | EPROM       | 18.0v|
   | 2764A        | INTEL            |   28 | 0x8908     | EPROM       | 12.0v|
   | 27128,D27128 | INTEL            |   28 | 0x8989     | EPROM       | 18.0v|
   | 27128A,D27128A,D27128B| INTEL            |   28 | 0x8989     | EPROM       | 12.0v|
   | D27256,M27256| INTEL            |   28 | 0x8904     | EPROM       | 12.0v|
-  | M2716,M2716M | INTEL            |   24 |            | EPROM       | 18.0v|
+  | M2716,M2716M | INTEL            |   24 |            | EPROM       | 25.0v|
   | P27256       | INTEL            |   28 | 0x8804     | EPROM       | 12.0v|
   | 27512        | INTEL            |   28 | 0x890D     | EPROM       | 12.0v|
   | 27C010,27C010A| INTEL            |   32 | 0x8935     | EPROM       | 12.0v|
@@ -766,6 +770,10 @@
   | 2804         | MICROCHIP memory |   24 |            | EPROM       | 12.0v|
   | 2816         | MICROCHIP memory |   24 |            | EPROM       | 12.0v|
   | 2817         | MICROCHIP memory |   28 |            | EPROM       | 12.0v|
+  | 28C04A       | MICROCHIP memory |   24 |            | EPROM       | 12.0v|
+  | 28C04AF      | MICROCHIP memory |   24 |            | EPROM       | 12.0v|
+  | 28C16A       | MICROCHIP memory |   24 |            | EPROM       | 12.0v|
+  | 28C16AF      | MICROCHIP memory |   24 |            | EPROM       | 12.0v|
   | 28C17A       | MICROCHIP memory |   28 |            | EPROM       | 12.0v|
   | 28C17AF      | MICROCHIP memory |   28 |            | EPROM       | 12.0v|
   | 28C256,28C256F| MICROCHIP memory |   28 |            | EPROM       | 12.0v|
@@ -804,6 +812,7 @@
   | UPD27C4001   | NEC              |   32 |            | EPROM       | 12.0v|
   | UPD27C512    | NEC              |   28 |            | EPROM       | 12.0v|
   | UPD27C8001   | NEC              |   32 |            | EPROM       | 12.0v|
+  | UPD28C04     | NEC              |   24 |            | EPROM       | 12.0v|
   | UPD28C256    | NEC              |   28 |            | EPROM       | 12.0v|
   | UPD28C64     | NEC              |   28 |            | EPROM       | 12.0v|
   | NX29F010     | NEXFLASH         |   32 | 0x0120     | Flash type 3|   - |
@@ -853,14 +862,14 @@
   | FM18L08      | RAMTRON          |   28 |            | SRAM        |   - |
   | KM28C64      | SAMSUNG          |   28 |            | EPROM       | 12.0v|
   | KM28C64A,KM28C65A| SAMSUNG          |   28 |            | EPROM       | 12.0v|
-  | ETC2716,M2716| SGS-THOMSON      |   24 |            | EPROM       | 18.0v|
+  | ETC2716,M2716| SGS-THOMSON      |   24 |            | EPROM       | 25.0v|
   | ETC2732      | SGS-THOMSON      |   24 |            | EPROM       | 18.0v|
   | M23C1001     | SGS-THOMSON      |   32 |            | EPROM       | 12.0v|
   | M23C2001     | SGS-THOMSON      |   32 |            | EPROM       | 12.0v|
   | M23C4001     | SGS-THOMSON      |   32 |            | EPROM       | 12.0v|
   | M27128A      | SGS-THOMSON      |   28 | 0x2089     | EPROM       | 12.0v|
   | M27256       | SGS-THOMSON      |   28 | 0x2004     | EPROM       | 12.0v|
-  | M2732A       | SGS-THOMSON      |   24 |            | EPROM       | 18.0v|
+  | M2732A       | SGS-THOMSON      |   24 |            | EPROM       | 21.0v|
   | M27512       | SGS-THOMSON      |   28 | 0x200D     | EPROM       | 13.0v|
   | M2764A       | SGS-THOMSON      |   28 | 0x2008     | EPROM       | 12.0v|
   | M27C1000     | SGS-THOMSON      |   32 | 0x2086     | EPROM       | 13.0v|
@@ -948,11 +957,11 @@
   | SST39SF040   | SST              |   32 | 0xBFB7     | Flash type 3|   - |
   | SST39SF512,SST39SF512A| SST              |   32 | 0xBFB4     | Flash type 3|   - |
   | SST39VF040,SST39VF040A| SST              |   32 | 0xBFD7     | Flash type 3|   - |
-  | ETC2716,M2716| ST               |   24 |            | EPROM       | 18.0v|
+  | ETC2716,M2716| ST               |   24 |            | EPROM       | 25.0v|
   | ETC2732      | ST               |   24 |            | EPROM       | 18.0v|
   | M27128A      | ST               |   28 | 0x2089     | EPROM       | 12.0v|
   | M27256       | ST               |   28 | 0x2004     | EPROM       | 12.0v|
-  | M2732A       | ST               |   24 |            | EPROM       | 18.0v|
+  | M2732A       | ST               |   24 |            | EPROM       | 21.0v|
   | M27512       | ST               |   28 | 0x200D     | EPROM       | 13.0v|
   | M2764A       | ST               |   28 | 0x2008     | EPROM       | 12.0v|
   | M27C1001,M27V101,M27W101| ST               |   32 | 0x2005     | EPROM       | 13.0v|
@@ -1088,6 +1097,7 @@
   | X28C010      | XICOR            |   32 |            | EPROM       | 12.0v|
   | X28C64,X28HC64| XICOR            |   28 |            | EPROM       | 12.0v|
   | X28C64(NonStandard),X28HC64(NonStandard)| XICOR            |   28 |            | EPROM       | 12.0v|
+  | X88C64P,X88C64S| XICOR            |   24 |            | EPROM       | 12.0v|
   | 6116         | Standard SRAM    |   24 |            | SRAM        |   - |
   | 6164,6264    | Standard SRAM    |   28 |            | SRAM        |   - |
   | 61256,62256  | Standard SRAM    |   28 |            | SRAM        |   - |
