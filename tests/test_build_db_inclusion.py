@@ -4,14 +4,11 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Phase 66 Plan 01 — DB inclusion, VPP correction, and support_status scaffold.
+Phase 66 — DB inclusion, VPP correction, and support_status.
 
-These tests assert the Phase 66 DB-01/02/03/05 behaviors that Plan 03 will
-implement by editing build_db.py and regenerating chip_database.json.
-
-ALL TESTS ARE EXPECTED TO FAIL (RED) until Plan 03 lands. Do NOT mark
-any of them xfail/skip — they must genuinely fail on the current DB so
-Plan 03's regeneration turns them green.
+These tests assert the Phase 66 DB-01/02/03/05 behaviors implemented by
+build_db.py with chip_database.json regenerated at 744 chips (Plan 03),
+and the SC#3 dispatch-safety invariant enforced by Plan 04.
 
 Taxonomy strings (locked — do NOT change wording):
   "supported"                 — normal dispatchable chip
@@ -25,6 +22,7 @@ EpromDatabase.get_eprom() does not expose the top-level support_status field.
 
 import json
 import os
+import sys
 
 _DB_FILE = os.environ.get(
     "FIRESTARTER_DB_FILE",
@@ -68,8 +66,8 @@ class TestProtocolNotImplementedInclusion:
         """After DB regen, XICOR X88C64 or X88C64P appears in chip_database.json
         with support_status == 'protocol-not-implemented'.
 
-        RED: the current DB has no X88C64 entry; it was silently skipped because
-        proto 0x34 is not in KNOWN_PROTOCOLS.
+        GREEN (Plan 03): X88C64P is included with support_status=protocol-not-implemented;
+        proto 0x34 is in KNOWN_PROTOCOLS and the chip passes the inclusion gate.
         """
         db = _load_db()
         found = []
@@ -118,8 +116,8 @@ class TestAdapterRequired24Pin:
         """Nine DIP24 damage-hazard EEPROMs must appear with support_status=
         'adapter-required' and a non-empty unsupported_reason.
 
-        RED: the current DB drops all 9 at the 24-pin EEPROM hazard gate
-        (build_db.py L359-370) and they are absent from chip_database.json.
+        GREEN (Plan 03): the 9 DIP24 damage-hazard EEPROMs are included as adapter-required
+        (build_db.py Site B fall-through with status assignment).
         """
         db = _load_db()
         adapter_chips = [
@@ -165,7 +163,7 @@ class TestNmosVppCorrection:
         """Entries whose aliases include M2716 or M2732 (but not M2732A alone)
         have electrical.vpp_mv == 25000 and support_status == 'vpp-exceeds-max'.
 
-        RED: current DB has vpp_mv=18000 (upstream-truncated) and no support_status.
+        GREEN (Plan 03): NMOS VPP corrected to 25000 mV; support_status=vpp-exceeds-max.
         """
         db = _load_db()
         found = []
@@ -191,7 +189,7 @@ class TestNmosVppCorrection:
         """Entries whose aliases include M2732A (and NOT M2716/M2732) have
         electrical.vpp_mv == 21000 and support_status == 'supported'.
 
-        RED: current DB has vpp_mv=18000 and no support_status.
+        GREEN (Plan 03): M2732A standalone entries have vpp_mv=21000 and support_status=supported.
         """
         db = _load_db()
         found = []
@@ -224,7 +222,7 @@ class TestSupportStatusUniversal:
     def test_every_chip_has_support_status(self):
         """Every chip in chip_database.json must have a top-level 'support_status' key.
 
-        RED: the current DB has no support_status field on any chip.
+        GREEN (Plan 03): every chip carries support_status; 744 chips confirmed.
         """
         db = _load_db()
         missing = [
@@ -241,7 +239,8 @@ class TestSupportStatusUniversal:
         """D-07: supported chips must NOT carry unsupported_reason; non-supported
         chips MUST carry a non-empty unsupported_reason.
 
-        RED: the current DB has neither support_status nor unsupported_reason.
+        GREEN (Plan 03): all 730 supported chips lack unsupported_reason; all 14 non-supported
+        chips carry a non-empty unsupported_reason.
         """
         db = _load_db()
         violations = []
@@ -295,4 +294,60 @@ class TestSerialSmdStillSkipped:
         assert not violations, (
             f"{len(violations)} serial/SMD chip(s) found in DB that must be skipped: "
             f"{violations[:5]}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# SC#3 / D-03 HARD: Non-supported chips must be non-dispatchable (Plan 04)
+# ---------------------------------------------------------------------------
+class TestNonSupportedNonDispatchable:
+    """SC#3 / D-03 HARD: every chip with support_status != 'supported' must
+    dispatch to 'not_implemented' or 'ERROR' — never to a real programming
+    handler (configure_eprom / configure_eeprom28c / configure_flash* /
+    configure_sram).
+
+    This pins the D-03 HARD invariant in CI (IN-03) so a future build_db.py
+    change cannot silently reintroduce the routing defect that was found in
+    66-VERIFICATION.md SC#3.
+
+    GREEN (Plan 04): NON_DISPATCHABLE_ALGO = 0x00 is set at Site B
+    (adapter-required) and Site C (vpp-exceeds-max) in build_db.py; X88C64P
+    keeps proto=0x34 which dispatch() already returns 'not_implemented' for.
+    After DB regen all 14 non-supported chips have non-dispatchable outcomes.
+    """
+
+    def test_non_supported_chips_are_non_dispatchable(self):
+        """For every chip with support_status != 'supported', dispatch(algorithm,
+        mem_type) must return 'not_implemented' or 'ERROR'.
+
+        Violations are enumerated in the failure message so a regression is
+        immediately identifiable by chip name, proto, and resolved handler.
+        """
+        # Inject tools/ onto sys.path so check_dispatch is importable — mirrors
+        # the pattern used by test_decoder.py (self-contained sys.path injection,
+        # not in conftest per 15-PATTERNS.md Critical Note 4).
+        _tools_dir = os.path.join(os.path.dirname(__file__), "..", "tools")
+        if _tools_dir not in sys.path:
+            sys.path.insert(0, _tools_dir)
+        from check_dispatch import _ALGO_MEM_TYPE, dispatch  # noqa: PLC0415
+
+        db = _load_db()
+        violations = []
+        for mfg, chip in _all_chips(db):
+            ss = chip.get("support_status", "supported")
+            if ss == "supported":
+                continue
+            proto = chip.get("programming", {}).get("algorithm", 0) or 0
+            mt = _ALGO_MEM_TYPE.get(proto)
+            handler = dispatch(proto, mt)
+            if handler not in ("not_implemented", "ERROR"):
+                violations.append(
+                    f"{mfg}/{chip.get('part_number', '<unknown>')} "
+                    f"support_status={ss} proto=0x{proto:02X} -> {handler} "
+                    f"(HARD invariant: non-supported chip wired to a real handler)"
+                )
+        assert not violations, (
+            f"{len(violations)} non-supported chip(s) resolve to a real handler "
+            f"(D-03 HARD invariant violated). All violations:\n"
+            + "\n".join(f"  {v}" for v in violations)
         )

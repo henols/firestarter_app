@@ -64,8 +64,12 @@ _28C_EEPROM_HAZARD_PINOUT = "DIP28_2764"
 
 # D-10 consistency assertion 2: a chip tagged support_status=protocol-not-implemented
 # must genuinely have an unimplemented protocol (i.e. proto NOT in KNOWN_PROTOCOLS).
-# Local mirror of build_db.py:83 — source of truth.  Keep in sync if KNOWN_PROTOCOLS
-# changes in build_db.py.
+# IMPORTANT: this set is the INCLUSION-GATE mirror of build_db.py's KNOWN_PROTOCOLS.
+# It is intentionally a SUBSET of that set: 0x34 (XICOR X88C64P) is in build_db.py's
+# KNOWN_PROTOCOLS so it passes the inclusion gate and gets tagged
+# protocol-not-implemented, but 0x34 is NOT in this set because assertion 2 relies on
+# X88C64P having proto=0x34 NOT in this set — that is what makes the assertion pass for
+# that chip. Do NOT add 0x34 here ("keep in sync" means structure, not membership).
 KNOWN_PROTOCOLS = {
     0x05,
     0x06,
@@ -133,8 +137,13 @@ def main():
     pni_with_known_proto = []
     # D-10 Assertion 3: no supported chip resolves to not_implemented (enforced above
     # in the per-chip loop via the reworked not_implemented bucket — no separate list needed).
+    # SC#3 / D-03 HARD inverse guard: non-supported chip wired to a real handler is a
+    # gate failure. check_dispatch previously only checked the regression direction
+    # (supported → not_implemented); this bucket catches the dangerous inverse.
+    non_supported_dispatchable = []
     total = 0
     non_supported_count = 0
+    non_dispatchable_count = 0
     for mfg, chips in db_raw.items():
         if not isinstance(chips, list):
             continue
@@ -159,6 +168,19 @@ def main():
                     pni_with_known_proto.append(
                         f"{mfg}/{part} proto=0x{proto:02X} — protocol IS in KNOWN_PROTOCOLS"
                     )
+                # SC#3 / D-03 HARD inverse guard: a non-supported chip routing to a real
+                # handler is the dangerous inverse regression — non-supported chips must
+                # dispatch to not_implemented or ERROR only (CR-02 / Phase 66 gap-closure).
+                if handler not in ("not_implemented", "ERROR"):
+                    non_supported_dispatchable.append(
+                        f"{mfg}/{part} support_status={chip_ss} proto=0x{proto:02X} "
+                        f"-> {handler} "
+                        f"(HARD invariant: non-supported chip wired to a working handler)"
+                    )
+                else:
+                    # Non-supported chip correctly dispatching to a non-dispatchable
+                    # outcome — count these for the truthful PASS summary line.
+                    non_dispatchable_count += 1
             if handler == "ERROR":
                 errors.append(f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}")
                 continue
@@ -210,6 +232,7 @@ def main():
         or wire_regressions
         or missing_reason
         or pni_with_known_proto
+        or non_supported_dispatchable
     ):
         if errors:
             print(f"FAIL: {len(errors)} of {total} chips have no valid dispatch path:")
@@ -268,13 +291,25 @@ def main():
                 print(f"  {e}")
             if len(pni_with_known_proto) > 20:
                 print(f"  ... and {len(pni_with_known_proto) - 20} more")
+        if non_supported_dispatchable:
+            print(
+                f"FAIL: {len(non_supported_dispatchable)} non-supported chips dispatch "
+                f"to a REAL handler (SC#3 / D-03 HARD invariant — must be "
+                f"not_implemented/ERROR):"
+            )
+            for e in non_supported_dispatchable[:20]:
+                print(f"  {e}")
+            if len(non_supported_dispatchable) > 20:
+                print(f"  ... and {len(non_supported_dispatchable) - 20} more")
         sys.exit(1)
 
     supported_count = total - non_supported_count
     print(
         f"PASS: all {total} chips scanned; "
         f"{supported_count} supported; "
-        f"{non_supported_count} non-supported (non-dispatchable, expected); "
+        f"{non_dispatchable_count} chips confirmed non-dispatchable "
+        f"(handler in not_implemented/ERROR); "
+        f"0 non_supported_dispatchable; "
         f"0 dispatch regressions; 0 consistency violations"
     )
 
