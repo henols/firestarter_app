@@ -80,7 +80,37 @@ VPP_MV = {
     0xC0: 16000, 0xD0: 16500, 0xE0: 17000, 0xF0: 18000,
 }
 
-KNOWN_PROTOCOLS = {0x05, 0x06, 0x07, 0x08, 0x0B, 0x0D, 0x0E, 0x10, 0x27, 0x28, 0x29, 0x35, 0x39}
+# NMOS VPP correction: promotes the comment at L46-56 to applied code.
+# Matched against part_number aliases; "highest VPP wins" for entries with
+# multiple NMOS aliases (e.g., INTEL/2732,2732A,M2732,M2732A).
+NMOS_TRUE_VPP_MV: dict[str, int] = {
+    "M2716": 25000,  # Intel NMOS 2716: 25V VPP (datasheet)
+    "M2732": 25000,  # Intel NMOS 2732: 25V VPP (datasheet)
+    "M2732A": 21000,  # Intel NMOS 2732A: 21V VPP (later variant)
+}
+# RURP boost regulator theoretical ceiling (build_db.py L55 comment + hw evidence).
+# Chips requiring VPP above this cannot be programmed on any RURP revision.
+RURP_VPP_CEILING_MV = 22000
+
+# 0x34 = XICOR X88C64P — DIP-parallel NovRAM; unimplemented protocol but
+# confirmed DIP-parallel memory. Added here so the chip passes the
+# KNOWN_PROTOCOLS gate and gets classified as protocol-not-implemented.
+KNOWN_PROTOCOLS = {
+    0x05,
+    0x06,
+    0x07,
+    0x08,
+    0x0B,
+    0x0D,
+    0x0E,
+    0x10,
+    0x27,
+    0x28,
+    0x29,
+    0x34,
+    0x35,
+    0x39,
+}
 
 VCC_VOLTAGES = {0x00: "5V", 0x01: "3.3V", 0x04: "5.5V", 0x05: "6.5V"}
 
@@ -336,38 +366,68 @@ def main():
                 pin_map_raw = int(ic.get("pin_map", "0"), 16)
                 pm_idx = pin_map_raw & 0xFF
 
-                # Skip chips with unknown protocol_id
-                if proto_id not in KNOWN_PROTOCOLS:
-                    print(f"WARN: skipping {name} — unknown protocol_id 0x{proto_id:02X}", file=sys.stderr)
-                    continue
+                # DB-07: Initialize support classification fields.
+                # These defaults are overridden at the two inclusion gates below
+                # and at the NMOS VPP override block before chip_entry construction.
+                _support_status = "supported"
+                _unsupported_reason = None
+                _nmos_vpp_mv = None
 
-                # SAFETY SKIP: 24-pin 5V parallel EEPROMs routed via EPROM
+                # Site A: Unknown-protocol gate.
+                # X88C64P (proto 0x34) is a confirmed DIP-parallel NovRAM —
+                # include it as protocol-not-implemented (not a WARN-skip).
+                # All other unknown-protocol chips (DataFlash 0x04, FWH 0x11,
+                # PLCC 0x0A) keep their WARN skip because they are serial/SMD
+                # or adapter-class parts that cannot physically run on RURP.
+                # 0x34 is in KNOWN_PROTOCOLS so the gate now passes it through;
+                # the _support_status assignment handles classification.
+                if proto_id not in KNOWN_PROTOCOLS:
+                    print(
+                        f"WARN: skipping {name} — unknown protocol_id 0x{proto_id:02X}",
+                        file=sys.stderr,
+                    )
+                    continue
+                if proto_id == 0x34:
+                    _support_status = "protocol-not-implemented"
+                    _unsupported_reason = (
+                        "Protocol 0x34 (XICOR NovRAM serial-parallel hybrid) "
+                        "is not implemented on this hardware"
+                    )
+
+                # SAFETY SKIP / Site B: 24-pin 5V parallel EEPROMs routed via EPROM
                 # algorithms (0x07/0x08/0x0B). Affected family per upstream:
                 # AT28C04/16, AT28HC16, UPD28C04, 28C04A/16A — 5V single-supply
                 # parallel EEPROMs with WE on socket pin 21 (per datasheet).
-                # If we let them through:
+                # If we let them through with a working handler:
                 #   - configure_eprom (0x07/0x08/0x0B dispatch) engages the
                 #     12V VPP regulator and asserts VPP_ENABLE during writes.
                 #   - DIP24_2716 pinout has vpp-pin=21 — so 12V hits the chip's
                 #     WE pin → hardware-damage path.
-                # The firmware has no 24-pin EEPROM handler (configure_eeprom28c
-                # is 28-pin only; configure_sram is empty stub and would silently
-                # fail EEPROM byte-program timing). Until a 24-pin EEPROM
-                # dispatch lands, these chips are unsafe to expose.
+                # DB-02: include as adapter-required (not a bare skip) so the DB
+                # is a complete catalog. D-03 HARD: do NOT route to a working
+                # handler — proto_id unchanged, no DIP24 EEPROM handler wired.
                 # Discriminator: pin_count == 24 AND proto_id in EPROM-family
                 # AND flags has the "electrically erasable" bit (0x10).
-                if (pin_count == 24
-                        and proto_id in (0x07, 0x08, 0x0B)
-                        and (flags & 0x10)):
+                if (
+                    pin_count == 24
+                    and proto_id in (0x07, 0x08, 0x0B)
+                    and (flags & 0x10)
+                ):
+                    _support_status = "adapter-required"
+                    _unsupported_reason = (
+                        f"24-pin 5V EEPROM with EPROM-family algo 0x{proto_id:02X}: "
+                        f"socket pin 21 = WE on 28C-family chips; "
+                        f"RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail "
+                        f"(hardware-damage path). Requires a dedicated DIP24 EEPROM "
+                        f"adapter or firmware handler before this chip can be programmed."
+                    )
                     print(
-                        f"WARN: skipping {mfg_name}/{name} — 24-pin 5V EEPROM with "
-                        f"EPROM-family algo 0x{proto_id:02X} (damage hazard: 12V VPP "
-                        f"to socket pin 21 = WE of 28C-family chips). No 24-pin "
-                        f"EEPROM firmware handler yet; tracked in follow_up "
-                        f"24pin-eeprom-no-handler.",
+                        f"INFO: including {mfg_name}/{name} as adapter-required — "
+                        f"24-pin 5V EEPROM with EPROM-family algo 0x{proto_id:02X} "
+                        f"(damage hazard: 12V VPP to socket pin 21 = WE of 28C-family "
+                        f"chips; tracked in follow_up 24pin-eeprom-no-handler).",
                         file=sys.stderr,
                     )
-                    continue
 
                 # --- SYNTHESIZE "COMPLETE" DATA ---
                 pinout_key = resolve_pinout_key(pin_count, variant, flags, pm_idx=pm_idx, proto_id=proto_id)
@@ -488,6 +548,28 @@ def main():
                 # any new proto_id added to KNOWN_PROTOCOLS but not classified
                 # above falls back to whatever the flags-based block decided).
 
+                # Site C: DB-03 NMOS VPP correction.
+                # Must run AFTER all fm1608/WARNING-5 overrides (ordering invariant
+                # — see L46-56 comment). "Highest VPP wins": iterate all aliases;
+                # the match with the highest VPP determines the final voltage +
+                # status (conservative — avoids M2732/M2732A match-order ambiguity
+                # on combined entries like INTEL/2732,2732A,M2732,M2732A).
+                part_aliases = {a.split("@")[0].strip() for a in name.split(",")}
+                for nmos_key, nmos_vpp in NMOS_TRUE_VPP_MV.items():
+                    if nmos_key in part_aliases:
+                        if _nmos_vpp_mv is None or nmos_vpp > _nmos_vpp_mv:
+                            _nmos_vpp_mv = nmos_vpp
+                if _nmos_vpp_mv is not None:
+                    if _nmos_vpp_mv > RURP_VPP_CEILING_MV:
+                        _support_status = "vpp-exceeds-max"
+                        _unsupported_reason = (
+                            f"VPP {_nmos_vpp_mv // 1000}V exceeds RURP ceiling "
+                            f"({RURP_VPP_CEILING_MV // 1000}V); "
+                            f"cannot program on this hardware"
+                        )
+                    # else: leave _support_status as "supported" — M2732A (21V)
+                    # is within the RURP ceiling.
+
                 chip_entry = {
                     # Upstream `name` is a comma-separated alias list where each
                     # alias may carry an @PACKAGE suffix (e.g.,
@@ -498,15 +580,28 @@ def main():
                     # @-suffix from each piece, dedupe, rejoin. Combined with
                     # database.py's alias-aware get_eprom_config lookup, this
                     # makes `firestarter info <alias>` work for every alias.
-                    "part_number": ",".join(dict.fromkeys(
-                        a.split("@")[0].strip() for a in name.split(",") if a.split("@")[0].strip()
-                    )),
+                    "part_number": ",".join(
+                        dict.fromkeys(
+                            a.split("@")[0].strip()
+                            for a in name.split(",")
+                            if a.split("@")[0].strip()
+                        )
+                    ),
+                    "support_status": _support_status,
                     "electrical": {
                         "type": _etype,
                         "size_bytes": mem_size,
                         "pin_count": pin_count,
-                        "vpp": VPP_VOLTAGES.get(voltages & 0xFF, "Unknown"),
-                        "vpp_mv": VPP_MV.get(voltages & 0xFF, 0),
+                        "vpp": (
+                            f"{_nmos_vpp_mv // 1000}V"
+                            if _nmos_vpp_mv is not None
+                            else VPP_VOLTAGES.get(voltages & 0xFF, "Unknown")
+                        ),
+                        "vpp_mv": (
+                            _nmos_vpp_mv
+                            if _nmos_vpp_mv is not None
+                            else VPP_MV.get(voltages & 0xFF, 0)
+                        ),
                         "vdd": VCC_VOLTAGES.get((voltages >> 8) & 0x0F, "5V"),
                         "vcc": VCC_VOLTAGES.get((voltages >> 12) & 0x0F, "5V"),
                     },
@@ -520,6 +615,8 @@ def main():
                     },
                     "pinout": pinout_key,
                 }
+                if _unsupported_reason:
+                    chip_entry["unsupported_reason"] = _unsupported_reason
 
                 chips.append(chip_entry)
                 total_chips += 1
