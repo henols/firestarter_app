@@ -62,6 +62,26 @@ _SRAM_PROTOCOLS = {0x0E, 0x27, 0x28, 0x29}
 # See WARNING-5 in .planning/v1.0-MILESTONE-AUDIT.md.
 _28C_EEPROM_HAZARD_PINOUT = "DIP28_2764"
 
+# D-10 consistency assertion 2: a chip tagged support_status=protocol-not-implemented
+# must genuinely have an unimplemented protocol (i.e. proto NOT in KNOWN_PROTOCOLS).
+# Local mirror of build_db.py:83 — source of truth.  Keep in sync if KNOWN_PROTOCOLS
+# changes in build_db.py.
+KNOWN_PROTOCOLS = {
+    0x05,
+    0x06,
+    0x07,
+    0x08,
+    0x0B,
+    0x0D,
+    0x0E,
+    0x10,
+    0x27,
+    0x28,
+    0x29,
+    0x35,
+    0x39,
+}
+
 
 def dispatch(protocol, mem_type):
     """Mirror firmware D2 dispatch order in memory.cpp::configure_memory."""
@@ -106,7 +126,15 @@ def main():
     sram_in_eprom = []
     eeprom28c_in_eprom = []
     wire_regressions = []
+    # D-10 Assertion 1: every non-supported chip must have a non-empty unsupported_reason.
+    missing_reason = []
+    # D-10 Assertion 2: a protocol-not-implemented chip must genuinely have an unimplemented
+    # protocol (proto not in KNOWN_PROTOCOLS — would indicate a DB build bug).
+    pni_with_known_proto = []
+    # D-10 Assertion 3: no supported chip resolves to not_implemented (enforced above
+    # in the per-chip loop via the reworked not_implemented bucket — no separate list needed).
     total = 0
+    non_supported_count = 0
     for mfg, chips in db_raw.items():
         if not isinstance(chips, list):
             continue
@@ -116,6 +144,21 @@ def main():
             mt = _ALGO_MEM_TYPE.get(proto)
             handler = dispatch(proto, mt)
             part = chip.get("part_number", "<unknown>")
+            # D-10 consistency assertions: populate for every chip regardless of handler.
+            chip_ss = chip.get("support_status", "supported")
+            if chip_ss != "supported":
+                non_supported_count += 1
+                # Assertion 1: non-supported chip must have a non-empty unsupported_reason.
+                if not chip.get("unsupported_reason", ""):
+                    missing_reason.append(
+                        f"{mfg}/{part} support_status={chip_ss} — missing unsupported_reason"
+                    )
+                # Assertion 2: protocol-not-implemented chip must have an actually-unimplemented
+                # protocol.  If it has a known protocol, the DB build is inconsistent.
+                if chip_ss == "protocol-not-implemented" and proto in KNOWN_PROTOCOLS:
+                    pni_with_known_proto.append(
+                        f"{mfg}/{part} proto=0x{proto:02X} — protocol IS in KNOWN_PROTOCOLS"
+                    )
             if handler == "ERROR":
                 errors.append(f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}")
                 continue
@@ -165,6 +208,8 @@ def main():
         or sram_in_eprom
         or eeprom28c_in_eprom
         or wire_regressions
+        or missing_reason
+        or pni_with_known_proto
     ):
         if errors:
             print(f"FAIL: {len(errors)} of {total} chips have no valid dispatch path:")
@@ -205,14 +250,32 @@ def main():
                 print(f"  {e}")
             if len(wire_regressions) > 20:
                 print(f"  ... and {len(wire_regressions) - 20} more")
+        if missing_reason:
+            print(
+                f"FAIL: {len(missing_reason)} non-supported chips are missing "
+                f"unsupported_reason (D-10 assertion 1):"
+            )
+            for e in missing_reason[:20]:
+                print(f"  {e}")
+            if len(missing_reason) > 20:
+                print(f"  ... and {len(missing_reason) - 20} more")
+        if pni_with_known_proto:
+            print(
+                f"FAIL: {len(pni_with_known_proto)} protocol-not-implemented chips "
+                f"have a protocol that IS in KNOWN_PROTOCOLS (D-10 assertion 2 — DB build bug):"
+            )
+            for e in pni_with_known_proto[:20]:
+                print(f"  {e}")
+            if len(pni_with_known_proto) > 20:
+                print(f"  ... and {len(pni_with_known_proto) - 20} more")
         sys.exit(1)
 
+    supported_count = total - non_supported_count
     print(
-        f"PASS: all {total} chips have a valid dispatch path; "
-        f"0 not-implemented chips; "
-        f"0 SRAM chips route to configure_eprom; "
-        f"0 DIP28_2764 Flash/EEPROM chips route to configure_eprom; "
-        f"0 wire-key regressions"
+        f"PASS: all {total} chips scanned; "
+        f"{supported_count} supported; "
+        f"{non_supported_count} non-supported (non-dispatchable, expected); "
+        f"0 dispatch regressions; 0 consistency violations"
     )
 
 
