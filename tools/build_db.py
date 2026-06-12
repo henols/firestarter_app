@@ -112,6 +112,15 @@ KNOWN_PROTOCOLS = {
     0x39,
 }
 
+# CR-01 Option A (Phase 66 gap-closure): algorithm sentinel for non-supported chips.
+# dispatch(0x00, None) falls into the mem_type fallback chain (protocol==0 path):
+#   _ALGO_MEM_TYPE.get(0x00) → None → {1:..., 4:..., 3:..., 5:...}.get(None, "ERROR")
+#   → "ERROR"
+# No real handler (configure_eprom / configure_eeprom28c / configure_flash* /
+# configure_sram) is ever reached for a non-supported chip. D-03 HARD: do NOT
+# route any flagged chip to a working handler.
+NON_DISPATCHABLE_ALGO = 0x00
+
 VCC_VOLTAGES = {0x00: "5V", 0x01: "3.3V", 0x04: "5.5V", 0x05: "6.5V"}
 
 DIP28_VARIANT_MAP = {
@@ -428,6 +437,9 @@ def main():
                         f"chips; tracked in follow_up 24pin-eeprom-no-handler).",
                         file=sys.stderr,
                     )
+                    # CR-01 Option A: demote to NON_DISPATCHABLE_ALGO so dispatch()
+                    # returns ERROR instead of configure_eprom (D-03 HARD invariant).
+                    proto_id = NON_DISPATCHABLE_ALGO
 
                 # --- SYNTHESIZE "COMPLETE" DATA ---
                 pinout_key = resolve_pinout_key(pin_count, variant, flags, pm_idx=pm_idx, proto_id=proto_id)
@@ -567,6 +579,9 @@ def main():
                             f"({RURP_VPP_CEILING_MV // 1000}V); "
                             f"cannot program on this hardware"
                         )
+                        # CR-01 Option A: demote to NON_DISPATCHABLE_ALGO so dispatch()
+                        # returns ERROR instead of configure_eprom (D-03 HARD invariant).
+                        proto_id = NON_DISPATCHABLE_ALGO
                     # else: leave _support_status as "supported" — M2732A (21V)
                     # is within the RURP ceiling.
 
