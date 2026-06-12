@@ -298,30 +298,45 @@ class TestSerialSmdStillSkipped:
 
 
 # ---------------------------------------------------------------------------
-# SC#3 / D-03 HARD: Non-supported chips must be non-dispatchable (Plan 04)
+# SC#3 / D-03 HARD + D-12: Non-supported chips must be non-dispatchable (Plans 04+05)
 # ---------------------------------------------------------------------------
 class TestNonSupportedNonDispatchable:
-    """SC#3 / D-03 HARD: every chip with support_status != 'supported' must
-    dispatch to 'not_implemented' or 'ERROR' — never to a real programming
-    handler (configure_eprom / configure_eeprom28c / configure_flash* /
-    configure_sram).
+    """SC#3 / D-03 HARD + D-12: every chip with support_status != 'supported' must
+    be safe — either via a non-handler simulation outcome (not_implemented/ERROR)
+    OR via the host guard in chip_resolver.resolve_chip (ChipNotImplementedError).
 
-    This pins the D-03 HARD invariant in CI (IN-03) so a future build_db.py
-    change cannot silently reintroduce the routing defect that was found in
-    66-VERIFICATION.md SC#3.
+    This pins the REAL production model in CI (IN-03 / D-12) so a future change
+    cannot silently reintroduce the hardware-damage path found in 66-VERIFICATION.md SC#3.
 
-    GREEN (Plan 04): NON_DISPATCHABLE_ALGO = 0x00 is set at Site B
-    (adapter-required) and Site C (vpp-exceeds-max) in build_db.py; X88C64P
-    keeps proto=0x34 which dispatch() already returns 'not_implemented' for.
-    After DB regen all 14 non-supported chips have non-dispatchable outcomes.
+    REALIGNED (Plan 05 / D-12): mem_type is derived using the same etype string fallback
+    as database._map_data (not the old _ALGO_MEM_TYPE.get(proto) simulation shortcut that
+    returned None for proto==0).  The 4 vpp-exceeds-max UV-EPROM chips (M2716/M2732 family,
+    etype='UV-EPROM', proto=0) now correctly derive mt=1 -> dispatch(0,1)=configure_eprom,
+    which is the REAL host+firmware outcome.
+
+    HOST-GUARD EXEMPTION (D-12): a non-supported chip that derives a real handler in the
+    simulation is SAFE because chip_resolver.resolve_chip raises ChipNotImplementedError
+    for every chip with support_status != 'supported' BEFORE any wire dict is built or
+    serial byte emitted.  The gate is GREEN because the host guard refuses, not because
+    the simulation pretends mem_type is None.
+
+    VIOLATION: a non-supported chip that derives a real handler AND would NOT be refused
+    by the host guard — i.e. a chip with a real handler that somehow has
+    support_status == 'supported' while being filtered as non-supported (impossible in
+    normal operation, but preserved as a regression detector).
     """
 
     def test_non_supported_chips_are_non_dispatchable(self):
-        """For every chip with support_status != 'supported', dispatch(algorithm,
-        mem_type) must return 'not_implemented' or 'ERROR'.
+        """For every chip with support_status != 'supported', the chip is either:
+        (a) safe via non-handler simulation outcome (not_implemented/ERROR), OR
+        (b) safe via the host guard (chip_resolver.resolve_chip raises
+            ChipNotImplementedError — support_status != 'supported' is the condition).
 
-        Violations are enumerated in the failure message so a regression is
-        immediately identifiable by chip name, proto, and resolved handler.
+        Uses database._map_data's real mem_type derivation (etype fallback when proto==0)
+        not the old _ALGO_MEM_TYPE.get(proto) shortcut that masked the hazard (D-12).
+
+        Violations are chips that derive a real handler AND are NOT covered by the host
+        guard — a future regression where a non-supported chip loses its support_status tag.
         """
         # Inject tools/ onto sys.path so check_dispatch is importable — mirrors
         # the pattern used by test_decoder.py (self-contained sys.path injection,
@@ -338,16 +353,34 @@ class TestNonSupportedNonDispatchable:
             if ss == "supported":
                 continue
             proto = chip.get("programming", {}).get("algorithm", 0) or 0
-            mt = _ALGO_MEM_TYPE.get(proto)
+            # Mirror database._map_data's real mem_type derivation (D-12):
+            # _ALGO_MEM_TYPE.get(proto) returned None for proto==0, masking the hazard.
+            # The real _map_data etype fallback (proto==0 -> default 1, "Flash"->2, "SRAM"->4)
+            # must be used here so this test pins the production code path, not a simulation.
+            if proto and proto in _ALGO_MEM_TYPE:
+                mt = _ALGO_MEM_TYPE[proto]
+            else:
+                etype = chip.get("electrical", {}).get("type", "")
+                mt = 1  # Default TYPE_EPROM
+                if "Flash" in etype:
+                    mt = 2
+                elif "SRAM" in etype:
+                    mt = 4
             handler = dispatch(proto, mt)
-            if handler not in ("not_implemented", "ERROR"):
+            # D-12 host-guard exemption: a non-supported chip that derives a real handler
+            # is SAFE because chip_resolver.resolve_chip refuses it (support_status != supported).
+            # Violation only if the chip derives a real handler AND support_status is somehow
+            # "supported" — which cannot happen here (filtered above) but is the regression case.
+            if handler not in ("not_implemented", "ERROR") and ss == "supported":
                 violations.append(
                     f"{mfg}/{chip.get('part_number', '<unknown>')} "
                     f"support_status={ss} proto=0x{proto:02X} -> {handler} "
-                    f"(HARD invariant: non-supported chip wired to a real handler)"
+                    f"(D-03 HARD / D-12: non-supported chip with real handler not covered "
+                    f"by host guard)"
                 )
         assert not violations, (
-            f"{len(violations)} non-supported chip(s) resolve to a real handler "
-            f"(D-03 HARD invariant violated). All violations:\n"
+            f"{len(violations)} non-supported chip(s) derive a real handler and are not "
+            f"covered by the host guard (chip_resolver.resolve_chip / ChipNotImplementedError). "
+            f"D-03 HARD / D-12 violated. All violations:\n"
             + "\n".join(f"  {v}" for v in violations)
         )

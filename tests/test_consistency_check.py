@@ -466,7 +466,17 @@ class TestDispatchChain:
             EpromOperator, "consistency_check_eprom", fake_method, raising=False
         )
 
-        # Stub database lookups so dispatch reaches the operator method
+        # Stub database lookups so dispatch reaches the operator method.
+        # get_eprom_config must also be stubbed (Phase 66-05): resolve_chip now calls
+        # get_eprom_config FIRST to read support_status before calling convert_to_programmer.
+        monkeypatch.setattr(
+            EpromDatabase,
+            "get_eprom_config",
+            lambda self, name: (
+                {"part_number": name, "support_status": "supported"},
+                "TEST",
+            ),
+        )
         monkeypatch.setattr(
             EpromDatabase,
             "get_eprom",
