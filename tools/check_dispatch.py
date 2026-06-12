@@ -120,7 +120,14 @@ def main():
                 errors.append(f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}")
                 continue
             if handler == "not_implemented":
-                not_implemented.append(f"{mfg}/{part} proto=0x{proto:02X}")
+                ss = chip.get("support_status", "supported")
+                if ss == "supported":
+                    # Regression: a supported chip routed to not_implemented is a gate failure.
+                    not_implemented.append(
+                        f"{mfg}/{part} proto=0x{proto:02X} support_status={ss}"
+                    )
+                # else: expected — protocol-not-implemented/adapter-required/vpp-exceeds-max
+                # chips correctly route to not_implemented (no handler exists; that is the point).
                 continue  # skip VPP/wire checks — no real handler to evaluate
             # BLOCKER-2 safety: SRAM protocol must never resolve to configure_eprom
             if proto in _SRAM_PROTOCOLS and handler == "configure_eprom":
@@ -168,7 +175,7 @@ def main():
         if not_implemented:
             print(
                 f"FAIL: {len(not_implemented)} chips route to not_implemented "
-                f"(protocol != 0, not in KNOWN_PROTOCOLS):"
+                f"(supported chip with no dispatch handler — protocol regression):"
             )
             for e in not_implemented[:20]:
                 print(f"  {e}")
