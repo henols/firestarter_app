@@ -182,14 +182,17 @@ def main():
                     # outcome — count these for the truthful PASS summary line.
                     non_dispatchable_count += 1
             if handler == "ERROR":
-                errors.append(f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}")
+                if chip_ss == "supported":
+                    # A supported chip with no dispatch path is a real gate failure.
+                    errors.append(f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}")
+                # else: non-supported chip dispatching to ERROR is the expected outcome
+                # (NON_DISPATCHABLE_ALGO=0x00 → dispatch returns ERROR; D-03 HARD enforced).
                 continue
             if handler == "not_implemented":
-                ss = chip.get("support_status", "supported")
-                if ss == "supported":
+                if chip_ss == "supported":
                     # Regression: a supported chip routed to not_implemented is a gate failure.
                     not_implemented.append(
-                        f"{mfg}/{part} proto=0x{proto:02X} support_status={ss}"
+                        f"{mfg}/{part} proto=0x{proto:02X} support_status={chip_ss}"
                     )
                 # else: expected — protocol-not-implemented/adapter-required/vpp-exceeds-max
                 # chips correctly route to not_implemented (no handler exists; that is the point).

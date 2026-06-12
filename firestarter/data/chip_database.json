@@ -1858,7 +1858,7 @@
       "part_number": "AT28C04,AT28HC04",
       "support_status": "adapter-required",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 512,
         "pin_count": 24,
         "vpp": "12V",
@@ -1867,8 +1867,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "100000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -1879,7 +1879,7 @@
       "part_number": "AT28C04E,AT28C04F",
       "support_status": "adapter-required",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 512,
         "pin_count": 24,
         "vpp": "12V",
@@ -1888,8 +1888,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "20000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -1920,7 +1920,7 @@
       "part_number": "AT28C16,AT28HC16,AT28HC16L",
       "support_status": "adapter-required",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -1929,8 +1929,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "100000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -1941,7 +1941,7 @@
       "part_number": "AT28C16E,AT28C16F",
       "support_status": "adapter-required",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -1950,8 +1950,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "20000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -6413,8 +6413,8 @@
         "vcc": "5.5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "50000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -6534,8 +6534,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "50000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -8258,7 +8258,7 @@
       "part_number": "28C04A",
       "support_status": "adapter-required",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 512,
         "pin_count": 24,
         "vpp": "12V",
@@ -8267,8 +8267,8 @@
         "vcc": "3.3V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "100000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -8279,7 +8279,7 @@
       "part_number": "28C04AF",
       "support_status": "adapter-required",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 512,
         "pin_count": 24,
         "vpp": "12V",
@@ -8288,8 +8288,8 @@
         "vcc": "3.3V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "20000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -8300,7 +8300,7 @@
       "part_number": "28C16A",
       "support_status": "adapter-required",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -8309,8 +8309,8 @@
         "vcc": "3.3V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "100000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -8321,7 +8321,7 @@
       "part_number": "28C16AF",
       "support_status": "adapter-required",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 2048,
         "pin_count": 24,
         "vpp": "12V",
@@ -8330,8 +8330,8 @@
         "vcc": "3.3V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "20000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -9108,7 +9108,7 @@
       "part_number": "UPD28C04",
       "support_status": "adapter-required",
       "electrical": {
-        "type": "UV-EPROM",
+        "type": "Flash/EEPROM",
         "size_bytes": 512,
         "pin_count": 24,
         "vpp": "12V",
@@ -9117,8 +9117,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "100000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -10136,8 +10136,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "100000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -12043,8 +12043,8 @@
         "vcc": "5V"
       },
       "programming": {
-        "algorithm": 11,
-        "pulse_duration": "100000 us",
+        "algorithm": 0,
+        "pulse_duration": "Algorithm Controlled",
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
