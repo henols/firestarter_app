@@ -106,14 +106,13 @@ def test_list_happy_path(runner: CliRunner) -> None:
 
 
 def test_info_chip_resolution_happy_path(runner: CliRunner) -> None:
-    """`firestarter info W27C512` resolves the chip — note this command currently
-    crashes downstream in ic_layout.py (pre-existing TypeError pinned by
-    test_characterization::test_info_known_chip with exit 1). This Click-side
-    test asserts the chip-resolution PATH succeeds.
+    """`firestarter info W27C512` resolves the chip and displays the layout.
+
+    Phase 69 Plan 01 fixed the ic_layout list-vs-int crash; exit_code is now 0.
     """
     result = runner.invoke(cli, ["info", "W27C512"])
     assert "not found in database" not in result.output
-    assert result.exit_code == 1
+    assert result.exit_code == 0
 
 
 def test_info_unknown_chip_error_path(runner: CliRunner) -> None:

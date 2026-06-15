@@ -246,14 +246,12 @@ def test_list(snapshot):
 def test_info_known_chip(snapshot):
     """Pin info output for W27C512 (known chip).
 
-    NOTE: firestarter info currently crashes with a TypeError in ic_layout.py
-    for all chips (vpp-pin comparison bug).  This snapshot pins the CURRENT
-    broken behavior so any change — fix or regression — is visible.
+    Phase 69 Plan 01 fixed the ic_layout list-vs-int crash; exit code is now 0
+    and stdout shows the formatted chip layout.
     """
     stdout, stderr, rc = run_firestarter("info", "W27C512")
-    # Current behavior: crash → exit 1, traceback on stderr
-    assert rc == 1
-    # Pin both stdout and stderr (traceback appears on stderr)
+    assert rc == 0
+    # Pin stdout (chip info layout) and stderr (should be empty after fix)
     assert stdout == snapshot
     assert stderr == snapshot(name="test_info_known_chip_stderr")
 
