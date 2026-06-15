@@ -391,24 +391,31 @@ class EpromSpecBuilder:
         )
 
         if pin_map_details:
-            if "rw-pin" in pin_map_details and pin_map_details["rw-pin"] <= pin_count:
-                pin_names[pin_map_details["rw-pin"] - 1] = "R/W(WE)"
-            if "vpp-pin" in pin_map_details and pin_map_details["vpp-pin"] <= pin_count:
-                pin_names[pin_map_details["vpp-pin"] - 1] = "VPP"
-                # If VPP is defined, and there's an OE pin, ensure OE is also labeled if it's different  # noqa: E501
-                if (
-                    "oe-pin" in pin_map_details
-                    and pin_map_details["oe-pin"] != pin_map_details["vpp-pin"]
-                    and pin_map_details["oe-pin"] <= pin_count
-                ):
-                    pin_names[pin_map_details["oe-pin"] - 1] = "OE"
-            elif (
-                "oe-pin" in pin_map_details and pin_map_details["oe-pin"] <= pin_count
-            ):  # Only OE, no separate VPP
-                pin_names[pin_map_details["oe-pin"] - 1] = "OE"
+            if "rw-pin" in pin_map_details:
+                rw = pin_map_details["rw-pin"]
+                rw = rw[0] if isinstance(rw, list) else rw
+                if rw <= pin_count:
+                    pin_names[rw - 1] = "R/W(WE)"
+            if "vpp-pin" in pin_map_details:
+                vpp = pin_map_details["vpp-pin"]
+                vpp = vpp[0] if isinstance(vpp, list) else vpp
+                if vpp <= pin_count:
+                    pin_names[vpp - 1] = "VPP"
+                    # If VPP is defined, and there's an OE pin, label OE only if it's different  # noqa: E501
+                    if "oe-pin" in pin_map_details:
+                        oe = pin_map_details["oe-pin"]
+                        oe = oe[0] if isinstance(oe, list) else oe
+                        if oe != vpp and oe <= pin_count:
+                            pin_names[oe - 1] = "OE"
+            elif "oe-pin" in pin_map_details:  # Only OE, no separate VPP
+                oe = pin_map_details["oe-pin"]
+                oe = oe[0] if isinstance(oe, list) else oe
+                if oe <= pin_count:
+                    pin_names[oe - 1] = "OE"
 
             if "address-bus-pins" in pin_map_details:
                 for i, pin_num in enumerate(pin_map_details["address-bus-pins"]):
+                    # address-bus-pins elements are already scalar ints
                     if pin_num <= pin_count:
                         pin_names[pin_num - 1] = f"A{i}"
         else:
