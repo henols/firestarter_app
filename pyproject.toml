@@ -112,7 +112,7 @@ python_version = "3.9"          # Must be in config file — mypy 2.1.0 rejects 
 ignore_missing_imports = true   # needed for tqdm, rich (no stubs)
 disallow_untyped_defs = false   # gradual adoption — global stays lenient (D-10)
 check_untyped_defs = false
-# mypy_error_watermark = 26   # Updated Phase 42 D-08 post-strict-overrides addition. Old floor: 44 (Phase 37 tip).
+# mypy_error_watermark = 29   # Updated Phase 69-03: post-fix floor (ic_layout + protocol_not_implemented tests). Prior: 26 (Phase 42 D-08).
 
 [[tool.mypy.overrides]]
 # Phase 36 test modules — strict-island: check bodies of untyped test functions.
