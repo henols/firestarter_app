@@ -181,6 +181,22 @@ def test_info_adapter_required_no_crash(runner: CliRunner) -> None:
     assert "ChipNotImplementedError" not in result.output
 
 
+def test_info_protocol_not_implemented_no_crash(runner: CliRunner) -> None:
+    """`firestarter info X88C64P` exits 0 — protocol-not-implemented DISPLAYS, not refuses.
+
+    SC#3 protocol-not-implemented coverage (Phase 66 third non-supported status).
+    X88C64P is the sole protocol-not-implemented chip in the packaged DB (part_number
+    alias "X88C64P,X88C64S", protocol 0x34 XICOR NovRAM). info bypasses resolve_chip
+    so it DISPLAYS the chip without refusing — same contract as M2716/AT28C16.
+    REAL presenter required (Pitfall 1). Depends on Plan 01 ic_layout fix.
+    """
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    result = runner.invoke(cli, ["info", "X88C64P"], obj=app)
+    assert result.exit_code == 0
+    assert "Traceback (most recent call last)" not in result.output
+
+
 def test_search_happy_path(runner: CliRunner) -> None:
     """`firestarter search W27` exits 0 and a matching chip name is in output."""
     result = runner.invoke(cli, ["search", "W27"])
@@ -229,6 +245,38 @@ def test_read_operator_returns_false(runner: CliRunner) -> None:
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["read", "W27C512", "out.bin"], obj=app)
     assert result.exit_code == 1
+
+
+def test_read_non_supported_typed_refusal(runner: CliRunner) -> None:
+    """`firestarter read M2716 out.bin` exits 1 with typed support_status refusal.
+
+    SC#3 vpp-exceeds-max (M2716). The Phase 66 ChipNotImplementedError guard in
+    resolve_chip refuses before any wire dict is built. The @map_typed_errors
+    decorator converts ChipNotImplementedError -> exit 1 + "Chip not usable:"
+    message. No Traceback in output.
+    """
+    app = make_app_context()
+    result = runner.invoke(cli, ["read", "M2716", "out.bin"], obj=app)
+    assert result.exit_code == 1
+    assert "Traceback (most recent call last)" not in result.output
+    assert "M2716" in result.output
+
+
+def test_read_protocol_not_implemented_typed_refusal(runner: CliRunner) -> None:
+    """`firestarter read X88C64P out.bin` exits 1 with typed support_status refusal.
+
+    SC#3 protocol-not-implemented (X88C64P — sole protocol-not-implemented chip
+    in the packaged DB, part_number alias "X88C64P,X88C64S", protocol 0x34).
+    The Phase 66 ChipNotImplementedError guard in resolve_chip refuses before
+    any wire dict is built; @map_typed_errors converts to exit 1 with "Chip not
+    usable:" and the not-implemented reason substring. No Traceback in output.
+    """
+    app = make_app_context()
+    result = runner.invoke(cli, ["read", "X88C64P", "out.bin"], obj=app)
+    assert result.exit_code == 1
+    assert "X88C64P" in result.output
+    assert "not implemented" in result.output.lower()
+    assert "Traceback (most recent call last)" not in result.output
 
 
 def test_write_happy_path(runner: CliRunner) -> None:

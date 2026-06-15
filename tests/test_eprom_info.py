@@ -108,3 +108,28 @@ def test_present_eprom_details_none_returns_early(
     """present_eprom_details with None chip_data short-circuits without crashing."""
     presenter.present_eprom_details(None)
     # No assertion on output — just that it does not raise.
+
+
+def test_prepare_detailed_eprom_data_happy_path(
+    db: EpromDatabase,
+    presenter: EpromConsolePresenter,
+) -> None:
+    """prepare_detailed_eprom_data returns non-None for W27C512 after ic_layout fix.
+
+    Phase 69 Plan 01 fixed the ic_layout list-vs-int crash; this test pins the
+    happy path that was previously un-testable (would always raise TypeError in
+    _generate_pin_names_for_display). W27C512 has a list-valued shared vpp/oe-pin
+    so it exercises the exact scalar-extraction path that was broken.
+    """
+    eprom = db.get_eprom("W27C512")
+    assert eprom is not None
+    bus_config = db.convert_to_programmer(eprom)
+    raw_config, manufacturer = db.get_eprom_config("W27C512")
+    result = presenter.prepare_detailed_eprom_data(
+        "W27C512",
+        eprom,
+        bus_config,
+        raw_config,
+        manufacturer,
+    )
+    assert result is not None
