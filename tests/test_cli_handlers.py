@@ -109,8 +109,12 @@ def test_info_chip_resolution_happy_path(runner: CliRunner) -> None:
     """`firestarter info W27C512` resolves the chip and displays the layout.
 
     Phase 69 Plan 01 fixed the ic_layout list-vs-int crash; exit_code is now 0.
+    Injects a REAL EpromConsolePresenter(db) — Pitfall 1: the default Mock
+    presenter returns None from prepare_detailed_eprom_data and masks the fix.
     """
-    result = runner.invoke(cli, ["info", "W27C512"])
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    result = runner.invoke(cli, ["info", "W27C512"], obj=app)
     assert "not found in database" not in result.output
     assert result.exit_code == 0
 
@@ -119,6 +123,62 @@ def test_info_unknown_chip_error_path(runner: CliRunner) -> None:
     """`firestarter info NOPE_NOT_A_CHIP` exits 1 with chip-not-found error."""
     result = runner.invoke(cli, ["info", "NOPE_NOT_A_CHIP"])
     assert result.exit_code == 1
+
+
+def test_info_happy_path_no_crash(runner: CliRunner) -> None:
+    """`firestarter info W27C512` exits 0 with chip name in output.
+
+    SC#1 regression: proves the ic_layout list-vs-int fix holds end-to-end.
+    Uses a REAL EpromConsolePresenter(db) to exercise the full display path.
+    """
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    result = runner.invoke(cli, ["info", "W27C512"], obj=app)
+    assert result.exit_code == 0
+    assert "Traceback (most recent call last)" not in result.output
+
+
+def test_info_2732_list_valued_pin_no_crash(runner: CliRunner) -> None:
+    """`firestarter info 2732` exits 0 — SC#1 list-valued-pin regression.
+
+    2732 has vpp-pin=[20] (list-valued shared pin); this was the original
+    live-crash chip. Proves the scalar-extraction fix in ic_layout.py works
+    for the vpp-exceeds-max + shared-pin path. REAL presenter required.
+    """
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    result = runner.invoke(cli, ["info", "2732"], obj=app)
+    assert result.exit_code == 0
+    assert "Traceback (most recent call last)" not in result.output
+
+
+def test_info_vpp_exceeds_max_no_crash(runner: CliRunner) -> None:
+    """`firestarter info M2716` exits 0 — vpp-exceeds-max status, distinct vpp/oe.
+
+    info deliberately bypasses resolve_chip so it DISPLAYS non-supported chips
+    without refusing (per Phase 68 spec). M2716 is a vpp-exceeds-max chip with
+    distinct vpp and oe pins. REAL presenter required (Pitfall 1).
+    """
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    result = runner.invoke(cli, ["info", "M2716"], obj=app)
+    assert result.exit_code == 0
+    assert "Traceback (most recent call last)" not in result.output
+
+
+def test_info_adapter_required_no_crash(runner: CliRunner) -> None:
+    """`firestarter info AT28C16` exits 0 — adapter-required 24-pin EEPROM.
+
+    info does NOT refuse adapter-required chips — it displays them. This is the
+    correct Phase 68 behavior: the capability guard fires only in resolve_chip
+    (the chip-op path), not in the info display path. REAL presenter required.
+    """
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    result = runner.invoke(cli, ["info", "AT28C16"], obj=app)
+    assert result.exit_code == 0
+    assert "Traceback (most recent call last)" not in result.output
+    assert "ChipNotImplementedError" not in result.output
 
 
 def test_search_happy_path(runner: CliRunner) -> None:
