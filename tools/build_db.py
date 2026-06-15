@@ -535,9 +535,68 @@ def main():
                             f"(SRAM/FRAM {size_label}; configure_sram dispatch)",
                             file=sys.stderr,
                         )
-                    # 24-pin (FM1208) keeps its DIP24_2716 pinout — no SRAM-specific
-                    # 24-pin entry yet; configure_sram doesn't engage VPP so the
-                    # vpp-pin field is ignored, making the pass-through safe.
+                    elif pin_count == 24:
+                        # DB-02 Group 1 fix: 24-pin SRAM chips (DS1220(RW), FM1208,
+                        # M48T02/12, M48Z02/12, ST/M48T02/12) use DIP24_6116 pinout.
+                        # Evidence: DS1220 datasheet pin 21 = WE (write enable).
+                        # DIP24_2716 has vpp-pin=[21] (12V VPP — wrong for SRAM);
+                        # DIP24_6116 has rw-pin=[21] (WE strobe — correct for SRAM).
+                        # Piersfinlayson/one-rom datasheet-verification confirms
+                        # DIP24_6116 for SRAM chips with WE on socket pin 21.
+                        # resolve_pinout_key returned DIP24_2716 via Tier 3 fallback
+                        # because (24, 0, 0x0B) has no Tier 1 rule and (24, 0) maps
+                        # to None in PIN_MAP_TO_PINOUT; override here inside the
+                        # fm1608 block (after proto_id is already set to 0x28)
+                        # to keep all SRAM-type overrides co-located (Pitfall 6).
+                        pinout_key = "DIP24_6116"
+                        print(
+                            f"INFO: {mfg_name}/{name} type=4 24-pin SRAM pinout override "
+                            f"DIP24_2716->DIP24_6116 "
+                            f"(pin 21 = WE on SRAM; piersfinlayson/one-rom + DS1220 datasheet)",
+                            file=sys.stderr,
+                        )
+
+                # DB-02 Group 2 fix: native 28-pin SRAM (proto_id == 0x28 SRAM_STD,
+                # type=4, pm_idx=0) that resolve_pinout_key incorrectly routes to
+                # DIP28_2764 via Tier 3 fallback (DIP28_VARIANT_MAP.get(0) = "DIP28_2764").
+                # The fm1608 block above does NOT catch these — it only fires on
+                # proto in (0x07, 0x08, 0x0B). These chips have native proto_id=0x28.
+                # Gate on pinout_key == "DIP28_2764" to ensure we only correct the
+                # wrong-fallback chips and never re-route a chip already set correctly
+                # (T-67.1-01 tamper mitigation).
+                #
+                # Mem-size discriminator (Pitfall 1):
+                #   <= 8192 bytes (8K): DIP28_JEDEC_SRAM_8K — 13 address bits (A0-A12);
+                #     per pinouts.json: "same address bus as DIP28_2764 (A0-A12, 13 bits for 8K)"
+                #   > 8192 bytes (32K): DIP28_28C256 — 15 address bits (A0-A14) + rw-pin=[27];
+                #     JEDEC 62256 standard: A14 at pin 1, WE at pin 27.
+                #
+                # Evidence:
+                #   - DIP28_JEDEC_SRAM_8K pinouts.json comment: "13 address bits for 8K"
+                #   - DIP28_28C256 pinouts.json: rw-pin=[27] + 15-bit address bus confirmed
+                #   - JEDEC 62256 standard pinout: A14=pin1, WE=pin27 (piersfinlayson/one-rom)
+                #   - Covers: DS1225(TEST)/8K, DS1230AB(TEST)/DS1230Y(TEST)/DS1230W(TEST3.3V)/32K,
+                #     BQ4010YMA(TEST)/8K, BQ4011YMA(TEST)/BQ4011LYMA(TEST3.3V)/32K,
+                #     W2464/W2465/8K, W24256/W24257A/32K, 6164/6264/8K, 61256/62256/32K
+                if (
+                    pin_count == 28
+                    and pm_idx == 0
+                    and proto_id == 0x28
+                    and type_int == 4
+                    and pinout_key == "DIP28_2764"
+                ):
+                    if mem_size <= 8192:
+                        pinout_key = "DIP28_JEDEC_SRAM_8K"
+                        size_label = "8K"
+                    else:
+                        pinout_key = "DIP28_28C256"
+                        size_label = f"{mem_size // 1024}K"
+                    print(
+                        f"INFO: {mfg_name}/{name} native 28-pin SRAM pinout override "
+                        f"DIP28_2764->{pinout_key} "
+                        f"({size_label}; JEDEC SRAM standard WE=pin27; DB-02 Group 2)",
+                        file=sys.stderr,
+                    )
 
                 # Re-derive electrical.type protocol-aware after all algorithm
                 # overrides have run. The firmware dispatch is the ground truth:

@@ -260,6 +260,131 @@ class TestSupportStatusUniversal:
 
 
 # ---------------------------------------------------------------------------
+# DB-02 (Plan 67.1-01): SRAM pinout corrections — 14 chips, 2 groups
+# ---------------------------------------------------------------------------
+class TestSramPinoutCorrections:
+    """DB-02 (67.1): The 14 native-SRAM DIP chips that previously fell through
+    resolve_pinout_key to wrong EPROM pinouts now carry correct SRAM pinouts.
+
+    Group 1 — 4 x 24-pin SRAM (DS1220(RW), FM1208, M48T02/12, M48Z02/12):
+      Correct pinout: DIP24_6116 (rw-pin=[21]/WE).
+      Previously: DIP24_2716 (vpp-pin=[21] — wrong, no WE strobe).
+
+    Group 2a — 5 x 28-pin SRAM, 8K (DS1225, BQ4010YMA, W2464/2465, 6164/6264):
+      Correct pinout: DIP28_JEDEC_SRAM_8K (13 address bits, WE at pin 27).
+      Previously: DIP28_2764 (EPROM pinout — wrong, no WE strobe).
+
+    Group 2b — 5 x 28-pin SRAM, 32K (DS1230, BQ4011YMA, W24256/24257A, 61256/62256):
+      Correct pinout: DIP28_28C256 (15 address bits, WE at pin 27).
+      Previously: DIP28_2764 (EPROM pinout — wrong, no WE strobe, missing A14 at pin 1).
+
+    Evidence:
+      - DIP24_6116: rw-pin=[21] (WE); DS1220 datasheet pin 21 = WE (piersfinlayson/one-rom verified)
+      - DIP28_JEDEC_SRAM_8K: 13 address bits (A0-A12) for 8K per pinouts.json comment
+      - DIP28_28C256: 15 address bits (A0-A14) + rw-pin=[27]; JEDEC 62256 standard A14 at pin 1
+    """
+
+    def test_group1_24pin_sram_gets_dip24_6116(self):
+        """DS1220(RW) must have pinout == 'DIP24_6116' after DB-02 regen.
+
+        DS1220 is a 24-pin 2K SRAM with WE on socket pin 21.
+        DIP24_2716 (wrong) has vpp-pin=[21]; DIP24_6116 (correct) has rw-pin=[21].
+        """
+        db = _load_db()
+        found = []
+        for mfg, chip in _all_chips(db):
+            al = _aliases(chip)
+            if "DS1220(RW)" in al:
+                found.append((mfg, chip))
+
+        assert found, "DS1220(RW) not found in chip_database.json"
+        for mfg, chip in found:
+            pinout = chip.get("pinout")
+            assert pinout == "DIP24_6116", (
+                f"{mfg}/{chip.get('part_number')}: expected pinout='DIP24_6116' "
+                f"(SRAM with WE on pin 21), got {pinout!r} (DB-02 Group 1 not fixed)"
+            )
+            # Must remain supported — only the pinout changes, not the status
+            assert chip.get("support_status") == "supported", (
+                f"{mfg}/{chip.get('part_number')}: support_status must remain 'supported' "
+                f"after pinout correction"
+            )
+
+    def test_group2a_8k_28pin_sram_gets_dip28_jedec_sram_8k(self):
+        """6264 (8K 28-pin SRAM) must have pinout == 'DIP28_JEDEC_SRAM_8K' after DB-02 regen.
+
+        DIP28_JEDEC_SRAM_8K has 13 address bits (A0-A12) and rw-pin=[27] (WE).
+        DIP28_2764 (wrong) is an EPROM pinout with no WE strobe.
+        """
+        db = _load_db()
+        found = []
+        for mfg, chip in _all_chips(db):
+            al = _aliases(chip)
+            if "6264" in al:
+                found.append((mfg, chip))
+
+        assert found, "6264 not found in chip_database.json"
+        for mfg, chip in found:
+            pinout = chip.get("pinout")
+            assert pinout == "DIP28_JEDEC_SRAM_8K", (
+                f"{mfg}/{chip.get('part_number')}: expected pinout='DIP28_JEDEC_SRAM_8K' "
+                f"(8K SRAM, 13 addr bits + WE), got {pinout!r} (DB-02 Group 2a not fixed)"
+            )
+            assert chip.get("support_status") == "supported", (
+                f"{mfg}/{chip.get('part_number')}: support_status must remain 'supported' "
+                f"after pinout correction"
+            )
+
+    def test_group2b_32k_28pin_sram_gets_dip28_28c256(self):
+        """62256 (32K 28-pin SRAM) must have pinout == 'DIP28_28C256' after DB-02 regen.
+
+        DIP28_28C256 has 15 address bits (A0-A14, with A14 at pin 1) and rw-pin=[27] (WE).
+        JEDEC 62256 standard: WE=pin27, A14=pin1. DIP28_2764 (wrong) has no WE strobe.
+        """
+        db = _load_db()
+        found = []
+        for mfg, chip in _all_chips(db):
+            al = _aliases(chip)
+            if "62256" in al:
+                found.append((mfg, chip))
+
+        assert found, "62256 not found in chip_database.json"
+        for mfg, chip in found:
+            pinout = chip.get("pinout")
+            assert pinout == "DIP28_28C256", (
+                f"{mfg}/{chip.get('part_number')}: expected pinout='DIP28_28C256' "
+                f"(32K SRAM, 15 addr bits + WE), got {pinout!r} (DB-02 Group 2b not fixed)"
+            )
+            assert chip.get("support_status") == "supported", (
+                f"{mfg}/{chip.get('part_number')}: support_status must remain 'supported' "
+                f"after pinout correction"
+            )
+
+    def test_no_supported_sram_on_eprom_pinout(self):
+        """After DB-02: no supported SRAM chip should have an EPROM pinout.
+
+        Any 'SRAM' etype chip with pinout in (DIP24_2716, DIP28_2764) is a regression.
+        """
+        db = _load_db()
+        violations = []
+        for mfg, chip in _all_chips(db):
+            ss = chip.get("support_status", "supported")
+            if ss != "supported":
+                continue  # non-supported chips may legitimately keep EPROM pinouts
+            etype = chip.get("electrical", {}).get("type", "")
+            pinout = chip.get("pinout", "")
+            if etype == "SRAM" and pinout in ("DIP24_2716", "DIP28_2764"):
+                violations.append(
+                    f"{mfg}/{chip.get('part_number')}: SRAM chip with EPROM pinout "
+                    f"{pinout!r} (DB-02 regression)"
+                )
+        assert not violations, (
+            f"{len(violations)} SRAM chip(s) still have wrong EPROM pinouts after DB-02: "
+            + "; ".join(violations[:5])
+        )
+
+
+# ---------------------------------------------------------------------------
 # D-01: Serial/SMD parts must still be skipped
 # ---------------------------------------------------------------------------
 class TestSerialSmdStillSkipped:

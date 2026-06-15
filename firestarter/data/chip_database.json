@@ -3946,7 +3946,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_6116"
     },
     {
       "part_number": "DS1220(TEST)",
@@ -4006,7 +4006,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "DS1230AB(RW),DS1230Y(RW)",
@@ -4046,7 +4046,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "DS1230W(RW3.3V)",
@@ -4086,7 +4086,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "DS1245AB(RW),DS1245Y(RW)",
@@ -9997,7 +9997,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_6116"
     },
     {
       "part_number": "FM1608",
@@ -10922,7 +10922,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_6116"
     },
     {
       "part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
@@ -12829,7 +12829,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP24_2716"
+      "pinout": "DIP24_6116"
     },
     {
       "part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y",
@@ -13633,7 +13633,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "BQ4011YMA(RW)",
@@ -13673,7 +13673,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "BQ4011LYMA(RW3.3V)",
@@ -13713,7 +13713,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "BQ4013YMA(RW)",
@@ -14479,7 +14479,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "W24512",
@@ -14519,7 +14519,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     }
   ],
   "WSI": [
@@ -14906,7 +14906,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_JEDEC_SRAM_8K"
     },
     {
       "part_number": "61256,62256",
@@ -14926,7 +14926,7 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
-      "pinout": "DIP28_2764"
+      "pinout": "DIP28_28C256"
     },
     {
       "part_number": "61512,62512",
