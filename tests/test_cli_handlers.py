@@ -776,3 +776,69 @@ def test_dev_fault_inject_fail(runner: CliRunner) -> None:
         f"Expected exit 1 (fault-inject failed), got {result.exit_code}. "
         f"Output: {result.output!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# DB-04 SC#1: info display shows status-specific support line (67.1-02 Task 1)
+#
+# Log output from EpromConsolePresenter goes through the logging subsystem.
+# In-process CliRunner tests capture it via pytest caplog (at WARNING level)
+# since the AppContext short-circuit skips _setup_logging in the CLI group.
+# ---------------------------------------------------------------------------
+
+
+def test_info_vpp_exceeds_max_shows_status(runner: CliRunner, caplog) -> None:
+    """`firestarter info M2716` shows "Support status" and "exceeds" in log output.
+
+    DB-04 SC#1: non-supported chips must render a status-specific line in info.
+    M2716 is vpp-exceeds-max (VPP 25V exceeds programmer max 22V). Exit must be
+    0 — info displays, never refuses. Log captured via caplog (WARNING level).
+    """
+    import logging
+
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
+        result = runner.invoke(cli, ["info", "M2716"], obj=app)
+    assert result.exit_code == 0
+    log_text = " ".join(r.getMessage() for r in caplog.records)
+    assert "Support status" in log_text
+    assert "exceeds" in log_text.lower()
+
+
+def test_info_adapter_required_shows_status(runner: CliRunner, caplog) -> None:
+    """`firestarter info AT28C16` shows "Support status" and "adapter" in log output.
+
+    DB-04 SC#1: adapter-required status must be surfaced in the info display.
+    AT28C16 is a 24-pin 5V EEPROM that needs a dedicated DIP24 adapter.
+    Exit must be 0 — info does not refuse adapter-required chips.
+    """
+    import logging
+
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
+        result = runner.invoke(cli, ["info", "AT28C16"], obj=app)
+    assert result.exit_code == 0
+    log_text = " ".join(r.getMessage() for r in caplog.records)
+    assert "Support status" in log_text
+    assert "adapter" in log_text.lower()
+
+
+def test_info_protocol_not_impl_shows_status(runner: CliRunner, caplog) -> None:
+    """`firestarter info X88C64P` shows "Support status" and "not implemented" in log output.
+
+    DB-04 SC#1: protocol-not-implemented status must be surfaced in info display.
+    X88C64P uses protocol 0x34 (XICOR NovRAM) which is not implemented.
+    Exit must be 0 — info does not refuse protocol-not-implemented chips.
+    """
+    import logging
+
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
+        result = runner.invoke(cli, ["info", "X88C64P"], obj=app)
+    assert result.exit_code == 0
+    log_text = " ".join(r.getMessage() for r in caplog.records)
+    assert "Support status" in log_text
+    assert "not implemented" in log_text.lower()
