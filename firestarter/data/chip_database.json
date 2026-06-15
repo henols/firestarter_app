@@ -1873,7 +1873,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "part_number": "AT28C04E,AT28C04F",
@@ -1894,7 +1894,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "part_number": "AT28C040,AT28C040E",
@@ -1935,7 +1935,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "part_number": "AT28C16E,AT28C16F",
@@ -1956,7 +1956,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "part_number": "AT28C17",
@@ -6419,7 +6419,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2732",
-      "unsupported_reason": "VPP 25V exceeds RURP ceiling (22V); cannot program on this hardware"
+      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
     },
     {
       "part_number": "2764",
@@ -6540,7 +6540,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "VPP 25V exceeds RURP ceiling (22V); cannot program on this hardware"
+      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
     },
     {
       "part_number": "P27256",
@@ -8273,7 +8273,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "part_number": "28C04AF",
@@ -8294,7 +8294,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "part_number": "28C16A",
@@ -8315,7 +8315,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "part_number": "28C16AF",
@@ -8336,7 +8336,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "part_number": "28C17A",
@@ -9123,7 +9123,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "24-pin 5V EEPROM with EPROM-family algo 0x0B: socket pin 21 = WE on 28C-family chips; RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail (hardware-damage path). Requires a dedicated DIP24 EEPROM adapter or firmware handler before this chip can be programmed."
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "part_number": "UPD28C256",
@@ -10142,7 +10142,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "VPP 25V exceeds RURP ceiling (22V); cannot program on this hardware"
+      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
     },
     {
       "part_number": "ETC2732",
@@ -12049,7 +12049,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "VPP 25V exceeds RURP ceiling (22V); cannot program on this hardware"
+      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
     },
     {
       "part_number": "ETC2732",
@@ -14864,7 +14864,7 @@
         "chip_id_value": "0x00000000"
       },
       "pinout": "DIP24_2716",
-      "unsupported_reason": "Protocol 0x34 (XICOR NovRAM serial-parallel hybrid) is not implemented on this hardware"
+      "unsupported_reason": "protocol not implemented: 0x34 (XICOR NovRAM serial-parallel hybrid)"
     }
   ],
   "Standard SRAM": [

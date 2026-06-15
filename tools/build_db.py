@@ -398,9 +398,12 @@ def main():
                     continue
                 if proto_id == 0x34:
                     _support_status = "protocol-not-implemented"
+                    # DB-04 Approach A (67.1-01): reason string begins with SC-required
+                    # wording so the host can render it verbatim (Plan 02 prints f"{e}").
+                    # Must contain "not implemented" substring — existing test
+                    # test_read_protocol_not_implemented_typed_refusal asserts it.
                     _unsupported_reason = (
-                        "Protocol 0x34 (XICOR NovRAM serial-parallel hybrid) "
-                        "is not implemented on this hardware"
+                        "protocol not implemented: 0x34 (XICOR NovRAM serial-parallel hybrid)"
                     )
 
                 # SAFETY SKIP / Site B: 24-pin 5V parallel EEPROMs routed via EPROM
@@ -423,12 +426,13 @@ def main():
                     and (flags & 0x10)
                 ):
                     _support_status = "adapter-required"
+                    # DB-04 Approach A (67.1-01): reason string begins with
+                    # "adapter required:" so the host can render it verbatim.
+                    # Non-empty adapter note required (DB-02 SC#1).
                     _unsupported_reason = (
-                        f"24-pin 5V EEPROM with EPROM-family algo 0x{proto_id:02X}: "
-                        f"socket pin 21 = WE on 28C-family chips; "
-                        f"RURP DIP24_2716 pinout maps pin 21 to the 12V VPP rail "
-                        f"(hardware-damage path). Requires a dedicated DIP24 EEPROM "
-                        f"adapter or firmware handler before this chip can be programmed."
+                        "adapter required: requires a dedicated DIP24 EEPROM adapter "
+                        "or firmware handler — socket pin 21 = WE, which the RURP "
+                        "DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
                     )
                     print(
                         f"INFO: including {mfg_name}/{name} as adapter-required — "
@@ -633,10 +637,13 @@ def main():
                 if _nmos_vpp_mv is not None:
                     if _nmos_vpp_mv > RURP_VPP_CEILING_MV:
                         _support_status = "vpp-exceeds-max"
+                        # DB-04 Approach A (67.1-01): reason string begins with
+                        # "VPP <x>V exceeds programmer max (<ceil>V)" so the host
+                        # can render it verbatim (Plan 02 prints f"{e}").
+                        # Uses "programmer max" (not "RURP ceiling") per SC#2 wording.
                         _unsupported_reason = (
-                            f"VPP {_nmos_vpp_mv // 1000}V exceeds RURP ceiling "
-                            f"({RURP_VPP_CEILING_MV // 1000}V); "
-                            f"cannot program on this hardware"
+                            f"VPP {_nmos_vpp_mv // 1000}V exceeds programmer max "
+                            f"({RURP_VPP_CEILING_MV // 1000}V)"
                         )
                         # CR-01 Option A: demote to NON_DISPATCHABLE_ALGO so dispatch()
                         # returns ERROR instead of configure_eprom (D-03 HARD invariant).

@@ -385,6 +385,95 @@ class TestSramPinoutCorrections:
 
 
 # ---------------------------------------------------------------------------
+# DB-04 (Plan 67.1-01): unsupported_reason strings begin with SC-required wording
+# ---------------------------------------------------------------------------
+class TestUnsupportedReasonStrings:
+    """DB-04 Approach A (67.1-01): the three unsupported_reason strings in
+    build_db.py now begin with the DB-04 SC#2-required status wording so the
+    host (Plan 02) can render them verbatim.
+
+    - vpp-exceeds-max  : starts with "VPP <x>V exceeds programmer max (<ceil>V)"
+    - adapter-required : starts with "adapter required:"
+    - protocol-not-implemented : contains "protocol not implemented"
+    """
+
+    def test_vpp_exceeds_max_reason_starts_with_exceeds_programmer_max(self):
+        """M2716 unsupported_reason contains 'exceeds programmer max'.
+
+        DB-04 SC#2: the vpp-exceeds-max reason must start with
+        'VPP <x>V exceeds programmer max (<ceil>V)' so the host renders it verbatim.
+        """
+        db = _load_db()
+        found = []
+        for mfg, chip in _all_chips(db):
+            al = _aliases(chip)
+            if "M2716" in al:
+                found.append((mfg, chip))
+
+        assert found, "M2716 not found in chip_database.json"
+        for mfg, chip in found:
+            reason = chip.get("unsupported_reason", "")
+            assert "exceeds programmer max" in reason, (
+                f"{mfg}/{chip.get('part_number')}: vpp-exceeds-max reason must contain "
+                f"'exceeds programmer max', got: {reason!r}"
+            )
+            assert reason.startswith("VPP "), (
+                f"{mfg}/{chip.get('part_number')}: vpp-exceeds-max reason must start "
+                f"with 'VPP ', got: {reason!r}"
+            )
+
+    def test_adapter_required_reason_starts_with_adapter_required(self):
+        """AT28C16 (adapter-required) unsupported_reason starts with 'adapter required:'.
+
+        DB-04 SC#2: adapter-required reason must start with 'adapter required:'
+        so the host renders it verbatim.
+        """
+        db = _load_db()
+        found = []
+        for mfg, chip in _all_chips(db):
+            al = _aliases(chip)
+            if "AT28C16" in al:
+                found.append((mfg, chip))
+
+        assert found, "AT28C16 not found in chip_database.json"
+        for mfg, chip in found:
+            ss = chip.get("support_status")
+            if ss != "adapter-required":
+                continue
+            reason = chip.get("unsupported_reason", "")
+            assert reason.startswith("adapter required:"), (
+                f"{mfg}/{chip.get('part_number')}: adapter-required reason must start "
+                f"with 'adapter required:', got: {reason!r}"
+            )
+
+    def test_protocol_not_implemented_reason_contains_not_implemented(self):
+        """X88C64P unsupported_reason contains 'protocol not implemented'.
+
+        DB-04 SC#2: protocol-not-implemented reason must contain 'protocol not implemented'
+        so the host renders it verbatim. Also must contain 'not implemented' substring
+        for the existing test_read_protocol_not_implemented_typed_refusal assertion.
+        """
+        db = _load_db()
+        found = []
+        for mfg, chip in _all_chips(db):
+            al = _aliases(chip)
+            if "X88C64P" in al or "X88C64S" in al:
+                found.append((mfg, chip))
+
+        assert found, "X88C64P not found in chip_database.json"
+        for mfg, chip in found:
+            reason = chip.get("unsupported_reason", "")
+            assert "protocol not implemented" in reason.lower(), (
+                f"{mfg}/{chip.get('part_number')}: protocol-not-implemented reason must "
+                f"contain 'protocol not implemented', got: {reason!r}"
+            )
+            assert "not implemented" in reason.lower(), (
+                f"{mfg}/{chip.get('part_number')}: reason must contain 'not implemented' "
+                f"(required by test_read_protocol_not_implemented_typed_refusal)"
+            )
+
+
+# ---------------------------------------------------------------------------
 # D-01: Serial/SMD parts must still be skipped
 # ---------------------------------------------------------------------------
 class TestSerialSmdStillSkipped:
