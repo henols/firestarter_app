@@ -123,7 +123,13 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
                 f"Unsupported protocol: {e} — this protocol is recognized but not yet implemented in the firmware."
             ) from e
         except ChipNotImplementedError as e:
-            raise click.ClickException(f"Chip not usable: {e}") from e
+            # DB-04 SC#2 Approach A: render the reason string verbatim.
+            # Plan 01 reworded unsupported_reason strings to begin with the
+            # SC-required wording, so str(e) = "<name>: <reason>" is already
+            # the authoritative status-specific message. Drop the generic
+            # "Chip not usable:" prefix so the DB string is the single source
+            # of truth for both info display and chip-op refusal.
+            raise click.ClickException(str(e)) from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
         except HardwareOperationError as e:

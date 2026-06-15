@@ -842,3 +842,57 @@ def test_info_protocol_not_impl_shows_status(runner: CliRunner, caplog) -> None:
     log_text = " ".join(r.getMessage() for r in caplog.records)
     assert "Support status" in log_text
     assert "not implemented" in log_text.lower()
+
+
+# ---------------------------------------------------------------------------
+# DB-04 SC#2/#4: per-status chip-op refusal matrix (67.1-02 Task 2)
+#
+# Each test asserts: exit 1, status-specific text in output, no traceback,
+# no generic "Chip not usable:" prefix (Approach A — reason string verbatim).
+# Guard fires before resolve_chip/convert_to_programmer → no serial I/O.
+# ---------------------------------------------------------------------------
+
+
+def test_read_vpp_exceeds_max_status_refusal(runner: CliRunner) -> None:
+    """`firestarter read M2716 out.bin` exits 1 with vpp-exceeds-max reason verbatim.
+
+    DB-04 SC#2/#4 vpp-exceeds-max: reason string is rendered directly (no
+    "Chip not usable:" prefix). The guard fires in resolve_chip before any
+    serial byte. M2716 VPP=25V exceeds programmer max (22V).
+    """
+    app = make_app_context()
+    result = runner.invoke(cli, ["read", "M2716", "out.bin"], obj=app)
+    assert result.exit_code == 1
+    assert "exceeds" in result.output.lower()
+    assert "Chip not usable:" not in result.output
+    assert "Traceback (most recent call last)" not in result.output
+
+
+def test_read_adapter_required_status_refusal(runner: CliRunner) -> None:
+    """`firestarter read AT28C16 out.bin` exits 1 with adapter-required reason verbatim.
+
+    DB-04 SC#2/#4 adapter-required: AT28C16 is a 24-pin 5V EEPROM that requires
+    a DIP24 adapter. Reason string rendered directly (no "Chip not usable:" prefix).
+    Guard fires in resolve_chip before any serial byte.
+    """
+    app = make_app_context()
+    result = runner.invoke(cli, ["read", "AT28C16", "out.bin"], obj=app)
+    assert result.exit_code == 1
+    assert "adapter" in result.output.lower()
+    assert "Chip not usable:" not in result.output
+    assert "Traceback (most recent call last)" not in result.output
+
+
+def test_read_protocol_not_implemented_status_refusal(runner: CliRunner) -> None:
+    """`firestarter read X88C64P out.bin` exits 1 with protocol-not-implemented reason verbatim.
+
+    DB-04 SC#2/#4 protocol-not-implemented: X88C64P uses protocol 0x34 (XICOR
+    NovRAM). Reason string rendered directly (no "Chip not usable:" prefix).
+    Guard fires in resolve_chip before any serial byte.
+    """
+    app = make_app_context()
+    result = runner.invoke(cli, ["read", "X88C64P", "out.bin"], obj=app)
+    assert result.exit_code == 1
+    assert "not implemented" in result.output.lower()
+    assert "Chip not usable:" not in result.output
+    assert "Traceback (most recent call last)" not in result.output
