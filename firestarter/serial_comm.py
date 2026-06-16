@@ -35,6 +35,7 @@ from firestarter.constants import (
 from firestarter.exceptions import (
     FirmwareOutdatedError,
     ProgrammerNotFoundError,
+    ProtocolNotImplementedError,
     SerialError,
     SerialTimeoutError,
 )
@@ -52,7 +53,7 @@ from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_de
     _decode_param,
     cobs_encode,
 )
-from firestarter.messages import MSG_OK_READY
+from firestarter.messages import MSG_ERR_PROTOCOL_NOT_IMPLEMENTED, MSG_OK_READY
 
 logger = logging.getLogger("SerialComm")
 rurp_logger = logging.getLogger("RURP")
@@ -394,6 +395,7 @@ class SerialCommunicator:
                         type=decoded.severity,
                         message=decoded.text,
                         payload=decoded.payload,
+                        id=decoded.id,
                     )
                     self._log_rurp_feedback(response)
                     yield response
@@ -439,6 +441,8 @@ class SerialCommunicator:
             if response.type == "OK":
                 return True, response.message
             elif response.type == "ERROR":
+                if response.id == MSG_ERR_PROTOCOL_NOT_IMPLEMENTED:
+                    raise ProtocolNotImplementedError(response.message)
                 return False, response.message
             # Other significant responses are ignored by this loop, which is the intended behavior.  # noqa: E501
 
@@ -694,6 +698,10 @@ class SerialCommunicator:
                 communicator.disconnect()
             if isinstance(e, FirmwareOutdatedError):
                 raise
+        except ProtocolNotImplementedError:
+            if communicator:
+                communicator.disconnect()
+            raise
         except Exception as e:
             logger.error(f"Unexpected error while probing {port_name}: {e}")
             if communicator:
@@ -748,10 +756,11 @@ class SerialCommunicator:
                         logger.info("Connecting... OK      ", extra={"status": "end"})
                     # The "Programmer found on..." message is logged by _probe_port on a new line.  # noqa: E501
                     return communicator
-            except FirmwareOutdatedError as e:
+            except (FirmwareOutdatedError, ProtocolNotImplementedError) as e:
                 if status_update_active:
                     logger.info("Connecting... Failed  ", extra={"status": "end"})
-                # If firmware is outdated on a port, stop probing and raise the specific error.  # noqa: E501
+                # If firmware is outdated or protocol not implemented, stop probing  # noqa: E501
+                # and raise the specific error (both are stop-probing, surface-the-specific-error cases).  # noqa: E501
                 raise e
 
         # If the loop completes without finding a programmer, it's a failure.

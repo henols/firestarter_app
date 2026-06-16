@@ -106,21 +106,95 @@ def test_list_happy_path(runner: CliRunner) -> None:
 
 
 def test_info_chip_resolution_happy_path(runner: CliRunner) -> None:
-    """`firestarter info W27C512` resolves the chip and displays full info.
+    """`firestarter info W27C512` resolves the chip and displays the layout.
 
-    The vpp-pin list-vs-scalar TypeError in ic_layout.py is now fixed, so
-    this command exits 0 and renders chip details on stdout.
+    Phase 69 Plan 01 fixed the ic_layout list-vs-int crash; exit_code is now 0.
+    Injects a REAL EpromConsolePresenter(db) — Pitfall 1: the default Mock
+    presenter returns None from prepare_detailed_eprom_data and masks the fix.
     """
-    result = runner.invoke(cli, ["info", "W27C512"])
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    result = runner.invoke(cli, ["info", "W27C512"], obj=app)
     assert "not found in database" not in result.output
     assert result.exit_code == 0
-    assert "W27C512" in result.output
 
 
 def test_info_unknown_chip_error_path(runner: CliRunner) -> None:
     """`firestarter info NOPE_NOT_A_CHIP` exits 1 with chip-not-found error."""
     result = runner.invoke(cli, ["info", "NOPE_NOT_A_CHIP"])
     assert result.exit_code == 1
+
+
+def test_info_happy_path_no_crash(runner: CliRunner) -> None:
+    """`firestarter info W27C512` exits 0 with chip name in output.
+
+    SC#1 regression: proves the ic_layout list-vs-int fix holds end-to-end.
+    Uses a REAL EpromConsolePresenter(db) to exercise the full display path.
+    """
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    result = runner.invoke(cli, ["info", "W27C512"], obj=app)
+    assert result.exit_code == 0
+    assert "Traceback (most recent call last)" not in result.output
+
+
+def test_info_2732_list_valued_pin_no_crash(runner: CliRunner) -> None:
+    """`firestarter info 2732` exits 0 — SC#1 list-valued-pin regression.
+
+    2732 has vpp-pin=[20] (list-valued shared pin); this was the original
+    live-crash chip. Proves the scalar-extraction fix in ic_layout.py works
+    for the vpp-exceeds-max + shared-pin path. REAL presenter required.
+    """
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    result = runner.invoke(cli, ["info", "2732"], obj=app)
+    assert result.exit_code == 0
+    assert "Traceback (most recent call last)" not in result.output
+
+
+def test_info_vpp_exceeds_max_no_crash(runner: CliRunner) -> None:
+    """`firestarter info M2716` exits 0 — vpp-exceeds-max status, distinct vpp/oe.
+
+    info deliberately bypasses resolve_chip so it DISPLAYS non-supported chips
+    without refusing (per Phase 68 spec). M2716 is a vpp-exceeds-max chip with
+    distinct vpp and oe pins. REAL presenter required (Pitfall 1).
+    """
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    result = runner.invoke(cli, ["info", "M2716"], obj=app)
+    assert result.exit_code == 0
+    assert "Traceback (most recent call last)" not in result.output
+
+
+def test_info_adapter_required_no_crash(runner: CliRunner) -> None:
+    """`firestarter info AT28C16` exits 0 — adapter-required 24-pin EEPROM.
+
+    info does NOT refuse adapter-required chips — it displays them. This is the
+    correct Phase 68 behavior: the capability guard fires only in resolve_chip
+    (the chip-op path), not in the info display path. REAL presenter required.
+    """
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    result = runner.invoke(cli, ["info", "AT28C16"], obj=app)
+    assert result.exit_code == 0
+    assert "Traceback (most recent call last)" not in result.output
+    assert "ChipNotImplementedError" not in result.output
+
+
+def test_info_protocol_not_implemented_no_crash(runner: CliRunner) -> None:
+    """`firestarter info X88C64P` exits 0 — protocol-not-implemented DISPLAYS, not refuses.
+
+    SC#3 protocol-not-implemented coverage (Phase 66 third non-supported status).
+    X88C64P is the sole protocol-not-implemented chip in the packaged DB (part_number
+    alias "X88C64P,X88C64S", protocol 0x34 XICOR NovRAM). info bypasses resolve_chip
+    so it DISPLAYS the chip without refusing — same contract as M2716/AT28C16.
+    REAL presenter required (Pitfall 1). Depends on Plan 01 ic_layout fix.
+    """
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    result = runner.invoke(cli, ["info", "X88C64P"], obj=app)
+    assert result.exit_code == 0
+    assert "Traceback (most recent call last)" not in result.output
 
 
 def test_search_happy_path(runner: CliRunner) -> None:
@@ -171,6 +245,38 @@ def test_read_operator_returns_false(runner: CliRunner) -> None:
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["read", "W27C512", "out.bin"], obj=app)
     assert result.exit_code == 1
+
+
+def test_read_non_supported_typed_refusal(runner: CliRunner) -> None:
+    """`firestarter read M2716 out.bin` exits 1 with typed support_status refusal.
+
+    SC#3 vpp-exceeds-max (M2716). The Phase 66 ChipNotImplementedError guard in
+    resolve_chip refuses before any wire dict is built. The @map_typed_errors
+    decorator converts ChipNotImplementedError -> exit 1 + "Chip not usable:"
+    message. No Traceback in output.
+    """
+    app = make_app_context()
+    result = runner.invoke(cli, ["read", "M2716", "out.bin"], obj=app)
+    assert result.exit_code == 1
+    assert "Traceback (most recent call last)" not in result.output
+    assert "M2716" in result.output
+
+
+def test_read_protocol_not_implemented_typed_refusal(runner: CliRunner) -> None:
+    """`firestarter read X88C64P out.bin` exits 1 with typed support_status refusal.
+
+    SC#3 protocol-not-implemented (X88C64P — sole protocol-not-implemented chip
+    in the packaged DB, part_number alias "X88C64P,X88C64S", protocol 0x34).
+    The Phase 66 ChipNotImplementedError guard in resolve_chip refuses before
+    any wire dict is built; @map_typed_errors converts to exit 1 with "Chip not
+    usable:" and the not-implemented reason substring. No Traceback in output.
+    """
+    app = make_app_context()
+    result = runner.invoke(cli, ["read", "X88C64P", "out.bin"], obj=app)
+    assert result.exit_code == 1
+    assert "X88C64P" in result.output
+    assert "not implemented" in result.output.lower()
+    assert "Traceback (most recent call last)" not in result.output
 
 
 def test_write_happy_path(runner: CliRunner) -> None:
@@ -670,3 +776,123 @@ def test_dev_fault_inject_fail(runner: CliRunner) -> None:
         f"Expected exit 1 (fault-inject failed), got {result.exit_code}. "
         f"Output: {result.output!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# DB-04 SC#1: info display shows status-specific support line (67.1-02 Task 1)
+#
+# Log output from EpromConsolePresenter goes through the logging subsystem.
+# In-process CliRunner tests capture it via pytest caplog (at WARNING level)
+# since the AppContext short-circuit skips _setup_logging in the CLI group.
+# ---------------------------------------------------------------------------
+
+
+def test_info_vpp_exceeds_max_shows_status(runner: CliRunner, caplog) -> None:
+    """`firestarter info M2716` shows "Support status" and "exceeds" in log output.
+
+    DB-04 SC#1: non-supported chips must render a status-specific line in info.
+    M2716 is vpp-exceeds-max (VPP 25V exceeds programmer max 22V). Exit must be
+    0 — info displays, never refuses. Log captured via caplog (WARNING level).
+    """
+    import logging
+
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
+        result = runner.invoke(cli, ["info", "M2716"], obj=app)
+    assert result.exit_code == 0
+    log_text = " ".join(r.getMessage() for r in caplog.records)
+    assert "Support status" in log_text
+    assert "exceeds" in log_text.lower()
+
+
+def test_info_adapter_required_shows_status(runner: CliRunner, caplog) -> None:
+    """`firestarter info AT28C16` shows "Support status" and "adapter" in log output.
+
+    DB-04 SC#1: adapter-required status must be surfaced in the info display.
+    AT28C16 is a 24-pin 5V EEPROM that needs a dedicated DIP24 adapter.
+    Exit must be 0 — info does not refuse adapter-required chips.
+    """
+    import logging
+
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
+        result = runner.invoke(cli, ["info", "AT28C16"], obj=app)
+    assert result.exit_code == 0
+    log_text = " ".join(r.getMessage() for r in caplog.records)
+    assert "Support status" in log_text
+    assert "adapter" in log_text.lower()
+
+
+def test_info_protocol_not_impl_shows_status(runner: CliRunner, caplog) -> None:
+    """`firestarter info X88C64P` shows "Support status" and "not implemented" in log output.
+
+    DB-04 SC#1: protocol-not-implemented status must be surfaced in info display.
+    X88C64P uses protocol 0x34 (XICOR NovRAM) which is not implemented.
+    Exit must be 0 — info does not refuse protocol-not-implemented chips.
+    """
+    import logging
+
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
+        result = runner.invoke(cli, ["info", "X88C64P"], obj=app)
+    assert result.exit_code == 0
+    log_text = " ".join(r.getMessage() for r in caplog.records)
+    assert "Support status" in log_text
+    assert "not implemented" in log_text.lower()
+
+
+# ---------------------------------------------------------------------------
+# DB-04 SC#2/#4: per-status chip-op refusal matrix (67.1-02 Task 2)
+#
+# Each test asserts: exit 1, status-specific text in output, no traceback,
+# no generic "Chip not usable:" prefix (Approach A — reason string verbatim).
+# Guard fires before resolve_chip/convert_to_programmer → no serial I/O.
+# ---------------------------------------------------------------------------
+
+
+def test_read_vpp_exceeds_max_status_refusal(runner: CliRunner) -> None:
+    """`firestarter read M2716 out.bin` exits 1 with vpp-exceeds-max reason verbatim.
+
+    DB-04 SC#2/#4 vpp-exceeds-max: reason string is rendered directly (no
+    "Chip not usable:" prefix). The guard fires in resolve_chip before any
+    serial byte. M2716 VPP=25V exceeds programmer max (22V).
+    """
+    app = make_app_context()
+    result = runner.invoke(cli, ["read", "M2716", "out.bin"], obj=app)
+    assert result.exit_code == 1
+    assert "exceeds" in result.output.lower()
+    assert "Chip not usable:" not in result.output
+    assert "Traceback (most recent call last)" not in result.output
+
+
+def test_read_adapter_required_status_refusal(runner: CliRunner) -> None:
+    """`firestarter read AT28C16 out.bin` exits 1 with adapter-required reason verbatim.
+
+    DB-04 SC#2/#4 adapter-required: AT28C16 is a 24-pin 5V EEPROM that requires
+    a DIP24 adapter. Reason string rendered directly (no "Chip not usable:" prefix).
+    Guard fires in resolve_chip before any serial byte.
+    """
+    app = make_app_context()
+    result = runner.invoke(cli, ["read", "AT28C16", "out.bin"], obj=app)
+    assert result.exit_code == 1
+    assert "adapter" in result.output.lower()
+    assert "Chip not usable:" not in result.output
+    assert "Traceback (most recent call last)" not in result.output
+
+
+def test_read_protocol_not_implemented_status_refusal(runner: CliRunner) -> None:
+    """`firestarter read X88C64P out.bin` exits 1 with protocol-not-implemented reason verbatim.
+
+    DB-04 SC#2/#4 protocol-not-implemented: X88C64P uses protocol 0x34 (XICOR
+    NovRAM). Reason string rendered directly (no "Chip not usable:" prefix).
+    Guard fires in resolve_chip before any serial byte.
+    """
+    app = make_app_context()
+    result = runner.invoke(cli, ["read", "X88C64P", "out.bin"], obj=app)
+    assert result.exit_code == 1
+    assert "not implemented" in result.output.lower()
+    assert "Chip not usable:" not in result.output
+    assert "Traceback (most recent call last)" not in result.output

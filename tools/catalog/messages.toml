@@ -577,6 +577,14 @@ format      = "Memory size %lu too small for chip-id check"
 params      = [{ type = "u32", render = "dec" }]
 wire_format = "id_frame"
 
+[[messages]]
+id          = 0xBB
+name        = "MSG_ERR_PROTOCOL_NOT_IMPLEMENTED"
+severity    = "ERROR"
+format      = "Protocol 0x%02x not implemented"
+params      = [{ type = "u8", render = "hex_byte" }]
+wire_format = "id_frame"
+
 # ---------------------------------------------------------------------------
 # DATA (0xE0..0xEF)
 # ---------------------------------------------------------------------------

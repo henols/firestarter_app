@@ -104,9 +104,33 @@ VPP_MV = {
     0xF0: 18000,
 }
 
+# NMOS VPP correction: promotes the comment above to applied code.
+# Matched against part_number aliases; "highest VPP wins" for entries with
+# multiple NMOS aliases (e.g., INTEL/2732,2732A,M2732,M2732A).
+NMOS_TRUE_VPP_MV: dict[str, int] = {
+    "M2716": 25000,  # Intel NMOS 2716: 25V VPP (datasheet)
+    "M2732": 25000,  # Intel NMOS 2732: 25V VPP (datasheet)
+    "M2732A": 21000,  # Intel NMOS 2732A: 21V VPP (later variant)
+}
+# RURP boost regulator theoretical ceiling (build_db.py comment + hw evidence).
+# Chips requiring VPP above this cannot be programmed on any RURP revision.
+RURP_VPP_CEILING_MV = 22000
+
+# CR-01 Option A (Phase 66 gap-closure): algorithm sentinel for non-supported chips.
+# dispatch(0x00, None) falls into the mem_type fallback chain (protocol==0 path):
+#   _ALGO_MEM_TYPE.get(0x00) → None → {1:..., 4:..., 3:..., 5:...}.get(None, "ERROR")
+#   → "ERROR"
+# No real handler (configure_eprom / configure_eeprom28c / configure_flash* /
+# configure_sram) is ever reached for a non-supported chip. D-03 HARD: do NOT
+# route any flagged chip to a working handler.
+NON_DISPATCHABLE_ALGO = 0x00
+
 # [VERIFIED: canonical IC2_ALG_* constants from database.h#L24-L77 @ a8efaedc]
 # 0x35 (IC2_ALG_ITE) and 0x39 (phantom — no IC2_ALG constant) removed:
 # neither produces chips in the INFOIC2PLUS DIP-24..32 filter.
+# 0x34 = XICOR X88C64P — DIP-parallel NovRAM; unimplemented protocol but
+# confirmed DIP-parallel memory. Added here so the chip passes the
+# KNOWN_PROTOCOLS gate and gets classified as protocol-not-implemented.
 KNOWN_PROTOCOLS = {
     0x05,
     0x06,
@@ -119,14 +143,16 @@ KNOWN_PROTOCOLS = {
     0x27,
     0x28,
     0x29,
+    0x34,  # XICOR X88C64P — DIP-parallel NovRAM; included as protocol-not-implemented
+    # NOT 0x35 or 0x39 — removed by v1.11 DEC-05
 }
 
 # [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
 VCC_VOLTAGES = {
     0x00: "5V",
     0x01: "3.3V",
-    0x02: "4V",  # BUG-1 fix: was missing
-    0x03: "4.5V",  # BUG-1 fix: was missing
+    0x02: "4V",  # BUG-1 fix: was missing from v1.12
+    0x03: "4.5V",  # BUG-1 fix: was missing from v1.12
     0x04: "5.5V",
     0x05: "6.5V",
 }
@@ -311,13 +337,78 @@ def main():
                 pin_map_raw = int(ic.get("pin_map", "0"), 16)
                 pm_idx = pin_map_raw & 0xFF
 
-                # Skip chips with unknown protocol_id
+                # DB-07: Initialize support classification fields.
+                # These defaults are overridden at the two inclusion gates below
+                # and at the NMOS VPP override block before chip_entry construction.
+                _support_status = "supported"
+                _unsupported_reason = None
+                _nmos_vpp_mv = None
+
+                # Site A: Unknown-protocol gate.
+                # X88C64P (proto 0x34) is a confirmed DIP-parallel NovRAM —
+                # include it as protocol-not-implemented (not a WARN-skip).
+                # All other unknown-protocol chips (DataFlash 0x04, FWH 0x11,
+                # PLCC 0x0A) keep their WARN skip because they are serial/SMD
+                # or adapter-class parts that cannot physically run on RURP.
+                # 0x34 is in KNOWN_PROTOCOLS so the gate now passes it through;
+                # the _support_status assignment handles classification.
                 if proto_id not in KNOWN_PROTOCOLS:
                     print(
                         f"WARN: skipping {name} — unknown protocol_id 0x{proto_id:02X}",
                         file=sys.stderr,
                     )
                     continue
+                if proto_id == 0x34:
+                    _support_status = "protocol-not-implemented"
+                    # DB-04 Approach A (67.1-01): reason string begins with SC-required
+                    # wording so the host can render it verbatim (Plan 02 prints f"{e}").
+                    # Must contain "not implemented" substring — existing test
+                    # test_read_protocol_not_implemented_typed_refusal asserts it.
+                    _unsupported_reason = "protocol not implemented: 0x34 (XICOR NovRAM serial-parallel hybrid)"
+
+                # SAFETY SKIP / Site B: 24-pin 5V parallel EEPROMs routed via EPROM
+                # algorithms (0x07/0x08/0x0B). Affected family per upstream:
+                # AT28C04/16, AT28HC16, UPD28C04, 28C04A/16A — 5V single-supply
+                # parallel EEPROMs with WE on socket pin 21 (per datasheet).
+                # If we let them through with a working handler:
+                #   - configure_eprom (0x07/0x08/0x0B dispatch) engages the
+                #     12V VPP regulator and asserts VPP_ENABLE during writes.
+                #   - DIP24_2716 pinout has vpp-pin=21 — so 12V hits the chip's
+                #     WE pin → hardware-damage path.
+                # DB-02: include as adapter-required (not a bare skip) so the DB
+                # is a complete catalog. D-03 HARD: do NOT route to a working
+                # handler — proto_id demoted to NON_DISPATCHABLE_ALGO, no DIP24
+                # EEPROM handler wired.
+                # Discriminator: pin_count == 24 AND proto_id in EPROM-family
+                # AND flags has the "electrically erasable" bit (0x10).
+                # ORDERING INVARIANT (Pitfall 6): Site B must fire BEFORE the
+                # resolve_pinout_key call so proto_id=0x00 is in effect at pinout
+                # resolution. The D-06 fail-safe skip (pinout_key is None) runs
+                # AFTER Site B; these chips resolve to DIP24_2716, not None.
+                if (
+                    pin_count == 24
+                    and proto_id in (0x07, 0x08, 0x0B)
+                    and (flags & 0x10)
+                ):
+                    _support_status = "adapter-required"
+                    # DB-04 Approach A (67.1-01): reason string begins with
+                    # "adapter required:" so the host can render it verbatim.
+                    # Non-empty adapter note required (DB-02 SC#1).
+                    _unsupported_reason = (
+                        "adapter required: requires a dedicated DIP24 EEPROM adapter "
+                        "or firmware handler — socket pin 21 = WE, which the RURP "
+                        "DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+                    )
+                    print(
+                        f"INFO: including {mfg_name}/{name} as adapter-required — "
+                        f"24-pin 5V EEPROM with EPROM-family algo 0x{proto_id:02X} "
+                        f"(damage hazard: 12V VPP to socket pin 21 = WE of 28C-family "
+                        f"chips; tracked in follow_up 24pin-eeprom-no-handler).",
+                        file=sys.stderr,
+                    )
+                    # CR-01 Option A: demote to NON_DISPATCHABLE_ALGO so dispatch()
+                    # returns ERROR instead of configure_eprom (D-03 HARD invariant).
+                    proto_id = NON_DISPATCHABLE_ALGO
 
                 # --- SYNTHESIZE "COMPLETE" DATA ---
 
@@ -492,7 +583,7 @@ def main():
                 elif proto_id in {0x07, 0x08, 0x0B}:
                     # Preserve flags-based EEPROM classification for electrically-
                     # erasable chips that share the configure_eprom (0x07/0x08/0x0B)
-                    # dispatch and 12V VPP but are NOT UV-erasable.
+                    # dispatch and 12V VPP but are NOT UV-erasable. (BUG-A fix)
                     if flags & 0x10:
                         _etype = "EEPROM"
                     else:
@@ -502,6 +593,34 @@ def main():
                 # else: leave _etype at the flags-based value (uncommon path —
                 # any new proto_id added to KNOWN_PROTOCOLS but not classified
                 # above falls back to whatever the flags-based block decided).
+
+                # Site C: DB-03 NMOS VPP correction.
+                # Must run AFTER all fm1608/WARNING-5 overrides (ordering invariant).
+                # "Highest VPP wins": iterate all aliases; the match with the highest
+                # VPP determines the final voltage + status (conservative — avoids
+                # M2732/M2732A match-order ambiguity on combined entries like
+                # INTEL/2732,2732A,M2732,M2732A).
+                part_aliases = {a.split("@")[0].strip() for a in name.split(",")}
+                for nmos_key, nmos_vpp in NMOS_TRUE_VPP_MV.items():
+                    if nmos_key in part_aliases:
+                        if _nmos_vpp_mv is None or nmos_vpp > _nmos_vpp_mv:
+                            _nmos_vpp_mv = nmos_vpp
+                if _nmos_vpp_mv is not None:
+                    if _nmos_vpp_mv > RURP_VPP_CEILING_MV:
+                        _support_status = "vpp-exceeds-max"
+                        # DB-04 Approach A (67.1-01): reason string begins with
+                        # "VPP <x>V exceeds programmer max (<ceil>V)" so the host
+                        # can render it verbatim (Plan 02 prints f"{e}").
+                        # Uses "programmer max" (not "RURP ceiling") per SC#2 wording.
+                        _unsupported_reason = (
+                            f"VPP {_nmos_vpp_mv // 1000}V exceeds programmer max "
+                            f"({RURP_VPP_CEILING_MV // 1000}V)"
+                        )
+                        # CR-01 Option A: demote to NON_DISPATCHABLE_ALGO so dispatch()
+                        # returns ERROR instead of configure_eprom (D-03 HARD invariant).
+                        proto_id = NON_DISPATCHABLE_ALGO
+                    # else: leave _support_status as "supported" — M2732A (21V)
+                    # is within the RURP ceiling.
 
                 chip_entry = {
                     # Upstream `name` is a comma-separated alias list where each
@@ -520,24 +639,30 @@ def main():
                             if a.split("@")[0].strip()
                         )
                     ),
+                    "support_status": _support_status,
                     "electrical": {
                         "type": _etype,
                         "size_bytes": mem_size,
                         "pin_count": pin_count,
                         # VPP code occupies bits 7-4 of the 16-bit voltages field
                         # (the HIGH nibble of the low byte). Bits 3-0 carry option
-                        # flags (e.g. powerdown-enable for ATF GAL parts per
-                        # minipro.h LAST_JEDEC_BIT_IS_POWERDOWN_ENABLE=0x1000, and
-                        # T48-specific sub-options). Masking with 0xF0 extracts only
-                        # the VPP nibble and avoids misidentifying a flags-bit as a
-                        # VPP code. E.g. SST27VF512 voltages=0x0001: 0x01&0xF0=0x00
-                        # correctly resolves to 12V; without the mask 0x01 is absent
-                        # from the table and produces 0mV/Unknown.
-                        # [VERIFIED: minipro/src/tl866a.c msg[5]=voltages.vpp<<4 and
-                        #  database.c voltages.vpp=voltages&0xff with all tl866ii VPP
-                        #  codes being multiples of 0x10 (high-nibble indices)]
-                        "vpp": VPP_VOLTAGES.get(voltages & 0xF0, "Unknown"),
-                        "vpp_mv": VPP_MV.get(voltages & 0xF0, 0),
+                        # flags. Masking with 0xF0 extracts only the VPP nibble.
+                        # BUG-B fix: was voltages & 0xFF (caused 0mV for chips with
+                        # flags bits set, e.g. SST27VF512 voltages=0x0001).
+                        # NMOS correction (Site C): override vpp/vpp_mv when
+                        # _nmos_vpp_mv is set (M2716/M2732/M2732A corrected voltage).
+                        "vpp": (
+                            f"{_nmos_vpp_mv // 1000}V"
+                            if _nmos_vpp_mv is not None
+                            else VPP_VOLTAGES.get(voltages & 0xF0, "Unknown")
+                        ),
+                        "vpp_mv": (
+                            _nmos_vpp_mv
+                            if _nmos_vpp_mv is not None
+                            else VPP_MV.get(voltages & 0xF0, 0)
+                        ),
+                        # BUG-3 fix: vcc at bits 11-8, vdd at bits 15-12.
+                        # v1.12 had them swapped (vdd at bits 11-8, vcc at bits 15-12).
                         # [VERIFIED: minipro database.c#L921-L923 @ a8efaedc]
                         "vcc": VCC_VOLTAGES.get(
                             (voltages >> 8) & 0x0F, "5V"
@@ -556,6 +681,8 @@ def main():
                     },
                     "pinout": pinout_key,
                 }
+                if _unsupported_reason:
+                    chip_entry["unsupported_reason"] = _unsupported_reason
 
                 # SRAM/FRAM/NVRAM vcc normalization.
                 # Static-memory parts have a single supply rail — there is no

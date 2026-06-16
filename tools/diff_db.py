@@ -1,7 +1,7 @@
 """
 GATE-02: Per-chip diff of the regenerated chip_database.json against the
-pinned pre-milestone baseline (chip_database.baseline.json, 734 chips,
-commit f92873d).
+pinned pre-milestone baseline (chip_database.baseline.json, 744 chips,
+Phase 70 integrated output).
 
 Loads both JSONs, builds composite-keyed indexes (one key per record, so
 duplicate part_numbers are never shadowed — CR-01), classifies every changed
@@ -106,6 +106,18 @@ _RATIONALES = {
         "  [VERIFIED: minipro/src/tl866a.c msg[5]=voltages.vpp<<4;\n"
         "   tl866ii_vpp_voltages[] table keys: 0x00=12V, 0x10=9V, 0x20=9.5V, ...]"
     ),
+    "RULE_PHASE66": (
+        "Phase 66 DB inclusion + VPP correction changes.\n"
+        "  DB-01: New chips with support_status=protocol-not-implemented included\n"
+        "    (previously silently skipped). New top-level key: support_status + unsupported_reason.\n"
+        "  DB-02: 9 damage-hazard 24-pin EEPROMs included as support_status=adapter-required\n"
+        "    (previously silently skipped; DIP24 form only).\n"
+        "  DB-03: NMOS high-VPP entries corrected: M2716/M2732=25V (vpp-exceeds-max),\n"
+        "    M2732A=21V (supported at corrected voltage). vpp/vpp_mv fields updated.\n"
+        "  DB-05: All chips gain explicit support_status=supported (majority, mechanical change).\n"
+        "  [VERIFIED: .planning/phases/66-db-inclusion-vpp-correction-dispatch-gate/66-CONTEXT.md"
+        " D-04/D-06/D-07]"
+    ),
 }
 
 
@@ -195,6 +207,17 @@ _RULE_FIELD_PATHS = {
         ("electrical", "vpp"),  # VPP voltage string (0xF0-mask fix)
         ("electrical", "vpp_mv"),  # VPP voltage in mV (0xF0-mask fix)
     },
+    # Phase 66: support_status + unsupported_reason (new top-level keys) + NMOS vpp/vpp_mv corrections.
+    # Every existing chip gains support_status=supported (a bare support_status diff);
+    # NMOS entries also gain corrected vpp/vpp_mv; non-supported chips gain unsupported_reason.
+    # RULE_PHASE66 is placed LAST (least specific) so it does not shadow BUG_A_ETYPE/BUG_B_VPP
+    # (Pitfall 7 in 70-RESEARCH.md): BUG_B_VPP requires not type_diff; RULE_PHASE66 does not.
+    "RULE_PHASE66": {
+        ("support_status",),
+        ("unsupported_reason",),
+        ("electrical", "vpp"),
+        ("electrical", "vpp_mv"),
+    },
 }
 
 
@@ -247,6 +270,8 @@ def _classify_diff(bl_chip, cu_chip):
       5. SRAM_PINOUT   — pinout changed only
       6. BUG_A_ETYPE   — electrical.type changed (flags-based EEPROM reclassification)
       7. BUG_B_VPP     — electrical.vpp/vpp_mv changed (0xF0-mask fix)
+      8. RULE_PHASE66  — only support_status/unsupported_reason/vpp/vpp_mv changed
+                         (LAST — least specific; must not shadow BUG_A_ETYPE/BUG_B_VPP)
       -> None          — no rule matched (UNEXPLAINED = D-03 BLOCK)
     """
     bl_prog = bl_chip.get("programming", {})
@@ -263,6 +288,13 @@ def _classify_diff(bl_chip, cu_chip):
     vpp_diff = bl_elec.get("vpp") != cu_elec.get("vpp") or bl_elec.get(
         "vpp_mv"
     ) != cu_elec.get("vpp_mv")
+    # Phase 66: support_status and/or unsupported_reason added; vpp/vpp_mv corrected for NMOS.
+    phase66_diff = (
+        bl_chip.get("support_status") != cu_chip.get("support_status")
+        or bl_chip.get("unsupported_reason") != cu_chip.get("unsupported_reason")
+        or bl_elec.get("vpp") != cu_elec.get("vpp")
+        or bl_elec.get("vpp_mv") != cu_elec.get("vpp_mv")
+    )
 
     voltage_diff = vcc_diff or vdd_diff
 
@@ -286,8 +318,25 @@ def _classify_diff(bl_chip, cu_chip):
         and not pinout_diff
     ):
         label = "BUG_A_ETYPE"
-    elif vpp_diff and not algo_diff and not timing_diff and not pinout_diff:
+    elif (
+        vpp_diff
+        and not algo_diff
+        and not timing_diff
+        and not pinout_diff
+        and not type_diff
+    ):
         label = "BUG_B_VPP"
+    elif (
+        phase66_diff
+        and not algo_diff
+        and not timing_diff
+        and not voltage_diff
+        and not pinout_diff
+    ):
+        # RULE_PHASE66: only Phase 66 fields changed (support_status, unsupported_reason,
+        # electrical.vpp, electrical.vpp_mv). Placed LAST so it does not shadow
+        # BUG_A_ETYPE/BUG_B_VPP (Pitfall 7 in 70-RESEARCH.md).
+        label = "RULE_PHASE66"
 
     diff_paths = _diff_field_paths(bl_chip, cu_chip)
 

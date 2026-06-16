@@ -33,6 +33,7 @@ Idempotence contract (D-02 / Pattern B):
   - JSON: sort_keys=True, indent=2, trailing newline.
   Two consecutive runs MUST produce byte-identical output.
 """
+
 import argparse
 import hashlib
 import json
@@ -45,9 +46,7 @@ from pathlib import Path
 from firestarter.database import EpromDatabase  # noqa: F401 — singleton kept available for §3/§4 lookups
 
 # Module-top path constants (lifted verbatim from check_dispatch.py:23-30 per D-01).
-_DATA_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "firestarter", "data"
-)
+_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "firestarter", "data")
 DB_FILE = os.environ.get(
     "FIRESTARTER_DB_FILE",
     os.path.join(_DATA_DIR, "chip_database.json"),
@@ -62,13 +61,18 @@ _REPO_ROOT = os.path.dirname(
 )
 DEFAULT_OUTPUT = os.path.join(_REPO_ROOT, ".planning", "v1.3-COVERAGE-MATRIX.md")
 DEFAULT_LEDGER = os.path.join(_REPO_ROOT, ".planning", "v1.3-defect-coverage-ids.json")
-DEFAULT_OUTPUT_ALL = os.path.join(_REPO_ROOT, ".planning", "v1.3-COVERAGE-MATRIX-ALL.md")
-DEFAULT_LEDGER_ALL = os.path.join(_REPO_ROOT, ".planning", "v1.3-defect-coverage-ids-all.json")
+DEFAULT_OUTPUT_ALL = os.path.join(
+    _REPO_ROOT, ".planning", "v1.3-COVERAGE-MATRIX-ALL.md"
+)
+DEFAULT_LEDGER_ALL = os.path.join(
+    _REPO_ROOT, ".planning", "v1.3-defect-coverage-ids-all.json"
+)
 
 
 # ---------------------------------------------------------------------------
 # Helpers (Patterns D + E + F from PATTERNS.md)
 # ---------------------------------------------------------------------------
+
 
 def iter_in_scope_rows(db_raw):
     """Yield (mfg, chip) for every algo-0x07 or algo-0x08 chip in db_raw.
@@ -255,9 +259,11 @@ def md_table(headers, rows):
     ]
 
     def line(cells):
-        return "| " + " | ".join(
-            cells[i].ljust(widths[i]) for i in range(len(cells))
-        ) + " |"
+        return (
+            "| "
+            + " | ".join(cells[i].ljust(widths[i]) for i in range(len(cells)))
+            + " |"
+        )
 
     header_line = line(str_headers)
     sep_line = "|" + "|".join("-" * (w + 2) for w in widths) + "|"
@@ -267,6 +273,7 @@ def md_table(headers, rows):
 # ---------------------------------------------------------------------------
 # Summary computation
 # ---------------------------------------------------------------------------
+
 
 def compute_summary(rows, db_raw):
     """Build the summary dict the §1 + §2 emitters consume.
@@ -285,9 +292,7 @@ def compute_summary(rows, db_raw):
             algo_counter[proto] += 1
 
     in_scope_count = len(rows)
-    variant_count = sum(
-        len(chip.get("part_number", "").split(",")) for _, chip in rows
-    )
+    variant_count = sum(len(chip.get("part_number", "").split(",")) for _, chip in rows)
 
     # Per-(algo, pinout) row counts.
     pinout_by_algo = defaultdict(Counter)
@@ -327,6 +332,7 @@ def compute_summary(rows, db_raw):
 # §1 — Summary Statistics
 # ---------------------------------------------------------------------------
 
+
 def emit_summary(summary, severity_counts=None):
     """Return the §1 markdown block as a single string.
 
@@ -363,7 +369,9 @@ def emit_summary(summary, severity_counts=None):
         [pinout, summary["pinout_by_algo"][0x07][pinout]]
         for pinout in sorted(summary["pinout_by_algo"][0x07])
     ]
-    parts.append("### Per-pinout class — algo 0x07 (212 chips)")
+    parts.append(
+        f"### Per-pinout class — algo 0x07 ({summary['algo_counter'][0x07]} chips)"
+    )
     parts.append("")
     parts.append(md_table(["Pinout", "Row count"], pin07_rows))
     parts.append("")
@@ -373,7 +381,9 @@ def emit_summary(summary, severity_counts=None):
         [pinout, summary["pinout_by_algo"][0x08][pinout]]
         for pinout in sorted(summary["pinout_by_algo"][0x08])
     ]
-    parts.append("### Per-pinout class — algo 0x08 (127 chips)")
+    parts.append(
+        f"### Per-pinout class — algo 0x08 ({summary['algo_counter'][0x08]} chips)"
+    )
     parts.append("")
     parts.append(md_table(["Pinout", "Row count"], pin08_rows))
     parts.append("")
@@ -394,9 +404,7 @@ def emit_summary(summary, severity_counts=None):
     ]
     parts.append("### Per-pulse-bucket distribution")
     parts.append("")
-    parts.append(
-        md_table(["Bucket", "algo-0x07", "algo-0x08"], pulse_bucket_rows)
-    )
+    parts.append(md_table(["Bucket", "algo-0x07", "algo-0x08"], pulse_bucket_rows))
     parts.append("")
 
     # f. Per-size-bucket
@@ -466,6 +474,7 @@ def _pulse_bucket_sort_key(bucket):
 # ---------------------------------------------------------------------------
 # Pattern F — Sort key for deterministic enumeration (§3 + §5)
 # ---------------------------------------------------------------------------
+
 
 def sort_key(mfg, chip):
     """Pattern F (PATTERNS.md lines 593-601 + RESEARCH.md 564-575) — D-06 sort.
@@ -543,25 +552,25 @@ def emit_full_enumeration(rows):
     `rows` is a list of (mfg, chip) tuples from `iter_in_scope_rows`.
     """
     parts = ["## §3: Full Enumeration", ""]
-    parts.append(
-        "One row per `chip_database.json` record (not per variant). "
-        "339 total rows: 212 algo-0x07 + 127 algo-0x08. "
-        "Sort: (algorithm, pinout, size_bytes, manufacturer, first_alias). "
-        "Per D-06."
-    )
-    parts.append("")
 
     algo_07_rows = [
-        (mfg, chip) for mfg, chip in rows
-        if chip["programming"]["algorithm"] == 0x07
+        (mfg, chip) for mfg, chip in rows if chip["programming"]["algorithm"] == 0x07
     ]
     algo_08_rows = [
-        (mfg, chip) for mfg, chip in rows
-        if chip["programming"]["algorithm"] == 0x08
+        (mfg, chip) for mfg, chip in rows if chip["programming"]["algorithm"] == 0x08
     ]
 
     algo_07_rows = sorted(algo_07_rows, key=lambda mc: sort_key(*mc))
     algo_08_rows = sorted(algo_08_rows, key=lambda mc: sort_key(*mc))
+
+    parts.append(
+        f"One row per `chip_database.json` record (not per variant). "
+        f"{len(algo_07_rows) + len(algo_08_rows)} total rows: "
+        f"{len(algo_07_rows)} algo-0x07 + {len(algo_08_rows)} algo-0x08. "
+        "Sort: (algorithm, pinout, size_bytes, manufacturer, first_alias). "
+        "Per D-06."
+    )
+    parts.append("")
 
     parts.append(f"### algo-0x07 ({len(algo_07_rows)} rows)")
     parts.append("")
@@ -588,6 +597,7 @@ def emit_full_enumeration(rows):
 # §2 — DB Count Reconciliation
 # ---------------------------------------------------------------------------
 
+
 def emit_reconciliation(summary):
     """Return the §2 markdown block as a single string.
 
@@ -604,15 +614,14 @@ def emit_reconciliation(summary):
     )
     parts.append("")
     parts.append(
-        "**Headline:** 743 → 734 (Δ −9), 214 → 212 (algo-0x07), 341 → 339 "
-        "(in-scope)."
+        "**Headline:** 743 → 734 (Δ −9), 214 → 212 (algo-0x07), 341 → 339 (in-scope)."
     )
     parts.append("")
     parts.append(
         "Delta absorbed by v1.0–v1.2 overrides (WARNING-5 algo flip on "
         "DIP28_2764 EEPROM hazard + fm1608-db-mismatch FRAM tagging) plus "
         "upstream `infoic.xml` drift between v1.0 close and v1.3 start. No "
-        "archaeology required — see CONTEXT.md \"Claude's Discretion\"."
+        'archaeology required — see CONTEXT.md "Claude\'s Discretion".'
     )
     parts.append("")
 
@@ -653,9 +662,7 @@ def emit_reconciliation(summary):
         per_algo_rows.append([f"0x{algo:02X}", live, old, live - old])
     parts.append("### Per-algorithm drift vs PROJECT.md:150")
     parts.append("")
-    parts.append(
-        md_table(["Algorithm", "Live", "Old", "Δ"], per_algo_rows)
-    )
+    parts.append(md_table(["Algorithm", "Live", "Old", "Δ"], per_algo_rows))
     parts.append("")
     parts.append(
         "**Notable shifts:** 0x0B (53→40, −13) + 0x0D (41→23, −18) + 0x28 "
@@ -785,7 +792,8 @@ def detect_hazard(rows):
     structurally unreachable for these rows.
     """
     cluster = [
-        (mfg, chip) for mfg, chip in rows
+        (mfg, chip)
+        for mfg, chip in rows
         if chip["pinout"] in ("DIP28_28C64", "DIP28_28C256")
         and chip["programming"]["algorithm"] == 0x07
     ]
@@ -837,7 +845,9 @@ def detect_correctness(rows):
 
     findings = []
     for (algo, pinout, size), members in clusters.items():
-        pulses = [parse_pulse_us(chip["programming"]["pulse_duration"]) for _, chip in members]
+        pulses = [
+            parse_pulse_us(chip["programming"]["pulse_duration"]) for _, chip in members
+        ]
         if len(set(pulses)) < 2:
             continue
         median = statistics.median(pulses)
@@ -867,24 +877,28 @@ def detect_correctness(rows):
         for sig_tuple, sig_rows in per_sig.items():
             algo_i, pinout_s, size_b, mfg_s, alias_s = sig_tuple
             signature = (algo_i, pinout_s, size_b, mfg_s, alias_s)
-            findings.append({
-                "severity": "CORRECTNESS",
-                "axis": "pulse_duration_outlier",
-                "signature": signature,
-                "hash": finding_hash("CORRECTNESS", "pulse_duration_outlier", signature),
-                "affected_chips": len(sig_rows),
-                "title": (
-                    f"{mfg_s}/{alias_s} pulse_duration outlier (>=10x median) "
-                    f"in algo-0x{algo_i:02X} / {pinout_s} / {size_b}B cluster"
-                ),
-                "root_cause_hypothesis": (
-                    "Pulse duration deviates by at least 10x from cluster "
-                    "median; possible upstream infoic.xml mis-classification "
-                    "or real-chip variance — verify against datasheet."
-                ),
-                "suggested_fix_venue": "awaiting bench data",
-                "examples": _examples_for(sig_rows, 3),
-            })
+            findings.append(
+                {
+                    "severity": "CORRECTNESS",
+                    "axis": "pulse_duration_outlier",
+                    "signature": signature,
+                    "hash": finding_hash(
+                        "CORRECTNESS", "pulse_duration_outlier", signature
+                    ),
+                    "affected_chips": len(sig_rows),
+                    "title": (
+                        f"{mfg_s}/{alias_s} pulse_duration outlier (>=10x median) "
+                        f"in algo-0x{algo_i:02X} / {pinout_s} / {size_b}B cluster"
+                    ),
+                    "root_cause_hypothesis": (
+                        "Pulse duration deviates by at least 10x from cluster "
+                        "median; possible upstream infoic.xml mis-classification "
+                        "or real-chip variance — verify against datasheet."
+                    ),
+                    "suggested_fix_venue": "awaiting bench data",
+                    "examples": _examples_for(sig_rows, 3),
+                }
+            )
 
     yield from findings
 
@@ -912,58 +926,66 @@ def detect_variance(rows):
             continue
 
         cid_checks = {
-            bool(chip["programming"].get("chip_id_check", False))
-            for _, chip in members
+            bool(chip["programming"].get("chip_id_check", False)) for _, chip in members
         }
         if len(cid_checks) > 1:
             signature = (algo, pinout, size, mfg)
-            findings.append({
-                "severity": "VARIANCE",
-                "axis": "chip_id_check_toggle",
-                "signature": signature,
-                "hash": finding_hash("VARIANCE", "chip_id_check_toggle", signature),
-                "affected_chips": len(members),
-                "title": (
-                    f"{mfg} on algo-0x{algo:02X} / {pinout} / {size}B: "
-                    "chip_id_check toggles between members"
-                ),
-                "root_cause_hypothesis": (
-                    "Cluster members disagree on whether chip_id readout is "
-                    "supported; likely upstream infoic.xml drift across "
-                    "die revisions or pin-compatible aliases."
-                ),
-                "suggested_fix_venue": "documentation-only",
-                "examples": _examples_for(members, 3),
-            })
+            findings.append(
+                {
+                    "severity": "VARIANCE",
+                    "axis": "chip_id_check_toggle",
+                    "signature": signature,
+                    "hash": finding_hash("VARIANCE", "chip_id_check_toggle", signature),
+                    "affected_chips": len(members),
+                    "title": (
+                        f"{mfg} on algo-0x{algo:02X} / {pinout} / {size}B: "
+                        "chip_id_check toggles between members"
+                    ),
+                    "root_cause_hypothesis": (
+                        "Cluster members disagree on whether chip_id readout is "
+                        "supported; likely upstream infoic.xml drift across "
+                        "die revisions or pin-compatible aliases."
+                    ),
+                    "suggested_fix_venue": "documentation-only",
+                    "examples": _examples_for(members, 3),
+                }
+            )
 
         # chip_id_value drift among members with chip_id_check=True.
         true_members = [
-            (mfg2, chip) for mfg2, chip in members
+            (mfg2, chip)
+            for mfg2, chip in members
             if bool(chip["programming"].get("chip_id_check", False))
         ]
         if len(true_members) >= 2:
-            cid_values = {chip["programming"].get("chip_id_value") for _, chip in true_members}
+            cid_values = {
+                chip["programming"].get("chip_id_value") for _, chip in true_members
+            }
             if len(cid_values) > 1:
                 signature = (algo, pinout, size, mfg)
-                findings.append({
-                    "severity": "VARIANCE",
-                    "axis": "chip_id_value_drift",
-                    "signature": signature,
-                    "hash": finding_hash("VARIANCE", "chip_id_value_drift", signature),
-                    "affected_chips": len(true_members),
-                    "title": (
-                        f"{mfg} on algo-0x{algo:02X} / {pinout} / {size}B: "
-                        "chip_id_value differs across members with chip_id_check=True"
-                    ),
-                    "root_cause_hypothesis": (
-                        "Legitimate die-revision identity drift OR upstream "
-                        "infoic.xml carries different signature bytes for "
-                        "pin-compatible aliases; expected for some Atmel / "
-                        "ST / SST families."
-                    ),
-                    "suggested_fix_venue": "documentation-only",
-                    "examples": _examples_for(true_members, 3),
-                })
+                findings.append(
+                    {
+                        "severity": "VARIANCE",
+                        "axis": "chip_id_value_drift",
+                        "signature": signature,
+                        "hash": finding_hash(
+                            "VARIANCE", "chip_id_value_drift", signature
+                        ),
+                        "affected_chips": len(true_members),
+                        "title": (
+                            f"{mfg} on algo-0x{algo:02X} / {pinout} / {size}B: "
+                            "chip_id_value differs across members with chip_id_check=True"
+                        ),
+                        "root_cause_hypothesis": (
+                            "Legitimate die-revision identity drift OR upstream "
+                            "infoic.xml carries different signature bytes for "
+                            "pin-compatible aliases; expected for some Atmel / "
+                            "ST / SST families."
+                        ),
+                        "suggested_fix_venue": "documentation-only",
+                        "examples": _examples_for(true_members, 3),
+                    }
+                )
 
     yield from findings
 
@@ -997,14 +1019,16 @@ def emit_defects(findings, ledger, next_n_holder):
     lines.append("")
     lines.append("```python")
     lines.append('if (pinout_key in ("DIP28_2764", "DIP28_28C256")')
-    lines.append('        and proto_id == 0x07')
+    lines.append("        and proto_id == 0x07")
     lines.append('        and _etype == "Flash/EEPROM"):')
-    lines.append('    print(')
+    lines.append("    print(")
     lines.append('        f"INFO: {mfg_name}/{name} algorithm override 0x07->0x0D "')
-    lines.append('        f"(WARNING-5: 5V EEPROM with non-EPROM pinout — route through configure_eeprom28c)",')
-    lines.append('        file=sys.stderr,')
-    lines.append('    )')
-    lines.append('    proto_id = 0x0D')
+    lines.append(
+        '        f"(WARNING-5: 5V EEPROM with non-EPROM pinout — route through configure_eeprom28c)",'
+    )
+    lines.append("        file=sys.stderr,")
+    lines.append("    )")
+    lines.append("    proto_id = 0x0D")
     lines.append("```")
     lines.append("")
     resolved_table_rows = [
@@ -1040,9 +1064,7 @@ def emit_defects(findings, ledger, next_n_holder):
             finding["signature"],
             next_n_holder,
         )
-        lines.append(
-            f"### {defect_id} — {finding['severity']}: {finding['title']}"
-        )
+        lines.append(f"### {defect_id} — {finding['severity']}: {finding['title']}")
         lines.append("")
         table_rows = [
             ["severity", finding["severity"]],
@@ -1112,7 +1134,9 @@ def pinout_coverage(rows, findings, ledger):
         members = pinout_rows[pinout]
         # BENCH chips that target this pinout class.
         covering = [b for b in BENCH_CHIP_MAP if b["pinout"] == pinout]
-        bench_cell = ", ".join(_bench_chip_label(b) for b in covering) if covering else "none"
+        bench_cell = (
+            ", ".join(_bench_chip_label(b) for b in covering) if covering else "none"
+        )
 
         any_pending = any(b.get("selection_pending") for b in covering)
         if covering:
@@ -1191,10 +1215,7 @@ def pulse_coverage(rows, findings, ledger, algo):
             any_pending = any(b.get("selection_pending") for b in chips_in_bucket)
             bench_cell = ", ".join(_bench_chip_label(b) for b in chips_in_bucket)
             covered = "Y (pending selection)" if any_pending else "Y"
-            note = (
-                "Selection lives in Phase 12 CONTEXT.md."
-                if any_pending else ""
-            )
+            note = "Selection lives in Phase 12 CONTEXT.md." if any_pending else ""
         else:
             bench_cell = "none"
             covered = "N"
@@ -1204,8 +1225,7 @@ def pulse_coverage(rows, findings, ledger, algo):
             # the row corresponding to the signature's (mfg, alias) lives in
             # the same pulse bucket as the cell being annotated.
             in_bucket_part_numbers = {
-                chip["part_number"].split(",")[0]
-                for _mfg, chip in members
+                chip["part_number"].split(",")[0] for _mfg, chip in members
             }
             cross = []
             for f in findings:
@@ -1222,7 +1242,8 @@ def pulse_coverage(rows, findings, ledger, algo):
             cross_ids = sorted(set(cross))
             note = (
                 ("cross-ref: " + ", ".join(cross_ids))
-                if cross_ids else "uncovered — see Known Gaps"
+                if cross_ids
+                else "uncovered — see Known Gaps"
             )
         table_rows.append([bucket, len(members), bench_cell, covered, note])
 
@@ -1249,16 +1270,19 @@ def size_coverage(rows, findings, ledger, algo):
             any_pending = any(b.get("selection_pending") for b in chips_at_size)
             bench_cell = ", ".join(_bench_chip_label(b) for b in chips_at_size)
             covered = "Y (pending selection)" if any_pending else "Y"
-            note = (
-                "Selection lives in Phase 12 CONTEXT.md."
-                if any_pending else ""
-            )
+            note = "Selection lives in Phase 12 CONTEXT.md." if any_pending else ""
         else:
             bench_cell = "none"
             covered = "N"
             note = "uncovered — see Known Gaps"
         table_rows.append(
-            [f"{size_b} / {size_label(size_b)}", len(members), bench_cell, covered, note]
+            [
+                f"{size_b} / {size_label(size_b)}",
+                len(members),
+                bench_cell,
+                covered,
+                note,
+            ]
         )
 
     return table_rows
@@ -1271,6 +1295,7 @@ def emit_bench_coverage(rows, findings, ledger):
     claim closing prose. BENCH chip selection is observational only — D-11
     forbids swap proposals; BENCH-05 / BENCH-06 stay "candidate".
     """
+    in_scope_count = len(rows)
     parts = ["## §5: BENCH Coverage Proof", ""]
     parts.append(
         "Three per-axis coverage tables (D-09) demonstrating BENCH-01..06 "
@@ -1322,7 +1347,13 @@ def emit_bench_coverage(rows, findings, ledger):
     parts.append("")
     parts.append(
         md_table(
-            ["Size (bytes / label)", "Row count", "BENCH chip(s)", "Covered?", "Note / Finding"],
+            [
+                "Size (bytes / label)",
+                "Row count",
+                "BENCH chip(s)",
+                "Covered?",
+                "Note / Finding",
+            ],
             size_coverage(rows, findings, ledger, 0x07),
         )
     )
@@ -1332,7 +1363,13 @@ def emit_bench_coverage(rows, findings, ledger):
     parts.append("")
     parts.append(
         md_table(
-            ["Size (bytes / label)", "Row count", "BENCH chip(s)", "Covered?", "Note / Finding"],
+            [
+                "Size (bytes / label)",
+                "Row count",
+                "BENCH chip(s)",
+                "Covered?",
+                "Note / Finding",
+            ],
             size_coverage(rows, findings, ledger, 0x08),
         )
     )
@@ -1372,7 +1409,7 @@ def emit_bench_coverage(rows, findings, ledger):
 
     # Milestone-claim closing prose (CONTEXT.md <specifics> "the matrix is the receipt")
     parts.append(
-        "These six BENCH chips (BENCH-01..06) represent N=339 in-scope DB "
+        f"These six BENCH chips (BENCH-01..06) represent N={in_scope_count} in-scope DB "
         "rows on axes pinout-class, pulse-duration bucket, and size bucket. "
         "Uncovered cells are documented above with cross-references to §4 "
         "defect candidates where the gap reflects a structural concern. "
@@ -1571,9 +1608,7 @@ def _emit_global_overview_all(groups):
         "Per-algorithm breakdown sorted by row count (descending):"
     )
     parts.append("")
-    rows_by_algo = sorted(
-        groups.items(), key=lambda kv: (-len(kv[1]), kv[0])
-    )
+    rows_by_algo = sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0]))
     parts.append(
         md_table(
             ["Algorithm", "Rows", "% of DB"],
@@ -1824,7 +1859,9 @@ def generate_matrix_all(output, ledger_path, check=False):
         body_parts.append("")
         body_parts.append("---")
         body_parts.append("")
-        body_parts.append(f"## §A-{_algo_label(algo)}: algo-{_algo_label(algo)} ({len(members)} chips)")
+        body_parts.append(
+            f"## §A-{_algo_label(algo)}: algo-{_algo_label(algo)} ({len(members)} chips)"
+        )
         body_parts.append("")
         body_parts.append(_emit_algo_summary(algo, members))
         body_parts.append("")
@@ -1842,6 +1879,7 @@ def generate_matrix_all(output, ledger_path, check=False):
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(

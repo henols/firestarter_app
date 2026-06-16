@@ -361,6 +361,9 @@
   
   '''
 # ---
+# name: test_info_known_chip[test_info_known_chip_stderr]
+  ''
+# ---
 # name: test_list
   '''
   +---------------------+------------------+------+------------+-------------+------+
@@ -683,13 +686,13 @@
   | IM29LV004T          | IMT              |   32 | 0x7FA7     | Flash/EEPROM| 12.0v|
   | D27011              | INTEL            |   28 | 0x8985     | UV-EPROM    | 13.0v|
   | D27C011             | INTEL            |   28 | 0x8931     | UV-EPROM    | 13.0v|
-  | 2732,2732A,M2732,M2…| INTEL            |   24 |            | UV-EPROM    | 18.0v|
+  | 2732,2732A,M2732,M2…| INTEL            |   24 |            | UV-EPROM    | 25.0v|
   | 2764                | INTEL            |   28 | 0x8908     | UV-EPROM    | 18.0v|
   | 2764A               | INTEL            |   28 | 0x8908     | UV-EPROM    | 12.0v|
   | 27128,D27128        | INTEL            |   28 | 0x8989     | UV-EPROM    | 18.0v|
   | 27128A,D27128A,D271…| INTEL            |   28 | 0x8989     | UV-EPROM    | 12.0v|
   | D27256,M27256       | INTEL            |   28 | 0x8904     | UV-EPROM    | 12.0v|
-  | M2716,M2716M        | INTEL            |   24 |            | UV-EPROM    | 18.0v|
+  | M2716,M2716M        | INTEL            |   24 |            | UV-EPROM    | 25.0v|
   | P27256              | INTEL            |   28 | 0x8804     | UV-EPROM    | 12.0v|
   | 27512               | INTEL            |   28 | 0x890D     | UV-EPROM    | 12.0v|
   | 27C010,27C010A      | INTEL            |   32 | 0x8935     | UV-EPROM    | 12.0v|
@@ -867,14 +870,14 @@
   | FM18L08             | RAMTRON          |   28 |            | SRAM        | -    |
   | KM28C64             | SAMSUNG          |   28 |            | Flash/EEPROM| 12.0v|
   | KM28C64A,KM28C65A   | SAMSUNG          |   28 |            | Flash/EEPROM| 12.0v|
-  | ETC2716,M2716       | SGS-THOMSON      |   24 |            | UV-EPROM    | 18.0v|
+  | ETC2716,M2716       | SGS-THOMSON      |   24 |            | UV-EPROM    | 25.0v|
   | ETC2732             | SGS-THOMSON      |   24 |            | UV-EPROM    | 18.0v|
   | M23C1001            | SGS-THOMSON      |   32 |            | UV-EPROM    | 12.0v|
   | M23C2001            | SGS-THOMSON      |   32 |            | UV-EPROM    | 12.0v|
   | M23C4001            | SGS-THOMSON      |   32 |            | UV-EPROM    | 12.0v|
   | M27128A             | SGS-THOMSON      |   28 | 0x2089     | UV-EPROM    | 12.0v|
   | M27256              | SGS-THOMSON      |   28 | 0x2004     | UV-EPROM    | 12.0v|
-  | M2732A              | SGS-THOMSON      |   24 |            | UV-EPROM    | 18.0v|
+  | M2732A              | SGS-THOMSON      |   24 |            | UV-EPROM    | 21.0v|
   | M27512              | SGS-THOMSON      |   28 | 0x200D     | UV-EPROM    | 13.0v|
   | M2764A              | SGS-THOMSON      |   28 | 0x2008     | UV-EPROM    | 12.0v|
   | M27C1000            | SGS-THOMSON      |   32 | 0x2086     | UV-EPROM    | 13.0v|
@@ -962,11 +965,11 @@
   | SST39SF040          | SST              |   32 | 0xBFB7     | Flash/EEPROM| 12.0v|
   | SST39SF512,SST39SF5…| SST              |   32 | 0xBFB4     | Flash/EEPROM| 12.0v|
   | SST39VF040,SST39VF0…| SST              |   32 | 0xBFD7     | Flash/EEPROM| 12.0v|
-  | ETC2716,M2716       | ST               |   24 |            | UV-EPROM    | 18.0v|
+  | ETC2716,M2716       | ST               |   24 |            | UV-EPROM    | 25.0v|
   | ETC2732             | ST               |   24 |            | UV-EPROM    | 18.0v|
   | M27128A             | ST               |   28 | 0x2089     | UV-EPROM    | 12.0v|
   | M27256              | ST               |   28 | 0x2004     | UV-EPROM    | 12.0v|
-  | M2732A              | ST               |   24 |            | UV-EPROM    | 18.0v|
+  | M2732A              | ST               |   24 |            | UV-EPROM    | 21.0v|
   | M27512              | ST               |   28 | 0x200D     | UV-EPROM    | 13.0v|
   | M2764A              | ST               |   28 | 0x2008     | UV-EPROM    | 12.0v|
   | M27C1001,M27V101,M2…| ST               |   32 | 0x2005     | UV-EPROM    | 13.0v|
@@ -1109,6 +1112,7 @@
   | X28C010             | XICOR            |   32 |            | Flash/EEPROM| 12.0v|
   | X28C64,X28HC64      | XICOR            |   28 |            | Flash/EEPROM| 12.0v|
   | X28C64(NonStandard)…| XICOR            |   28 |            | Flash/EEPROM| 12.0v|
+  | X88C64P,X88C64S     | XICOR            |   24 |            | UV-EPROM    | 12.0v|
   +---------------------+------------------+------+------------+-------------+------+
   
   '''

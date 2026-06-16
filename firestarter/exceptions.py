@@ -40,6 +40,30 @@ class EpromOperationError(Exception):
     pass
 
 
+class ProtocolNotImplementedError(EpromOperationError):
+    """Raised when firmware reports a protocol is not yet implemented (id 0xBB)."""
+
+    pass
+
+
+class ChipNotImplementedError(EpromOperationError):
+    """Raised when the host refuses a program-capable operation on a non-supported chip.
+
+    Fired by chip_resolver.resolve_chip when the chip's support_status is not
+    "supported" (covers all three non-supported statuses: protocol-not-implemented,
+    adapter-required, vpp-exceeds-max).  The guard fires BEFORE any wire dict is
+    built or serial byte emitted — the host will not drive hardware for a
+    non-supported chip.
+
+    This is distinct from ProtocolNotImplementedError, which is the firmware-side
+    0xBB response ("protocol recognized but not yet implemented in firmware").
+    ChipNotImplementedError is a HOST-SIDE refusal covering all support_status
+    non-supported cases, not a firmware response.
+    """
+
+    pass
+
+
 class HardwareOperationError(Exception):
     """Custom exception for hardware operation failures."""
 

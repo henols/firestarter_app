@@ -246,15 +246,14 @@ def test_list(snapshot):
 def test_info_known_chip(snapshot):
     """Pin info output for W27C512 (known chip).
 
-    Verifies that firestarter info exits 0 and renders chip details
-    including the corrected pulse_duration field from chip_database.json.
-    Previously this crashed with a TypeError (vpp-pin list-vs-scalar) in
-    ic_layout._generate_pin_names_for_display — that bug is now fixed.
+    Phase 69 Plan 01 fixed the ic_layout list-vs-int crash; exit code is now 0
+    and stdout shows the formatted chip layout.
     """
     stdout, stderr, rc = run_firestarter("info", "W27C512")
     assert rc == 0
-    assert stderr == ""
+    # Pin stdout (chip info layout) and stderr (should be empty after fix)
     assert stdout == snapshot
+    assert stderr == snapshot(name="test_info_known_chip_stderr")
 
 
 def test_search_w27(snapshot):

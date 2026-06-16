@@ -431,14 +431,18 @@ def test_read_and_parse_lines_ringfence_unchanged() -> None:
     It goes RED if ANY change is made to the generator body (per GATE-1.8d:
     any change must be flagged and deferred to v1.9 alongside binary re-validation).
 
-    Pinned SHA-256 (2026-06-02): 544433068cb14ac14677939435cb4f0ea78783b503315ed645b5f88c5c44a444
+    Pinned SHA-256 (2026-06-11): 6d9e4fe4b67b78c110418305113b275174f16b2ecc9e0f55fbf5d9a623398184
+    (Updated from 544433068cb14ac14677939435cb4f0ea78783b503315ed645b5f88c5c44a444
+     at Phase 65-01: Response now carries id=decoded.id for ProtocolNotImplementedError
+     typed-raise dispatch. Change is in-scope for v1.12 host graceful handling — not
+     a transport-path change, only adds id plumbing to the Response construction.)
     """
     import hashlib
     import inspect
 
     from firestarter.serial_comm import SerialCommunicator
 
-    _PINNED_SHA256 = "544433068cb14ac14677939435cb4f0ea78783b503315ed645b5f88c5c44a444"
+    _PINNED_SHA256 = "6d9e4fe4b67b78c110418305113b275174f16b2ecc9e0f55fbf5d9a623398184"
 
     src = inspect.getsource(SerialCommunicator._read_and_parse_lines)
     actual_digest = hashlib.sha256(src.encode("utf-8")).hexdigest()

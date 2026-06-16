@@ -17,7 +17,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "20 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "ALLIANCE": [
@@ -38,7 +39,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000052b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -57,7 +59,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00005234",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "AMD": [
@@ -78,7 +81,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -97,7 +101,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -116,7 +121,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -135,7 +141,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -154,7 +161,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000108",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -173,7 +181,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000189",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -192,7 +201,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000104",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -211,7 +221,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000185",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -230,7 +241,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000115",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -249,7 +261,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000010e",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -268,7 +281,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000197",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -287,7 +301,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000019b",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -306,7 +321,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000011c",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -325,7 +341,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000116",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -344,7 +361,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000110",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -363,7 +381,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000191",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -382,7 +401,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000010e",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -401,7 +421,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000197",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -420,7 +441,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000019b",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -439,7 +461,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000011c",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -458,7 +481,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000010e",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -477,7 +501,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000110",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -496,7 +521,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -515,7 +541,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -534,7 +561,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -553,7 +581,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000001a1",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -572,7 +601,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000125",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -591,7 +621,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000001a7",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -610,7 +641,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000001a2",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -629,7 +661,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000012a",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -648,7 +681,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000129",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -667,7 +701,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000134",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -686,7 +721,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000001b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -705,7 +741,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000134",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -724,7 +761,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000001b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -743,7 +781,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000120",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -762,7 +801,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000001a4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "AMIC": [
@@ -783,7 +823,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00003764",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -802,7 +843,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000373d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -821,7 +863,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000372c",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -840,7 +883,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00003761",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -859,7 +903,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00003764",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -878,7 +923,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000037a1",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -897,7 +943,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000374c",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -916,7 +963,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000037a1",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -935,7 +983,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000374c",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -954,7 +1003,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000378c",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -973,7 +1023,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000370d",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -992,7 +1043,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000378c",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1011,7 +1063,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000370d",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1030,7 +1083,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000037a4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1049,7 +1103,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000037a1",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1068,7 +1123,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000037a4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1087,7 +1143,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00003786",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1106,7 +1163,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00003792",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "ANACHIP": [
@@ -1127,7 +1185,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000010e",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1146,7 +1205,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000110",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "ASD": [
@@ -1167,7 +1227,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000dac1",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1186,7 +1247,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da45",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1205,7 +1267,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da46",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1224,7 +1287,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da0b",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "ASI Semic": [
@@ -1245,7 +1309,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000097d6",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1264,7 +1329,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009750",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1283,7 +1349,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009783",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1302,7 +1369,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009704",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1321,7 +1389,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009785",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "ATMEL": [
@@ -1342,7 +1411,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1361,7 +1431,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002904",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1380,7 +1451,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e05",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1399,7 +1471,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e85",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1418,7 +1491,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e86",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1437,7 +1511,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e0b",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1456,7 +1531,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e8a",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1475,7 +1551,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f83",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1494,7 +1571,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000298c",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1513,7 +1591,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e8c",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1532,7 +1611,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f0d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1551,7 +1631,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e0d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1570,7 +1651,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f94",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1589,7 +1671,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e94",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1608,7 +1691,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e05",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1627,7 +1711,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e86",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1646,7 +1731,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e0b",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1665,7 +1751,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e8c",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1684,7 +1771,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001e0d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1703,7 +1791,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1722,7 +1811,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1741,7 +1831,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1760,7 +1851,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1779,7 +1871,9 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -1798,7 +1892,9 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -1817,7 +1913,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1836,7 +1933,9 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -1855,7 +1954,9 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -1874,7 +1975,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1893,7 +1995,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1912,7 +2015,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1931,7 +2035,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1950,7 +2055,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1969,7 +2075,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -1988,7 +2095,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2007,7 +2115,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2026,7 +2135,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2045,7 +2155,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2064,7 +2175,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2083,7 +2195,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f35",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2102,7 +2215,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fba",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2121,7 +2235,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f3b",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2140,7 +2255,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fc4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2159,7 +2275,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fdc",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2178,7 +2295,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fdc",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2197,7 +2315,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f5d",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2216,7 +2335,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fd5",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2235,7 +2355,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fda",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2254,7 +2375,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f5b",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2273,7 +2395,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fa4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2292,7 +2415,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fdc",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2311,7 +2435,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f3d",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2330,7 +2455,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f05",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2349,7 +2475,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f05",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2368,7 +2495,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f04",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2387,7 +2515,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f04",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2406,7 +2535,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f07",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2425,7 +2555,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f07",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2444,7 +2575,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f08",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2463,7 +2595,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f08",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2482,7 +2615,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f17",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2501,7 +2635,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f0b",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2520,7 +2655,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f13",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2539,7 +2675,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f12",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2558,7 +2695,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f03",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2577,7 +2715,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f05",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2596,7 +2735,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f05",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2615,7 +2755,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f04",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2634,7 +2775,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f04",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2653,7 +2795,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f07",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2672,7 +2815,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f07",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2691,7 +2835,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f08",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2710,7 +2855,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f08",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2729,7 +2875,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f17",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2748,7 +2895,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f0b",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2767,7 +2915,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f13",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2786,7 +2935,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f12",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2805,7 +2955,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f03",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "CATALYST(CSI)": [
@@ -2826,7 +2977,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2845,7 +2997,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2864,7 +3017,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2883,7 +3037,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2902,7 +3057,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2921,7 +3077,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2940,7 +3097,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00003140",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2959,7 +3117,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2978,7 +3137,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -2997,7 +3157,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3016,7 +3177,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3035,7 +3197,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3054,7 +3217,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3073,7 +3237,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3092,7 +3257,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3111,7 +3277,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3130,7 +3297,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3149,7 +3317,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3168,7 +3337,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00003195",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3187,7 +3357,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00003194",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3206,7 +3377,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000031b9",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3225,7 +3397,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000031b8",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3244,7 +3417,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000031b4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3263,7 +3437,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000031bd",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "CFEON": [
@@ -3284,7 +3459,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3303,7 +3479,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3322,7 +3499,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3341,7 +3519,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3360,7 +3539,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3379,7 +3559,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3398,7 +3579,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3417,7 +3599,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "CHINGIS": [
@@ -3438,7 +3621,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d1d",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3457,7 +3641,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d2d",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3476,7 +3661,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d1e",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3495,7 +3681,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d2e",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3514,7 +3701,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d1c",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3533,7 +3721,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d4d",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3552,7 +3741,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d4e",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "CYPRESS": [
@@ -3573,7 +3763,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000341d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3592,7 +3783,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3611,7 +3803,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3630,7 +3823,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3649,7 +3843,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3668,7 +3863,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3687,7 +3883,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00003421",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3706,7 +3903,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000341f",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3725,7 +3923,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "DALLAS": [
@@ -3746,7 +3945,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3765,7 +3965,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3784,7 +3985,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3803,7 +4005,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3822,7 +4025,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3841,7 +4045,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3860,7 +4065,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3879,7 +4085,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3898,7 +4105,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3917,7 +4125,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3936,7 +4145,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3955,7 +4165,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3974,7 +4185,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -3993,7 +4205,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4012,7 +4225,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4031,7 +4245,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4050,7 +4265,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4069,7 +4285,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4088,7 +4305,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4107,7 +4325,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "DENSE-PAC": [
@@ -4128,7 +4347,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4147,7 +4367,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4166,7 +4387,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "EFST": [
@@ -4187,7 +4409,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008c00",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "EON": [
@@ -4208,7 +4431,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001c01",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4227,7 +4451,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001c83",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4246,7 +4471,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4265,7 +4491,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4284,7 +4511,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4303,7 +4531,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4322,7 +4551,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4341,7 +4571,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "EXEL": [
@@ -4362,7 +4593,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4381,7 +4613,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4400,7 +4633,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4419,7 +4653,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4438,7 +4673,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4457,7 +4693,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4476,7 +4713,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "FAIRCHILD": [
@@ -4497,7 +4735,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f86",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4516,7 +4755,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f08",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4535,7 +4775,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f04",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4554,7 +4795,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f85",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4573,7 +4815,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f86",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4592,7 +4835,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f07",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4611,7 +4855,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f08",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4630,7 +4875,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008fc2",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4649,7 +4895,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f83",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4668,7 +4915,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4687,7 +4935,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4706,7 +4955,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4725,7 +4975,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4744,7 +4995,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4763,7 +5015,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "FUJITSU": [
@@ -4784,7 +5037,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4803,7 +5057,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4822,7 +5077,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4841,7 +5097,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4860,7 +5117,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4879,7 +5137,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4898,7 +5157,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000004e5",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4917,7 +5177,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000004e5",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4936,7 +5197,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4955,7 +5217,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000040b",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4974,7 +5237,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -4993,7 +5257,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5012,7 +5277,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000004f4",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5031,7 +5297,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5050,7 +5317,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5069,7 +5337,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000048f",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5088,7 +5357,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000434",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5107,7 +5377,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000004b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5126,7 +5397,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000004a4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "GREENWICH": [
@@ -5147,7 +5419,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5166,7 +5439,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5185,7 +5459,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5204,7 +5479,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "HITACHI": [
@@ -5225,7 +5501,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000070d",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5244,7 +5521,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000710",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5263,7 +5541,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000794",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5282,7 +5561,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000738",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5301,7 +5581,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000007b9",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5320,7 +5601,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5339,7 +5621,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000731",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5358,7 +5641,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000007b0",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5377,7 +5661,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000720",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5396,7 +5681,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009785",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5415,7 +5701,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5434,7 +5721,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000115",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5453,7 +5741,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000719",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5472,7 +5761,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "HOLTEK": [
@@ -5493,7 +5783,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5512,7 +5803,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5531,7 +5823,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5550,7 +5843,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5569,7 +5863,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5588,7 +5883,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5607,7 +5903,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5626,7 +5923,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "HYNIX": [
@@ -5647,7 +5945,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000008a7",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5666,7 +5965,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000adb0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5685,7 +5985,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000ad40",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5704,7 +6005,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000ada4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "HYUNDAI": [
@@ -5725,7 +6027,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000008a7",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5744,7 +6047,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000adb0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5763,7 +6067,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000ad40",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5782,7 +6087,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000ada4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "ICE": [
@@ -5803,7 +6109,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5822,7 +6129,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5841,7 +6149,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "ICMIC": [
@@ -5862,7 +6171,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000010e",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5881,7 +6191,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000110",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "ICT": [
@@ -5902,7 +6213,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000010e",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5921,7 +6233,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000110",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "IMT": [
@@ -5942,7 +6255,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00007fa3",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5961,7 +6275,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00007fa0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5980,7 +6295,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00007fa2",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -5999,7 +6315,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00007fa1",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6018,7 +6335,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00007fa8",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6037,7 +6355,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00007fa7",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "INTEL": [
@@ -6058,7 +6377,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008985",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6077,7 +6397,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008931",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6086,17 +6407,19 @@
         "type": "UV-EPROM",
         "vcc": "5V",
         "vdd": "5.5V",
-        "vpp": "18V",
-        "vpp_mv": 18000
+        "vpp": "25V",
+        "vpp_mv": 25000
       },
       "part_number": "2732,2732A,M2732,M2732A",
       "pinout": "DIP24_2732",
       "programming": {
-        "algorithm": 11,
+        "algorithm": 0,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "500 us"
-      }
+        "pulse_duration": "Algorithm Controlled"
+      },
+      "support_status": "vpp-exceeds-max",
+      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
     },
     {
       "electrical": {
@@ -6115,7 +6438,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008908",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6134,7 +6458,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008908",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6153,7 +6478,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008989",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6172,7 +6498,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008989",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6191,7 +6518,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008904",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6200,17 +6528,19 @@
         "type": "UV-EPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "18V",
-        "vpp_mv": 18000
+        "vpp": "25V",
+        "vpp_mv": 25000
       },
       "part_number": "M2716,M2716M",
       "pinout": "DIP24_2716",
       "programming": {
-        "algorithm": 11,
+        "algorithm": 0,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "500 us"
-      }
+        "pulse_duration": "Algorithm Controlled"
+      },
+      "support_status": "vpp-exceeds-max",
+      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
     },
     {
       "electrical": {
@@ -6229,7 +6559,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008804",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6248,7 +6579,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000890d",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6267,7 +6599,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008935",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6286,7 +6619,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008934",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6305,7 +6639,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000893d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6324,7 +6659,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008983",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6343,7 +6679,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000898c",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6362,7 +6699,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000089fd",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6381,7 +6719,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008924",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6400,7 +6739,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000089b2",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6419,7 +6759,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008994",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6438,7 +6779,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008995",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6457,7 +6799,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000089b9",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6476,7 +6819,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000089b8",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6495,7 +6839,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000089b4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6514,7 +6859,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000089bd",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "ISSI": [
@@ -6535,7 +6881,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000d50e",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6554,7 +6901,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000d597",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6573,7 +6921,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000d510",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6592,7 +6941,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000d591",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6611,7 +6961,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000d50e",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6630,7 +6981,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000d597",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6649,7 +7001,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000d510",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6668,7 +7021,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000d591",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6687,7 +7041,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000d5b4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6706,7 +7061,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000d5bd",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "LINKAGE": [
@@ -6727,7 +7083,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6746,7 +7103,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6765,7 +7123,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "LINKSMART": [
@@ -6786,7 +7145,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004001",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6805,7 +7165,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004002",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6824,7 +7185,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004003",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "MACRONIX(MXIC)": [
@@ -6845,7 +7207,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c2d2",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6864,7 +7227,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c2c3",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6883,7 +7247,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c2c0",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6902,7 +7267,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c2b6",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6921,7 +7287,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c2b5",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6940,7 +7307,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c24f",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6959,7 +7327,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c20e",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6978,7 +7347,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c2ca",
         "pulse_duration": "10 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6997,7 +7367,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c220",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7016,7 +7387,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c2c3",
         "pulse_duration": "10 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7035,7 +7407,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c210",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7054,7 +7427,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c240",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7073,7 +7447,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c2c0",
         "pulse_duration": "10 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7092,7 +7467,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c291",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7111,7 +7487,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c280",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7130,7 +7507,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c202",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7149,7 +7527,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c20e",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7168,7 +7547,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c220",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7187,7 +7567,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c210",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7206,7 +7587,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c240",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7225,7 +7607,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c291",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7244,7 +7627,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c21a",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7263,7 +7647,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c22a",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7282,7 +7667,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c23c",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7301,7 +7687,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c219",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7320,7 +7707,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c218",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7339,7 +7727,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c234",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7358,7 +7747,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c234",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7377,7 +7767,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c2b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7396,7 +7787,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c2b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7415,7 +7807,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c246",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7434,7 +7827,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c245",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7453,7 +7847,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c237",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7472,7 +7867,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c237",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7491,7 +7887,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c236",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7510,7 +7907,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c236",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7529,7 +7927,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c2a4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7548,7 +7947,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c25a",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7567,7 +7967,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c25a",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7586,7 +7987,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c259",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7605,7 +8007,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000c259",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "MAXWELL": [
@@ -7626,7 +8029,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "MICROCHIP memory": [
@@ -7647,7 +8051,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002983",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7666,7 +8071,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000298c",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7685,7 +8091,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7704,7 +8111,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000290d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7723,7 +8131,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000290d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7742,7 +8151,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002902",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7761,7 +8171,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002994",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7780,7 +8191,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002991",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7799,7 +8211,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7818,7 +8231,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7837,7 +8251,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7856,7 +8271,9 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -7875,7 +8292,9 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -7894,7 +8313,9 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -7913,7 +8334,9 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -7932,7 +8355,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7951,7 +8375,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7970,7 +8395,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -7989,7 +8415,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8008,7 +8435,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8027,7 +8455,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8046,7 +8475,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "MITSUBISHI": [
@@ -8067,7 +8497,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8086,7 +8517,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001c83",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8105,7 +8537,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8124,7 +8557,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8143,7 +8577,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001cd0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "MOSEL VITELIC": [
@@ -8164,7 +8599,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8183,7 +8619,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8202,7 +8639,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8221,7 +8659,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8240,7 +8679,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004073",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8259,7 +8699,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004063",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8278,7 +8719,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000040a1",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8297,7 +8739,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004001",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8316,7 +8759,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000040a2",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8335,7 +8779,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004002",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8354,7 +8799,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000040a3",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8373,7 +8819,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004003",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8392,7 +8839,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004020",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8411,7 +8859,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004060",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8430,7 +8879,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004082",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "NEC": [
@@ -8451,7 +8901,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8470,7 +8921,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8489,7 +8941,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8508,7 +8961,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8527,7 +8981,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8546,7 +9001,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8565,7 +9021,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8584,7 +9041,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8603,7 +9061,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8622,7 +9081,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8641,7 +9101,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8660,7 +9121,9 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "adapter-required",
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -8679,7 +9142,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8698,7 +9162,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "NEXFLASH": [
@@ -8719,7 +9184,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000120",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "NSC": [
@@ -8740,7 +9206,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f86",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8759,7 +9226,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f07",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8778,7 +9246,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f08",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8797,7 +9266,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008fc2",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8816,7 +9286,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f83",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8835,7 +9306,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f04",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8854,7 +9326,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f85",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8873,7 +9346,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f86",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8892,7 +9366,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008fc2",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8911,7 +9386,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f86",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8930,7 +9406,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f07",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8949,7 +9426,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f08",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8968,7 +9446,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f85",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8987,7 +9466,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f07",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9006,7 +9486,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00008f08",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9025,7 +9506,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9044,7 +9526,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9063,7 +9546,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9082,7 +9566,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9101,7 +9586,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "OKI": [
@@ -9122,7 +9608,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9141,7 +9628,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9160,7 +9648,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9179,7 +9668,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9198,7 +9688,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000ae89",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "PHILIPS": [
@@ -9219,7 +9710,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001525",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9238,7 +9730,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000f53e",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9257,7 +9750,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9276,7 +9770,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "PMC": [
@@ -9297,7 +9792,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d1d",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9316,7 +9812,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d2d",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9335,7 +9832,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d1e",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9354,7 +9852,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d2e",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9373,7 +9872,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d1c",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9392,7 +9892,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d4d",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9411,7 +9912,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009d4e",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "PTC": [
@@ -9432,7 +9934,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9451,7 +9954,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9470,7 +9974,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "RAMTRON": [
@@ -9491,7 +9996,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9510,7 +10016,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9529,7 +10036,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9548,7 +10056,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9567,7 +10076,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "SAMSUNG": [
@@ -9588,7 +10098,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9607,7 +10118,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "SGS-THOMSON": [
@@ -9618,17 +10130,19 @@
         "type": "UV-EPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "18V",
-        "vpp_mv": 18000
+        "vpp": "25V",
+        "vpp_mv": 25000
       },
       "part_number": "ETC2716,M2716",
       "pinout": "DIP24_2716",
       "programming": {
-        "algorithm": 11,
+        "algorithm": 0,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "1000 us"
-      }
+        "pulse_duration": "Algorithm Controlled"
+      },
+      "support_status": "vpp-exceeds-max",
+      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
     },
     {
       "electrical": {
@@ -9647,7 +10161,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9666,7 +10181,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9685,7 +10201,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9704,7 +10221,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9723,7 +10241,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002089",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9742,7 +10261,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002004",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9751,8 +10271,8 @@
         "type": "UV-EPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "18V",
-        "vpp_mv": 18000
+        "vpp": "21V",
+        "vpp_mv": 21000
       },
       "part_number": "M2732A",
       "pinout": "DIP24_2732",
@@ -9761,7 +10281,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9780,7 +10301,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000200d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9799,7 +10321,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002008",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9818,7 +10341,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002086",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9837,7 +10361,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002005",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9856,7 +10381,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002061",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9875,7 +10401,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000208d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9894,7 +10421,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002041",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9913,7 +10441,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000203d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9932,7 +10461,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009b08",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9951,7 +10481,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002042",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9970,7 +10501,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -9989,7 +10521,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10008,7 +10541,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10027,7 +10561,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002007",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10046,7 +10581,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000020f4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10065,7 +10601,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000020a8",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10084,7 +10621,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002002",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10103,7 +10641,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002034",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10122,7 +10661,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000020b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10141,7 +10681,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000020b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10160,7 +10701,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002034",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10179,7 +10721,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002020",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10198,7 +10741,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000020e2",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10217,7 +10761,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002024",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10236,7 +10781,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002080",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10255,7 +10801,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000208d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10274,7 +10821,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002089",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10293,7 +10841,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002004",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10312,7 +10861,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002008",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10331,7 +10881,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009b04",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10350,7 +10901,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009b08",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10369,7 +10921,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10388,7 +10941,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10407,7 +10961,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10426,7 +10981,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10445,7 +11001,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10464,7 +11021,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10483,7 +11041,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10502,7 +11061,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10521,7 +11081,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10540,7 +11101,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "SPANSION(1)": [
@@ -10561,7 +11123,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000134",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10580,7 +11143,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000001b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10599,7 +11163,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000134",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10618,7 +11183,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000001b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10637,7 +11203,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000120",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10656,7 +11223,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000001a4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10675,7 +11243,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00000434",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10694,7 +11263,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000004b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10713,7 +11283,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000004a4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "SST": [
@@ -10734,7 +11305,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfa5",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10753,7 +11325,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfa6",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10772,7 +11345,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfa3",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10791,7 +11365,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfa4",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10810,7 +11385,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfa9",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10829,7 +11405,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfaa",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10848,7 +11425,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfa7",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10867,7 +11445,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfa8",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10886,7 +11465,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf04",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10905,7 +11485,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf04",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10924,7 +11505,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf07",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10943,7 +11525,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf10",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10962,7 +11545,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf5d",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10981,7 +11565,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf08",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11000,7 +11585,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf12",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11019,7 +11605,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf3d",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11038,7 +11625,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf22",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11057,7 +11645,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf24",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11076,7 +11665,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf13",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11095,7 +11685,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf20",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11114,7 +11705,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf23",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11133,7 +11725,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf25",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11152,7 +11745,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf14",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11171,7 +11765,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf21",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11190,7 +11785,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfc5",
         "pulse_duration": "10 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11209,7 +11805,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfc6",
         "pulse_duration": "10 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11228,7 +11825,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfc2",
         "pulse_duration": "10 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11247,7 +11845,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfc4",
         "pulse_duration": "10 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11266,7 +11865,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfd5",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11285,7 +11885,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfd6",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11304,7 +11905,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfd7",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11323,7 +11925,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfd4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11342,7 +11945,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfb5",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11361,7 +11965,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfb6",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11380,7 +11985,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfb7",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11399,7 +12005,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfb4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11418,7 +12025,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bfd7",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "ST": [
@@ -11429,17 +12037,19 @@
         "type": "UV-EPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "18V",
-        "vpp_mv": 18000
+        "vpp": "25V",
+        "vpp_mv": 25000
       },
       "part_number": "ETC2716,M2716",
       "pinout": "DIP24_2716",
       "programming": {
-        "algorithm": 11,
+        "algorithm": 0,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "1000 us"
-      }
+        "pulse_duration": "Algorithm Controlled"
+      },
+      "support_status": "vpp-exceeds-max",
+      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
     },
     {
       "electrical": {
@@ -11458,7 +12068,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11477,7 +12088,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002089",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11496,7 +12108,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002004",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11505,8 +12118,8 @@
         "type": "UV-EPROM",
         "vcc": "5V",
         "vdd": "5V",
-        "vpp": "18V",
-        "vpp_mv": 18000
+        "vpp": "21V",
+        "vpp_mv": 21000
       },
       "part_number": "M2732A",
       "pinout": "DIP24_2732",
@@ -11515,7 +12128,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "500 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11534,7 +12148,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000200d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11553,7 +12168,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002008",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11572,7 +12188,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002005",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11591,7 +12208,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002061",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11610,7 +12228,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000208d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11629,7 +12248,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000158c",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11648,7 +12268,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002041",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11667,7 +12288,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000203d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11686,7 +12308,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009b08",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11705,7 +12328,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002042",
         "pulse_duration": "50 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11724,7 +12348,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11743,7 +12368,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11762,7 +12388,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11781,7 +12408,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11800,7 +12428,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002007",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11819,7 +12448,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000020f4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11838,7 +12468,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000020a8",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11857,7 +12488,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002002",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11876,7 +12508,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11895,7 +12528,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002034",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11914,7 +12548,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000020b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11933,7 +12568,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000020b0",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11952,7 +12588,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002034",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11971,7 +12608,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002020",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -11990,7 +12628,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000020e2",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12009,7 +12648,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002024",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12028,7 +12668,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002080",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12047,7 +12688,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000208d",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12066,7 +12708,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002089",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12085,7 +12728,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002004",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12104,7 +12748,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00002008",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12123,7 +12768,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009b04",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12142,7 +12788,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009b04",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12161,7 +12808,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009b08",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12180,7 +12828,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12199,7 +12848,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12218,7 +12868,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12237,7 +12888,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12256,7 +12908,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12275,7 +12928,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12294,7 +12948,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12313,7 +12968,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12332,7 +12988,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12351,7 +13008,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "SYNCMOS": [
@@ -12372,7 +13030,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004073",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12391,7 +13050,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004063",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12410,7 +13070,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000040a1",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12429,7 +13090,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004001",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12448,7 +13110,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000040a2",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12467,7 +13130,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004002",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12486,7 +13150,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000040a3",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12505,7 +13170,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004003",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12524,7 +13190,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004020",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12543,7 +13210,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004060",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12562,7 +13230,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00004082",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12581,7 +13250,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12600,7 +13270,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12619,7 +13290,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12638,7 +13310,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "Standard SRAM": [
@@ -12659,7 +13332,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12678,7 +13352,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12697,7 +13372,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12716,7 +13392,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12735,7 +13412,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12754,7 +13432,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12773,7 +13452,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "TI": [
@@ -12794,7 +13474,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009783",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12813,7 +13494,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009704",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12832,7 +13514,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009785",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12851,7 +13534,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12870,7 +13554,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12889,7 +13574,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12908,7 +13594,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009746",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12927,7 +13614,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000097d6",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12946,7 +13634,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009732",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12965,7 +13654,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009750",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12984,7 +13674,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009707",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13003,7 +13694,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000089b4",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13022,7 +13714,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000089bd",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13041,7 +13734,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000097c2",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13060,7 +13754,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13079,7 +13774,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13098,7 +13794,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13117,7 +13814,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13136,7 +13834,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13155,7 +13854,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13174,7 +13874,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13193,7 +13894,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13212,7 +13914,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13231,7 +13934,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13250,7 +13954,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13269,7 +13974,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13288,7 +13994,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13307,7 +14014,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13326,7 +14034,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13345,7 +14054,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13364,7 +14074,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13383,7 +14094,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "TOSHIBA/KIOXIA": [
@@ -13404,7 +14116,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000098c4",
         "pulse_duration": "1000 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13423,7 +14136,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009845",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13442,7 +14156,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x00009885",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "WED": [
@@ -13463,7 +14178,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13482,7 +14198,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13501,7 +14218,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13520,7 +14238,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "WINBOND": [
@@ -13541,7 +14260,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da01",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13560,7 +14280,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da85",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13579,7 +14300,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da86",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13598,7 +14320,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da02",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13617,7 +14340,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da08",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13636,7 +14360,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da02",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13655,7 +14380,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000dac1",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13674,7 +14400,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da45",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13693,7 +14420,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da46",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13712,7 +14440,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000dac8",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13731,7 +14460,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000dac1",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13750,7 +14480,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000daa1",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13769,7 +14500,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000dad6",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13788,7 +14520,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da0b",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13807,7 +14540,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da8c",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13826,7 +14560,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13845,7 +14580,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13864,7 +14600,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13883,7 +14620,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13902,7 +14640,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13921,7 +14660,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "WSI": [
@@ -13942,7 +14682,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13961,7 +14702,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000023c1",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13980,7 +14722,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000023a8",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -13999,7 +14742,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000023c0",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -14018,7 +14762,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -14037,7 +14782,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "200 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -14056,7 +14802,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -14075,7 +14822,8 @@
         "chip_id_check": true,
         "chip_id_value": "0x000023e0",
         "pulse_duration": "100 us"
-      }
+      },
+      "support_status": "supported"
     }
   ],
   "XICOR": [
@@ -14096,7 +14844,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -14115,7 +14864,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -14134,7 +14884,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -14153,7 +14904,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -14172,7 +14924,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -14191,7 +14944,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -14210,7 +14964,8 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -14229,7 +14984,29 @@
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
         "pulse_duration": "Algorithm Controlled"
-      }
+      },
+      "support_status": "supported"
+    },
+    {
+      "electrical": {
+        "pin_count": 24,
+        "size_bytes": 8192,
+        "type": "UV-EPROM",
+        "vcc": "4V",
+        "vdd": "5V",
+        "vpp": "12V",
+        "vpp_mv": 12000
+      },
+      "part_number": "X88C64P,X88C64S",
+      "pinout": "DIP24_6116",
+      "programming": {
+        "algorithm": 52,
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000",
+        "pulse_duration": "Algorithm Controlled"
+      },
+      "support_status": "protocol-not-implemented",
+      "unsupported_reason": "protocol not implemented: 0x34 (XICOR NovRAM serial-parallel hybrid)"
     }
   ]
 }
