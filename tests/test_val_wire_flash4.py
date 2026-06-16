@@ -72,7 +72,9 @@ def test_flash4_wire_dict_algorithm_in_family_protocols(make_comm, fake_serial) 
     )
 
 
-def test_flash4_wire_dict_dispatches_to_configure_flash4(make_comm, fake_serial) -> None:
+def test_flash4_wire_dict_dispatches_to_configure_flash4(
+    make_comm, fake_serial
+) -> None:
     """dispatch(algorithm, type) returns 'configure_flash4' for the flash4 rep chip."""
     db = EpromDatabase()
     chip = db.get_eprom(_REP_CHIP)

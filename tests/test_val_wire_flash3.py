@@ -72,7 +72,9 @@ def test_flash3_wire_dict_algorithm_is_0x06(make_comm, fake_serial) -> None:
     )
 
 
-def test_flash3_wire_dict_dispatches_to_configure_flash3(make_comm, fake_serial) -> None:
+def test_flash3_wire_dict_dispatches_to_configure_flash3(
+    make_comm, fake_serial
+) -> None:
     """dispatch(algorithm, type) returns 'configure_flash3' for the flash3 rep chip."""
     db = EpromDatabase()
     chip = db.get_eprom(_REP_CHIP)

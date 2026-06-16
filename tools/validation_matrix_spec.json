@@ -73,7 +73,7 @@
       "id": "flash4",
       "handler": "configure_flash4",
       "protocols": [5, 53, 57],
-      "rep_chip": "SST39SF040",
+      "rep_chip": "AT29C040",
       "tier1": {
         "suite": "test_val_flash4",
         "assertions": [
@@ -86,7 +86,7 @@
         "commands": ["write", "read", "verify", "blank_check"]
       },
       "tier3": {
-        "test_chip": "SST39SF040",
+        "test_chip": "AT29C040",
         "boards": ["leonardo"],
         "skip_boards": ["uno328pb"]
       }

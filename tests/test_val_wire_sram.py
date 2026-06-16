@@ -30,7 +30,7 @@ _TOOLS_DIR = Path(__file__).parent.parent / "tools"
 if str(_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(_TOOLS_DIR))
 
-from check_dispatch import dispatch, _SRAM_PROTOCOLS  # noqa: E402
+from check_dispatch import _SRAM_PROTOCOLS, dispatch  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Spec loading

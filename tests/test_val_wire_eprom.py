@@ -21,8 +21,6 @@ import json
 import sys
 from pathlib import Path
 
-import pytest
-
 from firestarter.database import EpromDatabase
 
 # Add tools directory so check_dispatch is importable
