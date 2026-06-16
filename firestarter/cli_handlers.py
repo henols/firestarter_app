@@ -1259,11 +1259,6 @@ def dev_fault_inject(
 # dev validate-family (71-06 / HARN-01 Tier-3 + HARN-02 + HARN-03)
 # ---------------------------------------------------------------------------
 
-# Sentinel evidence_sha for software-only cells (no readback file exists).
-_EVIDENCE_SHA_SOFTWARE_SENTINEL: str = hashlib.sha256(
-    b"tier-software-no-file"
-).hexdigest()
-
 # r1 calibration tolerance band: 270000 ± 25%
 _R1_TARGET: int = 270_000
 _R1_TOLERANCE: float = 0.25
@@ -1355,7 +1350,9 @@ def _write_artifact(
     out_path.mkdir(parents=True, exist_ok=True)
 
     artifact: Dict[str, Any] = {  # noqa: UP006
-        "generated": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated": datetime.datetime.now(datetime.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        ),
         "harness_version": "71",
         "cells": cells,
     }
@@ -1555,17 +1552,27 @@ def dev_validate_family(
             evidence_sha = None
 
         # Map verdict to oracle classification (Leonardo = authoritative).
+        # verdict_int==0: write_cycle_eprom's own source-vs-readback SHA compare
+        # returned 0 (PASS). Map directly to board-class verdict — the caller
+        # MUST NOT add a source==source self-comparison call here (vacuous).
+        # The real readback compare already happened inside write_cycle_eprom.
+        # Preserve board-class semantics via pass_type: "authoritative" on
+        # Leonardo, "advisory" on all other non-uno328pb boards (HARN-03 / D-08).
         if verdict_int == 0:
-            oracle = _classify_sha_result(
-                evidence_sha or "",
-                evidence_sha or "",
-                board,
+            pass_type = (
+                "authoritative" if board == _AUTHORITATIVE_PASS_BOARD else "advisory"
             )
-            cell_verdict = oracle["verdict"]
+            cell_verdict = "PASS"
         elif verdict_int == 1:
             cell_verdict = "FAIL"
+            pass_type = (
+                "authoritative" if board == _AUTHORITATIVE_PASS_BOARD else "advisory"
+            )
         else:
             cell_verdict = "SKIP-deferred"  # hw-error → deferred
+            pass_type = (
+                "authoritative" if board == _AUTHORITATIVE_PASS_BOARD else "advisory"
+            )
 
         hw_cells.append(
             {
@@ -1573,6 +1580,7 @@ def dev_validate_family(
                 "board": board,
                 "tier": 3,
                 "verdict": cell_verdict,
+                "pass_type": pass_type,
                 "evidence_sha": evidence_sha,
                 "retry_count": 1,
             }
