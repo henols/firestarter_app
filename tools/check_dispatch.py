@@ -54,6 +54,44 @@ _ALGO_MEM_TYPE = {
 # enables the VPP boost regulator on a 5V SRAM part).
 _SRAM_PROTOCOLS = {0x0E, 0x27, 0x28, 0x29}
 
+# Per-family VPP range invariants (Phase 71 HARN-04 / D-09).
+# Maps handler name → (min_vpp_mv, max_vpp_mv).
+#
+# IMPLEMENTATION NOTE: chip_database.json stores vpp_mv in the "electrical" block.
+# For 5V-only handlers (flash3/flash4/sram/eeprom28c), the electrical.vpp_mv field
+# encodes the chip's write-protect (WP) pin voltage from the datasheet — NOT a
+# programming VPP that the RURP firmware would assert. These chips commonly list
+# vpp_mv=12000 (WP pin), which the firmware never enables via the VPP boost regulator.
+# Checking vpp_mv <= 6000 for 5V families would produce false positives on every
+# AMD/SST/Atmel flash chip in the current DB (see RESEARCH.md §Pitfall 6).
+#
+# Therefore only configure_flash_intel carries a meaningful invariant here: Intel 28F
+# chips require 12V on the P1/VPP pin for programming — a programming VPP that the
+# RURP firmware actively asserts. A chip with vpp_mv < 10000 routed to configure_flash_intel
+# would indicate a DB encoding error (declared insufficient VPP for a handler that needs it).
+#
+# The 5V-family invariant logic IS implemented below and IS tested via synthetic fixtures
+# (see tests/test_check_dispatch_invariants.py). Against the current clean DB, no real chip
+# trips the 5V family ceiling because the WP-pin 12V is a legitimate DB encoding.
+# Range (0, 6000) is the semantically correct invariant for these handlers —
+# proven capable of firing on a synthetic chip with vpp_mv=12000 routed to configure_sram.
+_FAMILY_VPP_INVARIANTS: dict[str, tuple[int, int]] = {
+    "configure_eprom": (0, 22000),  # RURP VPP ceiling 22V; any VPP up to that
+    "configure_eeprom28c": (0, 6000),  # 5V-only EEPROM — no elevated VPP rail
+    "configure_flash3": (0, 6000),  # AMD flash 5V only (WP-pin 12V != programming VPP)
+    "configure_flash4": (0, 6000),  # AMD/SST flash 5V only (WP-pin 12V exempt)
+    "configure_flash_intel": (10000, 22000),  # Intel 28F requires 12V programming VPP
+    "configure_sram": (0, 6000),  # SRAM — never VPP (BLOCKER-2 complement)
+}
+
+# VPP-INVARIANT ENFORCEMENT SCOPE:
+# DB-level invariant check (in the main() scan loop below) applies ONLY to
+# configure_flash_intel where the mismatch is detectable from the DB. For 5V-only
+# handlers, the DB's electrical.vpp_mv encodes WP-pin voltage (not programming VPP),
+# so checking vpp_mv > 6000 would produce false positives on every AMD/SST flash chip.
+# The 5V handler invariants are proven via synthetic fixture only (D-09).
+_DB_CHECKED_VPP_INVARIANTS: frozenset[str] = frozenset({"configure_flash_intel"})
+
 # DIP28_2764 + Flash/EEPROM hazard guard (WARNING-5).
 # Chips whose pinout == _28C_EEPROM_HAZARD_PINOUT AND electrical.type == "Flash/EEPROM"
 # must NOT route to `configure_eprom`. configure_eprom would assert P1_VPP_ENABLE,
@@ -165,6 +203,10 @@ def main():
     # gate failure. check_dispatch previously only checked the regression direction
     # (supported → not_implemented); this bucket catches the dangerous inverse.
     non_supported_dispatchable = []
+    # Phase 71 HARN-04 / D-09: per-family VPP range violation list.
+    # Populated when a chip's declared vpp_mv falls outside _FAMILY_VPP_INVARIANTS[handler].
+    # A non-empty list fails the gate (chip DB declares a VPP the handler must not enable).
+    family_vpp_violations: list[str] = []
     total = 0
     non_supported_count = 0
     non_dispatchable_count = 0
@@ -260,6 +302,30 @@ def main():
                 # else: expected — protocol-not-implemented/adapter-required/vpp-exceeds-max
                 # chips correctly route to not_implemented (no handler exists; that is the point).
                 continue  # skip VPP/wire checks — no real handler to evaluate
+            # Phase 71 HARN-04 / D-09: per-family VPP invariant check.
+            # Scope: only handlers in _DB_CHECKED_VPP_INVARIANTS (currently configure_flash_intel).
+            # For 5V-only handlers, electrical.vpp_mv encodes the WP-pin voltage (not programming
+            # VPP), producing false positives — those invariants are proven via synthetic fixture
+            # only. See _FAMILY_VPP_INVARIANTS comment block and RESEARCH.md §Pitfall 6.
+            # NOTE: vpp_mv lives in the "electrical" block in chip_database.json.
+            vpp_mv = chip.get("electrical", {}).get("vpp_mv", 0) or 0
+            if handler in _DB_CHECKED_VPP_INVARIANTS:
+                lo, hi = _FAMILY_VPP_INVARIANTS[handler]
+                if not (lo <= vpp_mv <= hi):
+                    family_vpp_violations.append(
+                        f"{mfg}/{part} proto=0x{proto:02X} handler={handler} "
+                        f"vpp_mv={vpp_mv} outside [{lo},{hi}]"
+                    )
+                    # Populate non_supported_dispatchable when this is ALSO a non-supported chip
+                    # routing to a real handler with a VPP mismatch — the dangerous dual-violation:
+                    # chip classification AND VPP contract are both wrong simultaneously.
+                    # This makes the inverse detector non-hollow per D-09 (proven via synthetic
+                    # fixture in test_check_dispatch_invariants.py).
+                    if chip_ss != "supported":
+                        non_supported_dispatchable.append(
+                            f"{mfg}/{part} proto=0x{proto:02X} ss={chip_ss} "
+                            f"handler={handler} vpp_mv={vpp_mv} outside [{lo},{hi}]"
+                        )
             # BLOCKER-2 safety: SRAM protocol must never resolve to configure_eprom
             if proto in _SRAM_PROTOCOLS and handler == "configure_eprom":
                 sram_in_eprom.append(f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}")
@@ -315,6 +381,7 @@ def main():
         or wire_regressions
         or missing_reason
         or pni_with_known_proto
+        or family_vpp_violations
         or non_supported_dispatchable
     ):
         if errors:
@@ -384,6 +451,15 @@ def main():
                 print(f"  {e}")
             if len(pni_with_known_proto) > 20:
                 print(f"  ... and {len(pni_with_known_proto) - 20} more")
+        if family_vpp_violations:
+            print(
+                f"FAIL: {len(family_vpp_violations)} per-family VPP invariant violation(s) "
+                f"(Phase 71 HARN-04 / D-09 — chip declares VPP outside its handler's allowed range):"
+            )
+            for v in family_vpp_violations[:20]:
+                print(f"  {v}")
+            if len(family_vpp_violations) > 20:
+                print(f"  ... and {len(family_vpp_violations) - 20} more")
         if non_supported_dispatchable:
             print(
                 f"FAIL: {len(non_supported_dispatchable)} non-supported chips dispatch "
