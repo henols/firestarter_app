@@ -53,15 +53,21 @@ def test_committed_header_has_val_families() -> None:
     assert "VAL_FAMILY_COUNT" in content, "Header is missing VAL_FAMILY_COUNT"
 
 
-def test_committed_header_has_13_rows() -> None:
-    """Header must contain exactly 13 rows (one per protocol across 6 families)."""
+def test_committed_header_has_11_rows() -> None:
+    """Header must contain exactly 11 rows (one per host-dispatchable protocol across 6 families).
+
+    flash4 contributes only protocol 0x05: 0x35 and 0x39 are firmware-dispatch-only
+    (zero DB chips) and are intentionally omitted from the host matrix (CR-02 resolution).
+    The native suite test_val_flash4.cpp still covers 0x35/0x39 directly.
+    """
     content = _COMMITTED_HEADER.read_text(encoding="utf-8")
     # Count lines that start with "    { 0x" (each row in the VAL_FAMILIES table)
     row_lines = [
         line for line in content.splitlines() if line.strip().startswith("{ 0x")
     ]
-    assert len(row_lines) == 13, (
-        f"Expected 13 VAL_FAMILIES rows, got {len(row_lines)}: {row_lines}"
+    assert len(row_lines) == 11, (
+        f"Expected 11 VAL_FAMILIES rows (removed one protocol x 2 rows for 0x35/0x39: 13->11), "
+        f"got {len(row_lines)}: {row_lines}"
     )
 
 
