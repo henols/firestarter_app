@@ -681,36 +681,38 @@ class TestDispatchGate02:
     Phase 62 — D-03: two distinct failure buckets:
       - protocol != 0 + unrecognized protocol → "not_implemented"
       - protocol == 0 + unknown mem_type → "ERROR"
-    Phase 62 — dispatch mirror gap: 0x35/0x39 must now route to configure_flash4
-    (not fall through to "ERROR" via the mem_type dict).
+
+    DEC-05 (v1.11): protocols 0x35/0x39 removed from KNOWN_PROTOCOLS and
+    _ALGO_MEM_TYPE. They now route to "not_implemented" (unknown non-zero
+    protocol bucket), NOT to "configure_flash4".
 
     Test cases:
-      1. dispatch(0x35, None) → "configure_flash4"
-      2. dispatch(0x39, None) → "configure_flash4"
+      1. dispatch(0x35, None) → "not_implemented"  (DEC-05: removed from dispatch)
+      2. dispatch(0x39, None) → "not_implemented"  (DEC-05: removed from dispatch)
       3. dispatch(0x99, None) → "not_implemented"  (unknown non-zero protocol)
       4. dispatch(0, 99)     → "ERROR"            (protocol=0, unknown mem_type)
       5. dispatch(0, 1)      → "configure_eprom"  (legacy fallback intact)
     """
 
-    def test_dispatch_0x35_routes_configure_flash4(self):
-        """0x35 (FLASH_EEPROM) must route to configure_flash4 — explicit arm, not mem_type fallback."""
+    def test_dispatch_0x35_routes_not_implemented(self):
+        """0x35 (FLASH_EEPROM) removed by DEC-05 — routes to not_implemented."""
         import os
         import sys
 
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
         from check_dispatch import dispatch
 
-        assert dispatch(0x35, None) == "configure_flash4"
+        assert dispatch(0x35, None) == "not_implemented"
 
-    def test_dispatch_0x39_routes_configure_flash4(self):
-        """0x39 (FLASH_EEPROM2) must route to configure_flash4 — explicit arm, not mem_type fallback."""
+    def test_dispatch_0x39_routes_not_implemented(self):
+        """0x39 (FLASH_EEPROM2) removed by DEC-05 — routes to not_implemented."""
         import os
         import sys
 
         sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
         from check_dispatch import dispatch
 
-        assert dispatch(0x39, None) == "configure_flash4"
+        assert dispatch(0x39, None) == "not_implemented"
 
     def test_dispatch_unknown_nonzero_proto_routes_not_implemented(self):
         """protocol != 0 with unrecognized protocol → not_implemented (D-03)."""

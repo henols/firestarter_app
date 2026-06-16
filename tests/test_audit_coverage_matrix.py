@@ -364,8 +364,7 @@ class TestAuditCoverageMatrix:
 
         seeded_ledger_path = tmp_path / "seeded.json"
         seeded_ledger_path.write_text(
-            _json.dumps({seed_hash: "DEFECT-COV-99"}, indent=2, sort_keys=True)
-            + "\n",
+            _json.dumps({seed_hash: "DEFECT-COV-99"}, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
         out3 = tmp_path / "m3.md"
