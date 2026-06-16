@@ -150,11 +150,17 @@ class TestShippedSpec:
                 )
 
     def test_protocol_ids_cover_expected_set(self) -> None:
-        """Union of all protocol IDs must cover the known 13 decimal values."""
-        # Decimal equivalents of the 6-family protocol IDs:
-        # 0x07=7, 0x08=8, 0x0B=11, 0x0D=13, 0x06=6, 0x05=5, 0x35=53, 0x39=57,
+        """Union of all host-spec protocol IDs must cover the known 11 decimal values.
+
+        flash4's 0x35/0x39 (53/57) were trimmed from the host spec in 71-08 (CR-02):
+        firmware + the Tier-1 native suite still cover {0x05,0x35,0x39}, but zero DB
+        chips carry 0x35/0x39 so the host never dispatches them — the host spec lists
+        only 0x05 for flash4. See validation_matrix_spec.json `protocols_note`.
+        """
+        # Decimal equivalents of the host-spec family protocol IDs:
+        # 0x07=7, 0x08=8, 0x0B=11, 0x0D=13, 0x06=6, 0x05=5,
         # 0x10=16, 0x0E=14, 0x27=39, 0x28=40, 0x29=41
-        expected = {7, 8, 11, 13, 6, 5, 53, 57, 16, 14, 39, 40, 41}
+        expected = {7, 8, 11, 13, 6, 5, 16, 14, 39, 40, 41}
         with open(SPEC_PATH, encoding="utf-8") as f:
             spec = json.load(f)
         actual: set[int] = set()
