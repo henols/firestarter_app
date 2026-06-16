@@ -363,7 +363,7 @@ def emit_summary(summary, severity_counts=None):
         [pinout, summary["pinout_by_algo"][0x07][pinout]]
         for pinout in sorted(summary["pinout_by_algo"][0x07])
     ]
-    parts.append("### Per-pinout class — algo 0x07 (212 chips)")
+    parts.append(f"### Per-pinout class — algo 0x07 ({summary['algo_counter'][0x07]} chips)")
     parts.append("")
     parts.append(md_table(["Pinout", "Row count"], pin07_rows))
     parts.append("")
@@ -373,7 +373,7 @@ def emit_summary(summary, severity_counts=None):
         [pinout, summary["pinout_by_algo"][0x08][pinout]]
         for pinout in sorted(summary["pinout_by_algo"][0x08])
     ]
-    parts.append("### Per-pinout class — algo 0x08 (127 chips)")
+    parts.append(f"### Per-pinout class — algo 0x08 ({summary['algo_counter'][0x08]} chips)")
     parts.append("")
     parts.append(md_table(["Pinout", "Row count"], pin08_rows))
     parts.append("")
@@ -543,13 +543,6 @@ def emit_full_enumeration(rows):
     `rows` is a list of (mfg, chip) tuples from `iter_in_scope_rows`.
     """
     parts = ["## §3: Full Enumeration", ""]
-    parts.append(
-        "One row per `chip_database.json` record (not per variant). "
-        "339 total rows: 212 algo-0x07 + 127 algo-0x08. "
-        "Sort: (algorithm, pinout, size_bytes, manufacturer, first_alias). "
-        "Per D-06."
-    )
-    parts.append("")
 
     algo_07_rows = [
         (mfg, chip) for mfg, chip in rows
@@ -562,6 +555,15 @@ def emit_full_enumeration(rows):
 
     algo_07_rows = sorted(algo_07_rows, key=lambda mc: sort_key(*mc))
     algo_08_rows = sorted(algo_08_rows, key=lambda mc: sort_key(*mc))
+
+    parts.append(
+        f"One row per `chip_database.json` record (not per variant). "
+        f"{len(algo_07_rows) + len(algo_08_rows)} total rows: "
+        f"{len(algo_07_rows)} algo-0x07 + {len(algo_08_rows)} algo-0x08. "
+        "Sort: (algorithm, pinout, size_bytes, manufacturer, first_alias). "
+        "Per D-06."
+    )
+    parts.append("")
 
     parts.append(f"### algo-0x07 ({len(algo_07_rows)} rows)")
     parts.append("")
@@ -1271,6 +1273,7 @@ def emit_bench_coverage(rows, findings, ledger):
     claim closing prose. BENCH chip selection is observational only — D-11
     forbids swap proposals; BENCH-05 / BENCH-06 stay "candidate".
     """
+    in_scope_count = len(rows)
     parts = ["## §5: BENCH Coverage Proof", ""]
     parts.append(
         "Three per-axis coverage tables (D-09) demonstrating BENCH-01..06 "
@@ -1372,7 +1375,7 @@ def emit_bench_coverage(rows, findings, ledger):
 
     # Milestone-claim closing prose (CONTEXT.md <specifics> "the matrix is the receipt")
     parts.append(
-        "These six BENCH chips (BENCH-01..06) represent N=339 in-scope DB "
+        f"These six BENCH chips (BENCH-01..06) represent N={in_scope_count} in-scope DB "
         "rows on axes pinout-class, pulse-duration bucket, and size bucket. "
         "Uncovered cells are documented above with cross-references to §4 "
         "defect candidates where the gap reflects a structural concern. "
