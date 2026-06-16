@@ -27,6 +27,10 @@ DB_FILE = os.environ.get(
     "FIRESTARTER_DB_FILE",
     os.path.join(_DATA_DIR, "chip_database.json"),
 )
+PINOUTS_FILE = os.environ.get(
+    "FIRESTARTER_PINOUTS_FILE",
+    os.path.join(_DATA_DIR, "pinouts.json"),
+)
 
 # Algorithm integer (upstream protocol_id from infoic.xml) → firmware mem_type integer.
 # Must mirror firestarter_app/firestarter/database.py::_ALGO_MEM_TYPE
@@ -43,8 +47,6 @@ _ALGO_MEM_TYPE = {
     0x27: 4,  # SRAM_24PIN        → TYPE_SRAM
     0x28: 4,  # SRAM_STD          → TYPE_SRAM
     0x29: 4,  # SRAM_512K_1M      → TYPE_SRAM
-    0x35: 5,  # FLASH_EEPROM_LIKE → TYPE_FLASH_TYPE_4
-    0x39: 5,  # FLASH_INTEL_ALT   → TYPE_FLASH_TYPE_4
 }
 
 # SRAM protocol set — these MUST route to configure_sram, never configure_eprom
@@ -61,6 +63,10 @@ _SRAM_PROTOCOLS = {0x0E, 0x27, 0x28, 0x29}
 # Plan 02 regenerates the DB with `_PROTOCOL_OVERRIDES` in build_db.py.
 # See WARNING-5 in .planning/v1.0-MILESTONE-AUDIT.md.
 _28C_EEPROM_HAZARD_PINOUT = "DIP28_2764"
+# "EEPROM" is added alongside "Flash/EEPROM" so that any future chip reclassified
+# to electrical.type="EEPROM" (e.g. cca7d62-style type migration) on this pinout
+# is also caught. Use set membership, not == string, for forward-compatibility.
+_28C_EEPROM_HAZARD_ETYPES = {"Flash/EEPROM", "EEPROM"}
 
 # D-10 consistency assertion 2: a chip tagged support_status=protocol-not-implemented
 # must genuinely have an unimplemented protocol (i.e. proto NOT in KNOWN_PROTOCOLS).
@@ -82,8 +88,7 @@ KNOWN_PROTOCOLS = {
     0x27,
     0x28,
     0x29,
-    0x35,
-    0x39,
+    # 0x34 is intentionally absent — see comment above KNOWN_PROTOCOLS definition
 }
 
 
@@ -95,7 +100,7 @@ def dispatch(protocol, mem_type):
         return "configure_eeprom28c"  # noqa: E701
     if protocol == 0x06:
         return "configure_flash3"  # noqa: E701
-    if protocol in (0x05, 0x35, 0x39):
+    if protocol == 0x05:
         return "configure_flash4"  # noqa: E701
     if protocol in (0x07, 0x08, 0x0B):
         return "configure_eprom"  # noqa: E701
@@ -114,10 +119,28 @@ def dispatch(protocol, mem_type):
     }.get(mem_type, "ERROR")
 
 
+def _build_no_vpp_pin_set(pinouts_file):
+    """Return the set of pinout keys that have no 'vpp-pin' entry in their pins dict.
+
+    These pinouts have no physical VPP line routed to the socket.  If
+    configure_eprom ever asserts P1_VPP_ENABLE on a chip sitting on one of
+    these pinouts, the 12 V boost regulator drives a socket pin that is
+    actually an address, WE, or NC line on the resident chip — a structural
+    VPP hazard that is independent of electrical.type string labelling.
+    """
+    with open(pinouts_file, encoding="utf-8") as f:
+        pinouts = json.load(f)
+    return {k for k, v in pinouts.items() if not v.get("pins", {}).get("vpp-pin")}
+
+
 def main():
     """Entry point: scan DB and exit non-zero if any chip lacks a dispatch path."""
     with open(DB_FILE, encoding="utf-8") as f:
         db_raw = json.load(f)
+
+    # GATE-03 structural guard: build the set of pinouts with no vpp-pin.
+    # This is loaded once here and used per-chip in the scan loop below.
+    no_vpp_pin_pinouts = _build_no_vpp_pin_set(PINOUTS_FILE)
 
     # WIRE-02 (D-15 Shape A): host-side wire-emit round-trip surface.
     # Per-chip we call db.convert_to_programmer(db.get_eprom(part)) and assert
@@ -129,6 +152,7 @@ def main():
     not_implemented = []
     sram_in_eprom = []
     eeprom28c_in_eprom = []
+    novpp_in_eprom = []
     wire_regressions = []
     # D-10 Assertion 1: every non-supported chip must have a non-empty unsupported_reason.
     missing_reason = []
@@ -239,16 +263,32 @@ def main():
             # BLOCKER-2 safety: SRAM protocol must never resolve to configure_eprom
             if proto in _SRAM_PROTOCOLS and handler == "configure_eprom":
                 sram_in_eprom.append(f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}")
-            # WARNING-5 safety: DIP28_2764 + Flash/EEPROM chips must NOT route to
+            # WARNING-5 safety: DIP28_2764 + 5V-EEPROM chips must NOT route to
             # configure_eprom (12V P1_VPP_ENABLE would hit A14 on the 5V part).
+            # DIP28_2764 DOES have a vpp-pin (pin 1), so the structural guard below
+            # cannot catch this case — the type-keyed guard is the correct net here.
+            # The type set covers both "Flash/EEPROM" and "EEPROM" so that chips
+            # reclassified by cca7d62-style type migrations are also caught.
             pinout = chip.get("pinout", "")
             etype = chip.get("electrical", {}).get("type", "")
             if (
                 pinout == _28C_EEPROM_HAZARD_PINOUT
-                and etype == "Flash/EEPROM"
+                and etype in _28C_EEPROM_HAZARD_ETYPES
                 and handler == "configure_eprom"
             ):
                 eeprom28c_in_eprom.append(
+                    f"{mfg}/{part} proto=0x{proto:02X} pinout={pinout}"
+                )
+            # GATE-03 PRIMARY structural guard (type-string-independent):
+            # configure_eprom asserts the 12 V VPP boost regulator on the pinout's
+            # vpp-pin. If the pinout has NO vpp-pin, the regulator would drive a
+            # socket pin that is actually an address, WE, or NC line on the resident
+            # chip → hardware damage. This guard is intentionally type-string-
+            # independent so it auto-covers any future electrical.type label
+            # (EEPROM, Flash/EEPROM, or anything else) without needing to track
+            # type-string churn.
+            if handler == "configure_eprom" and pinout in no_vpp_pin_pinouts:
+                novpp_in_eprom.append(
                     f"{mfg}/{part} proto=0x{proto:02X} pinout={pinout}"
                 )
 
@@ -271,6 +311,7 @@ def main():
         or not_implemented
         or sram_in_eprom
         or eeprom28c_in_eprom
+        or novpp_in_eprom
         or wire_regressions
         or missing_reason
         or pni_with_known_proto
@@ -302,13 +343,23 @@ def main():
                 print(f"  ... and {len(sram_in_eprom) - 20} more")
         if eeprom28c_in_eprom:
             print(
-                f"FAIL: {len(eeprom28c_in_eprom)} DIP28_2764 Flash/EEPROM chips "
+                f"FAIL: {len(eeprom28c_in_eprom)} DIP28_2764 5V-EEPROM chips "
                 f"route to configure_eprom (WARNING-5: 12V on A14 hazard):"
             )
             for e in eeprom28c_in_eprom[:20]:
                 print(f"  {e}")
             if len(eeprom28c_in_eprom) > 20:
                 print(f"  ... and {len(eeprom28c_in_eprom) - 20} more")
+        if novpp_in_eprom:
+            print(
+                f"FAIL: {len(novpp_in_eprom)} chips route to configure_eprom "
+                f"on a pinout with no vpp-pin "
+                f"(GATE-03 structural VPP hazard — type-string-independent):"
+            )
+            for e in novpp_in_eprom[:20]:
+                print(f"  {e}")
+            if len(novpp_in_eprom) > 20:
+                print(f"  ... and {len(novpp_in_eprom) - 20} more")
         if wire_regressions:
             print(f"FAIL: {len(wire_regressions)} wire-key regressions:")
             for e in wire_regressions[:20]:

@@ -1,7 +1,7 @@
 """
 GATE-02: Per-chip diff of the regenerated chip_database.json against the
-pinned pre-milestone baseline (chip_database.baseline.json, 734 chips,
-commit f92873d).
+pinned pre-milestone baseline (chip_database.baseline.json, 744 chips,
+Phase 70 integrated output).
 
 Loads both JSONs, builds composite-keyed indexes (one key per record, so
 duplicate part_numbers are never shadowed — CR-01), classifies every changed
@@ -85,6 +85,26 @@ _RATIONALES = {
         "  entry; now routed to correct JEDEC SRAM layout (DIP28_JEDEC_SRAM_8K or DIP28_28C256)\n"
         "  based on mem_size. The old DIP28_VARIANT_MAP guess table was deleted.\n"
         "  [CITED: Phase 58 principled resolve_pinout_key — pm_idx=0 28-pin SRAM chips]"
+    ),
+    "BUG_A_ETYPE": (
+        "BUG-A electrical.type fix — flags-based EEPROM reclassification for 0x07-protocol chips.\n"
+        "  Pass 2 previously mapped ALL proto=0x07 chips to 'UV-EPROM', ignoring flags bit 0x10\n"
+        "  (electrically erasable). Chips with flags & 0x10 set (W27C512, SST27SF512,\n"
+        "  SST27VF512, W27C257, etc.) are CMOS EEPROMs and now decode as 'EEPROM'.\n"
+        "  Algorithm stays 0x07 (configure_eprom, 12V VPP) — unchanged.\n"
+        "  [VERIFIED: infoic.xml survey — all DIP28_27512/27256 chips with flags & 0x10 are\n"
+        "   CMOS EEPROMs per datasheet; UV-EPROMs have flags & 0x10 = False]"
+    ),
+    "BUG_B_VPP": (
+        "BUG-B VPP decode fix — voltages & 0xF0 mask instead of voltages & 0xFF.\n"
+        "  The VPP voltage code occupies bits 7-4 (high nibble of the voltages low byte);\n"
+        "  bits 3-0 carry option flags (powerdown-enable, T48 sub-options, etc.).\n"
+        "  Previously, any chip with a nonzero low-nibble (e.g. voltages=0x0001 for\n"
+        "  SST27VF512) produced vpp_mv=0/Unknown because 0x01 is absent from the lookup\n"
+        "  table (all valid TL866II VPP codes are multiples of 0x10). Fix: mask with 0xF0\n"
+        "  to extract only the VPP nibble — SST27VF512 now correctly shows 12V.\n"
+        "  [VERIFIED: minipro/src/tl866a.c msg[5]=voltages.vpp<<4;\n"
+        "   tl866ii_vpp_voltages[] table keys: 0x00=12V, 0x10=9V, 0x20=9.5V, ...]"
     ),
     "RULE_PHASE66": (
         "Phase 66 DB inclusion + VPP correction changes.\n"
@@ -180,9 +200,18 @@ _RULE_FIELD_PATHS = {
         ("electrical", "type"),  # SRAM re-route re-derives type (Pass-2)
         ("programming", "algorithm"),  # Rule 3 SRAM override flips algorithm
     },
+    "BUG_A_ETYPE": {
+        ("electrical", "type"),  # flags-based EEPROM reclassification for 0x07 chips
+    },
+    "BUG_B_VPP": {
+        ("electrical", "vpp"),  # VPP voltage string (0xF0-mask fix)
+        ("electrical", "vpp_mv"),  # VPP voltage in mV (0xF0-mask fix)
+    },
     # Phase 66: support_status + unsupported_reason (new top-level keys) + NMOS vpp/vpp_mv corrections.
     # Every existing chip gains support_status=supported (a bare support_status diff);
     # NMOS entries also gain corrected vpp/vpp_mv; non-supported chips gain unsupported_reason.
+    # RULE_PHASE66 is placed LAST (least specific) so it does not shadow BUG_A_ETYPE/BUG_B_VPP
+    # (Pitfall 7 in 70-RESEARCH.md): BUG_B_VPP requires not type_diff; RULE_PHASE66 does not.
     "RULE_PHASE66": {
         ("support_status",),
         ("unsupported_reason",),
@@ -239,7 +268,10 @@ def _classify_diff(bl_chip, cu_chip):
       3. BUG2_TIMING   — timing changed only
       4. BUG3_VCC_VDD  — voltage (vcc/vdd) changed only
       5. SRAM_PINOUT   — pinout changed only
-      6. RULE_PHASE66  — only support_status/unsupported_reason/vpp/vpp_mv changed
+      6. BUG_A_ETYPE   — electrical.type changed (flags-based EEPROM reclassification)
+      7. BUG_B_VPP     — electrical.vpp/vpp_mv changed (0xF0-mask fix)
+      8. RULE_PHASE66  — only support_status/unsupported_reason/vpp/vpp_mv changed
+                         (LAST — least specific; must not shadow BUG_A_ETYPE/BUG_B_VPP)
       -> None          — no rule matched (UNEXPLAINED = D-03 BLOCK)
     """
     bl_prog = bl_chip.get("programming", {})
@@ -252,6 +284,10 @@ def _classify_diff(bl_chip, cu_chip):
     vcc_diff = bl_elec.get("vcc") != cu_elec.get("vcc")
     vdd_diff = bl_elec.get("vdd") != cu_elec.get("vdd")
     pinout_diff = bl_chip.get("pinout") != cu_chip.get("pinout")
+    type_diff = bl_elec.get("type") != cu_elec.get("type")
+    vpp_diff = bl_elec.get("vpp") != cu_elec.get("vpp") or bl_elec.get(
+        "vpp_mv"
+    ) != cu_elec.get("vpp_mv")
     # Phase 66: support_status and/or unsupported_reason added; vpp/vpp_mv corrected for NMOS.
     phase66_diff = (
         bl_chip.get("support_status") != cu_chip.get("support_status")
@@ -274,10 +310,32 @@ def _classify_diff(bl_chip, cu_chip):
         label = "BUG3_VCC_VDD"
     elif pinout_diff and not algo_diff and not timing_diff:
         label = "SRAM_PINOUT"
-    elif phase66_diff and not algo_diff and not timing_diff and not voltage_diff and not pinout_diff:
+    elif (
+        type_diff
+        and not algo_diff
+        and not timing_diff
+        and not voltage_diff
+        and not pinout_diff
+    ):
+        label = "BUG_A_ETYPE"
+    elif (
+        vpp_diff
+        and not algo_diff
+        and not timing_diff
+        and not pinout_diff
+        and not type_diff
+    ):
+        label = "BUG_B_VPP"
+    elif (
+        phase66_diff
+        and not algo_diff
+        and not timing_diff
+        and not voltage_diff
+        and not pinout_diff
+    ):
         # RULE_PHASE66: only Phase 66 fields changed (support_status, unsupported_reason,
-        # electrical.vpp, electrical.vpp_mv). Does NOT shadow RULE_ALGO/SRAM_PINOUT/BUG
-        # buckets — those always have a co-occurring algo/timing/voltage/pinout delta.
+        # electrical.vpp, electrical.vpp_mv). Placed LAST so it does not shadow
+        # BUG_A_ETYPE/BUG_B_VPP (Pitfall 7 in 70-RESEARCH.md).
         label = "RULE_PHASE66"
 
     diff_paths = _diff_field_paths(bl_chip, cu_chip)
