@@ -67,10 +67,16 @@ class TestNegativeControl:
     """Negative control proves verify CAN fail — a green cell is non-vacuous."""
 
     def test_classify_sha_mismatch_is_fail_on_leonardo(self) -> None:
-        """A SHA mismatch on Leonardo yields FAIL (authoritative), not advisory."""
+        """_classify_sha_result with DISTINCT hashes on Leonardo yields FAIL.
+
+        Comparator non-dead proof: two genuinely distinct SHA-256 digests are
+        supplied at the call site (sha256(b"correct-content") != sha256(b"wrong-content")).
+        This proves _classify_sha_result CAN return FAIL — it is not a vacuous oracle.
+        HARN-03 / D-08 non-vacuous comparator requirement.
+        """
         source_sha = hashlib.sha256(b"correct-content").hexdigest()
         wrong_sha = hashlib.sha256(b"wrong-content").hexdigest()
-        assert source_sha != wrong_sha
+        assert source_sha != wrong_sha, "Precondition: test hashes must be distinct"
         result = _classify_sha_result(
             readback_sha=wrong_sha,
             source_sha=source_sha,
@@ -381,7 +387,13 @@ class TestLeonardoAuthoritativePass:
     def test_write_cycle_pass_on_leonardo_is_authoritative(
         self, runner: CliRunner, tmp_path: Path
     ) -> None:
-        """write_cycle_eprom returns 0 on leonardo → PASS in artifact."""
+        """write_cycle_eprom returns 0 on leonardo → PASS, pass_type authoritative.
+
+        Non-vacuous oracle proof: PASS is driven by write_cycle_eprom's return code
+        (its real internal source-vs-readback SHA compare), not a source==source
+        self-comparison. assert_called_once() confirms the cycle ran exactly once and
+        the PASS decision is anchored to the real return code.
+        """
         source = tmp_path / "source.bin"
         source.write_bytes(b"\xff" * 64)
 
@@ -424,6 +436,69 @@ class TestLeonardoAuthoritativePass:
         cells = data["cells"]
         assert cells
         assert cells[0]["verdict"] == "PASS"
+        # Non-vacuous proof: cell must carry pass_type="authoritative" (Leonardo board)
+        assert cells[0]["pass_type"] == "authoritative", (
+            f"Leonardo PASS cell must have pass_type='authoritative', "
+            f"got {cells[0].get('pass_type')!r}"
+        )
+        # PASS is sourced from the return code — write_cycle_eprom called exactly once
+        operator.write_cycle_eprom.assert_called_once()  # type: ignore[attr-defined]
+
+    def test_write_cycle_pass_on_uno_is_advisory(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """write_cycle_eprom returns 0 on a non-Leonardo board → PASS, pass_type advisory.
+
+        Advisory boards (not Leonardo, not uno328pb which is N/A) yield verdict=PASS
+        but pass_type=advisory to distinguish from the authoritative Leonardo oracle.
+        """
+        source = tmp_path / "source.bin"
+        source.write_bytes(b"\xff" * 64)
+
+        operator = Mock(spec=EpromOperator)
+        operator.write_cycle_eprom.return_value = 0  # type: ignore[attr-defined]
+        config_manager = ConfigManager()
+        config_manager.set_value("port", "/dev/ttyACM0", persist=False)
+        config_manager.set_value("r1", None, persist=False)
+
+        app = AppContext(
+            db=EpromDatabase(skip_local_override=True),
+            config_manager=config_manager,
+            eprom_operator=operator,
+            hardware_manager=Mock(spec=HardwareManager),
+            firmware_manager=Mock(spec=FirmwareManager),
+            eprom_presenter=Mock(spec=EpromConsolePresenter),
+        )
+        result = runner.invoke(
+            cli,
+            [
+                "dev",
+                "validate-family",
+                "eprom",
+                "--board",
+                "uno",
+                "--chip",
+                "W27C512",
+                "--source",
+                str(source),
+                "--output-dir",
+                str(tmp_path),
+            ],
+            obj=app,
+        )
+        assert result.exit_code == 0, result.output
+
+        import json
+
+        data = json.loads((tmp_path / "validation-matrix.json").read_text())
+        cells = data["cells"]
+        assert cells
+        assert cells[0]["verdict"] == "PASS"
+        # Non-Leonardo boards yield advisory pass_type
+        assert cells[0]["pass_type"] == "advisory", (
+            f"Non-Leonardo PASS cell must have pass_type='advisory', "
+            f"got {cells[0].get('pass_type')!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
