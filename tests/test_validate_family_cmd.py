@@ -10,9 +10,7 @@ Covers:
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
-from typing import Optional
 from unittest.mock import Mock
 
 import pytest
@@ -27,7 +25,7 @@ from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
 
 
-def make_app_context(port: Optional[str] = None, **overrides: object) -> AppContext:
+def make_app_context(port: str | None = None, **overrides: object) -> AppContext:
     """Construct a minimal AppContext for CLI tests.
 
     If port is given, sets it in ConfigManager (no-persist); otherwise the
@@ -50,7 +48,9 @@ def make_app_context(port: Optional[str] = None, **overrides: object) -> AppCont
         eprom_operator=overrides.pop("eprom_operator", Mock(spec=EpromOperator)),
         hardware_manager=overrides.pop("hardware_manager", Mock(spec=HardwareManager)),
         firmware_manager=overrides.pop("firmware_manager", Mock(spec=FirmwareManager)),
-        eprom_presenter=overrides.pop("eprom_presenter", Mock(spec=EpromConsolePresenter)),
+        eprom_presenter=overrides.pop(
+            "eprom_presenter", Mock(spec=EpromConsolePresenter)
+        ),
     )
 
 
@@ -83,8 +83,14 @@ class TestSkipDeferredPath:
         artifact = tmp_path / "validation-matrix.json"
         assert artifact.exists(), "validation-matrix.json must be emitted"
 
-    def test_artifact_cells_are_skip_deferred(self, runner: CliRunner, tmp_path: Path) -> None:
-        """All Tier-3 cells have verdict SKIP-deferred when no hardware."""
+    def test_artifact_cells_are_skip_deferred(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Tier-3 cells have SKIP-deferred or N/A verdict when no hardware.
+
+        Boards in the tier3.boards list get SKIP-deferred; boards in
+        tier3.skip_boards (e.g. uno328pb) get N/A.
+        """
         app = make_app_context()
         runner.invoke(
             cli,
@@ -95,12 +101,18 @@ class TestSkipDeferredPath:
         data = json.loads(artifact.read_text())
         tier3_cells = [c for c in data["cells"] if c.get("tier") == 3]
         assert tier3_cells, "Should have Tier-3 cells"
+        deferred_verdicts = {"SKIP-deferred", "N/A"}
         for cell in tier3_cells:
-            assert cell["verdict"] == "SKIP-deferred", (
-                f"Expected SKIP-deferred, got {cell['verdict']!r} for {cell}"
+            assert cell["verdict"] in deferred_verdicts, (
+                f"Expected SKIP-deferred or N/A, got {cell['verdict']!r} for {cell}"
             )
+        # At least one SKIP-deferred cell must be present (not all N/A)
+        skip_cells = [c for c in tier3_cells if c["verdict"] == "SKIP-deferred"]
+        assert skip_cells, "At least one SKIP-deferred cell expected"
 
-    def test_artifact_schema_fields_present(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_artifact_schema_fields_present(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Emitted JSON has top-level generated/harness_version/cells fields."""
         app = make_app_context()
         runner.invoke(
@@ -114,7 +126,9 @@ class TestSkipDeferredPath:
         assert "harness_version" in data
         assert "cells" in data
 
-    def test_cell_has_required_schema_fields(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_cell_has_required_schema_fields(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Each cell carries family/board/tier/verdict/evidence_sha."""
         app = make_app_context()
         runner.invoke(
@@ -141,7 +155,9 @@ class TestSkipDeferredPath:
             "validation-matrix.md must be emitted"
         )
 
-    def test_all_families_emits_all_cells(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_all_families_emits_all_cells(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """'all' family argument emits Tier-3 cells for all 6 families."""
         app = make_app_context()
         runner.invoke(
@@ -158,7 +174,9 @@ class TestSkipDeferredPath:
 class TestArtifactNaming:
     """Artifact filename is validation-matrix.json (hyphen), never underscore (Pitfall 4)."""
 
-    def test_artifact_named_with_hyphen(self, runner: CliRunner, tmp_path: Path) -> None:
+    def test_artifact_named_with_hyphen(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
         """Emitted file is named validation-matrix.json (hyphen-separated)."""
         app = make_app_context()
         runner.invoke(

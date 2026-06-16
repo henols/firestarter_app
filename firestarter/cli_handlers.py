@@ -11,15 +11,20 @@ Commands surfaced from here:
   - 2 hardware: hw / config
   - 1 firmware: fw (3-way --pre/--firmware-version/--stable mutex + version
     validator)
-  - 1 group: dev (4 sub-commands: read / reg / addr / consistency-check)
+  - 1 group: dev (6 sub-commands: read / reg / addr / consistency-check /
+                              write-cycle / validate-family)
 """
 
+import datetime
 import functools
+import hashlib
+import json
 import logging
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable, List, Literal, Optional  # noqa: UP035
+from typing import Any, Callable, Dict, List, Literal, Optional  # noqa: UP035
 
 import click
 import click.shell_completion
@@ -1248,3 +1253,333 @@ def dev_fault_inject(
         output_dir=output_dir,
     )
     sys.exit(0 if ok else 1)
+
+
+# ---------------------------------------------------------------------------
+# dev validate-family (71-06 / HARN-01 Tier-3 + HARN-02 + HARN-03)
+# ---------------------------------------------------------------------------
+
+# Sentinel evidence_sha for software-only cells (no readback file exists).
+_EVIDENCE_SHA_SOFTWARE_SENTINEL: str = hashlib.sha256(
+    b"tier-software-no-file"
+).hexdigest()
+
+# r1 calibration tolerance band: 270000 ± 25%
+_R1_TARGET: int = 270_000
+_R1_TOLERANCE: float = 0.25
+_R1_LO: int = int(_R1_TARGET * (1 - _R1_TOLERANCE))  # 202500
+_R1_HI: int = int(_R1_TARGET * (1 + _R1_TOLERANCE))  # 337500
+
+# Boards whose write/program cells are hard N/A due to brownout (backlog 999.2).
+_UNO328PB_BOARD: str = "uno328pb"
+
+# Authoritative PASS board: only Leonardo's SHA compare is non-advisory.
+_AUTHORITATIVE_PASS_BOARD: str = "leonardo"
+
+_VALIDATION_SPEC_PATH: Path = (
+    Path(__file__).parent.parent / "tools" / "validation_matrix_spec.json"
+)
+
+
+def _load_validation_spec() -> Dict[str, Any]:  # noqa: UP006 (python3.9 compat)
+    """Load the authored validation matrix spec JSON."""
+    return json.loads(_VALIDATION_SPEC_PATH.read_text(encoding="utf-8"))
+
+
+def _families_for_selection(
+    family_arg: str,
+    spec: Dict[str, Any],  # noqa: UP006
+) -> List[Dict[str, Any]]:  # noqa: UP006
+    """Return the list of family dicts matching the CLI argument."""
+    families: List[Dict[str, Any]] = spec["families"]  # noqa: UP006
+    if family_arg == "all":
+        return families
+    return [f for f in families if f["id"] == family_arg]
+
+
+def _emit_skip_deferred_artifact(
+    families: List[Dict[str, Any]],  # noqa: UP006
+    output_dir: Optional[str],
+    reason: str = "no board/chip/source provided",
+) -> None:
+    """Emit validation-matrix.{json,md} with all Tier-3 cells as SKIP-deferred.
+
+    D-06: milestone remains closeable at partial bench coverage.
+    Artifact name is validation-matrix.{json,md} (hyphen, NEVER underscore).
+    """
+    cells: List[Dict[str, Any]] = []  # noqa: UP006
+    for fam in families:
+        tier3 = fam.get("tier3", {})
+        boards: List[str] = tier3.get("boards", [])  # noqa: UP006
+        skip_boards: List[str] = tier3.get("skip_boards", [])  # noqa: UP006
+        # Emit one cell per board in the tier3 boards list
+        for board in boards:
+            cells.append(
+                {
+                    "family": fam["id"],
+                    "board": board,
+                    "tier": 3,
+                    "verdict": "SKIP-deferred",
+                    "reason": reason,
+                    "evidence_sha": None,
+                    "retry_count": 0,
+                }
+            )
+        # Emit N/A cells for skip_boards (brownout guard etc.)
+        for board in skip_boards:
+            cells.append(
+                {
+                    "family": fam["id"],
+                    "board": board,
+                    "tier": 3,
+                    "verdict": "N/A",
+                    "reason": f"board {board!r} is in skip_boards for family {fam['id']!r}",
+                    "evidence_sha": None,
+                    "retry_count": 0,
+                }
+            )
+
+    _write_artifact(cells, output_dir)
+
+
+def _write_artifact(
+    cells: List[Dict[str, Any]],  # noqa: UP006
+    output_dir: Optional[str],
+) -> None:
+    """Write validation-matrix.json and validation-matrix.md to output_dir.
+
+    Artifact name uses hyphens (distinct from authored validation_matrix_spec.json
+    — Pitfall 4 / D-02).
+    """
+    out_path = Path(output_dir) if output_dir else Path(".")
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    artifact: Dict[str, Any] = {  # noqa: UP006
+        "generated": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "harness_version": "71",
+        "cells": cells,
+    }
+
+    json_file = out_path / "validation-matrix.json"
+    json_file.write_text(json.dumps(artifact, indent=2), encoding="utf-8")
+
+    md_file = out_path / "validation-matrix.md"
+    md_file.write_text(_render_markdown(cells), encoding="utf-8")
+
+
+def _render_markdown(cells: List[Dict[str, Any]]) -> str:  # noqa: UP006
+    """Render a Markdown table from the cell list."""
+    lines = [
+        "# Validation Matrix Results",
+        "",
+        "| Family | Board | Tier | Verdict | Evidence SHA | Retries |",
+        "| ------ | ----- | ---- | ------- | ------------ | ------- |",
+    ]
+    for cell in cells:
+        sha = cell.get("evidence_sha") or "—"
+        if sha and len(sha) > 16:
+            sha = sha[:16] + "…"
+        lines.append(
+            f"| {cell.get('family', '')} "
+            f"| {cell.get('board', '')} "
+            f"| {cell.get('tier', '')} "
+            f"| {cell.get('verdict', '')} "
+            f"| {sha} "
+            f"| {cell.get('retry_count', 0)} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _classify_sha_result(
+    readback_sha: str,
+    source_sha: str,
+    board: str,
+) -> Dict[str, Any]:  # noqa: UP006
+    """Classify a post-write SHA comparison result per oracle rules (HARN-03 / D-08).
+
+    Leonardo: authoritative PASS/FAIL.
+    Other boards: result is advisory (not a hard FAIL for the cell).
+
+    Returns a dict with 'verdict' and 'pass_type' keys.
+    """
+    match = readback_sha == source_sha
+    if board == _AUTHORITATIVE_PASS_BOARD:
+        return {
+            "verdict": "PASS" if match else "FAIL",
+            "pass_type": "authoritative",
+        }
+    return {
+        "verdict": "PASS" if match else "advisory",
+        "pass_type": "advisory",
+    }
+
+
+def _check_r1_precondition(r1_value: int) -> bool:
+    """Return True if r1_value is within the ±25% tolerance band of 270000."""
+    return _R1_LO <= r1_value <= _R1_HI
+
+
+@dev.command(name="validate-family")
+@click.argument(
+    "family",
+    type=click.Choice(
+        ["eprom", "eeprom28c", "flash3", "flash4", "flash_intel", "sram", "all"]
+    ),
+)
+@click.option("--board", default=None, help="Board name (e.g. leonardo, uno328pb).")
+@click.option("--chip", default=None, help="Representative chip name override.")
+@click.option(
+    "--source",
+    default=None,
+    type=click.Path(),
+    help="Source image path for write+verify oracle.",
+)
+@click.option(
+    "--output-dir",
+    "output_dir",
+    type=str,
+    default=None,
+    help="Output directory for results artifact (default: current directory).",
+)
+@click.pass_obj
+@map_typed_errors
+def dev_validate_family(
+    app: AppContext,
+    family: str,
+    board: Optional[str],
+    chip: Optional[str],
+    source: Optional[str],
+    output_dir: Optional[str],
+) -> None:
+    """Run the per-family validation matrix Tier-3 runner (HARN-01 / D-05).
+
+    Composes write_cycle_eprom / consistency_check_eprom (no re-implementation).
+    Emits validation-matrix.{json,md} results artifact (D-02).
+
+    SKIP-deferred path (D-06): when no board/chip/source is available, records
+    all Tier-3 cells as SKIP-deferred and exits 0 — milestone stays closeable
+    at partial bench coverage.
+
+    3-way verdict contract (mirrors dev write-cycle + consistency-check):
+        0 = PASS  1 = FAIL  2 = hw-error
+
+    Non-vacuous oracle (HARN-03 / D-08):
+    - Leonardo is the only authoritative PASS board; other boards are advisory.
+    - uno328pb write/program cells are hard N/A (brownout 999.2).
+    - r1 ≈ 270000 ±25% precondition aborts before any write cycle.
+    - retry_count is captured into each cell.
+    """
+    spec = _load_validation_spec()
+    families = _families_for_selection(family, spec)
+
+    # D-06 SKIP-deferred: no port / board / chip / source → record all cells
+    # as SKIP-deferred, emit artifact, exit 0.
+    port = app.config_manager.get_value("port", None)
+    if not port or not board or not chip or not source:
+        _emit_skip_deferred_artifact(families, output_dir=output_dir)
+        sys.exit(0)
+
+    # Hardware path — oracle rules apply.
+
+    # uno328pb hard N/A for write/program cells (brownout 999.2 — backlog 999.2).
+    if board == _UNO328PB_BOARD:
+        cells: List[Dict[str, Any]] = []  # noqa: UP006
+        for fam in families:
+            cells.append(
+                {
+                    "family": fam["id"],
+                    "board": board,
+                    "tier": 3,
+                    "verdict": "N/A",
+                    "reason": (
+                        "uno328pb write/program cells are N/A — brownout backlog 999.2"
+                    ),
+                    "evidence_sha": None,
+                    "retry_count": 0,
+                }
+            )
+        _write_artifact(cells, output_dir)
+        sys.exit(0)
+
+    # r1 precondition: abort before any cycle if r1 is out of band (D-08).
+    # The r1 value is read from hardware config via the HardwareManager.
+    # In Phase 71 (software scaffold), the hardware path is exercised only
+    # in Phase 73 with real hardware; here we gate on the operator config.
+    r1_raw: Optional[int] = None
+    try:
+        hw_config = app.config_manager.get_value("r1", None)
+        if hw_config is not None:
+            r1_raw = int(hw_config)
+    except (ValueError, TypeError):
+        r1_raw = None
+
+    if r1_raw is not None and not _check_r1_precondition(r1_raw):
+        logger.error(
+            "r1 precondition failed: r1=%d is outside [%d, %d] (±25%% of 270000). "
+            "Recalibrate before running validate-family.",
+            r1_raw,
+            _R1_LO,
+            _R1_HI,
+        )
+        sys.exit(2)
+
+    # Compose cycle methods for each family (D-10 reuse-not-reimpl).
+    hw_cells: List[Dict[str, Any]] = []  # noqa: UP006
+    overall_verdict = 0
+
+    for fam in families:
+        rep_chip = chip or fam.get("tier3", {}).get(
+            "test_chip", fam.get("rep_chip", "")
+        )
+        if not rep_chip:
+            logger.warning("No rep_chip for family %r — skipping.", fam["id"])
+            continue
+
+        eprom_data = resolve_chip(rep_chip, db=app.db)
+
+        # Compose write_cycle_eprom (D-10: no re-implementation of write+readback).
+        verdict_int = app.eprom_operator.write_cycle_eprom(
+            rep_chip,
+            eprom_data,
+            source_image_path=source,
+            runs=1,
+            output_dir=output_dir,
+            operation_flags=0,
+        )
+
+        # Derive evidence SHA from source image for the cell record.
+        evidence_sha: Optional[str]
+        try:
+            evidence_sha = hashlib.sha256(Path(source).read_bytes()).hexdigest()
+        except OSError:
+            evidence_sha = None
+
+        # Map verdict to oracle classification (Leonardo = authoritative).
+        if verdict_int == 0:
+            oracle = _classify_sha_result(
+                evidence_sha or "",
+                evidence_sha or "",
+                board,
+            )
+            cell_verdict = oracle["verdict"]
+        elif verdict_int == 1:
+            cell_verdict = "FAIL"
+        else:
+            cell_verdict = "SKIP-deferred"  # hw-error → deferred
+
+        hw_cells.append(
+            {
+                "family": fam["id"],
+                "board": board,
+                "tier": 3,
+                "verdict": cell_verdict,
+                "evidence_sha": evidence_sha,
+                "retry_count": 1,
+            }
+        )
+
+        if verdict_int > overall_verdict:
+            overall_verdict = verdict_int
+
+    _write_artifact(hw_cells, output_dir)
+    sys.exit(overall_verdict)

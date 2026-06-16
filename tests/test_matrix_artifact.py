@@ -103,9 +103,7 @@ class TestVerdictVocabulary:
             f"SKIP-deferred not found in verdicts: {verdicts}"
         )
 
-    def test_all_cells_eprom_family(
-        self, runner: CliRunner, tmp_path: Path
-    ) -> None:
+    def test_all_cells_eprom_family(self, runner: CliRunner, tmp_path: Path) -> None:
         """Single-family run emits only cells for that family."""
         app = _make_app_no_hw()
         runner.invoke(
@@ -126,11 +124,8 @@ class TestVerdictVocabulary:
             obj=app,
         )
         data = json.loads((tmp_path / "validation-matrix.json").read_text())
-        na_cells = [c for c in data["cells"] if c.get("verdict") == "N/A"]
-        # uno328pb is in skip_boards for all families; N/A cells should exist
-        # OR they're captured as SKIP-deferred for uno328pb — accept both
-        # (the oracle test covers the strict N/A assertion separately)
-        # This test just verifies the vocabulary is available
+        # uno328pb is in skip_boards for all families; N/A cells may exist.
+        # This test just verifies the verdict vocabulary is valid.
         valid_verdicts = {"PASS", "FAIL", "SKIP-deferred", "N/A", "advisory"}
         for cell in data["cells"]:
             assert cell["verdict"] in valid_verdicts, (
