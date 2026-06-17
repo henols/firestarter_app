@@ -1,15 +1,17 @@
 {
-  "generated": "2026-06-17T13:37:54Z",
+  "generated": "2026-06-17T14:17:32Z",
   "harness_version": "71",
   "cells": [
     {
       "family": "flash3",
       "board": "leonardo",
       "tier": 3,
-      "verdict": "SKIP-deferred",
-      "reason": "no AM29F040 on hand; deferred to a future bench session at beta release per operator 2026-06-17",
-      "evidence_sha": null,
-      "retry_count": 0
+      "verdict": "PASS",
+      "pass_type": "authoritative",
+      "evidence_sha": "c19c3e07b94b12beb32fbb6afd3de432453a895d82406a38390db78fa348368d",
+      "retry_count": 1,
+      "chip": "SST39SF040",
+      "note": "Bonus bench run 2026-06-17: SST39SF040 used (planned AM29F040 absent). configure_flash3 erase+write PASS on Leonardo Rev 2.0. Negative control: verify against wrong file exited 1 (0x7e != 0xa3 at 0x000000)."
     },
     {
       "family": "flash3",
