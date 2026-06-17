@@ -1,0 +1,18 @@
+{
+  "generated": "2026-06-17T14:03:00Z",
+  "harness_version": "71",
+  "cells": [
+    {
+      "family": "sram",
+      "board": "leonardo",
+      "tier": 3,
+      "verdict": "PASS",
+      "pass_type": "authoritative",
+      "evidence_sha": "1ae62b3110141bf43af6a7a14875442afaea8460122b814e36466febf39ca654",
+      "retry_count": 2,
+      "chip": "FM1608",
+      "method": "two-pattern write+read-back (D-06/D-07/D-08)",
+      "notes": "VAL-06 = table-stakes-PASS. configure_sram DOES write via generic_memory_write_execute. ALL bytes match across both patterns (A=0x5A, B=0xA5) on both runs (N=2). Zero mismatches. Parked byte-0 FRAM bug not triggered. FIX-01 closed not-needed with evidence. Erase probe: exit 1 (Not supported) — erase path AVOIDED per Pitfall 3; firestarter write FM1608 -b used."
+    }
+  ]
+}
