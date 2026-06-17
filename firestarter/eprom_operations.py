@@ -361,12 +361,29 @@ class EpromOperator:
                     response,
                     f"Programmer error during {phase_name.lower()}: {response.message}",
                 )
-            self._handle_progress_response(response, progress)
+            # INIT/END phases: render DATA progress frames but do NOT ack them.
+            # #write-empty-input-regression (Option C): a multi-step in-progress
+            # INIT/END sub-step (e.g. write-init blank-check) emits one
+            # MSG_DATA_PROGRESS per chunk but the firmware consumes a host ack
+            # only on the first chunk. Acking every DATA frame here piled up N-1
+            # spurious OK acks in the firmware RX buffer, desyncing the MAIN
+            # data-pull handshake -> MSG_ERR_EMPTY_INPUT (0xA4). The firmware keeps
+            # emitting progress (so the bar still moves); the host just skips the ack.
+            self._handle_progress_response(response, progress, ack_data=False)
         logger.debug(f"{phase_name.lower()} complete.")
         return final_msg
 
-    def _handle_progress_response(self, response, progress: ClassProgressHandler):
-        """Helper to process DATA, WARN, OK during a state phase."""
+    def _handle_progress_response(
+        self, response, progress: ClassProgressHandler, ack_data: bool = True
+    ):
+        """Helper to process DATA, WARN, OK during a state phase.
+
+        ``ack_data`` controls whether a DATA frame is acked. MAIN-phase flow
+        control requires the ack (default True). INIT/END progress frames must
+        NOT be acked (the firmware does not consume per-chunk progress acks);
+        callers in those phases pass ``ack_data=False``. Progress rendering
+        always runs regardless of ``ack_data``.
+        """
         if response.type == "DATA":
             try:
                 if response.message and "/" in response.message:
@@ -377,7 +394,8 @@ class EpromOperator:
                     progress.update(int(response.message))
             except (ValueError, TypeError):
                 pass  # Not a parsable progress update
-            self.comm.send_ack()
+            if ack_data:
+                self.comm.send_ack()
         elif response.type == "WARN":
             logger.warning(f"Programmer warning: {response.message}")
         elif response.type == "OK":
@@ -397,7 +415,8 @@ class EpromOperator:
                 _raise_for_error_response(response, response.message)
             if response.type == "OK" and final_msg is None:
                 final_msg = response.message  # Capture final message from MAIN's OK
-            self._handle_progress_response(response, progress)
+            # MAIN phase: DATA frames are flow-control; ack them (unchanged).
+            self._handle_progress_response(response, progress, ack_data=True)
         return final_msg
 
     def _main_phase_send_data(
