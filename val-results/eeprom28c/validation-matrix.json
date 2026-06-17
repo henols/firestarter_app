@@ -1,0 +1,24 @@
+{
+  "generated": "2026-06-17T12:42:43Z",
+  "harness_version": "71",
+  "cells": [
+    {
+      "family": "eeprom28c",
+      "board": "leonardo",
+      "tier": 3,
+      "verdict": "SKIP-deferred",
+      "reason": "no board/chip/source provided",
+      "evidence_sha": null,
+      "retry_count": 0
+    },
+    {
+      "family": "eeprom28c",
+      "board": "uno328pb",
+      "tier": 3,
+      "verdict": "N/A",
+      "reason": "board 'uno328pb' is in skip_boards for family 'eeprom28c'",
+      "evidence_sha": null,
+      "retry_count": 0
+    }
+  ]
+}
