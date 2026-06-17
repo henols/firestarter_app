@@ -1,15 +1,16 @@
 {
-  "generated": "2026-06-17T12:42:48Z",
+  "generated": "2026-06-17T13:38:46Z",
   "harness_version": "71",
   "cells": [
     {
       "family": "flash4",
       "board": "leonardo",
       "tier": 3,
-      "verdict": "SKIP-deferred",
-      "reason": "no board/chip/source provided",
-      "evidence_sha": null,
-      "retry_count": 0
+      "verdict": "FAIL",
+      "pass_type": "authoritative",
+      "evidence_sha": "f82c4afb723e09e681b0bf10f0fb71e940baef5d92793f50662ede4bd80f477e",
+      "retry_count": 1,
+      "reason": "hw-error: write cycle failed on W29C040 (Winbond flash4 representative). dev validate-family exit code 2: erase reported success but chip not erased to 0xFF (first byte=0x00 not 0xFF); flash4_write_init blank-check failed at 0x000000. Fallback standalone write -b: timeout verifying 0x6a at 0x00003f (got 0x00). Algorithm compatibility issue between configure_flash4 and W29C040 SDP/page-write timing. Phase-74 candidate: flash4 erase+write path needs investigation for W29C040 compatibility. Chip: W29C040 (algorithm=5, 512KB, DIP32_SST39SF040, 12V VPP). Board: Leonardo Rev 2.0, R1=270000."
     },
     {
       "family": "flash4",
