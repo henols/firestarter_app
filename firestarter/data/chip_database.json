@@ -1873,7 +1873,7 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
@@ -1894,7 +1894,7 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
@@ -1935,7 +1935,7 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
@@ -1956,7 +1956,7 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
@@ -8273,7 +8273,7 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
@@ -8294,7 +8294,7 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
@@ -8315,7 +8315,7 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
@@ -8336,7 +8336,7 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
@@ -9123,7 +9123,7 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
@@ -15006,7 +15006,7 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "protocol-not-implemented",
-      "unsupported_reason": "protocol not implemented: 0x34 (XICOR NovRAM serial-parallel hybrid)"
+      "unsupported_reason": "protocol not implemented: 0x34 (XICOR X88C64P \u2014 parallel DIP24 5V EEPROM, 8051 multiplexed-bus interface (ALE/WR/RD); feasible-candidate, handler not implemented)"
     }
   ]
 }

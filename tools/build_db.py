@@ -364,7 +364,10 @@ def main():
                     # wording so the host can render it verbatim (Plan 02 prints f"{e}").
                     # Must contain "not implemented" substring — existing test
                     # test_read_protocol_not_implemented_typed_refusal asserts it.
-                    _unsupported_reason = "protocol not implemented: 0x34 (XICOR NovRAM serial-parallel hybrid)"
+                    _unsupported_reason = (
+                        "protocol not implemented: 0x34 (XICOR X88C64P — parallel DIP24 5V EEPROM, "
+                        "8051 multiplexed-bus interface (ALE/WR/RD); feasible-candidate, handler not implemented)"
+                    )
 
                 # SAFETY SKIP / Site B: 24-pin 5V parallel EEPROMs routed via EPROM
                 # algorithms (0x07/0x08/0x0B). Affected family per upstream:
@@ -409,6 +412,41 @@ def main():
                     # CR-01 Option A: demote to NON_DISPATCHABLE_ALGO so dispatch()
                     # returns ERROR instead of configure_eprom (D-03 HARD invariant).
                     proto_id = NON_DISPATCHABLE_ALGO
+
+                # Named rule arm: AT28C04/AT28C16 family (D-03, Phase 76)
+                # Fires AFTER Site B so it overwrites the generic Site B reason string
+                # with explicit named-arm wording. proto_id is already NON_DISPATCHABLE_ALGO
+                # from Site B — do NOT re-demote it here (Site B handles that invariant).
+                # Keys on chip name (not proto_id) for audit-friendly explicit classification.
+                # Does NOT encode the DIP24→DIP32 pin remap — that lives in
+                # firestarter/doc/AT28C04-ADAPTER.md.
+                # Reason string must start with "adapter required:" per
+                # test_adapter_required_reason_starts_with_adapter_required.
+                _AT28C_DIP24_NAMES = {
+                    "AT28C04",
+                    "AT28HC04",
+                    "AT28C04E",
+                    "AT28C04F",
+                    "AT28C16",
+                    "AT28HC16",
+                    "AT28HC16L",
+                    "AT28C16E",
+                    "AT28C16F",
+                    "28C04A",
+                    "28C04AF",
+                    "28C16A",
+                    "28C16AF",
+                    "UPD28C04",
+                }
+                _chip_aliases = {
+                    a.split("@")[0].strip() for a in name.split(",") if a.strip()
+                }
+                if _chip_aliases & _AT28C_DIP24_NAMES:
+                    _support_status = "adapter-required"
+                    _unsupported_reason = (
+                        "adapter required: AT28C04/AT28C16 DIP24 chip — requires a physical "
+                        "DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
+                    )
 
                 # --- SYNTHESIZE "COMPLETE" DATA ---
 
