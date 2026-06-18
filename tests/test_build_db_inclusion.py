@@ -472,6 +472,56 @@ class TestUnsupportedReasonStrings:
                 f"(required by test_read_protocol_not_implemented_typed_refusal)"
             )
 
+    def test_at28c16_named_arm_reason_mentions_adapter_doc(self):
+        """AT28C16 (adapter-required) unsupported_reason references the adapter spec doc.
+
+        D-03 named arm must produce a reason string that:
+          1. Starts with 'adapter required:' (existing invariant)
+          2. References 'AT28C04-ADAPTER.md' (the named-arm adapter spec doc filename)
+          3. Does NOT contain 'DIP24_2716 pinout maps to the 12V VPP rail' (that is the
+             old generic Site B wording; named arm overwrites it)
+        """
+        db = _load_db()
+        found = []
+        for mfg, chip in _all_chips(db):
+            al = _aliases(chip)
+            if "AT28C16" in al:
+                found.append((mfg, chip))
+
+        assert found, "AT28C16 not found in chip_database.json"
+        for mfg, chip in found:
+            if chip.get("support_status") != "adapter-required":
+                continue
+            reason = chip.get("unsupported_reason", "")
+            assert reason.startswith("adapter required:"), (
+                f"{mfg}/{chip.get('part_number')}: reason must start with 'adapter required:', got: {reason!r}"
+            )
+            assert "AT28C04-ADAPTER.md" in reason, (
+                f"{mfg}/{chip.get('part_number')}: named-arm reason must reference "
+                f"'AT28C04-ADAPTER.md' (the adapter spec doc), got: {reason!r}"
+            )
+
+    def test_x88c64p_reason_does_not_say_serial_parallel_hybrid(self):
+        """X88C64P unsupported_reason must NOT contain 'serial-parallel hybrid'.
+
+        Regression guard: the old string was datasheet-wrong. D-02 replaces it.
+        The chip IS parallel (not a serial-parallel hybrid); the old string must not reappear.
+        """
+        db = _load_db()
+        found = []
+        for mfg, chip in _all_chips(db):
+            al = _aliases(chip)
+            if "X88C64P" in al or "X88C64S" in al:
+                found.append((mfg, chip))
+
+        assert found, "X88C64P not found in chip_database.json"
+        for mfg, chip in found:
+            reason = chip.get("unsupported_reason", "")
+            assert "serial-parallel hybrid" not in reason.lower(), (
+                f"{mfg}/{chip.get('part_number')}: reason must not contain old wrong wording "
+                f"'serial-parallel hybrid', got: {reason!r}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # D-01: Serial/SMD parts must still be skipped
