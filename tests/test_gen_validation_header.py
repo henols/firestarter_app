@@ -29,7 +29,19 @@ _COMMITTED_HEADER = (
     / "validation_matrix.h"
 )
 
+# The firmware sub-repo may be absent in standalone CI (firestarter_app checked
+# out alone). The committed validation_matrix.h lives in the firestarter repo, so
+# the cross-repo tests below skip cleanly when that checkout is absent — they run
+# from the meta work-tree where both repos sit side by side. Mirrors the
+# FW_ABSENT skip pattern in test_revision_constants_parity.py.
+_FW_HEADER_ABSENT = not _COMMITTED_HEADER.exists()
+_requires_fw_header = pytest.mark.skipif(
+    _FW_HEADER_ABSENT,
+    reason="firestarter firmware checkout absent (validation_matrix.h)",
+)
 
+
+@_requires_fw_header
 def test_committed_header_exists() -> None:
     """The committed header must exist in the firestarter submodule."""
     assert _COMMITTED_HEADER.exists(), (
@@ -38,6 +50,7 @@ def test_committed_header_exists() -> None:
     )
 
 
+@_requires_fw_header
 def test_committed_header_has_do_not_edit_banner() -> None:
     """Header must start with the DO NOT EDIT banner."""
     content = _COMMITTED_HEADER.read_text(encoding="utf-8")
@@ -46,6 +59,7 @@ def test_committed_header_has_do_not_edit_banner() -> None:
     ), "Header is missing the DO NOT EDIT banner"
 
 
+@_requires_fw_header
 def test_committed_header_has_val_families() -> None:
     """Header must contain VAL_FAMILIES and VAL_FAMILY_COUNT."""
     content = _COMMITTED_HEADER.read_text(encoding="utf-8")
@@ -53,6 +67,7 @@ def test_committed_header_has_val_families() -> None:
     assert "VAL_FAMILY_COUNT" in content, "Header is missing VAL_FAMILY_COUNT"
 
 
+@_requires_fw_header
 def test_committed_header_has_11_rows() -> None:
     """Header must contain exactly 11 rows (one per host-dispatchable protocol across 6 families).
 
@@ -71,6 +86,7 @@ def test_committed_header_has_11_rows() -> None:
     )
 
 
+@_requires_fw_header
 def test_codegen_produces_byte_identical_output() -> None:
     """Re-running the codegen must produce a byte-identical header (drift gate).
 
@@ -158,6 +174,7 @@ def test_validate_spec_called_before_emission() -> None:
         tmp_out.unlink(missing_ok=True)
 
 
+@_requires_fw_header
 @pytest.mark.parametrize(
     "handler",
     [
