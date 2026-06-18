@@ -414,9 +414,19 @@ def main():
                     proto_id = NON_DISPATCHABLE_ALGO
 
                 # Named rule arm: AT28C04/AT28C16 family (D-03, Phase 76)
-                # Fires AFTER Site B so it overwrites the generic Site B reason string
-                # with explicit named-arm wording. proto_id is already NON_DISPATCHABLE_ALGO
-                # from Site B — do NOT re-demote it here (Site B handles that invariant).
+                # Fires AFTER Site B so it overwrites any generic Site B reason string
+                # with explicit named-arm wording.
+                # SAFETY NOTE (corrected Phase 76 review WR-01): these DIP24_2816 chips
+                # arrive from infoic.xml with proto_id 0x0D (EEPROM_POLL →
+                # configure_eeprom28c, pure 5V, NO VPP regulator engagement). That is NOT
+                # one of Site B's 0x07/0x08/0x0B EPROM-family algos, so Site B does NOT
+                # fire for them and proto_id stays 0x0D — a real, dispatchable handler,
+                # NOT NON_DISPATCHABLE_ALGO. They are refused in-host NOT by proto_id
+                # demotion but by support_status="adapter-required", which
+                # chip_resolver.resolve_chip rejects before any wire dict is built; the
+                # 0x0D handler is itself VPP-free, so there is no 12V hazard even if
+                # dispatch were somehow reached. This arm therefore sets only
+                # support_status + reason and intentionally does NOT touch proto_id.
                 # Keys on chip name (not proto_id) for audit-friendly explicit classification.
                 # Does NOT encode the DIP24→DIP32 pin remap — that lives in
                 # firestarter/doc/AT28C04-ADAPTER.md.
