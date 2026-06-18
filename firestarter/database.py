@@ -59,7 +59,9 @@ _ALGO_MEM_TYPE = {
     0x29: 4,  # SRAM_512K_1M      → TYPE_SRAM
     # 0x35 (IC2_ALG_ITE — an ITE EC MCU, not a memory algorithm) and 0x39 (phantom —
     # no IC2_ALG constant) removed in Phase 57 (DEC-05) to match build_db.py's
-    # canonical allowlist; no DB chip uses either protocol.
+    # canonical allowlist; no DB chip uses either protocol. Firmware still dispatches
+    # 0x35 and 0x39 → configure_flash4 for forward-compat (memory.cpp:89), but the
+    # host excludes them from KNOWN_PROTOCOLS so they route to not_implemented here.
 }
 
 # Module-level constants

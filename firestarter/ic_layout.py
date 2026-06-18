@@ -225,8 +225,10 @@ class EpromSpecBuilder:
                 0x27: "SRAM (24-pin)",
                 0x28: "SRAM (28-pin)",
                 0x29: "SRAM/NVRAM (32-pin)",
-                # 0x35 (ITE EC MCU) and 0x39 (phantom) removed in Phase 57 (DEC-05);
-                # they are not memory protocols and no DB chip uses them.
+                # 0x35 (ITE EC MCU, 0 DB chips) and 0x39 (phantom, 0 DB chips) removed
+                # in Phase 57 (DEC-05); no DB chip uses either protocol. Firmware still
+                # dispatches both → configure_flash4 for forward-compat (memory.cpp:89);
+                # host routes them to not_implemented (excluded from KNOWN_PROTOCOLS).
             }
             if protocol_id in proto_display:
                 return proto_display[protocol_id]
