@@ -589,13 +589,20 @@ class EpromDatabase:
         if "bus-config" in full_eprom_data:
             programmer_data["bus-config"] = full_eprom_data["bus-config"]
 
-        # Calculate the simple 'flags' key for the programmer
-        # Inferring from mapped 'type': Type 2 (Flash 2) and Type 3 (Flash 3) are electrically erasable.  # noqa: E501
-        # New requirement: FLAG_CAN_ERASE should be set if info-flags has the 0x00000010 bit.  # noqa: E501
+        # Calculate the simple 'flags' key for the programmer.
+        # Canonical erase-capability ground truth (D-01/D-02): set FLAG_CAN_ERASE
+        # directly from electrical.type ∈ {"EEPROM","Flash/EEPROM"} rather than the
+        # fragile synthetic `info-flags & 0x10` round-trip injected by _map_data.
+        # This reads the same canonical field _map_data keys off (line ~434), so the
+        # derivation cannot silently drift under a future _map_data refactor. A missing
+        # key degrades safely to flag-clear (A1), identical to the old path. RF-01:
+        # zero behavioral delta for all chips (the synthetic path already matched).
+        # D-03 (firmware-inert on 0x0D): setting the flag on Flash/EEPROM parts is safe
+        # because the 0x0D configure_eeprom28c path (firestarter/src/proms/eeprom_28c.cpp)
+        # never reads is_flag_set(FLAG_CAN_ERASE) — it uses only FLAG_FORCE and
+        # FLAG_SKIP_BLANK_CHECK — so no extra voltage rail is routed. No firmware edit.
         simple_flags = 0
-        if (
-            full_eprom_data.get("info-flags", 0) & 0x00000010
-        ):  # Check for "Can be electrically erased" bit
+        if full_eprom_data.get("electrical-type", "") in ("EEPROM", "Flash/EEPROM"):
             simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
         programmer_data["flags"] = simple_flags
 
