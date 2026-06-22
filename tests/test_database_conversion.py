@@ -4,6 +4,7 @@ pin translation across representative chip families (D-14.1).
 
 import pytest
 
+from firestarter.constants import FLAG_CAN_ERASE
 from firestarter.database import EpromDatabase
 
 
@@ -74,6 +75,33 @@ def test_convert_bus_config_has_pin_mappings(db: EpromDatabase) -> None:
     # actual key set varies per pinout — assert non-empty.
     assert isinstance(bus, dict)
     assert len(bus) > 0
+
+
+def test_convert_w27c512_flag_can_erase(db: EpromDatabase) -> None:
+    """W27C512 (0x07 EE-EPROM, electrical.type=EEPROM) carries FLAG_CAN_ERASE on
+    the wire — locks the canonical electrical-type derivation (ERASE-01 / D-01/D-02)."""
+    full = db.get_eprom("W27C512")
+    assert full is not None
+    out = db.convert_to_programmer(full)
+    assert out["flags"] & FLAG_CAN_ERASE
+
+
+def test_convert_uv_eprom_no_flag_can_erase(db: EpromDatabase) -> None:
+    """M27C512 is a genuine UV-EPROM — negative control: FLAG_CAN_ERASE must be
+    clear so the erase flag cannot bleed to a non-erasable family (T-77-SCOPE)."""
+    full = db.get_eprom("M27C512")
+    assert full is not None
+    out = db.convert_to_programmer(full)
+    assert out["flags"] & FLAG_CAN_ERASE == 0
+
+
+def test_convert_at28c256_flash_eeprom_flag_can_erase(db: EpromDatabase) -> None:
+    """AT28C256 (Flash/EEPROM, routed to 0x0D) carries FLAG_CAN_ERASE — the flag is
+    firmware-inert on the 0x0D configure_eeprom28c path (D-03), so setting it is safe."""
+    full = db.get_eprom("AT28C256")
+    assert full is not None
+    out = db.convert_to_programmer(full)
+    assert out["flags"] & FLAG_CAN_ERASE
 
 
 # ---------------------------------------------------------------------------
