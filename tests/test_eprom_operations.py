@@ -132,6 +132,39 @@ def test_handle_progress_response_warn_and_ok_paths(make_comm, fake_serial) -> N
     )
 
 
+def test_init_phase_data_frames_not_acked() -> None:
+    """D-07 (commit fcf7974): INIT/END-phase DATA progress frames must NOT be acked.
+
+    The default (no ``-b``) write path — which Phase 77's auto-erase graduation
+    (FLAG_CAN_ERASE on the wire) makes the common case — drives
+    ``_execute_phase("INIT", ...)``, which emits per-chunk blank-check DATA progress
+    frames. ``ack_data=False`` ensures those frames are not acked, so spurious OK
+    acks cannot pile up in the firmware RX buffer and desync the MAIN handshake into
+    ``MSG_ERR_EMPTY_INPUT`` (0xA4). This guard asserts ``send_ack`` fires exactly once
+    per INIT phase (the phase-start ack), regardless of how many DATA frames arrive.
+    """
+    from unittest.mock import MagicMock
+
+    from firestarter.eprom_operations import ClassProgressHandler
+    from firestarter.frame_parser import Response
+
+    operator = EpromOperator(ConfigManager())
+    mock_comm = MagicMock()
+    # Two DATA progress frames followed by the terminating INIT frame.
+    mock_comm.get_response.side_effect = [
+        Response(type="DATA", message="1/128"),
+        Response(type="DATA", message="64/128"),
+        Response(type="INIT", message="OK"),
+    ]
+    operator.comm = mock_comm
+    progress = ClassProgressHandler()
+
+    operator._execute_phase("INIT", progress)
+
+    # Only the phase-start ACK fires; the two DATA frames trigger no extra acks.
+    mock_comm.send_ack.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # build_flags + hexdump (module-level helpers) — D-14 fallback coverage
 # ---------------------------------------------------------------------------
