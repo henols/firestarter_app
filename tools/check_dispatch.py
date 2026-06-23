@@ -76,7 +76,7 @@ _SRAM_PROTOCOLS = {0x0E, 0x27, 0x28, 0x29}
 # Range (0, 6000) is the semantically correct invariant for these handlers —
 # proven capable of firing on a synthetic chip with vpp_mv=12000 routed to configure_sram.
 _FAMILY_VPP_INVARIANTS: dict[str, tuple[int, int]] = {
-    "configure_eprom": (0, 22000),  # RURP VPP ceiling 22V; any VPP up to that
+    "configure_eprom": (0, 25000),  # RURP VPP ceiling 25V (raised Phase 79 from 22V)
     "configure_eeprom28c": (0, 6000),  # 5V-only EEPROM — no elevated VPP rail
     "configure_flash3": (0, 6000),  # AMD flash 5V only (WP-pin 12V != programming VPP)
     "configure_flash4": (0, 6000),  # AMD/SST flash 5V only (WP-pin 12V exempt)

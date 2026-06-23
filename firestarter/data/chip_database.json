@@ -6413,13 +6413,12 @@
       "part_number": "2732,2732A,M2732,M2732A",
       "pinout": "DIP24_2732",
       "programming": {
-        "algorithm": 0,
+        "algorithm": 11,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "Algorithm Controlled"
+        "pulse_duration": "500 us"
       },
-      "support_status": "vpp-exceeds-max",
-      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6534,13 +6533,12 @@
       "part_number": "M2716,M2716M",
       "pinout": "DIP24_2716",
       "programming": {
-        "algorithm": 0,
+        "algorithm": 11,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "Algorithm Controlled"
+        "pulse_duration": "500 us"
       },
-      "support_status": "vpp-exceeds-max",
-      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10136,13 +10134,12 @@
       "part_number": "ETC2716,M2716",
       "pinout": "DIP24_2716",
       "programming": {
-        "algorithm": 0,
+        "algorithm": 11,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "Algorithm Controlled"
+        "pulse_duration": "1000 us"
       },
-      "support_status": "vpp-exceeds-max",
-      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12043,13 +12040,12 @@
       "part_number": "ETC2716,M2716",
       "pinout": "DIP24_2716",
       "programming": {
-        "algorithm": 0,
+        "algorithm": 11,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "Algorithm Controlled"
+        "pulse_duration": "1000 us"
       },
-      "support_status": "vpp-exceeds-max",
-      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
+      "support_status": "supported"
     },
     {
       "electrical": {

@@ -114,7 +114,7 @@ NMOS_TRUE_VPP_MV: dict[str, int] = {
 }
 # RURP boost regulator theoretical ceiling (build_db.py comment + hw evidence).
 # Chips requiring VPP above this cannot be programmed on any RURP revision.
-RURP_VPP_CEILING_MV = 22000
+RURP_VPP_CEILING_MV = 25000
 
 # CR-01 Option A (Phase 66 gap-closure): algorithm sentinel for non-supported chips.
 # dispatch(0x00, None) falls into the mem_type fallback chain (protocol==0 path):
