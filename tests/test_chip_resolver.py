@@ -63,15 +63,32 @@ def test_resolve_chip_conversion_correctness(db):
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_chip_vpp_exceeds_max_raises_not_implemented(db):
-    """M2716 (vpp-exceeds-max UV-EPROM, 25V VPP) must raise ChipNotImplementedError.
+def test_resolve_chip_non_supported_raises_not_implemented(db):
+    """X88C64P (protocol-not-implemented, 0x34) must raise ChipNotImplementedError.
 
-    This is the exact 12V-VPP hardware-damage path closed by D-12: the host guard
-    fires before convert_to_programmer builds any wire dict, so configure_eprom is
-    never reached on the firmware side.
+    The host guard fires before convert_to_programmer builds any wire dict, so the
+    unimplemented firmware handler is never reached. Re-anchored from M2716 in
+    Phase 79: M2716 graduated to 'supported' (NMOS-02), so the 'vpp-exceeds-max'
+    category is now empty — X88C64P is the still-non-supported exemplar.
     """
     with pytest.raises(ChipNotImplementedError):
-        resolve_chip("M2716", db=db)
+        resolve_chip("X88C64P", db=db)
+
+
+def test_resolve_chip_nmos_graduated_resolves(db):
+    """Phase 79 (NMOS-02/03 host path): M2716 resolves with NO exception after the
+    25V ceiling raise graduated it to 'supported'.
+
+    Non-vacuous positive control for the graduation — this test FAILS on the
+    pre-Phase-79 DB (M2716 was 'vpp-exceeds-max' and raised ChipNotImplementedError).
+    Graduation is best-effort per CONTEXT D-07.
+    """
+    result = resolve_chip("M2716", db=db)
+    assert isinstance(result, dict)
+    assert result.get("memory-size", 0) > 0
+    # 25V chips dispatch to configure_eprom via protocol 0x0B (EPROM_LEGACY).
+    assert result.get("vpp_mv") == 25000
+    assert result.get("algorithm") == 11
 
 
 def test_resolve_chip_adapter_required_raises_not_implemented(db):
@@ -111,5 +128,5 @@ def test_resolve_chip_guard_fires_before_convert_to_programmer(db):
     """
     with patch.object(db, "convert_to_programmer") as mock_convert:
         with pytest.raises(ChipNotImplementedError):
-            resolve_chip("M2716", db=db)
+            resolve_chip("X88C64P", db=db)
         mock_convert.assert_not_called()
