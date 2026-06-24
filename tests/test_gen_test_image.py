@@ -16,7 +16,7 @@ import pytest
 # Add the tools directory to sys.path so gen_test_image is importable as a module
 sys.path.insert(0, str(Path(__file__).parent.parent / "tools"))
 
-from gen_test_image import generate_image  # noqa: E402  (after sys.path mutation)
+from gen_test_image import generate_image  # noqa: E402, I001  (after sys.path mutation)
 
 
 # ---------------------------------------------------------------------------
