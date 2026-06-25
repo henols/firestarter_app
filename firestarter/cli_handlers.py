@@ -1059,7 +1059,7 @@ def dev_addr(
     "output_dir",
     type=str,
     default=None,
-    help="Output dir for per-run binaries (default consistency-check-<chip>-<board>-<TS>/).",  # noqa: E501
+    help="Output dir for per-run binaries (default firestarter-runs/consistency-check-<chip>-<board>-<TS>/).",  # noqa: E501
 )
 @click.option(
     "--keep-files/--no-keep-files",
@@ -1150,7 +1150,7 @@ def dev_consistency_check(
     "output_dir",
     type=str,
     default=None,
-    help="Output dir for per-cycle binaries (default write-cycle-<chip>-<board>-<TS>/).",
+    help="Output dir for per-cycle binaries (default firestarter-runs/write-cycle-<chip>-<board>-<TS>/).",  # noqa: E501
 )
 @click.option(
     "-f",

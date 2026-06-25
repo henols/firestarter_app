@@ -57,6 +57,14 @@ logger = logging.getLogger("EpromOperator")
 
 bar_format = "{l_bar}{bar}| {n:#06x}/{total:#06x} bytes "
 
+# Parent folder that groups the auto-named per-run output directories produced by
+# consistency_check_eprom / write_cycle_eprom when the caller does not pass an
+# explicit --output-dir. Created relative to the current working directory, so a
+# bench session keeps all diagnostic runs under one subfolder
+# (e.g. ./firestarter-runs/consistency-check-<chip>-<board>-<TS>/) instead of
+# scattering timestamped folders directly in the launch directory.
+DEFAULT_RUN_OUTPUT_DIR = "firestarter-runs"
+
 
 def _raise_for_error_response(response, message: str) -> None:
     """Raise ProtocolNotImplementedError for id 0xBB, EpromOperationError otherwise.
@@ -618,7 +626,10 @@ class EpromOperator:
             # surface doesn't have a serial connection, so we fall back).
             if output_dir is None:
                 timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-                output_dir = f"consistency-check-{eprom_name}-unknown-board-{timestamp}"
+                output_dir = str(
+                    Path(DEFAULT_RUN_OUTPUT_DIR)
+                    / f"consistency-check-{eprom_name}-unknown-board-{timestamp}"
+                )
             output_path = Path(output_dir)
             output_path.mkdir(parents=True, exist_ok=True)
 
@@ -794,7 +805,10 @@ class EpromOperator:
 
         if output_dir is None:
             timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-            output_dir = f"write-cycle-{eprom_name}-unknown-board-{timestamp}"
+            output_dir = str(
+                Path(DEFAULT_RUN_OUTPUT_DIR)
+                / f"write-cycle-{eprom_name}-unknown-board-{timestamp}"
+            )
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
