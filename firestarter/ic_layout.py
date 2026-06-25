@@ -466,12 +466,16 @@ class EpromSpecBuilder:
         return layout_data
 
     # Curated map from electrical.type DB ground truth to display label (D-01).
-    # These are the four distinct values present in chip_database.json.
+    # These are the distinct values present in chip_database.json.
     # Falls back to get_chip_type_string (protocol-based) when electrical_type
     # is absent or empty (legacy user-override entries without electrical.type).
+    # Phase 84 fm-fram-full: "FRAM" added so FM1608 displays "FRAM" (not the
+    # protocol-based fallback).  CAN_ERASE is unaffected (FRAM ∉ {EEPROM,
+    # Flash/EEPROM} in database.py:605).
     _ELECTRICAL_TYPE_LABEL = {
         "EEPROM": "EEPROM",
         "Flash/EEPROM": "Flash/EEPROM",
+        "FRAM": "FRAM",
         "SRAM": "SRAM",
         "UV-EPROM": "UV-EPROM",
     }
@@ -569,13 +573,14 @@ class EpromSpecBuilder:
 
         # D-07-VPP: gate on vpp_mv > 0, not the always-zero flags & 0x08.
         # Coerce defensively: user-override entries may supply vpp_mv as a string.
-        # Exclude SRAM: volatile, no programming voltage; vpp_mv=12000 is an
-        # upstream infoic.xml decode artifact for SRAM entries, not a real VPP.
+        # Exclude SRAM and FRAM: volatile/no-program-VPP; vpp_mv=12000 is an
+        # upstream infoic.xml decode artifact for SRAM/FRAM entries, not a real VPP.
+        # Phase 84 fm-fram-full: FRAM added alongside SRAM (Pitfall-2 guard).
         try:
             _vpp_mv = int(eprom_data.get("vpp_mv", 0) or 0)
         except (TypeError, ValueError):
             _vpp_mv = 0
-        if etype != "SRAM" and _vpp_mv > 0:
+        if etype not in {"SRAM", "FRAM"} and _vpp_mv > 0:
             output_data["vpp_str"] = f"{eprom_data.get('vpp_volts', 'N/A')}v"
 
         # Chip ID: always render a row, but show "-" when the chip has no

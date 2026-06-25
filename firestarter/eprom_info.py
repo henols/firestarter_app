@@ -384,15 +384,16 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
         chip_id_str = f"0x{ic.get('chip-id', 0):04X}" if ic.get("chip-id") else ""
 
         # D-03: VPP gate mirrors info view — show voltage only when
-        # vpp_mv > 0 AND electrical-type != "SRAM".
+        # vpp_mv > 0 AND electrical-type not in {"SRAM", "FRAM"}.
         # Defensive int() coercion matches build_specifications (user-override entries
         # may store vpp_mv as a string).
+        # Phase 84 fm-fram-full: FRAM added alongside SRAM (Pitfall-2 parity gate).
         try:
             _vpp_mv = int(ic.get("vpp_mv", 0) or 0)
         except (TypeError, ValueError):
             _vpp_mv = 0
         _etype = ic.get("electrical-type", "")
-        if _etype != "SRAM" and _vpp_mv > 0:
+        if _etype not in {"SRAM", "FRAM"} and _vpp_mv > 0:
             # WR-02: mirror the info view's fallback ('N/A') so the two views
             # produce identical output when vpp_mv > 0 but vpp_volts is absent
             # (e.g. operator-override entries). Previously the list view fell

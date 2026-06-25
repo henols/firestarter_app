@@ -642,6 +642,26 @@ def main():
                 # any new proto_id added to KNOWN_PROTOCOLS but not classified
                 # above falls back to whatever the flags-based block decided).
 
+                # Phase 84 D-40 per-chip cosmetic relabel (fm-fram-full decision).
+                # Runs AFTER Pass-2 so the override is applied on top of the
+                # protocol-based _etype derivation.  Keyed on part_number; does NOT
+                # touch proto_id / pinout / vpp / algorithm — label-only correction.
+                #
+                # FM1608 (RAMTRON FRAM, algo=0x28/0x29 SRAM_512K_1M):
+                #   SRAM → FRAM. CAN_ERASE is unaffected (FRAM ∉ {EEPROM,
+                #   Flash/EEPROM}). VPP display stays hidden (companion guard in
+                #   ic_layout.py + eprom_info.py: "not in {'SRAM','FRAM'}").
+                #
+                # SST39SF040: KEEP Flash/EEPROM (sst-keep D-40 STOP — relabeling to
+                #   'Flash' would flip FLAG_CAN_ERASE OFF, breaking Phase-77/82-proven
+                #   auto-erase). Observation recorded in DECODE-AUDIT.md (plan 84-04).
+                _PHASE84_RELABEL = {"FM1608": "FRAM"}
+                part_aliases_set = {a.split("@")[0].strip() for a in name.split(",")}
+                for _relabel_pn, _relabel_etype in _PHASE84_RELABEL.items():
+                    if _relabel_pn in part_aliases_set:
+                        _etype = _relabel_etype
+                        break
+
                 # Site C: DB-03 NMOS VPP correction.
                 # Must run AFTER all fm1608/WARNING-5 overrides (ordering invariant).
                 # "Highest VPP wins": iterate all aliases; the match with the highest
