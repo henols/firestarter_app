@@ -118,6 +118,19 @@ _RATIONALES = {
         "  [VERIFIED: .planning/phases/66-db-inclusion-vpp-correction-dispatch-gate/66-CONTEXT.md"
         " D-04/D-06/D-07]"
     ),
+    "RULE_PHASE84_RELABEL": (
+        "Phase 84 cosmetic electrical.type relabel — label-only, NO dispatch / FLAG_CAN_ERASE / VPP change.\n"
+        "  FM1608 (RAMTRON FRAM): electrical.type corrected SRAM→FRAM at the build_db.py codegen\n"
+        "    layer (per-chip override after Pass-2). CAN_ERASE unaffected (FRAM ∉ {EEPROM,\n"
+        "    Flash/EEPROM}). VPP display gated out (FRAM has no programming VPP). Display-layer\n"
+        "    _ELECTRICAL_TYPE_LABEL extended with 'FRAM' key.\n"
+        "  SST39SF040: KEEP Flash/EEPROM — cosmetic 'Flash' label observation recorded in\n"
+        "    DECODE-AUDIT.md (plan 84-04); no code change (D-40 STOP: relabeling would flip\n"
+        "    FLAG_CAN_ERASE OFF, breaking Phase-77/82-proven auto-erase).\n"
+        "  Scope: exactly the relabeled part_numbers' electrical.type field; NO algorithm /\n"
+        "    pinout / vpp / FLAG_CAN_ERASE delta.\n"
+        "  [VERIFIED: Phase 84 plan 84-03, operator decision sst-keep / fm-fram-full 2026-06-25]"
+    ),
 }
 
 
@@ -218,6 +231,15 @@ _RULE_FIELD_PATHS = {
         ("electrical", "vpp"),
         ("electrical", "vpp_mv"),
     },
+    # Phase 84 cosmetic relabel: FM1608 SRAM→FRAM. Scoped to the relabeled chips'
+    # electrical.type field only. No algorithm / pinout / vpp / CAN_ERASE delta.
+    # Placed after RULE_PHASE66 (more specific than RULE_PHASE66's support_status scope,
+    # but still less specific than BUG_A_ETYPE which also matches type_diff without
+    # algo_diff — RULE_PHASE84_RELABEL is distinguished by the part_number scope check
+    # in _classify_diff, not by field exclusivity alone).
+    "RULE_PHASE84_RELABEL": {
+        ("electrical", "type"),  # only the type string changes for the relabeled chip
+    },
 }
 
 
@@ -241,6 +263,11 @@ def _diff_field_paths(bl_chip, cu_chip, prefix=()):
         else:
             paths.add(prefix + (k,))
     return paths
+
+
+# Phase 84 RULE_PHASE84_RELABEL scope: the exact part_numbers whose electrical.type
+# was corrected. SST39SF040 is EXCLUDED (sst-keep decision — no code change).
+_PHASE84_RELABEL_PART_NUMBERS = frozenset({"FM1608"})
 
 
 def _classify_diff(bl_chip, cu_chip):
@@ -268,9 +295,13 @@ def _classify_diff(bl_chip, cu_chip):
       3. BUG2_TIMING   — timing changed only
       4. BUG3_VCC_VDD  — voltage (vcc/vdd) changed only
       5. SRAM_PINOUT   — pinout changed only
-      6. BUG_A_ETYPE   — electrical.type changed (flags-based EEPROM reclassification)
-      7. BUG_B_VPP     — electrical.vpp/vpp_mv changed (0xF0-mask fix)
-      8. RULE_PHASE66  — only support_status/unsupported_reason/vpp/vpp_mv changed
+      6. RULE_PHASE84_RELABEL — only electrical.type changed, AND the chip is in
+                         _PHASE84_RELABEL_PART_NUMBERS (cosmetic label-only correction;
+                         scoped by part_number; MORE SPECIFIC than BUG_A_ETYPE so must
+                         precede it — otherwise BUG_A_ETYPE would match first)
+      7. BUG_A_ETYPE   — electrical.type changed (flags-based EEPROM reclassification)
+      8. BUG_B_VPP     — electrical.vpp/vpp_mv changed (0xF0-mask fix)
+      9. RULE_PHASE66  — only support_status/unsupported_reason/vpp/vpp_mv changed
                          (LAST — least specific; must not shadow BUG_A_ETYPE/BUG_B_VPP)
       -> None          — no rule matched (UNEXPLAINED = D-03 BLOCK)
     """
@@ -310,6 +341,21 @@ def _classify_diff(bl_chip, cu_chip):
         label = "BUG3_VCC_VDD"
     elif pinout_diff and not algo_diff and not timing_diff:
         label = "SRAM_PINOUT"
+    elif (
+        type_diff
+        and not algo_diff
+        and not timing_diff
+        and not voltage_diff
+        and not pinout_diff
+        and cu_chip.get("part_number") in _PHASE84_RELABEL_PART_NUMBERS
+    ):
+        # RULE_PHASE84_RELABEL (before BUG_A_ETYPE): cosmetic electrical.type label
+        # correction, scoped to the exact chips the operator authorized (fm-fram-full
+        # decision). Placed before BUG_A_ETYPE so the part_number-scoped rule takes
+        # priority for the named relabeled chips. The part_number check prevents this
+        # rule from silently explaining accidental type drift on unrelated chips
+        # (D-40 requirement: no collateral change to chips sharing the same infoic flags).
+        label = "RULE_PHASE84_RELABEL"
     elif (
         type_diff
         and not algo_diff

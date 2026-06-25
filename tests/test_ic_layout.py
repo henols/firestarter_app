@@ -83,3 +83,64 @@ def test_generate_pin_names_bare_int_still_works(
     # With no pin-map the generic layout is returned unchanged.
     assert result is not None
     assert len(result) == 28
+
+
+# ---------------------------------------------------------------------------
+# Phase 84 — fm-fram-full display-layer companion tests
+#
+# These tests pin the two display-layer changes that accompany the FM1608
+# SRAM→FRAM relabel (operator decision fm-fram-full, 2026-06-25):
+#   1. _ELECTRICAL_TYPE_LABEL["FRAM"] == "FRAM"  (resolve_type_label works for FRAM)
+#   2. FM1608 build_specifications does NOT include vpp_str (VPP row stays hidden)
+#
+# Both tests are RED before the ic_layout.py changes (Task 3) and GREEN after.
+# ---------------------------------------------------------------------------
+
+
+def test_electrical_type_label_includes_fram(
+    spec_builder: EpromSpecBuilder,
+) -> None:
+    """_ELECTRICAL_TYPE_LABEL must include a 'FRAM' key resolving to 'FRAM' — required
+    by the fm-fram-full relabel so the Type column shows 'FRAM' not the protocol fallback
+    (D-40 / Pitfall 2: without the key, resolve_type_label falls back to
+    get_chip_type_string which would return the protocol-based label, not 'FRAM')."""
+    label_map = spec_builder._ELECTRICAL_TYPE_LABEL
+    assert "FRAM" in label_map, (
+        "_ELECTRICAL_TYPE_LABEL must contain 'FRAM' key (fm-fram-full relabel)"
+    )
+    assert label_map["FRAM"] == "FRAM", (
+        "_ELECTRICAL_TYPE_LABEL['FRAM'] must equal 'FRAM'"
+    )
+
+
+def test_resolve_type_label_fram(
+    spec_builder: EpromSpecBuilder,
+) -> None:
+    """resolve_type_label returns 'FRAM' for electrical_type='FRAM' — the display helper
+    must handle the new FRAM value after the fm-fram-full relabel."""
+    result = spec_builder.resolve_type_label("FRAM")
+    assert result == "FRAM", (
+        f"resolve_type_label('FRAM') should return 'FRAM', got {result!r}"
+    )
+
+
+def test_fm1608_vpp_row_hidden_after_relabel(
+    spec_builder: EpromSpecBuilder,
+    db: EpromDatabase,
+) -> None:
+    """FM1608 build_specifications must NOT include vpp_str after the SRAM→FRAM relabel.
+    FRAM has no programming VPP; the vpp_mv=12000 in the DB is an infoic.xml decode
+    artifact.  The VPP-display gate (ic_layout.py build_specifications) must exclude
+    FRAM alongside SRAM (gate: electrical-type not in {'SRAM','FRAM'}).
+    This is the fm-fram-full Pitfall-2 guard (D-40 / fm-fram-full companion test)."""
+    eprom = db.get_eprom("FM1608")
+    assert eprom is not None
+    # The relabel sets electrical-type = "FRAM" in the mapped data.
+    # We call build_specifications with the mapped data which carries
+    # electrical-type via _map_data (the 'electrical-type' key).
+    result = spec_builder.build_specifications(eprom, electrical_type=eprom.get("electrical-type"))
+    assert result is not None
+    assert "vpp_str" not in result, (
+        "FM1608 must NOT have a VPP row after SRAM→FRAM relabel; "
+        "FRAM has no programming VPP (Pitfall 2 guard / fm-fram-full D-40)"
+    )

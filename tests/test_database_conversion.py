@@ -191,3 +191,39 @@ def test_search_chip_id_returns_list(db: EpromDatabase) -> None:
             chip_id_int = chip_id_val
         matches = db.search_chip_id(chip_id_int)
         assert isinstance(matches, list)
+
+
+# ---------------------------------------------------------------------------
+# Phase 84 — D-40 label-only CAN_ERASE pinning assertions
+# Proves that the FM1608 SRAM→FRAM relabel (fm-fram-full) and the SST39SF040
+# sst-keep decision do NOT change FLAG_CAN_ERASE.  These tests are the D-40
+# label-only-for-CAN_ERASE proof and should remain green through any subsequent
+# build_db.py regeneration.
+# ---------------------------------------------------------------------------
+
+
+def test_sst39sf040_flag_can_erase_unchanged(db: EpromDatabase) -> None:
+    """SST39SF040 (Flash/EEPROM, algo 0x06) carries FLAG_CAN_ERASE — the Phase-77/82
+    auto-erase path must not be broken.  sst-keep decision: no relabel, this test
+    confirms the flag is ON and remains ON (D-40 / RULE_PHASE84_RELABEL guard)."""
+    full = db.get_eprom("SST39SF040")
+    assert full is not None
+    out = db.convert_to_programmer(full)
+    assert out["flags"] & FLAG_CAN_ERASE, (
+        "SST39SF040 must carry FLAG_CAN_ERASE (auto-erase path); "
+        "electrical.type must stay Flash/EEPROM (sst-keep D-40 decision)"
+    )
+
+
+def test_fm1608_flag_can_erase_off(db: EpromDatabase) -> None:
+    """FM1608 (FRAM, algo 0x28/0x29) must NOT carry FLAG_CAN_ERASE — FRAM is not
+    electrically erasable in the same sense as EEPROM/Flash.  The fm-fram-full
+    relabel (SRAM→FRAM) must not accidentally set this flag (D-40 label-only proof).
+    CAN_ERASE is gated on electrical-type ∈ {EEPROM, Flash/EEPROM}; FRAM ∉ that set."""
+    full = db.get_eprom("FM1608")
+    assert full is not None
+    out = db.convert_to_programmer(full)
+    assert out["flags"] & FLAG_CAN_ERASE == 0, (
+        "FM1608 FRAM must NOT carry FLAG_CAN_ERASE; "
+        "FRAM ∉ {EEPROM, Flash/EEPROM} — relabel must be label-only (D-40)"
+    )
