@@ -865,7 +865,7 @@
   | PT28C020            | PTC              |   32 |            | EEPROM      | 12.0v|
   | PT28C040            | PTC              |   32 |            | EEPROM      | 12.0v|
   | FM1208              | RAMTRON          |   24 |            | SRAM        | -    |
-  | FM1608              | RAMTRON          |   28 |            | SRAM        | -    |
+  | FM1608              | RAMTRON          |   28 |            | FRAM        | -    |
   | FM16W08             | RAMTRON          |   28 |            | SRAM        | -    |
   | FM1808,FM1808B,FM18…| RAMTRON          |   28 |            | SRAM        | -    |
   | FM18L08             | RAMTRON          |   28 |            | SRAM        | -    |

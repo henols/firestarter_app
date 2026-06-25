@@ -81,7 +81,13 @@ class TestDiffDbPhase84Relabel:
     def _make_chip(self, etype, part_number="FM1608"):
         return {
             "part_number": part_number,
-            "electrical": {"type": etype, "vcc": "5V", "vdd": "5V", "vpp": "12V", "vpp_mv": 12000},
+            "electrical": {
+                "type": etype,
+                "vcc": "5V",
+                "vdd": "5V",
+                "vpp": "12V",
+                "vpp_mv": 12000,
+            },
             "programming": {"algorithm": 40, "pulse_duration": "Algorithm Controlled"},
             "support_status": "supported",
         }
@@ -107,7 +113,13 @@ class TestDiffDbPhase84Relabel:
 
         bl_chip = {
             "part_number": "SST39SF040",
-            "electrical": {"type": "Flash/EEPROM", "vcc": "5V", "vdd": "5V", "vpp": "12V", "vpp_mv": 12000},
+            "electrical": {
+                "type": "Flash/EEPROM",
+                "vcc": "5V",
+                "vdd": "5V",
+                "vpp": "12V",
+                "vpp_mv": 12000,
+            },
             "programming": {"algorithm": 6, "pulse_duration": "Algorithm Controlled"},
             "support_status": "supported",
         }

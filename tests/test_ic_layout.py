@@ -138,7 +138,9 @@ def test_fm1608_vpp_row_hidden_after_relabel(
     # The relabel sets electrical-type = "FRAM" in the mapped data.
     # We call build_specifications with the mapped data which carries
     # electrical-type via _map_data (the 'electrical-type' key).
-    result = spec_builder.build_specifications(eprom, electrical_type=eprom.get("electrical-type"))
+    result = spec_builder.build_specifications(
+        eprom, electrical_type=eprom.get("electrical-type")
+    )
     assert result is not None
     assert "vpp_str" not in result, (
         "FM1608 must NOT have a VPP row after SRAM→FRAM relabel; "
