@@ -19,6 +19,9 @@ MINIPRO_XML_URL = (
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "firestarter", "data")
 OUTPUT_FILE = os.path.join(_DATA_DIR, "chip_database.json")
 PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
+# VAR-05 / D-10: curated non-upstream chip supplement, merged post-decode (see
+# the EXTRA_CHIPS block in main()). Physically-real chips absent from infoic.xml.
+EXTRA_CHIPS_FILE = os.path.join(os.path.dirname(__file__), "extra_chips.json")
 
 # ==========================================
 # 2. PINOUT LIBRARY (The Missing Physical Layer)
@@ -725,10 +728,46 @@ def main():
             if chips:
                 complete_db[mfg_name] = chips
 
+    # ==========================================
+    # VAR-05 / D-10: NON-UPSTREAM CHIP SUPPLEMENT (post-decode merge)
+    # ==========================================
+    # Merge tools/extra_chips.json into complete_db AFTER the infoic.xml decode
+    # loop and BEFORE the JSON write. These are physically-real 24-pin UV-EPROM
+    # oddballs (2516, 2532) that are ABSENT from minipro's infoic.xml entirely —
+    # so they ship first-class in chip_database.json via this curated, provenance-
+    # cited supplement instead of per-operator ~/.firestarter/database.json edits.
+    #
+    # This is NOT a return of the deleted Rule 1/2/3: those patched chips that were
+    # already IN infoic.xml (a decode correction); the supplement adds chips with NO
+    # upstream record at all (a categorically different concern). The supplement
+    # records arrive FULLY-SPECIFIED and are deliberately NOT routed through
+    # classify() / resolve_pinout_key — they have no infoic.xml fields to decode.
+    # Each record carries its own source/datasheet provenance (D-11) and is byte-
+    # faithful here (the merge does not mutate any wire value).
+    supplement_count = 0
+    if os.path.exists(EXTRA_CHIPS_FILE):
+        with open(EXTRA_CHIPS_FILE) as ef:
+            extra_db = json.load(ef)
+        for mfg_name, extra_chips in extra_db.items():
+            if not isinstance(extra_chips, list):
+                continue
+            complete_db.setdefault(mfg_name, []).extend(extra_chips)
+            supplement_count += len(extra_chips)
+        print(
+            f"VAR-05 supplement: merged {supplement_count} non-upstream chip(s) "
+            f"from {EXTRA_CHIPS_FILE} (post-decode)."
+        )
+    else:
+        print(f"VAR-05 supplement: {EXTRA_CHIPS_FILE} not found — skipping merge.")
+
     with open(OUTPUT_FILE, "w") as f:
         json.dump(complete_db, f, indent=2, sort_keys=True)
 
-    print(f"Done! {total_chips} chips processed. Saved to {OUTPUT_FILE}")
+    print(
+        f"Done! {total_chips} upstream chips processed "
+        f"+ {supplement_count} non-upstream supplement chip(s) "
+        f"= {total_chips + supplement_count} total. Saved to {OUTPUT_FILE}"
+    )
 
 
 if __name__ == "__main__":

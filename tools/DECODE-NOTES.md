@@ -232,6 +232,16 @@ classified by `type`, classifier output `algorithm = 40 (0x28)`.
   (resolvable but not write-proven; host guards stay). This Plan 86-01 makes **no**
   assertion about 2516's presence/absence — see §"Note on 2516" in `86-01-PLAN.md` and
   the `86-04` plan. **Cross-reference: Plan 86-04 owns 2516/2532.**
+  **[Plan 86-04 IMPLEMENTED]** The supplement now ships as `tools/extra_chips.json`
+  (manufacturer-keyed, one record each for 2516/2532, each carrying a
+  `source: "non-upstream-supplement"` marker + a `datasheet` citation). `build_db.py`
+  merges it into `complete_db` **after** the infoic.xml decode loop and **before** the
+  JSON write (see the `VAR-05 / D-10` block in `main()` + `EXTRA_CHIPS_FILE`). The
+  supplement records are NOT routed through `classify()` / `resolve_pinout_key` — they
+  arrive fully-specified. 2516 keeps its SAFE-04 UNVERIFIED posture
+  (`verification_status: "UNVERIFIED"`, wire values unmoved, `support_status: supported`
+  so it stays resolvable for read/info; host guards unchanged). 2532 uses the new
+  non-JEDEC `DIP24_2532` pinout (VPP=pin 21, distinct from `DIP24_2732`).
 
 ---
 
