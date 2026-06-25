@@ -101,6 +101,18 @@
             "ce-pin": [18], "oe-pin": [20], "rw-pin": [21]
         }
     },
+    "DIP24_2532": {
+        "name": "TI 2532 (4KB) — non-JEDEC 24-pin UV-EPROM",
+        "comment": "TI/Motorola 2532 is a 4KB (4096x8) 24-pin UV-EPROM with a NON-JEDEC pinout that differs from the JEDEC 2732 (DIP24_2732). On the 2532: VPP=pin 21, A11=pin 18, !PD/PGM=pin 20 (chip-enable / power-down-program), VCC=pin 24, GND=pin 12. The JEDEC 2732 instead puts OE/VPP on pin 20, A11 on pin 21, and CE on pin 18 — so the two layouts must NOT be conflated (VPP on pin 21 vs pin 20 is a 12-25V-to-wrong-pin hardware-damage path). Source: TI 2532 datasheet pin assignment (committed 2516/2532-family scan under datasheets/0x0B-EPROM-LEGACY/2516_EPROM.pdf, which is the TI 2500-series UV-EPROM family doc covering the 2516/2532 lineage). vpp-pin=21 satisfies the GATE-03 structural VPP guard for the 0x0B legacy EPROM handler. Tentative leaf layout — bench-validation required (carries the same UNVERIFIED posture as the 2516 supplement row).",
+        "pins": {
+            "vcc-pin": [24], "gnd-pin": [12], "vpp-pin": [21],
+            "VCC_READ": 5.0, "VCC_PROG": 25.0,
+            "address-bus-pins": [8, 7, 6, 5, 4, 3, 2, 1, 23, 22, 19, 18],
+            "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
+            "ce-pin": [20],
+            "static-high-pins": [24]
+        }
+    },
     "DIP24_2816": {
         "name": "JEDEC 24-pin 5V parallel EEPROM (AT28C16/AT28C04 family)",
         "comment": "AT28C16/AT28C04/28C16A-class 24-pin 5V single-supply parallel EEPROMs. Same physical layout as DIP24_6116 SRAM (WE=pin 21, OE=pin 20, CE=pin 18, VCC=pin 24, GND=pin 12). NO vpp-pin — configure_eeprom28c is 5V-only (SDP-disable + DQ7 page-write polling; VPP regulator is never asserted). Over-allocated to A0-A10 (11 address bits = AT28C16 maximum); AT28C04 has 9 address lines and firmware restricts driving via mem_size. Source: Atmel AT28C16 datasheet Table 1 (pin description). Pin 21=WE, NOT VPP — the DIP24_2716 (UV-EPROM) layout has VPP=pin 21; this layout does NOT.",
