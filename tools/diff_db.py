@@ -118,6 +118,30 @@ _RATIONALES = {
         "  [VERIFIED: .planning/phases/66-db-inclusion-vpp-correction-dispatch-gate/66-CONTEXT.md"
         " D-04/D-06/D-07]"
     ),
+    "VARIANT_DECODE": (
+        "Variant-decode consolidation (Phase 86 VAR-02) — Rule 1/2/3 replaced by a\n"
+        "  single principled classify(type,proto,pm_idx,flags,pinout).\n"
+        "  The override stack is gone; electrical.type/algorithm/pinout are now derived\n"
+        "  once from the fields minipro itself uses to classify a device. Two effects\n"
+        "  land here as electrical.type-only deltas:\n"
+        "    (a) 68 5V-EEPROM-pinout chips (proto 0x0D, configure_eeprom28c, no VPP)\n"
+        "        decode Flash/EEPROM -> EEPROM. The old two-pass mapped proto 0x0D to\n"
+        "        'Flash/EEPROM'; classify() arm 2 (5V-EEPROM pinout clusters) emits the\n"
+        "        more-accurate 'EEPROM' type for the 28C/28LV/2816 family. NO algorithm,\n"
+        "        pinout, or VPP change — the chips already dispatched to configure_eeprom28c.\n"
+        "    (b) X88C64P (proto 0x34, XICOR NovRAM/EEPROM) decodes UV-EPROM -> EEPROM via\n"
+        "        classify() arm 4b. Display-only: the chip stays\n"
+        "        support_status=protocol-not-implemented and non-dispatchable; algorithm\n"
+        "        (0x34) and pinout unchanged.\n"
+        "  The variant HIGH byte is minipro's T56/T76 algo-file selector, NOT a\n"
+        "  classification axis — classify() keys on type/proto/pm_idx/flags.\n"
+        "  [VERIFIED: minipro database.c#L1918 @ a8efaedc —\n"
+        "   uint8_t algo_number = (uint8_t)(device->variant >> 8) —\n"
+        "   https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c#L1918]\n"
+        "  [VERIFIED: minipro minipro.h#L70 MP_SRAM=0x04 —\n"
+        "   https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/minipro.h#L70]\n"
+        "  [CITED: tools/DECODE-NOTES.md §2 (high byte) / §4 (X88C64) / §5 (FM1608)]"
+    ),
     "RULE_PHASE84_RELABEL": (
         "Phase 84 cosmetic electrical.type relabel — label-only, NO dispatch / FLAG_CAN_ERASE / VPP change.\n"
         "  FM1608 (RAMTRON FRAM): electrical.type corrected SRAM→FRAM at the build_db.py codegen\n"
@@ -240,6 +264,12 @@ _RULE_FIELD_PATHS = {
     "RULE_PHASE84_RELABEL": {
         ("electrical", "type"),  # only the type string changes for the relabeled chip
     },
+    # Phase 86 variant-decode consolidation: electrical.type-only delta for the
+    # 5V-EEPROM-pinout (proto 0x0D) chips Flash/EEPROM->EEPROM and X88C64P
+    # (proto 0x34) UV-EPROM->EEPROM. No algorithm / pinout / vpp delta.
+    "VARIANT_DECODE": {
+        ("electrical", "type"),
+    },
 }
 
 
@@ -299,6 +329,10 @@ def _classify_diff(bl_chip, cu_chip):
                          _PHASE84_RELABEL_PART_NUMBERS (cosmetic label-only correction;
                          scoped by part_number; MORE SPECIFIC than BUG_A_ETYPE so must
                          precede it — otherwise BUG_A_ETYPE would match first)
+      6b. VARIANT_DECODE — only electrical.type changed to 'EEPROM' AND proto in
+                         {0x0D, 0x34} (Phase 86 consolidation: 5V-EEPROM-pinout proto-0x0D
+                         Flash/EEPROM->EEPROM + X88C64P proto-0x34 UV-EPROM->EEPROM;
+                         scoped by new-type+proto so it does NOT shadow BUG_A_ETYPE)
       7. BUG_A_ETYPE   — electrical.type changed (flags-based EEPROM reclassification)
       8. BUG_B_VPP     — electrical.vpp/vpp_mv changed (0xF0-mask fix)
       9. RULE_PHASE66  — only support_status/unsupported_reason/vpp/vpp_mv changed
@@ -356,6 +390,22 @@ def _classify_diff(bl_chip, cu_chip):
         # rule from silently explaining accidental type drift on unrelated chips
         # (D-40 requirement: no collateral change to chips sharing the same infoic flags).
         label = "RULE_PHASE84_RELABEL"
+    elif (
+        type_diff
+        and not algo_diff
+        and not timing_diff
+        and not voltage_diff
+        and not pinout_diff
+        and cu_elec.get("type") == "EEPROM"
+        and cu_prog.get("algorithm") in (0x0D, 0x34)
+    ):
+        # VARIANT_DECODE (before BUG_A_ETYPE): Phase 86 consolidation electrical.type
+        # delta. The new classify() emits 'EEPROM' for the 5V-EEPROM-pinout proto-0x0D
+        # chips (were 'Flash/EEPROM') and for X88C64P proto-0x34 (was 'UV-EPROM').
+        # Scoped to new-type=='EEPROM' AND proto in {0x0D, 0x34} so it does NOT shadow
+        # genuine BUG_A_ETYPE (flags-based 0x07-proto reclassification) or the
+        # part_number-scoped RULE_PHASE84_RELABEL (FM1608 SRAM->FRAM, handled above).
+        label = "VARIANT_DECODE"
     elif (
         type_diff
         and not algo_diff
