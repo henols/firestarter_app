@@ -386,7 +386,7 @@ class TestAuditCoverageMatrix:
         post-Phase-70 integration (WARNING-5 override now correctly moves
         DIP28_28C64 + DIP28_28C256 chips from 0x07 to 0x0D):
 
-            total_chips == 744
+            total_chips == 746
             algo_0x07   == 170
             algo_0x08   == 127
             in_scope    == 297
@@ -395,6 +395,11 @@ class TestAuditCoverageMatrix:
         (Flash/EEPROM type) correctly receive algo 0x0D via the WARNING-5
         override in build_db.py. Previous counts (212/339) were incorrect
         because those chips should not have been on algo 0x07.
+
+        Phase 86-04 (VAR-05 / D-10): total_chips 744 -> 746 with the 2516 + 2532
+        non-upstream supplement merged post-decode. Both are 0x0B (EPROM-LEGACY),
+        NOT 0x07/0x08, so the in-scope (0x07+0x08) count stays 297; only the full-DB
+        total and the 0x0B histogram (30 -> 32) move.
         """
         from tools.audit_coverage_matrix import generate_matrix
 
@@ -410,7 +415,7 @@ class TestAuditCoverageMatrix:
         assert "## §2: DB Count Reconciliation" in body, "§2 header missing"
 
         # Live counts must appear in §1 — these are the regression anchors.
-        assert "744" in body, "total_chips=744 missing from matrix body"
+        assert "746" in body, "total_chips=746 missing from matrix body"
         assert "297" in body, "in_scope=297 missing from matrix body"
         assert "170" in body, "algo_0x07=170 missing from matrix body"
         assert "127" in body, "algo_0x08=127 missing from matrix body"

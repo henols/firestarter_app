@@ -142,6 +142,27 @@ _RATIONALES = {
         "   https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/minipro.h#L70]\n"
         "  [CITED: tools/DECODE-NOTES.md §2 (high byte) / §4 (X88C64) / §5 (FM1608)]"
     ),
+    "EXTRA_CHIPS_SUPPLEMENT": (
+        "Non-upstream chip supplement (Phase 86 VAR-05 / D-10) — 2516 + 2532.\n"
+        "  These are physically-real 24-pin UV-EPROM oddballs that are ABSENT from\n"
+        "  minipro's infoic.xml entirely (no upstream record at all). They ship\n"
+        "  first-class in chip_database.json via the curated, provenance-cited\n"
+        "  supplement tools/extra_chips.json, which build_db.py merges AFTER the\n"
+        "  infoic.xml decode loop (NOT routed through classify()/resolve_pinout_key —\n"
+        "  they arrive fully-specified). Each supplement record carries a\n"
+        "  source='non-upstream-supplement' marker + a datasheet citation (D-11).\n"
+        "  They appear here as NEW chips against the OLD baseline because the baseline\n"
+        "  re-pin is Plan 86-03 (runs AFTER this plan); their presence — with the\n"
+        "  non-upstream source marker — is the explanation, NOT a Rule 1 unblock.\n"
+        "    2516: algorithm 0x0B, DIP24_2716, UV-EPROM, vpp_mv 25000, 2048 B —\n"
+        "      wire values verbatim from the v1.15 user-override (SAFE-04, unmoved);\n"
+        "      verification_status UNVERIFIED (resolvable, not write-graduated; FUT-03).\n"
+        "    2532: algorithm 0x0B, DIP24_2532 (non-JEDEC, VPP=pin 21), UV-EPROM,\n"
+        "      4096 B; UNVERIFIED (no on-hand silicon).\n"
+        "  [CITED: tools/extra_chips.json provenance fields + 2516_EPROM.pdf datasheet;\n"
+        "   .planning/phases/86-variant-decode-correct-db-regen/86-CONTEXT.md D-10/D-11;\n"
+        "   .planning/v1.15/DECODE-AUDIT.md (2516 user-override wire values)]"
+    ),
     "RULE_PHASE84_RELABEL": (
         "Phase 84 cosmetic electrical.type relabel — label-only, NO dispatch / FLAG_CAN_ERASE / VPP change.\n"
         "  FM1608 (RAMTRON FRAM): electrical.type corrected SRAM→FRAM at the build_db.py codegen\n"
@@ -572,11 +593,46 @@ def main():
             print(f"  {note}")
         print()
 
-    # WR-03: verify (don't just assert) the Rule 1 unblock claim per new chip.
+    # New chips fall into two explained categories:
+    #   (a) EXTRA_CHIPS_SUPPLEMENT (Phase 86 VAR-05 / D-10): records carrying the
+    #       source="non-upstream-supplement" marker (2516/2532). Their presence —
+    #       with the cited source marker — IS the explanation (they are absent from
+    #       both infoic.xml and the OLD baseline because the re-pin is Plan 86-03).
+    #   (b) Rule 1 unblock (DIP24_2816 + algo=0x0D): the original new-chip class.
+    # A new chip that is NEITHER is surfaced as a WARN (WR-03).
+    supplement_new = [
+        key
+        for key in new_chips
+        if cu_idx[key][1].get("source") == "non-upstream-supplement"
+    ]
+    other_new = [key for key in new_chips if key not in set(supplement_new)]
+
+    if supplement_new:
+        print(
+            f"--- NEW chips: non-upstream supplement ({len(supplement_new)}) "
+            f"— Phase 86 VAR-05 / D-10 (cited) ---\n"
+        )
+        for line in _RATIONALES["EXTRA_CHIPS_SUPPLEMENT"].splitlines():
+            print(f"  {line}")
+        print()
+        for key in sorted(supplement_new):
+            c = cu_idx[key][1]
+            ds = c.get("datasheet", "<no datasheet>")
+            ver = c.get("verification_status", "")
+            ver_str = f", {ver}" if ver else ""
+            print(
+                f"  {_pn(key)} [non-upstream-supplement] "
+                f"(pinout={c.get('pinout')}, "
+                f"algo={c.get('programming', {}).get('algorithm'):#x}, "
+                f"datasheet={ds}{ver_str})"
+            )
+        print()
+
+    # WR-03: verify (don't just assert) the Rule 1 unblock claim per remaining new chip.
     print(
-        f"--- NEW chips ({len(new_chips)}) — expected Rule 1 unblock (DIP24_2816 + algo=0x0D) ---\n"
+        f"--- NEW chips ({len(other_new)}) — expected Rule 1 unblock (DIP24_2816 + algo=0x0D) ---\n"
     )
-    for key in sorted(new_chips):
+    for key in sorted(other_new):
         pn = _pn(key)
         c = cu_idx[key][1]
         c_pinout = c.get("pinout")
@@ -589,7 +645,7 @@ def main():
             )
         else:
             print(f"  {pn}")
-    if new_chips:
+    if other_new:
         print()
 
     print(f"--- MISSING chips ({len(missing_chips)}) ---\n")

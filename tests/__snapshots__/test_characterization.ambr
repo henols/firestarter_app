@@ -1037,6 +1037,8 @@
   | 628128              | Standard SRAM    |   32 |            | SRAM        | -    |
   | 628256              | Standard SRAM    |   32 |            | SRAM        | -    |
   | 628512              | Standard SRAM    |   32 |            | SRAM        | -    |
+  | 2516                | TEXAS INSTRUMENTS|   24 |            | UV-EPROM    | 25.0v|
+  | 2532                | TEXAS INSTRUMENTS|   24 |            | UV-EPROM    | 25.0v|
   | SMJ27C128,TMS27C128…| TI               |   28 | 0x9783     | UV-EPROM    | 13.0v|
   | SMJ27C256,TMS27C256…| TI               |   28 | 0x9704     | UV-EPROM    | 13.0v|
   | SMJ27C512,TMS27C512…| TI               |   28 | 0x9785     | UV-EPROM    | 13.0v|

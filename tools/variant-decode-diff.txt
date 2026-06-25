@@ -1,7 +1,7 @@
 ========================================================================
 GATE-02 Per-chip Diff Report
   Baseline: /workspaces/firestarter_app/tools/baseline/chip_database.baseline.json  (744 chips, 744 diffed)
-  Current:  /workspaces/firestarter_app/tools/../firestarter/data/chip_database.json  (744 chips, 744 diffed)
+  Current:  /workspaces/firestarter_app/tools/../firestarter/data/chip_database.json  (746 chips, 746 diffed)
 ========================================================================
 
 --- CHANGED chips (72 total) ---
@@ -145,8 +145,33 @@ GATE-02 Per-chip Diff Report
   UPD28C04 [VARIANT_DECODE] + secondary: unsupported_reason
   X88C64P,X88C64S [VARIANT_DECODE] + secondary: unsupported_reason
 
+--- NEW chips: non-upstream supplement (2) — Phase 86 VAR-05 / D-10 (cited) ---
+
+  Non-upstream chip supplement (Phase 86 VAR-05 / D-10) — 2516 + 2532.
+    These are physically-real 24-pin UV-EPROM oddballs that are ABSENT from
+    minipro's infoic.xml entirely (no upstream record at all). They ship
+    first-class in chip_database.json via the curated, provenance-cited
+    supplement tools/extra_chips.json, which build_db.py merges AFTER the
+    infoic.xml decode loop (NOT routed through classify()/resolve_pinout_key —
+    they arrive fully-specified). Each supplement record carries a
+    source='non-upstream-supplement' marker + a datasheet citation (D-11).
+    They appear here as NEW chips against the OLD baseline because the baseline
+    re-pin is Plan 86-03 (runs AFTER this plan); their presence — with the
+    non-upstream source marker — is the explanation, NOT a Rule 1 unblock.
+      2516: algorithm 0x0B, DIP24_2716, UV-EPROM, vpp_mv 25000, 2048 B —
+        wire values verbatim from the v1.15 user-override (SAFE-04, unmoved);
+        verification_status UNVERIFIED (resolvable, not write-graduated; FUT-03).
+      2532: algorithm 0x0B, DIP24_2532 (non-JEDEC, VPP=pin 21), UV-EPROM,
+        4096 B; UNVERIFIED (no on-hand silicon).
+    [CITED: tools/extra_chips.json provenance fields + 2516_EPROM.pdf datasheet;
+     .planning/phases/86-variant-decode-correct-db-regen/86-CONTEXT.md D-10/D-11;
+     .planning/v1.15/DECODE-AUDIT.md (2516 user-override wire values)]
+
+  2516 [non-upstream-supplement] (pinout=DIP24_2716, algo=0xb, datasheet=firestarter/datasheets/0x0B-EPROM-LEGACY/2516_EPROM.pdf, UNVERIFIED)
+  2532 [non-upstream-supplement] (pinout=DIP24_2532, algo=0xb, datasheet=firestarter/datasheets/0x0B-EPROM-LEGACY/2516_EPROM.pdf, UNVERIFIED)
+
 --- NEW chips (0) — expected Rule 1 unblock (DIP24_2816 + algo=0x0D) ---
 
 --- MISSING chips (0) ---
 
-PASS: all 72 changed chips explained (0 new chips confirmed; 0 chips removed from baseline)
+PASS: all 72 changed chips explained (2 new chips confirmed; 0 chips removed from baseline)
