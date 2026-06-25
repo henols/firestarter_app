@@ -508,7 +508,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -528,7 +528,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -548,7 +548,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1778,7 +1778,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1798,7 +1798,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1818,7 +1818,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1858,7 +1858,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1873,13 +1873,13 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1894,7 +1894,7 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
@@ -1920,7 +1920,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1935,13 +1935,13 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1956,13 +1956,13 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1982,7 +1982,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2002,7 +2002,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2022,7 +2022,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2042,7 +2042,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2062,7 +2062,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2162,7 +2162,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3104,7 +3104,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3124,7 +3124,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3144,7 +3144,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3164,7 +3164,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3184,7 +3184,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3284,7 +3284,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3304,7 +3304,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3910,7 +3910,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4580,7 +4580,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4600,7 +4600,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4620,7 +4620,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4640,7 +4640,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4660,7 +4660,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4680,7 +4680,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4700,7 +4700,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -5024,7 +5024,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "3.3V",
         "vdd": "5V",
         "vpp": "12V",
@@ -5748,7 +5748,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -6413,13 +6413,12 @@
       "part_number": "2732,2732A,M2732,M2732A",
       "pinout": "DIP24_2732",
       "programming": {
-        "algorithm": 0,
+        "algorithm": 11,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "Algorithm Controlled"
+        "pulse_duration": "500 us"
       },
-      "support_status": "vpp-exceeds-max",
-      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -6534,13 +6533,12 @@
       "part_number": "M2716,M2716M",
       "pinout": "DIP24_2716",
       "programming": {
-        "algorithm": 0,
+        "algorithm": 11,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "Algorithm Controlled"
+        "pulse_duration": "500 us"
       },
-      "support_status": "vpp-exceeds-max",
-      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -8198,7 +8196,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8218,7 +8216,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8238,7 +8236,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8258,7 +8256,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8273,13 +8271,13 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8294,13 +8292,13 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8315,13 +8313,13 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8336,13 +8334,13 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8362,7 +8360,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8382,7 +8380,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8402,7 +8400,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8422,7 +8420,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8442,7 +8440,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8462,7 +8460,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -9108,7 +9106,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -9123,13 +9121,13 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
     },
     {
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -9149,7 +9147,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -10003,8 +10001,8 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "SRAM",
-        "vcc": "5V",
+        "type": "FRAM",
+        "vcc": "3.3V",
         "vdd": "5V",
         "vpp": "12V",
         "vpp_mv": 12000
@@ -10085,7 +10083,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -10105,7 +10103,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -10136,13 +10134,12 @@
       "part_number": "ETC2716,M2716",
       "pinout": "DIP24_2716",
       "programming": {
-        "algorithm": 0,
+        "algorithm": 11,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "Algorithm Controlled"
+        "pulse_duration": "1000 us"
       },
-      "support_status": "vpp-exceeds-max",
-      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -10508,7 +10505,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -10528,7 +10525,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -12043,13 +12040,12 @@
       "part_number": "ETC2716,M2716",
       "pinout": "DIP24_2716",
       "programming": {
-        "algorithm": 0,
+        "algorithm": 11,
         "chip_id_check": false,
         "chip_id_value": "0x00000000",
-        "pulse_duration": "Algorithm Controlled"
+        "pulse_duration": "1000 us"
       },
-      "support_status": "vpp-exceeds-max",
-      "unsupported_reason": "VPP 25V exceeds programmer max (22V)"
+      "support_status": "supported"
     },
     {
       "electrical": {
@@ -12355,7 +12351,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -12375,7 +12371,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -12395,7 +12391,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -12495,7 +12491,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -13454,6 +13450,58 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "supported"
+    }
+  ],
+  "TEXAS INSTRUMENTS": [
+    {
+      "datasheet": "firestarter/datasheets/0x0B-EPROM-LEGACY/2516_EPROM.pdf",
+      "electrical": {
+        "pin_count": 24,
+        "size_bytes": 2048,
+        "type": "UV-EPROM",
+        "vcc": "5V",
+        "vdd": "6.5V",
+        "vpp": "25V",
+        "vpp_mv": 25000
+      },
+      "part_number": "2516",
+      "pinout": "DIP24_2716",
+      "programming": {
+        "algorithm": 11,
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000",
+        "pulse_duration": "500 us"
+      },
+      "provenance": "VAR-05 / D-10 \u2014 physically real 24-pin NMOS UV-EPROM, absent from minipro infoic.xml (all 28 infoic.xml '2516' hits are 25160 SPI serial parts). Wire values match the v1.15 user-override DECODE-AUDIT.md exactly (algorithm 0x0B, DIP24_2716, UV-EPROM, vpp_mv 25000, size_bytes 2048) \u2014 NOT silently moved (SAFE-04).",
+      "source": "non-upstream-supplement",
+      "support_status": "supported",
+      "verification_note": "SAFE-04 / FUT-03: resolvable for read/info but NOT write-graduated. v1.15 bench read was unstable on real silicon (3 distinct SHAs, N=3; shared OE/VPP pin instability on the 0x0B legacy path). No write proof exists. Host guards unchanged; wire values are the v1.15 user-override values verbatim. A write graduation requires a future bench session after the OE/VPP instability is root-caused (FUT-03).",
+      "verification_status": "UNVERIFIED"
+    },
+    {
+      "datasheet": "firestarter/datasheets/0x0B-EPROM-LEGACY/2516_EPROM.pdf",
+      "electrical": {
+        "pin_count": 24,
+        "size_bytes": 4096,
+        "type": "UV-EPROM",
+        "vcc": "5V",
+        "vdd": "6.5V",
+        "vpp": "25V",
+        "vpp_mv": 25000
+      },
+      "part_number": "2532",
+      "pinout": "DIP24_2532",
+      "programming": {
+        "algorithm": 11,
+        "chip_id_check": false,
+        "chip_id_value": "0x00000000",
+        "pulse_duration": "500 us"
+      },
+      "provenance": "VAR-05 / D-10 \u2014 TI 2532 is a physically real 4KB 24-pin UV-EPROM with a NON-JEDEC pinout (2532 != JEDEC 2732); absent from minipro infoic.xml. The 2516_EPROM.pdf is the TI 2500-series UV-EPROM family datasheet covering the 2516/2532 lineage; VPP=pin 21 / A11=pin 18 / !PD-PGM=pin 20 distinguishes the 2532 from the DIP24_2732 layout. Modeled by the new DIP24_2532 pinout entry. Carries the same UNVERIFIED posture as the 2516 row (no on-hand bench proof).",
+      "source": "non-upstream-supplement",
+      "support_status": "supported",
+      "verification_note": "SAFE-04 / D-11: resolvable for read/info but NOT write-graduated \u2014 no on-hand 2532 silicon was bench-tested. Non-JEDEC 24-pin oddball; the DIP24_2532 pinout is a tentative leaf layout requiring bench validation. VPP lands on pin 21 (DIP24_2532 vpp-pin) per the TI family datasheet \u2014 the GATE-03 structural VPP guard is satisfied.",
+      "verification_status": "UNVERIFIED"
     }
   ],
   "TI": [
@@ -14831,7 +14879,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14851,7 +14899,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14871,7 +14919,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14891,7 +14939,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14911,7 +14959,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14951,7 +14999,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14971,7 +15019,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14991,7 +15039,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -15006,7 +15054,7 @@
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "protocol-not-implemented",
-      "unsupported_reason": "protocol not implemented: 0x34 (XICOR NovRAM serial-parallel hybrid)"
+      "unsupported_reason": "protocol not implemented: 0x34 (XICOR X88C64P \u2014 parallel DIP24 5V EEPROM, 8051 multiplexed-bus interface (ALE/WR/RD); feasible-candidate, handler not implemented)"
     }
   ]
 }
