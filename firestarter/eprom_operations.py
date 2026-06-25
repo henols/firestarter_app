@@ -1537,9 +1537,31 @@ class EpromOperator:
                 )
             return is_ok
 
+    # Protocol IDs whose firmware handler (configure_sram) leaves a NULL
+    # firestarter_operation_main for CMD_BLANK_CHECK, causing 0xA4
+    # MSG_ERR_EMPTY_INPUT.  These are all SRAM families (D-30 host-side fix).
+    _SRAM_PROTO_IDS = frozenset({0x0E, 0x27, 0x28, 0x29})
+
     def check_eprom_blank(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
     ) -> bool:
+        # D-30: SRAM/FRAM blank-check short-circuit — detect before issuing any
+        # firmware command.  configure_sram() leaves a NULL main-op for
+        # CMD_BLANK_CHECK, so the firmware emits 0xA4 MSG_ERR_EMPTY_INPUT.
+        # SRAM/FRAM are volatile or byte-rewritable; "blank" has no meaningful
+        # concept for them.  Short-circuit with a clear message; do NOT touch the
+        # wire protocol or firmware (D-11/D-30 bound).
+        etype = eprom_data_dict.get("electrical-type", "")
+        proto = eprom_data_dict.get("protocol-id", 0)
+        if etype in ("SRAM", "FRAM") or proto in self._SRAM_PROTO_IDS:
+            logger.warning(
+                f"Blank check is not applicable to {eprom_name.upper()} "
+                f"(electrical type: {etype or 'unknown'}, protocol: 0x{proto:02X}). "
+                "SRAM/FRAM are volatile or byte-rewritable — they have no "
+                "factory-blank state and the firmware has no blank-check op for them."
+            )
+            return False
+
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
