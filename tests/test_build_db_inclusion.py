@@ -57,6 +57,87 @@ def _aliases(chip):
 
 
 # ---------------------------------------------------------------------------
+# VAR-03 (Phase 86): variant-decode classification assertions (Wave-0 oracle)
+# ---------------------------------------------------------------------------
+class TestVariantDecodeClassification:
+    """VAR-03 (Phase 86): FM1608 + X88C64 classification, pinned BEFORE the
+    Plan-02 classifier rewrite so Plan 02 is a refactor-under-test.
+
+    These two assertions describe the POST-Plan-02 state:
+      - FM1608  : GREEN against the current DB (already algorithm 40 / FRAM /
+                  DIP28_JEDEC_SRAM_8K — the type=4 SRAM arm + Phase-84 relabel).
+      - X88C64  : RED against the current DB (electrical.type is 'UV-EPROM' today
+                  because flags & 0x10 == 0 makes the flags rule miss the 0x34
+                  XICOR NovRAM/EEPROM). Plan 02's proto_id==0x34 -> EEPROM arm
+                  closes this gap. The RED expectation is recorded in 86-01-SUMMARY.
+
+    Source grounding: tools/DECODE-NOTES.md §4 (X88C64) + §5 (FM1608);
+    minipro minipro.h#L70 MP_SRAM=0x04; database.c#L1918 (high byte = algo_number,
+    NOT a classifier). Locked taxonomy strings are unchanged.
+    """
+
+    def test_fm1608_resolves_sram_std(self):
+        """FM1608 (RAMTRON) must classify as algorithm 40 (0x28 SRAM_STD),
+        electrical.type 'FRAM' (Phase-84 cosmetic relabel survives), and pinout
+        'DIP28_JEDEC_SRAM_8K'. GREEN against the current DB.
+        """
+        db = _load_db()
+        found = []
+        for mfg, chip in _all_chips(db):
+            al = _aliases(chip)
+            if "FM1608" in al:
+                found.append((mfg, chip))
+
+        assert found, "FM1608 not found in chip_database.json"
+        for mfg, chip in found:
+            algo = chip.get("programming", {}).get("algorithm")
+            etype = chip.get("electrical", {}).get("type")
+            pinout = chip.get("pinout")
+            assert algo == 40, (
+                f"{mfg}/{chip.get('part_number')}: expected programming.algorithm=40 "
+                f"(0x28 SRAM_STD via type=4 arm), got {algo!r}"
+            )
+            assert etype == "FRAM", (
+                f"{mfg}/{chip.get('part_number')}: expected electrical.type='FRAM' "
+                f"(Phase-84 cosmetic relabel), got {etype!r}"
+            )
+            assert pinout == "DIP28_JEDEC_SRAM_8K", (
+                f"{mfg}/{chip.get('part_number')}: expected pinout='DIP28_JEDEC_SRAM_8K', "
+                f"got {pinout!r}"
+            )
+
+    def test_x88c64_electrical_type_eeprom(self):
+        """X88C64 (XICOR, proto 0x34) must classify as electrical.type 'EEPROM'
+        with support_status 'protocol-not-implemented' (display-only fix; dispatch
+        unchanged — the chip stays non-dispatchable).
+
+        RED against the current DB: X88C64 is electrical.type 'UV-EPROM' today
+        (flags & 0x10 == 0 → the flags EEPROM rule misses 0x34). Plan 02 adds the
+        proto_id==0x34 -> EEPROM arm. The RED expectation is recorded in 86-01-SUMMARY.
+        """
+        db = _load_db()
+        found = []
+        for mfg, chip in _all_chips(db):
+            al = _aliases(chip)
+            if "X88C64" in al or "X88C64P" in al:
+                found.append((mfg, chip))
+
+        assert found, "X88C64 / X88C64P not found in chip_database.json"
+        for mfg, chip in found:
+            etype = chip.get("electrical", {}).get("type")
+            ss = chip.get("support_status")
+            assert etype == "EEPROM", (
+                f"{mfg}/{chip.get('part_number')}: expected electrical.type='EEPROM' "
+                f"(proto 0x34 XICOR NovRAM/EEPROM, DECODE-NOTES.md §4), got {etype!r} "
+                f"(RED until Plan 02 adds the 0x34->EEPROM arm)"
+            )
+            assert ss == "protocol-not-implemented", (
+                f"{mfg}/{chip.get('part_number')}: expected support_status="
+                f"'protocol-not-implemented' (display-only fix; dispatch unchanged), got {ss!r}"
+            )
+
+
+# ---------------------------------------------------------------------------
 # DB-01: Unknown-protocol DIP chip included as protocol-not-implemented
 # ---------------------------------------------------------------------------
 class TestProtocolNotImplementedInclusion:
