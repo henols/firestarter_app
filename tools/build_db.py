@@ -333,8 +333,18 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
 
     # 2. 5V-EEPROM pinout clusters (was Rule 1 + Rule 2 / WARNING-5).
     #    These pinouts have no programming VPP; route to configure_eeprom28c (0x0D).
-    if pinout_key in {"DIP24_2816", "DIP28_28C64", "DIP28_28C256"} or (
-        pinout_key == "DIP28_2764" and (flags & 0x10)
+    #    SCOPE (matches the deleted Rule 1 + Rule 2 exactly — do NOT broaden):
+    #      - DIP24_2816 (was Rule 1): force 0x0D for any proto (24-pin 28C family).
+    #      - DIP28_28C64 / DIP28_28C256 / (DIP28_2764 with flags&0x10) (was Rule 2):
+    #        flip ONLY EPROM-family proto (0x07/0x08/0x0B) chips. Genuine 5V FLASH
+    #        on the same DIP28 layout (AT29C256/AT29LV256, proto 0x05) is NOT a 28C
+    #        EEPROM — it must keep its Flash algorithm (handled by arm 4 below). The
+    #        old Rule 2 keyed on proto==0x07, so flash-proto chips were never flipped.
+    if pinout_key == "DIP24_2816":
+        return "EEPROM", 0x0D, pinout_key
+    if proto_id in {0x07, 0x08, 0x0B} and (
+        pinout_key in {"DIP28_28C64", "DIP28_28C256"}
+        or (pinout_key == "DIP28_2764" and (flags & 0x10))
     ):
         return "EEPROM", 0x0D, pinout_key
 

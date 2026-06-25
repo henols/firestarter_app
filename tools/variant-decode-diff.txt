@@ -4,9 +4,9 @@ GATE-02 Per-chip Diff Report
   Current:  /workspaces/firestarter_app/tools/../firestarter/data/chip_database.json  (744 chips, 744 diffed)
 ========================================================================
 
---- CHANGED chips (74 total) ---
+--- CHANGED chips (72 total) ---
 
-[RULE_ALGO] (6 chips)
+[RULE_ALGO] (4 chips)
   Algorithm correction (Rule 1/2/3) — Phase 57/58 principled re-derivation.
     Rule 1: variant_lo=0x10 chips (24-pin EEPROM family) now get DIP24_2816 + algo=0x0D
       instead of being skipped. Previously blocked by the 24-pin safety skip.
@@ -16,9 +16,7 @@ GATE-02 Per-chip Diff Report
     Rule 3: fm1608 FRAM chips corrected to algo=0x29 (SRAM_512K_1M).
       [VERIFIED: minipro database.c @ a8efaedc —
        https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c]
-  Affected part_numbers (6):
-    AT29C256
-    AT29LV256
+  Affected part_numbers (4):
     2732,2732A,M2732,M2732A
     M2716,M2716M
     ETC2716,M2716
@@ -151,4 +149,4 @@ GATE-02 Per-chip Diff Report
 
 --- MISSING chips (0) ---
 
-PASS: all 74 changed chips explained (0 new chips confirmed; 0 chips removed from baseline)
+PASS: all 72 changed chips explained (0 new chips confirmed; 0 chips removed from baseline)
