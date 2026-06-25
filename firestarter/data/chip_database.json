@@ -508,7 +508,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -528,7 +528,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -548,7 +548,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1778,7 +1778,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1798,7 +1798,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1818,7 +1818,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1858,7 +1858,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1879,7 +1879,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1920,7 +1920,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1941,7 +1941,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1962,7 +1962,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -1982,7 +1982,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2002,7 +2002,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2022,7 +2022,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2042,7 +2042,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2062,7 +2062,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2162,7 +2162,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2262,7 +2262,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2271,7 +2271,7 @@
       "part_number": "AT29C256",
       "pinout": "DIP28_28C256",
       "programming": {
-        "algorithm": 5,
+        "algorithm": 13,
         "chip_id_check": true,
         "chip_id_value": "0x00001fdc",
         "pulse_duration": "Algorithm Controlled"
@@ -2402,7 +2402,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -2411,7 +2411,7 @@
       "part_number": "AT29LV256",
       "pinout": "DIP28_28C256",
       "programming": {
-        "algorithm": 5,
+        "algorithm": 13,
         "chip_id_check": true,
         "chip_id_value": "0x00001fdc",
         "pulse_duration": "Algorithm Controlled"
@@ -3104,7 +3104,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3124,7 +3124,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3144,7 +3144,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3164,7 +3164,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3184,7 +3184,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3284,7 +3284,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3304,7 +3304,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -3910,7 +3910,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4580,7 +4580,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4600,7 +4600,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4620,7 +4620,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4640,7 +4640,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4660,7 +4660,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4680,7 +4680,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -4700,7 +4700,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -5024,7 +5024,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "3.3V",
         "vdd": "5V",
         "vpp": "12V",
@@ -5748,7 +5748,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -8196,7 +8196,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8216,7 +8216,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8236,7 +8236,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8256,7 +8256,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8277,7 +8277,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8298,7 +8298,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8319,7 +8319,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8340,7 +8340,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8360,7 +8360,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8380,7 +8380,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8400,7 +8400,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8420,7 +8420,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8440,7 +8440,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -8460,7 +8460,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "3.3V",
         "vpp": "12V",
@@ -9106,7 +9106,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -9127,7 +9127,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -9147,7 +9147,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -10083,7 +10083,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -10103,7 +10103,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -10505,7 +10505,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -10525,7 +10525,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -12351,7 +12351,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -12371,7 +12371,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -12391,7 +12391,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -12491,7 +12491,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "5.5V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14827,7 +14827,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 512,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14847,7 +14847,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14867,7 +14867,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 2048,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14887,7 +14887,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 32768,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14907,7 +14907,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14947,7 +14947,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14967,7 +14967,7 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "Flash/EEPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
@@ -14987,7 +14987,7 @@
       "electrical": {
         "pin_count": 24,
         "size_bytes": 8192,
-        "type": "UV-EPROM",
+        "type": "EEPROM",
         "vcc": "4V",
         "vdd": "5V",
         "vpp": "12V",
