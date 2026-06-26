@@ -337,6 +337,50 @@ def test_write_no_blank_check_polarity(runner: CliRunner) -> None:
     assert kwargs2["operation_flags"] & FLAG_SKIP_BLANK_CHECK
 
 
+def test_write_b_decouples_skip_erase_phase92(runner: CliRunner) -> None:
+    """Phase 92 decouple: ``write -b`` skips ONLY the blank check, NOT the erase.
+
+    Regression guard for the Phase-90/91 footgun: ``-b`` used to imply
+    ``skip_erase=not blank_check``, so ``write -b`` on a non-blank
+    electrically-erasable chip silently skipped the required erase (leaving
+    un-erasable 0->1 bits while the firmware reported "successful"). After the
+    decouple, ``-b`` no longer sets FLAG_SKIP_ERASE; ``--skip-erase`` is the
+    explicit opt-in.
+    """
+    from firestarter.constants import FLAG_SKIP_BLANK_CHECK, FLAG_SKIP_ERASE
+
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = True
+
+    # `write -b`: blank-check skipped, erase NOT skipped (the decouple).
+    app = make_app_context(eprom_operator=operator)
+    r = runner.invoke(cli, ["write", "W27C512", "in.bin", "-b"], obj=app)
+    assert r.exit_code == 0
+    f = operator.write_eprom.call_args.kwargs["operation_flags"]
+    assert f & FLAG_SKIP_BLANK_CHECK
+    assert not (f & FLAG_SKIP_ERASE)
+
+    # `write -b --skip-erase`: both skipped (explicit opt-in).
+    operator.write_eprom.reset_mock()
+    app2 = make_app_context(eprom_operator=operator)
+    r2 = runner.invoke(
+        cli, ["write", "W27C512", "in.bin", "-b", "--skip-erase"], obj=app2
+    )
+    assert r2.exit_code == 0
+    f2 = operator.write_eprom.call_args.kwargs["operation_flags"]
+    assert f2 & FLAG_SKIP_BLANK_CHECK
+    assert f2 & FLAG_SKIP_ERASE
+
+    # plain `write`: neither skipped (erase runs, blank check runs).
+    operator.write_eprom.reset_mock()
+    app3 = make_app_context(eprom_operator=operator)
+    r3 = runner.invoke(cli, ["write", "W27C512", "in.bin"], obj=app3)
+    assert r3.exit_code == 0
+    f3 = operator.write_eprom.call_args.kwargs["operation_flags"]
+    assert not (f3 & FLAG_SKIP_BLANK_CHECK)
+    assert not (f3 & FLAG_SKIP_ERASE)
+
+
 def test_verify_happy_path(runner: CliRunner) -> None:
     """`firestarter verify W27C512 in.bin` exits 0 when verify_eprom returns True."""
     operator = Mock(spec=EpromOperator)

@@ -301,9 +301,19 @@
     The inverse ``--blank-check`` polarity lives on the ``erase`` command — both
     polarities coexist verbatim per the rationale lock.
   
+    Phase 92 decouple: ``-b`` now skips ONLY the blank check. The pre-write
+    erase still runs for electrically-erasable chips (FLAG_CAN_ERASE) so ``write
+    -b`` on a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip
+    the erase (previously implied by ``-b``) for already-blank or non-erasable
+    parts.
+  
   Options:
-    -b, --no-blank-check  Do not perform blank check before write (and skip
-                          erase).
+    -b, --no-blank-check  Skip the blank check before write (erase still runs if
+                          the chip supports it).
+    --skip-erase          Also skip the pre-write erase (for already-blank or
+                          non-erasable/pre-erased parts). WARNING: skipping
+                          erase on a non-blank electrically-erasable chip leaves
+                          un-erased bits that cannot be reprogrammed.
     -f, --force           Force, even if the VPP or chip id doesn't match.
     -a, --address TEXT    Write start address in dec/hex
     --vpe-as-vpp          Use VPE as VPP voltage
@@ -1132,9 +1142,19 @@
     The inverse ``--blank-check`` polarity lives on the ``erase`` command — both
     polarities coexist verbatim per the rationale lock.
   
+    Phase 92 decouple: ``-b`` now skips ONLY the blank check. The pre-write
+    erase still runs for electrically-erasable chips (FLAG_CAN_ERASE) so ``write
+    -b`` on a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip
+    the erase (previously implied by ``-b``) for already-blank or non-erasable
+    parts.
+  
   Options:
-    -b, --no-blank-check  Do not perform blank check before write (and skip
-                          erase).
+    -b, --no-blank-check  Skip the blank check before write (erase still runs if
+                          the chip supports it).
+    --skip-erase          Also skip the pre-write erase (for already-blank or
+                          non-erasable/pre-erased parts). WARNING: skipping
+                          erase on a non-blank electrically-erasable chip leaves
+                          un-erased bits that cannot be reprogrammed.
     -f, --force           Force, even if the VPP or chip id doesn't match.
     -a, --address TEXT    Write start address in dec/hex
     --vpe-as-vpp          Use VPE as VPP voltage
