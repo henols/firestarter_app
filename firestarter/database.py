@@ -460,6 +460,13 @@ class EpromDatabase:
         if chip_id_val:
             data["chip-id"] = int(chip_id_val, 16)
 
+        # PGSZ-01 / CR-01: carry datasheet-sourced per-chip page_size when present.
+        # Set by build_db.py only for chips with a [CITED:] datasheet entry; absent
+        # for all other chips so they ride the firmware flash4_page_size() heuristic.
+        page_size_val = programming.get("page_size")
+        if page_size_val:
+            data["page_size"] = int(page_size_val)
+
         if pin_count and pinout_key:
             bus_config = self.get_bus_config(pin_count, pinout_key)
             if bus_config:
@@ -588,6 +595,12 @@ class EpromDatabase:
 
         if "bus-config" in full_eprom_data:
             programmer_data["bus-config"] = full_eprom_data["bus-config"]
+
+        # PGSZ-03 / CR-01: emit page-size wire field only when the DB supplies a
+        # datasheet-sourced per-chip page_size (emit-when-present, mirrors chip-id).
+        # Absent chips send nothing → firmware uses flash4_page_size(mem_size) heuristic.
+        if full_eprom_data.get("page_size"):
+            programmer_data["page-size"] = full_eprom_data["page_size"]
 
         # Calculate the simple 'flags' key for the programmer.
         # Canonical erase-capability ground truth (D-01/D-02): set FLAG_CAN_ERASE

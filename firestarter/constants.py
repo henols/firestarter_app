@@ -93,6 +93,11 @@ FLAG_VERBOSE = 0x80
 # Used by consistency_check_eprom() to emit knob values in per-read JSON commands.
 JSON_KEY_READ_SETTLING_DELAY = "read-settling-delay"
 JSON_KEY_READ_STROBE_US = "read-strobe-us"
+# Per-chip page size wire field (PGSZ-03 / CR-01) — Firmware sync: json_parser.c (key_page_size)
+# Emitted by eprom_operations.py only when the DB supplies a datasheet-sourced page_size
+# (emit-when-present, mirrors read-strobe-us pattern). When absent, firmware falls back
+# to flash4_page_size(mem_size) heuristic. 0 = use firmware default.
+JSON_KEY_PAGE_SIZE = "page-size"
 
 # RURP Control Register Bits — mirror of firestarter/include/rurp_pinout.h
 # Documentary only — Python does not write the control register directly
