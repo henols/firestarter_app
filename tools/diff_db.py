@@ -176,6 +176,21 @@ _RATIONALES = {
         "    pinout / vpp / FLAG_CAN_ERASE delta.\n"
         "  [VERIFIED: Phase 84 plan 84-03, operator decision sst-keep / fm-fram-full 2026-06-25]"
     ),
+    "PGSZ_PAGE_SIZE": (
+        "Phase 94 PGSZ-01 / CR-01 — datasheet-sourced per-chip page_size field added.\n"
+        "  Generalizes flash4 page sizing from the firmware capacity heuristic\n"
+        "  (flash4_page_size(mem_size)) to a DB-supplied per-chip value (emit-when-present).\n"
+        "  Only chips with a [CITED:] datasheet entry in build_db.py _PAGE_SIZE_BY_PART\n"
+        "  get this field. Chips without a cited datasheet continue using the heuristic.\n"
+        "    W29C040,W29C042: page_size=256 added.\n"
+        "      [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C040.pdf §6.2\n"
+        "              'Every page contains 256 bytes of data.']\n"
+        "    W29C020,W29C020C,W29C022: page_size=128 added.\n"
+        "      [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C020.pdf §6.2\n"
+        "              'Every page contains 128 bytes of data.' + FEATURES '128 bytes per page']\n"
+        "  No other fields changed. No dispatch / algorithm / VPP delta.\n"
+        "  [VERIFIED: Phase 94 Plan 02 — PGSZ-01/02/03 requirements + 94-RESEARCH.md A1/A2]"
+    ),
 }
 
 
@@ -290,6 +305,12 @@ _RULE_FIELD_PATHS = {
     # (proto 0x34) UV-EPROM->EEPROM. No algorithm / pinout / vpp delta.
     "VARIANT_DECODE": {
         ("electrical", "type"),
+    },
+    # Phase 94 PGSZ-01 / CR-01: per-chip page_size field added to programming block.
+    # Only chips with a [CITED:] datasheet entry in build_db.py _PAGE_SIZE_BY_PART get
+    # this field. No other field changes. Scoped to programming.page_size additions only.
+    "PGSZ_PAGE_SIZE": {
+        ("programming", "page_size"),
     },
 }
 
@@ -454,6 +475,20 @@ def _classify_diff(bl_chip, cu_chip):
         # electrical.vpp, electrical.vpp_mv). Placed LAST so it does not shadow
         # BUG_A_ETYPE/BUG_B_VPP (Pitfall 7 in 70-RESEARCH.md).
         label = "RULE_PHASE66"
+    elif (
+        bl_prog.get("page_size") != cu_prog.get("page_size")
+        and not algo_diff
+        and not timing_diff
+        and not voltage_diff
+        and not pinout_diff
+        and not type_diff
+        and not vpp_diff
+    ):
+        # PGSZ_PAGE_SIZE: Phase 94 / CR-01 — only programming.page_size changed
+        # (datasheet-sourced per-chip page size added for W29C040=256 / W29C020=128).
+        # No other field changes. Placed LAST (most specific scope: programming.page_size
+        # only) to avoid shadowing any compound changes detected by prior rules.
+        label = "PGSZ_PAGE_SIZE"
 
     diff_paths = _diff_field_paths(bl_chip, cu_chip)
 

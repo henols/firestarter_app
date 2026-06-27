@@ -126,6 +126,27 @@ NMOS_TRUE_VPP_MV: dict[str, int] = {
 # Chips requiring VPP above this cannot be programmed on any RURP revision.
 RURP_VPP_CEILING_MV = 25000
 
+# PGSZ-01 / CR-01: datasheet-sourced per-chip page size map.
+# Keyed on the canonical part number (first alias in the comma-separated list).
+# Each entry carries a [CITED:] datasheet reference — DO NOT author [ASSUMED] values.
+# Chips absent from this map omit the page_size field → firmware falls back to
+# flash4_page_size(mem_size) heuristic (safe, proven-correct for these chips).
+# Only in-repo datasheet PDFs are authoritative sources.
+_PAGE_SIZE_BY_PART: dict[str, int] = {
+    # [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C040.pdf §6.2
+    #         "Every page contains 256 bytes of data."]
+    "W29C040": 256,
+    # W29C042 shares the same DB entry as W29C040 (same family, same page structure)
+    # but is not individually documented in the in-repo datasheet — omitted per
+    # PGSZ-01 discipline. The shared entry gets W29C040's citation via part-number lookup.
+    # [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C020.pdf §6.2
+    #         "Every page contains 128 bytes of data." + FEATURES "128 bytes per page"]
+    "W29C020": 128,
+    # W29C020C and W29C022 share the same DB entry as W29C020 (same family).
+    # Not individually documented in the in-repo datasheet — omitted per PGSZ-01
+    # discipline. The shared entry gets W29C020's citation via part-number lookup.
+}
+
 # CR-01 Option A (Phase 66 gap-closure): algorithm sentinel for non-supported chips.
 # dispatch(0x00, None) falls into the mem_type fallback chain (protocol==0 path):
 #   _ALGO_MEM_TYPE.get(0x00) → None → {1:..., 4:..., 3:..., 5:...}.get(None, "ERROR")
@@ -700,6 +721,20 @@ def main():
                         ),
                         "chip_id_check": True if (flags & 0x20) else False,
                         "chip_id_value": ic.get("chip_id"),
+                        # PGSZ-01 / CR-01: datasheet-sourced per-chip page size.
+                        # Looked up by the FIRST alias of the comma-separated part
+                        # name (canonical key). Absent chips omit the field entirely
+                        # so they ride the firmware flash4_page_size() heuristic.
+                        **(
+                            {
+                                "page_size": _PAGE_SIZE_BY_PART[
+                                    name.split(",")[0].split("@")[0].strip()
+                                ]
+                            }
+                            if name.split(",")[0].split("@")[0].strip()
+                            in _PAGE_SIZE_BY_PART
+                            else {}
+                        ),
                     },
                     "pinout": pinout_key,
                 }

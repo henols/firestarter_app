@@ -23,7 +23,7 @@ import json
 import sys
 from pathlib import Path
 
-from firestarter.constants import FLAG_CAN_ERASE
+from firestarter.constants import FLAG_CAN_ERASE, JSON_KEY_PAGE_SIZE
 from firestarter.database import EpromDatabase
 
 # Add tools directory so check_dispatch is importable
@@ -176,4 +176,69 @@ def test_flash4_eeprom_type_chip_no_flag_can_erase() -> None:
     assert (flags & FLAG_CAN_ERASE) == 0, (
         f"FIX-01a: W29C040 (Flash/EEPROM type, protocol 0x05) wire flags {flags:#04x} "
         f"must NOT carry FLAG_CAN_ERASE; flash4 auto-erases per page (T-93-CANERASE)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# PGSZ-01/03 assertions (Phase 94 Plan 02 — CR-01 wire field)
+# ---------------------------------------------------------------------------
+
+
+def test_w29c040_wire_dict_carries_page_size_256() -> None:
+    """PGSZ-01/03: W29C040 wire dict must carry page-size == 256.
+
+    The DB carries page_size=256 [CITED: W29C040.pdf §6.2], and
+    convert_to_programmer() emits the JSON_KEY_PAGE_SIZE wire key when present.
+    """
+    db = EpromDatabase()
+    chip = db.get_eprom("W29C040")
+    assert chip is not None, "W29C040 must be present in EpromDatabase"
+    wire = db.convert_to_programmer(chip)
+    assert JSON_KEY_PAGE_SIZE in wire, (
+        f"PGSZ-03: W29C040 wire dict must carry '{JSON_KEY_PAGE_SIZE}' key; "
+        f"got keys: {list(wire.keys())}"
+    )
+    assert wire[JSON_KEY_PAGE_SIZE] == 256, (
+        f"PGSZ-01: W29C040 page-size must be 256 (datasheet §6.2), "
+        f"got {wire[JSON_KEY_PAGE_SIZE]!r}"
+    )
+
+
+def test_w29c020_wire_dict_carries_page_size_128() -> None:
+    """PGSZ-01/03: W29C020 wire dict must carry page-size == 128.
+
+    The DB carries page_size=128 [CITED: W29C020.pdf §6.2], and
+    convert_to_programmer() emits the JSON_KEY_PAGE_SIZE wire key when present.
+    """
+    db = EpromDatabase()
+    chip = db.get_eprom("W29C020")
+    assert chip is not None, "W29C020 must be present in EpromDatabase"
+    wire = db.convert_to_programmer(chip)
+    assert JSON_KEY_PAGE_SIZE in wire, (
+        f"PGSZ-03: W29C020 wire dict must carry '{JSON_KEY_PAGE_SIZE}' key; "
+        f"got keys: {list(wire.keys())}"
+    )
+    assert wire[JSON_KEY_PAGE_SIZE] == 128, (
+        f"PGSZ-01: W29C020 page-size must be 128 (datasheet §6.2), "
+        f"got {wire[JSON_KEY_PAGE_SIZE]!r}"
+    )
+
+
+def test_heuristic_family_chip_omits_page_size() -> None:
+    """PGSZ-01/03: a flash4 chip NOT in _PAGE_SIZE_BY_PART must NOT carry page-size.
+
+    Chips without a [CITED:] datasheet entry have no page_size in the DB;
+    convert_to_programmer() must omit the key so the firmware uses its
+    flash4_page_size(mem_size) heuristic fallback.
+
+    AT29C010A (flash4 family, no in-repo datasheet citation) is the test chip.
+    """
+    db = EpromDatabase()
+    chip = db.get_eprom("AT29C010A")
+    assert chip is not None, "AT29C010A must be present in EpromDatabase"
+    wire = db.convert_to_programmer(chip)
+    assert wire.get("algorithm") == 5, "AT29C010A algorithm must be 5 (flash4)"
+    assert JSON_KEY_PAGE_SIZE not in wire, (
+        f"PGSZ-01: AT29C010A (no datasheet citation) must NOT carry '{JSON_KEY_PAGE_SIZE}'; "
+        f"it should use the firmware heuristic fallback. Got wire keys: {list(wire.keys())}"
     )

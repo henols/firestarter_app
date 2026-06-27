@@ -14447,6 +14447,7 @@
         "algorithm": 5,
         "chip_id_check": true,
         "chip_id_value": "0x0000da45",
+        "page_size": 128,
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "supported"
@@ -14467,6 +14468,7 @@
         "algorithm": 5,
         "chip_id_check": true,
         "chip_id_value": "0x0000da46",
+        "page_size": 256,
         "pulse_duration": "Algorithm Controlled"
       },
       "support_status": "supported"
