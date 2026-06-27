@@ -104,16 +104,22 @@ def test_convert_at28c256_flash_eeprom_flag_can_erase(db: EpromDatabase) -> None
     assert out["flags"] & FLAG_CAN_ERASE
 
 
-def test_convert_w29c040_flash_eeprom_flag_can_erase(db: EpromDatabase) -> None:
-    """W29C040 (Flash/EEPROM, algorithm 0x05) carries FLAG_CAN_ERASE — extends the
-    electrical-type derivation lock (ERASE-01 / D-01/D-02) to the flash4 (0x05)
-    Flash/EEPROM family per D-05.  W29C020/W29C040 are bench-proven for the FIRST
-    time in Phase 82; this pinning test independently verifies the Flash/EEPROM branch
-    without inheriting Phase 77's EEPROM-only proof (DB-02 / D-04)."""
+def test_convert_w29c040_no_flag_can_erase(db: EpromDatabase) -> None:
+    """W29C040 (Flash/EEPROM, algorithm 0x05) must NOT carry FLAG_CAN_ERASE.
+
+    FIX-01a / T-93-CANERASE (Phase 94 Plan 01): flash4 (0x05) auto-erases per
+    page during the page-write; no separate 12V bulk erase is needed or safe.
+    The old pinning test (D-05 / Phase 82) asserted the hazardous flag=0x02 —
+    that assertion was wrong; this test replaces it with the correct invariant.
+    """
     full = db.get_eprom("W29C040")
     assert full is not None
     out = db.convert_to_programmer(full)
-    assert out["flags"] & FLAG_CAN_ERASE
+    assert out["flags"] & FLAG_CAN_ERASE == 0, (
+        f"FIX-01a: W29C040 (algorithm 0x05) wire flags {out['flags']:#04x} must NOT "
+        f"carry FLAG_CAN_ERASE ({FLAG_CAN_ERASE:#04x}); flash4 auto-erases per page "
+        f"(T-93-CANERASE / SAFE-01 Item 2)"
+    )
 
 
 # ---------------------------------------------------------------------------

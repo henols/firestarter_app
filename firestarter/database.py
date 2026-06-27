@@ -602,8 +602,18 @@ class EpromDatabase:
         # never reads is_flag_set(FLAG_CAN_ERASE) — it uses only FLAG_FORCE and
         # FLAG_SKIP_BLANK_CHECK — so no extra voltage rail is routed. No firmware edit.
         simple_flags = 0
+        algo = programmer_data["algorithm"]  # already computed above from protocol-id
         if full_eprom_data.get("electrical-type", "") in ("EEPROM", "Flash/EEPROM"):
-            simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
+            if algo != 5:
+                # FIX-01a / T-93-CANERASE: flash4 (0x05) auto-erases per page during
+                # the page-write; no separate 12V bulk erase is needed or safe.
+                # Setting FLAG_CAN_ERASE for 0x05 routes firmware flash4_write_init →
+                # flash4_erase_execute which asserts CTRL_VPP_REGULATOR_ENABLE on a
+                # 5V-only chip (12V on a 5V part — hardware-damage hazard).
+                # Scope: algorithm==5 only. 0x07 and 0x0D paths are unchanged.
+                # D-03 note: 0x0D configure_eeprom28c never reads FLAG_CAN_ERASE, so
+                # leaving it set on 0x0D is firmware-inert and must stay unchanged.
+                simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
         programmer_data["flags"] = simple_flags
 
         return programmer_data
