@@ -242,3 +242,98 @@ def test_heuristic_family_chip_omits_page_size() -> None:
         f"PGSZ-01: AT29C010A (no datasheet citation) must NOT carry '{JSON_KEY_PAGE_SIZE}'; "
         f"it should use the firmware heuristic fallback. Got wire keys: {list(wire.keys())}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 95: Proactive boot-block detect — host --force flag + message catalog
+# ---------------------------------------------------------------------------
+
+
+def test_write_force_flag_sets_flag_force_in_wire_flags() -> None:
+    """Phase 95: --force on write sets FLAG_FORCE (0x01) in the operation flags.
+
+    The proactive §6.6 boot-block detect uses FLAG_FORCE to decide whether to
+    abort (no force → ERROR) or warn-and-proceed (force → WARNING). This test
+    confirms that the CLI --force path reaches FLAG_FORCE on the wire so the
+    firmware proactive check behaves correctly when the operator passes --force.
+
+    Implemented via build_flags(force=True), which is the same path used by
+    the Click write command's _build_op_flags(force=True) call.
+    """
+    from firestarter.constants import FLAG_FORCE
+    from firestarter.eprom_operations import build_flags
+
+    flags_with_force = build_flags(force=True)
+    flags_without_force = build_flags(force=False)
+
+    assert (flags_with_force & FLAG_FORCE) != 0, (
+        f"build_flags(force=True) must set FLAG_FORCE ({FLAG_FORCE:#04x}) in the result; "
+        f"got flags={flags_with_force:#04x}. The proactive boot-block detect uses FLAG_FORCE "
+        f"to decide abort vs warn-and-proceed (Phase 95 / section 6.6 W29C040)"
+    )
+    assert (flags_without_force & FLAG_FORCE) == 0, (
+        f"build_flags(force=False) must NOT set FLAG_FORCE ({FLAG_FORCE:#04x}); "
+        f"got flags={flags_without_force:#04x}"
+    )
+
+
+def test_warn_fl4_boot_block_locked_in_catalog() -> None:
+    """Phase 95: MSG_WARN_FL4_BOOT_BLOCK_LOCKED (0x85) exists in the host message catalog.
+
+    The new warning message is emitted by flash4_write_init when FLAG_FORCE is
+    set and the proactive §6.6 boot-block detect returns locked. The host must
+    recognise and decode it as a WARN-severity message (not ERROR), display it
+    via the standard warning path (logger.warning()), and continue rather than
+    raising EpromOperationError.
+    """
+    from firestarter.messages import (
+        CATALOG,
+        MSG_WARN_FL4_BOOT_BLOCK_LOCKED,
+        SEVERITY_WARN,
+    )
+
+    assert MSG_WARN_FL4_BOOT_BLOCK_LOCKED == 0x85, (
+        f"MSG_WARN_FL4_BOOT_BLOCK_LOCKED must be 0x85, got {MSG_WARN_FL4_BOOT_BLOCK_LOCKED:#04x}"
+    )
+    assert MSG_WARN_FL4_BOOT_BLOCK_LOCKED in CATALOG, (
+        "MSG_WARN_FL4_BOOT_BLOCK_LOCKED must be present in CATALOG"
+    )
+    entry = CATALOG[MSG_WARN_FL4_BOOT_BLOCK_LOCKED]
+    assert entry.severity == SEVERITY_WARN, (
+        f"MSG_WARN_FL4_BOOT_BLOCK_LOCKED severity must be SEVERITY_WARN ({SEVERITY_WARN:#04x}), "
+        f"got {entry.severity:#04x} — host must treat this as a warning, not an error"
+    )
+    # Verify the fixed "section 6.6" text (no "ss6.6" mangling)
+    assert "ss6.6" not in entry.format, (
+        f"MSG_WARN_FL4_BOOT_BLOCK_LOCKED format must not contain 'ss6.6' mangling; "
+        f"got: {entry.format!r}"
+    )
+    assert "section 6.6" in entry.format, (
+        f"MSG_WARN_FL4_BOOT_BLOCK_LOCKED format must contain 'section 6.6'; "
+        f"got: {entry.format!r}"
+    )
+
+
+def test_err_fl4_boot_block_locked_section_6_6_text() -> None:
+    """Phase 95: MSG_ERR_FL4_BOOT_BLOCK_LOCKED (0xBC) format text fixed — no 'ss6.6'.
+
+    The existing error message had a cosmetic bug: 'ss6.6' instead of 'section 6.6'.
+    This test pins the corrected format so the fix cannot regress via codegen drift.
+    """
+    from firestarter.messages import CATALOG, MSG_ERR_FL4_BOOT_BLOCK_LOCKED
+
+    assert MSG_ERR_FL4_BOOT_BLOCK_LOCKED == 0xBC, (
+        f"MSG_ERR_FL4_BOOT_BLOCK_LOCKED must be 0xBC, got {MSG_ERR_FL4_BOOT_BLOCK_LOCKED:#04x}"
+    )
+    assert MSG_ERR_FL4_BOOT_BLOCK_LOCKED in CATALOG, (
+        "MSG_ERR_FL4_BOOT_BLOCK_LOCKED must be present in CATALOG"
+    )
+    entry = CATALOG[MSG_ERR_FL4_BOOT_BLOCK_LOCKED]
+    assert "ss6.6" not in entry.format, (
+        f"MSG_ERR_FL4_BOOT_BLOCK_LOCKED format must not contain 'ss6.6' mangling "
+        f"(cosmetic fix Phase 95); got: {entry.format!r}"
+    )
+    assert "section 6.6" in entry.format, (
+        f"MSG_ERR_FL4_BOOT_BLOCK_LOCKED format must contain 'section 6.6'; "
+        f"got: {entry.format!r}"
+    )
