@@ -191,6 +191,25 @@ _RATIONALES = {
         "  No other fields changed. No dispatch / algorithm / VPP delta.\n"
         "  [VERIFIED: Phase 94 Plan 02 — PGSZ-01/02/03 requirements + 94-RESEARCH.md A1/A2]"
     ),
+    "RC1_DIP32_27C020": (
+        "Phase 98 RC-1 fix — DIP32_27C020 scoped pinout for 0x08 ≤256K 32-pin chips.\n"
+        "  Root cause RC-1: pin 31 was modeled as address line A18 (DIP32_STD) for all\n"
+        "  0x08/32-pin chips, but for ≤256K chips (27C010/27C020 class), pin 31 is PGM\n"
+        "  (program enable, active-LOW), not A18. A18 = bit 18 = mask 0x40000; at ≤256K\n"
+        "  (mem_size ≤ 262144) address bit 18 is never set, so pin 31 is never a real A18\n"
+        "  line — DIP32_STD modeled it incorrectly for this sub-class.\n"
+        "  Fix: resolve_pinout_key in build_db.py routes proto_id==0x08 && mem_size<=262144\n"
+        "  chips to DIP32_27C020 (pin 31 OFF the address bus; VPP on pin 1 retained).\n"
+        "  The 512K AM27C040 (524288) and 1M AM27C080 (1048576) legitimately use pin 31=A18\n"
+        "  and stay on DIP32_STD (host-side D-04 alias guard).\n"
+        "  Scope: 88 chips across 128K and 256K (65K/128K/256K sizes, proto 0x08, 32-pin).\n"
+        "  No algorithm / VPP / electrical.type delta — pinout field only.\n"
+        "  Q1 RESOLVED (2026-06-30): static-high-pins ruled out (drives HIGH; PGM=VIL).\n"
+        "  PGM program-active assert is Plan 02's firmware branch, not this pinout.\n"
+        "  [CITED: firestarter/datasheets/0x08-EPROM-QUICK/AM27C020.pdf — pin 31=PGM, VPP=pin 1]\n"
+        "  [CITED: Phase 98 Plan 01 FIX-03 — D-02/D-04 scoped pinout variant]\n"
+        "  [CITED: .planning/phases/98-fix-correct-the-0x08-32-pin-write-vpp-path/98-01-PLAN.md]"
+    ),
 }
 
 
@@ -312,6 +331,11 @@ _RULE_FIELD_PATHS = {
     "PGSZ_PAGE_SIZE": {
         ("programming", "page_size"),
     },
+    # Phase 98 RC-1 fix: DIP32_27C020 pinout assigned to 0x08 ≤256K chips. Pinout-only
+    # change — no algorithm / VPP / electrical.type delta.
+    "RC1_DIP32_27C020": {
+        ("pinout",),
+    },
 }
 
 
@@ -366,7 +390,8 @@ def _classify_diff(bl_chip, cu_chip):
       2. BUG2_AND_BUG3 — timing + voltage changed (combined fix, precedes singles)
       3. BUG2_TIMING   — timing changed only
       4. BUG3_VCC_VDD  — voltage (vcc/vdd) changed only
-      5. SRAM_PINOUT   — pinout changed only
+      5a. RC1_DIP32_27C020 — pinout changed to DIP32_27C020 (Phase 98 RC-1 fix; before SRAM_PINOUT)
+      5b. SRAM_PINOUT  — pinout changed only (other pinout re-routes)
       6. RULE_PHASE84_RELABEL — only electrical.type changed, AND the chip is in
                          _PHASE84_RELABEL_PART_NUMBERS (cosmetic label-only correction;
                          scoped by part_number; MORE SPECIFIC than BUG_A_ETYPE so must
@@ -415,6 +440,16 @@ def _classify_diff(bl_chip, cu_chip):
         label = "BUG2_TIMING"
     elif voltage_diff and not timing_diff and not algo_diff:
         label = "BUG3_VCC_VDD"
+    elif (
+        pinout_diff
+        and not algo_diff
+        and not timing_diff
+        and cu_chip.get("pinout") == "DIP32_27C020"
+    ):
+        # RC1_DIP32_27C020 (before SRAM_PINOUT): Phase 98 RC-1 fix — 0x08 ≤256K chips
+        # reassigned from DIP32_STD to DIP32_27C020. Scoped to the new pinout value so
+        # SRAM_PINOUT (which handles 28-pin pm_idx=0 re-routes) is not masked.
+        label = "RC1_DIP32_27C020"
     elif pinout_diff and not algo_diff and not timing_diff:
         label = "SRAM_PINOUT"
     elif (

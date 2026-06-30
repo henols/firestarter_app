@@ -289,7 +289,14 @@ def resolve_pinout_key(
             elif proto_id == 0x0D:
                 key = "DIP32_28C512_EEPROM"  # 5V EEPROM; WE=30, no VPP
             elif proto_id in {0x07, 0x08, 0x10}:
-                key = "DIP32_STD"  # UV-EPROM / Intel-flash; VPP=pin 1
+                if proto_id == 0x08 and mem_size <= 262144:
+                    # D-02/D-04: ≤256K 0x08 chips (27C010/27C020 class) have pin 31 = PGM
+                    # (NOT A18 — A18 = bit 18 = mask 0x40000 is unused at ≤256K).
+                    # 512K AM27C040 (524288) and 1M AM27C080 (1048576) legitimately use
+                    # pin 31 = A18 and MUST stay on DIP32_STD (host-side D-04 alias guard).
+                    key = "DIP32_27C020"  # PGM on pin 31 (off address bus); VPP on pin 1
+                else:
+                    key = "DIP32_STD"  # UV-EPROM / Intel-flash; VPP=pin 1
             else:
                 key = None
         else:

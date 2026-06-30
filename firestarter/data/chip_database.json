@@ -11,7 +11,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M8720",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -255,7 +255,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AM27C010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -275,7 +275,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AM27C020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -395,7 +395,7 @@
         "vpp_mv": 12000
       },
       "part_number": "AM27LV010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -415,7 +415,7 @@
         "vpp_mv": 12000
       },
       "part_number": "AM27LV020,AM27LV020B",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -475,7 +475,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AM27H010,AM27HB010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -817,7 +817,7 @@
         "vpp_mv": 12000
       },
       "part_number": "A27020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -1179,7 +1179,7 @@
         "vpp_mv": 12000
       },
       "part_number": "27CX010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -1303,7 +1303,7 @@
         "vpp_mv": 13000
       },
       "part_number": "SMJ27C010A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -1445,7 +1445,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AT27C010,AT27C010L",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -1485,7 +1485,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AT27C020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -1685,7 +1685,7 @@
         "vpp_mv": 12000
       },
       "part_number": "AT27BV010,AT27LV010,AT27LV010A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -1705,7 +1705,7 @@
         "vpp_mv": 12000
       },
       "part_number": "AT27BV020,AT27LV020,AT27LV020A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -2971,7 +2971,7 @@
         "vpp_mv": 13000
       },
       "part_number": "CAT27010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -3757,7 +3757,7 @@
         "vpp_mv": 12000
       },
       "part_number": "CY27C010,CY27H010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -3777,7 +3777,7 @@
         "vpp_mv": 12000
       },
       "part_number": "CY27C020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -4341,7 +4341,7 @@
         "vpp_mv": 12000
       },
       "part_number": "DPV27C101",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -4425,7 +4425,7 @@
         "vpp_mv": 12000
       },
       "part_number": "EN27C010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -4729,7 +4729,7 @@
         "vpp_mv": 12000
       },
       "part_number": "FM27C010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -4809,7 +4809,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27C010,NM27LC010,NM27LV010,NM27P010,NMC27C010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -4829,7 +4829,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27C020,NM27LV020,NM27P020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -5151,7 +5151,7 @@
         "vpp_mv": 12500
       },
       "part_number": "MBM27C1000P,MBM27C1000",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -5171,7 +5171,7 @@
         "vpp_mv": 12000
       },
       "part_number": "MBM27C1001",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -5211,7 +5211,7 @@
         "vpp_mv": 12500
       },
       "part_number": "MBM27C2000P,MBM27C2000",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -5231,7 +5231,7 @@
         "vpp_mv": 12000
       },
       "part_number": "MBM27C2001",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -5555,7 +5555,7 @@
         "vpp_mv": 13000
       },
       "part_number": "HN27C101AG,HN27C101AP,HN27C101AFP,HN27C101ATT,HN27C101G,HN27C101P",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -5575,7 +5575,7 @@
         "vpp_mv": 12500
       },
       "part_number": "HN27C301AG,HN27C301AP,HN27C301AFP",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -5595,7 +5595,7 @@
         "vpp_mv": 12500
       },
       "part_number": "HN27C301G",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -5777,7 +5777,7 @@
         "vpp_mv": 12000
       },
       "part_number": "HT27C010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -5797,7 +5797,7 @@
         "vpp_mv": 12000
       },
       "part_number": "HT27C020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -5857,7 +5857,7 @@
         "vpp_mv": 12000
       },
       "part_number": "HT27LC010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -5877,7 +5877,7 @@
         "vpp_mv": 12000
       },
       "part_number": "HT27LC020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -6103,7 +6103,7 @@
         "vpp_mv": 13000
       },
       "part_number": "ICE27C010,ICE27LC010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -6123,7 +6123,7 @@
         "vpp_mv": 13000
       },
       "part_number": "ICE27C020,ICE27LC020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -6165,7 +6165,7 @@
         "vpp_mv": 12000
       },
       "part_number": "27CX010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -6207,7 +6207,7 @@
         "vpp_mv": 12000
       },
       "part_number": "27CX010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -6591,7 +6591,7 @@
         "vpp_mv": 12000
       },
       "part_number": "27C010,27C010A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -6611,7 +6611,7 @@
         "vpp_mv": 12000
       },
       "part_number": "27C020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -6873,7 +6873,7 @@
         "vpp_mv": 12000
       },
       "part_number": "IS27C010,IS27HC010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -6893,7 +6893,7 @@
         "vpp_mv": 12000
       },
       "part_number": "IS27C020,IS27HC020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -6953,7 +6953,7 @@
         "vpp_mv": 12000
       },
       "part_number": "IS27LV010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -6973,7 +6973,7 @@
         "vpp_mv": 12000
       },
       "part_number": "IS27LV020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -7075,7 +7075,7 @@
         "vpp_mv": 12000
       },
       "part_number": "LG28C010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -7095,7 +7095,7 @@
         "vpp_mv": 12000
       },
       "part_number": "LG28C020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -7199,7 +7199,7 @@
         "vpp_mv": 12000
       },
       "part_number": "MX26C1000",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -7219,7 +7219,7 @@
         "vpp_mv": 12000
       },
       "part_number": "MX26C2000",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -7319,7 +7319,7 @@
         "vpp_mv": 13000
       },
       "part_number": "MX27C1000",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -7339,7 +7339,7 @@
         "vpp_mv": 13000
       },
       "part_number": "MX27C1000A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -7359,7 +7359,7 @@
         "vpp_mv": 13000
       },
       "part_number": "MX27C2000",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -7379,7 +7379,7 @@
         "vpp_mv": 13000
       },
       "part_number": "MX27C2000A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -7519,7 +7519,7 @@
         "vpp_mv": 13000
       },
       "part_number": "MX27L1000",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -7539,7 +7539,7 @@
         "vpp_mv": 13000
       },
       "part_number": "MX27L2000",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -8509,7 +8509,7 @@
         "vpp_mv": 12500
       },
       "part_number": "M5M27C101K",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -8973,7 +8973,7 @@
         "vpp_mv": 12000
       },
       "part_number": "UPD27C1001A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -9013,7 +9013,7 @@
         "vpp_mv": 12000
       },
       "part_number": "UPD27C2001",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -9198,7 +9198,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27C010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -9218,7 +9218,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27C020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -9338,7 +9338,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27LC010,NM27P010,NMC27C010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -9378,7 +9378,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27LV010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -9398,7 +9398,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27LV020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -9458,7 +9458,7 @@
         "vpp_mv": 13000
       },
       "part_number": "NM27P020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -9600,7 +9600,7 @@
         "vpp_mv": 12000
       },
       "part_number": "MSM27C201",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -9660,7 +9660,7 @@
         "vpp_mv": 12500
       },
       "part_number": "MSM27C1000",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -9680,7 +9680,7 @@
         "vpp_mv": 12500
       },
       "part_number": "MSM27C2000",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -9702,7 +9702,7 @@
         "vpp_mv": 12000
       },
       "part_number": "27C010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -9926,7 +9926,7 @@
         "vpp_mv": 12000
       },
       "part_number": "PT28C010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -9946,7 +9946,7 @@
         "vpp_mv": 12000
       },
       "part_number": "PT28C020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -10172,7 +10172,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M23C1001",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -10192,7 +10192,7 @@
         "vpp_mv": 12000
       },
       "part_number": "M23C2001",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -10332,7 +10332,7 @@
         "vpp_mv": 13000
       },
       "part_number": "M27C1000",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -10352,7 +10352,7 @@
         "vpp_mv": 13000
       },
       "part_number": "M27C1001,M27V101",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -10372,7 +10372,7 @@
         "vpp_mv": 13000
       },
       "part_number": "M27C2001,M27V201,M27W201",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -11296,7 +11296,7 @@
         "vpp_mv": 12000
       },
       "part_number": "SST27SF010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -11316,7 +11316,7 @@
         "vpp_mv": 12000
       },
       "part_number": "SST27SF020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -11376,7 +11376,7 @@
         "vpp_mv": 12000
       },
       "part_number": "SST27VF010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -11396,7 +11396,7 @@
         "vpp_mv": 12000
       },
       "part_number": "SST27VF020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -11776,7 +11776,7 @@
         "vpp_mv": 12000
       },
       "part_number": "SST37VF010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -11796,7 +11796,7 @@
         "vpp_mv": 12000
       },
       "part_number": "SST37VF020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -11836,7 +11836,7 @@
         "vpp_mv": 12000
       },
       "part_number": "SST37VF512",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -12178,7 +12178,7 @@
         "vpp_mv": 13000
       },
       "part_number": "M27C1001,M27V101,M27W101",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -12198,7 +12198,7 @@
         "vpp_mv": 13000
       },
       "part_number": "M27C2001,M27V201,M27W201",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -13636,7 +13636,7 @@
         "vpp_mv": 12000
       },
       "part_number": "TMS27C010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -13656,7 +13656,7 @@
         "vpp_mv": 13000
       },
       "part_number": "TMS27C010A,TMS27PC010A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -13676,7 +13676,7 @@
         "vpp_mv": 13000
       },
       "part_number": "TMS27C020,TMS27PC020",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -14302,7 +14302,7 @@
         "vpp_mv": 12000
       },
       "part_number": "W27C01,W27C010,W27E01,W27E010,W27L01,W27L010",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -14322,7 +14322,7 @@
         "vpp_mv": 12000
       },
       "part_number": "W27C02,W27C020,W27E02,W27E020,W27L02",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -14726,7 +14726,7 @@
         "vpp_mv": 13000
       },
       "part_number": "WS27C010F",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -14746,7 +14746,7 @@
         "vpp_mv": 13000
       },
       "part_number": "WS27C010L",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C020",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
