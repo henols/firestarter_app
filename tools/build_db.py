@@ -294,7 +294,9 @@ def resolve_pinout_key(
                     # (NOT A18 — A18 = bit 18 = mask 0x40000 is unused at ≤256K).
                     # 512K AM27C040 (524288) and 1M AM27C080 (1048576) legitimately use
                     # pin 31 = A18 and MUST stay on DIP32_STD (host-side D-04 alias guard).
-                    key = "DIP32_27C020"  # PGM on pin 31 (off address bus); VPP on pin 1
+                    key = (
+                        "DIP32_27C020"  # PGM on pin 31 (off address bus); VPP on pin 1
+                    )
                 else:
                     key = "DIP32_STD"  # UV-EPROM / Intel-flash; VPP=pin 1
             else:
