@@ -81,6 +81,16 @@
             "ce-pin": [22], "oe-pin": [24], "rw-pin": [31]
         }
     },
+    "DIP32_27C020": {
+        "name": "JEDEC 32-pin UV-EPROM ≤256K (27C010/27C020 family — PGM on pin 31)",
+        "comment": "Scoped pinout for 0x08 protocol chips with mem_size ≤ 262144 (≤256K — A18 bit 18 = mask 0x40000 unused). Per AM27C020.pdf: pin 1 = VPP (12.75V programming voltage), pin 31 = PGM (active-LOW program enable, NOT A18). On 256K and smaller parts, address bit 18 is never set, so pin 31 is always the PGM control, never an address line. Scope: ONLY assigned by resolve_pinout_key to proto_id=0x08 && mem_size<=262144 (D-02/D-04 alias guard). The 512K AM27C040 and 1M AM27C080 legitimately use pin 31 = A18 and MUST stay on DIP32_STD. Q1 RESOLVED (2026-06-30): static-high-pins is RULED OUT as the PGM vehicle — static_high_mask ORs HIGH (1) into line 22 (CONTROL bit 6) with no inversion in the RURP latch path (rurp_internal_write_to_register, rurp_register_utils.h:63-89); PGM program-active is VIL (LOW) per AM27C020.pdf. Therefore pin 31 is taken OFF the address bus here (so the firmware bus-config no longer drives line 22 from an address bit), but the deliberate program-active PGM=VIL hold-LOW across the CE pulse is delivered by Plan 02's firmware branch in memory_set_data, gated on protocol==0x08 && pins==32 && mem_size<=262144. This pinout's pin-31 job is precisely 'take it off the address bus.' D-04: the size gate (≤262144) structurally prevents this pinout from being assigned to any A18-bearing chip.",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16], "vpp-pin": [1],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22], "oe-pin": [24]
+        }
+    },
     "DIP28_28C256": {
         "name": "JEDEC 28-pin 5V parallel EEPROM (28C256 family)",
         "comment": "Per piersfinlayson/one-rom (datasheet-verified): 28C256 family has 15 address pins (A0-A14), with A14 at pin 1 (NOT VPP) and WE at pin 27 (NOT PGM). 5V single-supply, no programming voltage. Distinct from DIP28_2764 (UV-EPROM layout) which has VPP at pin 1 and PGM at pin 27. Covers ~8 chips at (pin_count=28, pm_idx=20, protocol_id=0x07): AT28C256, AT28C256E/F, HN58C256, HN58C256AP, etc. Routes through configure_eeprom28c after WARNING-5 algo override OR directly via pm_idx-based pinout selection.",
