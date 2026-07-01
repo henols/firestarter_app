@@ -43,13 +43,31 @@ _FW_DISPATCH_TEST = (
 )
 
 # ---------------------------------------------------------------------------
-# §0 table parser
+# §0 table parser (post-Phase-100 two-table layout)
 # ---------------------------------------------------------------------------
+#
+# Phase 100 restructured the bucket table: the `.cpp` filename moved OUT of
+# the bucket-table columns (column 3 is now the frozen `datasheets/` slug,
+# e.g. `` `0x05-FLASH-AMD-STD` ``) and into a separate "Handler-family layer"
+# table that maps handler-family → configure_*() → file.  So the doc leg is
+# now a two-table join: bucket table gives hex → family, handler-family
+# table gives family → file.
 
-# Matches a §0 pipe-table row:  | 0xNN | ... | `<handler>.cpp` | ...
-# Column 3 (handler) is in backticks; this regex extracts hex (group 1) and
-# filename (group 2).  Only rows that start with a protocol hex are matched.
-_ROW_RE = re.compile(r"^\|\s*0x([0-9A-Fa-f]+)\s*\|[^|]*\|\s*`([a-z0-9_]+\.cpp)`\s*\|")
+# Matches a bucket-table row:  | 0xNN | <count> | `<slug>` | `PROTO_*` | <name> | <handler-family...> | <phantom?> |
+# We need column 1 (hex, group 1), column 6 (handler-family, group 2) — the
+# family word is the FIRST whitespace-delimited token of that column (e.g.
+# "flash4 (0x05 + phantoms 0x35/0x39)" -> "flash4") — and column 7 (phantom?,
+# group 3), used to exclude phantom rows (0x35/0x39) from the doc leg, since
+# they are NOT in check_dispatch.KNOWN_PROTOCOLS and route to
+# not_implemented on the tool leg (host-side exclusion, unrelated to naming).
+_BUCKET_ROW_RE = re.compile(
+    r"^\|\s*0x([0-9A-Fa-f]+)\s*\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|"
+)
+
+# Matches a Handler-family layer row:  | <family> | `configure_*()` | `<file>.cpp` | <protocols> |
+_FAMILY_ROW_RE = re.compile(
+    r"^\|\s*([a-z0-9_-]+)\s*\|\s*`[a-z0-9_]+\(\)`\s*\|\s*`([a-z0-9_]+\.cpp)`\s*\|"
+)
 
 # Map: doc handler-file → check_dispatch handler-function name.
 # These are the seven distinct handlers that appear across the §0 table.
@@ -63,20 +81,61 @@ DOC_FILE_TO_FUNC: dict[str, str] = {
     "not_implemented.cpp": "not_implemented",
 }
 
+# Map: handler-family "not-implemented" label (bucket-table column, hyphenated)
+# to its Handler-family-layer key ("not-implemented" too) — kept as an
+# explicit alias table in case the two tables ever spell the family
+# differently (defensive; currently identical).
+_FAMILY_LABEL_ALIASES: dict[str, str] = {
+    "not-implemented": "not-implemented",
+}
+
 
 def parse_protocols_md() -> dict[int, str]:
-    """Parse the §0 pipe table from PROTOCOLS.md.
+    """Parse the current (post-Phase-100) two-table PROTOCOLS.md layout.
 
     Returns a dict mapping ``{hex_int: handler_filename}`` for every row in
-    the §0 canonical bucket table.  The §0 table is the single source of truth
-    for the doc leg of the three-way dispatch bind (D-06).
+    the §0 canonical bucket table, composed via:
+      1. bucket table:          hex -> handler-family (first token of col 6)
+      2. Handler-family layer:  handler-family -> handler_filename
+
+    This is the single source of truth for the doc leg of the three-way
+    dispatch bind (D-06), re-pointed at the Phase-100 table structure where
+    the `.cpp` filename no longer lives in the bucket table itself.
     """
-    result: dict[int, str] = {}
     text = _PROTOCOLS_MD.read_text(encoding="utf-8")
-    for line in text.splitlines():
-        m = _ROW_RE.match(line)
+    lines = text.splitlines()
+
+    # Step 1: hex -> family (first whitespace token of the handler-family column).
+    # Phantom rows (phantom? column == "YES") are excluded — they are absent
+    # from check_dispatch.KNOWN_PROTOCOLS and route to not_implemented on the
+    # tool leg (host-side exclusion; matches the original test's documented
+    # scope: "Phantom 0x35/0x39 are NOT in §0 ... excluded from the doc parse").
+    hex_to_family: dict[int, str] = {}
+    for line in lines:
+        m = _BUCKET_ROW_RE.match(line)
         if m:
-            result[int(m.group(1), 16)] = m.group(2)
+            phantom_col = m.group(3).strip().upper()
+            if phantom_col == "YES":
+                continue
+            hex_id = int(m.group(1), 16)
+            family_col = m.group(2).strip()
+            family = family_col.split()[0] if family_col else ""
+            family = _FAMILY_LABEL_ALIASES.get(family, family)
+            hex_to_family[hex_id] = family
+
+    # Step 2: family -> handler filename (Handler-family layer table).
+    family_to_file: dict[str, str] = {}
+    for line in lines:
+        m = _FAMILY_ROW_RE.match(line)
+        if m:
+            family_to_file[m.group(1).strip()] = m.group(2).strip()
+
+    # Step 3: compose hex -> handler filename.
+    result: dict[int, str] = {}
+    for hex_id, family in hex_to_family.items():
+        handler_file = family_to_file.get(family)
+        if handler_file is not None:
+            result[hex_id] = handler_file
     return result
 
 
