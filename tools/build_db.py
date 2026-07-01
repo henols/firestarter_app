@@ -22,6 +22,14 @@ PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
 # VAR-05 / D-10: curated non-upstream chip supplement, merged post-decode (see
 # the EXTRA_CHIPS block in main()). Physically-real chips absent from infoic.xml.
 EXTRA_CHIPS_FILE = os.path.join(os.path.dirname(__file__), "extra_chips.json")
+# IN-02 (98-03 host half): named boundary for the DIP32_27C020 size-keyed
+# resolve_pinout_key arm — 256K (262144 bytes), the largest 0x08 32-pin part
+# where A18 (bit 18 = mask 0x40000) is structurally unused. Chips above this
+# boundary (512K AM27C040, 1M AM27C080) legitimately use pin 31 = A18 and MUST
+# stay on DIP32_STD (D-04 alias guard). Cross-references the firmware-side
+# constant of the same name/value in firestarter/include/firestarter.h (added
+# by the 98-04 firmware plan).
+MAX_27C020_SIZE = 262144
 
 # ==========================================
 # 2. PINOUT LIBRARY (The Missing Physical Layer)
@@ -289,7 +297,7 @@ def resolve_pinout_key(
             elif proto_id == 0x0D:
                 key = "DIP32_28C512_EEPROM"  # 5V EEPROM; WE=30, no VPP
             elif proto_id in {0x07, 0x08, 0x10}:
-                if proto_id == 0x08 and mem_size <= 262144:
+                if proto_id == 0x08 and mem_size <= MAX_27C020_SIZE:
                     # D-02/D-04: ≤256K 0x08 chips (27C010/27C020 class) have pin 31 = PGM
                     # (NOT A18 — A18 = bit 18 = mask 0x40000 is unused at ≤256K).
                     # 512K AM27C040 (524288) and 1M AM27C080 (1048576) legitimately use
@@ -403,7 +411,16 @@ def interpret_timing(raw_hex, protocol_id):
     # Raw pulse_delay is microseconds for ALL protocols — no multiplier.
     try:
         val = int(raw_hex, 16)
-    except Exception:
+    except (TypeError, ValueError):
+        # WR-05 (98-03): narrowed from bare `except Exception` so an unparseable
+        # pulse_delay is visible (not silently masked as a valid 0 us timing) —
+        # an upstream infoic.xml decode fault would otherwise ship wrong timing
+        # to the firmware unnoticed.
+        print(
+            f"WARN: chip with protocol {protocol_id:#04x} has unparseable "
+            f"pulse_delay {raw_hex!r} — defaulting to 0 us",
+            file=sys.stderr,
+        )
         val = 0
 
     if protocol_id in (0x07, 0x08, 0x0B):

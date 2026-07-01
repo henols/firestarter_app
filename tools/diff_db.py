@@ -444,11 +444,17 @@ def _classify_diff(bl_chip, cu_chip):
         pinout_diff
         and not algo_diff
         and not timing_diff
+        and not voltage_diff
+        and not type_diff
+        and not vpp_diff
         and cu_chip.get("pinout") == "DIP32_27C020"
     ):
         # RC1_DIP32_27C020 (before SRAM_PINOUT): Phase 98 RC-1 fix — 0x08 ≤256K chips
         # reassigned from DIP32_STD to DIP32_27C020. Scoped to the new pinout value so
         # SRAM_PINOUT (which handles 28-pin pm_idx=0 re-routes) is not masked.
+        # WR-03 (98-03): pinout-only scope is now ENFORCED here (not just asserted in
+        # prose) — a co-occurring voltage/type/vpp change on a DIP32_27C020 chip falls
+        # through to a more specific/generic rule instead of being absorbed silently.
         label = "RC1_DIP32_27C020"
     elif pinout_diff and not algo_diff and not timing_diff:
         label = "SRAM_PINOUT"
