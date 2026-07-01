@@ -39,6 +39,17 @@ MAX_DATA_CHUNK = BUFFER_SIZE - 2  # 510
 # per CLAUDE.md constant-parity rule (FRAME-05 / D-06).
 CMD_FRAME_MAX = 512
 
+# IN-02 (Phase 98-03/98-05): <=256K (262144 byte) size boundary for 0x08
+# (EPROM_QUICK) 32-pin parts where pin 31 (A18 on DIP32_STD) is structurally
+# unused as an address line and is safe to repurpose as DIP32_27C020's
+# PGM/RW strobe. Chips above this boundary (512K AM27C040, 1M AM27C080)
+# legitimately use pin 31 = A18 and MUST stay on DIP32_STD (D-04 alias guard).
+# tools/build_db.py imports this constant (single host-side source of truth)
+# rather than redefining it. Firmware parity: firestarter.h #define
+# MAX_27C020_SIZE 262144 — a divergence is a hardware-damage A18 risk;
+# see tests/test_revision_constants_parity.py.
+MAX_27C020_SIZE = 262144
+
 
 # Wire-protocol command codes — Firmware sync: firestarter.h
 # cmd field values sent in JSON commands to the Arduino firmware.

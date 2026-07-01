@@ -5,6 +5,8 @@ import xml.etree.ElementTree as ET
 
 import requests
 
+from firestarter.constants import MAX_27C020_SIZE
+
 # ==========================================
 # 1. CONFIGURATION
 # ==========================================
@@ -22,14 +24,15 @@ PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
 # VAR-05 / D-10: curated non-upstream chip supplement, merged post-decode (see
 # the EXTRA_CHIPS block in main()). Physically-real chips absent from infoic.xml.
 EXTRA_CHIPS_FILE = os.path.join(os.path.dirname(__file__), "extra_chips.json")
-# IN-02 (98-03 host half): named boundary for the DIP32_27C020 size-keyed
-# resolve_pinout_key arm — 256K (262144 bytes), the largest 0x08 32-pin part
-# where A18 (bit 18 = mask 0x40000) is structurally unused. Chips above this
-# boundary (512K AM27C040, 1M AM27C080) legitimately use pin 31 = A18 and MUST
-# stay on DIP32_STD (D-04 alias guard). Cross-references the firmware-side
-# constant of the same name/value in firestarter/include/firestarter.h (added
-# by the 98-04 firmware plan).
-MAX_27C020_SIZE = 262144
+# IN-02 (98-03 host half, 98-05 mirrored into firestarter/constants.py as the
+# single host-side source of truth): named boundary for the DIP32_27C020
+# size-keyed resolve_pinout_key arm — 256K (262144 bytes), the largest 0x08
+# 32-pin part where A18 (bit 18 = mask 0x40000) is structurally unused. Chips
+# above this boundary (512K AM27C040, 1M AM27C080) legitimately use pin 31 =
+# A18 and MUST stay on DIP32_STD (D-04 alias guard). Cross-references the
+# firmware-side constant of the same name/value in
+# firestarter/include/firestarter.h (added by 98-05); see
+# tests/test_revision_constants_parity.py for the cross-repo assertion.
 
 # ==========================================
 # 2. PINOUT LIBRARY (The Missing Physical Layer)

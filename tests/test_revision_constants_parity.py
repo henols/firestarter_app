@@ -211,3 +211,30 @@ def test_cmd_frame_max_parity() -> None:
     from firestarter.constants import CMD_FRAME_MAX
 
     assert CMD_FRAME_MAX == 512  # == Uno DATA_BUFFER_SIZE floor (D-07)
+
+
+@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+def test_max_27c020_size_parity() -> None:
+    """Assert host MAX_27C020_SIZE == firmware MAX_27C020_SIZE (IN-02).
+
+    The <=256K (262144 byte) size boundary for 0x08 (EPROM_QUICK) 32-pin
+    parts — where pin 31 (A18 on DIP32_STD) is structurally unused and safe
+    to repurpose as DIP32_27C020's PGM/RW strobe — is duplicated across the
+    host (`firestarter/constants.py`, imported by `tools/build_db.py`'s
+    `resolve_pinout_key` size gate) and the firmware
+    (`firestarter/include/firestarter.h #define MAX_27C020_SIZE 262144`).
+
+    A divergence between the two is a hardware-damage A18 risk (T-98-18):
+    chips above the boundary (512K AM27C040, 1M AM27C080) legitimately use
+    pin 31 = A18 and MUST stay on DIP32_STD — if the host and firmware
+    boundaries disagree, a chip could be pinout-scoped one way host-side and
+    gated another way firmware-side. This test FAILs at pytest time on
+    divergence, matching the existing CTRL_*/FLAG_* parity discipline.
+
+    The skipif guard keys on firmware-header presence (same FW_ABSENT proxy
+    used by the other parity tests in this file) — it skips cleanly when the
+    firmware sub-repo checkout is absent.
+    """
+    from firestarter.constants import MAX_27C020_SIZE
+
+    assert MAX_27C020_SIZE == 262144  # firestarter.h #define MAX_27C020_SIZE 262144
