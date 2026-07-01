@@ -361,7 +361,7 @@
   Jumper config (Rev 2.0 & 2.1):
     JP4: (● ●)   (28pin, 32pin = Closed)
   
-  Protocol: EPROM/EEPROM (ID: 0x07)
+  Protocol: EPROM - 28-pin UV/EE, 13V VPP (ID: 0x07)
     - JEDEC 28-pin EPROM algorithm (also covers compatible 28C parts)
     - Requires VPP on OE/VPP pin and byte-program style pulses
     - Vendors may enable software data protection/unlock cycles
