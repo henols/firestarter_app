@@ -146,3 +146,59 @@ def test_fm1608_vpp_row_hidden_after_relabel(
         "FM1608 must NOT have a VPP row after SRAM→FRAM relabel; "
         "FRAM has no programming VPP (Pitfall 2 guard / fm-fram-full D-40)"
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 102 — HOST protocol-display-name consolidation companion tests
+#
+# These tests pin the two Phase 102 display-layer changes:
+#   1. Single-source invariant (D-01): _get_protocol_info_structured's `type`
+#      field and get_chip_type_string's fallback both resolve to the SAME
+#      string for every protocol id — they must both read
+#      _PROTOCOL_DISPLAY_NAME, so the two vocabularies can never re-diverge
+#      (the recurring IN-01 class of bug).
+#   2. Coverage reconcile (D-04): 0x34 (X88C64) is present with the canonical
+#      name; 0x11 (FWH) is dropped.
+#
+# Neither test asserts on description_points bullet text (D-03 — bullets are
+# Phase-103-owned; prose reconciliation is out of scope here).
+# ---------------------------------------------------------------------------
+
+
+def test_protocol_info_type_matches_chip_type_string_single_source(
+    spec_builder: EpromSpecBuilder,
+) -> None:
+    """_get_protocol_info_structured's `type` field must equal
+    get_chip_type_string's fallback label for every protocol id present in
+    _PROTOCOL_DISPLAY_NAME — pinning the D-01 single-source invariant so the
+    info-line vocabulary and the proto_display fallback vocabulary can never
+    re-diverge (IN-01 class guard)."""
+    for pid in spec_builder._PROTOCOL_DISPLAY_NAME:
+        info = spec_builder._get_protocol_info_structured(pid)
+        if info is None:
+            continue
+        fallback_label = spec_builder.get_chip_type_string(0, pid)
+        assert info["type"] == fallback_label, (
+            f"protocol 0x{pid:02X}: _get_protocol_info_structured type "
+            f"{info['type']!r} must equal get_chip_type_string fallback "
+            f"{fallback_label!r} (D-01 single source)"
+        )
+
+
+def test_protocol_display_name_coverage_reconciled(
+    spec_builder: EpromSpecBuilder,
+) -> None:
+    """0x34 (X88C64) resolves to the canonical name and 0x11 (FWH) is dropped
+    from _get_protocol_info_structured — pinning the D-04 coverage reconcile
+    so the host's 12-protocol canonical set cannot silently regress."""
+    result_0x34 = spec_builder._get_protocol_info_structured(0x34)
+    assert result_0x34 is not None, (
+        "0x34 (X88C64) must resolve via _get_protocol_info_structured (D-04)"
+    )
+    assert result_0x34["type"] == "EEPROM - XICOR 8051-bus", (
+        f"0x34 type should be 'EEPROM - XICOR 8051-bus', got {result_0x34['type']!r}"
+    )
+    result_0x11 = spec_builder._get_protocol_info_structured(0x11)
+    assert result_0x11 is None, (
+        f"0x11 (FWH) must be dropped from protocol_info_data (D-04), got {result_0x11!r}"
+    )
