@@ -228,9 +228,9 @@ class DiagnosticReport:
     `AutoCapture`/`TransportHealth` sub-objects. `vpp_vpe_mv` is a `None`
     slot left for Phase 111's measured-voltage sampler.
 
-    NOTE: fields `provenance` (plan 02) and `db_diff` (plan 03) are added by
-    later plans in this phase -- `to_dict()`/`render()` are structured so
-    those keys can be appended without restructuring either method.
+    NOTE: field `db_diff` (plan 03) is added by a later plan in this phase --
+    `to_dict()`/`render()` are structured so that key can be appended without
+    restructuring either method.
     """
 
     auto_capture: AutoCapture
@@ -239,6 +239,7 @@ class DiagnosticReport:
     results: list[StepResult] = field(default_factory=list)
     banner: BannerCounts | None = None
     vpp_vpe_mv: int | None = None
+    provenance: Provenance | None = None
 
     def _utc_now(self) -> str:
         return datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -291,6 +292,18 @@ class DiagnosticReport:
             "locked_steps": list(self.banner.locked_steps),
         }
 
+    def _provenance_dict(self) -> dict[str, Any] | None:
+        p = self.provenance
+        if p is None:
+            return None
+        return {
+            "shield_rev": p.shield_rev,
+            "chip_origin": p.chip_origin,
+            "owns_eraser": p.owns_eraser,
+            "pot_touched": p.pot_touched,
+            "pot_note": p.pot_note,
+        }
+
     def to_dict(self) -> dict[str, Any]:
         """CANONICAL serializable mapping -- the single source both render()
         and to_json_block() consume (RPT-01, D-01). Hand-written (NOT
@@ -306,6 +319,12 @@ class DiagnosticReport:
             "steps": [self._step_dict(r) for r in self.results],
             "banner": self._banner_dict(),
             "vpp_vpe_mv": self.vpp_vpe_mv,
+            "provenance": self._provenance_dict(),
+            "is_submittable": (
+                is_submittable(self.provenance)
+                if self.provenance is not None
+                else False
+            ),
         }
 
     def render(self, console: Any = None) -> Any:
@@ -347,6 +366,17 @@ class DiagnosticReport:
 
         banner = d["banner"]
         table.add_row("banner", f"{banner['n_ran']} of {banner['m_applicable']} ran")
+
+        prov = d["provenance"]
+        if prov is not None:
+            table.add_row("provenance: shield_rev", str(prov["shield_rev"]))
+            table.add_row("provenance: chip_origin", str(prov["chip_origin"]))
+            table.add_row("provenance: owns_eraser", str(prov["owns_eraser"]))
+            table.add_row("provenance: pot_touched", str(prov["pot_touched"]))
+            table.add_row("provenance: pot_note", str(prov["pot_note"]))
+        else:
+            table.add_row("provenance", "not collected")
+        table.add_row("is_submittable", str(d["is_submittable"]))
 
         if console is not None:
             console.print(table)
