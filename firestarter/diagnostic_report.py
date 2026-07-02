@@ -289,9 +289,10 @@ class DiagnosticReport:
     `AutoCapture`/`TransportHealth` sub-objects. `vpp_vpe_mv` is a `None`
     slot left for Phase 111's measured-voltage sampler.
 
-    NOTE: field `db_diff` (plan 03) is added by a later plan in this phase --
-    `to_dict()`/`render()` are structured so that key can be appended without
-    restructuring either method.
+    `db_diff` (plan 03, RPT-05) is the advisory, read-only DB-diff -- current
+    `support_status` beside a proposed-disposition string derived purely from
+    the sweep verdicts. It is `None` when no `build_db_diff` call has been
+    composed in yet.
     """
 
     auto_capture: AutoCapture
@@ -301,6 +302,7 @@ class DiagnosticReport:
     banner: BannerCounts | None = None
     vpp_vpe_mv: int | None = None
     provenance: Provenance | None = None
+    db_diff: DbDiff | None = None
 
     def _utc_now(self) -> str:
         return datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -365,6 +367,15 @@ class DiagnosticReport:
             "pot_note": p.pot_note,
         }
 
+    def _db_diff_dict(self) -> dict[str, Any] | None:
+        dd = self.db_diff
+        if dd is None:
+            return None
+        return {
+            "current_support_status": dd.current_support_status,
+            "proposed_disposition": dd.proposed_disposition,
+        }
+
     def to_dict(self) -> dict[str, Any]:
         """CANONICAL serializable mapping -- the single source both render()
         and to_json_block() consume (RPT-01, D-01). Hand-written (NOT
@@ -386,6 +397,7 @@ class DiagnosticReport:
                 if self.provenance is not None
                 else False
             ),
+            "db_diff": self._db_diff_dict(),
         }
 
     def render(self, console: Any = None) -> Any:
@@ -438,6 +450,19 @@ class DiagnosticReport:
         else:
             table.add_row("provenance", "not collected")
         table.add_row("is_submittable", str(d["is_submittable"]))
+
+        db_diff = d["db_diff"]
+        if db_diff is not None:
+            table.add_row(
+                "db_diff: current_support_status",
+                str(db_diff["current_support_status"]),
+            )
+            table.add_row(
+                "db_diff: proposed_disposition",
+                str(db_diff["proposed_disposition"]),
+            )
+        else:
+            table.add_row("db_diff", "not computed")
 
         if console is not None:
             console.print(table)
