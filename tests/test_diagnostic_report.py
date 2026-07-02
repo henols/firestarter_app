@@ -38,6 +38,17 @@ Test taxonomy:
     test_report_provenance_blank_field_flips_is_submittable -> a blank
         required provenance field flips is_submittable to False in the dict
 
+  Read-only advisory DB-diff (RPT-05, D-07, Plan 03)
+    test_db_diff_readonly -> build_db_diff reads support_status from a
+        write-method-less Mock DB (no write ever attempted)
+    test_db_diff_verdict_mapping -> BAD/PASS-only/marginal verdicts map to
+        the correct advisory proposed_disposition string
+    test_db_diff_real_db_read -> against the real EpromDatabase, the
+        current_support_status matches the live DB config, read-only
+    test_module_never_writes_support_status -> structural scan: no
+        "support_status =" assignment / ".write" / "set_" DB-mutation call
+        anywhere in the module source
+
 References:
   - .planning/phases/110-diagnostic-report-model-dual-output-provenance-prompts/110-01-PLAN.md
   - .planning/phases/110-diagnostic-report-model-dual-output-provenance-prompts/110-RESEARCH.md
@@ -51,7 +62,17 @@ import json
 from unittest.mock import Mock
 
 import firestarter
-from firestarter.chip_test import derive_plan, run_plan
+from firestarter.chip_test import (
+    FP_INDETERMINATE,
+    VERDICT_BAD,
+    VERDICT_NA,
+    VERDICT_OK,
+    VERDICT_SKIPPED,
+    Fingerprint,
+    StepResult,
+    derive_plan,
+    run_plan,
+)
 from firestarter.database import EpromDatabase
 
 # Real chip pulled from the shipped chip_database.json (same seam as
@@ -300,3 +321,115 @@ def test_report_without_provenance_dict_is_null():
     d = report.to_dict()
     assert d["provenance"] is None
     assert d["is_submittable"] is False
+
+
+# ---------------------------------------------------------------------------
+# Read-only advisory DB-diff (RPT-05, D-07, Plan 03)
+# ---------------------------------------------------------------------------
+
+
+def _mock_db(support_status: str = "adapter-required"):
+    """Write-method-less Mock DB (RPT-05, D-07): the spec exposes ONLY the
+    three read methods `resolve_chip`/`derive_plan` are allowed to touch. It
+    has NO write/set method at all, so any accidental write attempt inside
+    build_db_diff raises AttributeError -- read-only proven by construction."""
+    db = Mock(spec=["get_eprom", "get_eprom_config", "convert_to_programmer"])
+    db.get_eprom_config.return_value = ({"support_status": support_status}, "MFR")
+    return db
+
+
+def test_db_diff_readonly():
+    from firestarter.diagnostic_report import build_db_diff
+
+    db = _mock_db(support_status="adapter-required")
+    results = [StepResult(op="id", verdict=VERDICT_OK)]
+
+    diff = build_db_diff("SOME-CHIP", db, results)
+
+    db.get_eprom_config.assert_called_once_with("SOME-CHIP")
+    assert diff.current_support_status == "adapter-required"
+    # The mock has no write/set method -- nothing but the three spec'd read
+    # methods can even be called on it. Confirm no unexpected call was made.
+    db.get_eprom.assert_not_called()
+    db.convert_to_programmer.assert_not_called()
+
+
+def test_db_diff_verdict_mapping():
+    from firestarter.diagnostic_report import build_db_diff
+
+    db = _mock_db()
+
+    # Any BAD verdict -> community-fail signal (advisory).
+    bad_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_BAD),
+    ]
+    diff_bad = build_db_diff("X", db, bad_results)
+    assert "community-fail" in diff_bad.proposed_disposition
+    assert "advisory" in diff_bad.proposed_disposition
+    assert diff_bad.proposed_disposition != "community-fail"  # descriptive text, not a bare value
+
+    # PASS-only (OK + NA/SKIPPED, no BAD) -> candidate for community-reported (advisory).
+    pass_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="blank", verdict=VERDICT_NA),
+        StepResult(op="write", verdict=VERDICT_SKIPPED),
+    ]
+    diff_pass = build_db_diff("X", db, pass_results)
+    assert "community-reported" in diff_pass.proposed_disposition
+    assert "advisory" in diff_pass.proposed_disposition
+    assert diff_pass.proposed_disposition != "community-reported"
+
+    # marginal verdict -> inconclusive, needs N>=2 (advisory).
+    marginal_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="verify", verdict="marginal"),
+    ]
+    diff_marginal = build_db_diff("X", db, marginal_results)
+    assert "inconclusive" in diff_marginal.proposed_disposition
+    assert "N>=2" in diff_marginal.proposed_disposition or "N≥2" in diff_marginal.proposed_disposition
+    assert "advisory" in diff_marginal.proposed_disposition
+
+    # A StepResult carrying an "indeterminate" fingerprint classification also
+    # routes to the inconclusive branch, even without a bare "marginal" verdict.
+    indeterminate_results = [
+        StepResult(
+            op="verify",
+            verdict=VERDICT_OK,
+            fingerprint=Fingerprint(
+                total=10, bad=3, bad_pct=0.3, classification=FP_INDETERMINATE
+            ),
+        ),
+    ]
+    diff_indeterminate = build_db_diff("X", db, indeterminate_results)
+    assert "inconclusive" in diff_indeterminate.proposed_disposition
+
+
+def test_db_diff_real_db_read():
+    from firestarter.diagnostic_report import build_db_diff
+
+    name = "AT28C04,AT28HC04"
+    raw_config, _manufacturer = _REAL_DB.get_eprom_config(name)
+    expected = raw_config.get("support_status", "supported")
+    assert expected == "adapter-required"  # sanity: known fixture from test_chip_test.py
+
+    results = [StepResult(op="id", verdict=VERDICT_OK)]
+    diff = build_db_diff(name, _REAL_DB, results)
+
+    assert diff.current_support_status == expected
+
+
+def test_module_never_writes_support_status():
+    import re
+
+    import firestarter.diagnostic_report as diagnostic_report_mod
+
+    src = inspect.getsource(diagnostic_report_mod)
+    lines = [ln for ln in src.splitlines() if not ln.strip().startswith("#")]
+    joined = "\n".join(lines)
+
+    # Assignment only -- "==" comparisons (e.g. reading support_status) are
+    # legitimate and must not false-positive this scan.
+    assert re.search(r"support_status\s*(?<!=)=(?!=)\s*[^=]", joined) is None
+    assert ".write(" not in joined
+    assert re.search(r"\bset_[a-z_]+\(", joined) is None
