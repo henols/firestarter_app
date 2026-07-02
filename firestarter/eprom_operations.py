@@ -82,8 +82,8 @@ def _raise_for_error_response(response, message: str) -> None:
     from firestarter.messages import MSG_ERR_PROTOCOL_NOT_IMPLEMENTED
 
     if response.id == MSG_ERR_PROTOCOL_NOT_IMPLEMENTED:
-        raise ProtocolNotImplementedError(response.message)
-    raise EpromOperationError(message)
+        raise ProtocolNotImplementedError(response.message, error_code=response.id)
+    raise EpromOperationError(message, error_code=response.id)
 
 
 # Boot-block region size: W29C040 §6.6 defines two 16K boot blocks (first and last).
