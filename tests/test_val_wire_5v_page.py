@@ -66,7 +66,9 @@ def test_5v_page_wire_dict_has_algorithm_field(make_comm, fake_serial) -> None:
     assert "algorithm" in wire, "wire dict must have 'algorithm' key"
 
 
-def test_5v_page_wire_dict_algorithm_in_family_protocols(make_comm, fake_serial) -> None:
+def test_5v_page_wire_dict_algorithm_in_family_protocols(
+    make_comm, fake_serial
+) -> None:
     """Wire dict algorithm is in {5, 53, 57} (5v_page family protocols) for the rep chip."""
     db = EpromDatabase()
     chip = db.get_eprom(_REP_CHIP)
