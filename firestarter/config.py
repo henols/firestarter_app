@@ -12,8 +12,15 @@ import logging
 import os
 from typing import Optional
 
-# Define the home path and configuration file path
-HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
+# Define the home path and configuration file path.
+# FIRESTARTER_CONFIG_DIR overrides the user config/override directory (default
+# ~/.firestarter). Provides a deterministic isolation seam for tests/CI that
+# invoke the CLI as a subprocess — mirroring EpromDatabase(skip_local_override=True)
+# at the process boundary so a developer's local ~/.firestarter overrides do not
+# leak into black-box CLI goldens. Unset → unchanged default behavior.
+HOME_PATH = os.environ.get("FIRESTARTER_CONFIG_DIR") or os.path.join(
+    os.path.expanduser("~"), ".firestarter"
+)
 CONFIG_FILE_DEFAULT = "config.json"  # Default filename
 # CONFIG_FILE = os.path.join(HOME_PATH, "config.json") # No longer used directly as a global fixed path for ConfigManager  # noqa: E501
 DATABASE_FILE = os.path.join(HOME_PATH, "database.json")

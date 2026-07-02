@@ -118,6 +118,98 @@ _RATIONALES = {
         "  [VERIFIED: .planning/phases/66-db-inclusion-vpp-correction-dispatch-gate/66-CONTEXT.md"
         " D-04/D-06/D-07]"
     ),
+    "VARIANT_DECODE": (
+        "Variant-decode consolidation (Phase 86 VAR-02) — Rule 1/2/3 replaced by a\n"
+        "  single principled classify(type,proto,pm_idx,flags,pinout).\n"
+        "  The override stack is gone; electrical.type/algorithm/pinout are now derived\n"
+        "  once from the fields minipro itself uses to classify a device. Two effects\n"
+        "  land here as electrical.type-only deltas:\n"
+        "    (a) 68 5V-EEPROM-pinout chips (proto 0x0D, configure_eeprom28c, no VPP)\n"
+        "        decode Flash/EEPROM -> EEPROM. The old two-pass mapped proto 0x0D to\n"
+        "        'Flash/EEPROM'; classify() arm 2 (5V-EEPROM pinout clusters) emits the\n"
+        "        more-accurate 'EEPROM' type for the 28C/28LV/2816 family. NO algorithm,\n"
+        "        pinout, or VPP change — the chips already dispatched to configure_eeprom28c.\n"
+        "    (b) X88C64P (proto 0x34, XICOR NovRAM/EEPROM) decodes UV-EPROM -> EEPROM via\n"
+        "        classify() arm 4b. Display-only: the chip stays\n"
+        "        support_status=protocol-not-implemented and non-dispatchable; algorithm\n"
+        "        (0x34) and pinout unchanged.\n"
+        "  The variant HIGH byte is minipro's T56/T76 algo-file selector, NOT a\n"
+        "  classification axis — classify() keys on type/proto/pm_idx/flags.\n"
+        "  [VERIFIED: minipro database.c#L1918 @ a8efaedc —\n"
+        "   uint8_t algo_number = (uint8_t)(device->variant >> 8) —\n"
+        "   https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c#L1918]\n"
+        "  [VERIFIED: minipro minipro.h#L70 MP_SRAM=0x04 —\n"
+        "   https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/minipro.h#L70]\n"
+        "  [CITED: tools/DECODE-NOTES.md §2 (high byte) / §4 (X88C64) / §5 (FM1608)]"
+    ),
+    "EXTRA_CHIPS_SUPPLEMENT": (
+        "Non-upstream chip supplement (Phase 86 VAR-05 / D-10) — 2516 + 2532.\n"
+        "  These are physically-real 24-pin UV-EPROM oddballs that are ABSENT from\n"
+        "  minipro's infoic.xml entirely (no upstream record at all). They ship\n"
+        "  first-class in chip_database.json via the curated, provenance-cited\n"
+        "  supplement tools/extra_chips.json, which build_db.py merges AFTER the\n"
+        "  infoic.xml decode loop (NOT routed through classify()/resolve_pinout_key —\n"
+        "  they arrive fully-specified). Each supplement record carries a\n"
+        "  source='non-upstream-supplement' marker + a datasheet citation (D-11).\n"
+        "  They appear here as NEW chips against the OLD baseline because the baseline\n"
+        "  re-pin is Plan 86-03 (runs AFTER this plan); their presence — with the\n"
+        "  non-upstream source marker — is the explanation, NOT a Rule 1 unblock.\n"
+        "    2516: algorithm 0x0B, DIP24_2716, UV-EPROM, vpp_mv 25000, 2048 B —\n"
+        "      wire values verbatim from the v1.15 user-override (SAFE-04, unmoved);\n"
+        "      verification_status UNVERIFIED (resolvable, not write-graduated; FUT-03).\n"
+        "    2532: algorithm 0x0B, DIP24_2532 (non-JEDEC, VPP=pin 21), UV-EPROM,\n"
+        "      4096 B; UNVERIFIED (no on-hand silicon).\n"
+        "  [CITED: tools/extra_chips.json provenance fields + 2516_EPROM.pdf datasheet;\n"
+        "   .planning/phases/86-variant-decode-correct-db-regen/86-CONTEXT.md D-10/D-11;\n"
+        "   .planning/v1.15/DECODE-AUDIT.md (2516 user-override wire values)]"
+    ),
+    "RULE_PHASE84_RELABEL": (
+        "Phase 84 cosmetic electrical.type relabel — label-only, NO dispatch / FLAG_CAN_ERASE / VPP change.\n"
+        "  FM1608 (RAMTRON FRAM): electrical.type corrected SRAM→FRAM at the build_db.py codegen\n"
+        "    layer (per-chip override after Pass-2). CAN_ERASE unaffected (FRAM ∉ {EEPROM,\n"
+        "    Flash/EEPROM}). VPP display gated out (FRAM has no programming VPP). Display-layer\n"
+        "    _ELECTRICAL_TYPE_LABEL extended with 'FRAM' key.\n"
+        "  SST39SF040: KEEP Flash/EEPROM — cosmetic 'Flash' label observation recorded in\n"
+        "    DECODE-AUDIT.md (plan 84-04); no code change (D-40 STOP: relabeling would flip\n"
+        "    FLAG_CAN_ERASE OFF, breaking Phase-77/82-proven auto-erase).\n"
+        "  Scope: exactly the relabeled part_numbers' electrical.type field; NO algorithm /\n"
+        "    pinout / vpp / FLAG_CAN_ERASE delta.\n"
+        "  [VERIFIED: Phase 84 plan 84-03, operator decision sst-keep / fm-fram-full 2026-06-25]"
+    ),
+    "PGSZ_PAGE_SIZE": (
+        "Phase 94 PGSZ-01 / CR-01 — datasheet-sourced per-chip page_size field added.\n"
+        "  Generalizes flash4 page sizing from the firmware capacity heuristic\n"
+        "  (flash4_page_size(mem_size)) to a DB-supplied per-chip value (emit-when-present).\n"
+        "  Only chips with a [CITED:] datasheet entry in build_db.py _PAGE_SIZE_BY_PART\n"
+        "  get this field. Chips without a cited datasheet continue using the heuristic.\n"
+        "    W29C040,W29C042: page_size=256 added.\n"
+        "      [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C040.pdf §6.2\n"
+        "              'Every page contains 256 bytes of data.']\n"
+        "    W29C020,W29C020C,W29C022: page_size=128 added.\n"
+        "      [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C020.pdf §6.2\n"
+        "              'Every page contains 128 bytes of data.' + FEATURES '128 bytes per page']\n"
+        "  No other fields changed. No dispatch / algorithm / VPP delta.\n"
+        "  [VERIFIED: Phase 94 Plan 02 — PGSZ-01/02/03 requirements + 94-RESEARCH.md A1/A2]"
+    ),
+    "RC1_DIP32_27C020": (
+        "Phase 98 RC-1 fix — DIP32_27C020 scoped pinout for 0x08 ≤256K 32-pin chips.\n"
+        "  Root cause RC-1: pin 31 was modeled as address line A18 (DIP32_STD) for all\n"
+        "  0x08/32-pin chips, but for ≤256K chips (27C010/27C020 class), pin 31 is PGM\n"
+        "  (program enable, active-LOW), not A18. A18 = bit 18 = mask 0x40000; at ≤256K\n"
+        "  (mem_size ≤ 262144) address bit 18 is never set, so pin 31 is never a real A18\n"
+        "  line — DIP32_STD modeled it incorrectly for this sub-class.\n"
+        "  Fix: resolve_pinout_key in build_db.py routes proto_id==0x08 && mem_size<=262144\n"
+        "  chips to DIP32_27C020 (pin 31 OFF the address bus; VPP on pin 1 retained).\n"
+        "  The 512K AM27C040 (524288) and 1M AM27C080 (1048576) legitimately use pin 31=A18\n"
+        "  and stay on DIP32_STD (host-side D-04 alias guard).\n"
+        "  Scope: 88 chips across 128K and 256K (65K/128K/256K sizes, proto 0x08, 32-pin).\n"
+        "  No algorithm / VPP / electrical.type delta — pinout field only.\n"
+        "  Q1 RESOLVED (2026-06-30): static-high-pins ruled out (drives HIGH; PGM=VIL).\n"
+        "  PGM program-active assert is Plan 02's firmware branch, not this pinout.\n"
+        "  [CITED: firestarter/datasheets/0x08-EPROM-QUICK/AM27C020.pdf — pin 31=PGM, VPP=pin 1]\n"
+        "  [CITED: Phase 98 Plan 01 FIX-03 — D-02/D-04 scoped pinout variant]\n"
+        "  [CITED: .planning/phases/98-fix-correct-the-0x08-32-pin-write-vpp-path/98-01-PLAN.md]"
+    ),
 }
 
 
@@ -218,6 +310,32 @@ _RULE_FIELD_PATHS = {
         ("electrical", "vpp"),
         ("electrical", "vpp_mv"),
     },
+    # Phase 84 cosmetic relabel: FM1608 SRAM→FRAM. Scoped to the relabeled chips'
+    # electrical.type field only. No algorithm / pinout / vpp / CAN_ERASE delta.
+    # Placed after RULE_PHASE66 (more specific than RULE_PHASE66's support_status scope,
+    # but still less specific than BUG_A_ETYPE which also matches type_diff without
+    # algo_diff — RULE_PHASE84_RELABEL is distinguished by the part_number scope check
+    # in _classify_diff, not by field exclusivity alone).
+    "RULE_PHASE84_RELABEL": {
+        ("electrical", "type"),  # only the type string changes for the relabeled chip
+    },
+    # Phase 86 variant-decode consolidation: electrical.type-only delta for the
+    # 5V-EEPROM-pinout (proto 0x0D) chips Flash/EEPROM->EEPROM and X88C64P
+    # (proto 0x34) UV-EPROM->EEPROM. No algorithm / pinout / vpp delta.
+    "VARIANT_DECODE": {
+        ("electrical", "type"),
+    },
+    # Phase 94 PGSZ-01 / CR-01: per-chip page_size field added to programming block.
+    # Only chips with a [CITED:] datasheet entry in build_db.py _PAGE_SIZE_BY_PART get
+    # this field. No other field changes. Scoped to programming.page_size additions only.
+    "PGSZ_PAGE_SIZE": {
+        ("programming", "page_size"),
+    },
+    # Phase 98 RC-1 fix: DIP32_27C020 pinout assigned to 0x08 ≤256K chips. Pinout-only
+    # change — no algorithm / VPP / electrical.type delta.
+    "RC1_DIP32_27C020": {
+        ("pinout",),
+    },
 }
 
 
@@ -241,6 +359,11 @@ def _diff_field_paths(bl_chip, cu_chip, prefix=()):
         else:
             paths.add(prefix + (k,))
     return paths
+
+
+# Phase 84 RULE_PHASE84_RELABEL scope: the exact part_numbers whose electrical.type
+# was corrected. SST39SF040 is EXCLUDED (sst-keep decision — no code change).
+_PHASE84_RELABEL_PART_NUMBERS = frozenset({"FM1608"})
 
 
 def _classify_diff(bl_chip, cu_chip):
@@ -267,10 +390,19 @@ def _classify_diff(bl_chip, cu_chip):
       2. BUG2_AND_BUG3 — timing + voltage changed (combined fix, precedes singles)
       3. BUG2_TIMING   — timing changed only
       4. BUG3_VCC_VDD  — voltage (vcc/vdd) changed only
-      5. SRAM_PINOUT   — pinout changed only
-      6. BUG_A_ETYPE   — electrical.type changed (flags-based EEPROM reclassification)
-      7. BUG_B_VPP     — electrical.vpp/vpp_mv changed (0xF0-mask fix)
-      8. RULE_PHASE66  — only support_status/unsupported_reason/vpp/vpp_mv changed
+      5a. RC1_DIP32_27C020 — pinout changed to DIP32_27C020 (Phase 98 RC-1 fix; before SRAM_PINOUT)
+      5b. SRAM_PINOUT  — pinout changed only (other pinout re-routes)
+      6. RULE_PHASE84_RELABEL — only electrical.type changed, AND the chip is in
+                         _PHASE84_RELABEL_PART_NUMBERS (cosmetic label-only correction;
+                         scoped by part_number; MORE SPECIFIC than BUG_A_ETYPE so must
+                         precede it — otherwise BUG_A_ETYPE would match first)
+      6b. VARIANT_DECODE — only electrical.type changed to 'EEPROM' AND proto in
+                         {0x0D, 0x34} (Phase 86 consolidation: 5V-EEPROM-pinout proto-0x0D
+                         Flash/EEPROM->EEPROM + X88C64P proto-0x34 UV-EPROM->EEPROM;
+                         scoped by new-type+proto so it does NOT shadow BUG_A_ETYPE)
+      7. BUG_A_ETYPE   — electrical.type changed (flags-based EEPROM reclassification)
+      8. BUG_B_VPP     — electrical.vpp/vpp_mv changed (0xF0-mask fix)
+      9. RULE_PHASE66  — only support_status/unsupported_reason/vpp/vpp_mv changed
                          (LAST — least specific; must not shadow BUG_A_ETYPE/BUG_B_VPP)
       -> None          — no rule matched (UNEXPLAINED = D-03 BLOCK)
     """
@@ -308,8 +440,55 @@ def _classify_diff(bl_chip, cu_chip):
         label = "BUG2_TIMING"
     elif voltage_diff and not timing_diff and not algo_diff:
         label = "BUG3_VCC_VDD"
+    elif (
+        pinout_diff
+        and not algo_diff
+        and not timing_diff
+        and not voltage_diff
+        and not type_diff
+        and not vpp_diff
+        and cu_chip.get("pinout") == "DIP32_27C020"
+    ):
+        # RC1_DIP32_27C020 (before SRAM_PINOUT): Phase 98 RC-1 fix — 0x08 ≤256K chips
+        # reassigned from DIP32_STD to DIP32_27C020. Scoped to the new pinout value so
+        # SRAM_PINOUT (which handles 28-pin pm_idx=0 re-routes) is not masked.
+        # WR-03 (98-03): pinout-only scope is now ENFORCED here (not just asserted in
+        # prose) — a co-occurring voltage/type/vpp change on a DIP32_27C020 chip falls
+        # through to a more specific/generic rule instead of being absorbed silently.
+        label = "RC1_DIP32_27C020"
     elif pinout_diff and not algo_diff and not timing_diff:
         label = "SRAM_PINOUT"
+    elif (
+        type_diff
+        and not algo_diff
+        and not timing_diff
+        and not voltage_diff
+        and not pinout_diff
+        and cu_chip.get("part_number") in _PHASE84_RELABEL_PART_NUMBERS
+    ):
+        # RULE_PHASE84_RELABEL (before BUG_A_ETYPE): cosmetic electrical.type label
+        # correction, scoped to the exact chips the operator authorized (fm-fram-full
+        # decision). Placed before BUG_A_ETYPE so the part_number-scoped rule takes
+        # priority for the named relabeled chips. The part_number check prevents this
+        # rule from silently explaining accidental type drift on unrelated chips
+        # (D-40 requirement: no collateral change to chips sharing the same infoic flags).
+        label = "RULE_PHASE84_RELABEL"
+    elif (
+        type_diff
+        and not algo_diff
+        and not timing_diff
+        and not voltage_diff
+        and not pinout_diff
+        and cu_elec.get("type") == "EEPROM"
+        and cu_prog.get("algorithm") in (0x0D, 0x34)
+    ):
+        # VARIANT_DECODE (before BUG_A_ETYPE): Phase 86 consolidation electrical.type
+        # delta. The new classify() emits 'EEPROM' for the 5V-EEPROM-pinout proto-0x0D
+        # chips (were 'Flash/EEPROM') and for X88C64P proto-0x34 (was 'UV-EPROM').
+        # Scoped to new-type=='EEPROM' AND proto in {0x0D, 0x34} so it does NOT shadow
+        # genuine BUG_A_ETYPE (flags-based 0x07-proto reclassification) or the
+        # part_number-scoped RULE_PHASE84_RELABEL (FM1608 SRAM->FRAM, handled above).
+        label = "VARIANT_DECODE"
     elif (
         type_diff
         and not algo_diff
@@ -337,6 +516,20 @@ def _classify_diff(bl_chip, cu_chip):
         # electrical.vpp, electrical.vpp_mv). Placed LAST so it does not shadow
         # BUG_A_ETYPE/BUG_B_VPP (Pitfall 7 in 70-RESEARCH.md).
         label = "RULE_PHASE66"
+    elif (
+        bl_prog.get("page_size") != cu_prog.get("page_size")
+        and not algo_diff
+        and not timing_diff
+        and not voltage_diff
+        and not pinout_diff
+        and not type_diff
+        and not vpp_diff
+    ):
+        # PGSZ_PAGE_SIZE: Phase 94 / CR-01 — only programming.page_size changed
+        # (datasheet-sourced per-chip page size added for W29C040=256 / W29C020=128).
+        # No other field changes. Placed LAST (most specific scope: programming.page_size
+        # only) to avoid shadowing any compound changes detected by prior rules.
+        label = "PGSZ_PAGE_SIZE"
 
     diff_paths = _diff_field_paths(bl_chip, cu_chip)
 
@@ -476,11 +669,46 @@ def main():
             print(f"  {note}")
         print()
 
-    # WR-03: verify (don't just assert) the Rule 1 unblock claim per new chip.
+    # New chips fall into two explained categories:
+    #   (a) EXTRA_CHIPS_SUPPLEMENT (Phase 86 VAR-05 / D-10): records carrying the
+    #       source="non-upstream-supplement" marker (2516/2532). Their presence —
+    #       with the cited source marker — IS the explanation (they are absent from
+    #       both infoic.xml and the OLD baseline because the re-pin is Plan 86-03).
+    #   (b) Rule 1 unblock (DIP24_2816 + algo=0x0D): the original new-chip class.
+    # A new chip that is NEITHER is surfaced as a WARN (WR-03).
+    supplement_new = [
+        key
+        for key in new_chips
+        if cu_idx[key][1].get("source") == "non-upstream-supplement"
+    ]
+    other_new = [key for key in new_chips if key not in set(supplement_new)]
+
+    if supplement_new:
+        print(
+            f"--- NEW chips: non-upstream supplement ({len(supplement_new)}) "
+            f"— Phase 86 VAR-05 / D-10 (cited) ---\n"
+        )
+        for line in _RATIONALES["EXTRA_CHIPS_SUPPLEMENT"].splitlines():
+            print(f"  {line}")
+        print()
+        for key in sorted(supplement_new):
+            c = cu_idx[key][1]
+            ds = c.get("datasheet", "<no datasheet>")
+            ver = c.get("verification_status", "")
+            ver_str = f", {ver}" if ver else ""
+            print(
+                f"  {_pn(key)} [non-upstream-supplement] "
+                f"(pinout={c.get('pinout')}, "
+                f"algo={c.get('programming', {}).get('algorithm'):#x}, "
+                f"datasheet={ds}{ver_str})"
+            )
+        print()
+
+    # WR-03: verify (don't just assert) the Rule 1 unblock claim per remaining new chip.
     print(
-        f"--- NEW chips ({len(new_chips)}) — expected Rule 1 unblock (DIP24_2816 + algo=0x0D) ---\n"
+        f"--- NEW chips ({len(other_new)}) — expected Rule 1 unblock (DIP24_2816 + algo=0x0D) ---\n"
     )
-    for key in sorted(new_chips):
+    for key in sorted(other_new):
         pn = _pn(key)
         c = cu_idx[key][1]
         c_pinout = c.get("pinout")
@@ -493,7 +721,7 @@ def main():
             )
         else:
             print(f"  {pn}")
-    if new_chips:
+    if other_new:
         print()
 
     print(f"--- MISSING chips ({len(missing_chips)}) ---\n")

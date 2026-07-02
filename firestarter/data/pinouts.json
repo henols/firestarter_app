@@ -81,6 +81,16 @@
             "ce-pin": [22], "oe-pin": [24], "rw-pin": [31]
         }
     },
+    "DIP32_27C020": {
+        "name": "JEDEC 32-pin UV-EPROM ≤256K (27C010/27C020 family — PGM on pin 31)",
+        "comment": "Scoped pinout for 0x08 protocol chips with mem_size ≤ 262144 (≤256K — A18 bit 18 = mask 0x40000 unused). Per AM27C020.pdf: pin 1 = VPP (12.75V programming voltage), pin 31 = PGM (active-LOW program enable, NOT A18). On 256K and smaller parts, address bit 18 is never set, so pin 31 is always the PGM control, never an address line. Scope: ONLY assigned by resolve_pinout_key to proto_id=0x08 && mem_size<=262144 (D-02/D-04 alias guard). The 512K AM27C040 and 1M AM27C080 legitimately use pin 31 = A18 and MUST stay on DIP32_STD. CR-01 CORRECTED FIX (2026-07-01, operator schematic study): pin 31 is the distinct RW line — CTRL_READ_WRITE (physical bit 0x40) — DISTINCT from P1/VPP (CTRL_VPP_P1_ENABLE, physical bit 0x08) on BOTH legacy Rev 0/1 AND Rev 2 layouts (revision-invariant; the earlier CR-01 fork worry about a Rev-2 P1/PGM alias was a misdiagnosis — that alias is CTRL_ADDRESS_LINE_18_REV2/CTRL_VPP_P1_ENABLE_REV2 sharing 0x08, which this fix never touches). rw-pin:[31] mirrors the working DIP32_SST39SF040 flash entry (also rw-pin:[31]) and uses the SAME existing rw_line mechanism: the host resolves pin 31 -> pin_conversions[32][31] = 22 -> config.rw_line = 22, and the firmware's mem_util_remap_address_bus / mem_util_calculate_top_address_register fold bus line 22 into the CONTROL register's CTRL_READ_WRITE (0x40) bit, held at the program-active VIL level for the full write (WRITE_FLAG=0) pulse. Static-high-pins is RULED OUT as the PGM vehicle (Q1, 2026-06-30) — static_high_mask ORs HIGH into the bus line with no inversion in the RURP latch path, but PGM program-active is VIL (LOW). rw-pin:[31] is the correct mechanism: it is the missing assignment that makes pin 31 a DELIBERATELY-driven /PGM (=/WE) write strobe instead of merely unassigned/floating. Whether this flips bits on the seated AM27C020 remains the Phase-99 empirical gate; this pinout delivers the corrected host bus-config, not a silicon proof.",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16], "vpp-pin": [1],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22], "oe-pin": [24], "rw-pin": [31]
+        }
+    },
     "DIP28_28C256": {
         "name": "JEDEC 28-pin 5V parallel EEPROM (28C256 family)",
         "comment": "Per piersfinlayson/one-rom (datasheet-verified): 28C256 family has 15 address pins (A0-A14), with A14 at pin 1 (NOT VPP) and WE at pin 27 (NOT PGM). 5V single-supply, no programming voltage. Distinct from DIP28_2764 (UV-EPROM layout) which has VPP at pin 1 and PGM at pin 27. Covers ~8 chips at (pin_count=28, pm_idx=20, protocol_id=0x07): AT28C256, AT28C256E/F, HN58C256, HN58C256AP, etc. Routes through configure_eeprom28c after WARNING-5 algo override OR directly via pm_idx-based pinout selection.",
@@ -99,6 +109,18 @@
             "address-bus-pins": [8, 7, 6, 5, 4, 3, 2, 1, 23, 22, 19],
             "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
             "ce-pin": [18], "oe-pin": [20], "rw-pin": [21]
+        }
+    },
+    "DIP24_2532": {
+        "name": "TI 2532 (4KB) — non-JEDEC 24-pin UV-EPROM",
+        "comment": "TI/Motorola 2532 is a 4KB (4096x8) 24-pin UV-EPROM with a NON-JEDEC pinout that differs from the JEDEC 2732 (DIP24_2732). On the 2532: VPP=pin 21, A11=pin 18, !PD/PGM=pin 20 (chip-enable / power-down-program), VCC=pin 24, GND=pin 12. The JEDEC 2732 instead puts OE/VPP on pin 20, A11 on pin 21, and CE on pin 18 — so the two layouts must NOT be conflated (VPP on pin 21 vs pin 20 is a 12-25V-to-wrong-pin hardware-damage path). Source: TI 2532 datasheet pin assignment (committed 2516/2532-family scan under datasheets/0x0B-EPROM-LEGACY/2516_EPROM.pdf, which is the TI 2500-series UV-EPROM family doc covering the 2516/2532 lineage). vpp-pin=21 satisfies the GATE-03 structural VPP guard for the 0x0B legacy EPROM handler. Tentative leaf layout — bench-validation required (carries the same UNVERIFIED posture as the 2516 supplement row).",
+        "pins": {
+            "vcc-pin": [24], "gnd-pin": [12], "vpp-pin": [21],
+            "VCC_READ": 5.0, "VCC_PROG": 25.0,
+            "address-bus-pins": [8, 7, 6, 5, 4, 3, 2, 1, 23, 22, 19, 18],
+            "data-bus-pins": [9, 10, 11, 13, 14, 15, 16, 17],
+            "ce-pin": [20],
+            "static-high-pins": [24]
         }
     },
     "DIP24_2816": {

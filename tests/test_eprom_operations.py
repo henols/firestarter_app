@@ -132,6 +132,39 @@ def test_handle_progress_response_warn_and_ok_paths(make_comm, fake_serial) -> N
     )
 
 
+def test_init_phase_data_frames_not_acked() -> None:
+    """D-07 (commit fcf7974): INIT/END-phase DATA progress frames must NOT be acked.
+
+    The default (no ``-b``) write path — which Phase 77's auto-erase graduation
+    (FLAG_CAN_ERASE on the wire) makes the common case — drives
+    ``_execute_phase("INIT", ...)``, which emits per-chunk blank-check DATA progress
+    frames. ``ack_data=False`` ensures those frames are not acked, so spurious OK
+    acks cannot pile up in the firmware RX buffer and desync the MAIN handshake into
+    ``MSG_ERR_EMPTY_INPUT`` (0xA4). This guard asserts ``send_ack`` fires exactly once
+    per INIT phase (the phase-start ack), regardless of how many DATA frames arrive.
+    """
+    from unittest.mock import MagicMock
+
+    from firestarter.eprom_operations import ClassProgressHandler
+    from firestarter.frame_parser import Response
+
+    operator = EpromOperator(ConfigManager())
+    mock_comm = MagicMock()
+    # Two DATA progress frames followed by the terminating INIT frame.
+    mock_comm.get_response.side_effect = [
+        Response(type="DATA", message="1/128"),
+        Response(type="DATA", message="64/128"),
+        Response(type="INIT", message="OK"),
+    ]
+    operator.comm = mock_comm
+    progress = ClassProgressHandler()
+
+    operator._execute_phase("INIT", progress)
+
+    # Only the phase-start ACK fires; the two DATA frames trigger no extra acks.
+    mock_comm.send_ack.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # build_flags + hexdump (module-level helpers) — D-14 fallback coverage
 # ---------------------------------------------------------------------------
@@ -871,3 +904,97 @@ class TestMeasureCommandNakLatency:
             port=None,
         )
         assert result is False
+
+
+# ---------------------------------------------------------------------------
+# Phase-84 Plan 02 Task 1 (RED): SRAM/FRAM blank-check host short-circuit
+#
+# D-30: FM1608 (0x28 SRAM_STD) blank-check surfaces firmware 0xA4
+# MSG_ERR_EMPTY_INPUT because configure_sram() leaves a NULL
+# firestarter_operation_main for CMD_BLANK_CHECK.  Fix = detect SRAM/FRAM
+# at the host blank-check entry and short-circuit BEFORE issuing the command.
+#
+# These tests MUST FAIL until Task 2 adds the short-circuit to check_eprom_blank.
+# The negative control (non-SRAM still issues blank-check) MUST PASS both now
+# and after the fix.
+# ---------------------------------------------------------------------------
+
+# Minimal eprom_data_dict for an FM1608-class chip (SRAM, proto 0x28).
+# ``protocol-id`` mirrors the field name written by database._map_data.
+_FM1608_LIKE_EPROM_DATA: dict = {
+    "memory-size": 8192,
+    "flags": 0,
+    "electrical-type": "SRAM",
+    "protocol-id": 0x28,
+}
+
+# Minimal eprom_data_dict for a W27C512 (EEPROM, proto 0x07) — non-SRAM.
+_W27C512_LIKE_EPROM_DATA: dict = {
+    "memory-size": 65536,
+    "flags": 0,
+    "electrical-type": "EEPROM",
+    "protocol-id": 0x07,
+}
+
+
+class TestSramBlankCheckShortCircuit:
+    """D-30 host short-circuit: SRAM/FRAM blank-check must not reach firmware.
+
+    Positive test: FM1608-class (SRAM, 0x28) must short-circuit; _setup_operation
+    must NOT be called (no blank-check command sent to the firmware).
+    Negative control: W27C512 (EEPROM, 0x07) must still reach _setup_operation
+    (the short-circuit is SRAM/FRAM-scoped, NOT a blanket disable).
+
+    T-84-04 mitigation: the negative control makes the EEPROM path regression-proof.
+    """
+
+    def test_sram_blank_check_short_circuits_before_setup(self, monkeypatch) -> None:
+        """FM1608-class SRAM chip: check_eprom_blank must NOT call _setup_operation.
+
+        The host short-circuit should fire immediately, returning False (not
+        applicable) without reaching the firmware command layer.  This test
+        MUST FAIL until Task 2 implements the short-circuit (RED gate).
+        """
+        setup_called = []
+
+        def _fake_setup_operation(self_op, eprom_name, eprom_data_dict, cmd, *a, **kw):
+            setup_called.append((eprom_name, cmd))
+            return None, 0
+
+        monkeypatch.setattr(EpromOperator, "_setup_operation", _fake_setup_operation)
+
+        op = EpromOperator(ConfigManager())
+        result = op.check_eprom_blank("FM1608", dict(_FM1608_LIKE_EPROM_DATA))
+
+        # Short-circuit: _setup_operation must NOT be reached (no command to firmware).
+        assert setup_called == [], (
+            "SRAM blank-check must short-circuit BEFORE _setup_operation; "
+            f"_setup_operation was called with: {setup_called}"
+        )
+        # Result must be False (blank-check not applicable to SRAM/FRAM).
+        assert result is False
+
+    def test_eeprom_blank_check_still_reaches_setup(self, monkeypatch) -> None:
+        """Negative control: W27C512 (EEPROM, 0x07) must still reach _setup_operation.
+
+        The short-circuit must NOT disable blank-check for real EPROM/EEPROM chips
+        (T-84-04 mitigated).  This test MUST PASS both before and after the fix.
+        """
+        setup_called = []
+
+        def _fake_setup_operation(self_op, eprom_name, eprom_data_dict, cmd, *a, **kw):
+            setup_called.append((eprom_name, cmd))
+            # Return None to abort cleanly (no real serial I/O).
+            return None, 0
+
+        monkeypatch.setattr(EpromOperator, "_setup_operation", _fake_setup_operation)
+
+        op = EpromOperator(ConfigManager())
+        op.check_eprom_blank("W27C512", dict(_W27C512_LIKE_EPROM_DATA))
+
+        # Non-SRAM: _setup_operation MUST have been called.
+        assert len(setup_called) == 1, (
+            "W27C512 (EEPROM) blank-check must reach _setup_operation; "
+            f"call list: {setup_called}"
+        )
+        assert setup_called[0][0] == "W27C512"

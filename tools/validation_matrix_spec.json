@@ -48,19 +48,19 @@
       }
     },
     {
-      "id": "flash3",
-      "handler": "configure_flash3",
+      "id": "nor_unlock",
+      "handler": "configure_flash_nor_unlock",
       "protocols": [6],
       "rep_chip": "AM29F040",
       "tier1": {
-        "suite": "test_val_flash3",
+        "suite": "test_val_nor_unlock",
         "assertions": [
           "no_vpp_regulator_on_write",
           "no_vpp_regulator_on_read"
         ]
       },
       "tier2": {
-        "test_module": "test_val_wire_flash3",
+        "test_module": "test_val_wire_nor_unlock",
         "commands": ["write", "read", "verify", "blank_check"]
       },
       "tier3": {
@@ -70,20 +70,20 @@
       }
     },
     {
-      "id": "flash4",
-      "handler": "configure_flash4",
+      "id": "5v_page",
+      "handler": "configure_flash_5v_page",
       "protocols": [5],
-      "protocols_note": "The matrix tracks host-dispatchable protocols (check_dispatch.py KNOWN_PROTOCOLS / dispatch()). Protocols 0x35 (53) and 0x39 (57) ALSO dispatch to configure_flash4 in firmware (memory.cpp) and ARE covered by the Tier-1 native suite test_val_flash4.cpp (hard-coded make_handle(0x35,...)/make_handle(0x39,...), calling configure_memory directly). However, zero chips in chip_database.json carry algorithm=0x35 or 0x39, so the host dispatch path never routes to configure_flash4 via those protocols. They are intentionally omitted here to keep the host matrix consistent with the host dispatch mirror (CR-02 resolution, 2026-06-16). This is NOT a regression — the firmware truth and native coverage are preserved in test_val_flash4.cpp.",
+      "protocols_note": "The matrix tracks host-dispatchable protocols (check_dispatch.py KNOWN_PROTOCOLS / dispatch()). Protocols 0x35 (53) and 0x39 (57) ALSO dispatch to configure_flash_5v_page in firmware (memory.cpp) and ARE covered by the Tier-1 native suite test_val_5v_page.cpp (hard-coded make_handle(0x35,...)/make_handle(0x39,...), calling configure_memory directly). However, zero chips in chip_database.json carry algorithm=0x35 or 0x39, so the host dispatch path never routes to configure_flash_5v_page via those protocols. They are intentionally omitted here to keep the host matrix consistent with the host dispatch mirror (CR-02 resolution, 2026-06-16). This is NOT a regression — the firmware truth and native coverage are preserved in test_val_5v_page.cpp.",
       "rep_chip": "AT29C040",
       "tier1": {
-        "suite": "test_val_flash4",
+        "suite": "test_val_5v_page",
         "assertions": [
           "no_vpp_regulator_on_write",
           "no_vpp_regulator_on_read"
         ]
       },
       "tier2": {
-        "test_module": "test_val_wire_flash4",
+        "test_module": "test_val_wire_5v_page",
         "commands": ["write", "read", "verify", "blank_check"]
       },
       "tier3": {

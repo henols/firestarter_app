@@ -71,9 +71,9 @@ def test_committed_header_has_val_families() -> None:
 def test_committed_header_has_11_rows() -> None:
     """Header must contain exactly 11 rows (one per host-dispatchable protocol across 6 families).
 
-    flash4 contributes only protocol 0x05: 0x35 and 0x39 are firmware-dispatch-only
+    5v_page contributes only protocol 0x05: 0x35 and 0x39 are firmware-dispatch-only
     (zero DB chips) and are intentionally omitted from the host matrix (CR-02 resolution).
-    The native suite test_val_flash4.cpp still covers 0x35/0x39 directly.
+    The native suite test_val_5v_page.cpp still covers 0x35/0x39 directly.
     """
     content = _COMMITTED_HEADER.read_text(encoding="utf-8")
     # Count lines that start with "    { 0x" (each row in the VAL_FAMILIES table)
@@ -180,8 +180,8 @@ def test_validate_spec_called_before_emission() -> None:
     [
         "configure_eprom",
         "configure_eeprom28c",
-        "configure_flash3",
-        "configure_flash4",
+        "configure_flash_nor_unlock",
+        "configure_flash_5v_page",
         "configure_flash_intel",
         "configure_sram",
     ],

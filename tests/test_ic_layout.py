@@ -83,3 +83,122 @@ def test_generate_pin_names_bare_int_still_works(
     # With no pin-map the generic layout is returned unchanged.
     assert result is not None
     assert len(result) == 28
+
+
+# ---------------------------------------------------------------------------
+# Phase 84 — fm-fram-full display-layer companion tests
+#
+# These tests pin the two display-layer changes that accompany the FM1608
+# SRAM→FRAM relabel (operator decision fm-fram-full, 2026-06-25):
+#   1. _ELECTRICAL_TYPE_LABEL["FRAM"] == "FRAM"  (resolve_type_label works for FRAM)
+#   2. FM1608 build_specifications does NOT include vpp_str (VPP row stays hidden)
+#
+# Both tests are RED before the ic_layout.py changes (Task 3) and GREEN after.
+# ---------------------------------------------------------------------------
+
+
+def test_electrical_type_label_includes_fram(
+    spec_builder: EpromSpecBuilder,
+) -> None:
+    """_ELECTRICAL_TYPE_LABEL must include a 'FRAM' key resolving to 'FRAM' — required
+    by the fm-fram-full relabel so the Type column shows 'FRAM' not the protocol fallback
+    (D-40 / Pitfall 2: without the key, resolve_type_label falls back to
+    get_chip_type_string which would return the protocol-based label, not 'FRAM')."""
+    label_map = spec_builder._ELECTRICAL_TYPE_LABEL
+    assert "FRAM" in label_map, (
+        "_ELECTRICAL_TYPE_LABEL must contain 'FRAM' key (fm-fram-full relabel)"
+    )
+    assert label_map["FRAM"] == "FRAM", (
+        "_ELECTRICAL_TYPE_LABEL['FRAM'] must equal 'FRAM'"
+    )
+
+
+def test_resolve_type_label_fram(
+    spec_builder: EpromSpecBuilder,
+) -> None:
+    """resolve_type_label returns 'FRAM' for electrical_type='FRAM' — the display helper
+    must handle the new FRAM value after the fm-fram-full relabel."""
+    result = spec_builder.resolve_type_label("FRAM")
+    assert result == "FRAM", (
+        f"resolve_type_label('FRAM') should return 'FRAM', got {result!r}"
+    )
+
+
+def test_fm1608_vpp_row_hidden_after_relabel(
+    spec_builder: EpromSpecBuilder,
+    db: EpromDatabase,
+) -> None:
+    """FM1608 build_specifications must NOT include vpp_str after the SRAM→FRAM relabel.
+    FRAM has no programming VPP; the vpp_mv=12000 in the DB is an infoic.xml decode
+    artifact.  The VPP-display gate (ic_layout.py build_specifications) must exclude
+    FRAM alongside SRAM (gate: electrical-type not in {'SRAM','FRAM'}).
+    This is the fm-fram-full Pitfall-2 guard (D-40 / fm-fram-full companion test)."""
+    eprom = db.get_eprom("FM1608")
+    assert eprom is not None
+    # The relabel sets electrical-type = "FRAM" in the mapped data.
+    # We call build_specifications with the mapped data which carries
+    # electrical-type via _map_data (the 'electrical-type' key).
+    result = spec_builder.build_specifications(
+        eprom, electrical_type=eprom.get("electrical-type")
+    )
+    assert result is not None
+    assert "vpp_str" not in result, (
+        "FM1608 must NOT have a VPP row after SRAM→FRAM relabel; "
+        "FRAM has no programming VPP (Pitfall 2 guard / fm-fram-full D-40)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 102 — HOST protocol-display-name consolidation companion tests
+#
+# These tests pin the two Phase 102 display-layer changes:
+#   1. Single-source invariant (D-01): _get_protocol_info_structured's `type`
+#      field and get_chip_type_string's fallback both resolve to the SAME
+#      string for every protocol id — they must both read
+#      _PROTOCOL_DISPLAY_NAME, so the two vocabularies can never re-diverge
+#      (the recurring IN-01 class of bug).
+#   2. Coverage reconcile (D-04): 0x34 (X88C64) is present with the canonical
+#      name; 0x11 (FWH) is dropped.
+#
+# Neither test asserts on description_points bullet text (D-03 — bullets are
+# Phase-103-owned; prose reconciliation is out of scope here).
+# ---------------------------------------------------------------------------
+
+
+def test_protocol_info_type_matches_chip_type_string_single_source(
+    spec_builder: EpromSpecBuilder,
+) -> None:
+    """_get_protocol_info_structured's `type` field must equal
+    get_chip_type_string's fallback label for every protocol id present in
+    _PROTOCOL_DISPLAY_NAME — pinning the D-01 single-source invariant so the
+    info-line vocabulary and the proto_display fallback vocabulary can never
+    re-diverge (IN-01 class guard)."""
+    for pid in spec_builder._PROTOCOL_DISPLAY_NAME:
+        info = spec_builder._get_protocol_info_structured(pid)
+        if info is None:
+            continue
+        fallback_label = spec_builder.get_chip_type_string(0, pid)
+        assert info["type"] == fallback_label, (
+            f"protocol 0x{pid:02X}: _get_protocol_info_structured type "
+            f"{info['type']!r} must equal get_chip_type_string fallback "
+            f"{fallback_label!r} (D-01 single source)"
+        )
+
+
+def test_protocol_display_name_coverage_reconciled(
+    spec_builder: EpromSpecBuilder,
+) -> None:
+    """0x34 (X88C64) resolves to the canonical name and 0x11 (FWH) is dropped
+    from _get_protocol_info_structured — pinning the D-04 coverage reconcile
+    so the host's 12-protocol canonical set cannot silently regress."""
+    result_0x34 = spec_builder._get_protocol_info_structured(0x34)
+    assert result_0x34 is not None, (
+        "0x34 (X88C64) must resolve via _get_protocol_info_structured (D-04)"
+    )
+    assert result_0x34["type"] == "EEPROM - XICOR 8051-bus", (
+        f"0x34 type should be 'EEPROM - XICOR 8051-bus', got {result_0x34['type']!r}"
+    )
+    result_0x11 = spec_builder._get_protocol_info_structured(0x11)
+    assert result_0x11 is None, (
+        f"0x11 (FWH) must be dropped from protocol_info_data (D-04), got {result_0x11!r}"
+    )

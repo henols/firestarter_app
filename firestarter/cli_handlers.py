@@ -159,8 +159,15 @@ def build_arg_flags(args: object) -> int:
     force = getattr(args, "force", False)
     verbose = getattr(args, "verbose", False)
     vpe_as_vpp = getattr(args, "vpe_as_vpp", False)
+    # Phase 92 decouple: skip-erase is its own explicit flag, NOT implied by
+    # `not blank_check`. See _build_op_flags for the rationale (write -b must
+    # still erase an erase-capable chip).
     flags = build_flags(
-        blank_check, force, vpe_as_vpp, verbose, skip_erase=not blank_check
+        blank_check,
+        force,
+        vpe_as_vpp,
+        verbose,
+        skip_erase=getattr(args, "skip_erase", False),
     )
 
     if hasattr(args, "input_enable"):
@@ -219,6 +226,7 @@ def _build_op_flags(
     force: bool = False,
     verbose: bool = False,
     vpe_as_vpp: bool = False,
+    skip_erase: bool = False,
     input_enable: Optional[bool] = None,
     chip_disable: Optional[bool] = None,
 ) -> int:
@@ -229,16 +237,23 @@ def _build_op_flags(
     rules build_arg_flags uses (post-41-01 truthiness semantics):
 
         - blank_check / force / vpe_as_vpp / verbose -> build_flags(...)
+        - skip_erase -> FLAG_SKIP_ERASE (explicit; see decouple note below)
         - input_enable presence (any value, even False) -> apply OE mask rule
         - chip_disable presence (any value, even False) -> apply CE mask rule
 
     The OE/CE flags use None to mean "this command does not take this flag"
     so they behave like the main.py `hasattr(args, "input_enable")` gate:
     only `dev reg` and `dev addr` opt into them.
+
+    Phase 92 decouple (was `skip_erase=not blank_check`): `-b`/`--no-blank-check`
+    no longer implies skip-erase. Skipping the blank check must NOT skip the
+    erase that electrically-erasable parts (FLAG_CAN_ERASE: flash3/flash4/EEPROM
+    /EPROM-EEPROM) require — `write -b` on a non-blank such chip used to silently
+    skip the erase, leaving un-erasable 0->1 bits while the firmware's DQ7-only
+    poll reported "successful" (the Phase-90/91 "12V-VPP regression" false alarm).
+    `skip_erase` is now an explicit opt-in (write `--skip-erase`), default False.
     """
-    flags = build_flags(
-        blank_check, force, vpe_as_vpp, verbose, skip_erase=not blank_check
-    )
+    flags = build_flags(blank_check, force, vpe_as_vpp, verbose, skip_erase=skip_erase)
     if input_enable is not None:
         flags |= 0 if input_enable else FLAG_OUTPUT_ENABLE
     if chip_disable is not None:
@@ -436,7 +451,16 @@ def read(
     is_flag=True,
     flag_value=False,
     default=True,
-    help="Do not perform blank check before write (and skip erase).",
+    help="Skip the blank check before write (erase still runs if the chip supports it).",
+)
+@click.option(
+    "--skip-erase",
+    "skip_erase",
+    is_flag=True,
+    default=False,
+    help="Also skip the pre-write erase (for already-blank or non-erasable/pre-erased parts). "
+    "WARNING: skipping erase on a non-blank electrically-erasable chip leaves un-erased bits "
+    "that cannot be reprogrammed.",
 )
 @click.option(
     "-f",
@@ -453,6 +477,7 @@ def write(
     eprom: str,
     input_file: str,
     blank_check: bool,
+    skip_erase: bool,
     force: bool,
     address: Optional[str],
     vpe_as_vpp: bool,
@@ -464,6 +489,11 @@ def write(
     flips ``blank_check`` to False (mirrors argparse ``store_false default=True``).
     The inverse ``--blank-check`` polarity lives on the ``erase`` command —
     both polarities coexist verbatim per the rationale lock.
+
+    Phase 92 decouple: ``-b`` now skips ONLY the blank check. The pre-write erase
+    still runs for electrically-erasable chips (FLAG_CAN_ERASE) so ``write -b`` on
+    a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip the erase
+    (previously implied by ``-b``) for already-blank or non-erasable parts.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.write_eprom(
@@ -472,7 +502,10 @@ def write(
         input_file,
         address_str=address,
         operation_flags=_build_op_flags(
-            blank_check=blank_check, force=force, vpe_as_vpp=vpe_as_vpp
+            blank_check=blank_check,
+            force=force,
+            vpe_as_vpp=vpe_as_vpp,
+            skip_erase=skip_erase,
         ),
     )
     sys.exit(0 if ok else 1)
@@ -1059,7 +1092,7 @@ def dev_addr(
     "output_dir",
     type=str,
     default=None,
-    help="Output dir for per-run binaries (default consistency-check-<chip>-<board>-<TS>/).",  # noqa: E501
+    help="Output dir for per-run binaries (default firestarter-runs/consistency-check-<chip>-<board>-<TS>/).",  # noqa: E501
 )
 @click.option(
     "--keep-files/--no-keep-files",
@@ -1150,7 +1183,7 @@ def dev_consistency_check(
     "output_dir",
     type=str,
     default=None,
-    help="Output dir for per-cycle binaries (default write-cycle-<chip>-<board>-<TS>/).",
+    help="Output dir for per-cycle binaries (default firestarter-runs/write-cycle-<chip>-<board>-<TS>/).",  # noqa: E501
 )
 @click.option(
     "-f",

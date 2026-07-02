@@ -10,6 +10,7 @@ EPROM Operations Module (Refactored)
 import hashlib
 import logging
 import os
+import re
 import shutil
 import time
 from contextlib import contextmanager
@@ -57,6 +58,14 @@ logger = logging.getLogger("EpromOperator")
 
 bar_format = "{l_bar}{bar}| {n:#06x}/{total:#06x} bytes "
 
+# Parent folder that groups the auto-named per-run output directories produced by
+# consistency_check_eprom / write_cycle_eprom when the caller does not pass an
+# explicit --output-dir. Created relative to the current working directory, so a
+# bench session keeps all diagnostic runs under one subfolder
+# (e.g. ./firestarter-runs/consistency-check-<chip>-<board>-<TS>/) instead of
+# scattering timestamped folders directly in the launch directory.
+DEFAULT_RUN_OUTPUT_DIR = "firestarter-runs"
+
 
 def _raise_for_error_response(response, message: str) -> None:
     """Raise ProtocolNotImplementedError for id 0xBB, EpromOperationError otherwise.
@@ -75,6 +84,85 @@ def _raise_for_error_response(response, message: str) -> None:
     if response.id == MSG_ERR_PROTOCOL_NOT_IMPLEMENTED:
         raise ProtocolNotImplementedError(response.message)
     raise EpromOperationError(message)
+
+
+# Boot-block region size: W29C040 §6.6 defines two 16K boot blocks (first and last).
+_BOOT_BLOCK_SIZE = 0x4000  # 16 KiB
+
+# Pattern to extract the hex address from MSG_ERR_FL4_VERIFY_TIMEOUT messages.
+# Format: "Timeout verifying 0x%02x at 0x%06lx (got 0x%02x)"
+_TIMEOUT_ADDR_RE = re.compile(r"at 0x([0-9a-fA-F]+)")
+
+# Flash4 protocol ID.  Boot-block lockout is specific to the AMD/JEDEC SDP
+# page-write flash family (protocol 0x05, FLASH_AMD_STD).
+_FLASH4_PROTOCOL_ID = 5
+
+
+def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional[str]:
+    """Return a boot-block-locked inference hint string, or None.
+
+    FIX-01b (Phase 94 Plan 03): when a flash4 (protocol 0x05) write fails with
+    MSG_ERR_FL4_VERIFY_TIMEOUT and the failing address is in the first or last
+    16K of the chip, the operator cannot distinguish a silicon boot-block lockout
+    from a firmware bug without additional context.  This function returns a
+    hint string that can be appended to the error message so the operator
+    understands the probable root cause.
+
+    Returns a hint string (to be appended to the error message) when:
+      - response.id == MSG_ERR_FL4_VERIFY_TIMEOUT (0xB3), AND
+      - protocol == 5 (flash4 / FLASH_AMD_STD), AND
+      - the failing address is in the first 16K (< 0x4000) OR
+        the last 16K (>= mem_size - 0x4000).
+
+    Returns None for all other cases (different protocol, different error id,
+    or mid-chip address) so unrelated faults are not mislabelled (T-94-MISLABEL).
+
+    Wording per A3 / STRIDE T-94-MISLABEL: the hint INFERS the lockout from the
+    address range; it does NOT confirm it (only the firmware §6.6 DETECT read
+    can read the FF/FE lockout bit and confirm).
+    """
+    from firestarter.messages import MSG_ERR_FL4_VERIFY_TIMEOUT
+
+    if response.id != MSG_ERR_FL4_VERIFY_TIMEOUT:
+        return None
+    if protocol != _FLASH4_PROTOCOL_ID:
+        return None
+
+    # Extract the failing address from the decoded message text.
+    m = _TIMEOUT_ADDR_RE.search(response.message or "")
+    if not m:
+        return None
+
+    try:
+        addr = int(m.group(1), 16)
+    except ValueError:
+        return None
+
+    boot_block_size = _BOOT_BLOCK_SIZE
+    in_first_block = addr < boot_block_size
+    in_last_block = (mem_size > boot_block_size) and (
+        addr >= mem_size - boot_block_size
+    )
+
+    if not (in_first_block or in_last_block):
+        return None
+
+    # Build the hint with f-strings (py3.11-safe — no backslashes inside {} expressions).
+    last_block_start = mem_size - boot_block_size
+    last_block_end = mem_size - 1
+    region = (
+        "0x0000-0x3FFF"
+        if in_first_block
+        else (f"0x{last_block_start:05X}-0x{last_block_end:05X}")
+    )
+    hint = (
+        f"boot-block region hint: address 0x{addr:06X} is in the {region} region. "
+        "This boot-block region may be locked (W29C040 datasheet §6.6 "
+        "boot-block lockout — irreversible, no unlock command exists). "
+        "Writes to addresses >=0x4000 should succeed on an unlocked region. "
+        "This is an inference from the address range, not a confirmed detection."
+    )
+    return hint
 
 
 def build_flags(
@@ -420,11 +508,25 @@ class EpromOperator:
         return final_msg
 
     def _main_phase_send_data(
-        self, progress: ClassProgressHandler, input_file_path: str, buffer_size: int
+        self,
+        progress: ClassProgressHandler,
+        input_file_path: str,
+        buffer_size: int,
+        eprom_data_dict: Optional[dict] = None,
     ) -> None:
-        """Main phase handler for writing or verifying data."""
+        """Main phase handler for writing or verifying data.
+
+        ``eprom_data_dict`` is forwarded from the write/verify caller so that
+        the boot-block-locked heuristic hint (FIX-01b, Phase 94) can be appended
+        to MSG_ERR_FL4_VERIFY_TIMEOUT errors when the failing address is in the
+        first or last 16K of a flash4 (protocol 0x05) chip.  Passing None (the
+        default) keeps behaviour identical to pre-FIX-01b for all other callers.
+        """
         if not os.path.exists(input_file_path):
             raise EpromOperationError(f"Input file {input_file_path} not found.")
+
+        protocol: int = (eprom_data_dict or {}).get("protocol-id", 0)
+        mem_size: int = (eprom_data_dict or {}).get("memory-size", 0)
 
         with open(input_file_path, "rb") as file_handle:
             file_size = os.path.getsize(input_file_path)
@@ -435,7 +537,11 @@ class EpromOperator:
                 if response.type == "MAIN":
                     break  # Main phase is complete
                 if response.type == "ERROR":
-                    _raise_for_error_response(response, response.message)
+                    hint = _boot_block_hint_message(response, protocol, mem_size)
+                    msg = response.message
+                    if hint:
+                        msg = msg + " -- " + hint
+                    _raise_for_error_response(response, msg)
                 if response.type != "OK":
                     raise EpromOperationError(
                         f"Programmer did not request data chunk, got {response.type}: {response.message}"  # noqa: E501
@@ -618,7 +724,10 @@ class EpromOperator:
             # surface doesn't have a serial connection, so we fall back).
             if output_dir is None:
                 timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-                output_dir = f"consistency-check-{eprom_name}-unknown-board-{timestamp}"
+                output_dir = str(
+                    Path(DEFAULT_RUN_OUTPUT_DIR)
+                    / f"consistency-check-{eprom_name}-unknown-board-{timestamp}"
+                )
             output_path = Path(output_dir)
             output_path.mkdir(parents=True, exist_ok=True)
 
@@ -794,7 +903,10 @@ class EpromOperator:
 
         if output_dir is None:
             timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-            output_dir = f"write-cycle-{eprom_name}-unknown-board-{timestamp}"
+            output_dir = str(
+                Path(DEFAULT_RUN_OUTPUT_DIR)
+                / f"write-cycle-{eprom_name}-unknown-board-{timestamp}"
+            )
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
@@ -1466,6 +1578,7 @@ class EpromOperator:
                 main_phase_handler=self._main_phase_send_data,
                 input_file_path=input_file_path,
                 buffer_size=buf_size,
+                eprom_data_dict=cmd_data,  # FIX-01b: boot-block hint context
             )
 
             if is_ok:
@@ -1537,9 +1650,31 @@ class EpromOperator:
                 )
             return is_ok
 
+    # Protocol IDs whose firmware handler (configure_sram) leaves a NULL
+    # firestarter_operation_main for CMD_BLANK_CHECK, causing 0xA4
+    # MSG_ERR_EMPTY_INPUT.  These are all SRAM families (D-30 host-side fix).
+    _SRAM_PROTO_IDS = frozenset({0x0E, 0x27, 0x28, 0x29})
+
     def check_eprom_blank(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
     ) -> bool:
+        # D-30: SRAM/FRAM blank-check short-circuit — detect before issuing any
+        # firmware command.  configure_sram() leaves a NULL main-op for
+        # CMD_BLANK_CHECK, so the firmware emits 0xA4 MSG_ERR_EMPTY_INPUT.
+        # SRAM/FRAM are volatile or byte-rewritable; "blank" has no meaningful
+        # concept for them.  Short-circuit with a clear message; do NOT touch the
+        # wire protocol or firmware (D-11/D-30 bound).
+        etype = eprom_data_dict.get("electrical-type", "")
+        proto = eprom_data_dict.get("protocol-id", 0)
+        if etype in ("SRAM", "FRAM") or proto in self._SRAM_PROTO_IDS:
+            logger.warning(
+                f"Blank check is not applicable to {eprom_name.upper()} "
+                f"(electrical type: {etype or 'unknown'}, protocol: 0x{proto:02X}). "
+                "SRAM/FRAM are volatile or byte-rewritable — they have no "
+                "factory-blank state and the firmware has no blank-check op for them."
+            )
+            return False
+
         with self._operation_context(
             eprom_name,
             eprom_data_dict,

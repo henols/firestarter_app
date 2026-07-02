@@ -167,7 +167,7 @@ class TestSkipDeferredPath:
         )
         data = json.loads((tmp_path / "validation-matrix.json").read_text())
         families = {c["family"] for c in data["cells"]}
-        expected = {"eprom", "eeprom28c", "flash3", "flash4", "flash_intel", "sram"}
+        expected = {"eprom", "eeprom28c", "nor_unlock", "5v_page", "flash_intel", "sram"}
         assert expected <= families, f"Expected all 6 families, got {families}"
 
 
