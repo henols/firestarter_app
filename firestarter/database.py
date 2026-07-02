@@ -43,27 +43,6 @@ PROTOCOL_MAP = {
     0x28: "SRAM_STD",
 }
 
-# Algorithm integer (upstream protocol_id from infoic.xml) → firmware mem_type integer.
-# Firmware dispatches on protocol first; mem_type is kept consistent for fallback paths.
-_ALGO_MEM_TYPE = {
-    0x05: 5,  # FLASH_AMD_STD     → TYPE_FLASH_TYPE_4
-    0x06: 3,  # FLASH_AMD_ALT     → TYPE_FLASH_TYPE_3
-    0x07: 1,  # EPROM_STD         → TYPE_EPROM
-    0x08: 1,  # EPROM_QUICK       → TYPE_EPROM
-    0x0B: 1,  # EPROM_LEGACY      → TYPE_EPROM
-    0x0D: 1,  # EEPROM_POLL       → TYPE_EPROM (firmware dispatches on protocol prefix)
-    0x0E: 4,  # SRAM_32PIN        → TYPE_SRAM
-    0x10: 1,  # FLASH_INTEL       → TYPE_EPROM (firmware dispatches on protocol prefix)
-    0x27: 4,  # SRAM_24PIN        → TYPE_SRAM
-    0x28: 4,  # SRAM_STD          → TYPE_SRAM
-    0x29: 4,  # SRAM_512K_1M      → TYPE_SRAM
-    # 0x35 (IC2_ALG_ITE — an ITE EC MCU, not a memory algorithm) and 0x39 (phantom —
-    # no IC2_ALG constant) removed in Phase 57 (DEC-05) to match build_db.py's
-    # canonical allowlist; no DB chip uses either protocol. Firmware still dispatches
-    # 0x35 and 0x39 → configure_flash4 for forward-compat (memory.cpp:89), but the
-    # host excludes them from KNOWN_PROTOCOLS so they route to not_implemented here.
-}
-
 # Module-level constants
 types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
 ROM_CE = 0x100
@@ -415,18 +394,6 @@ class EpromDatabase:
         # Read algorithm integer directly — set by build_db.py from upstream protocol_id
         protocol_id = programming.get("algorithm", 0)
 
-        # Derive mem_type from algorithm (D3). Fall back to electrical.type substring
-        # only when algorithm is absent / 0 (legacy user-override DB entries).
-        if protocol_id and protocol_id in _ALGO_MEM_TYPE:
-            determined_type = _ALGO_MEM_TYPE[protocol_id]
-        else:
-            type_str = electrical.get("type", "")
-            determined_type = 1  # Default to EPROM
-            if "Flash" in type_str:
-                determined_type = 2  # Generic Flash (legacy fallback only)
-            elif "SRAM" in type_str:
-                determined_type = 4
-
         # The new DB doesn't have the raw flags, so we infer what we can
         info_flags = 0
         if programming.get("chip_id_check"):
@@ -442,7 +409,6 @@ class EpromDatabase:
             "name": ic.get("part_number"),
             "manufacturer": manufacturer,
             "memory-size": electrical.get("size_bytes", 0),
-            "type": determined_type,
             "pin-count": pin_count,
             "vpp_volts": vpp,
             "vpp_mv": vpp_mv,
@@ -582,7 +548,6 @@ class EpromDatabase:
         # Keys to keep from the full data
         programmer_data = {
             "memory-size": full_eprom_data.get("memory-size", 0),
-            "type": full_eprom_data.get("type", 0),
             "algorithm": full_eprom_data.get("protocol-id", 0),
             "pin-count": full_eprom_data.get("pin-count", 0),
             "vpp_mv": vpp_mv,
