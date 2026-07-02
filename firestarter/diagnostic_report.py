@@ -1,0 +1,255 @@
+"""
+Project Name: Firestarter
+Copyright (c) 2024 Henrik Olsson
+
+Permission is hereby granted under MIT license.
+
+Community Chip-Validation Diagnostic Report Model (v1.21 Phase 110)
+
+Pure host-side data assembly for `firestarter dev test <chip>` (Phase 112):
+composes the Phase-108/109 `Plan` / `StepResult` / `Fingerprint` /
+`BannerCounts` objects plus new auto-capture and transport-health
+sub-objects into one `DiagnosticReport`, rendered two ways -- a `rich` table
+and a fenced ```json``` block -- from a SINGLE canonical `to_dict()` mapping
+(RPT-01). Neither render maintains a second hand-written field list, and
+neither re-parses the other's output: add a field to `to_dict()` once, both
+renders pick it up.
+
+This module is ORCHESTRATOR-ONLY (SAFE-02, milestone non-regression
+invariant): it imports no serial-transport or hardware-manager class, sets
+no VPP, builds no wire/protocol command dict, passes no force-override flag,
+and adds zero firmware dispatch entries. `AutoCapture.fw_board_identity` is
+RECEIVED as threaded-in input (Phase 112 captures `version:board` off the
+transient per-operation `comm` and passes it in) -- this module never
+fetches it and never opens a serial connection (RESEARCH Pitfall 1).
+"""
+
+from __future__ import annotations
+
+import datetime
+import json
+from dataclasses import dataclass, field
+from typing import Any
+
+from firestarter.chip_test import BannerCounts, Plan, StepResult
+
+# ---------------------------------------------------------------------------
+# Module constants (D-02, D-03) -- single sources of truth
+# ---------------------------------------------------------------------------
+
+SCHEMA_VERSION = "1.0"  # D-02: single-sourced, baked into to_dict() output
+NOT_MEASURED = "not measured"  # D-03: honest fallback, never a false 0
+
+# Elevated-counter threshold for `transport_suspect` (dormant today -- no
+# transport counter is reachable per RESEARCH §Transport Counter Survey; a
+# future phase that adds real counters activates this without a redesign).
+_SUSPECT_THRESHOLD = 5
+
+
+# ---------------------------------------------------------------------------
+# AutoCapture (RPT-02) -- no method fetches identity or opens serial
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class AutoCapture:
+    """Auto-captured identity/protocol fields (RPT-02) -- no tester input.
+
+    `fw_board_identity` is `str | None` because it is RECEIVED as threaded-in
+    input from Phase 112 (which captures `version:board` off the transient
+    per-operation `comm.programmer_info`) -- this dataclass and this module
+    NEVER fetch it themselves and NEVER import the serial-transport class
+    (Pitfall 1). `host_version` is the caller-supplied
+    `firestarter.__version__` string (read at the call site, not stored as a
+    class default, so a future version bump is always live).
+    """
+
+    host_version: str
+    fw_board_identity: str | None = None
+    chip: str = ""
+    protocol: str | None = None
+    chip_id_expected: int | None = None
+    chip_id_actual: int | None = None
+    chip_id_mismatch_reason: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# TransportHealth (XPORT-01, D-03) -- honest "not measured" fallback
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class TransportHealth:
+    """Best-effort transport-health counters (XPORT-01).
+
+    Every counter defaults to `None` -- "not measured" -- because no
+    COBS-decode-error / CRC-failure / retry / timeout counter is reachable
+    from the operator or serial-transport layer today (RESEARCH §Transport
+    Counter Survey: verified NONE exist). `transport_suspect` defaults
+    `False` and can only be set `True` by `_is_transport_suspect` below --
+    never inferred from absent data.
+    """
+
+    cobs_errors: int | None = None
+    crc_failures: int | None = None
+    retries: int | None = None
+    timeouts: int | None = None
+    transport_suspect: bool = False
+
+
+def _is_transport_suspect(th: TransportHealth) -> bool:
+    """True only when a counter is PRESENT (not None) AND elevated (D-03).
+
+    Absent counters can never fabricate suspicion -- mirrors Phase 108's
+    honest `indeterminate` fingerprint bucket. Since no counter is reachable
+    today (RESEARCH §Transport Counter Survey), this always returns False in
+    production; it exists so a future counter source activates it without a
+    redesign.
+    """
+    for value in (th.cobs_errors, th.crc_failures, th.retries, th.timeouts):
+        if value is not None and value >= _SUSPECT_THRESHOLD:
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# DiagnosticReport (RPT-01, RPT-02, XPORT-01) -- single-source dual render
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DiagnosticReport:
+    """The single source object every `dev test` run produces (D-01).
+
+    Composes the Phase-108/109 `Plan`, `list[StepResult]`, and `BannerCounts`
+    objects (never redefined here, never recomputed) plus the new
+    `AutoCapture`/`TransportHealth` sub-objects. `vpp_vpe_mv` is a `None`
+    slot left for Phase 111's measured-voltage sampler.
+
+    NOTE: fields `provenance` (plan 02) and `db_diff` (plan 03) are added by
+    later plans in this phase -- `to_dict()`/`render()` are structured so
+    those keys can be appended without restructuring either method.
+    """
+
+    auto_capture: AutoCapture
+    transport: TransportHealth
+    plan: Plan
+    results: list[StepResult] = field(default_factory=list)
+    banner: BannerCounts | None = None
+    vpp_vpe_mv: int | None = None
+
+    def _utc_now(self) -> str:
+        return datetime.datetime.now(datetime.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+
+    def _auto_capture_dict(self) -> dict[str, Any]:
+        ac = self.auto_capture
+        return {
+            "host_version": ac.host_version,
+            "fw_board_identity": ac.fw_board_identity,
+            "chip": ac.chip,
+            "protocol": ac.protocol,
+            "chip_id_expected": ac.chip_id_expected,
+            "chip_id_actual": ac.chip_id_actual,
+            "chip_id_mismatch_reason": ac.chip_id_mismatch_reason,
+        }
+
+    def _transport_dict(self) -> dict[str, Any]:
+        """Substitute NOT_MEASURED for any None counter -- the ONE place in
+        this module that knows the sentinel string (Pitfall 3)."""
+        th = self.transport
+        return {
+            "cobs_errors": NOT_MEASURED if th.cobs_errors is None else th.cobs_errors,
+            "crc_failures": (
+                NOT_MEASURED if th.crc_failures is None else th.crc_failures
+            ),
+            "retries": NOT_MEASURED if th.retries is None else th.retries,
+            "timeouts": NOT_MEASURED if th.timeouts is None else th.timeouts,
+            "transport_suspect": _is_transport_suspect(th),
+        }
+
+    def _step_dict(self, result: StepResult) -> dict[str, Any]:
+        return {
+            "op": result.op,
+            "verdict": result.verdict,
+            "reason": result.reason,
+            "error_code": result.error_code,
+            "fingerprint": (
+                result.fingerprint.classification if result.fingerprint else None
+            ),
+        }
+
+    def _banner_dict(self) -> dict[str, Any]:
+        if self.banner is None:
+            return {"n_ran": None, "m_applicable": None, "locked_steps": []}
+        return {
+            "n_ran": self.banner.n_ran,
+            "m_applicable": self.banner.m_applicable,
+            "locked_steps": list(self.banner.locked_steps),
+        }
+
+    def to_dict(self) -> dict[str, Any]:
+        """CANONICAL serializable mapping -- the single source both render()
+        and to_json_block() consume (RPT-01, D-01). Hand-written (NOT
+        `dataclasses.asdict()` wholesale, Pitfall 3): this is the ONE place
+        `schema_version` is baked in and the ONE place NOT_MEASURED is
+        substituted for an absent transport counter.
+        """
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "generated": self._utc_now(),
+            "auto_capture": self._auto_capture_dict(),
+            "transport_health": self._transport_dict(),
+            "steps": [self._step_dict(r) for r in self.results],
+            "banner": self._banner_dict(),
+            "vpp_vpe_mv": self.vpp_vpe_mv,
+        }
+
+    def render(self, console: Any = None) -> Any:
+        """Human `rich` table built from the SAME dict `to_dict()` produces
+        (RPT-01, D-01) -- never a second hand-maintained field list, never a
+        re-parse of the JSON string produced by `to_json_block()`."""
+        from rich.table import Table
+
+        d = self.to_dict()
+        ac = d["auto_capture"]
+        table = Table(title=f"dev test -- {ac['chip']}")
+        table.add_column("Field")
+        table.add_column("Value")
+
+        table.add_row("host_version", str(ac["host_version"]))
+        table.add_row("fw_board_identity", str(ac["fw_board_identity"]))
+        table.add_row("protocol", str(ac["protocol"]))
+        table.add_row(
+            "chip_id (expected/actual)",
+            f"{ac['chip_id_expected']} / {ac['chip_id_actual']}",
+        )
+
+        for step_row in d["steps"]:
+            table.add_row(
+                f"step: {step_row['op']}",
+                f"{step_row['verdict']} (err={step_row['error_code']}, "
+                f"fingerprint={step_row['fingerprint']})",
+            )
+
+        th = d["transport_health"]
+        table.add_row(
+            "transport_health",
+            (
+                f"cobs={th['cobs_errors']} crc={th['crc_failures']} "
+                f"retries={th['retries']} timeouts={th['timeouts']} "
+                f"suspect={th['transport_suspect']}"
+            ),
+        )
+
+        banner = d["banner"]
+        table.add_row("banner", f"{banner['n_ran']} of {banner['m_applicable']} ran")
+
+        if console is not None:
+            console.print(table)
+        return table
+
+    def to_json_block(self) -> str:
+        """Fenced ```json block for the self-contained issue body (RPT-01)."""
+        return "```json\n" + json.dumps(self.to_dict(), indent=2) + "\n```"
