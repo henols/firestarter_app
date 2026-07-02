@@ -367,7 +367,9 @@ def test_db_diff_verdict_mapping():
     diff_bad = build_db_diff("X", db, bad_results)
     assert "community-fail" in diff_bad.proposed_disposition
     assert "advisory" in diff_bad.proposed_disposition
-    assert diff_bad.proposed_disposition != "community-fail"  # descriptive text, not a bare value
+    assert (
+        diff_bad.proposed_disposition != "community-fail"
+    )  # descriptive text, not a bare value
 
     # PASS-only (OK + NA/SKIPPED, no BAD) -> candidate for community-reported (advisory).
     pass_results = [
@@ -387,7 +389,10 @@ def test_db_diff_verdict_mapping():
     ]
     diff_marginal = build_db_diff("X", db, marginal_results)
     assert "inconclusive" in diff_marginal.proposed_disposition
-    assert "N>=2" in diff_marginal.proposed_disposition or "N≥2" in diff_marginal.proposed_disposition
+    assert (
+        "N>=2" in diff_marginal.proposed_disposition
+        or "N≥2" in diff_marginal.proposed_disposition
+    )
     assert "advisory" in diff_marginal.proposed_disposition
 
     # A StepResult carrying an "indeterminate" fingerprint classification also
@@ -411,7 +416,9 @@ def test_db_diff_real_db_read():
     name = "AT28C04,AT28HC04"
     raw_config, _manufacturer = _REAL_DB.get_eprom_config(name)
     expected = raw_config.get("support_status", "supported")
-    assert expected == "adapter-required"  # sanity: known fixture from test_chip_test.py
+    assert (
+        expected == "adapter-required"
+    )  # sanity: known fixture from test_chip_test.py
 
     results = [StepResult(op="id", verdict=VERDICT_OK)]
     diff = build_db_diff(name, _REAL_DB, results)
@@ -428,8 +435,15 @@ def test_module_never_writes_support_status():
     lines = [ln for ln in src.splitlines() if not ln.strip().startswith("#")]
     joined = "\n".join(lines)
 
-    # Assignment only -- "==" comparisons (e.g. reading support_status) are
-    # legitimate and must not false-positive this scan.
-    assert re.search(r"support_status\s*(?<!=)=(?!=)\s*[^=]", joined) is None
+    # A bare `support_status = ...` write/assignment -- NOT a `==` comparison
+    # (reading it is legitimate), NOT `current_support_status=...` (a kwarg /
+    # dataclass field name that merely CONTAINS "support_status" as a
+    # suffix), and NOT a dataclass field declaration
+    # (`current_support_status: str = ...`). A real write site would assign
+    # to the bare dict key/attribute name `support_status` itself.
+    assert (
+        re.search(r"(?<![a-zA-Z0-9_])support_status\s*(?<!=)=(?!=)\s*\S", joined)
+        is None
+    )
     assert ".write(" not in joined
     assert re.search(r"\bset_[a-z_]+\(", joined) is None

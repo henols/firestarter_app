@@ -215,6 +215,67 @@ def is_submittable(p: Provenance) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# DbDiff (RPT-05, D-07) -- read-only advisory triage text, never a DB write
+# ---------------------------------------------------------------------------
+
+_DISPOSITION_COMMUNITY_FAIL = (
+    "suggests: community-fail signal (advisory -- human triage required)"
+)
+_DISPOSITION_CANDIDATE = "suggests: candidate for community-reported (advisory)"
+_DISPOSITION_INCONCLUSIVE = "inconclusive -- needs N>=2 agreement (advisory)"
+_DISPOSITION_NO_CHANGE = "no change suggested (advisory)"
+
+
+@dataclass
+class DbDiff:
+    """Current DB `support_status` beside an ADVISORY proposed-disposition
+    (RPT-05, D-07).
+
+    `proposed_disposition` is always plainly-labeled descriptive triage
+    text -- it is NEVER a concrete `support_status` value and this module
+    NEVER writes it back to the database. It exists to inform a human
+    maintainer; the Phase-113/114 taxonomy state-machine and N>=2 promotion
+    rule are explicitly out of scope here (D-07).
+    """
+
+    current_support_status: str = "supported"
+    proposed_disposition: str = ""
+
+
+def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
+    """Read-only transform: current `support_status` + an advisory
+    proposed-disposition string derived purely from sweep verdicts
+    (RPT-05, D-07).
+
+    Reads `support_status` via `db.get_eprom_config(name)` -- mirroring the
+    exact `chip_resolver.py:54` read site -- and NEVER calls any write/set
+    method on `db`. `get_eprom_config` returns a `(config_dict, manufacturer)`
+    tuple; only the config dict is used, defensively handling a `None`/absent
+    config. The verdict-to-string mapping never yields a concrete
+    `support_status` value -- every branch is advisory descriptive text.
+    """
+    raw_config, _manufacturer = db.get_eprom_config(name)
+    current = (raw_config or {}).get("support_status", "supported")
+
+    verdicts = {r.verdict for r in results}
+    has_indeterminate_fingerprint = any(
+        r.fingerprint is not None and r.fingerprint.classification == "indeterminate"
+        for r in results
+    )
+
+    if "BAD" in verdicts:
+        proposed = _DISPOSITION_COMMUNITY_FAIL
+    elif "marginal" in verdicts or has_indeterminate_fingerprint:
+        proposed = _DISPOSITION_INCONCLUSIVE
+    elif "OK" in verdicts and verdicts <= {"OK", "NA", "SKIPPED"}:
+        proposed = _DISPOSITION_CANDIDATE
+    else:
+        proposed = _DISPOSITION_NO_CHANGE
+
+    return DbDiff(current, proposed)
+
+
+# ---------------------------------------------------------------------------
 # DiagnosticReport (RPT-01, RPT-02, XPORT-01) -- single-source dual render
 # ---------------------------------------------------------------------------
 
