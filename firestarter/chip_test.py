@@ -60,3 +60,31 @@ def prepass_images(length: int) -> tuple[bytes, bytes]:
     blank/contact condition (see `classify_fingerprint`).
     """
     return b"\x00" * length, b"\xff" * length
+
+
+# ---------------------------------------------------------------------------
+# Shared byte-diff-offset helper (D-04 -- reused, not reimplemented)
+# ---------------------------------------------------------------------------
+#
+# Mirrors the exact divergence math in `consistency_check_eprom`
+# (eprom_operations.py:842-863): cmp_len / diff_offsets / pct / first
+# divergence offset. This is the ONE divergence primitive `classify_fingerprint`
+# consumes -- do NOT add a second parallel divergence implementation
+# elsewhere in this codebase (D-04 mandate). The math is small enough to
+# copy rather than import, keeping this module import-light (no dependency
+# on eprom_operations.py).
+
+
+def _diff_offsets(
+    expected: bytes, actual: bytes
+) -> tuple[int, list[int], float, int | None]:
+    """Return (cmp_len, diff_offsets, pct, first) for two byte arrays.
+
+    `cmp_len` is `min(len(expected), len(actual))` -- unequal-length inputs
+    are compared only over their common prefix and never raise.
+    """
+    cmp_len = min(len(expected), len(actual))
+    diff_offsets = [o for o in range(cmp_len) if expected[o] != actual[o]]
+    pct = 100.0 * len(diff_offsets) / cmp_len if cmp_len else 0.0
+    first = diff_offsets[0] if diff_offsets else None
+    return cmp_len, diff_offsets, pct, first
