@@ -109,8 +109,8 @@ def test_family_vpp_invariants_all_six_handlers_present() -> None:
     expected = {
         "configure_eprom",
         "configure_eeprom28c",
-        "configure_flash3",
-        "configure_flash4",
+        "configure_flash_nor_unlock",
+        "configure_flash_5v_page",
         "configure_flash_intel",
         "configure_sram",
     }

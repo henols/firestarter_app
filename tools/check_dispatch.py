@@ -78,8 +78,8 @@ _SRAM_PROTOCOLS = {0x0E, 0x27, 0x28, 0x29}
 _FAMILY_VPP_INVARIANTS: dict[str, tuple[int, int]] = {
     "configure_eprom": (0, 25000),  # RURP VPP ceiling 25V (raised Phase 79 from 22V)
     "configure_eeprom28c": (0, 6000),  # 5V-only EEPROM — no elevated VPP rail
-    "configure_flash3": (0, 6000),  # AMD flash 5V only (WP-pin 12V != programming VPP)
-    "configure_flash4": (0, 6000),  # AMD/SST flash 5V only (WP-pin 12V exempt)
+    "configure_flash_nor_unlock": (0, 6000),  # AMD flash 5V only (WP-pin 12V != programming VPP)
+    "configure_flash_5v_page": (0, 6000),  # AMD/SST flash 5V only (WP-pin 12V exempt)
     "configure_flash_intel": (10000, 22000),  # Intel 28F requires 12V programming VPP
     "configure_sram": (0, 6000),  # SRAM — never VPP (BLOCKER-2 complement)
 }
@@ -137,9 +137,9 @@ def dispatch(protocol, mem_type):
     if protocol == 0x0D:
         return "configure_eeprom28c"  # noqa: E701
     if protocol == 0x06:
-        return "configure_flash3"  # noqa: E701
+        return "configure_flash_nor_unlock"  # noqa: E701
     if protocol == 0x05:
-        return "configure_flash4"  # noqa: E701
+        return "configure_flash_5v_page"  # noqa: E701
     if protocol in (0x07, 0x08, 0x0B):
         return "configure_eprom"  # noqa: E701
     if protocol in (0x0E, 0x27, 0x28, 0x29):
@@ -152,8 +152,8 @@ def dispatch(protocol, mem_type):
     return {
         1: "configure_eprom",
         4: "configure_sram",
-        3: "configure_flash3",
-        5: "configure_flash4",
+        3: "configure_flash_nor_unlock",
+        5: "configure_flash_5v_page",
     }.get(mem_type, "ERROR")
 
 
