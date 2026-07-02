@@ -18,9 +18,10 @@ Pure, bench-free compute layer for `firestarter dev test <chip>` (Phase 112):
   Bug A, ST-vs-Winbond chip-ID mixup, AM27C020 write#1/write#2 divergence).
 
 This module is pure compute over host-side byte arrays: it sets no VPP,
-builds no wire dict, and calls no operator/firmware method. Plans 108-03
-(derive_plan) and 108-04 (run_plan) extend this module with the
-orchestration engine in later waves.
+builds no wire dict, and calls no operator/firmware method. Plan 108-04
+extends this module with `run_plan` -- the non-fatal per-step executor that
+composes existing `EpromOperator` methods only (still zero new firmware
+dispatch, zero VPP-set, zero raw wire dict).
 """
 
 from __future__ import annotations
@@ -28,7 +29,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from firestarter.chip_resolver import resolve_chip
 from firestarter.constants import FLAG_CAN_ERASE  # 0x02 -- do NOT redefine; import
+from firestarter.exceptions import (
+    ChipNotFoundError,
+    ChipNotImplementedError,
+    EpromOperationError,
+)
 
 # ---------------------------------------------------------------------------
 # Address-derived pattern generator (PATT-01, D-01/D-02)
@@ -371,3 +378,209 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
         )
 
     return Plan(name=name, steps=steps, reason="")
+
+
+# ---------------------------------------------------------------------------
+# Non-fatal per-step executor (SWEEP-02/03/04, RPT-03) -- guard-HONORING
+# execution path
+# ---------------------------------------------------------------------------
+#
+# run_plan() re-resolves EVERY executed step through chip_resolver.resolve_chip
+# (Pattern 2 / Pitfall 2) -- it NEVER reuses derive_plan's guard-bypassing
+# dict. Each step runs inside its own try/except (Pattern 6 / Pitfall 1): one
+# step's BAD verdict or exception NEVER aborts the remaining steps (the
+# W29C040 locked-boot-block lesson -- the surprise IS the value). The engine
+# dispatches to the existing EpromOperator methods only -- it sets no VPP,
+# builds no wire dict, and passes no --force.
+
+# Verdict vocabulary (SWEEP-02). `MARGINAL` is destructive/verify-only (D-06,
+# wired in Task 3) -- never forced onto read-step disagreement.
+VERDICT_OK = "OK"
+VERDICT_BAD = "BAD"
+VERDICT_NA = "NA"
+VERDICT_SKIPPED = "SKIPPED"
+VERDICT_MARGINAL = "marginal"
+
+# Ops that mutate the chip -- gated by the id-first destructive_gate (SWEEP-03)
+# and run N>=2 with a `marginal`-on-disagreement policy (SWEEP-04, Task 3).
+_DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_ERASE})
+# Steps whose per-run outcome is compared for the N>=2 disagreement policy
+# (D-06: destructive/verify ONLY -- write, erase, verify; read disagreement is
+# a divergence metric, never a verdict flip).
+_MULTI_RUN_OPS = frozenset({OP_WRITE, OP_ERASE, OP_VERIFY})
+
+_DESTRUCTIVE_GATE_REASON = (
+    "chip-ID mismatch — destructive steps gated (chip left pristine)"
+)
+
+
+@dataclass
+class StepResult:
+    """Outcome of executing a single `Step` (SWEEP-02/03/04, RPT-03).
+
+    `verdict` is one of OK/BAD/NA/SKIPPED/marginal. `error_code` carries the
+    exact firmware `response.id` captured off `EpromOperationError.error_code`
+    (RPT-03) when the step raised; `None` otherwise. `fingerprint` is attached
+    only for the write/verify step (Task 3, PATT-02 wiring). `run_count` is
+    the number of times the underlying operator method was actually invoked
+    for this step (1 for single-run steps; N for multi-run destructive/verify
+    steps, Task 3).
+    """
+
+    op: str
+    verdict: str
+    reason: str = ""
+    error_code: int | None = None
+    fingerprint: Fingerprint | None = None
+    run_count: int = 0
+
+
+def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> StepResult:
+    return StepResult(op=op, verdict=verdict, reason=reason, run_count=0)
+
+
+def _resolve_or_none(
+    name: str, db: Any
+) -> tuple[dict[str, Any] | None, StepResult | None, str]:
+    """Re-resolve `name` via the guard-HONORING `resolve_chip` (Pitfall 2).
+
+    Returns `(eprom_data, None, "")` on success, or `(None, step_result_stub,
+    reason)` when `resolve_chip` refuses -- callers fill in `op` on the stub.
+    A refusal (ChipNotImplementedError / ChipNotFoundError) maps to SKIPPED
+    with the reason recorded; the op was still listed by `derive_plan`, so
+    the report can show "this chip's protocol supports write, but the host
+    guard refuses it" (RESEARCH Pitfall 2).
+    """
+    try:
+        eprom_data = resolve_chip(name, db=db)
+    except (ChipNotImplementedError, ChipNotFoundError) as exc:
+        reason = str(exc) or exc.__class__.__name__
+        return None, _skip_result("", reason), reason
+    return eprom_data, None, ""
+
+
+def run_plan(
+    plan: Plan,
+    operator: Any,
+    db: Any,
+    *,
+    runs: int = 2,
+) -> list[StepResult]:
+    """Execute `plan.steps` as independent, non-fatal steps (SWEEP-02).
+
+    Each supported step re-resolves `plan.name` through `resolve_chip(name,
+    db=db)` -- the guard-HONORING execution path (Pattern 2) -- and dispatches
+    to the matching existing `EpromOperator` method (id -> check_eprom_id,
+    read -> read_eprom, blank-check -> check_eprom_blank, write ->
+    write_eprom, verify -> verify_eprom, erase -> erase_eprom). NA steps from
+    `derive_plan` are recorded NA WITHOUT any operator call.
+
+    The id-check step runs FIRST (SWEEP-03): a chip-ID mismatch closes a
+    `destructive_gate` that every destructive step (write/erase) consults
+    BEFORE calling its operator method, marking itself SKIPPED with reason
+    (chip left pristine) instead. Non-destructive id/read/blank-check findings
+    are still recorded regardless of the gate.
+
+    One step's `BAD` verdict or raised exception NEVER aborts the remaining
+    steps (Pitfall 1) -- each step's body is wrapped in its own try/except.
+    `EpromOperationError` -> `BAD` capturing `err.error_code` (RPT-03); a
+    `resolve_chip` refusal -> `SKIPPED`/`NA` with reason (Pitfall 2).
+
+    Task 3 wires `runs>=2` on destructive/verify steps (marginal-on-
+    disagreement, D-05/D-06) and the write/verify Fingerprint. This task
+    (Task 1) executes each step exactly once; the `runs` parameter is
+    threaded through for Task 3 and does not change Task 1 behavior beyond
+    accepting the kwarg.
+    """
+    results: list[StepResult] = []
+    destructive_gate_closed = False
+
+    for step in plan.steps:
+        if not step.supported:
+            results.append(_skip_result(step.op, step.reason, verdict=VERDICT_NA))
+            continue
+
+        if step.op in _DESTRUCTIVE_OPS and destructive_gate_closed:
+            results.append(_skip_result(step.op, _DESTRUCTIVE_GATE_REASON))
+            continue
+
+        result = _run_step(plan.name, step, operator, db, runs=runs)
+        results.append(result)
+
+        if step.op == OP_ID:
+            destructive_gate_closed = _id_step_closes_gate(result)
+
+    return results
+
+
+def _id_step_closes_gate(result: StepResult) -> bool:
+    """SWEEP-03: close the destructive gate on an id-check failure/mismatch.
+
+    `is_ok is False` (chip-ID check failed) OR the step itself errored (`BAD`)
+    both close the gate -- Pitfall 4 requires ANY id-uncertainty to gate
+    destructive steps shut, not just an explicit numeric mismatch.
+    """
+    return result.verdict == VERDICT_BAD
+
+
+def _run_step(
+    name: str, step: Step, operator: Any, db: Any, *, runs: int
+) -> StepResult:
+    """Execute a single supported step through the guard-honoring resolver.
+
+    Wraps the ENTIRE step body (resolve + dispatch) in try/except so no
+    exception escapes to the `run_plan` loop (Pitfall 1). Reference:
+    cli_handlers.py:1568 `dev_validate_family` -- the same
+    `resolve_chip(name, db=...)` + operator-method compose pattern used here.
+    """
+    eprom_data, skip_stub, reason = _resolve_or_none(name, db)
+    if skip_stub is not None:
+        skip_stub.op = step.op
+        return skip_stub
+
+    try:
+        return _dispatch_step(name, step, eprom_data, operator)
+    except EpromOperationError as exc:
+        return StepResult(
+            op=step.op,
+            verdict=VERDICT_BAD,
+            reason=str(exc),
+            error_code=exc.error_code,
+            run_count=1,
+        )
+    except (ChipNotImplementedError, ChipNotFoundError) as exc:
+        # Belt-and-suspenders: a resolve-time-only exception raised instead
+        # during dispatch (defensive; resolve_chip already ran above).
+        return _skip_result(step.op, str(exc) or exc.__class__.__name__)
+
+
+def _dispatch_step(
+    name: str, step: Step, eprom_data: dict[str, Any], operator: Any
+) -> StepResult:
+    """Dispatch `step.op` to its matching existing `EpromOperator` method.
+
+    id -> check_eprom_id (bool, Optional[int]); all others -> a single bool.
+    The engine sets NO VPP, builds NO wire dict, and passes NO --force -- it
+    only calls the operator's existing public methods.
+    """
+    if step.op == OP_ID:
+        is_ok, _detected_id = operator.check_eprom_id(name, eprom_data)
+        return StepResult(
+            op=step.op,
+            verdict=VERDICT_OK if is_ok else VERDICT_BAD,
+            run_count=1,
+        )
+
+    method = {
+        OP_READ: operator.read_eprom,
+        OP_BLANK_CHECK: operator.check_eprom_blank,
+        OP_WRITE: operator.write_eprom,
+        OP_VERIFY: operator.verify_eprom,
+        OP_ERASE: operator.erase_eprom,
+    }[step.op]
+    is_ok = method(name, eprom_data)
+    return StepResult(
+        op=step.op,
+        verdict=VERDICT_OK if is_ok else VERDICT_BAD,
+        run_count=1,
+    )

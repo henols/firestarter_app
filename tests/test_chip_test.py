@@ -46,14 +46,30 @@ References:
 from unittest.mock import Mock
 
 from firestarter.chip_test import (
+    OP_BLANK_CHECK,
+    OP_ID,
+    OP_READ,
+    OP_WRITE,
+    VERDICT_BAD,
+    VERDICT_NA,
+    VERDICT_OK,
+    VERDICT_SKIPPED,
+    Plan,
+    Step,
     _diff_offsets,  # test-internal: the shared divergence primitive (D-04)
     address_fold_byte,
     classify_fingerprint,
     derive_plan,
     generate_pattern,
     prepass_images,
+    run_plan,
 )
 from firestarter.database import EpromDatabase
+from firestarter.exceptions import (
+    ChipNotFoundError,
+    ChipNotImplementedError,
+    EpromOperationError,
+)
 
 # ---------------------------------------------------------------------------
 # Pattern generator (PATT-01)
@@ -459,3 +475,139 @@ def test_derive_plan_destructive_flag_annotates_not_strips():
     assert "write" in ops_default
     assert "erase" in ops_default
     assert ops_default == ops_destructive
+
+
+# ---------------------------------------------------------------------------
+# run_plan -- non-fatal per-step executor (SWEEP-02/03, 108-04 Task 1)
+# ---------------------------------------------------------------------------
+#
+# Bench-free: a Mock(spec=[...]) stand-in for EpromOperator drives each step's
+# outcome; resolve_chip runs for real against EpromDatabase(skip_local_override
+# =True) (no ~/.firestarter, no serial). M8720 is real+supported (protocol
+# 0x08, EEPROM) so resolve_chip succeeds for every step by default.
+
+_OPERATOR_METHODS = [
+    "check_eprom_id",
+    "read_eprom",
+    "check_eprom_blank",
+    "write_eprom",
+    "verify_eprom",
+    "erase_eprom",
+]
+
+
+def _mock_operator(**returns):
+    op = Mock(spec=_OPERATOR_METHODS)
+    op.check_eprom_id.return_value = (True, 0x1234)
+    op.read_eprom.return_value = True
+    op.check_eprom_blank.return_value = True
+    op.write_eprom.return_value = True
+    op.verify_eprom.return_value = True
+    op.erase_eprom.return_value = True
+    for name, value in returns.items():
+        getattr(op, name).return_value = value
+        getattr(op, name).side_effect = None
+    return op
+
+
+def _plan_with_steps(*steps):
+    return Plan(name="M8720", steps=list(steps))
+
+
+def _result(results, op):
+    for r in results:
+        if r.op == op:
+            return r
+    raise AssertionError(f"no result for op {op!r} in {[r.op for r in results]}")
+
+
+def test_run_plan_non_fatal_raising_step_does_not_abort_later_steps():
+    operator = _mock_operator()
+    operator.read_eprom.side_effect = EpromOperationError(
+        "boot block locked", error_code=0xA4
+    )
+    plan = _plan_with_steps(
+        Step(op=OP_READ, supported=True, reason=""),
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+    )
+    results = run_plan(plan, operator, _REAL_DB)
+
+    read_result = _result(results, OP_READ)
+    write_result = _result(results, OP_WRITE)
+    assert read_result.verdict == VERDICT_BAD
+    assert read_result.error_code == 0xA4
+    # The later step still ran -- one step's exception never aborts the rest.
+    assert write_result.verdict == VERDICT_OK
+    operator.write_eprom.assert_called_once()
+
+
+def test_run_plan_verdict_vocabulary_and_na_not_executed():
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_BLANK_CHECK, supported=False, reason="not applicable"),
+        Step(op=OP_READ, supported=True, reason=""),
+    )
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    read_result = _result(results, OP_READ)
+    assert blank_result.verdict == VERDICT_NA
+    assert blank_result.reason == "not applicable"
+    operator.check_eprom_blank.assert_not_called()
+    assert read_result.verdict == VERDICT_OK
+    assert {r.verdict for r in results} <= {
+        VERDICT_OK,
+        VERDICT_BAD,
+        VERDICT_NA,
+        VERDICT_SKIPPED,
+    }
+
+
+def test_run_plan_resolver_refusal_maps_to_skipped(monkeypatch):
+    import firestarter.chip_test as chip_test_mod
+
+    spy = Mock(side_effect=ChipNotImplementedError("adapter-required"))
+    monkeypatch.setattr(chip_test_mod, "resolve_chip", spy)
+
+    operator = _mock_operator()
+    plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB)
+
+    read_result = _result(results, OP_READ)
+    assert read_result.verdict in (VERDICT_SKIPPED, VERDICT_NA)
+    assert read_result.reason
+    operator.read_eprom.assert_not_called()
+
+
+def test_run_plan_chip_not_found_maps_to_skipped(monkeypatch):
+    import firestarter.chip_test as chip_test_mod
+
+    spy = Mock(side_effect=ChipNotFoundError("no-such-chip"))
+    monkeypatch.setattr(chip_test_mod, "resolve_chip", spy)
+
+    operator = _mock_operator()
+    plan = _plan_with_steps(Step(op=OP_ID, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB)
+
+    id_result = _result(results, OP_ID)
+    assert id_result.verdict in (VERDICT_SKIPPED, VERDICT_NA)
+    operator.check_eprom_id.assert_not_called()
+
+
+def test_run_plan_routes_through_resolve_chip_not_derivation_dict(monkeypatch):
+    import firestarter.chip_test as chip_test_mod
+
+    real_resolve = chip_test_mod.resolve_chip
+    spy = Mock(side_effect=real_resolve)
+    monkeypatch.setattr(chip_test_mod, "resolve_chip", spy)
+
+    operator = _mock_operator()
+    plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
+    run_plan(plan, operator, _REAL_DB)
+
+    spy.assert_called_once_with("M8720", db=_REAL_DB)
+    # The operator was called with the freshly-resolved dict, not any
+    # derive_plan-internal structure.
+    called_args = operator.read_eprom.call_args
+    assert called_args.args[0] == "M8720"
+    assert called_args.args[1] == real_resolve("M8720", db=_REAL_DB)
