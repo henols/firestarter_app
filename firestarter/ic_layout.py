@@ -200,17 +200,15 @@ class EpromSpecBuilder:
             }
         }
 
-    def get_chip_type_string(
-        self, chip_type_int: int, protocol_id: int | None = None
-    ) -> str:
+    def get_chip_type_string(self, protocol_id: int | None = None) -> str:
         """Return a user-facing chip-type label.
 
-        When protocol_id is supplied, use it to disambiguate the chip family
-        more precisely than the numeric mem_type alone (which collapses
-        UV-EPROM, 5V EEPROM, and Intel-flash into the same value 1). The
-        protocol-based labels are aligned with the algorithm-family names
-        in firestarter/CLAUDE.md so the displayed type matches the firmware
-        dispatch path the chip actually takes.
+        When protocol_id is supplied, use it to look up the protocol-based
+        display label. The protocol-based labels are aligned with the
+        algorithm-family names in firestarter/CLAUDE.md so the displayed
+        type matches the firmware dispatch path the chip actually takes.
+        Falls back to the bare string "Unknown" when the protocol is absent
+        or unrecognized.
         """
         if protocol_id is not None:
             # 0x35 (ITE EC MCU, 0 DB chips) and 0x39 (phantom, 0 DB chips) removed
@@ -219,8 +217,7 @@ class EpromSpecBuilder:
             # host routes them to not_implemented (excluded from KNOWN_PROTOCOLS).
             if protocol_id in self._PROTOCOL_DISPLAY_NAME:
                 return self._PROTOCOL_DISPLAY_NAME[protocol_id]
-        type_map = {1: "EPROM", 2: "Flash type 2", 3: "Flash type 3", 4: "SRAM"}
-        return type_map.get(chip_type_int, f"Unknown ({chip_type_int})")
+        return "Unknown"
 
     def _interpret_flags(self, flags: int) -> list[str]:
         """Interpret the info-flags value and return a list of properties.
@@ -502,7 +499,6 @@ class EpromSpecBuilder:
     def resolve_type_label(
         self,
         electrical_type: Optional[str],  # noqa: UP006
-        type_int: int = 0,
         protocol_id: Optional[int] = None,  # noqa: UP006
     ) -> str:
         """Return the user-facing chip-type display label (D-04 single source of truth).
@@ -521,7 +517,6 @@ class EpromSpecBuilder:
             electrical_type: Raw ``electrical.type`` string from the DB record
                 (e.g. ``"EEPROM"``, ``"UV-EPROM"``, ``"Flash/EEPROM"``, ``"SRAM"``).
                 Pass ``None`` or ``""`` for legacy entries.
-            type_int: The mapped ``type`` integer (mem_type) — used by the fallback.
             protocol_id: The mapped ``protocol-id`` integer — used by the fallback
                 for more precise disambiguation.
 
@@ -531,7 +526,7 @@ class EpromSpecBuilder:
         etype = electrical_type or ""
         if etype in self._ELECTRICAL_TYPE_LABEL:
             return self._ELECTRICAL_TYPE_LABEL[etype]
-        return self.get_chip_type_string(type_int, protocol_id)
+        return self.get_chip_type_string(protocol_id)
 
     def build_specifications(  # noqa: UP006
         self,
@@ -561,7 +556,6 @@ class EpromSpecBuilder:
         etype = electrical_type or ""
         chip_type_str = self.resolve_type_label(
             electrical_type,
-            eprom_data.get("type", 0),
             eprom_data.get("protocol-id"),
         )
 
@@ -705,8 +699,12 @@ def main():  # Test function
         )
 
     logger.info(f"\n--- Testing get_chip_type_string ---")  # noqa: F541
-    logger.info(f"Type 1: {spec_builder.get_chip_type_string(1)}")
-    logger.info(f"Type 5: {spec_builder.get_chip_type_string(5)}")
+    logger.info(
+        f"Protocol 0x08 (known): {spec_builder.get_chip_type_string(0x08)}"
+    )
+    logger.info(
+        f"Protocol 0x99 (unknown): {spec_builder.get_chip_type_string(0x99)}"
+    )
 
     logger.info(f"\n--- Testing flag interpretation (example flags) ---")  # noqa: F541
     example_flags = 0x000000B0  # Has ID, Elec. Erasable, Can be Elec. Erased
