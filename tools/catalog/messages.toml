@@ -455,14 +455,6 @@ params      = []
 wire_format = "id_frame"
 
 [[messages]]
-id          = 0xAE
-name        = "MSG_ERR_MEM_TYPE_UNSUPPORTED"
-severity    = "ERROR"
-format      = "Memory type 0x%02x not supported"
-params      = [{ type = "u8", render = "hex_byte" }]
-wire_format = "id_frame"
-
-[[messages]]
 id          = 0xAF
 name        = "MSG_ERR_VERIFY"
 severity    = "ERROR"
