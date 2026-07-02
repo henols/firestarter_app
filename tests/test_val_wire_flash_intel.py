@@ -75,15 +75,15 @@ def test_flash_intel_wire_dict_algorithm_is_0x10(make_comm, fake_serial) -> None
 def test_flash_intel_wire_dict_dispatches_to_configure_flash_intel(
     make_comm, fake_serial
 ) -> None:
-    """dispatch(algorithm, type) returns 'configure_flash_intel' for the flash_intel rep chip."""
+    """dispatch(algorithm, 0) returns 'configure_flash_intel' for the flash_intel rep chip; wire carries no `type` key (HOST-01)."""
     db = EpromDatabase()
     chip = db.get_eprom(_REP_CHIP)
     assert chip is not None, f"rep_chip '{_REP_CHIP}' not found in EpromDatabase"
     wire = db.convert_to_programmer(chip)
+    assert "type" not in wire
     algo = wire.get("algorithm", 0)
-    mem_type = wire.get("type", 0)
-    handler = dispatch(algo, mem_type)
+    handler = dispatch(algo, 0)
     assert handler == _EXPECTED_HANDLER, (
-        f"dispatch({algo:#04x}, {mem_type}) -> '{handler}', "
+        f"dispatch({algo:#04x}, 0) -> '{handler}', "
         f"expected '{_EXPECTED_HANDLER}' for '{_REP_CHIP}'"
     )
