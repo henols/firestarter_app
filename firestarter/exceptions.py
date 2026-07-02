@@ -37,7 +37,9 @@ class FirmwareOutdatedError(SerialError):
 class EpromOperationError(Exception):
     """Custom exception for EPROM operation failures."""
 
-    pass
+    def __init__(self, *args: object, error_code: int | None = None) -> None:
+        super().__init__(*args)
+        self.error_code = error_code
 
 
 class ProtocolNotImplementedError(EpromOperationError):
