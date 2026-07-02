@@ -25,6 +25,8 @@ orchestration engine in later waves.
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
+
 # ---------------------------------------------------------------------------
 # Address-derived pattern generator (PATT-01, D-01/D-02)
 # ---------------------------------------------------------------------------
@@ -88,3 +90,134 @@ def _diff_offsets(
     pct = 100.0 * len(diff_offsets) / cmp_len if cmp_len else 0.0
     first = diff_offsets[0] if diff_offsets else None
     return cmp_len, diff_offsets, pct, first
+
+
+# ---------------------------------------------------------------------------
+# Four-bucket byte-mismatch fingerprint classifier (PATT-02, D-03/D-04)
+# ---------------------------------------------------------------------------
+
+# The four locked outcome labels (D-03) -- never coerce an ambiguous
+# distribution into one of the first three; fall back to indeterminate.
+FP_BLANK_CONTACT = "blank/contact"
+FP_ADDRESS_LINE = "address-line"
+FP_TRANSPORT = "transport"
+FP_INDETERMINATE = "indeterminate"
+
+# Candidate thresholds (Claude's discretion, D-04) -- direction is
+# HIGH-confidence, exact numbers are tunable/bench-informed later. A wrong
+# number only produces more `indeterminate`, never a false confident label.
+_FF_RATIO_THRESHOLD = 0.98  # blank/contact: >= this fraction of actual == 0xFF
+_BIT_CLUSTER_THRESHOLD = 0.9  # address-line: >= this fraction of mismatches
+# share one polarity of one high address bit
+
+
+@dataclass
+class Fingerprint:
+    """Verdict + raw evidence for a single expected-vs-actual byte compare."""
+
+    total: int
+    bad: int
+    bad_pct: float
+    classification: str
+    evidence: dict = field(default_factory=dict)
+
+
+def classify_fingerprint(
+    expected: bytes,
+    actual: bytes,
+    *,
+    repeat_divergent: bool | None = None,
+    addr_base: int = 0,
+) -> Fingerprint:
+    """Classify a byte-mismatch pattern into one of four honest buckets.
+
+    Consumes the shared `_diff_offsets` divergence primitive (D-04 -- the
+    same math `consistency_check_eprom` uses for run1-vs-run2 divergence,
+    here applied to expected-pattern-vs-read-back). Never writes a second
+    divergence implementation.
+
+    Classification order is LOCKED (D-04):
+      1. blank/contact  -- cheapest, most common false-PASS source
+      2. address-line   -- power-of-two high-bit clustering (needs addr_base
+                            to map offsets to ABSOLUTE addresses, Pitfall 3)
+      3. transport       -- scattered + non-repeatable across N>=2 runs
+      4. indeterminate   -- fallback; NEVER coerce an ambiguous distribution
+                            into a confident label (D-03).
+    """
+    cmp_len, diff_offsets, bad_pct, first_offset = _diff_offsets(expected, actual)
+    bad = len(diff_offsets)
+
+    ff_count = sum(1 for b in actual[:cmp_len] if b == 0xFF)
+    ff_ratio = (ff_count / cmp_len) if cmp_len else 0.0
+
+    evidence: dict = {
+        "ff_ratio": ff_ratio,
+        "repeat_divergent": repeat_divergent,
+        "first_offset": first_offset,
+        "bit_clustering": {},
+    }
+
+    # 1. blank/contact: read-back is near-all 0xFF (un-driven bus / contact
+    # fault). Checked first regardless of whether there are zero mismatches
+    # (a perfect verify) or the pattern never matched at all.
+    if ff_ratio >= _FF_RATIO_THRESHOLD:
+        return Fingerprint(
+            total=cmp_len,
+            bad=bad,
+            bad_pct=bad_pct,
+            classification=FP_BLANK_CONTACT,
+            evidence=evidence,
+        )
+
+    # 2. address-line: mismatches concentrate on one polarity of a single
+    # high address bit (A8+). Map each mismatch offset to its ABSOLUTE
+    # address (addr_base + offset) before clustering (Pitfall 3) -- else
+    # the signal is computed against the wrong bits. Candidate bits are
+    # restricted to those that can actually vary within [0, cmp_len), i.e.
+    # 8 <= k < ceil(log2(cmp_len)); bits at or above that never toggle
+    # within the compared region and would spuriously "cluster" at 100%.
+    suspected_line = None
+    best_score = 0.0
+    if bad and cmp_len > (1 << 8):
+        max_bit = (cmp_len - 1).bit_length()
+        for k in range(8, max_bit):
+            mask = 1 << k
+            set_count = sum(1 for o in diff_offsets if (addr_base + o) & mask)
+            clear_count = bad - set_count
+            score = max(set_count, clear_count) / bad
+            evidence["bit_clustering"][k] = score
+            if score > best_score:
+                best_score = score
+                suspected_line = k
+
+    if suspected_line is not None and best_score >= _BIT_CLUSTER_THRESHOLD:
+        evidence["suspected_line"] = suspected_line
+        evidence["cluster_score"] = best_score
+        return Fingerprint(
+            total=cmp_len,
+            bad=bad,
+            bad_pct=bad_pct,
+            classification=FP_ADDRESS_LINE,
+            evidence=evidence,
+        )
+
+    # 3. transport: scattered (no dominant high bit, checked above) AND
+    # non-repeatable across the N>=2 runs (caller-supplied signal from
+    # run1-vs-run2 divergence -- the uno328pb signature).
+    if repeat_divergent is True:
+        return Fingerprint(
+            total=cmp_len,
+            bad=bad,
+            bad_pct=bad_pct,
+            classification=FP_TRANSPORT,
+            evidence=evidence,
+        )
+
+    # 4. indeterminate: never coerce an ambiguous distribution (D-03).
+    return Fingerprint(
+        total=cmp_len,
+        bad=bad,
+        bad_pct=bad_pct,
+        classification=FP_INDETERMINATE,
+        evidence=evidence,
+    )
