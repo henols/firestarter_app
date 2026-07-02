@@ -31,6 +31,13 @@ Test taxonomy:
                                                 HardwareManager import, no
                                                 VPP-set, no "--force" token
 
+  Provenance composition, single-source preserved (RPT-04, RPT-01, Plan 02)
+    test_report_with_provenance_surfaces_in_both_renders -> a report built
+        WITH a filled Provenance shows the provenance section (+
+        is_submittable True) in to_dict() and render()
+    test_report_provenance_blank_field_flips_is_submittable -> a blank
+        required provenance field flips is_submittable to False in the dict
+
 References:
   - .planning/phases/110-diagnostic-report-model-dual-output-provenance-prompts/110-01-PLAN.md
   - .planning/phases/110-diagnostic-report-model-dual-output-provenance-prompts/110-RESEARCH.md
@@ -239,3 +246,57 @@ def test_report_module_is_orchestrator_only():
         if isinstance(node, ast.Constant) and isinstance(node.value, str)
     }
     assert "--force" not in force_literals
+
+
+# ---------------------------------------------------------------------------
+# Provenance composition, single-source preserved (RPT-04, RPT-01, Plan 02)
+# ---------------------------------------------------------------------------
+
+
+def test_report_with_provenance_surfaces_in_both_renders():
+    from firestarter.diagnostic_report import Provenance
+
+    report = _build_report()
+    report.provenance = Provenance(
+        shield_rev="Rev 2.2",
+        chip_origin="new/blank",
+        pot_touched=False,
+    )
+
+    d = report.to_dict()
+    assert d["provenance"] is not None
+    assert d["provenance"]["shield_rev"] == "Rev 2.2"
+    assert d["is_submittable"] is True
+
+    table = report.render()
+    # render() must read the SAME to_dict() output -- never a parallel field
+    # list, never a re-parse of the JSON string (RPT-01 single-source).
+    src = inspect.getsource(type(report).render)
+    assert "self.to_dict()" in src or "to_dict()" in src
+    assert "json.loads" not in src
+    assert "json.load(" not in src
+
+    # A provenance row is present in the rendered table.
+    rendered_fields = {str(cell) for column in table.columns for cell in column.cells}
+    assert any("Rev 2.2" in cell or "shield_rev" in cell for cell in rendered_fields)
+
+
+def test_report_provenance_blank_field_flips_is_submittable():
+    from firestarter.diagnostic_report import Provenance
+
+    report = _build_report()
+    report.provenance = Provenance(
+        shield_rev="",
+        chip_origin="new/blank",
+        pot_touched=False,
+    )
+
+    d = report.to_dict()
+    assert d["is_submittable"] is False
+
+
+def test_report_without_provenance_dict_is_null():
+    report = _build_report()
+    d = report.to_dict()
+    assert d["provenance"] is None
+    assert d["is_submittable"] is False
