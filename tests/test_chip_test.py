@@ -59,12 +59,14 @@ from firestarter.chip_test import (
     VERDICT_NA,
     VERDICT_OK,
     VERDICT_SKIPPED,
+    BannerCounts,
     Plan,
     Step,
     _diff_offsets,  # test-internal: the shared divergence primitive (D-04)
     _write_region_for,  # test-internal: UV small-region selector (PATT-03)
     address_fold_byte,
     classify_fingerprint,
+    count_applicable,
     derive_plan,
     generate_pattern,
     prepass_images,
@@ -1107,3 +1109,135 @@ def test_generate_pattern_and_classify_fingerprint_source_unchanged():
     classify_src = inspect.getsource(chip_test_mod.classify_fingerprint)
     assert "_WRITE_REGION_START" not in classify_src
     assert "_UV_WRITE_REGION_LENGTH" not in classify_src
+
+
+# ---------------------------------------------------------------------------
+# count_applicable -- applicable-only N-of-M banner DATA (SWEEP-05, 109-02)
+# ---------------------------------------------------------------------------
+#
+# AM2716 (UV-EPROM): non-destructive steps = {id(NA), read, blank-check,
+# verify}; locked_destructive = {write} (erase is NA -- never locked).
+#   M = 3 supported (read/blank-check/verify) + 1 locked (write) = 4
+#   N (all-OK run) = 3 (read/blank-check/verify; id is NA, excluded)
+#
+# M8720 (EEPROM, FLAG_CAN_ERASE set): non-destructive steps = {id(NA),
+# read, blank-check, verify}; locked_destructive = {write, erase}.
+#   M = 3 supported + 2 locked (write, erase) = 5
+#   N (all-OK run) = 3
+
+
+def test_count_applicable_uv_counts():
+    plan = derive_plan("AM2716", _REAL_DB, destructive=False)
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+
+    counts = count_applicable(plan, results)
+
+    assert isinstance(counts, BannerCounts)
+    assert counts.m_applicable == 4
+    assert counts.n_ran == 3
+    assert counts.n_ran < counts.m_applicable
+    assert {op for op, _reason in counts.locked_steps} == {"write"}
+
+
+def test_count_applicable_eeprom_counts():
+    # Confirm M8720 actually has FLAG_CAN_ERASE set (erase applicable).
+    full = _REAL_DB.get_eprom("M8720")
+    prog = _REAL_DB.convert_to_programmer(full)
+    from firestarter.constants import FLAG_CAN_ERASE
+
+    assert prog["flags"] & FLAG_CAN_ERASE
+
+    plan = derive_plan("M8720", _REAL_DB, destructive=False)
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+
+    counts = count_applicable(plan, results)
+
+    assert counts.m_applicable == 5
+    assert counts.n_ran == 3
+    assert counts.n_ran < counts.m_applicable
+    assert {op for op, _reason in counts.locked_steps} == {"write", "erase"}
+
+
+def test_count_applicable_bad_counts_as_ran():
+    # A BAD read still counts toward N (ran); NA (id) does not.
+    operator = _mock_operator()
+    operator.read_eprom.return_value = False
+    plan = derive_plan("AM2716", _REAL_DB, destructive=False)
+    results = run_plan(plan, operator, _REAL_DB)
+
+    read_result = _result(results, OP_READ)
+    assert read_result.verdict == VERDICT_BAD
+
+    counts = count_applicable(plan, results)
+    assert counts.n_ran == 3  # read(BAD) + blank-check(OK) + verify(OK)
+
+
+def test_count_applicable_skipped_does_not_count_as_ran():
+    # A SKIPPED step (destructive gate closed by an id mismatch) must not
+    # count toward N, even though its op is a supported/executable step.
+    name = "AS29F002T"
+    expected_id = _real_expected_chip_id(name)
+    assert expected_id
+
+    operator = _mock_operator()
+    operator.check_eprom_id.return_value = (False, 0x9999)
+    plan = derive_plan(name, _REAL_DB, destructive=True)
+    results = run_plan(plan, operator, _REAL_DB)
+
+    write_result = _result(results, OP_WRITE)
+    assert write_result.verdict == VERDICT_SKIPPED
+
+    counts = count_applicable(plan, results)
+    # write/erase were gated SKIPPED -- excluded from N despite being
+    # counted in M (they are `plan.steps` supported entries here, since
+    # destructive=True keeps them in steps rather than locked_destructive).
+    ran_ops = {r.op for r in results if r.verdict not in (VERDICT_NA, VERDICT_SKIPPED)}
+    assert "write" not in ran_ops
+    assert "erase" not in ran_ops
+    assert counts.n_ran == len(ran_ops)
+
+
+def test_count_applicable_m_from_single_plan_never_rederives(monkeypatch):
+    import firestarter.chip_test as chip_test_mod
+
+    plan = derive_plan("AM2716", _REAL_DB, destructive=False)
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+
+    spy = Mock(side_effect=AssertionError("count_applicable must not re-derive"))
+    monkeypatch.setattr(chip_test_mod, "derive_plan", spy)
+
+    counts = count_applicable(plan, results)
+
+    spy.assert_not_called()
+    assert counts.m_applicable == 4
+
+
+def test_count_applicable_n_equals_m_when_destructive():
+    # Same chip (M8720), destructive=True: locked_destructive is empty and
+    # every applicable step actually executes -- N == M (banner would not
+    # trigger).
+    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+
+    counts = count_applicable(plan, results)
+
+    assert plan.locked_destructive == []
+    assert counts.n_ran == counts.m_applicable == 5
+
+
+def test_count_applicable_no_print_or_render_introduced():
+    # Banner DATA only -- this task must not add print/render/CLI output.
+    import re
+
+    src = Path(chip_test_source_path()).read_text()
+    assert not re.search(r"\bprint\(|\bclick\.|\bconsole", src)
+
+
+def chip_test_source_path() -> str:
+    import firestarter.chip_test as chip_test_mod
+
+    return chip_test_mod.__file__

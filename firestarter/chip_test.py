@@ -876,3 +876,74 @@ def _dispatch_multi_run(
         run_count=runs,
         fingerprint=fingerprint,
     )
+
+
+# ---------------------------------------------------------------------------
+# Applicable-only N-of-M banner DATA (SWEEP-05, Phase 109 Plan 02)
+# ---------------------------------------------------------------------------
+#
+# DATA ONLY -- this module emits no print/render/CLI output; rendering the
+# "only N of M tests ran -- pass --destructive on a scrap chip for the rest"
+# banner belongs to Phase 110 (report model) / Phase 112 (dev test handler).
+#
+# Applicable-only counting (109-CONTEXT.md "Claude's Discretion", LOCKED by
+# 109-PATTERNS.md): M excludes NA/inapplicable slots (blank-check NA on
+# SRAM/FRAM, id NA when the DB's chip-id sentinel is 0, erase NA on UV /
+# non-FLAG_CAN_ERASE) so the banner never inflates M with never-achievable
+# slots. M is computed from the SINGLE derived `Plan` object -- its
+# `steps` (already-supported, already-executable ops) PLUS the applicable
+# entries on `plan.locked_destructive` (every entry there is, by 109-01's
+# construction, an applicable destructive op a `--destructive` run WOULD
+# execute; NA destructive ops are never placed there) -- derive_plan is
+# NEVER called a second time to compute M (D-01).
+#
+# N counts the steps THIS run actually executed: any StepResult verdict in
+# {OK, BAD, marginal} counts as "ran" (a ran-but-BAD step still counts,
+# since "ran" and "verdict" are separate axes); NA and SKIPPED steps do not
+# count toward N (they never reached the operator).
+
+_RAN_VERDICTS = frozenset({VERDICT_OK, VERDICT_BAD, VERDICT_MARGINAL})
+
+
+@dataclass
+class BannerCounts:
+    """Applicable-only N-of-M banner DATA (SWEEP-05) -- no rendering here.
+
+    `n_ran` is the number of applicable steps THIS run executed (any
+    verdict); `m_applicable` is the number of applicable steps a
+    `--destructive` run would execute for this SAME chip (from the single
+    `Plan` object, never a second derivation); `locked_steps` is
+    `plan.locked_destructive` verbatim, for a future report/banner to name
+    the specific missing ops (e.g. "write, erase").
+    """
+
+    n_ran: int
+    m_applicable: int
+    locked_steps: list[tuple[str, str]] = field(default_factory=list)
+
+
+def count_applicable(plan: Plan, results: list[StepResult]) -> BannerCounts:
+    """Compute the SWEEP-05 applicable-only N-of-M banner data.
+
+    M = `sum(1 for s in plan.steps if s.supported)` PLUS
+    `len(plan.locked_destructive)` -- both read off the ONE `plan` object
+    passed in; this function never calls `derive_plan` (D-01/T-109-08).
+
+    N = count of `results` whose verdict is in {OK, BAD, marginal} (ran);
+    NA and SKIPPED results are excluded.
+
+    For a non-destructive chip run, `locked_destructive` is non-empty and
+    N < M (the banner-trigger condition). For a destructive run,
+    `locked_destructive` is empty and N == M (banner would not fire),
+    since the previously-locked ops are now real supported `steps` that
+    the run executed.
+    """
+    m_applicable = sum(1 for s in plan.steps if s.supported) + len(
+        plan.locked_destructive
+    )
+    n_ran = sum(1 for r in results if r.verdict in _RAN_VERDICTS)
+    return BannerCounts(
+        n_ran=n_ran,
+        m_applicable=m_applicable,
+        locked_steps=list(plan.locked_destructive),
+    )
