@@ -283,10 +283,10 @@ class Step:
     """A single derived operation descriptor.
 
     `supported=False` means the step is NA for this chip (a reason is always
-    recorded); `destructive` marks steps that write/erase the part. This
-    plan (108-03) only ANNOTATES `destructive` -- it does not strip
-    write/erase from the plan when the caller passes `destructive=False`.
-    The plan-construction `--destructive` gate is Phase 109.
+    recorded); `destructive` marks steps that write/erase the part. As of
+    Phase 109 (D-01, SAFE-01) a `destructive=False` call to `derive_plan`
+    structurally OMITS these steps from `Plan.steps` -- see `Plan.
+    locked_destructive` for where they are recorded instead.
     """
 
     op: str
@@ -297,11 +297,22 @@ class Step:
 
 @dataclass
 class Plan:
-    """Ordered, derived test plan for a single chip (SWEEP-01)."""
+    """Ordered, derived test plan for a single chip (SWEEP-01).
+
+    `locked_destructive` (D-01, SAFE-01) is an ADVISORY-ONLY field: it
+    records the `(op, reason)` of write/erase steps that a `destructive=True`
+    call would have added to `steps` but were omitted because the caller
+    passed `destructive=False`. `run_plan` MUST NOT iterate this field --
+    it exists solely so the SWEEP-05 banner / Phase-110 report can still
+    count M (the steps a `--destructive` run would execute) without a
+    second `derive_plan` call and without ever giving the executor a code
+    path to a destructive op in a non-destructive run.
+    """
 
     name: str
     steps: list[Step] = field(default_factory=list)
     reason: str = ""
+    locked_destructive: list[tuple[str, str]] = field(default_factory=list)
 
 
 def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
@@ -310,8 +321,14 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
     Reads `db.get_eprom(name)` then `db.convert_to_programmer(full)` --
     NEVER `chip_resolver.resolve_chip` (Pattern 1/2, T-108-06) -- so this
     works even for chips whose `support_status` would make `resolve_chip`
-    refuse them. `destructive` only annotates write/erase steps; it never
-    removes them from the returned plan (Task 2 `done` criterion).
+    refuse them. `destructive` is read ONLY from this call's kwarg -- never
+    from config or environment (SAFE-01). When `destructive=False`, the
+    write/erase steps that a `destructive=True` call would add are
+    structurally OMITTED from the returned `Plan.steps` and instead
+    recorded as `(op, reason)` tuples on the advisory `Plan.
+    locked_destructive` field (D-01) -- `run_plan` has no code path to
+    iterate them. When `destructive=True`, `steps` contains write/erase
+    exactly as before and `locked_destructive` is empty.
 
     Unknown chips (no DB entry) return an empty `Plan` with `reason` set --
     there is nothing to derive.
@@ -327,6 +344,7 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
     chip_id = prog.get("chip-id", 0)
 
     steps: list[Step] = []
+    locked_destructive: list[tuple[str, str]] = []
 
     # id-check: ALWAYS first (SWEEP-03). Supported only when the chip
     # carries a real (nonzero) chip-id to compare against -- the sentinel
@@ -357,9 +375,14 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
     else:
         steps.append(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
 
-    # write: always supported, always flagged destructive. Listed
-    # regardless of the `destructive` kwarg (annotate-only, Task 2 `done`).
-    steps.append(Step(op=OP_WRITE, supported=True, reason="", destructive=True))
+    # write: always supported, always flagged destructive. When
+    # destructive=False the step is OMITTED from the executable `steps`
+    # list -- structurally absent, not skipped at exec time (D-01, SAFE-01)
+    # -- and recorded on the advisory `locked_destructive` list instead.
+    if destructive:
+        steps.append(Step(op=OP_WRITE, supported=True, reason="", destructive=True))
+    else:
+        locked_destructive.append((OP_WRITE, "destructive=False: write omitted (D-01)"))
 
     steps.append(Step(op=OP_VERIFY, supported=True, reason=""))
 
@@ -368,7 +391,12 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
     # Pitfall 6). UV-EPROM never has the flag set (electrical-type is not in
     # {EEPROM, Flash/EEPROM}) so it is NA here for the same condition.
     if can_erase and protocol != _PROTOCOL_FLASH4:
-        steps.append(Step(op=OP_ERASE, supported=True, reason="", destructive=True))
+        if destructive:
+            steps.append(Step(op=OP_ERASE, supported=True, reason="", destructive=True))
+        else:
+            locked_destructive.append(
+                (OP_ERASE, "destructive=False: erase omitted (D-01)")
+            )
     else:
         if protocol == _PROTOCOL_FLASH4:
             reason = "flash4 (0x05) auto-erases per page; no separate erase op"
@@ -376,11 +404,16 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
             reason = "UV-EPROM has no electrical erase (UV light only)"
         else:
             reason = "FLAG_CAN_ERASE not set for this chip"
+        # NA erase is never a supported executable step regardless of the
+        # destructive kwarg -- there is nothing to lock/omit here (it was
+        # never runnable), so it is NOT added to locked_destructive either.
         steps.append(
             Step(op=OP_ERASE, supported=False, reason=reason, destructive=True)
         )
 
-    return Plan(name=name, steps=steps, reason="")
+    return Plan(
+        name=name, steps=steps, reason="", locked_destructive=locked_destructive
+    )
 
 
 # ---------------------------------------------------------------------------

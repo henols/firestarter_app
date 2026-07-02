@@ -415,7 +415,9 @@ def test_derive_plan_eeprom_erase_supported_when_can_erase_set():
 
     assert prog["flags"] & FLAG_CAN_ERASE
 
-    plan = derive_plan("AS29F002T", _REAL_DB)
+    # destructive=True: erase is a supported step in the executable steps
+    # list (D-01 -- destructive=False would structurally omit it).
+    plan = derive_plan("AS29F002T", _REAL_DB, destructive=True)
     erase_step = _step(plan, "erase")
     assert erase_step.supported is True
 
@@ -449,7 +451,9 @@ def test_derive_plan_read_and_verify_always_present():
 
 
 def test_derive_plan_write_present_and_destructive():
-    plan = derive_plan("M8720", _REAL_DB)
+    # destructive=True: write remains in the executable steps list, exactly
+    # as Phase 108 produced it (D-01 destructive path unchanged).
+    plan = derive_plan("M8720", _REAL_DB, destructive=True)
     write_step = _step(plan, "write")
     assert write_step.supported is True
     assert write_step.destructive is True
@@ -468,17 +472,74 @@ def test_derive_plan_erase_condition_checks_flag_and_protocol():
     assert "0x05" in src or "0x5" in src or "PROTOCOL_FLASH4" in src
 
 
-def test_derive_plan_destructive_flag_annotates_not_strips():
-    # destructive=False must NOT strip write/erase from the plan -- the
-    # plan-construction --destructive gate is Phase 109; here it only
-    # annotates (Task 2 `done` criterion).
+def test_derive_plan_destructive_flag_strips_not_annotates():
+    # Phase 109 (D-01, SAFE-01) INVERTS the Phase-108 annotate-only
+    # contract: destructive=False must structurally OMIT write/erase from
+    # the executable steps list; destructive=True keeps them exactly as
+    # Phase 108 produced them.
     plan_default = derive_plan("M8720", _REAL_DB, destructive=False)
     plan_destructive = derive_plan("M8720", _REAL_DB, destructive=True)
     ops_default = {s.op for s in plan_default.steps}
     ops_destructive = {s.op for s in plan_destructive.steps}
-    assert "write" in ops_default
-    assert "erase" in ops_default
-    assert ops_default == ops_destructive
+
+    assert "write" not in ops_default
+    assert "erase" not in ops_default
+    assert "write" in ops_destructive
+    assert "erase" in ops_destructive
+    # Only the destructive ops are removed -- id/read/blank-check remain.
+    assert ops_default == ops_destructive - {"write", "erase"}
+
+
+def test_derive_plan_strip_default_only_destructive_ops_removed():
+    # strip_default (109-01 Task 1 behavior): only the destructive ops
+    # (write, erase) are removed when destructive=False -- verify is NOT
+    # in _DESTRUCTIVE_OPS and stays present regardless (its execution is
+    # naturally inert without a preceding write).
+    plan = derive_plan("M8720", _REAL_DB, destructive=False)
+    ops = {s.op for s in plan.steps}
+    assert ops == {"id", "read", "blank-check", "verify"}
+    assert "write" not in ops
+    assert "erase" not in ops
+
+
+def test_derive_plan_advisory_populated_when_non_destructive():
+    # advisory_populated: locked_destructive is a non-empty list of
+    # (op, reason) tuples covering the omitted write (and erase, since
+    # M8720's erase is a supported destructive op) when destructive=False.
+    plan = derive_plan("M8720", _REAL_DB, destructive=False)
+    assert plan.locked_destructive
+    locked_ops = {op for op, _reason in plan.locked_destructive}
+    assert locked_ops == {"write", "erase"}
+    for _op, reason in plan.locked_destructive:
+        assert reason
+
+
+def test_derive_plan_destructive_keeps_and_empties_advisory():
+    # destructive_keeps: destructive=True keeps write/erase in steps exactly
+    # as Phase 108 produced them, and locked_destructive is empty.
+    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    ops = {s.op for s in plan.steps}
+    assert "write" in ops
+    assert "erase" in ops
+    assert plan.locked_destructive == []
+
+
+def test_derive_plan_na_erase_advisory_only_records_write():
+    # na_erase_advisory: AM2716 (UV-EPROM) has no supported erase (no
+    # FLAG_CAN_ERASE) -- the non-destructive plan omits write to
+    # locked_destructive, but the NA erase must NOT be fabricated as a
+    # runnable/locked step. It stays an unsupported `erase` Step in `steps`
+    # (as before) and is not added to locked_destructive.
+    full = _REAL_DB.get_eprom("AM2716")
+    assert full["electrical-type"] == "UV-EPROM"
+
+    plan = derive_plan("AM2716", _REAL_DB, destructive=False)
+    locked_ops = {op for op, _reason in plan.locked_destructive}
+    assert locked_ops == {"write"}
+
+    erase_step = _step(plan, "erase")
+    assert erase_step.supported is False
+    assert "erase" not in {s.op for s in plan.steps if s.op == "erase" and s.supported}
 
 
 # ---------------------------------------------------------------------------
