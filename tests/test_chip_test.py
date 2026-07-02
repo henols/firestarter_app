@@ -46,6 +46,8 @@ References:
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 from firestarter.chip_test import (
     _UV_WRITE_REGION_LENGTH,  # test-internal: engine module constant (PATT-03)
     OP_BLANK_CHECK,
@@ -1241,3 +1243,166 @@ def chip_test_source_path() -> str:
     import firestarter.chip_test as chip_test_mod
 
     return chip_test_mod.__file__
+
+
+# ---------------------------------------------------------------------------
+# SAFE-02 orchestrator-only verification (Phase 109 Plan 02, Task 2)
+# ---------------------------------------------------------------------------
+#
+# Every op run_plan executes routes through chip_resolver.resolve_chip (the
+# guard-HONORING path) and calls only existing EpromOperator public methods;
+# it sets no VPP, builds no raw wire/command dict, passes no --force; a
+# firmware VPP-guard refusal is captured as a step finding, never silently
+# retried. This section asserts that property mechanically -- it does not
+# change run_plan's behavior (assert-only), except where noted.
+
+
+def test_safe02_routes_via_resolve_chip_for_every_executed_step(monkeypatch):
+    import firestarter.chip_test as chip_test_mod
+
+    real_resolve = chip_test_mod.resolve_chip
+    spy = Mock(side_effect=real_resolve)
+    monkeypatch.setattr(chip_test_mod, "resolve_chip", spy)
+
+    operator = _mock_operator()
+    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    # M8720's id step is NA (chip-id sentinel 0) -- every OTHER step here is
+    # supported, so all of them must resolve through the spy.
+    executed_steps = [s for s in plan.steps if s.supported]
+    assert len(executed_steps) >= 4
+
+    run_plan(plan, operator, _REAL_DB)
+
+    # resolve_chip is called once per executed (supported) step -- never
+    # reused from derive_plan's guard-bypassing dict.
+    assert spy.call_count == len(executed_steps)
+    for call in spy.call_args_list:
+        assert call.args == ("M8720",)
+        assert call.kwargs == {"db": _REAL_DB}
+
+
+def test_safe02_no_vpp_no_wire_no_force_source_scan():
+    # Human-readable companion to the Plan-03 AST checker (not a
+    # replacement): a lightweight substring scan of chip_test.py's CODE
+    # (docstrings/comments stripped) asserting no VPP-set call, no raw
+    # wire/command dict literal, and no force=True / "--force" pass-through
+    # was introduced. Prose mentions of these terms in comments/docstrings
+    # describing the safety property itself (e.g. "passes no --force") are
+    # expected and must not trip this check -- only executable code lines.
+    import ast
+
+    src = Path(chip_test_source_path()).read_text()
+    tree = ast.parse(src)
+
+    # Strip module/function/class docstrings, then re-render source lines
+    # without comments by re-parsing each non-string-expression statement's
+    # own source segment. Simpler + robust: walk AST nodes and only inspect
+    # literal string/keyword values that are NOT docstrings, plus attribute/
+    # call names -- i.e. inspect the parsed AST, not raw text.
+    forbidden_call_names = {"set_vpp"}
+    forbidden_dict_keys = {"cmd", "bus-config", "vpp_mv"}
+    forbidden_kwarg = "force"
+
+    docstring_nodes = set()
+    for node in ast.walk(tree):
+        if isinstance(
+            node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            body = getattr(node, "body", [])
+            if (
+                body
+                and isinstance(body[0], ast.Expr)
+                and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)
+            ):
+                docstring_nodes.add(id(body[0].value))
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr in forbidden_call_names:
+            raise AssertionError(f"forbidden attribute access: .{node.attr}")
+        if isinstance(node, ast.Call):
+            func = node.func
+            call_name = getattr(func, "attr", None) or getattr(func, "id", None)
+            if call_name in forbidden_call_names:
+                raise AssertionError(f"forbidden call: {call_name}(...)")
+            for kw in node.keywords:
+                if kw.arg == forbidden_kwarg:
+                    raise AssertionError("forbidden force= kwarg passed to a call")
+        if isinstance(node, ast.Dict):
+            for key in node.keys:
+                if (
+                    isinstance(key, ast.Constant)
+                    and isinstance(key.value, str)
+                    and key.value in forbidden_dict_keys
+                ):
+                    raise AssertionError(
+                        f"forbidden raw dict key literal: {key.value!r}"
+                    )
+        if (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and id(node) not in docstring_nodes
+            and node.value == "--force"
+        ):
+            raise AssertionError(
+                "forbidden literal '--force' string outside docstrings"
+            )
+
+
+def test_safe02_vpp_guard_refusal_is_a_finding_not_a_retry_single_run():
+    # A VPP-guard-flavored EpromOperationError from a single-run step
+    # (blank-check) becomes a captured BAD finding with error_code -- and
+    # the operator method is invoked EXACTLY ONCE (no silent retry-around
+    # the refusal).
+    operator = _mock_operator()
+    operator.check_eprom_blank.side_effect = EpromOperationError(
+        "VPP guard refused: voltage out of range", error_code=0xA9
+    )
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB)
+
+    result = _result(results, OP_BLANK_CHECK)
+    assert result.verdict == VERDICT_BAD
+    assert result.error_code == 0xA9
+    operator.check_eprom_blank.assert_called_once()
+
+
+def test_safe02_vpp_guard_refusal_is_a_finding_not_a_retry_multi_run():
+    # Multi-run destructive/verify steps: a VPP-guard refusal on the FIRST
+    # invocation must not be retried-around -- run_plan's try/except wraps
+    # the whole step body, so the exception propagates out of the runs-loop
+    # immediately (exactly 1 call, not `runs` calls, and no bypass call).
+    operator = _mock_operator()
+    operator.write_eprom.side_effect = EpromOperationError(
+        "VPP guard refused: voltage out of range", error_code=0xA9
+    )
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    result = _result(results, OP_WRITE)
+    assert result.verdict == VERDICT_BAD
+    assert result.error_code == 0xA9
+    # No silent retry-around the guard refusal: called exactly once (the
+    # exception aborts the runs-loop for this step; run_plan moves on to
+    # the NEXT step, it does not re-invoke write_eprom to bypass the guard).
+    operator.write_eprom.assert_called_once()
+
+
+def test_safe02_only_known_operator_methods_no_attribute_error():
+    # Mock(spec=[six methods]): accessing/calling ANY out-of-spec attribute
+    # (e.g. a VPP setter) raises AttributeError immediately -- proven here
+    # against the same Mock instance run_plan uses below. A full destructive
+    # run through every op must complete without ever tripping that guard,
+    # proving run_plan never reaches for a method outside the six existing
+    # EpromOperator public methods.
+    operator = _mock_operator()
+
+    with pytest.raises(AttributeError):
+        operator.set_vpp  # out-of-spec attribute access -- sanity check
+
+    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    results = run_plan(plan, operator, _REAL_DB)  # must not raise AttributeError
+
+    assert len(results) == len(plan.steps)
