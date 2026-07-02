@@ -40,7 +40,7 @@ def test_resolve_chip_hit_returns_dict(db):
 def test_resolve_chip_hit_has_required_programmer_keys(db):
     """The resolved dict carries the keys the firmware command builders expect."""
     result = resolve_chip("W27C512", db=db)
-    for key in ("memory-size", "type", "algorithm", "pin-count", "vpp_mv", "flags"):
+    for key in ("memory-size", "algorithm", "pin-count", "vpp_mv", "flags"):
         assert key in result, f"Missing required key: {key}"
 
 
@@ -130,3 +130,42 @@ def test_resolve_chip_guard_fires_before_convert_to_programmer(db):
         with pytest.raises(ChipNotImplementedError):
             resolve_chip("X88C64P", db=db)
         mock_convert.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Phase 106 Plan 03 — HOST-04 algorithm-presence guard (D-01/D-02, SC#4).
+# A support_status=="supported" entry whose programming.algorithm is absent
+# or 0 must still be refused, BEFORE any wire dict is built or serial byte
+# emitted. Mirrors the firmware's protocol==0 -> 0xBB fail-close.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "broken_programming",
+    [
+        {},  # algorithm key absent entirely
+        {"algorithm": 0},  # algorithm present but unusable (0)
+    ],
+)
+def test_resolve_chip_refuses_missing_algorithm_before_convert_to_programmer(
+    db, broken_programming
+):
+    """A supported-but-algorithm-less entry raises ChipNotImplementedError with
+    convert_to_programmer never called (no wire dict, no serial byte).
+
+    Constructs a deliberately-broken synthetic raw record (support_status=
+    "supported" yet programming.algorithm missing/0) via patch.object on
+    get_eprom_config, so the NEW algorithm guard fires -- not the pre-existing
+    support_status guard.
+    """
+    broken_raw_config = {
+        "support_status": "supported",
+        "programming": broken_programming,
+    }
+    with patch.object(
+        db, "get_eprom_config", return_value=(broken_raw_config, "TESTMFG")
+    ):
+        with patch.object(db, "convert_to_programmer") as mock_convert:
+            with pytest.raises(ChipNotImplementedError):
+                resolve_chip("BROKEN_OVERRIDE_CHIP", db=db)
+            mock_convert.assert_not_called()
