@@ -26,6 +26,9 @@ orchestration engine in later waves.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
+
+from firestarter.constants import FLAG_CAN_ERASE  # 0x02 -- do NOT redefine; import
 
 # ---------------------------------------------------------------------------
 # Address-derived pattern generator (PATT-01, D-01/D-02)
@@ -221,3 +224,150 @@ def classify_fingerprint(
         classification=FP_INDETERMINATE,
         evidence=evidence,
     )
+
+
+# ---------------------------------------------------------------------------
+# Plan derivation (SWEEP-01, D-01/D-02) -- guard-BYPASSING derivation path
+# ---------------------------------------------------------------------------
+#
+# derive_plan() reads the frozen DB fields via db.get_eprom() (database.py:506)
+# and db.convert_to_programmer() (database.py:535) ONLY. The support-status
+# guard lives exclusively inside chip_resolver.resolve_chip() (chip_resolver.py:16)
+# -- derivation never calls it, so a chip whose support_status would make
+# resolve_chip refuse it (e.g. "adapter-required") still yields a full plan
+# (Pattern 2 / T-108-06). The guard-HONORING path is Plan 108-04's run_plan,
+# which re-resolves each executed step through resolve_chip(name, db).
+#
+# Op inclusion is a PURE function of the frozen fields protocol-id /
+# electrical-type / FLAG_CAN_ERASE -- the build-time classifier
+# (tools/build_db.py) already froze its result into the DB and is never
+# re-invoked at runtime here.
+
+# Protocol 0x05 (FLASH_AMD_STD / "flash4") auto-erases per page during the
+# page-write; convert_to_programmer() deliberately clears FLAG_CAN_ERASE for
+# this protocol (database.py:582-595) because setting it would route a 12V
+# bulk-erase onto a 5V-only part (Pitfall 6). No named constant for this
+# protocol id exists in constants.py -- mirror database.py's own `algo != 5`
+# check rather than introduce a new cross-module constant.
+_PROTOCOL_FLASH4 = 0x05
+
+# SRAM/FRAM electrical types and protocol ids: blank-check has no meaningful
+# concept for volatile/byte-rewritable memory. derive_plan owns this NA
+# decision up front (RESEARCH nuance recommendation (a)) rather than relying
+# on check_eprom_blank's own short-circuit (eprom_operations.py:1656-1676),
+# which the plan mirrors here for the SAME protocol-id set.
+_SRAM_FRAM_ETYPES = frozenset({"SRAM", "FRAM"})
+_SRAM_PROTO_IDS = frozenset({0x0E, 0x27, 0x28, 0x29})
+
+# Ordered op vocabulary (id-check FIRST per SWEEP-03).
+OP_ID = "id"
+OP_READ = "read"
+OP_BLANK_CHECK = "blank-check"
+OP_WRITE = "write"
+OP_VERIFY = "verify"
+OP_ERASE = "erase"
+
+
+@dataclass
+class Step:
+    """A single derived operation descriptor.
+
+    `supported=False` means the step is NA for this chip (a reason is always
+    recorded); `destructive` marks steps that write/erase the part. This
+    plan (108-03) only ANNOTATES `destructive` -- it does not strip
+    write/erase from the plan when the caller passes `destructive=False`.
+    The plan-construction `--destructive` gate is Phase 109.
+    """
+
+    op: str
+    supported: bool
+    reason: str
+    destructive: bool = False
+
+
+@dataclass
+class Plan:
+    """Ordered, derived test plan for a single chip (SWEEP-01)."""
+
+    name: str
+    steps: list[Step] = field(default_factory=list)
+    reason: str = ""
+
+
+def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
+    """Derive the ordered op list for `name` strictly from frozen DB fields.
+
+    Reads `db.get_eprom(name)` then `db.convert_to_programmer(full)` --
+    NEVER `chip_resolver.resolve_chip` (Pattern 1/2, T-108-06) -- so this
+    works even for chips whose `support_status` would make `resolve_chip`
+    refuse them. `destructive` only annotates write/erase steps; it never
+    removes them from the returned plan (Task 2 `done` criterion).
+
+    Unknown chips (no DB entry) return an empty `Plan` with `reason` set --
+    there is nothing to derive.
+    """
+    full = db.get_eprom(name)
+    if not full:
+        return Plan(name=name, steps=[], reason=f"{name}: not found in database")
+
+    prog = db.convert_to_programmer(full)
+    protocol = prog.get("algorithm", full.get("protocol-id", 0))
+    etype = full.get("electrical-type", "")
+    can_erase = bool(prog.get("flags", 0) & FLAG_CAN_ERASE)
+    chip_id = prog.get("chip-id", 0)
+
+    steps: list[Step] = []
+
+    # id-check: ALWAYS first (SWEEP-03). Supported only when the chip
+    # carries a real (nonzero) chip-id to compare against -- the sentinel
+    # value 0 means "no chip-id in DB entry" (Open Question 2 -> NA).
+    if chip_id:
+        steps.append(Step(op=OP_ID, supported=True, reason=""))
+    else:
+        steps.append(Step(op=OP_ID, supported=False, reason="no chip-id in DB entry"))
+
+    # read / verify: always supported -- every protocol reads.
+    steps.append(Step(op=OP_READ, supported=True, reason=""))
+
+    # blank-check: NA for SRAM/FRAM (derive_plan owns this decision up
+    # front, mirroring check_eprom_blank's own short-circuit by BOTH
+    # electrical-type and protocol-id, since the programmer dict passed to
+    # the operator lacks those keys -- RESEARCH § nuance recommendation a).
+    if etype in _SRAM_FRAM_ETYPES or protocol in _SRAM_PROTO_IDS:
+        steps.append(
+            Step(
+                op=OP_BLANK_CHECK,
+                supported=False,
+                reason=(
+                    f"blank-check not applicable to {etype or 'unknown'} "
+                    "(volatile/byte-rewritable, no factory-blank state)"
+                ),
+            )
+        )
+    else:
+        steps.append(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    # write: always supported, always flagged destructive. Listed
+    # regardless of the `destructive` kwarg (annotate-only, Task 2 `done`).
+    steps.append(Step(op=OP_WRITE, supported=True, reason="", destructive=True))
+
+    steps.append(Step(op=OP_VERIFY, supported=True, reason=""))
+
+    # erase: supported only if FLAG_CAN_ERASE is set AND protocol != 0x05
+    # (flash4 auto-erases per page; the flag is deliberately clear for it --
+    # Pitfall 6). UV-EPROM never has the flag set (electrical-type is not in
+    # {EEPROM, Flash/EEPROM}) so it is NA here for the same condition.
+    if can_erase and protocol != _PROTOCOL_FLASH4:
+        steps.append(Step(op=OP_ERASE, supported=True, reason="", destructive=True))
+    else:
+        if protocol == _PROTOCOL_FLASH4:
+            reason = "flash4 (0x05) auto-erases per page; no separate erase op"
+        elif etype == "UV-EPROM":
+            reason = "UV-EPROM has no electrical erase (UV light only)"
+        else:
+            reason = "FLAG_CAN_ERASE not set for this chip"
+        steps.append(
+            Step(op=OP_ERASE, supported=False, reason=reason, destructive=True)
+        )
+
+    return Plan(name=name, steps=steps, reason="")

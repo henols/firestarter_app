@@ -243,11 +243,13 @@ def test_fingerprint_evidence_fields():
 #
 # Real chips pulled from the shipped chip_database.json via
 # EpromDatabase(skip_local_override=True) (no ~/.firestarter, no serial) --
-# same seam as tests/test_validate_family_cmd.py. Names/protocols verified
-# against the live DB this session (RESEARCH.md Deep-Dive 2):
+# same seam as tests/test_validate_family_cmd.py. Names/protocols/chip-ids
+# verified against the live DB this session (RESEARCH.md Deep-Dive 2):
 #   AE29F1008    -- protocol 0x05 (flash4), Flash/EEPROM, FLAG_CAN_ERASE clear
 #   AM2716       -- protocol 0x0B, UV-EPROM, chip-id sentinel 0 (no real id)
-#   M8720        -- protocol 0x08, EEPROM, has a real (nonzero) chip-id
+#   M8720        -- protocol 0x08, EEPROM, chip-id sentinel 0 (no real id)
+#   AS29F002T    -- protocol 0x06, Flash/EEPROM, real nonzero chip-id (21168),
+#                   FLAG_CAN_ERASE set (algorithm != 5)
 #   DS1220(RW)   -- protocol 0x28, SRAM, blank-check must be NA
 #   AT28C04,AT28HC04 -- support_status "adapter-required" (resolve_chip refuses)
 
@@ -342,8 +344,8 @@ def _step(plan, op):
 
 
 def test_derive_plan_id_step_supported_when_chip_id_present():
-    # M8720 has a real nonzero chip-id.
-    plan = derive_plan("M8720", _REAL_DB)
+    # AS29F002T has a real nonzero chip-id (21168).
+    plan = derive_plan("AS29F002T", _REAL_DB)
     id_step = _step(plan, "id")
     assert id_step.supported is True
 
@@ -383,17 +385,17 @@ def test_derive_plan_uv_eprom_erase_na():
 
 
 def test_derive_plan_eeprom_erase_supported_when_can_erase_set():
-    # M8720 -- protocol 0x08, EEPROM -- FLAG_CAN_ERASE is set (etype in
-    # {EEPROM, Flash/EEPROM} and algorithm != 5).
-    full = _REAL_DB.get_eprom("M8720")
+    # AS29F002T -- protocol 0x06, Flash/EEPROM -- FLAG_CAN_ERASE is set
+    # (etype in {EEPROM, Flash/EEPROM} and algorithm != 5).
+    full = _REAL_DB.get_eprom("AS29F002T")
     prog = _REAL_DB.convert_to_programmer(full)
-    assert full["electrical-type"] == "EEPROM"
+    assert full["electrical-type"] == "Flash/EEPROM"
     assert prog["algorithm"] != 5
     from firestarter.constants import FLAG_CAN_ERASE
 
     assert prog["flags"] & FLAG_CAN_ERASE
 
-    plan = derive_plan("M8720", _REAL_DB)
+    plan = derive_plan("AS29F002T", _REAL_DB)
     erase_step = _step(plan, "erase")
     assert erase_step.supported is True
 
