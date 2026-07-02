@@ -58,6 +58,33 @@ Support and discussions forum at [Discord](https://discord.com/invite/kmhbxAjQc3
 - [Support me](#support-me)
 
 
+## Breaking Changes (v1.20)
+
+### Legacy `type` wire field removed — `algorithm` is the sole dispatch key (breaking change)
+
+The host→firmware JSON command no longer carries a `type` field (the old `mem_type`
+integer). `algorithm` (the upstream minipro `protocol_id`) is now the **only** value
+the firmware uses to decide how to program a chip — the backward-compatibility
+`mem_type` fallback dispatch chain has been removed entirely, on both the firmware
+and the host.
+
+Every chip database entry — built-in or user override — now **must** carry a
+usable, non-zero `algorithm`. A chip lacking one is refused by the CLI before any
+serial byte is sent; there is no silent fallback to a `mem_type`-derived handler
+anymore.
+
+**Pre-v1.20 firmware/hosts stay safe.** A stale host CLI that still emits a `type`
+field is not harmful to new firmware: the firmware silently skips unknown JSON
+fields, so `type` simply no longer does anything. The only functional loss is the
+fallback path itself, which was already dead code for every real chip in the
+database.
+
+**Upgrade:** `pip install --pre firestarter && firestarter fw -i --pre` — reflash
+firmware **and** upgrade the CLI together, the same lockstep discipline as every
+prior breaking wire-protocol change.
+
+This change is beta-only (v1.20). Nothing is promoted to stable without operator authorization.
+
 ## Breaking Changes (v1.10)
 
 ### Command-channel wire protocol — COBS framing + CRC8 (breaking change)
