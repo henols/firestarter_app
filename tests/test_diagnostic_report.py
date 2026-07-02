@@ -447,3 +447,74 @@ def test_module_never_writes_support_status():
     )
     assert ".write(" not in joined
     assert re.search(r"\bset_[a-z_]+\(", joined) is None
+
+
+# ---------------------------------------------------------------------------
+# DbDiff composed into DiagnosticReport (RPT-05, RPT-01, Plan 03)
+# ---------------------------------------------------------------------------
+
+
+def test_report_composes_db_diff_from_single_source():
+    from firestarter.diagnostic_report import build_db_diff
+
+    report = _build_report()
+    db = _mock_db(support_status="adapter-required")
+    report.db_diff = build_db_diff("SOME-CHIP", db, report.results)
+
+    d = report.to_dict()
+    assert d["db_diff"] is not None
+    assert d["db_diff"]["current_support_status"] == "adapter-required"
+    assert d["db_diff"]["proposed_disposition"] == report.db_diff.proposed_disposition
+
+    table = report.render()
+    # render() must read the SAME to_dict() output -- never a parallel field
+    # list, never a re-parse of the JSON string (RPT-01 single-source).
+    src = inspect.getsource(type(report).render)
+    assert "self.to_dict()" in src or "to_dict()" in src
+    assert "json.loads" not in src
+    assert "json.load(" not in src
+
+    rendered_fields = {str(cell) for column in table.columns for cell in column.cells}
+    assert any("adapter-required" in cell for cell in rendered_fields)
+
+
+def test_report_without_db_diff_is_null():
+    report = _build_report()
+    d = report.to_dict()
+    assert d["db_diff"] is None
+
+
+def test_full_report_all_four_sub_objects_single_source():
+    """End-to-end: a full DiagnosticReport (auto_capture + provenance +
+    transport + db_diff + real plan/results/banner) surfaces all four
+    sub-object sections from one to_dict() and one render() -- the phase
+    gate proving RPT-01's single-source contract holds with db_diff added."""
+    from firestarter.diagnostic_report import (
+        SCHEMA_VERSION,
+        Provenance,
+        build_db_diff,
+    )
+
+    report = _build_report()
+    report.provenance = Provenance(
+        shield_rev="Rev 2.2",
+        chip_origin="new/blank",
+        pot_touched=False,
+    )
+    db = _mock_db(support_status="supported")
+    report.db_diff = build_db_diff("M8720", db, report.results)
+
+    d = report.to_dict()
+    assert d["schema_version"] == SCHEMA_VERSION
+    assert d["auto_capture"] is not None
+    assert d["provenance"] is not None
+    assert d["transport_health"] is not None
+    assert d["db_diff"] is not None
+
+    block = report.to_json_block()
+    inner = block.strip()[len("```json\n") :].rsplit("```", 1)[0]
+    parsed = json.loads(inner)
+    assert parsed["db_diff"]["current_support_status"] == "supported"
+
+    table = report.render()  # must not raise
+    assert table.row_count > 0
