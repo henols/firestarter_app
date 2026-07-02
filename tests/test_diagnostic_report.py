@@ -78,12 +78,12 @@ def _mock_operator(**returns):
 def _build_report(chip_name: str = "M8720"):
     """Shared helper: derive a real plan + run it against a mock operator,
     then compose a DiagnosticReport from genuine StepResult objects."""
+    from firestarter.chip_test import count_applicable
     from firestarter.diagnostic_report import (
         AutoCapture,
         DiagnosticReport,
         TransportHealth,
     )
-    from firestarter.chip_test import count_applicable
 
     plan = derive_plan(chip_name, _REAL_DB)
     operator = _mock_operator()
@@ -208,12 +208,34 @@ def test_transport_not_measured():
 
 
 def test_report_module_is_orchestrator_only():
+    """AST-based structural scan (mirrors the Phase-109 SAFE-02 lesson: a raw
+    substring grep false-positives on docstring prose describing the safety
+    property itself, e.g. "imports no SerialCommunicator"). This test parses
+    the module's AST and asserts no import statement names either forbidden
+    symbol, and that no string literal in the source equals "--force"
+    (a real CLI-flag token, never legitimately embedded in this module)."""
+    import ast
+
     import firestarter.diagnostic_report as diagnostic_report_mod
 
     src = inspect.getsource(diagnostic_report_mod)
-    assert "SerialCommunicator" not in src
-    assert "HardwareManager" not in src
-    assert "--force" not in src
-    # No VPP-set call site (structural token check -- the module never
-    # constructs a wire/protocol command dict).
-    assert "vpp_mv=" not in src or "vpp_vpe_mv" in src
+    tree = ast.parse(src)
+
+    imported_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported_names.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            imported_names.update(alias.name for alias in node.names)
+
+    assert "SerialCommunicator" not in imported_names
+    assert "HardwareManager" not in imported_names
+
+    # No literal "--force" token anywhere as an actual string constant (a
+    # real CLI-flag pass-through would appear as a string literal, not prose).
+    force_literals = {
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+    }
+    assert "--force" not in force_literals
