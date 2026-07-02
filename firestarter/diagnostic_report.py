@@ -31,6 +31,8 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
+from rich.prompt import Confirm, Prompt
+
 from firestarter.chip_test import BannerCounts, Plan, StepResult
 
 # ---------------------------------------------------------------------------
@@ -110,6 +112,106 @@ def _is_transport_suspect(th: TransportHealth) -> bool:
         if value is not None and value >= _SUSPECT_THRESHOLD:
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Provenance (RPT-04, D-04/D-05/D-06) -- human-asked, never auto-derived
+# ---------------------------------------------------------------------------
+
+# Community-tolerant enumerated shield-revision options -- NOT a closed
+# hardware whitelist. The trailing "other" (free-text escape) and "not sure"
+# entries are load-bearing: this module never reads a hardware-revision byte
+# to fill this field (D-05, the Bug A lesson -- a hardware revision byte
+# cannot distinguish Rev 2.2 / Rev 2.0 / modified Rev 0).
+SHIELD_REV_CHOICES = ["Rev 2.2", "Rev 2.0", "modified Rev 0", "other", "not sure"]
+
+_CHIP_ORIGIN_CHOICES = ["new/blank", "pulled/used"]
+
+
+@dataclass
+class Provenance:
+    """Tester-supplied provenance the firmware cannot self-report (RPT-04).
+
+    Every field defaults blank/`None` so an un-filled report is not
+    submittable (`is_submittable`). `shield_rev` is ALWAYS human-asked --
+    this dataclass and `prompt_provenance` below never read a
+    hardware-revision byte to populate it (D-05). `owns_eraser` stays `None`
+    when the chip under test is not UV-EPROM (only asked when relevant,
+    D-06); `pot_note` is optional free text collected only when
+    `pot_touched` is `True`.
+    """
+
+    shield_rev: str = ""
+    chip_origin: str = ""
+    owns_eraser: bool | None = None
+    pot_touched: bool | None = None
+    pot_note: str = ""
+
+
+def prompt_provenance(
+    is_uv: bool,
+    *,
+    ask: Any = Prompt.ask,
+    confirm: Any = Confirm.ask,
+) -> Provenance:
+    """Collect provenance BEFORE the sweep via injectable callables (RPT-04).
+
+    `ask`/`confirm` default to `rich.prompt.Prompt.ask`/`Confirm.ask`
+    (mirroring `firmware.py`'s existing `Confirm.ask(..., default=...)`
+    usage) but are overridable parameters so this function never blocks a
+    unit test on a TTY (Pitfall 4) -- tests pass `Mock(side_effect=[...])`
+    instead. Prompt order: shield_rev (free-text follow-up on "other"),
+    chip_origin, owns_eraser (ONLY when `is_uv`), pot_touched, pot_note
+    (ONLY when `pot_touched`).
+
+    This function reads no hardware-revision byte and imports no
+    serial-transport or hardware-manager class -- `is_uv` is the ONLY
+    hardware-adjacent input, and it is received as a plain bool the caller
+    (Phase 112) derives; this function never fetches it itself (D-05).
+    """
+    shield_rev = ask(
+        "Shield revision",
+        choices=SHIELD_REV_CHOICES,
+        default="not sure",
+    )
+    if shield_rev == "other":
+        # A blank free-text answer stays "" (falls through to is_submittable
+        # as blank) rather than silently becoming the literal "other".
+        shield_rev = ask("Describe shield revision", default="") or ""
+
+    chip_origin = ask(
+        "Chip origin",
+        choices=_CHIP_ORIGIN_CHOICES,
+        default="new/blank",
+    )
+
+    owns_eraser: bool | None = None
+    if is_uv:
+        owns_eraser = confirm("Do you own a UV eraser?", default=False)
+
+    pot_touched = confirm("Did you touch/adjust the VPP/VPE pot?", default=False)
+
+    pot_note = ""
+    if pot_touched:
+        pot_note = ask("Pot adjustment note (optional)", default="") or ""
+
+    return Provenance(
+        shield_rev=shield_rev,
+        chip_origin=chip_origin,
+        owns_eraser=owns_eraser,
+        pot_touched=pot_touched,
+        pot_note=pot_note,
+    )
+
+
+def is_submittable(p: Provenance) -> bool:
+    """True iff every REQUIRED provenance field is filled (RPT-04, D-05).
+
+    `"not sure"` on `shield_rev` is a valid, FILLED answer (truthy string)
+    -- only a blank `""`/`None` on a required field fails. `pot_note` is
+    always optional and never gates submittability.
+    """
+    return bool(p.shield_rev) and bool(p.chip_origin) and p.pot_touched is not None
 
 
 # ---------------------------------------------------------------------------
