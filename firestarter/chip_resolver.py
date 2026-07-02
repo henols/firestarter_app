@@ -56,6 +56,20 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
         reason = raw_config.get("unsupported_reason", "unsupported on this hardware")
         raise ChipNotImplementedError(f"{name}: {reason}")
 
+    # Algorithm-presence guard (HOST-04 / D-01 / D-02): mirrors the firmware's
+    # fail-closed protocol==0 -> 0xBB dispatch refusal (Phase 105). A chip entry
+    # (built-in or user-override) whose programming.algorithm is absent or 0 has
+    # no usable protocol to dispatch on and must be refused here, BEFORE
+    # convert_to_programmer builds any wire dict or a serial byte is sent. A
+    # non-zero-but-unknown algorithm is deliberately NOT refused here (D-01) —
+    # it falls through to the firmware's own fail-closed dispatch.
+    algorithm = raw_config.get("programming", {}).get("algorithm", 0)
+    if not algorithm:
+        raise ChipNotImplementedError(
+            f"{name}: no usable programming algorithm (protocol) defined — "
+            "a chip entry must specify a non-zero 'algorithm' to be programmed"
+        )
+
     full = db.get_eprom(name)
     data = db.convert_to_programmer(full) if full else None
     if not data:
