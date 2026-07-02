@@ -26,7 +26,10 @@ dispatch, zero VPP-set, zero raw wire dict).
 
 from __future__ import annotations
 
+import hashlib
+import tempfile
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from firestarter.chip_resolver import resolve_chip
@@ -424,7 +427,9 @@ class StepResult:
     only for the write/verify step (Task 3, PATT-02 wiring). `run_count` is
     the number of times the underlying operator method was actually invoked
     for this step (1 for single-run steps; N for multi-run destructive/verify
-    steps, Task 3).
+    steps, Task 3). `divergence` carries the read-step byte-level divergence
+    metric (D-06) when the step's `runs` disagreed -- a metric only, never a
+    verdict flip and never `marginal` (marginal is destructive/verify-only).
     """
 
     op: str
@@ -433,6 +438,7 @@ class StepResult:
     error_code: int | None = None
     fingerprint: Fingerprint | None = None
     run_count: int = 0
+    divergence: dict[str, Any] | None = None
 
 
 def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> StepResult:
@@ -488,12 +494,30 @@ def run_plan(
     `EpromOperationError` -> `BAD` capturing `err.error_code` (RPT-03); a
     `resolve_chip` refusal -> `SKIPPED`/`NA` with reason (Pitfall 2).
 
-    Task 3 wires `runs>=2` on destructive/verify steps (marginal-on-
-    disagreement, D-05/D-06) and the write/verify Fingerprint. This task
-    (Task 1) executes each step exactly once; the `runs` parameter is
-    threaded through for Task 3 and does not change Task 1 behavior beyond
-    accepting the kwarg.
+    Destructive/verify steps (write/erase/verify) run `runs` times (default
+    2, D-05); when the per-run outcomes DISAGREE the step verdict is
+    `marginal` -- never coerced to a confident OK/BAD (D-06, the AM27C020
+    write#1 60/64 vs write#2 0/64 case made structural). `runs < 2` is
+    rejected BEFORE any resolve/operator call (D-05 guard, mirrors
+    `consistency_check_eprom`). Read-step disagreement across `runs` is
+    reported as a byte-level divergence metric only -- NOT a verdict flip,
+    NOT `marginal` (D-06). The write/verify step attaches a `Fingerprint`
+    (Task 3, PATT-02 wiring) built from `generate_pattern` vs the read-back,
+    with `addr_base` == the write region start (Pitfall 3).
     """
+    if runs < 2:
+        return [
+            StepResult(
+                op="__plan__",
+                verdict=VERDICT_BAD,
+                reason=(
+                    f"runs must be >= 2 (got {runs}); a destructive/verify "
+                    "step requires at least 2 runs to compare (D-05)"
+                ),
+                run_count=0,
+            )
+        ]
+
     results: list[StepResult] = []
     destructive_gate_closed = False
 
@@ -529,6 +553,15 @@ def _id_step_closes_gate(result: StepResult) -> bool:
     return result.verdict in (VERDICT_BAD, VERDICT_SKIPPED)
 
 
+# Region used for the write/verify address-derived pattern fingerprint
+# (Task 3, PATT-01/02 wiring). A small fixed region keeps the bench-free
+# engine's write/verify step cheap and matches the region-parameterized
+# generator contract (D-02) -- Phase 109 owns the concrete UV small-region
+# window; this default is a reasonable stand-in for non-UV chips.
+_WRITE_REGION_START = 0
+_WRITE_REGION_LENGTH = 256
+
+
 def _run_step(
     name: str, step: Step, operator: Any, db: Any, *, runs: int
 ) -> StepResult:
@@ -540,12 +573,14 @@ def _run_step(
     `resolve_chip(name, db=...)` + operator-method compose pattern used here.
     """
     eprom_data, skip_stub, reason = _resolve_or_none(name, db)
-    if skip_stub is not None:
+    if skip_stub is not None or eprom_data is None:
+        if skip_stub is None:
+            skip_stub = _skip_result(step.op, reason)
         skip_stub.op = step.op
         return skip_stub
 
     try:
-        return _dispatch_step(name, step, eprom_data, operator)
+        return _dispatch_step(name, step, eprom_data, operator, runs=runs)
     except EpromOperationError as exc:
         return StepResult(
             op=step.op,
@@ -561,55 +596,196 @@ def _run_step(
 
 
 def _dispatch_step(
-    name: str, step: Step, eprom_data: dict[str, Any], operator: Any
+    name: str,
+    step: Step,
+    eprom_data: dict[str, Any],
+    operator: Any,
+    *,
+    runs: int,
 ) -> StepResult:
     """Dispatch `step.op` to its matching existing `EpromOperator` method.
 
-    id -> check_eprom_id (bool, Optional[int]); all others -> a single bool.
-    The engine sets NO VPP, builds NO wire dict, and passes NO --force -- it
-    only calls the operator's existing public methods.
+    id -> check_eprom_id (single run, bool/Optional[int]); blank-check ->
+    single run; read -> `runs`-times with a byte-level divergence metric
+    (D-06, never a verdict flip); write/verify/erase -> `runs`-times with a
+    marginal-on-disagreement policy (D-05/D-06); write/verify additionally
+    attach a `Fingerprint` (PATT-02 wiring, Pitfall 3 addr_base). The engine
+    sets NO VPP, builds NO wire dict, and passes NO --force -- it only calls
+    the operator's existing public methods.
     """
     if step.op == OP_ID:
-        is_ok, detected_id = operator.check_eprom_id(name, eprom_data)
-        expected_id = eprom_data.get("chip-id")
-        # Pitfall 4: gate on is_ok=False OR an explicit id mismatch -- a
-        # detected id differing from the DB's expected chip-id closes the
-        # destructive gate even when the firmware itself reported is_ok=True
-        # (defensive; check_eprom_id's own is_ok already reflects this in
-        # practice, but the mismatch check makes the gate condition explicit
-        # and independent of firmware wording).
-        mismatch = (
-            is_ok
-            and expected_id
-            and detected_id is not None
-            and detected_id != expected_id
-        )
-        verdict = VERDICT_BAD if (not is_ok or mismatch) else VERDICT_OK
-        reason = ""
-        if mismatch:
-            reason = (
-                f"chip-ID mismatch: expected 0x{expected_id:X}, "
-                f"detected 0x{detected_id:X}"
-            )
-        elif not is_ok:
-            reason = "chip-ID check did not return OK"
+        return _dispatch_id(name, eprom_data, operator)
+    if step.op == OP_BLANK_CHECK:
+        is_ok = operator.check_eprom_blank(name, eprom_data)
         return StepResult(
-            op=step.op,
-            verdict=verdict,
-            reason=reason,
-            run_count=1,
+            op=step.op, verdict=VERDICT_OK if is_ok else VERDICT_BAD, run_count=1
         )
+    if step.op == OP_READ:
+        return _dispatch_read(name, eprom_data, operator, runs=runs)
+    # write / verify / erase: multi-run marginal policy (D-05/D-06).
+    return _dispatch_multi_run(step.op, name, eprom_data, operator, runs=runs)
 
-    method = {
-        OP_READ: operator.read_eprom,
-        OP_BLANK_CHECK: operator.check_eprom_blank,
-        OP_WRITE: operator.write_eprom,
-        OP_VERIFY: operator.verify_eprom,
-        OP_ERASE: operator.erase_eprom,
-    }[step.op]
-    is_ok = method(name, eprom_data)
+
+def _dispatch_id(name: str, eprom_data: dict[str, Any], operator: Any) -> StepResult:
+    is_ok, detected_id = operator.check_eprom_id(name, eprom_data)
+    expected_id = eprom_data.get("chip-id")
+    # Pitfall 4: gate on is_ok=False OR an explicit id mismatch -- a
+    # detected id differing from the DB's expected chip-id closes the
+    # destructive gate even when the firmware itself reported is_ok=True
+    # (defensive; check_eprom_id's own is_ok already reflects this in
+    # practice, but the mismatch check makes the gate condition explicit
+    # and independent of firmware wording).
+    mismatch = (
+        is_ok and expected_id and detected_id is not None and detected_id != expected_id
+    )
+    verdict = VERDICT_BAD if (not is_ok or mismatch) else VERDICT_OK
+    reason = ""
+    if mismatch:
+        reason = (
+            f"chip-ID mismatch: expected 0x{expected_id:X}, detected 0x{detected_id:X}"
+        )
+    elif not is_ok:
+        reason = "chip-ID check did not return OK"
+    return StepResult(op=OP_ID, verdict=verdict, reason=reason, run_count=1)
+
+
+def _dispatch_read(
+    name: str, eprom_data: dict[str, Any], operator: Any, *, runs: int
+) -> StepResult:
+    """Run `read_eprom` `runs` times into temp files; report divergence ONLY.
+
+    D-06: read-step disagreement across runs is a byte-level divergence
+    metric on the step result, NEVER a verdict flip and NEVER `marginal`
+    (marginal is destructive/verify-only). The step's own verdict is OK/BAD
+    from the LAST run's return value -- disagreement across runs does not
+    change it.
+    """
+    last_ok = True
+    run_bytes: list[bytes] = []
+    with tempfile.TemporaryDirectory(prefix="chip_test_read_") as tmp_dir:
+        for i in range(runs):
+            out_path = str(Path(tmp_dir) / f"run_{i:02d}.bin")
+            last_ok = operator.read_eprom(name, eprom_data, output_file=out_path)
+            try:
+                run_bytes.append(Path(out_path).read_bytes())
+            except OSError:
+                run_bytes.append(b"")
+
+    divergence: dict[str, Any] | None = None
+    if len(run_bytes) >= 2 and any(run_bytes):
+        shas = [hashlib.sha256(b).hexdigest() for b in run_bytes]
+        diverged = len(set(shas)) != 1
+        if diverged:
+            cmp_len, diff_offsets, pct, first = _diff_offsets(
+                run_bytes[0], run_bytes[1]
+            )
+            divergence = {
+                "repeat_divergent": True,
+                "cmp_len": cmp_len,
+                "bad": len(diff_offsets),
+                "pct": pct,
+                "first_offset": first,
+            }
+
+    reason = "read runs diverged" if divergence else ""
     return StepResult(
-        op=step.op,
-        verdict=VERDICT_OK if is_ok else VERDICT_BAD,
-        run_count=1,
+        op=OP_READ,
+        verdict=VERDICT_OK if last_ok else VERDICT_BAD,
+        reason=reason,
+        run_count=runs,
+        divergence=divergence,
+    )
+
+
+def _dispatch_multi_run(
+    op: str,
+    name: str,
+    eprom_data: dict[str, Any],
+    operator: Any,
+    *,
+    runs: int,
+) -> StepResult:
+    """Run a destructive/verify op `runs` times; `marginal` on disagreement.
+
+    Collects a per-run bool outcome (the operator method's own return value)
+    for write/erase; write/verify ALSO builds the expected address-derived
+    pattern and reads back via `operator.verify_eprom`'s outcome plus a
+    fresh `read_eprom` to compute the `Fingerprint` (PATT-02). Disagreement
+    across the N per-run outcomes -> `marginal`, never coerced to a
+    confident OK/BAD (D-06, the AM27C020 structural case).
+    """
+    outcomes: list[bool] = []
+    fingerprint: Fingerprint | None = None
+    tmp_source_path: str | None = None
+
+    expected = generate_pattern(_WRITE_REGION_START, _WRITE_REGION_LENGTH)
+    if op in (OP_WRITE, OP_VERIFY):
+        tmp_fh = tempfile.NamedTemporaryFile(
+            prefix="chip_test_pattern_", suffix=".bin", delete=False
+        )
+        try:
+            tmp_fh.write(expected)
+        finally:
+            tmp_fh.close()
+        tmp_source_path = tmp_fh.name
+
+    try:
+        for _ in range(runs):
+            if op == OP_WRITE:
+                outcomes.append(operator.write_eprom(name, eprom_data, tmp_source_path))
+            elif op == OP_VERIFY:
+                outcomes.append(
+                    operator.verify_eprom(name, eprom_data, tmp_source_path)
+                )
+            else:  # OP_ERASE
+                outcomes.append(operator.erase_eprom(name, eprom_data))
+
+        if op in (OP_WRITE, OP_VERIFY):
+            # Readback for the fingerprint is best-effort: a readback failure
+            # (e.g. the SAME boot-block-locked condition that failed the
+            # write/verify runs themselves) must NOT convert an otherwise
+            # successful write/verify outcome into BAD (Pitfall 1 extends to
+            # this internal readback call too) -- it only means no
+            # Fingerprint could be attached.
+            actual = b""
+            try:
+                with tempfile.TemporaryDirectory(prefix="chip_test_verify_") as tmp_dir:
+                    readback_path = str(Path(tmp_dir) / "readback.bin")
+                    operator.read_eprom(name, eprom_data, output_file=readback_path)
+                    try:
+                        actual = Path(readback_path).read_bytes()
+                    except OSError:
+                        actual = b""
+            except EpromOperationError:
+                actual = b""
+
+            if actual:
+                diverged = len(set(outcomes)) != 1 if outcomes else False
+                fingerprint = classify_fingerprint(
+                    expected,
+                    actual,
+                    repeat_divergent=diverged,
+                    addr_base=_WRITE_REGION_START,
+                )
+    finally:
+        if tmp_source_path is not None:
+            try:
+                Path(tmp_source_path).unlink()
+            except OSError:
+                pass
+
+    diverged = len(set(outcomes)) != 1 if outcomes else False
+    if diverged:
+        verdict = VERDICT_MARGINAL
+        reason = f"{runs} runs disagreed on outcome (D-06 marginal policy)"
+    else:
+        verdict = VERDICT_OK if outcomes and outcomes[0] else VERDICT_BAD
+        reason = ""
+
+    return StepResult(
+        op=op,
+        verdict=verdict,
+        reason=reason,
+        run_count=runs,
+        fingerprint=fingerprint,
     )
