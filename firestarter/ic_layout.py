@@ -699,12 +699,8 @@ def main():  # Test function
         )
 
     logger.info(f"\n--- Testing get_chip_type_string ---")  # noqa: F541
-    logger.info(
-        f"Protocol 0x08 (known): {spec_builder.get_chip_type_string(0x08)}"
-    )
-    logger.info(
-        f"Protocol 0x99 (unknown): {spec_builder.get_chip_type_string(0x99)}"
-    )
+    logger.info(f"Protocol 0x08 (known): {spec_builder.get_chip_type_string(0x08)}")
+    logger.info(f"Protocol 0x99 (unknown): {spec_builder.get_chip_type_string(0x99)}")
 
     logger.info(f"\n--- Testing flag interpretation (example flags) ---")  # noqa: F541
     example_flags = 0x000000B0  # Has ID, Elec. Erasable, Can be Elec. Erased
