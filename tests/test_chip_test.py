@@ -43,13 +43,17 @@ References:
     D-01/D-02/D-03/D-04
 """
 
+from unittest.mock import Mock
+
 from firestarter.chip_test import (
     _diff_offsets,  # test-internal: the shared divergence primitive (D-04)
     address_fold_byte,
     classify_fingerprint,
+    derive_plan,
     generate_pattern,
     prepass_images,
 )
+from firestarter.database import EpromDatabase
 
 # ---------------------------------------------------------------------------
 # Pattern generator (PATT-01)
@@ -231,3 +235,225 @@ def test_fingerprint_evidence_fields():
     assert "ff_ratio" in fp.evidence
     assert "repeat_divergent" in fp.evidence
     assert "first_offset" in fp.evidence
+
+
+# ---------------------------------------------------------------------------
+# derive_plan (SWEEP-01, 108-03 Task 1) -- guard-bypassing derivation path
+# ---------------------------------------------------------------------------
+#
+# Real chips pulled from the shipped chip_database.json via
+# EpromDatabase(skip_local_override=True) (no ~/.firestarter, no serial) --
+# same seam as tests/test_validate_family_cmd.py. Names/protocols verified
+# against the live DB this session (RESEARCH.md Deep-Dive 2):
+#   AE29F1008    -- protocol 0x05 (flash4), Flash/EEPROM, FLAG_CAN_ERASE clear
+#   AM2716       -- protocol 0x0B, UV-EPROM, chip-id sentinel 0 (no real id)
+#   M8720        -- protocol 0x08, EEPROM, has a real (nonzero) chip-id
+#   DS1220(RW)   -- protocol 0x28, SRAM, blank-check must be NA
+#   AT28C04,AT28HC04 -- support_status "adapter-required" (resolve_chip refuses)
+
+_REAL_DB = EpromDatabase(skip_local_override=True)
+
+
+def test_derive_plan_id_check_first():
+    plan = derive_plan("M8720", _REAL_DB)
+    assert plan.steps[0].op == "id"
+
+
+def test_derive_plan_reads_via_get_eprom_and_convert_to_programmer_only():
+    # A minimal spy DB exposing ONLY get_eprom/convert_to_programmer (no
+    # resolve_chip, no get_eprom_config) -- proves derive_plan never reaches
+    # for resolve_chip's guard.
+    full = _REAL_DB.get_eprom("M8720")
+    prog = _REAL_DB.convert_to_programmer(full)
+
+    spy_db = Mock(spec=["get_eprom", "convert_to_programmer"])
+    spy_db.get_eprom.return_value = full
+    spy_db.convert_to_programmer.return_value = prog
+
+    plan = derive_plan("M8720", spy_db)
+
+    spy_db.get_eprom.assert_called_once_with("M8720")
+    spy_db.convert_to_programmer.assert_called_once_with(full)
+    assert plan.steps[0].op == "id"
+
+
+def test_derive_plan_never_calls_resolve_chip(monkeypatch):
+    # Belt-and-suspenders: patch resolve_chip in chip_resolver and assert it
+    # is never invoked by derive_plan (Pitfall 2 / T-108-06).
+    import firestarter.chip_resolver as chip_resolver_mod
+
+    spy = Mock(side_effect=AssertionError("resolve_chip must not be called"))
+    monkeypatch.setattr(chip_resolver_mod, "resolve_chip", spy)
+
+    derive_plan("M8720", _REAL_DB)
+
+    spy.assert_not_called()
+
+
+def test_derive_bypasses_guard_for_non_supported_chip():
+    # AT28C04 has support_status "adapter-required" -- resolve_chip would
+    # raise ChipNotImplementedError, but derive_plan must still yield a
+    # full plan because it never calls resolve_chip (SWEEP-01).
+    name = "AT28C04,AT28HC04"
+    raw_config, _manufacturer = _REAL_DB.get_eprom_config(name)
+    assert raw_config.get("support_status") == "adapter-required"
+
+    plan = derive_plan(name, _REAL_DB)  # must NOT raise ChipNotImplementedError
+
+    assert len(plan.steps) > 0
+    assert plan.steps[0].op == "id"
+
+
+def test_derive_plan_flag_can_erase_imported_not_redefined():
+    import firestarter.chip_test as chip_test_mod
+    from firestarter.constants import FLAG_CAN_ERASE
+
+    assert chip_test_mod.FLAG_CAN_ERASE is FLAG_CAN_ERASE
+    assert FLAG_CAN_ERASE == 0x02
+
+
+def test_derive_plan_unknown_chip_returns_empty_plan_with_reason():
+    plan = derive_plan("NO-SUCH-CHIP-XYZ", _REAL_DB)
+    assert plan.steps == []
+    assert plan.reason
+
+
+def test_derive_plan_no_runtime_classify_call():
+    # grep-gate companion: derive_plan's source contains no call to
+    # classify() (build-time only, tools/build_db.py).
+    import inspect
+
+    import firestarter.chip_test as chip_test_mod
+
+    src = inspect.getsource(chip_test_mod.derive_plan)
+    assert "classify(" not in src
+
+
+# ---------------------------------------------------------------------------
+# Protocol-driven op-inclusion rules (SWEEP-01, 108-03 Task 2)
+# ---------------------------------------------------------------------------
+
+
+def _step(plan, op):
+    for s in plan.steps:
+        if s.op == op:
+            return s
+    raise AssertionError(f"no step named {op!r} in plan: {[s.op for s in plan.steps]}")
+
+
+def test_derive_plan_id_step_supported_when_chip_id_present():
+    # M8720 has a real nonzero chip-id.
+    plan = derive_plan("M8720", _REAL_DB)
+    id_step = _step(plan, "id")
+    assert id_step.supported is True
+
+
+def test_derive_plan_id_step_na_when_chip_id_absent():
+    # AM2716 (UV-EPROM, protocol 0x0B) carries the chip-id sentinel 0 in the
+    # programmer dict -- nothing to compare against, so the id step is NA.
+    plan = derive_plan("AM2716", _REAL_DB)
+    id_step = _step(plan, "id")
+    assert id_step.supported is False
+    assert id_step.reason
+
+
+def test_derive_plan_flash4_erase_na():
+    # AE29F1008 -- protocol 0x05 (flash4), Flash/EEPROM. FLAG_CAN_ERASE is
+    # deliberately clear for 0x05 (auto-erase per page; Pitfall 6).
+    full = _REAL_DB.get_eprom("AE29F1008")
+    assert full["protocol-id"] == 5
+    assert full["electrical-type"] == "Flash/EEPROM"
+
+    plan = derive_plan("AE29F1008", _REAL_DB)
+    erase_step = _step(plan, "erase")
+    assert erase_step.supported is False
+    assert erase_step.reason
+
+
+def test_derive_plan_uv_eprom_erase_na():
+    # AM2716 -- UV-EPROM, no electrical erase; FLAG_CAN_ERASE never set for
+    # UV-EPROM electrical-type.
+    full = _REAL_DB.get_eprom("AM2716")
+    assert full["electrical-type"] == "UV-EPROM"
+
+    plan = derive_plan("AM2716", _REAL_DB)
+    erase_step = _step(plan, "erase")
+    assert erase_step.supported is False
+    assert erase_step.reason
+
+
+def test_derive_plan_eeprom_erase_supported_when_can_erase_set():
+    # M8720 -- protocol 0x08, EEPROM -- FLAG_CAN_ERASE is set (etype in
+    # {EEPROM, Flash/EEPROM} and algorithm != 5).
+    full = _REAL_DB.get_eprom("M8720")
+    prog = _REAL_DB.convert_to_programmer(full)
+    assert full["electrical-type"] == "EEPROM"
+    assert prog["algorithm"] != 5
+    from firestarter.constants import FLAG_CAN_ERASE
+
+    assert prog["flags"] & FLAG_CAN_ERASE
+
+    plan = derive_plan("M8720", _REAL_DB)
+    erase_step = _step(plan, "erase")
+    assert erase_step.supported is True
+
+
+def test_derive_plan_blank_check_na_for_sram_chip():
+    # DS1220(RW) -- protocol 0x28, SRAM. derive_plan must own this NA
+    # decision up front (RESEARCH nuance recommendation (a)), not rely on
+    # the operator's own check_eprom_blank short-circuit.
+    full = _REAL_DB.get_eprom("DS1220(RW)")
+    assert full["electrical-type"] == "SRAM"
+
+    plan = derive_plan("DS1220(RW)", _REAL_DB)
+    blank_step = _step(plan, "blank-check")
+    assert blank_step.supported is False
+    assert blank_step.reason
+
+
+def test_derive_plan_blank_check_supported_for_regular_eeprom():
+    plan = derive_plan("M8720", _REAL_DB)
+    blank_step = _step(plan, "blank-check")
+    assert blank_step.supported is True
+
+
+def test_derive_plan_read_and_verify_always_present():
+    for name in ("M8720", "AM2716", "AE29F1008", "DS1220(RW)"):
+        plan = derive_plan(name, _REAL_DB)
+        read_step = _step(plan, "read")
+        verify_step = _step(plan, "verify")
+        assert read_step.supported is True
+        assert verify_step.supported is True
+
+
+def test_derive_plan_write_present_and_destructive():
+    plan = derive_plan("M8720", _REAL_DB)
+    write_step = _step(plan, "write")
+    assert write_step.supported is True
+    assert write_step.destructive is True
+
+
+def test_derive_plan_erase_condition_checks_flag_and_protocol():
+    # Structural check on the source: the erase-inclusion condition
+    # references both FLAG_CAN_ERASE and a check against protocol 0x05 (or
+    # an equivalent named constant) -- acceptance criterion for Task 2.
+    import inspect
+
+    import firestarter.chip_test as chip_test_mod
+
+    src = inspect.getsource(chip_test_mod.derive_plan)
+    assert "FLAG_CAN_ERASE" in src
+    assert "0x05" in src or "0x5" in src or "PROTOCOL_FLASH4" in src
+
+
+def test_derive_plan_destructive_flag_annotates_not_strips():
+    # destructive=False must NOT strip write/erase from the plan -- the
+    # plan-construction --destructive gate is Phase 109; here it only
+    # annotates (Task 2 `done` criterion).
+    plan_default = derive_plan("M8720", _REAL_DB, destructive=False)
+    plan_destructive = derive_plan("M8720", _REAL_DB, destructive=True)
+    ops_default = {s.op for s in plan_default.steps}
+    ops_destructive = {s.op for s in plan_destructive.steps}
+    assert "write" in ops_default
+    assert "erase" in ops_default
+    assert ops_default == ops_destructive
