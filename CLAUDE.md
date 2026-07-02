@@ -55,7 +55,6 @@ Example write command:
 ```json
 {
   "cmd": 2,
-  "type": 1,
   "algorithm": 7,
   "memory-size": 65536,
   "vpp_mv": 12000,
