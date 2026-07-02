@@ -177,7 +177,7 @@ def test_protocol_info_type_matches_chip_type_string_single_source(
         info = spec_builder._get_protocol_info_structured(pid)
         if info is None:
             continue
-        fallback_label = spec_builder.get_chip_type_string(0, pid)
+        fallback_label = spec_builder.get_chip_type_string(pid)
         assert info["type"] == fallback_label, (
             f"protocol 0x{pid:02X}: _get_protocol_info_structured type "
             f"{info['type']!r} must equal get_chip_type_string fallback "

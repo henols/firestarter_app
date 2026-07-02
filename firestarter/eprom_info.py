@@ -405,7 +405,6 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
         # D-04: Type via the single shared helper (resolve_type_label).
         type_str = spec_builder.resolve_type_label(
             ic.get("electrical-type"),
-            ic.get("type", 0),
             ic.get("protocol-id"),
         )
         # WR-01: the Type column is a fixed-width 12-char cell. The
