@@ -56,7 +56,7 @@ _FW_DISPATCH_TEST = (
 # Matches a bucket-table row:  | 0xNN | <count> | `<slug>` | `PROTO_*` | <name> | <handler-family...> | <phantom?> |
 # We need column 1 (hex, group 1), column 6 (handler-family, group 2) — the
 # family word is the FIRST whitespace-delimited token of that column (e.g.
-# "flash4 (0x05 + phantoms 0x35/0x39)" -> "flash4") — and column 7 (phantom?,
+# "5v_page (0x05 + phantoms 0x35/0x39)" -> "5v_page") — and column 7 (phantom?,
 # group 3), used to exclude phantom rows (0x35/0x39) from the doc leg, since
 # they are NOT in check_dispatch.KNOWN_PROTOCOLS and route to
 # not_implemented on the tool leg (host-side exclusion, unrelated to naming).
@@ -72,8 +72,8 @@ _FAMILY_ROW_RE = re.compile(
 # Map: doc handler-file → check_dispatch handler-function name.
 # These are the seven distinct handlers that appear across the §0 table.
 DOC_FILE_TO_FUNC: dict[str, str] = {
-    "flash_type_4.cpp": "configure_flash4",
-    "flash_type_3.cpp": "configure_flash3",
+    "flash_5v_page.cpp": "configure_flash_5v_page",
+    "flash_nor_unlock.cpp": "configure_flash_nor_unlock",
     "eprom.cpp": "configure_eprom",
     "eeprom_28c.cpp": "configure_eeprom28c",
     "flash_intel.cpp": "configure_flash_intel",

@@ -25,8 +25,8 @@ SPEC_PATH = _TOOLS_DIR / "validation_matrix_spec.json"
 EXPECTED_HANDLERS = {
     "configure_eprom",
     "configure_eeprom28c",
-    "configure_flash3",
-    "configure_flash4",
+    "configure_flash_nor_unlock",
+    "configure_flash_5v_page",
     "configure_flash_intel",
     "configure_sram",
 }

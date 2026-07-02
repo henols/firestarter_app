@@ -58,7 +58,7 @@ _SRAM_PROTOCOLS = {0x0E, 0x27, 0x28, 0x29}
 # Maps handler name → (min_vpp_mv, max_vpp_mv).
 #
 # IMPLEMENTATION NOTE: chip_database.json stores vpp_mv in the "electrical" block.
-# For 5V-only handlers (flash3/flash4/sram/eeprom28c), the electrical.vpp_mv field
+# For 5V-only handlers (nor_unlock/5v_page/sram/eeprom28c), the electrical.vpp_mv field
 # encodes the chip's write-protect (WP) pin voltage from the datasheet — NOT a
 # programming VPP that the RURP firmware would assert. These chips commonly list
 # vpp_mv=12000 (WP pin), which the firmware never enables via the VPP boost regulator.
