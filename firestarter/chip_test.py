@@ -589,10 +589,60 @@ def _id_step_closes_gate(result: StepResult) -> bool:
 # Region used for the write/verify address-derived pattern fingerprint
 # (Task 3, PATT-01/02 wiring). A small fixed region keeps the bench-free
 # engine's write/verify step cheap and matches the region-parameterized
-# generator contract (D-02) -- Phase 109 owns the concrete UV small-region
-# window; this default is a reasonable stand-in for non-UV chips.
+# generator contract (D-02). This is the NON-UV default region -- Phase 109
+# (PATT-03) owns the UV-EPROM branch below via `_write_region_for`.
 _WRITE_REGION_START = 0
 _WRITE_REGION_LENGTH = 256
+
+# UV-EPROM write-region WIDTH (PATT-03, SC4). This is an ENGINE MODULE
+# CONSTANT, never sourced from any DB field -- a malicious/misconfigured DB
+# entry must not be able to widen the write window. `memory-size` is only a
+# top-anchor PLACEMENT bound (where the window sits), never a WIDTH input.
+_UV_WRITE_REGION_LENGTH = 256
+
+# UV detection at EXECUTION time: `_dispatch_multi_run`'s `eprom_data` is
+# `resolve_chip`'s PROGRAMMER dict (via `convert_to_programmer`), which does
+# NOT carry `electrical-type` -- only `derive_plan`'s guard-bypassing `full`
+# dict does. Algorithm 0x0B (EPROM_LEGACY/protocol-id 11) IS carried through
+# to the programmer dict as `algorithm`, and is UV-EPROM-exclusive across the
+# whole chip database (verified: no non-UV chip uses protocol-id 0x0B) --
+# this is the execution-time UV signal `_write_region_for` uses. `full`-style
+# dicts (bench-free unit tests, or any future caller with the richer dict)
+# are also honored via the `electrical-type` field when present.
+_PROTOCOL_UV_EPROM = 0x0B
+
+
+def _write_region_for(eprom_data: dict[str, Any]) -> tuple[int, int]:
+    """Choose the (start, length) write/verify region for `eprom_data`.
+
+    UV-EPROM chips get a small, top-anchored, high-address window
+    `[mem_size - _UV_WRITE_REGION_LENGTH, mem_size)` (PATT-03): the
+    high-address base (all high bits set) makes `generate_pattern`'s
+    address-XOR-fold exercise the upper-address decode -- the Bug-A
+    upper-address read-path fault surface -- and the tiny window lets an
+    eraser-less tester safely retry. The WIDTH always comes from the
+    `_UV_WRITE_REGION_LENGTH` module constant, NEVER from any DB field
+    (SC4: a bad DB entry cannot widen it); `memory-size` only bounds where
+    the window is placed. Non-UV chips (and UV chips whose memory-size is
+    missing/too small to fit the window) get the engine default region.
+
+    UV detection accepts EITHER `electrical-type == "UV-EPROM"` (the `full`
+    DB dict, used by bench-free unit tests) OR `algorithm ==
+    _PROTOCOL_UV_EPROM` (the programmer dict `_dispatch_multi_run` actually
+    sees at execution time, via `resolve_chip`/`convert_to_programmer`,
+    which drops `electrical-type`).
+    """
+    is_uv = (
+        eprom_data.get("electrical-type", "") == "UV-EPROM"
+        or eprom_data.get("algorithm") == _PROTOCOL_UV_EPROM
+    )
+    if is_uv:
+        mem_size = int(eprom_data.get("memory-size", 0) or 0)
+        if mem_size >= _UV_WRITE_REGION_LENGTH:
+            return mem_size - _UV_WRITE_REGION_LENGTH, _UV_WRITE_REGION_LENGTH
+        # Defensive fallback: mem_size missing/too small to fit the window
+        # would produce a negative start -- use the engine default instead.
+    return _WRITE_REGION_START, _WRITE_REGION_LENGTH
 
 
 def _run_step(
@@ -745,13 +795,17 @@ def _dispatch_multi_run(
     pattern and reads back via `operator.verify_eprom`'s outcome plus a
     fresh `read_eprom` to compute the `Fingerprint` (PATT-02). Disagreement
     across the N per-run outcomes -> `marginal`, never coerced to a
-    confident OK/BAD (D-06, the AM27C020 structural case).
+    confident OK/BAD (D-06, the AM27C020 structural case). The write/verify
+    region is chosen per-chip by `_write_region_for` (PATT-03) -- UV-EPROM
+    chips get a small top-anchored high-address window; other chips keep
+    the engine default region.
     """
     outcomes: list[bool] = []
     fingerprint: Fingerprint | None = None
     tmp_source_path: str | None = None
 
-    expected = generate_pattern(_WRITE_REGION_START, _WRITE_REGION_LENGTH)
+    region_start, region_length = _write_region_for(eprom_data)
+    expected = generate_pattern(region_start, region_length)
     if op in (OP_WRITE, OP_VERIFY):
         tmp_fh = tempfile.NamedTemporaryFile(
             prefix="chip_test_pattern_", suffix=".bin", delete=False
@@ -798,7 +852,7 @@ def _dispatch_multi_run(
                     expected,
                     actual,
                     repeat_divergent=diverged,
-                    addr_base=_WRITE_REGION_START,
+                    addr_base=region_start,
                 )
     finally:
         if tmp_source_path is not None:

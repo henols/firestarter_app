@@ -47,6 +47,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 from firestarter.chip_test import (
+    _UV_WRITE_REGION_LENGTH,  # test-internal: engine module constant (PATT-03)
     OP_BLANK_CHECK,
     OP_ERASE,
     OP_ID,
@@ -61,6 +62,7 @@ from firestarter.chip_test import (
     Plan,
     Step,
     _diff_offsets,  # test-internal: the shared divergence primitive (D-04)
+    _write_region_for,  # test-internal: UV small-region selector (PATT-03)
     address_fold_byte,
     classify_fingerprint,
     derive_plan,
@@ -959,3 +961,149 @@ def test_write_step_fingerprint_addr_base_matches_region_start():
     results = run_plan(plan, operator, _REAL_DB, runs=2)
     write_result = _result(results, OP_WRITE)
     assert write_result.fingerprint is not None
+
+
+# ---------------------------------------------------------------------------
+# UV small-region top-anchored write cap (PATT-03, 109-01 Task 2)
+# ---------------------------------------------------------------------------
+#
+# Bench-free: `_write_region_for` is a pure selector over an `eprom_data`
+# dict, no operator/DB call. Real memory-size values are read once from
+# `_REAL_DB` to build representative UV/non-UV `eprom_data` dicts.
+
+
+def test_uv_window_top_anchored_default_length():
+    # uv_window: AM2716 (UV-EPROM, memory-size 2048) -> [1792, 2048) with
+    # the default 256 B engine constant.
+    full = _REAL_DB.get_eprom("AM2716")
+    assert full["electrical-type"] == "UV-EPROM"
+    assert full["memory-size"] == 2048
+
+    start, length = _write_region_for(full)
+    assert length == _UV_WRITE_REGION_LENGTH == 256
+    assert start == 2048 - _UV_WRITE_REGION_LENGTH == 1792
+
+
+def test_uv_window_scales_with_memory_size():
+    # uv_window_scales: AM2732 (UV-EPROM, memory-size 4096) -> top-anchored
+    # to ITS mem_size, not a fixed literal.
+    full = _REAL_DB.get_eprom("AM2732")
+    assert full["electrical-type"] == "UV-EPROM"
+    assert full["memory-size"] == 4096
+
+    start, length = _write_region_for(full)
+    assert length == _UV_WRITE_REGION_LENGTH
+    assert start == 4096 - _UV_WRITE_REGION_LENGTH == 3840
+
+
+def test_nonuv_default_region_unchanged():
+    # nonuv_default: a non-UV chip (M8720, EEPROM) keeps the engine default
+    # region (start == 0, length == 256).
+    full = _REAL_DB.get_eprom("M8720")
+    assert full["electrical-type"] != "UV-EPROM"
+
+    start, length = _write_region_for(full)
+    assert start == 0
+    assert length == 256
+
+
+def test_cap_not_widenable_by_injected_db_field():
+    # cap_not_widenable (SC4): a synthetic eprom_data dict with an injected
+    # bogus size/width hint must NOT widen the UV region -- the length
+    # ALWAYS comes from the _UV_WRITE_REGION_LENGTH module constant, never
+    # from any DB field.
+    malicious = {
+        "electrical-type": "UV-EPROM",
+        "memory-size": 1_048_576,  # huge, attacker-controlled placement
+        "write-region-length": 999_999,  # bogus width field the selector must ignore
+    }
+    start, length = _write_region_for(malicious)
+    assert length == _UV_WRITE_REGION_LENGTH
+    assert start == 1_048_576 - _UV_WRITE_REGION_LENGTH
+
+
+def test_cap_not_widenable_uv_missing_memory_size_falls_back_to_default():
+    # Defensive fallback: a UV chip with missing/too-small memory-size must
+    # not produce a negative start -- falls back to the engine default
+    # region rather than fabricating an out-of-bounds window.
+    broken = {"electrical-type": "UV-EPROM"}  # no memory-size key at all
+    start, length = _write_region_for(broken)
+    assert start == 0
+    assert length == 256
+
+
+def test_write_region_for_detects_uv_via_execution_time_programmer_dict():
+    # Execution-time gotcha: _dispatch_multi_run's eprom_data is
+    # resolve_chip's PROGRAMMER dict (via convert_to_programmer), which does
+    # NOT carry "electrical-type" -- only derive_plan's guard-bypassing
+    # `full` dict does. _write_region_for must still detect UV-EPROM via the
+    # `algorithm` field (0x0B / EPROM_LEGACY, UV-EPROM-exclusive in this DB)
+    # that IS present on the resolved programmer dict.
+    from firestarter.chip_resolver import resolve_chip
+
+    prog = resolve_chip("AM2716", db=_REAL_DB)
+    assert "electrical-type" not in prog
+    assert prog.get("algorithm") == 0x0B
+
+    start, length = _write_region_for(prog)
+    assert length == _UV_WRITE_REGION_LENGTH
+    assert start == prog["memory-size"] - _UV_WRITE_REGION_LENGTH
+
+
+def test_addr_base_absolute_matches_region_start():
+    # addr_base_absolute: the region start fed to generate_pattern equals
+    # the addr_base fed to classify_fingerprint (Pitfall 3) -- verified via
+    # the selector + generate_pattern's own consumption contract, bench-free.
+    full = _REAL_DB.get_eprom("AM2716")
+    start, length = _write_region_for(full)
+    pattern = generate_pattern(start, length)
+    # The pattern's first byte must equal address_fold_byte(start) -- i.e.
+    # generate_pattern was invoked with the ABSOLUTE region start, not an
+    # offset-relative 0 (which would silently ignore the UV window).
+    assert pattern[0] == address_fold_byte(start)
+
+
+def test_dispatch_multi_run_uses_selector_for_uv_chip():
+    # Integration check: _dispatch_multi_run must pass the SAME absolute
+    # `start` to both generate_pattern and classify_fingerprint's addr_base
+    # when driving a UV-EPROM chip through run_plan (no lingering bare
+    # _WRITE_REGION_START inside the UV path).
+    from firestarter.chip_test import generate_pattern as _gen
+
+    full = _REAL_DB.get_eprom("AM2716")
+    start, length = _write_region_for(full)
+    assert start == 1792  # sanity: AM2716 is on the UV top-anchored window
+
+    expected_bytes = _gen(start, length)
+    operator = _mock_operator()
+    operator.read_eprom.side_effect = _writes_bytes_to_output_file(expected_bytes)
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    results = run_plan(
+        Plan(name="AM2716", steps=plan.steps), operator, _REAL_DB, runs=2
+    )
+    write_result = _result(results, OP_WRITE)
+    # A perfect read-back against the UV-window-anchored expected pattern
+    # must classify as zero mismatches -- proving the SAME start fed both
+    # generate_pattern (to build `expected_bytes` here) and the engine's
+    # internal generate_pattern/classify_fingerprint(addr_base=...) calls.
+    assert write_result.fingerprint is not None
+    assert write_result.fingerprint.bad == 0
+
+
+def test_generate_pattern_and_classify_fingerprint_source_unchanged():
+    # Guard against regressing D-02: generate_pattern/classify_fingerprint
+    # must remain region-parameterized pure functions -- PATT-03 only
+    # chooses different start/length per chip, it never edits these bodies.
+    import inspect
+
+    import firestarter.chip_test as chip_test_mod
+
+    gen_src = inspect.getsource(chip_test_mod.generate_pattern)
+    assert "_WRITE_REGION_START" not in gen_src
+    assert "_UV_WRITE_REGION_LENGTH" not in gen_src
+
+    classify_src = inspect.getsource(chip_test_mod.classify_fingerprint)
+    assert "_WRITE_REGION_START" not in classify_src
+    assert "_UV_WRITE_REGION_LENGTH" not in classify_src
