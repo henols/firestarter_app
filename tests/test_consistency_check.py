@@ -514,11 +514,18 @@ class TestDispatchChain:
         # Stub database lookups so dispatch reaches the operator method.
         # get_eprom_config must also be stubbed (Phase 66-05): resolve_chip now calls
         # get_eprom_config FIRST to read support_status before calling convert_to_programmer.
+        # Phase 106-03 (HOST-04): resolve_chip also requires a usable
+        # programming.algorithm on the same raw record, or it refuses before
+        # convert_to_programmer is reached.
         monkeypatch.setattr(
             EpromDatabase,
             "get_eprom_config",
             lambda self, name: (
-                {"part_number": name, "support_status": "supported"},
+                {
+                    "part_number": name,
+                    "support_status": "supported",
+                    "programming": {"algorithm": 7},
+                },
                 "TEST",
             ),
         )
