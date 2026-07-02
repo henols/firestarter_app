@@ -475,11 +475,13 @@ def run_plan(
     write_eprom, verify -> verify_eprom, erase -> erase_eprom). NA steps from
     `derive_plan` are recorded NA WITHOUT any operator call.
 
-    The id-check step runs FIRST (SWEEP-03): a chip-ID mismatch closes a
-    `destructive_gate` that every destructive step (write/erase) consults
-    BEFORE calling its operator method, marking itself SKIPPED with reason
-    (chip left pristine) instead. Non-destructive id/read/blank-check findings
-    are still recorded regardless of the gate.
+    The id-check step runs FIRST (SWEEP-03): a chip-ID mismatch -- `is_ok is
+    False` OR the firmware-detected id differing from the DB's expected
+    `chip-id` (Pitfall 4) -- closes a `destructive_gate` that every
+    destructive step (write/erase) consults BEFORE calling its operator
+    method, marking itself SKIPPED with reason (chip left pristine) instead.
+    Non-destructive id/read/blank-check findings are still recorded
+    regardless of the gate.
 
     One step's `BAD` verdict or raised exception NEVER aborts the remaining
     steps (Pitfall 1) -- each step's body is wrapped in its own try/except.
@@ -516,11 +518,15 @@ def run_plan(
 def _id_step_closes_gate(result: StepResult) -> bool:
     """SWEEP-03: close the destructive gate on an id-check failure/mismatch.
 
-    `is_ok is False` (chip-ID check failed) OR the step itself errored (`BAD`)
-    both close the gate -- Pitfall 4 requires ANY id-uncertainty to gate
-    destructive steps shut, not just an explicit numeric mismatch.
+    Closes on `is_ok is False` (chip-ID check failed), a detected id that
+    differs from the DB's expected `chip-id` (Pitfall 4's explicit mismatch
+    case), OR the step itself erroring/being skipped -- ANY id-uncertainty
+    gates destructive steps shut, not just an explicit numeric mismatch.
+    A `NA` id step (no expected chip-id in the DB entry, Open Question 2)
+    does NOT close the gate -- there is nothing to compare, so the gate
+    stays open subject to the plan's own `--destructive` annotation.
     """
-    return result.verdict == VERDICT_BAD
+    return result.verdict in (VERDICT_BAD, VERDICT_SKIPPED)
 
 
 def _run_step(
@@ -564,10 +570,33 @@ def _dispatch_step(
     only calls the operator's existing public methods.
     """
     if step.op == OP_ID:
-        is_ok, _detected_id = operator.check_eprom_id(name, eprom_data)
+        is_ok, detected_id = operator.check_eprom_id(name, eprom_data)
+        expected_id = eprom_data.get("chip-id")
+        # Pitfall 4: gate on is_ok=False OR an explicit id mismatch -- a
+        # detected id differing from the DB's expected chip-id closes the
+        # destructive gate even when the firmware itself reported is_ok=True
+        # (defensive; check_eprom_id's own is_ok already reflects this in
+        # practice, but the mismatch check makes the gate condition explicit
+        # and independent of firmware wording).
+        mismatch = (
+            is_ok
+            and expected_id
+            and detected_id is not None
+            and detected_id != expected_id
+        )
+        verdict = VERDICT_BAD if (not is_ok or mismatch) else VERDICT_OK
+        reason = ""
+        if mismatch:
+            reason = (
+                f"chip-ID mismatch: expected 0x{expected_id:X}, "
+                f"detected 0x{detected_id:X}"
+            )
+        elif not is_ok:
+            reason = "chip-ID check did not return OK"
         return StepResult(
             op=step.op,
-            verdict=VERDICT_OK if is_ok else VERDICT_BAD,
+            verdict=verdict,
+            reason=reason,
             run_count=1,
         )
 

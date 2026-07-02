@@ -47,6 +47,7 @@ from unittest.mock import Mock
 
 from firestarter.chip_test import (
     OP_BLANK_CHECK,
+    OP_ERASE,
     OP_ID,
     OP_READ,
     OP_WRITE,
@@ -611,3 +612,119 @@ def test_run_plan_routes_through_resolve_chip_not_derivation_dict(monkeypatch):
     called_args = operator.read_eprom.call_args
     assert called_args.args[0] == "M8720"
     assert called_args.args[1] == real_resolve("M8720", db=_REAL_DB)
+
+
+# ---------------------------------------------------------------------------
+# id-first chip-ID mismatch destructive gate (SWEEP-03, 108-04 Task 2)
+# ---------------------------------------------------------------------------
+#
+# AS29F002T carries a real nonzero chip-id (21168 == 0x52B0) in the DB --
+# used as the id-bearing chip so a mismatch is meaningful. M8720's chip-id is
+# the sentinel 0 (NA id step, never gates).
+
+
+def _real_expected_chip_id(name: str) -> int:
+    full = _REAL_DB.get_eprom(name)
+    prog = _REAL_DB.convert_to_programmer(full)
+    return prog["chip-id"]
+
+
+def test_id_mismatch_gate_skips_destructive_steps_without_calling_operator():
+    name = "AS29F002T"
+    expected_id = _real_expected_chip_id(name)
+    assert expected_id  # sanity: this chip has a real nonzero chip-id
+
+    operator = _mock_operator()
+    operator.check_eprom_id.return_value = (False, 0x9999)
+    plan = Plan(
+        name=name,
+        steps=[
+            Step(op=OP_ID, supported=True, reason=""),
+            Step(op=OP_READ, supported=True, reason=""),
+            Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+            Step(op=OP_ERASE, supported=True, reason="", destructive=True),
+        ],
+    )
+    results = run_plan(plan, operator, _REAL_DB)
+
+    id_result = _result(results, OP_ID)
+    write_result = _result(results, OP_WRITE)
+    erase_result = _result(results, OP_ERASE)
+    read_result = _result(results, OP_READ)
+
+    assert id_result.verdict == VERDICT_BAD
+    assert write_result.verdict == VERDICT_SKIPPED
+    assert erase_result.verdict == VERDICT_SKIPPED
+    assert write_result.reason
+    assert erase_result.reason
+    # Chip left pristine: destructive operator methods NEVER called.
+    operator.write_eprom.assert_not_called()
+    operator.erase_eprom.assert_not_called()
+    # Non-destructive findings are still recorded (id/read).
+    assert read_result.verdict == VERDICT_OK
+    operator.read_eprom.assert_called_once()
+
+
+def test_id_detected_mismatch_gate_skips_destructive_steps():
+    # Explicit numeric mismatch: is_ok=True but detected id != expected id.
+    name = "AS29F002T"
+    expected_id = _real_expected_chip_id(name)
+    assert expected_id
+
+    operator = _mock_operator()
+    operator.check_eprom_id.return_value = (True, expected_id + 1)
+    plan = Plan(
+        name=name,
+        steps=[
+            Step(op=OP_ID, supported=True, reason=""),
+            Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+        ],
+    )
+    results = run_plan(plan, operator, _REAL_DB)
+
+    assert _result(results, OP_ID).verdict == VERDICT_BAD
+    assert _result(results, OP_WRITE).verdict == VERDICT_SKIPPED
+    operator.write_eprom.assert_not_called()
+
+
+def test_id_match_leaves_destructive_steps_ungated():
+    name = "AS29F002T"
+    expected_id = _real_expected_chip_id(name)
+
+    operator = _mock_operator()
+    operator.check_eprom_id.return_value = (True, expected_id)
+    plan = Plan(
+        name=name,
+        steps=[
+            Step(op=OP_ID, supported=True, reason=""),
+            Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+            Step(op=OP_ERASE, supported=True, reason="", destructive=True),
+        ],
+    )
+    results = run_plan(plan, operator, _REAL_DB)
+
+    assert _result(results, OP_ID).verdict == VERDICT_OK
+    assert _result(results, OP_WRITE).verdict == VERDICT_OK
+    assert _result(results, OP_ERASE).verdict == VERDICT_OK
+    operator.write_eprom.assert_called_once()
+    operator.erase_eprom.assert_called_once()
+
+
+def test_id_mismatch_does_not_gate_non_destructive_steps():
+    name = "AS29F002T"
+    operator = _mock_operator()
+    operator.check_eprom_id.return_value = (False, 0x9999)
+    plan = Plan(
+        name=name,
+        steps=[
+            Step(op=OP_ID, supported=True, reason=""),
+            Step(op=OP_READ, supported=True, reason=""),
+            Step(op=OP_BLANK_CHECK, supported=True, reason=""),
+        ],
+    )
+    results = run_plan(plan, operator, _REAL_DB)
+
+    assert _result(results, OP_READ).verdict == VERDICT_OK
+    assert _result(results, OP_BLANK_CHECK).verdict == VERDICT_OK
+    operator.read_eprom.assert_called_once()
+    operator.check_eprom_blank.assert_called_once()
