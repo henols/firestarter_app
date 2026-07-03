@@ -399,6 +399,7 @@ class DiagnosticReport:
             "banner": self._banner_dict(),
             "voltage": self._voltage_dict(),
             "is_submittable": is_submittable(self.auto_capture),
+            "dedup_fingerprint": dedup_fingerprint(self),
             "db_diff": self._db_diff_dict(),
         }
 

@@ -289,6 +289,43 @@ def test_dedup_fingerprint_non_destructive_graceful_degradation():
     assert len(fp_a) == 12
 
 
+def test_dedup_fingerprint_in_to_dict_single_source():
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    report = _minimal_report()
+    d = report.to_dict()
+
+    assert d["dedup_fingerprint"] == dedup_fingerprint(report)
+
+
+def test_dedup_fingerprint_graceful_degradation_via_to_dict():
+    """A fingerprint-less (non-destructive-shaped) report yields a stable,
+    repeatable id through to_dict() across two identical-verdict runs."""
+    step_specs = [
+        ("id", VERDICT_OK, None, ""),
+        ("read", VERDICT_OK, None, ""),
+    ]
+    report_a = _minimal_report(step_specs=step_specs)
+    report_b = _minimal_report(step_specs=step_specs)
+
+    d_a = report_a.to_dict()
+    d_b = report_b.to_dict()
+
+    assert d_a["dedup_fingerprint"] == d_b["dedup_fingerprint"]
+    assert len(d_a["dedup_fingerprint"]) == 12
+
+
+def test_dedup_fingerprint_in_json_block():
+    report = _minimal_report()
+    block = report.to_json_block()
+
+    inner = block.strip()[len("```json\n") :].rsplit("```", 1)[0]
+    parsed = json.loads(inner)
+
+    assert "dedup_fingerprint" in parsed
+    assert parsed["dedup_fingerprint"] == report.to_dict()["dedup_fingerprint"]
+
+
 # ---------------------------------------------------------------------------
 # Single-source dual-render (RPT-01, D-01)
 # ---------------------------------------------------------------------------
