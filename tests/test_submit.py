@@ -12,6 +12,9 @@ No PATH, network, or browser is ever touched -- every seam (`which_fn`,
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 from firestarter import submit
 
 # ---------------------------------------------------------------------------
@@ -131,3 +134,102 @@ def test_sanitize_uses_getpass_default_when_user_omitted(monkeypatch):
     d = {"reason": "run by ciuser here"}
     out = submit.sanitize_dict(d)
     assert out["reason"] == "run by <user> here"
+
+
+# ---------------------------------------------------------------------------
+# Task 2: overall_verdict / build_title / build_body / build_issue_url
+# ---------------------------------------------------------------------------
+
+
+def _step(op: str, verdict: str, fingerprint_cls: str | None = None):
+    fp = SimpleNamespace(classification=fingerprint_cls) if fingerprint_cls else None
+    return SimpleNamespace(op=op, verdict=verdict, fingerprint=fp)
+
+
+def test_overall_verdict_all_ok_is_pass():
+    results = [_step("id", "OK"), _step("read", "OK")]
+    assert submit.overall_verdict(results) == "PASS"
+
+
+def test_overall_verdict_marginal_is_inconclusive():
+    results = [_step("id", "OK"), _step("write", "marginal")]
+    assert submit.overall_verdict(results) == "INCONCLUSIVE"
+
+
+def test_overall_verdict_bad_dominates_marginal():
+    # FAIL-dominant ordering (D-02) -- distinct from the exit-code max()
+    # ordering where marginal(2) > BAD(1).
+    results = [_step("write", "marginal"), _step("verify", "BAD")]
+    assert submit.overall_verdict(results) == "FAIL"
+
+
+def test_overall_verdict_bad_alone_is_fail():
+    results = [_step("id", "BAD")]
+    assert submit.overall_verdict(results) == "FAIL"
+
+
+def test_title_contains_shorthash_and_chip():
+    report = Mock()
+    report.to_dict.return_value = {"dedup_fingerprint": "abc123def456"}
+    report.results = [_step("id", "OK")]
+    title = submit.build_title(report, "W27C512")
+    assert "abc123def456" in title
+    assert "W27C512" in title
+    assert "[dev test]" in title
+    assert "PASS" in title
+
+
+def test_title_reflects_fail_verdict():
+    report = Mock()
+    report.to_dict.return_value = {"dedup_fingerprint": "deadbeef0000"}
+    report.results = [_step("verify", "BAD")]
+    title = submit.build_title(report, "AM27C020")
+    assert "FAIL" in title
+    assert "deadbeef0000" in title
+
+
+def test_build_body_table_from_sanitized_steps():
+    sanitized = {
+        "steps": [
+            {"op": "id", "verdict": "OK", "reason": ""},
+            {
+                "op": "write",
+                "verdict": "BAD",
+                "reason": "port /dev/tty<redacted> gone",
+            },
+        ]
+    }
+    body = submit.build_body(sanitized, [], include_json=False)
+    assert "| id | OK | - |" in body
+    assert "| write | BAD | port /dev/tty<redacted> gone |" in body
+    assert "```json" not in body
+
+
+def test_build_body_includes_json_by_default():
+    sanitized = {"steps": [{"op": "id", "verdict": "OK", "reason": ""}], "chip": "X"}
+    body = submit.build_body(sanitized, [])
+    assert "```json" in body
+    assert '"chip": "X"' in body
+
+
+def test_build_issue_url_targets_hardcoded_repo():
+    url = submit.build_issue_url("My Title", "My Body")
+    assert url.startswith("https://github.com/henols/firestarter_app/issues/new?")
+
+
+def test_build_issue_url_percent_encodes():
+    url = submit.build_issue_url("a b", "c&d")
+    assert "a%20b" in url
+    assert "c%26d" in url
+
+
+def test_build_issue_url_has_no_labels_param():
+    url = submit.build_issue_url("t", "b")
+    assert "labels=" not in url
+
+
+def test_build_issue_url_not_derived_from_git_remote():
+    # D-01/T-113-05: SUBMIT_REPO is a hardcoded constant, never inferred.
+    url = submit.build_issue_url("t", "b")
+    assert submit.SUBMIT_REPO in url
+    assert submit.SUBMIT_REPO == "henols/firestarter_app"

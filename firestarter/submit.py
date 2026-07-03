@@ -33,15 +33,13 @@ from __future__ import annotations
 import base64
 import copy
 import getpass
+import json
 import re
 import shutil  # noqa: F401 -- consumed by gh_available (Task 3)
 import subprocess  # noqa: F401 -- consumed by gh_available/submit_via_gh (Task 3)
 import webbrowser  # noqa: F401 -- consumed by Plan 03's submit_via_browser
 from typing import Any
-from urllib.parse import (  # noqa: F401 -- consumed by build_issue_url (Task 2)
-    quote,
-    urlencode,
-)
+from urllib.parse import quote, urlencode
 
 # ---------------------------------------------------------------------------
 # Module constants (D-01, D-05)
@@ -113,3 +111,71 @@ def sanitize_dict(d: dict[str, Any], *, user: str | None = None) -> dict[str, An
         else None
     )
     return _scrub_value(working, user_pattern=user_pattern)  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# Overall verdict (title-legibility ordering, D-02) + builders (Task 2)
+# ---------------------------------------------------------------------------
+
+
+def overall_verdict(results: Any) -> str:
+    """FAIL-dominant title verdict (D-02) -- NOT the handler's exit-code
+    `max()` ordering (`cli_handlers.py`, where `marginal=2 > BAD=1`).
+
+    `FAIL` if any step verdict is `BAD`; else `INCONCLUSIVE` if any is
+    `marginal`; else `PASS`. Human-legible ordering for the issue title.
+    """
+    verdicts = {r.verdict for r in results}
+    if "BAD" in verdicts:
+        return "FAIL"
+    if "marginal" in verdicts:
+        return "INCONCLUSIVE"
+    return "PASS"
+
+
+def build_title(report: Any, chip: str) -> str:
+    """`[dev test] <chip> — <PASS/FAIL/INCONCLUSIVE> (<shorthash>)` (D-02, SUB-03).
+
+    The dedup shorthash is read from `report.to_dict()["dedup_fingerprint"]`
+    (the Plan-01 field) -- this is the single-source link between the report
+    model and the issue title.
+    """
+    d = report.to_dict()
+    shorthash = d["dedup_fingerprint"]
+    verdict = overall_verdict(report.results)
+    return f"[dev test] {chip} — {verdict} ({shorthash})"
+
+
+def build_body(
+    sanitized_dict: dict[str, Any], results: Any, *, include_json: bool = True
+) -> str:
+    """Markdown body: a human results table, then (optionally) the fenced
+    JSON block -- both derived from the SAME sanitized dict (SUB-02).
+
+    Mirrors the `dev-test-<chip>.md` table shape (`cli_handlers.py`:
+    `| Step | Verdict | Reason |`), but sources the reason cells from
+    `sanitized_dict["steps"]` so PII stays scrubbed even when `results`
+    (the unsanitized `StepResult` objects) is also passed in for shaping.
+    """
+    lines = ["| Step | Verdict | Reason |", "| ---- | ------- | ------ |"]
+    for step in sanitized_dict.get("steps", []):
+        reason = step.get("reason") or "-"
+        lines.append(f"| {step.get('op')} | {step.get('verdict')} | {reason} |")
+    body = "\n".join(lines)
+    if include_json:
+        body += "\n\n```json\n" + json.dumps(sanitized_dict, indent=2) + "\n```"
+    return body
+
+
+def build_issue_url(title: str, body: str) -> str:
+    """`https://github.com/henols/firestarter_app/issues/new?...` (D-01).
+
+    Percent-encodes `title`/`body` via `urllib.parse.urlencode(quote_via=quote)`.
+    Deliberately OMITS the `labels` query param (RESEARCH Pitfall 1): GitHub
+    silently drops or 404s the `labels` param for community testers without
+    write access on `henols/firestarter_app` -- triage relies on the
+    `[dev test]` title marker plus the fenced-JSON `schema_version` instead.
+    Server-side template-based labeling is deferred to Phase 114.
+    """
+    query = urlencode({"title": title, "body": body}, quote_via=quote)
+    return f"https://github.com/{SUBMIT_REPO}/issues/new?{query}"
