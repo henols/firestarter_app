@@ -6,9 +6,9 @@ tool with no negative-fixture test is exactly the failure mode this project
 incurred with v1.12's GATE-03 (a declared-empty detector that could never
 fail because nothing concrete was asserted). Every planted-violation test
 below injects a REAL subprocess-level violation via the
-`FIRESTARTER_DEVTEST_SRC` env-override -- never an in-process synthetic --
-so a passing test suite proves the checker itself (not the test) fails the
-build on a real violation.
+`FIRESTARTER_DEVTEST_SRC` / `FIRESTARTER_DEVTEST_HANDLER` env-overrides --
+never an in-process synthetic -- so a passing test suite proves the checker
+itself (not the test) fails the build on a real violation.
 
 Coverage:
   1. Clean-pass baseline: the checker exits 0 on the current, real
@@ -21,6 +21,14 @@ Coverage:
      the checker non-zero.
   5. Planted "--force" string-literal violation: a temp fixture containing
      the bare CLI flag string flips the checker non-zero.
+  6. Env-override seam sanity: a clean fixture injected via
+     FIRESTARTER_DEVTEST_SRC still passes.
+  7. Handler-shaped planted violation (Phase 112, anti-hollow for the
+     `dev_test` handler leg specifically): a fixture defining a `dev_test`
+     function containing a forbidden op, injected via
+     FIRESTARTER_DEVTEST_HANDLER, flips the checker non-zero -- AND the real,
+     clean `cli_handlers.py` (which the checker now actually scans, scoped to
+     the `dev_test` function + its private helpers) still passes.
 """
 
 import os
@@ -174,5 +182,104 @@ def test_env_override_points_at_a_clean_fixture_still_passes(tmp_path: Path) -> 
     assert result.returncode == 0, (
         f"checker exited {result.returncode} on a clean env-override fixture.\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "PASS:" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Test 7: handler-shaped planted violation (Phase 112 anti-hollow proof)
+# ---------------------------------------------------------------------------
+
+
+def test_checker_exits_nonzero_on_planted_handler_violation(tmp_path: Path) -> None:
+    """A handler-shaped fixture with a forbidden op MUST fail the gate.
+
+    Mimics the real `dev_test` handler's shape (a `dev_test`-named function
+    calling into an operator) but plants a VPP-set call site inside it. This
+    is the anti-hollow proof for the HANDLER leg specifically (Phase-109
+    D-02/D-03): the fixture is written to disk and injected via
+    FIRESTARTER_DEVTEST_HANDLER (a real subprocess-level violation, not an
+    in-process synthetic) -- if the checker silently skipped the handler
+    scan (or scanned the wrong function names), this would incorrectly pass.
+    """
+    bad = tmp_path / "planted_handler_violation.py"
+    bad.write_text(
+        "def dev_test(app, chip, destructive, output_dir, assume_yes):\n"
+        "    app.hardware_manager.set_vpp(12000)\n"
+        "    return app.eprom_operator.write_eprom(chip, {}, 'path')\n"
+    )
+    result = _run_checker({"FIRESTARTER_DEVTEST_HANDLER": str(bad)})
+    assert result.returncode != 0, (
+        f"checker exited 0 on a planted handler-shaped VPP-set violation.\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "FAIL:" in result.stdout
+    assert "VPP-set" in result.stdout
+
+
+def test_checker_exits_nonzero_on_planted_handler_force_violation(
+    tmp_path: Path,
+) -> None:
+    """A handler-shaped fixture passing force=True MUST fail the gate.
+
+    Second handler-leg planted-violation shape (force pass-through rather
+    than VPP-set) -- proves the scoped handler scan catches more than one
+    deny bucket, not just the one the first fixture happens to hit.
+    """
+    bad = tmp_path / "planted_handler_force.py"
+    bad.write_text(
+        "def dev_test(app, chip, destructive, output_dir, assume_yes):\n"
+        "    return app.eprom_operator.erase_eprom(chip, {}, force=True)\n"
+    )
+    result = _run_checker({"FIRESTARTER_DEVTEST_HANDLER": str(bad)})
+    assert result.returncode != 0, (
+        f"checker exited 0 on a planted handler-shaped force=True violation.\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "FAIL:" in result.stdout
+    assert "force" in result.stdout.lower()
+
+
+def test_checker_exits_zero_on_real_handler_now_in_scope() -> None:
+    """The clean-pass baseline, re-asserted with the handler leg in scope.
+
+    Load-bearing proof (Phase 112): the real, shipped `cli_handlers.py`
+    (scoped to `dev_test` + its private helpers) is orchestrator-only --
+    this is the same invocation as test_checker_exits_zero_on_clean_source
+    but stated explicitly so a future reader sees the handler-in-scope
+    assertion is deliberate, not incidental.
+    """
+    result = _run_checker()
+    assert result.returncode == 0, (
+        f"checker exited {result.returncode} with the real handler in scope.\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "PASS:" in result.stdout
+    assert "cli_handlers.py" in result.stdout, (
+        f"Expected the PASS: line to name cli_handlers.py (handler actually "
+        f"scanned, not skipped) but got:\n{result.stdout}"
+    )
+
+
+def test_env_override_points_at_a_clean_handler_fixture_still_passes(
+    tmp_path: Path,
+) -> None:
+    """A CLEAN handler-shaped fixture injected via the env-override still passes.
+
+    Proves the FIRESTARTER_DEVTEST_HANDLER seam is a faithful re-target (not
+    itself the source of the non-zero exit in the tests above) -- a clean
+    fixture defining `dev_test` (with no forbidden ops) routed through the
+    same seam produces PASS:, isolating the violations above as the true
+    cause of the non-zero exits.
+    """
+    clean = tmp_path / "planted_handler_clean.py"
+    clean.write_text(
+        "def dev_test(app, chip, destructive, output_dir, assume_yes):\n"
+        "    return app.eprom_operator.write_eprom(chip, {}, 'path')\n"
+    )
+    result = _run_checker({"FIRESTARTER_DEVTEST_HANDLER": str(clean)})
+    assert result.returncode == 0, (
+        f"checker exited {result.returncode} on a clean handler env-override "
+        f"fixture.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     assert "PASS:" in result.stdout
