@@ -51,6 +51,20 @@ _CHIP_NO_ID = "M8720"
 _CHIP_WITH_ID = "AS29F002T"
 
 
+@pytest.fixture(autouse=True)
+def _isolate_config_dir(tmp_path_factory, monkeypatch):
+    """Point FIRESTARTER_CONFIG_DIR at a throwaway dir for every `dev test`.
+
+    `dev test` now ALWAYS persists its report to <config dir>/reports
+    (config.get_config_dir()); without this, every no-`--output-dir` invocation
+    in this module would write into the developer's real ~/.firestarter/reports.
+    A fresh dir per test (from tmp_path_factory, NOT the shared `tmp_path`
+    fixture -- tests here assert on the cwd `tmp_path` being empty) keeps the
+    suite hermetic; tests that check the report location read the same env var
+    back via get_config_dir()."""
+    monkeypatch.setenv("FIRESTARTER_CONFIG_DIR", str(tmp_path_factory.mktemp("fs_cfg")))
+
+
 def make_app_context(**overrides: object) -> AppContext:
     """Construct a minimal, hardware-free AppContext for `dev test` tests.
 
@@ -466,9 +480,14 @@ class TestDualArtifactWrite:
             f"dev-test-{_CHIP_NO_ID}.md",
         ]
 
-    def test_no_output_dir_writes_no_files_but_renders_stdout(
+    def test_no_output_dir_writes_to_default_reports_dir(
         self, runner: CliRunner, tmp_path: Path
     ) -> None:
+        """Without --output-dir the report is written to the default
+        <config dir>/reports (get_config_dir()), NOT the cwd, and still
+        renders to stdout."""
+        from firestarter.config import get_config_dir
+
         app = make_app_context(
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(),
@@ -477,7 +496,12 @@ class TestDualArtifactWrite:
             os.chdir(tmp_path)
             result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
+        # Nothing written to the cwd ...
         assert os.listdir(tmp_path) == []
+        # ... but the report landed in the default reports dir.
+        reports_dir = Path(get_config_dir()) / "reports"
+        assert (reports_dir / f"dev-test-{_CHIP_NO_ID}.json").is_file()
+        assert (reports_dir / f"dev-test-{_CHIP_NO_ID}.md").is_file()
         assert "dev test" in result.output
 
     def test_json_artifact_is_report_to_dict(

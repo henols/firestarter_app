@@ -44,7 +44,7 @@ from firestarter.chip_test import (
     derive_plan,
     run_plan,
 )
-from firestarter.config import ConfigManager
+from firestarter.config import ConfigManager, get_config_dir
 from firestarter.constants import FLAG_CHIP_ENABLE, FLAG_OUTPUT_ENABLE
 from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import (
@@ -1768,7 +1768,9 @@ def _make_sampler(app: "AppContext", report: DiagnosticReport) -> Any:
     default=None,
     help=(
         "Write dev-test-<chip>.json and dev-test-<chip>.md into this "
-        "directory. Default: no files written, stdout report only."
+        "directory, overriding the default location. Default: "
+        "<config dir>/reports (honors FIRESTARTER_CONFIG_DIR; "
+        "e.g. ~/.firestarter/reports). The report is always written."
     ),
 )
 @click.option(
@@ -1872,26 +1874,30 @@ def dev_test(
     console = Console()
     report.render(console)
 
-    if output_dir:
-        out_path = Path(output_dir)
-        out_path.mkdir(parents=True, exist_ok=True)
-        safe_chip = _sanitize_chip_token(chip)
+    # The report is ALWAYS persisted. --output-dir overrides the default
+    # location, which is <config dir>/reports (honors FIRESTARTER_CONFIG_DIR;
+    # default ~/.firestarter/reports).
+    out_path = Path(output_dir) if output_dir else Path(get_config_dir()) / "reports"
+    out_path.mkdir(parents=True, exist_ok=True)
+    safe_chip = _sanitize_chip_token(chip)
 
-        json_file = out_path / f"dev-test-{safe_chip}.json"
-        json_file.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+    json_file = out_path / f"dev-test-{safe_chip}.json"
+    json_file.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
 
-        md_lines = [
-            f"# dev test -- {chip}",
-            "",
-            "| Step | Verdict | Reason |",
-            "| ---- | ------- | ------ |",
-        ]
-        for r in results:
-            md_lines.append(f"| {r.op} | {r.verdict} | {r.reason or '-'} |")
-        md_lines.append("")
-        md_lines.append(report.to_json_block())
-        md_file = out_path / f"dev-test-{safe_chip}.md"
-        md_file.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
+    md_lines = [
+        f"# dev test -- {chip}",
+        "",
+        "| Step | Verdict | Reason |",
+        "| ---- | ------- | ------ |",
+    ]
+    for r in results:
+        md_lines.append(f"| {r.op} | {r.verdict} | {r.reason or '-'} |")
+    md_lines.append("")
+    md_lines.append(report.to_json_block())
+    md_file = out_path / f"dev-test-{safe_chip}.md"
+    md_file.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
+
+    console.print(f"[dim]Report written to {json_file}[/dim]")
 
     if not results:
         sys.exit(0)
