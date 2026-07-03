@@ -35,8 +35,8 @@ import copy
 import getpass
 import json
 import re
-import shutil  # noqa: F401 -- consumed by gh_available (Task 3)
-import subprocess  # noqa: F401 -- consumed by gh_available/submit_via_gh (Task 3)
+import shutil
+import subprocess
 import webbrowser  # noqa: F401 -- consumed by Plan 03's submit_via_browser
 from typing import Any
 from urllib.parse import quote, urlencode
@@ -179,3 +179,55 @@ def build_issue_url(title: str, body: str) -> str:
     """
     query = urlencode({"title": title, "body": body}, quote_via=quote)
     return f"https://github.com/{SUBMIT_REPO}/issues/new?{query}"
+
+
+# ---------------------------------------------------------------------------
+# gh-tier detection + shell-out (Task 3, T-113-01)
+# ---------------------------------------------------------------------------
+
+
+def gh_available(
+    *,
+    which_fn: Any = shutil.which,
+    run_fn: Any = subprocess.run,
+) -> bool:
+    """`True` only when `gh` is on PATH AND `gh auth status` exits 0.
+
+    Short-circuits `False` (never probes auth) when `which_fn("gh")` is
+    falsy, so `run_fn` is never called with `gh` absent.
+    """
+    if not which_fn("gh"):
+        return False
+    proc = run_fn(["gh", "auth", "status"], capture_output=True, text=True, check=False)
+    return proc.returncode == 0
+
+
+def submit_via_gh(title: str, body: str, *, run_fn: Any = subprocess.run) -> str | None:
+    """File the issue via `gh issue create`, body piped over stdin (no cap).
+
+    The argv is a LIST passed to `run_fn` -- never a shell string, never
+    `shell=True` (T-113-01, the command-injection control). Returns the
+    created issue URL (`proc.stdout.strip()`) on returncode 0, else `None`.
+    """
+    proc = run_fn(
+        [
+            "gh",
+            "issue",
+            "create",
+            "--repo",
+            SUBMIT_REPO,
+            "--label",
+            GSD_INBOX_LABEL,
+            "--title",
+            title,
+            "--body-file",
+            "-",
+        ],
+        input=body,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode == 0:
+        return proc.stdout.strip()
+    return None

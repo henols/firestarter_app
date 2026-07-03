@@ -233,3 +233,66 @@ def test_build_issue_url_not_derived_from_git_remote():
     url = submit.build_issue_url("t", "b")
     assert submit.SUBMIT_REPO in url
     assert submit.SUBMIT_REPO == "henols/firestarter_app"
+
+
+# ---------------------------------------------------------------------------
+# Task 3: gh_available + submit_via_gh (list argv, stdin body)
+# ---------------------------------------------------------------------------
+
+
+def test_gh_tier_available_when_present_and_authed():
+    which_fn = Mock(return_value="/usr/bin/gh")
+    run_fn = Mock(return_value=Mock(returncode=0))
+    assert submit.gh_available(which_fn=which_fn, run_fn=run_fn) is True
+    run_fn.assert_called_once_with(
+        ["gh", "auth", "status"], capture_output=True, text=True, check=False
+    )
+
+
+def test_gh_tier_absent_short_circuits_no_run_fn_call():
+    which_fn = Mock(return_value=None)
+    run_fn = Mock()
+    assert submit.gh_available(which_fn=which_fn, run_fn=run_fn) is False
+    run_fn.assert_not_called()
+
+
+def test_gh_tier_present_but_not_authed():
+    which_fn = Mock(return_value="/usr/bin/gh")
+    run_fn = Mock(return_value=Mock(returncode=1))
+    assert submit.gh_available(which_fn=which_fn, run_fn=run_fn) is False
+
+
+def test_submit_via_gh_exact_argv_and_stdin_body():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout="https://github.com/henols/firestarter_app/issues/1\n",
+        )
+    )
+    result = submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
+    run_fn.assert_called_once_with(
+        [
+            "gh",
+            "issue",
+            "create",
+            "--repo",
+            "henols/firestarter_app",
+            "--label",
+            "gsd-inbox",
+            "--title",
+            "My Title",
+            "--body-file",
+            "-",
+        ],
+        input="My Body",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result == "https://github.com/henols/firestarter_app/issues/1"
+
+
+def test_submit_via_gh_returns_none_on_failure():
+    run_fn = Mock(return_value=Mock(returncode=1, stdout=""))
+    result = submit.submit_via_gh("t", "b", run_fn=run_fn)
+    assert result is None
