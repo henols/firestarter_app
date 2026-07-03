@@ -572,6 +572,83 @@ def test_db_diff_verdict_mapping():
     assert "inconclusive" in diff_indeterminate.proposed_disposition
 
 
+def test_ladder_state_verdict_mapping():
+    """GRAD-01 (Phase 114, D-01): build_db_diff derives a report-side
+    ladder_state tag purely from sweep verdicts -- BAD -> community-fail;
+    all-OK (subset of {OK,NA,SKIPPED}, at least one OK) -> community-reported;
+    marginal / indeterminate-fingerprint / no-change -> "" (no community-*
+    tag). community-confirmed is the human-only target and must never be
+    emitted here (D-01/D-02)."""
+    from firestarter.diagnostic_report import (
+        _LADDER_COMMUNITY_CONFIRMED,
+        _LADDER_COMMUNITY_FAIL,
+        _LADDER_COMMUNITY_REPORTED,
+        _LADDER_NONE,
+        build_db_diff,
+    )
+
+    db = _mock_db()
+
+    bad_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_BAD),
+    ]
+    diff_bad = build_db_diff("X", db, bad_results)
+    assert diff_bad.ladder_state == _LADDER_COMMUNITY_FAIL == "community-fail"
+
+    pass_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="blank", verdict=VERDICT_NA),
+        StepResult(op="write", verdict=VERDICT_SKIPPED),
+    ]
+    diff_pass = build_db_diff("X", db, pass_results)
+    assert (
+        diff_pass.ladder_state == _LADDER_COMMUNITY_REPORTED == "community-reported"
+    )
+
+    marginal_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="verify", verdict="marginal"),
+    ]
+    diff_marginal = build_db_diff("X", db, marginal_results)
+    assert diff_marginal.ladder_state == _LADDER_NONE == ""
+
+    indeterminate_results = [
+        StepResult(
+            op="verify",
+            verdict=VERDICT_OK,
+            fingerprint=Fingerprint(
+                total=10, bad=3, bad_pct=0.3, classification=FP_INDETERMINATE
+            ),
+        ),
+    ]
+    diff_indeterminate = build_db_diff("X", db, indeterminate_results)
+    assert diff_indeterminate.ladder_state == _LADDER_NONE == ""
+
+    # No-change branch (e.g. empty results) also yields no community-* tag.
+    diff_no_change = build_db_diff("X", db, [])
+    assert diff_no_change.ladder_state == _LADDER_NONE == ""
+
+    # community-confirmed is NEVER emitted by build_db_diff for any verdict
+    # combination exercised above -- it is the human-gated target only.
+    for diff in (diff_bad, diff_pass, diff_marginal, diff_indeterminate, diff_no_change):
+        assert diff.ladder_state != _LADDER_COMMUNITY_CONFIRMED
+        assert diff.ladder_state != "community-confirmed"
+
+
+def test_ladder_state_single_source_in_to_dict():
+    """GRAD-01 (Phase 114): to_dict()['db_diff']['ladder_state'] equals
+    report.db_diff.ladder_state -- single-source, added once (Pattern 3)."""
+    from firestarter.diagnostic_report import build_db_diff
+
+    report = _build_report()
+    db = _mock_db(support_status="adapter-required")
+    report.db_diff = build_db_diff("SOME-CHIP", db, report.results)
+
+    d = report.to_dict()
+    assert d["db_diff"]["ladder_state"] == report.db_diff.ladder_state
+
+
 def test_db_diff_real_db_read():
     from firestarter.diagnostic_report import build_db_diff
 
