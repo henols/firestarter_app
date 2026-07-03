@@ -306,32 +306,6 @@ def test_sample_vpp_mv_drain_timeout_is_swallowed(
     assert result == 20900
 
 
-def test_sample_vpp_mv_retries_once_after_a_failed_attempt(
-    hw_config, make_comm, fake_serial
-) -> None:
-    """`sample_vpp_mv()` retries exactly once when the first attempt fails
-    (e.g. a stale still-active previous command swallowed the first
-    attempt's data-request ack, per the deeper MCU-reset-not-guaranteed
-    race). The second `find_and_connect` call lands on a clean handshake
-    and the overall call succeeds instead of returning None."""
-    from firestarter.exceptions import ProgrammerNotFoundError
-
-    fake_serial.feed(_ok_frame_bytes())  # ready handshake for the 2nd attempt
-    for _ in range(3):
-        fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 20, 9, 5, 0)))
-    comm = make_comm()
-
-    hw = HardwareManager(hw_config)
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=[ProgrammerNotFoundError("stale command swallowed ack"), comm],
-    ) as mock_connect:
-        result = hw.sample_vpp_mv()
-
-    assert result == 20900
-    assert mock_connect.call_count == 2
-
-
 def test_voltage_format_pin() -> None:
     """Pin the 0xE4/0xE5 `CATALOG` format strings against the sampler's
     tolerant regex -- a codegen regen that changes the wording silently

@@ -61,17 +61,6 @@ MAX_27C020_SIZE = 262144
 # debug session, 2026-07-03).
 FIRMWARE_CMD_TIMEOUT_MS = 1000
 
-# Retry delay for hardware.py's voltage-sampler retry wrapper
-# (_sample_one_voltage). Live-hardware re-verification (dev-test-vpp-vpe-timeout
-# debug session, 2026-07-03) showed a FAST-failing attempt (a stray watchdog
-# frame answering the retry's own FW-version-probe expect_ack with ERROR,
-# short-circuiting before any real wait) does NOT guarantee the dangling old
-# command's FIRMWARE_CMD_TIMEOUT_MS window has elapsed by the time control
-# returns to the caller. A short fixed delay before retrying gives that
-# window a chance to clear even on a fast-fail path, without materially
-# slowing down the common (single-attempt-succeeds) case.
-VOLTAGE_SAMPLE_RETRY_DELAY_S = 1.5
-
 
 # Wire-protocol command codes — Firmware sync: firestarter.h
 # cmd field values sent in JSON commands to the Arduino firmware.

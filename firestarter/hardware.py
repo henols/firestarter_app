@@ -19,7 +19,6 @@ from firestarter.constants import (
     COMMAND_READ_VPE,
     COMMAND_READ_VPP,
     FIRMWARE_CMD_TIMEOUT_MS,
-    VOLTAGE_SAMPLE_RETRY_DELAY_S,
 )
 from firestarter.exceptions import (
     HardwareOperationError,
@@ -360,44 +359,9 @@ class HardwareManager:
         Reads N DATA frames for the given rail `state` (COMMAND_READ_VPP or
         COMMAND_READ_VPE) and returns the median reconstructed mV value.
 
-        Thin retry wrapper around `_sample_one_voltage_attempt` (the actual
-        handshake). Up to 2 retries (3 attempts total), each preceded by a
-        `VOLTAGE_SAMPLE_RETRY_DELAY_S` delay: on this Leonardo, reopening the
-        serial port does not *reliably* reset the MCU on every cycle (DTR-
-        toggle-on-open is a non-deterministic platform/driver side effect),
-        so occasionally a still-active previous CMD_READ_VPP/VPE command
-        (see `_drain_pending_command` docstring) survives long enough to
-        swallow an attempt's first data-request ack, or to answer a later
-        attempt's own FW-version-probe handshake with its stray watchdog
-        ERROR frame. That second case fails FAST (expect_ack returns on the
-        first ERROR it sees, without waiting out any real timeout), so an
-        immediate retry is NOT guaranteed to land after the dangling
-        command's FIRMWARE_CMD_TIMEOUT_MS window has cleared -- a fixed
-        delay before each retry is required (live-hardware re-verification,
-        dev-test-vpp-vpe-timeout debug session, 2026-07-03). Returns None
-        only if every attempt fails.
-        """
-        for attempt in range(3):
-            if attempt > 0:
-                logger.debug(
-                    f"Voltage sample (state={state}) failed "
-                    f"(attempt {attempt}/3), retrying after "
-                    f"{VOLTAGE_SAMPLE_RETRY_DELAY_S}s..."
-                )
-                time.sleep(VOLTAGE_SAMPLE_RETRY_DELAY_S)
-            result = self._sample_one_voltage_attempt(state, n=n, flags=flags)
-            if result is not None:
-                return result
-        return None
-
-    def _sample_one_voltage_attempt(
-        self, state: int, n: int = 3, flags: int = 0
-    ) -> Optional[int]:
-        """
-        Single attempt: mirrors the _read_voltage_loop handshake
-        (find_and_connect -> expect_ack -> send_ack -> get_response) but
-        stops after `n` frames instead of looping forever, and returns a
-        value instead of printing.
+        Mirrors the _read_voltage_loop handshake (find_and_connect ->
+        expect_ack -> send_ack -> get_response) but stops after `n` frames
+        instead of looping forever, and returns a value instead of printing.
 
         Unlike the standalone read loop (which runs until the OPERATOR hits
         Ctrl+C and the WHOLE PROCESS then exits), this method deliberately
