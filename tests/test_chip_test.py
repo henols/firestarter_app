@@ -883,6 +883,100 @@ def test_marginal_on_disagreeing_verify_runs():
     assert verify_result.verdict == VERDICT_MARGINAL
 
 
+# ---------------------------------------------------------------------------
+# Sampler hook (D-04, Phase 112 112-01) -- bracket site is _dispatch_multi_run's
+# OP_WRITE branch ONLY; sampler=None must be a proven no-op (SC4, D-04).
+# ---------------------------------------------------------------------------
+
+
+def test_run_plan_sampler_brackets_write():
+    operator = _mock_operator()
+    calls: list[str] = []
+
+    def sampler(phase):
+        calls.append(phase)
+
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=2, sampler=sampler)
+
+    write_result = _result(results, OP_WRITE)
+    assert write_result.verdict == VERDICT_OK
+    # Exactly one "before"/"after" pair per run (runs=2 -> 4 calls total),
+    # each "before" immediately preceding and "after" immediately following
+    # the corresponding write_eprom call.
+    assert calls == ["before", "after", "before", "after"]
+    assert operator.write_eprom.call_count == 2
+
+
+def test_run_plan_sampler_not_invoked_around_non_write_ops():
+    operator = _mock_operator()
+    calls: list[str] = []
+
+    def sampler(phase):
+        calls.append(phase)
+
+    plan = _plan_with_steps(
+        Step(op=OP_ID, supported=True, reason=""),
+        Step(op=OP_READ, supported=True, reason=""),
+        Step(op=OP_BLANK_CHECK, supported=True, reason=""),
+        Step(op=OP_VERIFY, supported=True, reason=""),
+        Step(op=OP_ERASE, supported=True, reason=""),
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=2, sampler=sampler)
+
+    # None of id/read/blank-check/verify/erase should invoke the sampler --
+    # the bracket is scoped to OP_WRITE only (D-04).
+    assert calls == []
+    for op in (OP_ID, OP_READ, OP_BLANK_CHECK, OP_VERIFY, OP_ERASE):
+        assert _result(results, op).verdict in (VERDICT_OK, VERDICT_BAD)
+
+
+def test_run_plan_sampler_none_is_noop_matches_baseline():
+    baseline_operator = _mock_operator()
+    plan_a = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    baseline_results = run_plan(plan_a, baseline_operator, _REAL_DB, runs=2)
+
+    sampler_free_operator = _mock_operator()
+    plan_b = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    explicit_none_results = run_plan(
+        plan_b, sampler_free_operator, _REAL_DB, runs=2, sampler=None
+    )
+
+    baseline_write = _result(baseline_results, OP_WRITE)
+    explicit_write = _result(explicit_none_results, OP_WRITE)
+    assert baseline_write.verdict == explicit_write.verdict == VERDICT_OK
+    assert baseline_write.run_count == explicit_write.run_count == 2
+    assert baseline_operator.write_eprom.call_count == (
+        sampler_free_operator.write_eprom.call_count
+    )
+
+
+def test_run_plan_sampler_exception_does_not_abort_write_step():
+    operator = _mock_operator()
+
+    def raising_sampler(phase):
+        raise RuntimeError(f"bench sampler exploded during {phase}")
+
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=2, sampler=raising_sampler)
+
+    write_result = _result(results, OP_WRITE)
+    # The write step's verdict is still computed purely from the operator
+    # outcome -- a sampler exception is swallowed, never surfacing as BAD
+    # or aborting the step (Pitfall 1 extended to the sampler).
+    assert write_result.verdict == VERDICT_OK
+    assert write_result.run_count == 2
+    assert operator.write_eprom.call_count == 2
+
+
 def test_read_step_disagreement_is_divergence_metric_not_marginal():
     operator = _mock_operator()
     # Two runs of read_eprom write DIFFERENT bytes to output_file --
