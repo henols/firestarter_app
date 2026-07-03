@@ -4,7 +4,8 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Community Chip-Validation Diagnostic Report Model (v1.21 Phase 110)
+Community Chip-Validation Diagnostic Report Model (v1.21 Phase 110, reworked
+Phase 112 Plan 04)
 
 Pure host-side data assembly for `firestarter dev test <chip>` (Phase 112):
 composes the Phase-108/109 `Plan` / `StepResult` / `Fingerprint` /
@@ -18,10 +19,23 @@ renders pick it up.
 This module is ORCHESTRATOR-ONLY (SAFE-02, milestone non-regression
 invariant): it imports no serial-transport or hardware-manager class, sets
 no VPP, builds no wire/protocol command dict, passes no force-override flag,
-and adds zero firmware dispatch entries. `AutoCapture.fw_board_identity` is
-RECEIVED as threaded-in input (Phase 112 captures `version:board` off the
-transient per-operation `comm` and passes it in) -- this module never
-fetches it and never opens a serial connection (RESEARCH Pitfall 1).
+and adds zero firmware dispatch entries. `AutoCapture.fw_board_identity` and
+`AutoCapture.hw_revision` are RECEIVED as threaded-in input (Phase 112
+captures them host-side and passes them in) -- this module never fetches
+them and never opens a serial connection (RESEARCH Pitfall 1).
+
+REVERSAL (Phase 112 Plan 04, operator-approved per `112-UAT.md` test 2): the
+entire interactive tester-input-collection model (RPT-04, D-04/D-05/D-06) is
+REMOVED from this module -- its collector function, its human-input
+dataclass, and its enumerated choice-list constants no longer exist. Those
+choice strings contained a path-separator character that collided with the
+third-party prompt library's own separator-rendered choice display, so
+partial natural inputs like `new`/`used`/`2.0` were rejected. Every question
+that collector asked is now either firmware/DB auto-captured (`hw_revision`,
+`fw_board_identity`, `protocol`) or dropped as self-reported-and-unverifiable
+/ redundant (chip origin, UV-eraser ownership, pot-touched). `is_submittable`
+is now computed from auto-capture completeness ONLY -- no human-input field
+gates it.
 """
 
 from __future__ import annotations
@@ -30,8 +44,6 @@ import datetime
 import json
 from dataclasses import dataclass, field
 from typing import Any
-
-from rich.prompt import Confirm, Prompt
 
 from firestarter.chip_test import BannerCounts, Plan, StepResult
 
@@ -59,15 +71,24 @@ class AutoCapture:
 
     `fw_board_identity` is `str | None` because it is RECEIVED as threaded-in
     input from Phase 112 (which captures `version:board` off the transient
-    per-operation `comm.programmer_info`) -- this dataclass and this module
-    NEVER fetch it themselves and NEVER import the serial-transport class
-    (Pitfall 1). `host_version` is the caller-supplied
-    `firestarter.__version__` string (read at the call site, not stored as a
-    class default, so a future version bump is always live).
+    per-operation `comm.programmer_info`, when an orchestrator-safe live
+    source is reachable) -- this dataclass and this module NEVER fetch it
+    themselves and NEVER import the serial-transport class (Pitfall 1).
+    `host_version` is the caller-supplied `firestarter.__version__` string
+    (read at the call site, not stored as a class default, so a future
+    version bump is always live).
+
+    `hw_revision` is `str | None` -- the coarse silkscreen-bucket string the
+    firmware/codec produce (e.g. a "Rev 2.0-class"-style label), or `None`
+    when not measured. It is ALWAYS auto-captured (Phase 112 Plan 04 reverses
+    the earlier D-05 "always human-asked" precision argument) -- this
+    dataclass and this module never prompt a human for it, and a coarse or
+    absent reading is an accepted, honest outcome rather than a gap.
     """
 
     host_version: str
     fw_board_identity: str | None = None
+    hw_revision: str | None = None
     chip: str = ""
     protocol: str | None = None
     chip_id_expected: int | None = None
@@ -115,103 +136,33 @@ def _is_transport_suspect(th: TransportHealth) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Provenance (RPT-04, D-04/D-05/D-06) -- human-asked, never auto-derived
+# Submittability (Phase 112 Plan 04) -- auto-capture-only, no human gate
 # ---------------------------------------------------------------------------
+#
+# REVERSAL: this section previously held the RPT-04 / D-04/D-05/D-06
+# interactive tester-input-collection model -- a collector function, a
+# human-input dataclass, and enumerated choice-list constants for shield
+# revision and chip origin. All deleted (operator-approved, 112-UAT.md test
+# 2): the choice strings contained a path-separator character that collided
+# with the third-party prompt library's own separator-rendered choice
+# display, rejecting natural inputs like `new`/`used`/`2.0`; and every
+# question asked was either firmware/DB-queryable (shield/hw/fw) or
+# self-reported-and-unverifiable (chip origin, UV eraser ownership).
 
-# Community-tolerant enumerated shield-revision options -- NOT a closed
-# hardware whitelist. The trailing "other" (free-text escape) and "not sure"
-# entries are load-bearing: this module never reads a hardware-revision byte
-# to fill this field (D-05, the Bug A lesson -- a hardware revision byte
-# cannot distinguish Rev 2.2 / Rev 2.0 / modified Rev 0).
-SHIELD_REV_CHOICES = ["Rev 2.2", "Rev 2.0", "modified Rev 0", "other", "not sure"]
 
-_CHIP_ORIGIN_CHOICES = ["new/blank", "pulled/used"]
+def is_submittable(ac: AutoCapture) -> bool:
+    """True iff the auto-captured identity needed to act on a report is
+    present (Phase 112 Plan 04) -- NO human-provenance field is involved.
 
-
-@dataclass
-class Provenance:
-    """Tester-supplied provenance the firmware cannot self-report (RPT-04).
-
-    Every field defaults blank/`None` so an un-filled report is not
-    submittable (`is_submittable`). `shield_rev` is ALWAYS human-asked --
-    this dataclass and `prompt_provenance` below never read a
-    hardware-revision byte to populate it (D-05). `owns_eraser` stays `None`
-    when the chip under test is not UV-EPROM (only asked when relevant,
-    D-06); `pot_note` is optional free text collected only when
-    `pot_touched` is `True`.
+    A report is submittable when the objective, machine-captured identity
+    is complete: `chip` (the name under test), `protocol` (the DB-derived
+    algorithm), and `host_version` (always populated by the caller) are all
+    present. `hw_revision`/`fw_board_identity` are informational-best-effort
+    (coarse bucket or honest `None` is acceptable) and never gate
+    submittability -- gating on a field that can honestly read `None` on a
+    perfectly good report would defeat the auto-capture-only intent.
     """
-
-    shield_rev: str = ""
-    chip_origin: str = ""
-    owns_eraser: bool | None = None
-    pot_touched: bool | None = None
-    pot_note: str = ""
-
-
-def prompt_provenance(
-    is_uv: bool,
-    *,
-    ask: Any = Prompt.ask,
-    confirm: Any = Confirm.ask,
-) -> Provenance:
-    """Collect provenance BEFORE the sweep via injectable callables (RPT-04).
-
-    `ask`/`confirm` default to `rich.prompt.Prompt.ask`/`Confirm.ask`
-    (mirroring `firmware.py`'s existing `Confirm.ask(..., default=...)`
-    usage) but are overridable parameters so this function never blocks a
-    unit test on a TTY (Pitfall 4) -- tests pass `Mock(side_effect=[...])`
-    instead. Prompt order: shield_rev (free-text follow-up on "other"),
-    chip_origin, owns_eraser (ONLY when `is_uv`), pot_touched, pot_note
-    (ONLY when `pot_touched`).
-
-    This function reads no hardware-revision byte and imports no
-    serial-transport or hardware-manager class -- `is_uv` is the ONLY
-    hardware-adjacent input, and it is received as a plain bool the caller
-    (Phase 112) derives; this function never fetches it itself (D-05).
-    """
-    shield_rev = ask(
-        "Shield revision",
-        choices=SHIELD_REV_CHOICES,
-        default="not sure",
-    )
-    if shield_rev == "other":
-        # A blank free-text answer stays "" (falls through to is_submittable
-        # as blank) rather than silently becoming the literal "other".
-        shield_rev = ask("Describe shield revision", default="") or ""
-
-    chip_origin = ask(
-        "Chip origin",
-        choices=_CHIP_ORIGIN_CHOICES,
-        default="new/blank",
-    )
-
-    owns_eraser: bool | None = None
-    if is_uv:
-        owns_eraser = confirm("Do you own a UV eraser?", default=False)
-
-    pot_touched = confirm("Did you touch/adjust the VPP/VPE pot?", default=False)
-
-    pot_note = ""
-    if pot_touched:
-        pot_note = ask("Pot adjustment note (optional)", default="") or ""
-
-    return Provenance(
-        shield_rev=shield_rev,
-        chip_origin=chip_origin,
-        owns_eraser=owns_eraser,
-        pot_touched=pot_touched,
-        pot_note=pot_note,
-    )
-
-
-def is_submittable(p: Provenance) -> bool:
-    """True iff every REQUIRED provenance field is filled (RPT-04, D-05).
-
-    `"not sure"` on `shield_rev` is a valid, FILLED answer (truthy string)
-    -- only a blank `""`/`None` on a required field fails. `pot_note` is
-    always optional and never gates submittability.
-    """
-    return bool(p.shield_rev) and bool(p.chip_origin) and p.pot_touched is not None
+    return bool(ac.chip) and bool(ac.protocol) and bool(ac.host_version)
 
 
 # ---------------------------------------------------------------------------
@@ -312,7 +263,6 @@ class DiagnosticReport:
     vpe_after_mv: int | None = None
     vpp_mv: int | None = None
     vpe_mv: int | None = None
-    provenance: Provenance | None = None
     db_diff: DbDiff | None = None
 
     def _utc_now(self) -> str:
@@ -325,6 +275,7 @@ class DiagnosticReport:
         return {
             "host_version": ac.host_version,
             "fw_board_identity": ac.fw_board_identity,
+            "hw_revision": ac.hw_revision,
             "chip": ac.chip,
             "protocol": ac.protocol,
             "chip_id_expected": ac.chip_id_expected,
@@ -389,18 +340,6 @@ class DiagnosticReport:
             "locked_steps": list(self.banner.locked_steps),
         }
 
-    def _provenance_dict(self) -> dict[str, Any] | None:
-        p = self.provenance
-        if p is None:
-            return None
-        return {
-            "shield_rev": p.shield_rev,
-            "chip_origin": p.chip_origin,
-            "owns_eraser": p.owns_eraser,
-            "pot_touched": p.pot_touched,
-            "pot_note": p.pot_note,
-        }
-
     def _db_diff_dict(self) -> dict[str, Any] | None:
         dd = self.db_diff
         if dd is None:
@@ -425,12 +364,7 @@ class DiagnosticReport:
             "steps": [self._step_dict(r) for r in self.results],
             "banner": self._banner_dict(),
             "voltage": self._voltage_dict(),
-            "provenance": self._provenance_dict(),
-            "is_submittable": (
-                is_submittable(self.provenance)
-                if self.provenance is not None
-                else False
-            ),
+            "is_submittable": is_submittable(self.auto_capture),
             "db_diff": self._db_diff_dict(),
         }
 
@@ -448,6 +382,7 @@ class DiagnosticReport:
 
         table.add_row("host_version", str(ac["host_version"]))
         table.add_row("fw_board_identity", str(ac["fw_board_identity"]))
+        table.add_row("hw_revision", str(ac["hw_revision"]))
         table.add_row("protocol", str(ac["protocol"]))
         table.add_row(
             "chip_id (expected/actual)",
@@ -484,15 +419,6 @@ class DiagnosticReport:
             ),
         )
 
-        prov = d["provenance"]
-        if prov is not None:
-            table.add_row("provenance: shield_rev", str(prov["shield_rev"]))
-            table.add_row("provenance: chip_origin", str(prov["chip_origin"]))
-            table.add_row("provenance: owns_eraser", str(prov["owns_eraser"]))
-            table.add_row("provenance: pot_touched", str(prov["pot_touched"]))
-            table.add_row("provenance: pot_note", str(prov["pot_note"]))
-        else:
-            table.add_row("provenance", "not collected")
         table.add_row("is_submittable", str(d["is_submittable"]))
 
         db_diff = d["db_diff"]
