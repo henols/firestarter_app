@@ -242,6 +242,70 @@ def test_sample_median_of_even_n_off_grid(hw_config, make_comm, fake_serial) -> 
     assert result == 20950
 
 
+# ---------------------------------------------------------------------------
+# dev-test-vpp-vpe-timeout regression (2026-07-03) -- `_sample_one_voltage`
+# stops acking after `n` frames while the firmware's CMD_READ_VPP/VPE handler
+# is still ACTIVE (no host-sendable stop signal exists for this command).
+# The firmware's own FIRMWARE_CMD_TIMEOUT_MS watchdog self-terminates it and
+# emits a stray "Command N timed out" ERROR frame ~1s later. Without
+# draining that frame on the SAME connection, it leaks into the NEXT
+# find_and_connect's handshake and can desync it (the live-hardware
+# "Connecting... / ERROR: Command 11 timed out" loop the operator reported).
+# ---------------------------------------------------------------------------
+
+
+def test_sample_vpp_mv_drains_stray_watchdog_timeout_frame(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """A stray MSG_ERR_CMD_TIMEOUT frame arriving after the 3rd sample (the
+    firmware's watchdog self-terminating the still-active command) is
+    consumed by `_drain_pending_command` on THIS connection -- it must not
+    raise, and must not affect the returned median."""
+    fake_serial.feed(_ok_frame_bytes())  # ready handshake
+    for _ in range(3):
+        fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 20, 9, 5, 0)))
+    # Stray watchdog-timeout frame the firmware emits ~1s after the last ack
+    # (COMMAND_READ_VPP == 11) -- simulates the exact race from the debug
+    # session's live-hardware capture.
+    fake_serial.feed(build_frame(0xAA, struct.pack(">B", 11)))
+    comm = make_comm()
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        result = hw.sample_vpp_mv()
+
+    assert result == 20900
+    # The stray frame must be drained (read) rather than left pending --
+    # confirms _drain_pending_command actually consumed it instead of a
+    # no-op that happened to not raise.
+    assert fake_serial.in_waiting == 0
+
+
+def test_sample_vpp_mv_drain_timeout_is_swallowed(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """When NOTHING arrives after the 3rd sample (e.g. the watchdog frame is
+    lost, or this connection is closed before it fires), the drain's own
+    SerialTimeoutError is swallowed -- `_sample_one_voltage` still returns
+    the median, it does not propagate the drain timeout as a failure."""
+    fake_serial.feed(_ok_frame_bytes())  # ready handshake
+    for _ in range(3):
+        fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 20, 9, 5, 0)))
+    comm = make_comm()
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        result = hw.sample_vpp_mv()
+
+    assert result == 20900
+
+
 def test_voltage_format_pin() -> None:
     """Pin the 0xE4/0xE5 `CATALOG` format strings against the sampler's
     tolerant regex -- a codegen regen that changes the wording silently
