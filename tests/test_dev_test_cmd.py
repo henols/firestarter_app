@@ -35,7 +35,6 @@ from click.testing import CliRunner
 from firestarter.cli_handlers import AppContext, cli
 from firestarter.config import ConfigManager
 from firestarter.database import EpromDatabase
-from firestarter.diagnostic_report import Provenance
 from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
 from firestarter.firmware import FirmwareManager
@@ -98,13 +97,19 @@ def make_clean_operator() -> Mock:
 
 
 def make_hardware_manager(
-    vpp_values: object = 12000, vpe_values: object = 5000
+    vpp_values: object = 12000,
+    vpe_values: object = 5000,
+    hw_revision: object = "Rev 2.0-class",
 ) -> Mock:
-    """A Mock(spec=HardwareManager) with canned sample_vpp_mv/sample_vpe_mv.
+    """A Mock(spec=HardwareManager) with canned sample_vpp_mv/sample_vpe_mv/
+    read_hardware_revision_value.
 
     A plain int makes every call return the same value (return_value); a
     list makes each successive call return the next value (side_effect) --
     used to simulate a rail sagging across before/after brackets (D-04).
+    `read_hardware_revision_value` defaults to a canned coarse-bucket string
+    (Phase 112 Plan 04 auto-capture wiring) -- `Mock(spec=HardwareManager)`
+    picks it up because the real class now defines the method.
     """
     hw = Mock(spec=HardwareManager)
     if isinstance(vpp_values, list):
@@ -115,6 +120,7 @@ def make_hardware_manager(
         hw.sample_vpe_mv.side_effect = vpe_values
     else:
         hw.sample_vpe_mv.return_value = vpe_values
+    hw.read_hardware_revision_value.return_value = hw_revision
     return hw
 
 
@@ -218,25 +224,29 @@ class TestExitCodeMapping:
 
 
 # ---------------------------------------------------------------------------
-# D-02/D-03: TTY-aware prompt gating + -y/--yes bypass
+# D-02/D-03 (reworked Phase 112 Plan 04): --destructive safety confirm only
 # ---------------------------------------------------------------------------
+#
+# REVERSAL: this class previously tested the interactive tester-input
+# collector function alongside the --destructive confirm. That collector is
+# gone (operator-approved descope, 112-UAT.md test 2); the ONLY interactive
+# input left in the handler is the --destructive safety confirm (SAFE-03),
+# which is NOT provenance and is preserved unchanged below.
 
 
 class TestPromptGating:
-    """On-TTY prompts provenance + destructive confirm; off-TTY skips both."""
+    """Off-TTY: no confirm prompt, sweep runs unattended. On-TTY: the
+    --destructive confirm gates a destructive run; -y/--yes bypasses it."""
 
-    def test_off_tty_skips_both_prompts(
-        self, runner: CliRunner, tmp_path: Path
-    ) -> None:
-        """Off-TTY: no provenance/confirm prompt, blank Provenance, report
-        not-submittable -- --destructive itself is treated as consent."""
+    def test_off_tty_no_confirm_prompt(self, runner: CliRunner, tmp_path: Path) -> None:
+        """Off-TTY: --destructive itself is consent -- no confirm is invoked,
+        the sweep runs, and the report has no provenance key at all."""
         app = make_app_context(
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(),
         )
         with (
             _off_tty(),
-            patch("firestarter.cli_handlers.prompt_provenance") as mock_pp,
             patch("firestarter.cli_handlers.Confirm") as mock_confirm,
         ):
             result = runner.invoke(
@@ -252,39 +262,28 @@ class TestPromptGating:
                 obj=app,
             )
         assert result.exit_code == 0, result.output
-        mock_pp.assert_not_called()
         mock_confirm.ask.assert_not_called()
         data = json.loads((tmp_path / f"dev-test-{_CHIP_NO_ID}.json").read_text())
-        assert data["is_submittable"] is False
-        assert data["provenance"] == {
-            "shield_rev": "",
-            "chip_origin": "",
-            "owns_eraser": None,
-            "pot_touched": None,
-            "pot_note": "",
-        }
+        assert "provenance" not in data
+        assert data["is_submittable"] is True
 
-    def test_on_tty_prompts_provenance_before_sweep(self, runner: CliRunner) -> None:
-        """On-TTY: prompt_provenance is called; destructive confirm (accepted)
-        is called; the sweep proceeds (write is invoked)."""
+    def test_on_tty_destructive_confirm_gates(self, runner: CliRunner) -> None:
+        """On-TTY, --destructive, confirm accepted: Confirm.ask IS called and
+        the sweep proceeds (write is invoked) -- there is no provenance
+        prompt to call."""
         operator = make_clean_operator()
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
         with (
             patch("firestarter.cli_handlers._is_interactive", return_value=True),
-            patch("firestarter.cli_handlers.prompt_provenance") as mock_pp,
             patch("firestarter.cli_handlers.Confirm") as mock_confirm,
         ):
             mock_confirm.ask.return_value = True
-            mock_pp.return_value = Provenance(
-                shield_rev="Rev 2.2", chip_origin="new/blank", pot_touched=False
-            )
             result = runner.invoke(
                 cli, ["dev", "test", _CHIP_NO_ID, "--destructive"], obj=app
             )
         assert result.exit_code == 0, result.output
-        mock_pp.assert_called_once()
         mock_confirm.ask.assert_called_once()
         operator.write_eprom.assert_called()
 
@@ -292,48 +291,40 @@ class TestPromptGating:
         self, runner: CliRunner
     ) -> None:
         """On-TTY, --destructive, confirm declined: command aborts (exit 0,
-        chip left untouched) before any operator write call."""
+        chip left untouched) before any operator write call (SAFE-03)."""
         operator = make_clean_operator()
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
         with (
             patch("firestarter.cli_handlers._is_interactive", return_value=True),
-            patch("firestarter.cli_handlers.prompt_provenance") as mock_pp,
             patch("firestarter.cli_handlers.Confirm") as mock_confirm,
         ):
             mock_confirm.ask.return_value = False
-            mock_pp.return_value = Provenance(
-                shield_rev="Rev 2.2", chip_origin="new/blank", pot_touched=False
-            )
             result = runner.invoke(
                 cli, ["dev", "test", _CHIP_NO_ID, "--destructive"], obj=app
             )
         assert result.exit_code == 0, result.output
         operator.write_eprom.assert_not_called()
 
-    def test_yes_bypasses_confirm_but_not_provenance(self, runner: CliRunner) -> None:
-        """-y/--yes on a TTY skips the destructive confirm but still prompts
-        provenance (D-03: -y is not a blanket non-interactive switch)."""
+    def test_yes_bypasses_confirm_on_a_tty(self, runner: CliRunner) -> None:
+        """-y/--yes on a TTY skips the destructive confirm entirely and the
+        write proceeds -- there is no longer any provenance prompt to
+        reason about."""
         operator = make_clean_operator()
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
         with (
             patch("firestarter.cli_handlers._is_interactive", return_value=True),
-            patch("firestarter.cli_handlers.prompt_provenance") as mock_pp,
             patch("firestarter.cli_handlers.Confirm") as mock_confirm,
         ):
-            mock_pp.return_value = Provenance(
-                shield_rev="Rev 2.2", chip_origin="new/blank", pot_touched=False
-            )
             result = runner.invoke(
                 cli,
                 ["dev", "test", _CHIP_NO_ID, "--destructive", "-y"],
                 obj=app,
             )
         assert result.exit_code == 0, result.output
-        mock_pp.assert_called_once()
         mock_confirm.ask.assert_not_called()
         operator.write_eprom.assert_called()
 
@@ -493,11 +484,33 @@ class TestDualArtifactWrite:
             "steps",
             "banner",
             "voltage",
-            "provenance",
             "is_submittable",
             "db_diff",
         ):
             assert key in data, f"missing to_dict() key {key!r} in artifact"
+        assert "provenance" not in data
+        assert "hw_revision" in data["auto_capture"]
+
+    def test_hw_revision_auto_captured_end_to_end(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """The mocked hardware manager's read_hardware_revision_value() flows
+        through to the rendered report and the .json artifact (Phase 112
+        Plan 04 auto-capture wiring, end-to-end)."""
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(hw_revision="Rev 2.0-class"),
+        )
+        with _off_tty():
+            result = runner.invoke(
+                cli,
+                ["dev", "test", _CHIP_NO_ID, "--output-dir", str(tmp_path)],
+                obj=app,
+            )
+        assert result.exit_code == 0, result.output
+        assert "Rev 2.0-class" in result.output
+        data = json.loads((tmp_path / f"dev-test-{_CHIP_NO_ID}.json").read_text())
+        assert data["auto_capture"]["hw_revision"] == "Rev 2.0-class"
 
     def test_md_artifact_contains_fenced_json_block(
         self, runner: CliRunner, tmp_path: Path

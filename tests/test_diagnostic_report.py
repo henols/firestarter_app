@@ -18,9 +18,10 @@ Test taxonomy:
     test_json_block_parseable        -> fenced ```json round-trips, schema_version
 
   Auto-capture (RPT-02)
-    test_auto_capture_fields         -> host_version, fw_board_identity, chip,
-                                         protocol, chip-id, per-step error_code
-                                         + fingerprint classification
+    test_auto_capture_fields         -> host_version, fw_board_identity,
+                                         hw_revision, chip, protocol, chip-id,
+                                         per-step error_code + fingerprint
+                                         classification
 
   Transport-health honest fallback (XPORT-01, D-03)
     test_transport_not_measured      -> every counter == NOT_MEASURED (never 0);
@@ -31,12 +32,10 @@ Test taxonomy:
                                                 HardwareManager import, no
                                                 VPP-set, no "--force" token
 
-  Provenance composition, single-source preserved (RPT-04, RPT-01, Plan 02)
-    test_report_with_provenance_surfaces_in_both_renders -> a report built
-        WITH a filled Provenance shows the provenance section (+
-        is_submittable True) in to_dict() and render()
-    test_report_provenance_blank_field_flips_is_submittable -> a blank
-        required provenance field flips is_submittable to False in the dict
+  Auto-capture-only submittability, no human-input gate (Phase 112 Plan 04)
+    test_is_submittable_derived_from_auto_capture -> is_submittable is True
+        on a complete AutoCapture and False when a required auto-captured
+        field is blank -- to_dict() has no "provenance" key at all
 
   Read-only advisory DB-diff (RPT-05, D-07, Plan 03)
     test_db_diff_readonly -> build_db_diff reads support_status from a
@@ -121,6 +120,7 @@ def _build_report(chip_name: str = "M8720"):
     auto_capture = AutoCapture(
         host_version=firestarter.__version__,
         fw_board_identity="3.0.0b10:leonardo",
+        hw_revision="Rev 2.0-class",
         chip=chip_name,
         protocol="0x08",
         chip_id_expected=0x1234,
@@ -199,6 +199,7 @@ def test_auto_capture_fields():
     ac = d["auto_capture"]
     assert ac["host_version"] == firestarter.__version__
     assert ac["fw_board_identity"] == "3.0.0b10:leonardo"
+    assert ac["hw_revision"] == "Rev 2.0-class"
     assert ac["chip"] == "M8720"
     assert ac["protocol"] == "0x08"
     assert ac["chip_id_expected"] == 0x1234
@@ -270,57 +271,28 @@ def test_report_module_is_orchestrator_only():
 
 
 # ---------------------------------------------------------------------------
-# Provenance composition, single-source preserved (RPT-04, RPT-01, Plan 02)
+# Auto-capture-only submittability, no human-input gate (Phase 112 Plan 04)
 # ---------------------------------------------------------------------------
+#
+# REVERSAL: this section previously tested composing a filled/blank
+# Provenance into a DiagnosticReport (RPT-04, D-04/D-05/D-06). That
+# interactive tester-input model is gone (operator-approved descope,
+# 112-UAT.md test 2) -- is_submittable is now derived purely from
+# auto_capture, and to_dict() no longer has a "provenance" key at all.
 
 
-def test_report_with_provenance_surfaces_in_both_renders():
-    from firestarter.diagnostic_report import Provenance
+def test_is_submittable_derived_from_auto_capture():
+    from firestarter.diagnostic_report import is_submittable
 
-    report = _build_report()
-    report.provenance = Provenance(
-        shield_rev="Rev 2.2",
-        chip_origin="new/blank",
-        pot_touched=False,
-    )
-
+    report = _build_report()  # _build_report's AutoCapture is complete
     d = report.to_dict()
-    assert d["provenance"] is not None
-    assert d["provenance"]["shield_rev"] == "Rev 2.2"
+    assert "provenance" not in d
     assert d["is_submittable"] is True
+    assert is_submittable(report.auto_capture) is True
 
-    table = report.render()
-    # render() must read the SAME to_dict() output -- never a parallel field
-    # list, never a re-parse of the JSON string (RPT-01 single-source).
-    src = inspect.getsource(type(report).render)
-    assert "self.to_dict()" in src or "to_dict()" in src
-    assert "json.loads" not in src
-    assert "json.load(" not in src
-
-    # A provenance row is present in the rendered table.
-    rendered_fields = {str(cell) for column in table.columns for cell in column.cells}
-    assert any("Rev 2.2" in cell or "shield_rev" in cell for cell in rendered_fields)
-
-
-def test_report_provenance_blank_field_flips_is_submittable():
-    from firestarter.diagnostic_report import Provenance
-
-    report = _build_report()
-    report.provenance = Provenance(
-        shield_rev="",
-        chip_origin="new/blank",
-        pot_touched=False,
-    )
-
-    d = report.to_dict()
-    assert d["is_submittable"] is False
-
-
-def test_report_without_provenance_dict_is_null():
-    report = _build_report()
-    d = report.to_dict()
-    assert d["provenance"] is None
-    assert d["is_submittable"] is False
+    report.auto_capture.protocol = None
+    d_incomplete = report.to_dict()
+    assert d_incomplete["is_submittable"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -484,30 +456,23 @@ def test_report_without_db_diff_is_null():
     assert d["db_diff"] is None
 
 
-def test_full_report_all_four_sub_objects_single_source():
-    """End-to-end: a full DiagnosticReport (auto_capture + provenance +
-    transport + db_diff + real plan/results/banner) surfaces all four
-    sub-object sections from one to_dict() and one render() -- the phase
-    gate proving RPT-01's single-source contract holds with db_diff added."""
-    from firestarter.diagnostic_report import (
-        SCHEMA_VERSION,
-        Provenance,
-        build_db_diff,
-    )
+def test_full_report_all_sub_objects_single_source():
+    """End-to-end: a full DiagnosticReport (auto_capture + transport +
+    db_diff + real plan/results/banner) surfaces every sub-object section
+    from one to_dict() and one render() -- the phase gate proving RPT-01's
+    single-source contract holds with db_diff added (no provenance
+    sub-object since the Phase 112 Plan 04 descope -- auto_capture alone
+    drives is_submittable)."""
+    from firestarter.diagnostic_report import SCHEMA_VERSION, build_db_diff
 
     report = _build_report()
-    report.provenance = Provenance(
-        shield_rev="Rev 2.2",
-        chip_origin="new/blank",
-        pot_touched=False,
-    )
     db = _mock_db(support_status="supported")
     report.db_diff = build_db_diff("M8720", db, report.results)
 
     d = report.to_dict()
     assert d["schema_version"] == SCHEMA_VERSION
     assert d["auto_capture"] is not None
-    assert d["provenance"] is not None
+    assert "provenance" not in d
     assert d["transport_health"] is not None
     assert d["db_diff"] is not None
 
@@ -516,7 +481,7 @@ def test_full_report_all_four_sub_objects_single_source():
     parsed = json.loads(inner)
     assert parsed["db_diff"]["current_support_status"] == "supported"
 
-    table = report.render()  # must not raise
+    report.render()  # must not raise
 
 
 # ---------------------------------------------------------------------------
