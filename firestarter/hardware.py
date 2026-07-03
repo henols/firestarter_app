@@ -335,3 +335,13 @@ class HardwareManager:
                 comm.disconnect()
 
         return int(statistics.median(samples)) if samples else None
+
+    def sample_vpp_mv(self, n: int = 3) -> Optional[int]:
+        """Value-returning sibling of read_vpp_voltage: median VPP mV over
+        `n` samples (100 mV resolution), or None if not measured."""
+        return self._sample_one_voltage(COMMAND_READ_VPP, n=n)
+
+    def sample_vpe_mv(self, n: int = 3) -> Optional[int]:
+        """Value-returning sibling of read_vpe_voltage: median VPE mV over
+        `n` samples (100 mV resolution), or None if not measured."""
+        return self._sample_one_voltage(COMMAND_READ_VPE, n=n)
