@@ -1781,6 +1781,17 @@ def _make_sampler(app: "AppContext", report: DiagnosticReport) -> Any:
     default=False,
     help="Bypass the --destructive confirm prompt on a TTY.",
 )
+@click.option(
+    "--submit",
+    "submit",
+    is_flag=True,
+    default=False,
+    help=(
+        "After the report is rendered and saved, file it to the "
+        "maintainer's GitHub tracker (explicit + interactive-only; "
+        "never on a bare run)."
+    ),
+)
 @click.pass_obj
 @map_typed_errors
 def dev_test(
@@ -1789,6 +1800,7 @@ def dev_test(
     destructive: bool,
     output_dir: Optional[str],
     assume_yes: bool,
+    submit: bool,
 ) -> None:
     """Run the community chip-validation sweep for CHIP (SWEEP-01..05, RPT-01..05).
 
@@ -1804,6 +1816,11 @@ def dev_test(
 
     Prints a rendered report to stdout on every run. With --output-dir,
     additionally writes dev-test-<chip>.json and dev-test-<chip>.md.
+
+    With --submit (SUB-01/02, Phase 113), files the already-rendered,
+    already-persisted report to the maintainer's GitHub tracker via a lazy
+    `submit_report` call -- the sweep is never re-run. Submission requires
+    the explicit flag; a bare run never submits.
 
     Exit code (D-01): 0 if every step is OK/NA/SKIPPED, 2 if any step is
     marginal (and none BAD), 1 if any step is BAD (including a chip-ID
@@ -1898,6 +1915,11 @@ def dev_test(
     md_file.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
 
     console.print(f"[dim]Report written to {json_file}[/dim]")
+
+    if submit:
+        from firestarter import submit as submit_mod
+
+        submit_mod.submit_report(report, chip, json_file, console=console)
 
     if not results:
         sys.exit(0)

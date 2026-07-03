@@ -580,6 +580,103 @@ class TestDualArtifactWrite:
 
 
 # ---------------------------------------------------------------------------
+# Phase 113-04: --submit flag + lazy submit_report call site (SUB-01/02)
+# ---------------------------------------------------------------------------
+
+
+class TestSubmitFlag:
+    """--submit is a Click flag wired to a lazy `submit_report` call site
+    consuming the in-memory report + resolved json_file path -- never a
+    re-run of the sweep. A bare run (no --submit) never calls submit_report
+    (SUB-02, no submission side effect)."""
+
+    def test_bare_run_never_calls_submit_report(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(),
+        )
+        with (
+            _off_tty(),
+            patch("firestarter.submit.submit_report") as mock_submit_report,
+        ):
+            result = runner.invoke(
+                cli,
+                ["dev", "test", _CHIP_NO_ID, "--output-dir", str(tmp_path)],
+                obj=app,
+            )
+        assert result.exit_code == 0, result.output
+        mock_submit_report.assert_not_called()
+
+    def test_submit_flag_calls_submit_report_once_with_report_chip_json_file(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(),
+        )
+        with (
+            _off_tty(),
+            patch("firestarter.submit.submit_report") as mock_submit_report,
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "dev",
+                    "test",
+                    _CHIP_NO_ID,
+                    "--submit",
+                    "--output-dir",
+                    str(tmp_path),
+                ],
+                obj=app,
+            )
+        assert result.exit_code == 0, result.output
+        mock_submit_report.assert_called_once()
+        args, kwargs = mock_submit_report.call_args
+        report_arg, chip_arg, json_file_arg = args
+        assert chip_arg == _CHIP_NO_ID
+        assert json_file_arg == tmp_path / f"dev-test-{_CHIP_NO_ID}.json"
+        # The in-memory report object, not a re-derived/re-loaded copy.
+        assert report_arg.to_dict()["auto_capture"]["chip"] == _CHIP_NO_ID
+        assert kwargs["console"] is not None
+
+    def test_submit_off_tty_end_to_end_never_opens_browser_or_runs_gh(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """Off-TTY --submit through the REAL submit_report (D-04): prints the
+        body + URL and returns WITHOUT opening a browser / running gh --
+        neither injected seam is ever called."""
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(),
+        )
+        mock_browser_open = Mock()
+        mock_run_fn = Mock()
+        with (
+            _off_tty(),
+            patch("firestarter.submit.webbrowser.open", mock_browser_open),
+            patch("firestarter.submit.subprocess.run", mock_run_fn),
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "dev",
+                    "test",
+                    _CHIP_NO_ID,
+                    "--submit",
+                    "--output-dir",
+                    str(tmp_path),
+                ],
+                obj=app,
+            )
+        assert result.exit_code == 0, result.output
+        mock_browser_open.assert_not_called()
+        mock_run_fn.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Test helper
 # ---------------------------------------------------------------------------
 
