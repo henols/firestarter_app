@@ -28,12 +28,33 @@ from typing import Any, Callable, Dict, List, Literal, Optional  # noqa: UP035
 
 import click
 import click.shell_completion
+from rich.console import Console
+from rich.prompt import Confirm
 
 from firestarter import __version__ as version
 from firestarter.chip_resolver import resolve_chip
+from firestarter.chip_test import (
+    OP_ID,
+    VERDICT_BAD,
+    VERDICT_MARGINAL,
+    VERDICT_NA,
+    VERDICT_OK,
+    VERDICT_SKIPPED,
+    count_applicable,
+    derive_plan,
+    run_plan,
+)
 from firestarter.config import ConfigManager
 from firestarter.constants import FLAG_CHIP_ENABLE, FLAG_OUTPUT_ENABLE
 from firestarter.database import EpromDatabase
+from firestarter.diagnostic_report import (
+    AutoCapture,
+    DiagnosticReport,
+    Provenance,
+    TransportHealth,
+    build_db_diff,
+    prompt_provenance,
+)
 from firestarter.eprom_info import EpromConsolePresenter, print_eprom_list_table
 from firestarter.eprom_operations import EpromOperator, build_flags
 from firestarter.exceptions import (
@@ -1624,3 +1645,277 @@ def dev_validate_family(
 
     _write_artifact(hw_cells, output_dir)
     sys.exit(overall_verdict)
+
+
+# ---------------------------------------------------------------------------
+# `dev test` -- community chip-validation sweep (Phase 112, D-01..D-05)
+# ---------------------------------------------------------------------------
+
+# Protocol id exclusive to UV-EPROM across the whole chip database (mirrors
+# chip_test.py's own `_PROTOCOL_UV_EPROM`) -- used here ONLY to derive the
+# host-side `is_uv` signal for `prompt_provenance`'s owns_eraser gate; this
+# handler never re-implements chip_test.py's execution-time write-region
+# logic, it only mirrors the SAME detection signal (109-CONTEXT.md).
+_PROTOCOL_UV_EPROM = 0x0B
+
+# Per-verdict -> exit-code mapping (D-01): OK/NA/SKIPPED are exit-clean;
+# `marginal` is an inconclusive result (exit 2); BAD beats marginal via
+# `max` over the whole result set, mirroring dev_validate_family's own
+# `if verdict_int > overall_verdict` pattern (cli_handlers.py:1622-1623).
+_VERDICT_EXIT_CODES = {
+    VERDICT_OK: 0,
+    VERDICT_NA: 0,
+    VERDICT_SKIPPED: 0,
+    VERDICT_MARGINAL: 2,
+    VERDICT_BAD: 1,
+}
+
+
+def _verdict_code(verdict: str) -> int:
+    """Map a single StepResult verdict to its 0/1/2 exit-code contribution."""
+    return _VERDICT_EXIT_CODES.get(verdict, 0)
+
+
+def _sanitize_chip_token(chip: str) -> str:
+    """Filesystem-safe token for the dev-test-<chip>.{json,md} artifact names.
+
+    Replaces path separators and other filesystem-unsafe characters with `_`
+    so an arbitrary chip name (e.g. containing `/`, spaces, or parens like
+    `DS1220(RW)`) never escapes the output directory or breaks on a
+    case-sensitive/insensitive filesystem boundary. Deterministic: the same
+    chip name always sanitizes to the same token.
+    """
+    safe_chars = []
+    for ch in chip:
+        if ch.isalnum() or ch in ("-", "_", "."):
+            safe_chars.append(ch)
+        else:
+            safe_chars.append("_")
+    return "".join(safe_chars)
+
+
+def _is_uv_eprom(app: "AppContext", chip: str) -> bool:
+    """Host-side UV-EPROM signal (mirrors chip_test._write_region_for, D-01).
+
+    `electrical-type == "UV-EPROM"` (the guard-bypassing `full` DB dict) OR
+    `algorithm == 0x0B` (the programmer dict's protocol id, UV-EPROM-exclusive
+    across the whole chip database) -- same OR'd signal as
+    `chip_test.py:649-652`. A missing DB entry is treated as not-UV (there is
+    nothing to derive_plan for either).
+    """
+    full = app.db.get_eprom(chip)
+    if not full:
+        return False
+    is_uv = full.get("electrical-type", "") == "UV-EPROM"
+    if is_uv:
+        return True
+    try:
+        prog = app.db.convert_to_programmer(full)
+    except Exception:  # noqa: BLE001 -- best-effort signal, never fatal
+        return False
+    return bool(prog.get("algorithm") == _PROTOCOL_UV_EPROM)
+
+
+def _chip_id_fields(
+    app: "AppContext", chip: str, results: list
+) -> tuple[Optional[int], Optional[int], Optional[str]]:
+    """Derive (chip_id_expected, chip_id_actual, mismatch_reason) for AutoCapture.
+
+    `chip_id_expected` is read directly off the DB entry (host-side, never
+    from firmware). `chip_id_actual`/`chip_id_mismatch_reason` are recovered
+    from the id step's `StepResult.reason` text (the ONLY place
+    `chip_test._dispatch_id` records the detected id, RPT-02) when a mismatch
+    was reported; on a clean/NA/SKIPPED id step there is no actual-id
+    disagreement to surface, so both stay `None`.
+    """
+    full = app.db.get_eprom(chip) or {}
+    prog = app.db.convert_to_programmer(full) if full else {}
+    chip_id_expected = prog.get("chip-id") or None
+
+    chip_id_actual: Optional[int] = None
+    mismatch_reason: Optional[str] = None
+    for r in results:
+        if r.op == OP_ID and r.reason and "mismatch" in r.reason.lower():
+            mismatch_reason = r.reason
+            # reason text: "chip-ID mismatch: expected 0x.., detected 0x.."
+            try:
+                detected_hex = r.reason.rsplit("0x", 1)[-1]
+                chip_id_actual = int(detected_hex, 16)
+            except (ValueError, IndexError):
+                chip_id_actual = None
+            break
+    return chip_id_expected, chip_id_actual, mismatch_reason
+
+
+def _is_interactive() -> bool:
+    """TTY check factored into its own function so tests can monkeypatch it
+    directly (D-02) -- `click.testing.CliRunner.invoke` replaces `sys.stdin`
+    with its own stream for the duration of the call, so a test-time
+    `patch("sys.stdin.isatty", ...)` applied before `invoke()` does not
+    survive; patching `firestarter.cli_handlers._is_interactive` does.
+    """
+    return sys.stdin.isatty()
+
+
+def _make_sampler(app: "AppContext", report: DiagnosticReport) -> Any:
+    """Build the before/after sampler thunk closing over `hardware_manager`.
+
+    Only constructed for a `--destructive` run (D-04). Reuses the existing
+    `sample_vpp_mv`/`sample_vpe_mv` monitor path (COMMAND_READ_VPP/VPE,
+    energize+measure only -- SAFE-02) -- no VPP-set call is made here or
+    anywhere in this module. `chip_test.run_plan` calls this as an opaque
+    `sampler(phase)` callable and never imports `hardware.py` itself (D-04
+    decoupling, chip_test.py:542-553).
+    """
+
+    def _sampler(phase: str) -> None:
+        vpp = app.hardware_manager.sample_vpp_mv()
+        vpe = app.hardware_manager.sample_vpe_mv()
+        if phase == "before":
+            report.vpp_before_mv = vpp
+            report.vpe_before_mv = vpe
+        elif phase == "after":
+            report.vpp_after_mv = vpp
+            report.vpe_after_mv = vpe
+
+    return _sampler
+
+
+@dev.command(name="test")
+@click.argument("chip", shell_complete=_complete_eprom)
+@click.option(
+    "--destructive",
+    is_flag=True,
+    default=False,
+    help=(
+        "Run the full write/erase/verify sweep (sacrifices the chip). "
+        "CLI-only flag -- never read from config or environment (SAFE-01)."
+    ),
+)
+@click.option(
+    "--output-dir",
+    "output_dir",
+    type=str,
+    default=None,
+    help=(
+        "Write dev-test-<chip>.json and dev-test-<chip>.md into this "
+        "directory. Default: no files written, stdout report only."
+    ),
+)
+@click.option(
+    "-y",
+    "--yes",
+    "assume_yes",
+    is_flag=True,
+    default=False,
+    help="Bypass the --destructive confirm prompt on a TTY (never bypasses provenance prompts).",  # noqa: E501
+)
+@click.pass_obj
+@map_typed_errors
+def dev_test(
+    app: "AppContext",
+    chip: str,
+    destructive: bool,
+    output_dir: Optional[str],
+    assume_yes: bool,
+) -> None:
+    """Run the community chip-validation sweep for CHIP (SWEEP-01..05, RPT-01..05).
+
+    Without --destructive: id + read + blank-check only (chip stays
+    pristine). With --destructive: adds write/erase/verify (sacrifices the
+    chip) -- gated behind a TTY confirm unless -y/--yes is given.
+
+    Prints a rendered report to stdout on every run. With --output-dir,
+    additionally writes dev-test-<chip>.json and dev-test-<chip>.md.
+
+    Exit code (D-01): 0 if every step is OK/NA/SKIPPED, 2 if any step is
+    marginal (and none BAD), 1 if any step is BAD (including a chip-ID
+    mismatch) -- computed as max over per-step exit codes.
+    """
+    is_uv = _is_uv_eprom(app, chip)
+    interactive = _is_interactive()
+
+    provenance: Optional[Provenance] = None
+    if interactive:
+        provenance = prompt_provenance(is_uv)
+        if destructive and not assume_yes:
+            proceed = Confirm.ask(
+                "--destructive will sacrifice the chip. Continue?", default=False
+            )
+            if not proceed:
+                click.echo("Aborted -- chip left untouched.")
+                sys.exit(0)
+    else:
+        # Off-TTY: skip both prompts. Blank Provenance -> is_submittable()
+        # computes False (correct, not a gap). --destructive itself is
+        # treated as consent -- no confirm possible without a TTY (D-02).
+        provenance = Provenance()
+
+    plan = derive_plan(chip, app.db, destructive=destructive)
+
+    auto_capture = AutoCapture(
+        host_version=version,
+        fw_board_identity=None,
+        chip=chip,
+        protocol=None,
+    )
+    transport = TransportHealth()
+    report = DiagnosticReport(
+        auto_capture=auto_capture,
+        transport=transport,
+        plan=plan,
+        provenance=provenance,
+    )
+
+    sampler = _make_sampler(app, report) if destructive else None
+    results = run_plan(plan, app.eprom_operator, app.db, sampler=sampler)
+    report.results = results
+    report.banner = count_applicable(plan, results)
+
+    if not destructive:
+        # Phase-111 D-04: standalone non-destructive VPP+VPE read fills the
+        # non-split slots; before/after stay None (-> NOT_MEASURED). Rejected:
+        # sampling around the whole run_plan call (111-CONTEXT.md).
+        report.vpp_mv = app.hardware_manager.sample_vpp_mv()
+        report.vpe_mv = app.hardware_manager.sample_vpe_mv()
+
+    full = app.db.get_eprom(chip)
+    if full:
+        prog = app.db.convert_to_programmer(full)
+        auto_capture.protocol = str(prog.get("algorithm"))
+    (
+        auto_capture.chip_id_expected,
+        auto_capture.chip_id_actual,
+        auto_capture.chip_id_mismatch_reason,
+    ) = _chip_id_fields(app, chip, results)
+
+    report.db_diff = build_db_diff(chip, app.db, results)
+
+    console = Console()
+    report.render(console)
+
+    if output_dir:
+        out_path = Path(output_dir)
+        out_path.mkdir(parents=True, exist_ok=True)
+        safe_chip = _sanitize_chip_token(chip)
+
+        json_file = out_path / f"dev-test-{safe_chip}.json"
+        json_file.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+
+        md_lines = [
+            f"# dev test -- {chip}",
+            "",
+            "| Step | Verdict | Reason |",
+            "| ---- | ------- | ------ |",
+        ]
+        for r in results:
+            md_lines.append(f"| {r.op} | {r.verdict} | {r.reason or '-'} |")
+        md_lines.append("")
+        md_lines.append(report.to_json_block())
+        md_file = out_path / f"dev-test-{safe_chip}.md"
+        md_file.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
+
+    if not results:
+        sys.exit(0)
+    code = max(_verdict_code(r.verdict) for r in results)
+    sys.exit(code)
