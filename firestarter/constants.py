@@ -50,17 +50,6 @@ CMD_FRAME_MAX = 512
 # see tests/test_revision_constants_parity.py.
 MAX_27C020_SIZE = 262144
 
-# Firmware command-loop watchdog — Firmware sync: firestarter.h #define TIMEOUT_MS.
-# Any command left ACTIVE (e.g. CMD_READ_VPP/VPE's unbounded ack-loop, which has
-# no host-sendable stop signal) self-terminates on the firmware side this many ms
-# after its last-seen host ack, emitting MSG_ERR_CMD_TIMEOUT ("Command N timed
-# out"). Host code that stops acking a still-running command (bounded voltage
-# sampler, hardware.py _sample_one_voltage) must drain that stray error frame on
-# the SAME connection before disconnecting — otherwise it leaks into the next
-# find_and_connect's read and can desync its handshake (dev-test-vpp-vpe-timeout
-# debug session, 2026-07-03).
-FIRMWARE_CMD_TIMEOUT_MS = 1000
-
 
 # Wire-protocol command codes — Firmware sync: firestarter.h
 # cmd field values sent in JSON commands to the Arduino firmware.

@@ -18,7 +18,6 @@ from firestarter.constants import (
     COMMAND_HW_VERSION,
     COMMAND_READ_VPE,
     COMMAND_READ_VPP,
-    FIRMWARE_CMD_TIMEOUT_MS,
 )
 from firestarter.exceptions import (
     HardwareOperationError,
@@ -320,38 +319,6 @@ class HardwareManager:
         v_int, v_dec = int(match.group(1)), int(match.group(2))
         return v_int * 1000 + v_dec * 100
 
-    def _drain_pending_command(self, comm: SerialCommunicator) -> None:
-        """Best-effort: consume the still-active firmware command's eventual
-        self-timeout frame on THIS connection so it can't leak into the next
-        find_and_connect (see _sample_one_voltage docstring).
-
-        We stopped acking, but a DATA frame the firmware sent right before
-        our last ack (or produced from that last ack, if it raced our loop
-        exit) can still be in flight -- that frame is NOT what we're waiting
-        for. Only an ERROR (the watchdog's "Command N timed out") or an OK
-        means the firmware command has actually finished; anything else
-        (DATA, or nothing) means it is still active and we must keep waiting,
-        bounded by an overall deadline set just past FIRMWARE_CMD_TIMEOUT_MS
-        from now so we cannot wait forever if the firmware behaves
-        unexpectedly. Every outcome, including hitting the deadline without
-        ever seeing a terminal response, is swallowed -- this is best-effort
-        cleanup, not a contract.
-        """
-        deadline = time.time() + (FIRMWARE_CMD_TIMEOUT_MS / 1000) + 0.5
-        while True:
-            remaining = deadline - time.time()
-            if remaining <= 0:
-                return
-            try:
-                response = comm.get_response(timeout=remaining)
-            except (SerialError, SerialTimeoutError, HardwareOperationError) as e:
-                logger.debug(f"Drain wait ended without a response (expected): {e}")
-                return
-            if response.type in ("ERROR", "OK"):
-                return
-            # DATA (or anything else): still active, keep waiting for the
-            # real terminal response within the remaining deadline.
-
     def _sample_one_voltage(
         self, state: int, n: int = 3, flags: int = 0
     ) -> Optional[int]:
@@ -362,22 +329,6 @@ class HardwareManager:
         Mirrors the _read_voltage_loop handshake (find_and_connect ->
         expect_ack -> send_ack -> get_response) but stops after `n` frames
         instead of looping forever, and returns a value instead of printing.
-
-        Unlike the standalone read loop (which runs until the OPERATOR hits
-        Ctrl+C and the WHOLE PROCESS then exits), this method deliberately
-        stops acking after `n` frames while the firmware's CMD_READ_VPP/VPE
-        handler keeps running -- there is no host-sendable stop signal for
-        this command (hw_read_voltage only ever checks for another ACK). The
-        firmware's own command watchdog (FIRMWARE_CMD_TIMEOUT_MS, mirrors
-        firestarter.h TIMEOUT_MS) self-terminates the still-active command
-        ~1s after our last ack and emits a stray "Command N timed out" ERROR
-        frame. Because `dev test` immediately opens ANOTHER connection right
-        after this one (vpe after vpp, or the next before/after cycle) --
-        unlike standalone, which exits the process after Ctrl+C -- that stray
-        frame can otherwise arrive after disconnect and get read by the NEXT
-        find_and_connect, desyncing its handshake (dev-test-vpp-vpe-timeout
-        debug session, 2026-07-03). We drain it here, on THIS connection,
-        before disconnecting, so it can never leak into the next connect.
 
         Returns None on any transport error, a non-ready ack, a non-DATA
         response, or when no sample could be parsed (honest fallback, never
@@ -405,12 +356,6 @@ class HardwareManager:
                 if mv is not None:
                     samples.append(mv)
                 comm.send_ack()  # acknowledge data and request next reading
-
-            # We stop acking here on purpose, but the firmware command is
-            # still ACTIVE (see docstring). Wait out its watchdog window so
-            # its self-timeout ERROR frame is consumed on THIS connection,
-            # not leaked into the next one.
-            self._drain_pending_command(comm)
         except (
             ProgrammerNotFoundError,
             SerialError,
