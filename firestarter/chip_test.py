@@ -384,7 +384,18 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
     else:
         locked_destructive.append((OP_WRITE, "destructive=False: write omitted (D-01)"))
 
-    steps.append(Step(op=OP_VERIFY, supported=True, reason=""))
+    # verify: always supported, but only executable on a destructive plan --
+    # it follows the same D-01 write/erase gating (there is no preceding
+    # write on a non-destructive run, so a bare verify would compare a
+    # freshly-generated pattern against unrelated chip contents). Positioned
+    # after write and before erase so the destructive step order (write,
+    # verify, erase) is unchanged.
+    if destructive:
+        steps.append(Step(op=OP_VERIFY, supported=True, reason=""))
+    else:
+        locked_destructive.append(
+            (OP_VERIFY, "destructive=False: verify omitted (D-01)")
+        )
 
     # erase: supported only if FLAG_CAN_ERASE is set AND protocol != 0x05
     # (flash4 auto-erases per page; the flag is deliberately clear for it --
