@@ -474,6 +474,16 @@ class DiagnosticReport:
         banner = d["banner"]
         table.add_row("banner", f"{banner['n_ran']} of {banner['m_applicable']} ran")
 
+        v = d["voltage"]
+        table.add_row(
+            "voltage",
+            (
+                f"vpp before/after={v['vpp_before_mv']}/{v['vpp_after_mv']} "
+                f"vpe before/after={v['vpe_before_mv']}/{v['vpe_after_mv']} "
+                f"vpp={v['vpp_mv']} vpe={v['vpe_mv']}"
+            ),
+        )
+
         prov = d["provenance"]
         if prov is not None:
             table.add_row("provenance: shield_rev", str(prov["shield_rev"]))
