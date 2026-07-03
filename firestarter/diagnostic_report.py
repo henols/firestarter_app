@@ -286,8 +286,13 @@ class DiagnosticReport:
 
     Composes the Phase-108/109 `Plan`, `list[StepResult]`, and `BannerCounts`
     objects (never redefined here, never recomputed) plus the new
-    `AutoCapture`/`TransportHealth` sub-objects. `vpp_vpe_mv` is a `None`
-    slot left for Phase 111's measured-voltage sampler.
+    `AutoCapture`/`TransportHealth` sub-objects. The measured-voltage slot is
+    split (Phase 111, D-01/D-03/D-04) into destructive-run before/after pairs
+    per rail (`vpp_before_mv`/`vpp_after_mv`/`vpe_before_mv`/`vpe_after_mv`)
+    plus standalone non-destructive readings (`vpp_mv`/`vpe_mv`) -- a rail
+    that sagged across a write reads very differently from a regulator that
+    never reached its target, so the two shapes are never conflated into one
+    field.
 
     `db_diff` (plan 03, RPT-05) is the advisory, read-only DB-diff -- current
     `support_status` beside a proposed-disposition string derived purely from
@@ -300,7 +305,13 @@ class DiagnosticReport:
     plan: Plan
     results: list[StepResult] = field(default_factory=list)
     banner: BannerCounts | None = None
-    vpp_vpe_mv: int | None = None
+    # D-01 split / D-03 destructive before-after / D-04 standalone honest-fallback
+    vpp_before_mv: int | None = None
+    vpp_after_mv: int | None = None
+    vpe_before_mv: int | None = None
+    vpe_after_mv: int | None = None
+    vpp_mv: int | None = None
+    vpe_mv: int | None = None
     provenance: Provenance | None = None
     db_diff: DbDiff | None = None
 
@@ -333,6 +344,29 @@ class DiagnosticReport:
             "retries": NOT_MEASURED if th.retries is None else th.retries,
             "timeouts": NOT_MEASURED if th.timeouts is None else th.timeouts,
             "transport_suspect": _is_transport_suspect(th),
+        }
+
+    def _voltage_dict(self) -> dict[str, Any]:
+        """Substitute NOT_MEASURED for any None voltage field -- the ONE
+        place in this module that knows the sentinel string for a voltage
+        reading (mirrors `_transport_dict`, Pitfall 3). Readings land on the
+        100 mV grid the sampler reports at; an absent reading is honestly
+        `NOT_MEASURED`, never a fabricated `0` (D-04)."""
+        return {
+            "vpp_before_mv": (
+                NOT_MEASURED if self.vpp_before_mv is None else self.vpp_before_mv
+            ),
+            "vpp_after_mv": (
+                NOT_MEASURED if self.vpp_after_mv is None else self.vpp_after_mv
+            ),
+            "vpe_before_mv": (
+                NOT_MEASURED if self.vpe_before_mv is None else self.vpe_before_mv
+            ),
+            "vpe_after_mv": (
+                NOT_MEASURED if self.vpe_after_mv is None else self.vpe_after_mv
+            ),
+            "vpp_mv": NOT_MEASURED if self.vpp_mv is None else self.vpp_mv,
+            "vpe_mv": NOT_MEASURED if self.vpe_mv is None else self.vpe_mv,
         }
 
     def _step_dict(self, result: StepResult) -> dict[str, Any]:
@@ -390,7 +424,7 @@ class DiagnosticReport:
             "transport_health": self._transport_dict(),
             "steps": [self._step_dict(r) for r in self.results],
             "banner": self._banner_dict(),
-            "vpp_vpe_mv": self.vpp_vpe_mv,
+            "voltage": self._voltage_dict(),
             "provenance": self._provenance_dict(),
             "is_submittable": (
                 is_submittable(self.provenance)
