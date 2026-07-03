@@ -29,6 +29,11 @@ Coverage:
      FIRESTARTER_DEVTEST_HANDLER, flips the checker non-zero -- AND the real,
      clean `cli_handlers.py` (which the checker now actually scans, scoped to
      the `dev_test` function + its private helpers) still passes.
+  8. submit.py-shaped planted violation (Phase 113, anti-hollow for the
+     THIRD full-scan leg specifically): a fixture with a forbidden op
+     injected via FIRESTARTER_DEVTEST_SUBMIT flips the checker non-zero --
+     AND a clean fixture through the same env-override still passes -- AND
+     the real, clean `submit.py` still passes with the PASS line naming it.
 """
 
 import os
@@ -280,6 +285,86 @@ def test_env_override_points_at_a_clean_handler_fixture_still_passes(
     result = _run_checker({"FIRESTARTER_DEVTEST_HANDLER": str(clean)})
     assert result.returncode == 0, (
         f"checker exited {result.returncode} on a clean handler env-override "
+        f"fixture.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "PASS:" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Test 8: submit.py third full-scan leg (Phase 113, anti-hollow proof)
+# ---------------------------------------------------------------------------
+
+
+def test_checker_exits_zero_on_real_submit_and_pass_line_names_it() -> None:
+    """The real, clean `submit.py` passes, and the PASS: line names it --
+    proving the third leg actually ran (was not silently skipped, the
+    v1.12 hollow-GATE-03 failure mode)."""
+    result = _run_checker()
+    assert result.returncode == 0, (
+        f"checker exited {result.returncode} with the submit.py leg in scope.\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "PASS:" in result.stdout
+    assert "submit.py" in result.stdout, (
+        f"Expected the PASS: line to name submit.py (leg actually scanned, "
+        f"not skipped) but got:\n{result.stdout}"
+    )
+
+
+def test_checker_exits_nonzero_on_planted_submit_vpp_set_violation(
+    tmp_path: Path,
+) -> None:
+    """A submit-shaped fixture with a real VPP-set call site, injected via
+    FIRESTARTER_DEVTEST_SUBMIT, MUST fail the gate (anti-hollow proof for
+    the new leg, T-113-01)."""
+    bad = tmp_path / "planted_submit_vpp_set.py"
+    bad.write_text(
+        "def submit_report(op, report, chip, saved_json_path):\n"
+        "    op.set_vpp(12000)\n"
+        "    return None\n"
+    )
+    result = _run_checker({"FIRESTARTER_DEVTEST_SUBMIT": str(bad)})
+    assert result.returncode != 0, (
+        f"checker exited 0 on a planted submit-shaped VPP-set violation.\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "FAIL:" in result.stdout
+    assert "VPP-set" in result.stdout
+
+
+def test_checker_exits_nonzero_on_planted_submit_force_violation(
+    tmp_path: Path,
+) -> None:
+    """A submit-shaped fixture passing force=True, injected via
+    FIRESTARTER_DEVTEST_SUBMIT, MUST fail the gate."""
+    bad = tmp_path / "planted_submit_force.py"
+    bad.write_text(
+        "def submit_report(op, report, chip, saved_json_path):\n"
+        "    return op.erase_eprom(chip, {}, force=True)\n"
+    )
+    result = _run_checker({"FIRESTARTER_DEVTEST_SUBMIT": str(bad)})
+    assert result.returncode != 0, (
+        f"checker exited 0 on a planted submit-shaped force=True violation.\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "FAIL:" in result.stdout
+    assert "force" in result.stdout.lower()
+
+
+def test_env_override_points_at_a_clean_submit_fixture_still_passes(
+    tmp_path: Path,
+) -> None:
+    """A CLEAN submit-shaped fixture injected via the env-override still
+    passes -- proves the FIRESTARTER_DEVTEST_SUBMIT seam is a faithful
+    re-target (not itself the source of the non-zero exit in the two tests
+    above), isolating the planted violations as the true cause."""
+    clean = tmp_path / "planted_submit_clean.py"
+    clean.write_text(
+        "def submit_report(report, chip, saved_json_path):\n    return None\n"
+    )
+    result = _run_checker({"FIRESTARTER_DEVTEST_SUBMIT": str(clean)})
+    assert result.returncode == 0, (
+        f"checker exited {result.returncode} on a clean submit env-override "
         f"fixture.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     assert "PASS:" in result.stdout

@@ -1,9 +1,11 @@
 """
 AST-based orchestrator-only gate for `dev test` (SAFE-03, Phase 109 D-02/D-03).
 
-Scans `firestarter/chip_test.py` (the Phase-108 test-plan engine) and DENIES
-three violation classes that would break `dev test`'s orchestrator-only
-contract:
+Scans `firestarter/chip_test.py` (the Phase-108 test-plan engine),
+`firestarter/cli_handlers.py` (the `dev_test` handler, scoped), and
+`firestarter/submit.py` (the Phase-113 submission-flow module, in full) and
+DENIES three violation classes that would break `dev test`'s
+orchestrator-only contract:
 
   1. VPP-set call sites -- any call whose callee name/attribute sets or
      enables VPP (e.g. `set_vpp`, `enable_vpp`, `write_vpp`, `vpp_enable`, or
@@ -95,6 +97,21 @@ _DEFAULT_DEVTEST_HANDLER = os.path.join(_HERE, "..", "firestarter", "cli_handler
 # proof for the handler leg specifically).
 FIRESTARTER_DEVTEST_HANDLER = os.environ.get(
     "FIRESTARTER_DEVTEST_HANDLER", _DEFAULT_DEVTEST_HANDLER
+)
+
+# The Phase-113 `submit.py` submission-flow module -- a fresh orchestrator
+# module (like chip_test.py) with zero pre-existing force/VPP/wire-dict
+# usage, so it is scanned IN FULL via _scan_file (not the scoped
+# _scan_target_functions path reserved for the large pre-existing
+# cli_handlers.py).
+_DEFAULT_DEVTEST_SUBMIT = os.path.join(_HERE, "..", "firestarter", "submit.py")
+
+# Env-override seam (mirrors FIRESTARTER_DEVTEST_SRC/HANDLER above): lets the
+# paired pytest point this checker at a deliberately-violating submit-shaped
+# fixture file without editing the real, clean submit.py (anti-hollow proof
+# for the submit.py leg specifically).
+FIRESTARTER_DEVTEST_SUBMIT = os.environ.get(
+    "FIRESTARTER_DEVTEST_SUBMIT", _DEFAULT_DEVTEST_SUBMIT
 )
 
 # The `dev test` handler function plus its private, co-located helpers
@@ -322,19 +339,26 @@ def main() -> None:
     """Entry point: scan the orchestrator source(s), exit non-zero on any hit.
 
     Scans `FIRESTARTER_DEVTEST_SRC` (default: `firestarter/chip_test.py`) IN
-    FULL, and `FIRESTARTER_DEVTEST_HANDLER` (default: the real `firestarter/
+    FULL, `FIRESTARTER_DEVTEST_HANDLER` (default: the real `firestarter/
     cli_handlers.py`, which now houses the landed `dev test` handler) SCOPED
     to just the `dev_test` function and its private co-located helpers
     (`_HANDLER_FUNCTION_NAMES`) -- `cli_handlers.py` is a large multi-command
     module with pre-existing, legitimate `--force` flags on unrelated
-    commands that a whole-file scan would false-positive on. Collects
-    VPP-set / raw-wire-dict / force violations across both scan results into
-    three buckets; any non-empty bucket fails the build. Both targets
-    resolve to real files in production -- the `scanned`-empty fail-closed
-    guard below still fires if some future refactor moves either file, or
-    renames/removes `dev_test`, without updating this checker.
+    commands that a whole-file scan would false-positive on -- and
+    `FIRESTARTER_DEVTEST_SUBMIT` (default: the real `firestarter/submit.py`,
+    the Phase-113 submission-flow module) IN FULL, like `chip_test.py` (a
+    fresh module with zero pre-existing force/VPP/wire-dict usage). Collects
+    VPP-set / raw-wire-dict / force violations across all three scan results
+    into three buckets; any non-empty bucket fails the build. All three
+    targets resolve to real files in production -- the `scanned`-empty
+    fail-closed guard below still fires if some future refactor moves any of
+    them, or renames/removes `dev_test`, without updating this checker.
     """
-    targets = [FIRESTARTER_DEVTEST_SRC, FIRESTARTER_DEVTEST_HANDLER]
+    targets = [
+        FIRESTARTER_DEVTEST_SRC,
+        FIRESTARTER_DEVTEST_HANDLER,
+        FIRESTARTER_DEVTEST_SUBMIT,
+    ]
 
     host_only_errors: list[str] = []
     for t in targets:
@@ -362,6 +386,13 @@ def main() -> None:
         vpp_set_violations.extend(handler_visitor.vpp_set_violations)
         raw_wire_dict_violations.extend(handler_visitor.raw_wire_dict_violations)
         force_violations.extend(handler_visitor.force_violations)
+
+    submit_visitor = _scan_file(FIRESTARTER_DEVTEST_SUBMIT)
+    if submit_visitor is not None:
+        scanned.append(FIRESTARTER_DEVTEST_SUBMIT)
+        vpp_set_violations.extend(submit_visitor.vpp_set_violations)
+        raw_wire_dict_violations.extend(submit_visitor.raw_wire_dict_violations)
+        force_violations.extend(submit_visitor.force_violations)
 
     if not scanned:
         print(
