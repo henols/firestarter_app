@@ -504,6 +504,7 @@ def run_plan(
     db: Any,
     *,
     runs: int = 2,
+    sampler: Any = None,
 ) -> list[StepResult]:
     """Execute `plan.steps` as independent, non-fatal steps (SWEEP-02).
 
@@ -537,6 +538,19 @@ def run_plan(
     NOT `marginal` (D-06). The write/verify step attaches a `Fingerprint`
     (Task 3, PATT-02 wiring) built from `generate_pattern` vs the read-back,
     with `addr_base` == the write region start (Pitfall 3).
+
+    `sampler` (D-04, Phase 112) is an OPTIONAL opaque callable the caller
+    supplies -- this engine never imports `hardware.py` and stays entirely
+    sampler-agnostic. When provided, it is invoked as `sampler("before")`
+    immediately before and `sampler("after")` immediately after EACH
+    `operator.write_eprom(...)` call inside the OP_WRITE branch of
+    `_dispatch_multi_run` ONLY (never around OP_READ/OP_VERIFY/OP_ERASE/OP_ID/
+    OP_BLANK_CHECK, and never around the whole `run_plan`/step loop) so a
+    write-pulse voltage droop can be told apart from a read droop. A raised
+    sampler exception is swallowed (best-effort diagnostic, not part of the
+    write contract) and never aborts the write step. `sampler=None` (the
+    default) is a proven no-op: it adds zero calls and leaves every existing
+    caller's `StepResult` list unchanged.
     """
     if runs < 2:
         return [
@@ -563,7 +577,7 @@ def run_plan(
             results.append(_skip_result(step.op, _DESTRUCTIVE_GATE_REASON))
             continue
 
-        result = _run_step(plan.name, step, operator, db, runs=runs)
+        result = _run_step(plan.name, step, operator, db, runs=runs, sampler=sampler)
         results.append(result)
 
         if step.op == OP_ID:
@@ -646,7 +660,7 @@ def _write_region_for(eprom_data: dict[str, Any]) -> tuple[int, int]:
 
 
 def _run_step(
-    name: str, step: Step, operator: Any, db: Any, *, runs: int
+    name: str, step: Step, operator: Any, db: Any, *, runs: int, sampler: Any = None
 ) -> StepResult:
     """Execute a single supported step through the guard-honoring resolver.
 
@@ -654,6 +668,9 @@ def _run_step(
     exception escapes to the `run_plan` loop (Pitfall 1). Reference:
     cli_handlers.py:1568 `dev_validate_family` -- the same
     `resolve_chip(name, db=...)` + operator-method compose pattern used here.
+
+    `sampler` (D-04) is threaded through unchanged to `_dispatch_step`;
+    `None` is the default and a proven no-op.
     """
     eprom_data, skip_stub, reason = _resolve_or_none(name, db)
     if skip_stub is not None or eprom_data is None:
@@ -663,7 +680,9 @@ def _run_step(
         return skip_stub
 
     try:
-        return _dispatch_step(name, step, eprom_data, operator, runs=runs)
+        return _dispatch_step(
+            name, step, eprom_data, operator, runs=runs, sampler=sampler
+        )
     except EpromOperationError as exc:
         return StepResult(
             op=step.op,
@@ -685,6 +704,7 @@ def _dispatch_step(
     operator: Any,
     *,
     runs: int,
+    sampler: Any = None,
 ) -> StepResult:
     """Dispatch `step.op` to its matching existing `EpromOperator` method.
 
@@ -695,6 +715,10 @@ def _dispatch_step(
     attach a `Fingerprint` (PATT-02 wiring, Pitfall 3 addr_base). The engine
     sets NO VPP, builds NO wire dict, and passes NO --force -- it only calls
     the operator's existing public methods.
+
+    `sampler` (D-04) is threaded through unchanged to `_dispatch_multi_run`,
+    the only op with a bracket site (OP_WRITE); `None` is the default and a
+    proven no-op for every other op.
     """
     if step.op == OP_ID:
         return _dispatch_id(name, eprom_data, operator)
@@ -706,7 +730,9 @@ def _dispatch_step(
     if step.op == OP_READ:
         return _dispatch_read(name, eprom_data, operator, runs=runs)
     # write / verify / erase: multi-run marginal policy (D-05/D-06).
-    return _dispatch_multi_run(step.op, name, eprom_data, operator, runs=runs)
+    return _dispatch_multi_run(
+        step.op, name, eprom_data, operator, runs=runs, sampler=sampler
+    )
 
 
 def _dispatch_id(name: str, eprom_data: dict[str, Any], operator: Any) -> StepResult:
@@ -780,6 +806,19 @@ def _dispatch_read(
     )
 
 
+def _sample(sampler: Any, phase: str) -> None:
+    """Best-effort sampler invocation (D-04) -- never lets an exception
+    escape (Pitfall 1 extended to the sampler: it is a diagnostic hook, not
+    part of the write contract). No-op when `sampler is None`.
+    """
+    if sampler is None:
+        return
+    try:
+        sampler(phase)
+    except Exception:  # noqa: BLE001 -- best-effort diagnostic, swallow all
+        pass
+
+
 def _dispatch_multi_run(
     op: str,
     name: str,
@@ -787,6 +826,7 @@ def _dispatch_multi_run(
     operator: Any,
     *,
     runs: int,
+    sampler: Any = None,
 ) -> StepResult:
     """Run a destructive/verify op `runs` times; `marginal` on disagreement.
 
@@ -799,6 +839,12 @@ def _dispatch_multi_run(
     region is chosen per-chip by `_write_region_for` (PATT-03) -- UV-EPROM
     chips get a small top-anchored high-address window; other chips keep
     the engine default region.
+
+    `sampler` (D-04, Phase 112) is invoked as `sampler("before")` /
+    `sampler("after")` tightly bracketing EACH `operator.write_eprom(...)`
+    call -- ONLY in the `op == OP_WRITE` branch, never around OP_VERIFY or
+    OP_ERASE, and never around the whole run loop (a write droop must stay
+    distinguishable from a read droop). `sampler=None` adds zero calls.
     """
     outcomes: list[bool] = []
     fingerprint: Fingerprint | None = None
@@ -819,7 +865,9 @@ def _dispatch_multi_run(
     try:
         for _ in range(runs):
             if op == OP_WRITE:
+                _sample(sampler, "before")
                 outcomes.append(operator.write_eprom(name, eprom_data, tmp_source_path))
+                _sample(sampler, "after")
             elif op == OP_VERIFY:
                 outcomes.append(
                     operator.verify_eprom(name, eprom_data, tmp_source_path)
