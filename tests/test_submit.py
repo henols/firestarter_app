@@ -296,3 +296,135 @@ def test_submit_via_gh_returns_none_on_failure():
     run_fn = Mock(return_value=Mock(returncode=1, stdout=""))
     result = submit.submit_via_gh("t", "b", run_fn=run_fn)
     assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Task 1: submit_via_browser -- D-05 oversize escalation (small/mid/huge)
+# ---------------------------------------------------------------------------
+
+
+def _small_body() -> str:
+    return submit.build_body(
+        {"steps": [{"op": "id", "verdict": "OK", "reason": "-"}], "chip": "X"},
+        [],
+    )
+
+
+def test_browser_tier_small_body_opens_once():
+    browser_open = Mock()
+    saved = SimpleNamespace(name="dev-test-x.json")
+    url = submit.submit_via_browser(
+        "My Title", _small_body(), saved, browser_open=browser_open
+    )
+    browser_open.assert_called_once_with(url)
+    assert url is not None
+    assert url.startswith("https://github.com/henols/firestarter_app/issues/new?")
+
+
+def test_browser_tier_under_cap_returns_the_url():
+    browser_open = Mock()
+    saved = SimpleNamespace(name="dev-test-x.json")
+    url = submit.submit_via_browser(
+        "t", _small_body(), saved, browser_open=browser_open
+    )
+    assert url == browser_open.call_args[0][0]
+
+
+def _oversize_json_only_body(repeats: int = 183) -> str:
+    # A "payload" key lives ONLY in the JSON block (build_body's table is
+    # sourced from "steps", never other top-level keys) -- so dropping the
+    # fenced JSON removes essentially all of the bulk. Space-heavy content
+    # is used because a space percent-encodes to `%20` (3 bytes for 1 raw
+    # char), which is what pushes the ENCODED url over the escalate
+    # threshold while the RAW body char count stays comfortably under it
+    # -- proving the measurement keys on the encoded URL, not the raw body
+    # (Pitfall 3).
+    sanitized = {
+        "steps": [{"op": "id", "verdict": "OK", "reason": "-"}],
+        "payload": "a b c d e f g h i j " * repeats,
+    }
+    return submit.build_body(sanitized, [], include_json=True)
+
+
+def test_oversize_drops_json_past_escalate_threshold():
+    body = _oversize_json_only_body()
+    assert len(body) < submit._URL_ESCALATE_BYTES  # fits by raw char count
+    full_url = submit.build_issue_url("t", body)
+    assert len(full_url.encode("utf-8")) > submit._URL_ESCALATE_BYTES  # but not encoded
+
+    browser_open = Mock()
+    saved = SimpleNamespace(name="dev-test-x.json")
+    url = submit.submit_via_browser("t", body, saved, browser_open=browser_open)
+
+    assert url is not None
+    browser_open.assert_called_once_with(url)
+    # decode back to confirm the JSON block itself is gone from the sent body
+    from urllib.parse import parse_qs, urlparse
+
+    sent_body = parse_qs(urlparse(url).query)["body"][0]
+    assert "```json" not in sent_body
+    assert "a b c d" not in sent_body
+
+
+def test_oversize_note_names_filename_not_full_path():
+    from pathlib import Path
+
+    body = _oversize_json_only_body()
+    saved = Path("/home/alice/.firestarter/reports/dev-test-x.json")
+    browser_open = Mock()
+    url = submit.submit_via_browser("t", body, saved, browser_open=browser_open)
+
+    from urllib.parse import parse_qs, urlparse
+
+    sent_body = parse_qs(urlparse(url).query)["body"][0]
+    assert "dev-test-x.json" in sent_body
+    assert "/home/alice" not in sent_body
+    assert str(saved) not in sent_body
+
+
+def test_oversize_hard_stop_no_open_past_cap(capsys):
+    # Neither the table nor the (would-be-dropped) JSON fits under the hard
+    # cap even after escalation -- the browser must never open.
+    huge_reason = "r" * 9000
+    sanitized = {
+        "steps": [{"op": "id", "verdict": "OK", "reason": huge_reason}],
+    }
+    body = submit.build_body(sanitized, [], include_json=False)
+    browser_open = Mock()
+    saved = SimpleNamespace(name="dev-test-x.json")
+    result = submit.submit_via_browser("t", body, saved, browser_open=browser_open)
+
+    assert result is None
+    browser_open.assert_not_called()
+    captured = capsys.readouterr()
+    assert "dev-test-x.json" in captured.out or str(saved) in captured.out
+    assert "gh" in captured.out.lower()
+
+
+def test_oversize_hard_stop_uses_console_when_given():
+    huge_reason = "r" * 9000
+    sanitized = {"steps": [{"op": "id", "verdict": "OK", "reason": huge_reason}]}
+    body = submit.build_body(sanitized, [], include_json=False)
+    browser_open = Mock()
+    console = Mock()
+    saved = SimpleNamespace(name="dev-test-x.json")
+    result = submit.submit_via_browser(
+        "t", body, saved, browser_open=browser_open, console=console
+    )
+    assert result is None
+    browser_open.assert_not_called()
+    console.print.assert_called_once()
+
+
+def test_oversize_hard_stop_no_json_fence_still_hard_stops():
+    # No fenced JSON block exists at all -- the escalation branch has
+    # nothing to drop, but the hard-stop must still fire on a huge table.
+    huge_reason = "q" * 9000
+    sanitized = {"steps": [{"op": "id", "verdict": "OK", "reason": huge_reason}]}
+    body = submit.build_body(sanitized, [], include_json=False)
+    assert "```json" not in body
+    browser_open = Mock()
+    saved = SimpleNamespace(name="dev-test-x.json")
+    result = submit.submit_via_browser("t", body, saved, browser_open=browser_open)
+    assert result is None
+    browser_open.assert_not_called()

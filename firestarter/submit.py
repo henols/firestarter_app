@@ -37,7 +37,7 @@ import json
 import re
 import shutil
 import subprocess
-import webbrowser  # noqa: F401 -- consumed by Plan 03's submit_via_browser
+import webbrowser
 from typing import Any
 from urllib.parse import quote, urlencode
 
@@ -231,3 +231,69 @@ def submit_via_gh(title: str, body: str, *, run_fn: Any = subprocess.run) -> str
     if proc.returncode == 0:
         return proc.stdout.strip()
     return None
+
+
+# ---------------------------------------------------------------------------
+# Browser tier + D-05 oversize escalation (Task 1)
+# ---------------------------------------------------------------------------
+
+
+def _print(msg: str, *, console: Any = None) -> None:
+    if console is not None:
+        console.print(msg)
+    else:
+        print(msg)
+
+
+def submit_via_browser(
+    title: str,
+    body: str,
+    saved_json_path: Any,
+    *,
+    browser_open: Any = webbrowser.open,
+    console: Any = None,
+) -> str | None:
+    """Open a prefilled `issues/new` browser URL, degrading past the D-05
+    encoded-byte thresholds (RESEARCH §Oversize Handling / §Browser URL Facts).
+
+    The byte measurement is ALWAYS on `len(url.encode("utf-8"))` of the
+    fully-encoded URL (Pitfall 3) -- never the raw body char count. Past
+    `_URL_ESCALATE_BYTES` (7500) the fenced JSON block is dropped from the
+    body and a note pointing at the always-saved report -- naming only
+    `saved_json_path.name`, never the full path (avoids leaking the
+    tester's home dir into the PUBLIC issue body) -- is appended, then the
+    URL is re-encoded. Past `_URL_HARD_CAP_BYTES` (8000), even after
+    dropping the JSON block, the browser is NEVER opened: this prints the
+    local report path plus a `gh`-tier directive to the tester's own
+    console (not the issue body, so the full path is fine here) and
+    returns `None`. `browser_open` is called at most once, and only when
+    strictly under the hard cap.
+    """
+    url = build_issue_url(title, body)
+    n = len(url.encode("utf-8"))
+
+    if n > _URL_ESCALATE_BYTES:
+        table_only = body.split("\n\n```json\n", 1)[0]
+        note = (
+            "\n\n_Full machine-readable report saved locally as "
+            f"`{saved_json_path.name}` -- attach it to this issue, or "
+            "re-run with the `gh` CLI installed to file the complete "
+            "report automatically._"
+        )
+        body = table_only + note
+        url = build_issue_url(title, body)
+        n = len(url.encode("utf-8"))
+
+    if n > _URL_HARD_CAP_BYTES:
+        _print(
+            "Report too large for a browser-prefilled issue URL "
+            f"({n} bytes encoded, over the ~8 KB GitHub server cap). "
+            f"The full report is saved locally at {saved_json_path}. "
+            "Install the `gh` CLI and re-run with --submit to file the "
+            "complete report automatically.",
+            console=console,
+        )
+        return None
+
+    browser_open(url)
+    return url
