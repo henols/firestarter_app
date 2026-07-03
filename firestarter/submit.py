@@ -37,9 +37,14 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 import webbrowser
 from typing import Any
 from urllib.parse import quote, urlencode
+
+from rich.prompt import Confirm
+
+from firestarter.diagnostic_report import is_submittable
 
 # ---------------------------------------------------------------------------
 # Module constants (D-01, D-05)
@@ -297,3 +302,98 @@ def submit_via_browser(
 
     browser_open(url)
     return url
+
+
+# ---------------------------------------------------------------------------
+# submit_report: D-03 refuse gate + D-04 TTY/off-TTY dispatch (Task 2)
+# ---------------------------------------------------------------------------
+
+
+def submit_report(
+    report: Any,
+    chip: str,
+    saved_json_path: Any,
+    *,
+    which_fn: Any = shutil.which,
+    run_fn: Any = subprocess.run,
+    browser_open: Any = webbrowser.open,
+    isatty_fn: Any = None,
+    confirm_fn: Any = Confirm.ask,
+    console: Any = None,
+) -> None:
+    """The single submission entry point (SUB-01/02) -- composes every
+    Plan-02 builder over the ALREADY-COMPLETED `report`/`saved_json_path`;
+    it never re-runs the sweep and never re-derives the report.
+
+    Step 1 (D-03 refuse gate): when `is_submittable(report.auto_capture)`
+    is `False`, prints the specific missing field name(s) among
+    `chip`/`protocol`/`host_version` and returns WITHOUT calling
+    `browser_open`, `run_fn`, or `confirm_fn`.
+
+    Step 2: builds the sanitized body (`sanitize_dict` -> `build_body`) and
+    title (`build_title`) -- the SAME sanitized body is what every
+    downstream seam (preview, off-TTY print, `gh`, browser) receives; a PII
+    vector present in a step reason never reaches a seam unscrubbed.
+
+    Step 3 (D-04 off-TTY): when `isatty_fn()` is `False`, prints the
+    sanitized body plus the issue URL and returns WITHOUT opening the
+    browser or running `gh` -- no silent CI/off-TTY submission.
+
+    Step 4 (D-04 on-TTY): previews the body, then `confirm_fn(...)`; on
+    decline, aborts without sending (does NOT reuse the `-y/--yes`
+    `--destructive` bypass -- an explicit submit confirm is always
+    required).
+
+    Step 5 (tier dispatch): on confirm, dispatches to `submit_via_gh` when
+    `gh_available()`, falling back to `submit_via_browser` if the `gh`
+    attempt returns `None`; otherwise dispatches straight to
+    `submit_via_browser`.
+    """
+    isatty_fn = isatty_fn or (lambda: sys.stdin.isatty())
+
+    ac = report.auto_capture
+    if not is_submittable(ac):
+        missing = [
+            name
+            for name, value in (
+                ("chip", ac.chip),
+                ("protocol", ac.protocol),
+                ("host_version", ac.host_version),
+            )
+            if not value
+        ]
+        _print(
+            f"Cannot submit -- missing required field(s): {', '.join(missing)}.",
+            console=console,
+        )
+        return
+
+    sanitized = sanitize_dict(report.to_dict())
+    title = build_title(report, chip)
+    body = build_body(sanitized, report.results, include_json=True)
+
+    if not isatty_fn():
+        url = build_issue_url(title, body)
+        _print(body, console=console)
+        _print(url, console=console)
+        return
+
+    _print(body, console=console)
+    if not confirm_fn(f"Submit this report to {SUBMIT_REPO}?", default=False):
+        return
+
+    if gh_available(which_fn=which_fn, run_fn=run_fn):
+        url = submit_via_gh(title, body, run_fn=run_fn)
+        if url is None:
+            submit_via_browser(
+                title,
+                body,
+                saved_json_path,
+                browser_open=browser_open,
+                console=console,
+            )
+        return
+
+    submit_via_browser(
+        title, body, saved_json_path, browser_open=browser_open, console=console
+    )

@@ -428,3 +428,305 @@ def test_oversize_hard_stop_no_json_fence_still_hard_stops():
     result = submit.submit_via_browser("t", body, saved, browser_open=browser_open)
     assert result is None
     browser_open.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Task 2: submit_report -- D-03 refuse gate + D-04 TTY/off-TTY dispatch
+# ---------------------------------------------------------------------------
+
+
+def _make_report(*, chip="W27C512", protocol="7", host_version="3.0.0b11", pii=None):
+    auto_capture = SimpleNamespace(
+        chip=chip,
+        protocol=protocol,
+        host_version=host_version,
+        fw_board_identity=None,
+        hw_revision=None,
+        chip_id_expected=None,
+        chip_id_actual=None,
+        chip_id_mismatch_reason=None,
+    )
+    reason = pii if pii is not None else "-"
+    results = [_step("id", "OK")]
+    steps_dict = [{"op": "id", "verdict": "OK", "reason": reason}]
+    to_dict_value = {
+        "dedup_fingerprint": "abc123def456",
+        "steps": steps_dict,
+        "auto_capture": {
+            "chip": chip,
+            "protocol": protocol,
+            "host_version": host_version,
+        },
+    }
+    report = SimpleNamespace(
+        auto_capture=auto_capture,
+        results=results,
+        to_dict=lambda: to_dict_value,
+    )
+    return report
+
+
+def test_refuse_missing_protocol_prints_field_and_does_not_send():
+    report = _make_report(protocol=None)
+    which_fn = Mock()
+    run_fn = Mock()
+    browser_open = Mock()
+    isatty_fn = Mock(return_value=True)
+    confirm_fn = Mock(return_value=True)
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=console,
+    )
+
+    assert any("protocol" in m for m in printed)
+    which_fn.assert_not_called()
+    run_fn.assert_not_called()
+    browser_open.assert_not_called()
+    confirm_fn.assert_not_called()
+    isatty_fn.assert_not_called()
+
+
+def test_refuse_missing_chip_names_chip():
+    report = _make_report(chip=None)
+    console = Mock()
+    printed: list[str] = []
+    console.print.side_effect = lambda msg: printed.append(msg)
+    submit.submit_report(
+        report,
+        "",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=console,
+    )
+    assert any("chip" in m for m in printed)
+
+
+def test_offtty_prints_body_and_url_never_sends():
+    report = _make_report()
+    which_fn = Mock()
+    run_fn = Mock()
+    browser_open = Mock()
+    confirm_fn = Mock()
+    isatty_fn = Mock(return_value=False)
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=console,
+    )
+
+    assert any("| id | OK |" in m for m in printed)
+    assert any("github.com/henols/firestarter_app/issues/new" in m for m in printed)
+    browser_open.assert_not_called()
+    run_fn.assert_not_called()
+    confirm_fn.assert_not_called()
+    which_fn.assert_not_called()
+
+
+def test_tty_decline_aborts_without_sending():
+    report = _make_report()
+    which_fn = Mock()
+    run_fn = Mock()
+    browser_open = Mock()
+    confirm_fn = Mock(return_value=False)
+    isatty_fn = Mock(return_value=True)
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=Mock(),
+    )
+
+    confirm_fn.assert_called_once()
+    browser_open.assert_not_called()
+    run_fn.assert_not_called()
+
+
+def test_tty_confirm_gh_available_dispatches_to_gh_not_browser():
+    report = _make_report()
+    which_fn = Mock(return_value="/usr/bin/gh")
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),  # gh auth status
+            Mock(
+                returncode=0,
+                stdout="https://github.com/henols/firestarter_app/issues/9\n",
+            ),  # gh issue create
+        ]
+    )
+    browser_open = Mock()
+    confirm_fn = Mock(return_value=True)
+    isatty_fn = Mock(return_value=True)
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=Mock(),
+    )
+
+    assert run_fn.call_count == 2
+    browser_open.assert_not_called()
+
+
+def test_tty_confirm_gh_unavailable_dispatches_to_browser():
+    report = _make_report()
+    which_fn = Mock(return_value=None)
+    run_fn = Mock()
+    browser_open = Mock()
+    confirm_fn = Mock(return_value=True)
+    isatty_fn = Mock(return_value=True)
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=Mock(),
+    )
+
+    browser_open.assert_called_once()
+    run_fn.assert_not_called()
+
+
+def test_tty_confirm_gh_create_fails_falls_back_to_browser():
+    report = _make_report()
+    which_fn = Mock(return_value="/usr/bin/gh")
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),  # gh auth status: authed
+            Mock(returncode=1, stdout=""),  # gh issue create: fails
+        ]
+    )
+    browser_open = Mock()
+    confirm_fn = Mock(return_value=True)
+    isatty_fn = Mock(return_value=True)
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=Mock(),
+    )
+
+    browser_open.assert_called_once()
+
+
+def test_tty_body_sent_to_gh_is_sanitized():
+    # A PII vector present in a step reason must never reach the seam
+    # unscrubbed (end-to-end sanitize integration).
+    report = _make_report(pii="failed reading /home/alice/scratch/file.bin")
+    which_fn = Mock(return_value="/usr/bin/gh")
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),
+            Mock(returncode=0, stdout="https://github.com/x/y/issues/1\n"),
+        ]
+    )
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=Mock(),
+    )
+    create_call = run_fn.call_args_list[1]
+    sent_body = create_call.kwargs["input"]
+    assert "alice" not in sent_body
+    assert "/home/<user>/scratch/file.bin" in sent_body
+
+
+def test_tty_body_sent_to_browser_is_sanitized():
+    report = _make_report(pii="port /dev/ttyACM0 gone")
+    browser_open = Mock()
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value=None),
+        run_fn=Mock(),
+        browser_open=browser_open,
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=Mock(),
+    )
+    from urllib.parse import parse_qs, urlparse
+
+    sent_url = browser_open.call_args[0][0]
+    sent_body = parse_qs(urlparse(sent_url).query)["body"][0]
+    assert "ttyACM0" not in sent_body
+    assert "/dev/tty<redacted>" in sent_body
+
+
+def test_refuse_never_calls_isatty():
+    # D-03 refuse must short-circuit before the D-04 TTY gate is even
+    # consulted.
+    report = _make_report(host_version=None)
+    isatty_fn = Mock(return_value=True)
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=isatty_fn,
+        confirm_fn=Mock(),
+        console=Mock(),
+    )
+    isatty_fn.assert_not_called()
