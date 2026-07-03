@@ -602,9 +602,7 @@ def test_ladder_state_verdict_mapping():
         StepResult(op="write", verdict=VERDICT_SKIPPED),
     ]
     diff_pass = build_db_diff("X", db, pass_results)
-    assert (
-        diff_pass.ladder_state == _LADDER_COMMUNITY_REPORTED == "community-reported"
-    )
+    assert diff_pass.ladder_state == _LADDER_COMMUNITY_REPORTED == "community-reported"
 
     marginal_results = [
         StepResult(op="id", verdict=VERDICT_OK),
@@ -631,7 +629,13 @@ def test_ladder_state_verdict_mapping():
 
     # community-confirmed is NEVER emitted by build_db_diff for any verdict
     # combination exercised above -- it is the human-gated target only.
-    for diff in (diff_bad, diff_pass, diff_marginal, diff_indeterminate, diff_no_change):
+    for diff in (
+        diff_bad,
+        diff_pass,
+        diff_marginal,
+        diff_indeterminate,
+        diff_no_change,
+    ):
         assert diff.ladder_state != _LADDER_COMMUNITY_CONFIRMED
         assert diff.ladder_state != "community-confirmed"
 

@@ -52,7 +52,10 @@ from firestarter.chip_test import BannerCounts, Plan, StepResult
 # Module constants (D-02, D-03) -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.0"  # D-02: single-sourced, baked into to_dict() output
+SCHEMA_VERSION = "1.1"  # D-02: single-sourced, baked into to_dict() output
+# 1.1 (Phase 114, GRAD-01): additive db_diff.ladder_state key -- backward
+# compatible, existing consumers reading current_support_status/
+# proposed_disposition are unaffected.
 NOT_MEASURED = "not measured"  # D-03: honest fallback, never a false 0
 
 # Elevated-counter threshold for `transport_suspect` (dormant today -- no
@@ -210,34 +213,52 @@ _DISPOSITION_CANDIDATE = "suggests: candidate for community-reported (advisory)"
 _DISPOSITION_INCONCLUSIVE = "inconclusive -- needs N>=2 agreement (advisory)"
 _DISPOSITION_NO_CHANGE = "no change suggested (advisory)"
 
+# Graduation-ladder tag names (GRAD-01, Phase 114, D-01/D-02). These are the
+# formalized report-side vocabulary the ladder taxonomy documents (see
+# doc/community-validation.md). `_LADDER_COMMUNITY_CONFIRMED` is the
+# human-gated target reachable only after a maintainer manually promotes a
+# chip (N>=2 agreeing reports, D-03) via the unchanged `build_db.py` write
+# locus -- `build_db_diff` below NEVER assigns it.
+_LADDER_COMMUNITY_REPORTED = "community-reported"
+_LADDER_COMMUNITY_FAIL = "community-fail"
+_LADDER_COMMUNITY_CONFIRMED = "community-confirmed"  # human-only; never auto-emitted
+_LADDER_NONE = ""
+
 
 @dataclass
 class DbDiff:
     """Current DB `support_status` beside an ADVISORY proposed-disposition
-    (RPT-05, D-07).
+    (RPT-05, D-07) plus a derived report-side `ladder_state` tag (GRAD-01,
+    D-01/D-02).
 
     `proposed_disposition` is always plainly-labeled descriptive triage
     text -- it is NEVER a concrete `support_status` value and this module
-    NEVER writes it back to the database. It exists to inform a human
-    maintainer; the Phase-113/114 taxonomy state-machine and N>=2 promotion
-    rule are explicitly out of scope here (D-07).
+    NEVER writes it back to the database. `ladder_state` is likewise a
+    report-side-only label (one of `_LADDER_COMMUNITY_REPORTED` /
+    `_LADDER_COMMUNITY_FAIL` / `_LADDER_NONE`) -- `_LADDER_COMMUNITY_CONFIRMED`
+    is the human-gated target and is NEVER auto-assigned here. It exists to
+    inform a human maintainer; the N>=2 promotion rule and the actual
+    `support_status` write remain a manual `build_db.py` edit, entirely out
+    of scope for this module (D-01/D-02/D-07).
     """
 
     current_support_status: str = "supported"
     proposed_disposition: str = ""
+    ladder_state: str = ""
 
 
 def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
     """Read-only transform: current `support_status` + an advisory
-    proposed-disposition string derived purely from sweep verdicts
-    (RPT-05, D-07).
+    proposed-disposition string + a derived `ladder_state` tag, both computed
+    purely from sweep verdicts (RPT-05/D-07, GRAD-01/D-01).
 
     Reads `support_status` via `db.get_eprom_config(name)` -- mirroring the
     exact `chip_resolver.py:54` read site -- and NEVER calls any write/set
     method on `db`. `get_eprom_config` returns a `(config_dict, manufacturer)`
     tuple; only the config dict is used, defensively handling a `None`/absent
-    config. The verdict-to-string mapping never yields a concrete
-    `support_status` value -- every branch is advisory descriptive text.
+    config. Neither the disposition text nor `ladder_state` ever yields a
+    concrete `support_status` value, and `ladder_state` never becomes
+    `_LADDER_COMMUNITY_CONFIRMED` -- that state is human-gated only (D-01/D-02).
     """
     raw_config, _manufacturer = db.get_eprom_config(name)
     current = (raw_config or {}).get("support_status", "supported")
@@ -250,14 +271,18 @@ def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
 
     if "BAD" in verdicts:
         proposed = _DISPOSITION_COMMUNITY_FAIL
+        ladder_state = _LADDER_COMMUNITY_FAIL
     elif "marginal" in verdicts or has_indeterminate_fingerprint:
         proposed = _DISPOSITION_INCONCLUSIVE
+        ladder_state = _LADDER_NONE
     elif "OK" in verdicts and verdicts <= {"OK", "NA", "SKIPPED"}:
         proposed = _DISPOSITION_CANDIDATE
+        ladder_state = _LADDER_COMMUNITY_REPORTED
     else:
         proposed = _DISPOSITION_NO_CHANGE
+        ladder_state = _LADDER_NONE
 
-    return DbDiff(current, proposed)
+    return DbDiff(current, proposed, ladder_state)
 
 
 # ---------------------------------------------------------------------------
@@ -381,6 +406,7 @@ class DiagnosticReport:
         return {
             "current_support_status": dd.current_support_status,
             "proposed_disposition": dd.proposed_disposition,
+            "ladder_state": dd.ladder_state,
         }
 
     def to_dict(self) -> dict[str, Any]:
@@ -465,6 +491,10 @@ class DiagnosticReport:
             table.add_row(
                 "db_diff: proposed_disposition",
                 str(db_diff["proposed_disposition"]),
+            )
+            table.add_row(
+                "db_diff: ladder_state",
+                str(db_diff["ladder_state"]) or "(none)",
             )
         else:
             table.add_row("db_diff", "not computed")
