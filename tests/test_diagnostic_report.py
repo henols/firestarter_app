@@ -517,4 +517,62 @@ def test_full_report_all_four_sub_objects_single_source():
     assert parsed["db_diff"]["current_support_status"] == "supported"
 
     table = report.render()  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# Wave-0 RED scaffold (v1.21 Phase 111, VOLT-01 / D-01) -- measured-voltage
+# split fields on DiagnosticReport.
+#
+# `vpp_before_mv` / `vpp_after_mv` / `vpe_before_mv` / `vpe_after_mv` /
+# `vpp_mv` / `vpe_mv` and the nested `to_dict()["voltage"]` sub-dict do NOT
+# exist yet -- the current slot is the single `vpp_vpe_mv: int | None` field
+# (Plan 03 replaces it). This test is EXPECTED to fail (TypeError on the
+# unknown dataclass kwargs / KeyError on "voltage") until then; that RED
+# state is the Wave-0 deliverable (111-VALIDATION.md). Do NOT add the split
+# fields to the dataclass here.
+# ---------------------------------------------------------------------------
+
+
+def test_voltage_split_fields_serialize():
+    from firestarter.diagnostic_report import NOT_MEASURED, DiagnosticReport
+
+    # (a) destructive-run shape: before/after pairs populated, standalone
+    # vpp_mv/vpe_mv left None -> both must serialize to NOT_MEASURED, never 0.
+    report_destructive = _build_report()
+    report_destructive.vpp_before_mv = 20900
+    report_destructive.vpp_after_mv = 17400
+    report_destructive.vpe_before_mv = 23900
+    report_destructive.vpe_after_mv = 23800
+
+    d_destructive = report_destructive.to_dict()
+    voltage_destructive = d_destructive["voltage"]
+    assert voltage_destructive["vpp_before_mv"] == 20900
+    assert voltage_destructive["vpp_after_mv"] == 17400
+    assert voltage_destructive["vpe_before_mv"] == 23900
+    assert voltage_destructive["vpe_after_mv"] == 23800
+    assert voltage_destructive["vpp_mv"] == NOT_MEASURED
+    assert voltage_destructive["vpe_mv"] == NOT_MEASURED
+
+    # (b) non-destructive standalone shape: vpp_mv/vpe_mv populated, all four
+    # before/after pairs left None -> all four must serialize to
+    # NOT_MEASURED, never a false 0 (D-04 honest-fallback).
+    report_standalone = _build_report()
+    report_standalone.vpp_mv = 20900
+    report_standalone.vpe_mv = 23900
+
+    d_standalone = report_standalone.to_dict()
+    voltage_standalone = d_standalone["voltage"]
+    assert voltage_standalone["vpp_mv"] == 20900
+    assert voltage_standalone["vpe_mv"] == 23900
+    for key in ("vpp_before_mv", "vpp_after_mv", "vpe_before_mv", "vpe_after_mv"):
+        assert voltage_standalone[key] == NOT_MEASURED
+
+    # (c) single-source assertion: render() must expose a voltage row
+    # consistent with to_dict()["voltage"] -- proving render() sources from
+    # to_dict() rather than maintaining a second field list (D-01).
+    assert isinstance(report_destructive, DiagnosticReport)
+    table = report_destructive.render()
+    rendered_cells = [str(cell) for column in table.columns for cell in column.cells]
+    rendered_text = " ".join(rendered_cells)
+    assert "20900" in rendered_text
     assert table.row_count > 0
