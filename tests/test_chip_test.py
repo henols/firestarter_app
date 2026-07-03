@@ -448,11 +448,18 @@ def test_derive_plan_blank_check_supported_for_regular_eeprom():
 
 
 def test_derive_plan_read_and_verify_always_present():
+    # read is always present in the executable steps list, regardless of
+    # destructive. verify is present only on a destructive plan (112-05
+    # SC2/SWEEP-05: verify is gated behind `destructive` exactly like
+    # write/erase, D-01) -- see test_derive_plan_verify_gated_behind_destructive
+    # for the non-destructive-omission coverage.
     for name in ("M8720", "AM2716", "AE29F1008", "DS1220(RW)"):
         plan = derive_plan(name, _REAL_DB)
         read_step = _step(plan, "read")
-        verify_step = _step(plan, "verify")
         assert read_step.supported is True
+
+        plan_destructive = derive_plan(name, _REAL_DB, destructive=True)
+        verify_step = _step(plan_destructive, "verify")
         assert verify_step.supported is True
 
 
@@ -492,30 +499,58 @@ def test_derive_plan_destructive_flag_strips_not_annotates():
     assert "erase" not in ops_default
     assert "write" in ops_destructive
     assert "erase" in ops_destructive
-    # Only the destructive ops are removed -- id/read/blank-check remain.
-    assert ops_default == ops_destructive - {"write", "erase"}
+    # verify is now stripped from the non-destructive plan alongside
+    # write/erase (112-05 SC2/SWEEP-05: verify gated behind `destructive`,
+    # D-01) -- only id/read/blank-check remain.
+    assert ops_default == ops_destructive - {"write", "erase", "verify"}
 
 
 def test_derive_plan_strip_default_only_destructive_ops_removed():
-    # strip_default (109-01 Task 1 behavior): only the destructive ops
-    # (write, erase) are removed when destructive=False -- verify is NOT
-    # in _DESTRUCTIVE_OPS and stays present regardless (its execution is
-    # naturally inert without a preceding write).
+    # strip_default (109-01 Task 1 behavior, corrected by 112-05 SC2/SWEEP-05):
+    # write/erase are removed from the executable steps list when
+    # destructive=False because they mutate the chip (_DESTRUCTIVE_OPS).
+    # verify is gated at plan-construction time in derive_plan behind the
+    # `destructive` flag (D-01) -- it is NOT added to _DESTRUCTIVE_OPS
+    # (verify does not mutate the chip; the runtime id-first gate stays
+    # scoped to write/erase), but a bare verify with no preceding write
+    # would compare a freshly-generated pattern against unrelated chip
+    # contents, so it is omitted from the non-destructive plan too.
     plan = derive_plan("M8720", _REAL_DB, destructive=False)
     ops = {s.op for s in plan.steps}
-    assert ops == {"id", "read", "blank-check", "verify"}
+    assert ops == {"id", "read", "blank-check"}
     assert "write" not in ops
     assert "erase" not in ops
+    assert "verify" not in ops
+
+
+def test_derive_plan_verify_gated_behind_destructive():
+    # 112-05 SC2/SWEEP-05: non-mocked composition assertion. M8720
+    # (protocol 0x08, EEPROM, FLAG_CAN_ERASE set) is the module's
+    # established erasable-chip fixture (see the fixture comment near
+    # _REAL_DB above).
+    plan_default = derive_plan("M8720", _REAL_DB, destructive=False)
+    nd_ops = [s.op for s in plan_default.steps]
+    assert nd_ops == [OP_ID, OP_READ, OP_BLANK_CHECK]
+    assert OP_VERIFY not in nd_ops
+    locked_ops = {op for op, _reason in plan_default.locked_destructive}
+    assert OP_VERIFY in locked_ops
+
+    plan_destructive = derive_plan("M8720", _REAL_DB, destructive=True)
+    d_ops = [s.op for s in plan_destructive.steps]
+    assert OP_VERIFY in d_ops
+    assert d_ops.index(OP_VERIFY) > d_ops.index(OP_WRITE)
+    assert d_ops.index(OP_VERIFY) < d_ops.index(OP_ERASE)
 
 
 def test_derive_plan_advisory_populated_when_non_destructive():
     # advisory_populated: locked_destructive is a non-empty list of
-    # (op, reason) tuples covering the omitted write (and erase, since
-    # M8720's erase is a supported destructive op) when destructive=False.
+    # (op, reason) tuples covering the omitted write, verify (112-05
+    # SC2/SWEEP-05), and erase (since M8720's erase is a supported
+    # destructive op) when destructive=False.
     plan = derive_plan("M8720", _REAL_DB, destructive=False)
     assert plan.locked_destructive
     locked_ops = {op for op, _reason in plan.locked_destructive}
-    assert locked_ops == {"write", "erase"}
+    assert locked_ops == {"write", "verify", "erase"}
     for _op, reason in plan.locked_destructive:
         assert reason
 
@@ -532,16 +567,17 @@ def test_derive_plan_destructive_keeps_and_empties_advisory():
 
 def test_derive_plan_na_erase_advisory_only_records_write():
     # na_erase_advisory: AM2716 (UV-EPROM) has no supported erase (no
-    # FLAG_CAN_ERASE) -- the non-destructive plan omits write to
-    # locked_destructive, but the NA erase must NOT be fabricated as a
-    # runnable/locked step. It stays an unsupported `erase` Step in `steps`
-    # (as before) and is not added to locked_destructive.
+    # FLAG_CAN_ERASE) -- the non-destructive plan omits write and verify
+    # (112-05 SC2/SWEEP-05) to locked_destructive, but the NA erase must
+    # NOT be fabricated as a runnable/locked step. It stays an unsupported
+    # `erase` Step in `steps` (as before) and is not added to
+    # locked_destructive.
     full = _REAL_DB.get_eprom("AM2716")
     assert full["electrical-type"] == "UV-EPROM"
 
     plan = derive_plan("AM2716", _REAL_DB, destructive=False)
     locked_ops = {op for op, _reason in plan.locked_destructive}
-    assert locked_ops == {"write"}
+    assert locked_ops == {"write", "verify"}
 
     erase_step = _step(plan, "erase")
     assert erase_step.supported is False
@@ -1231,9 +1267,11 @@ def test_count_applicable_uv_counts():
 
     assert isinstance(counts, BannerCounts)
     assert counts.m_applicable == 4
-    assert counts.n_ran == 3
+    # verify is now gated behind destructive (112-05 SC2/SWEEP-05 fix) --
+    # only id/read/blank-check actually run on a non-destructive plan.
+    assert counts.n_ran == 2
     assert counts.n_ran < counts.m_applicable
-    assert {op for op, _reason in counts.locked_steps} == {"write"}
+    assert {op for op, _reason in counts.locked_steps} == {"write", "verify"}
 
 
 def test_count_applicable_eeprom_counts():
@@ -1251,13 +1289,20 @@ def test_count_applicable_eeprom_counts():
     counts = count_applicable(plan, results)
 
     assert counts.m_applicable == 5
-    assert counts.n_ran == 3
+    # verify is now gated behind destructive (112-05 SC2/SWEEP-05 fix) --
+    # only id/read/blank-check actually run on a non-destructive plan.
+    assert counts.n_ran == 2
     assert counts.n_ran < counts.m_applicable
-    assert {op for op, _reason in counts.locked_steps} == {"write", "erase"}
+    assert {op for op, _reason in counts.locked_steps} == {
+        "write",
+        "verify",
+        "erase",
+    }
 
 
 def test_count_applicable_bad_counts_as_ran():
-    # A BAD read still counts toward N (ran); NA (id) does not.
+    # A BAD read still counts toward N (ran); NA (id) does not. verify no
+    # longer runs on a non-destructive plan (112-05 SC2/SWEEP-05 fix).
     operator = _mock_operator()
     operator.read_eprom.return_value = False
     plan = derive_plan("AM2716", _REAL_DB, destructive=False)
@@ -1267,7 +1312,7 @@ def test_count_applicable_bad_counts_as_ran():
     assert read_result.verdict == VERDICT_BAD
 
     counts = count_applicable(plan, results)
-    assert counts.n_ran == 3  # read(BAD) + blank-check(OK) + verify(OK)
+    assert counts.n_ran == 2  # read(BAD) + blank-check(OK)
 
 
 def test_count_applicable_skipped_does_not_count_as_ran():

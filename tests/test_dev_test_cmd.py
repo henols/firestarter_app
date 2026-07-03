@@ -222,6 +222,28 @@ class TestExitCodeMapping:
         operator.write_eprom.assert_not_called()
         operator.erase_eprom.assert_not_called()
 
+    def test_non_destructive_run_never_dispatches_verify(
+        self, runner: CliRunner
+    ) -> None:
+        """112-05 SC2/SWEEP-05 regression: a non-destructive run must never
+        reach operator.verify_eprom. Removes make_clean_operator()'s usual
+        `verify_eprom.return_value = True` masking and replaces it with a
+        side_effect that raises if verify is ever dispatched -- under the
+        pre-fix (4-step) plan this test fails (verify runs -> AssertionError
+        -> BAD -> exit 1); under the fix it passes (verify structurally
+        absent from the non-destructive plan -> unreachable -> exit 0)."""
+        operator = make_clean_operator()
+        operator.verify_eprom.side_effect = AssertionError(
+            "verify must not run on a non-destructive plan"
+        )
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+        operator.verify_eprom.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # D-02/D-03 (reworked Phase 112 Plan 04): --destructive safety confirm only
