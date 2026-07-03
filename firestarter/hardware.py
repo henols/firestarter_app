@@ -330,6 +330,15 @@ class HardwareManager:
         expect_ack -> send_ack -> get_response) but stops after `n` frames
         instead of looping forever, and returns a value instead of printing.
 
+        Unlike the standalone read loop (which runs until the OPERATOR hits
+        Ctrl+C), this method deliberately stops acking after `n` frames.
+        The firmware's hw_read_voltage handler now recognizes an explicit
+        `DONE` message (mirrors eprom_write's OP_MSG_DONE handling) and ends
+        the command immediately on receipt, so we send one here -- before
+        disconnecting -- instead of leaving the command dangling for the
+        firmware's watchdog to reap (dev-test-vpp-vpe-timeout debug session,
+        2026-07-03; firmware fix in hardware_operations.cpp).
+
         Returns None on any transport error, a non-ready ack, a non-DATA
         response, or when no sample could be parsed (honest fallback, never
         a fabricated 0).
@@ -356,6 +365,10 @@ class HardwareManager:
                 if mv is not None:
                     samples.append(mv)
                 comm.send_ack()  # acknowledge data and request next reading
+
+            # Tell the firmware to end the command now, rather than letting
+            # it stay active until its own watchdog times it out.
+            comm.send_done()
         except (
             ProgrammerNotFoundError,
             SerialError,

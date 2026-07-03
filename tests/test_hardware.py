@@ -15,7 +15,7 @@ frames the firmware would emit.
 import re
 import struct
 from typing import Iterator  # noqa: UP035
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -240,6 +240,47 @@ def test_sample_median_of_even_n_off_grid(hw_config, make_comm, fake_serial) -> 
 
     assert isinstance(result, int)
     assert result == 20950
+
+
+# ---------------------------------------------------------------------------
+# dev-test-vpp-vpe-timeout fix (2026-07-03) -- `_sample_one_voltage` now
+# sends an explicit DONE after its n-sample loop and BEFORE disconnecting,
+# so the firmware's hw_read_voltage handler (which now recognizes OP_MSG_DONE,
+# mirroring eprom_write) ends the command immediately instead of relying on
+# its 1s watchdog. This replaces the superseded drain/retry host-side
+# mitigation (reverted commits f7ab92a, 2352b5f) with the real firmware fix.
+# ---------------------------------------------------------------------------
+
+
+def test_sample_vpp_mv_sends_done_before_disconnect(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """After the n-sample loop, `_sample_one_voltage` calls `send_done()`
+    on the still-open connection before `disconnect()` -- proving the
+    firmware is told to end the command instead of being left dangling."""
+    fake_serial.feed(_ok_frame_bytes())  # ready handshake
+    for _ in range(3):
+        fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 20, 9, 5, 0)))
+    comm = make_comm()
+
+    manager = Mock()
+    manager.attach_mock(Mock(wraps=comm.send_done), "send_done")
+    manager.attach_mock(Mock(wraps=comm.disconnect), "disconnect")
+    comm.send_done = manager.send_done
+    comm.disconnect = manager.disconnect
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        result = hw.sample_vpp_mv()
+
+    # A clean n-sample read still returns the median.
+    assert result == 20900
+    manager.send_done.assert_called_once()
+    manager.disconnect.assert_called_once()
+    assert [c[0] for c in manager.mock_calls] == ["send_done", "disconnect"]
 
 
 def test_voltage_format_pin() -> None:
