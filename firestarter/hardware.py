@@ -112,6 +112,40 @@ class HardwareManager:
             if comm:
                 comm.disconnect()
 
+    def read_hardware_revision_value(self, flags: int = 0) -> Optional[str]:
+        """Value-returning sibling of get_hardware_revision: returns the
+        coarse revision-bucket string (or None on any transport error / a
+        non-ready ack) instead of only logging it.
+
+        Mirrors get_hardware_revision's exact find_and_connect -> expect_ack
+        -> disconnect handshake but returns data rather than printing (same
+        relationship sample_vpp_mv/_sample_one_voltage bears to
+        read_vpp_voltage). This is the auto-capture source for
+        AutoCapture.hw_revision (Phase 112 Plan 04) -- a coarse bucket or an
+        honest None is an accepted outcome, never a fabricated value. Opens
+        ONE serial read (energize/query only) -- no VPP-set, no wire-dict,
+        no --force (SAFE-02 clean). Does NOT change get_hardware_revision's
+        existing bool contract -- the `dev hw` CLI command depends on that.
+        """
+        command = {"state": COMMAND_HW_VERSION}
+        if flags:
+            command["flags"] = flags
+
+        comm = None
+        try:
+            comm = SerialCommunicator.find_and_connect(command, self.config)
+            is_ok, msg = comm.expect_ack()
+            if is_ok:
+                return msg
+            logger.error(f"Failed to read hardware revision: {msg}")
+            return None
+        except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
+            logger.error(f"Failed to read hardware revision: {e}")
+            return None
+        finally:
+            if comm:
+                comm.disconnect()
+
     def set_hardware_config(
         self,
         rev: Optional[int] = None,

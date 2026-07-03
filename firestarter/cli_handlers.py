@@ -50,10 +50,8 @@ from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import (
     AutoCapture,
     DiagnosticReport,
-    Provenance,
     TransportHealth,
     build_db_diff,
-    prompt_provenance,
 )
 from firestarter.eprom_info import EpromConsolePresenter, print_eprom_list_table
 from firestarter.eprom_operations import EpromOperator, build_flags
@@ -1651,13 +1649,6 @@ def dev_validate_family(
 # `dev test` -- community chip-validation sweep (Phase 112, D-01..D-05)
 # ---------------------------------------------------------------------------
 
-# Protocol id exclusive to UV-EPROM across the whole chip database (mirrors
-# chip_test.py's own `_PROTOCOL_UV_EPROM`) -- used here ONLY to derive the
-# host-side `is_uv` signal for `prompt_provenance`'s owns_eraser gate; this
-# handler never re-implements chip_test.py's execution-time write-region
-# logic, it only mirrors the SAME detection signal (109-CONTEXT.md).
-_PROTOCOL_UV_EPROM = 0x0B
-
 # Per-verdict -> exit-code mapping (D-01): OK/NA/SKIPPED are exit-clean;
 # `marginal` is an inconclusive result (exit 2); BAD beats marginal via
 # `max` over the whole result set, mirroring dev_validate_family's own
@@ -1692,28 +1683,6 @@ def _sanitize_chip_token(chip: str) -> str:
         else:
             safe_chars.append("_")
     return "".join(safe_chars)
-
-
-def _is_uv_eprom(app: "AppContext", chip: str) -> bool:
-    """Host-side UV-EPROM signal (mirrors chip_test._write_region_for, D-01).
-
-    `electrical-type == "UV-EPROM"` (the guard-bypassing `full` DB dict) OR
-    `algorithm == 0x0B` (the programmer dict's protocol id, UV-EPROM-exclusive
-    across the whole chip database) -- same OR'd signal as
-    `chip_test.py:649-652`. A missing DB entry is treated as not-UV (there is
-    nothing to derive_plan for either).
-    """
-    full = app.db.get_eprom(chip)
-    if not full:
-        return False
-    is_uv = full.get("electrical-type", "") == "UV-EPROM"
-    if is_uv:
-        return True
-    try:
-        prog = app.db.convert_to_programmer(full)
-    except Exception:  # noqa: BLE001 -- best-effort signal, never fatal
-        return False
-    return bool(prog.get("algorithm") == _PROTOCOL_UV_EPROM)
 
 
 def _chip_id_fields(
@@ -1808,7 +1777,7 @@ def _make_sampler(app: "AppContext", report: DiagnosticReport) -> Any:
     "assume_yes",
     is_flag=True,
     default=False,
-    help="Bypass the --destructive confirm prompt on a TTY (never bypasses provenance prompts).",  # noqa: E501
+    help="Bypass the --destructive confirm prompt on a TTY.",
 )
 @click.pass_obj
 @map_typed_errors
@@ -1825,6 +1794,12 @@ def dev_test(
     pristine). With --destructive: adds write/erase/verify (sacrifices the
     chip) -- gated behind a TTY confirm unless -y/--yes is given.
 
+    Issues ZERO interactive prompts about tester-supplied identity (Phase
+    112 Plan 04 reversal, operator-approved per 112-UAT.md): shield
+    revision, chip origin, and pot-adjustment are no longer asked -- the
+    report auto-captures what the firmware/DB can supply and is honest
+    ("not measured"/None) about what it cannot.
+
     Prints a rendered report to stdout on every run. With --output-dir,
     additionally writes dev-test-<chip>.json and dev-test-<chip>.md.
 
@@ -1832,30 +1807,34 @@ def dev_test(
     marginal (and none BAD), 1 if any step is BAD (including a chip-ID
     mismatch) -- computed as max over per-step exit codes.
     """
-    is_uv = _is_uv_eprom(app, chip)
     interactive = _is_interactive()
 
-    provenance: Optional[Provenance] = None
-    if interactive:
-        provenance = prompt_provenance(is_uv)
-        if destructive and not assume_yes:
-            proceed = Confirm.ask(
-                "--destructive will sacrifice the chip. Continue?", default=False
-            )
-            if not proceed:
-                click.echo("Aborted -- chip left untouched.")
-                sys.exit(0)
-    else:
-        # Off-TTY: skip both prompts. Blank Provenance -> is_submittable()
-        # computes False (correct, not a gap). --destructive itself is
-        # treated as consent -- no confirm possible without a TTY (D-02).
-        provenance = Provenance()
+    # SAFE-03: the ONLY interactive input left in this handler is the
+    # --destructive safety confirm -- it is a safety gate, not tester-input
+    # collection, and MUST stay. On a TTY (and not -y/--yes), require an
+    # explicit "yes" before sacrificing the chip. Off-TTY, --destructive
+    # itself is consent (no confirm possible without a TTY, D-02).
+    if interactive and destructive and not assume_yes:
+        proceed = Confirm.ask(
+            "--destructive will sacrifice the chip. Continue?", default=False
+        )
+        if not proceed:
+            click.echo("Aborted -- chip left untouched.")
+            sys.exit(0)
 
     plan = derive_plan(chip, app.db, destructive=destructive)
 
+    # fw_board_identity stays None: EpromOperator.comm is a transient
+    # per-operation connection torn down after every operator call (see
+    # 112-02-SUMMARY.md) -- there is no live comm to read programmer_info
+    # off of after run_plan returns without opening a new, extraneous
+    # connection, which would violate the orchestrator-only contract
+    # (SAFE-02). hw_revision IS reachable via a dedicated, orchestrator-safe
+    # energize/query read (Part A, hardware.py) and is populated below.
     auto_capture = AutoCapture(
         host_version=version,
         fw_board_identity=None,
+        hw_revision=app.hardware_manager.read_hardware_revision_value(),
         chip=chip,
         protocol=None,
     )
@@ -1864,7 +1843,6 @@ def dev_test(
         auto_capture=auto_capture,
         transport=transport,
         plan=plan,
-        provenance=provenance,
     )
 
     sampler = _make_sampler(app, report) if destructive else None
