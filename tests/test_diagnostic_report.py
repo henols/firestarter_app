@@ -62,12 +62,15 @@ from unittest.mock import Mock
 
 import firestarter
 from firestarter.chip_test import (
+    FP_ADDRESS_LINE,
+    FP_BLANK_CONTACT,
     FP_INDETERMINATE,
     VERDICT_BAD,
     VERDICT_NA,
     VERDICT_OK,
     VERDICT_SKIPPED,
     Fingerprint,
+    Plan,
     StepResult,
     derive_plan,
     run_plan,
@@ -134,6 +137,156 @@ def _build_report(chip_name: str = "M8720"):
         banner=banner,
     )
     return report
+
+
+def _minimal_report(
+    *,
+    chip: str = "M8720",
+    protocol: str = "0x08",
+    host_version: str = "3.0.0b10",
+    step_specs: list[tuple[str, str, str | None, str]] | None = None,
+    vpp_before_mv: int | None = None,
+    vpe_before_mv: int | None = None,
+):
+    """Directly-constructed DiagnosticReport (no derive_plan/run_plan) for
+    precise dedup_fingerprint test control over step shape.
+
+    `step_specs` is a list of `(op, verdict, fingerprint_classification,
+    reason)` tuples; `fingerprint_classification=None` means no Fingerprint
+    is attached (the non-destructive/graceful-degradation shape)."""
+    from firestarter.diagnostic_report import (
+        AutoCapture,
+        DiagnosticReport,
+        TransportHealth,
+    )
+
+    step_specs = step_specs or [
+        ("id", VERDICT_OK, None, "chip id matched"),
+        ("read", VERDICT_OK, None, ""),
+    ]
+    results = []
+    for op, verdict, cls, reason in step_specs:
+        fp = (
+            Fingerprint(total=10, bad=0, bad_pct=0.0, classification=cls)
+            if cls is not None
+            else None
+        )
+        results.append(
+            StepResult(op=op, verdict=verdict, reason=reason, fingerprint=fp)
+        )
+
+    auto_capture = AutoCapture(
+        host_version=host_version,
+        chip=chip,
+        protocol=protocol,
+    )
+    return DiagnosticReport(
+        auto_capture=auto_capture,
+        transport=TransportHealth(),
+        plan=Plan(name=chip),
+        results=results,
+        vpp_before_mv=vpp_before_mv,
+        vpe_before_mv=vpe_before_mv,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Dedup fingerprint (SUB-03, D-02) -- deterministic, volatile-field-free
+# ---------------------------------------------------------------------------
+
+
+def test_dedup_fingerprint_is_12_char_lowercase_hex():
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    report = _minimal_report()
+    fp = dedup_fingerprint(report)
+
+    assert isinstance(fp, str)
+    assert len(fp) == 12
+    assert fp == fp.lower()
+    int(fp, 16)  # raises ValueError if not valid hex
+
+
+def test_dedup_fingerprint_deterministic_same_shape():
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    report_a = _minimal_report()
+    report_b = _minimal_report()
+
+    assert dedup_fingerprint(report_a) == dedup_fingerprint(report_b)
+
+
+def test_dedup_fingerprint_excludes_volatile_fields():
+    """Reports differing ONLY in host_version and measured vpp/vpe mV must
+    hash equal -- the hash is computed at two DIFFERENT wall-clock moments
+    (via a fresh DiagnosticReport each call) to also implicitly prove the
+    `generated` timestamp (never read by dedup_fingerprint) cannot leak in."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    report_a = _minimal_report(
+        host_version="3.0.0b10", vpp_before_mv=20900, vpe_before_mv=23900
+    )
+    report_b = _minimal_report(
+        host_version="3.0.0b99", vpp_before_mv=17400, vpe_before_mv=11000
+    )
+
+    assert dedup_fingerprint(report_a) == dedup_fingerprint(report_b)
+
+
+def test_dedup_fingerprint_excludes_reason_and_error_code():
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    report_a = _minimal_report(
+        step_specs=[("id", VERDICT_OK, None, "chip id matched exactly")]
+    )
+    report_b = _minimal_report(
+        step_specs=[("id", VERDICT_OK, None, "totally different text")]
+    )
+
+    assert dedup_fingerprint(report_a) == dedup_fingerprint(report_b)
+
+
+def test_dedup_fingerprint_sensitive_to_verdict_change():
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    report_ok = _minimal_report(step_specs=[("read", VERDICT_OK, None, "")])
+    report_bad = _minimal_report(step_specs=[("read", VERDICT_BAD, None, "")])
+
+    assert dedup_fingerprint(report_ok) != dedup_fingerprint(report_bad)
+
+
+def test_dedup_fingerprint_sensitive_to_classification_change():
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    report_blank = _minimal_report(
+        step_specs=[("verify", VERDICT_BAD, FP_BLANK_CONTACT, "")]
+    )
+    report_addr = _minimal_report(
+        step_specs=[("verify", VERDICT_BAD, FP_ADDRESS_LINE, "")]
+    )
+
+    assert dedup_fingerprint(report_blank) != dedup_fingerprint(report_addr)
+
+
+def test_dedup_fingerprint_non_destructive_graceful_degradation():
+    """A non-destructive run (no write/verify Fingerprint on any step)
+    gracefully collapses to chip + protocol + ordered verdicts and stays
+    stable across two identical-shaped runs (D-02)."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    step_specs = [
+        ("id", VERDICT_OK, None, ""),
+        ("read", VERDICT_OK, None, ""),
+        ("blank", VERDICT_NA, None, "SRAM/FRAM"),
+    ]
+    report_a = _minimal_report(step_specs=step_specs)
+    report_b = _minimal_report(step_specs=step_specs)
+
+    fp_a = dedup_fingerprint(report_a)
+    fp_b = dedup_fingerprint(report_b)
+
+    assert fp_a == fp_b
+    assert len(fp_a) == 12
 
 
 # ---------------------------------------------------------------------------

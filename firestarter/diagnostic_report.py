@@ -41,6 +41,7 @@ gates it.
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
 from dataclasses import dataclass, field
 from typing import Any
@@ -163,6 +164,39 @@ def is_submittable(ac: AutoCapture) -> bool:
     perfectly good report would defeat the auto-capture-only intent.
     """
     return bool(ac.chip) and bool(ac.protocol) and bool(ac.host_version)
+
+
+# ---------------------------------------------------------------------------
+# Dedup fingerprint (SUB-03, D-02) -- deterministic, volatile-field-free
+# ---------------------------------------------------------------------------
+
+
+def dedup_fingerprint(report: DiagnosticReport) -> str:
+    """Deterministic 12-char lowercase hex short-hash for report dedup (D-02).
+
+    Reads ONLY `AutoCapture.chip`/`.protocol` (via `report.auto_capture`) and,
+    per step in `report.results` order, `StepResult.op`/`.verdict` plus
+    `StepResult.fingerprint.classification` when present (empty string
+    otherwise -- the graceful-degradation case for a non-destructive run with
+    no write/verify fingerprint attached). The hash deliberately EXCLUDES
+    every volatile field -- `generated`, `host_version`, measured
+    `vpp_*`/`vpe_*` millivolt readings, `error_code`, and the free-text
+    `reason` string -- so a clean re-test of the same chip with the same
+    outcome shape dedups to the SAME id, and no scrubbable-PII-bearing
+    `reason` text ever influences it (T-113-02).
+
+    This is a non-secret dedup id, not a security control (T-113-06) --
+    `hashlib.sha256` is used here purely for its distribution properties,
+    truncated to 12 hex characters (collision-safe at this scale, short
+    enough for an issue title).
+    """
+    ac = report.auto_capture
+    parts = [ac.chip or "", str(ac.protocol or "")]
+    for result in report.results:
+        cls = result.fingerprint.classification if result.fingerprint else ""
+        parts.append(f"{result.op}={result.verdict}:{cls}")
+    canonical = "|".join(parts)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
 
 # ---------------------------------------------------------------------------
