@@ -677,6 +677,69 @@ class TestSubmitFlag:
 
 
 # ---------------------------------------------------------------------------
+# SAFE-04: absent-chip hard-fail (case A) vs present-but-unsupported sweep
+# (case B) -- the guard keys off `get_eprom` emptiness, never a
+# `resolve_chip` support-status refusal.
+# ---------------------------------------------------------------------------
+
+
+class TestAbsentChipHardFail:
+    """Case A (absent from DB) hard-fails before hardware; case B (in DB but
+    refused by resolve_chip on support_status) still runs the full sweep."""
+
+    def test_dev_test_absent_chip_hard_fails_before_hardware(
+        self, runner: CliRunner
+    ) -> None:
+        """`NO_SUCH_CHIP_XYZ` is absent from the DB (get_eprom is falsy).
+        `dev test` must exit 1 with the bare `Error: ... not found in
+        database` message and short-circuit BEFORE any hardware read /
+        operator call / report render -- proven by
+        read_hardware_revision_value.assert_not_called() (the load-bearing
+        assertion: the pre-guard handler also exits nonzero in this mock
+        harness, but only because it crashes AFTER energizing hardware)."""
+        chip = "NO_SUCH_CHIP_XYZ"
+        app = make_app_context(
+            eprom_operator=Mock(spec=EpromOperator),
+            hardware_manager=Mock(spec=HardwareManager),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", chip], obj=app)
+        assert result.exit_code == 1, result.output
+        assert f"{chip}: not found in database" in result.output
+        app.hardware_manager.read_hardware_revision_value.assert_not_called()
+        app.eprom_operator.read_eprom.assert_not_called()
+        assert "dev test" not in result.output
+
+    def test_dev_test_present_but_unsupported_still_sweeps(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        """AT28C16 IS in the DB (get_eprom truthy) but `resolve_chip` refuses
+        it (adapter-required, ChipNotImplementedError). The guard must NOT
+        swallow this -- the sweep still runs (hardware read reached, report
+        rendered) and the refusal is recorded as SKIPPED findings, never a
+        bare exit -- proving the guard keys off `get_eprom` emptiness only."""
+        chip = "AT28C16"
+        operator = make_clean_operator()
+        hw = make_hardware_manager()
+        app = make_app_context(eprom_operator=operator, hardware_manager=hw)
+        with _off_tty():
+            result = runner.invoke(
+                cli,
+                ["dev", "test", chip, "--output-dir", str(tmp_path)],
+                obj=app,
+            )
+        assert result.exit_code == 0, result.output
+        hw.read_hardware_revision_value.assert_called()
+        data = json.loads((tmp_path / f"dev-test-{chip}.json").read_text())
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["id"]["verdict"] == "NA"
+        assert steps["read"]["verdict"] == "SKIPPED"
+        assert "adapter" in steps["read"]["reason"]
+        assert steps["blank-check"]["verdict"] == "SKIPPED"
+        assert "adapter" in steps["blank-check"]["reason"]
+
+
+# ---------------------------------------------------------------------------
 # Test helper
 # ---------------------------------------------------------------------------
 
