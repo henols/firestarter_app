@@ -1841,6 +1841,14 @@ def dev_test(
             click.echo("Aborted -- chip left untouched.")
             sys.exit(0)
 
+    # SAFE-04: hard-fail BEFORE any hardware is energized when the chip name
+    # is absent from the DB entirely (case A). Keyed strictly off
+    # `get_eprom` emptiness -- NEVER a `resolve_chip` support-status refusal
+    # -- so an in-DB-but-unsupported chip (case B, e.g. adapter-required)
+    # still runs the full community-validation sweep below.
+    if not app.db.get_eprom(chip):
+        raise ChipNotFoundError(f"{chip}: not found in database")
+
     plan = derive_plan(chip, app.db, destructive=destructive)
 
     # fw_board_identity stays None: EpromOperator.comm is a transient
