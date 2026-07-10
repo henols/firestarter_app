@@ -126,6 +126,10 @@ v1.4 introduces an opt-in beta channel for both the app (via PyPI pre-releases) 
 (via GitHub Pre-releases). App and firmware beta versions use matching `X.Y.ZbN` lockstep identifiers
 so you always know both components are from the same beta cut.
 
+> **New to the beta channel?** See [`doc/beta-testing-install.md`](doc/beta-testing-install.md)
+> for a full stranger-friendly walkthrough: install the beta app, flash the matching beta firmware
+> to your specific board, run a smoke check, then hand off into `firestarter dev test <chip>`.
+
 #### Installing the beta app
 
 ```bash
