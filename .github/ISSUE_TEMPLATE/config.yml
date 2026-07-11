@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Central Firestarter issue tracker
+    url: https://github.com/henols/firestarter_prom/issues/new/choose
+    about: Report bugs, request features, ask for support, or coordinate cross-repository work here.
