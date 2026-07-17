@@ -670,6 +670,21 @@ def main():
                     # else: leave _support_status as "supported" — M2732A (21V)
                     # is within the RURP ceiling.
 
+                # Rule 4 — ASD AE29F-series algorithm correction.
+                # Upstream infoic.xml assigns protocol_id=0x05 (FLASH_AMD_STD /
+                # IC2_ALG_F29EE -> configure_flash4) to these chips, but they
+                # require algorithm 0x06 (FLASH_AMD_ALT / IC2_ALG_W29F32P ->
+                # configure_flash3) for correct AMD command-set erase.
+                # AE49F2008 from the same manufacturer already uses 0x06.
+                _ALGO4_TARGETS = {"AE29F1008", "AE29F2008", "AE29F4008"}
+                if part_aliases & _ALGO4_TARGETS and proto_id == 0x05:
+                    print(
+                        f"INFO: {mfg_name}/{name} algorithm 0x{proto_id:02X}->0x06 "
+                        f"(Rule 4: ASD AE29F-series requires configure_flash3)",
+                        file=sys.stderr,
+                    )
+                    proto_id = 0x06
+
                 chip_entry = {
                     # Upstream `name` is a comma-separated alias list where each
                     # alias may carry an @PACKAGE suffix (e.g.,

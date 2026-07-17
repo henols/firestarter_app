@@ -1223,7 +1223,7 @@
       "part_number": "AE29F1008",
       "pinout": "DIP32_SST39SF040",
       "programming": {
-        "algorithm": 5,
+        "algorithm": 6,
         "chip_id_check": true,
         "chip_id_value": "0x0000dac1",
         "pulse_duration": "Algorithm Controlled"
@@ -1243,7 +1243,7 @@
       "part_number": "AE29F2008",
       "pinout": "DIP32_SST39SF040",
       "programming": {
-        "algorithm": 5,
+        "algorithm": 6,
         "chip_id_check": true,
         "chip_id_value": "0x0000da45",
         "pulse_duration": "Algorithm Controlled"
@@ -1263,7 +1263,7 @@
       "part_number": "AE29F4008",
       "pinout": "DIP32_SST39SF040",
       "programming": {
-        "algorithm": 5,
+        "algorithm": 6,
         "chip_id_check": true,
         "chip_id_value": "0x0000da46",
         "pulse_duration": "Algorithm Controlled"
