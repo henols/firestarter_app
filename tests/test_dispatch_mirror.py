@@ -19,6 +19,8 @@ Coverage:
 import pathlib
 import re
 
+import pytest
+
 from tools import check_dispatch
 
 # ---------------------------------------------------------------------------
@@ -41,6 +43,13 @@ _FW_DISPATCH_TEST = (
     / "test_dispatch"
     / "test_configure_memory.cpp"
 )
+
+# Cross-repo legs read files from the sibling `firestarter/` firmware checkout.
+# When that checkout is absent (e.g. the app-only CI checkout in beta-release.yml),
+# skip the cross-repo assertions cleanly instead of failing with FileNotFoundError.
+# Mirrors the FW_ABSENT idiom in test_revision_constants_parity.py and the
+# cross-repo validation_matrix skip guard (5b6f8a5).
+FW_ABSENT = not (_PROTOCOLS_MD.exists() and _FW_DISPATCH_TEST.exists())
 
 # ---------------------------------------------------------------------------
 # §0 table parser (post-Phase-100 two-table layout)
@@ -144,6 +153,7 @@ def parse_protocols_md() -> dict[int, str]:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
 def test_dispatch_mirror_doc_matches_tool() -> None:
     """Every §0 protocol row must agree between PROTOCOLS.md and check_dispatch.dispatch().
 
@@ -175,6 +185,7 @@ def test_dispatch_mirror_doc_matches_tool() -> None:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
 def test_dispatch_mirror_firmware_leg_enumerates_all_protocols() -> None:
     """Every §0 protocol that maps to a real handler must appear in the native dispatch test.
 
