@@ -109,8 +109,8 @@ def test_family_vpp_invariants_all_six_handlers_present() -> None:
     expected = {
         "configure_eprom",
         "configure_eeprom28c",
-        "configure_flash3",
-        "configure_flash4",
+        "configure_flash_nor_unlock",
+        "configure_flash_5v_page",
         "configure_flash_intel",
         "configure_sram",
     }
@@ -155,7 +155,38 @@ def test_configure_eprom_with_valid_vpp_is_not_a_violation() -> None:
     is_violation, _ = _check_invariant("configure_eprom", vpp_mv=12000)
     assert not is_violation, (
         "configure_eprom with vpp_mv=12000 must NOT be a VPP violation "
-        "(EPROM handler legitimately enables VPP up to 22000 mV)"
+        "(EPROM handler legitimately enables VPP up to 25000 mV)"
+    )
+
+
+def test_configure_eprom_with_25v_vpp_is_not_a_violation() -> None:
+    """Phase 79 (NMOS-02): configure_eprom with vpp_mv=25000 must NOT be flagged.
+
+    Non-vacuous positive control for the raised ceiling: 25000 sits exactly at the
+    new upper bound (0, 25000), so it is in-range and NOT a violation. This FAILS
+    on the pre-Phase-79 invariant (0, 22000) where 25000 > 22000 would flag it —
+    it is therefore a real proof of the ceiling raise, not a re-assert of 12000.
+
+    This is the family invariant a 25V NMOS chip (M2716/M2732) relies on after
+    graduation to route cleanly through configure_eprom.
+    """
+    is_violation, _ = _check_invariant("configure_eprom", vpp_mv=25000)
+    assert not is_violation, (
+        "configure_eprom with vpp_mv=25000 must NOT be a VPP violation after the "
+        "Phase 79 ceiling raise (25000 is the new upper bound of the (0, 25000) range)"
+    )
+
+
+def test_configure_eprom_above_25v_is_a_violation() -> None:
+    """FUT-02 preserved: configure_eprom with vpp_mv=25001 (>25V) MUST be flagged.
+
+    Negative control proving the raised ceiling still fails closed above 25V —
+    any future chip declaring >25000 mV routed to configure_eprom is a violation.
+    """
+    is_violation, _ = _check_invariant("configure_eprom", vpp_mv=25001)
+    assert is_violation, (
+        "configure_eprom with vpp_mv=25001 must be a VPP violation "
+        "(>25000 mV exceeds the raised RURP ceiling — FUT-02 fail-closed)"
     )
 
 

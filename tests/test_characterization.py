@@ -27,12 +27,12 @@ D-05a (determinism): All subprocess output is pre-processed by normalize_output(
      strings.
 """
 
-import os  # noqa: F401
+import os
 import re
 import shutil
 import subprocess
 import sys  # noqa: F401
-import tempfile  # noqa: F401
+import tempfile
 from pathlib import Path  # noqa: F401
 
 import pytest
@@ -54,6 +54,20 @@ from .conftest import build_frame
 
 _WHICH = shutil.which("firestarter")
 FIRESTARTER = _WHICH if _WHICH is not None else None
+
+# Hermetic config dir for subprocess goldens. The DB-backed subprocess tests
+# (list/info/search) invoke the real `firestarter` entry point, which merges a
+# developer's ``~/.firestarter/database.json`` user-override. The golden
+# snapshots were pinned WITHOUT any override, so a local override (e.g. the
+# Phase 81 2516 user-override entry) would leak a spurious row into `list`/`info`
+# output and break the snapshot on the bench machine while CI (no override)
+# stays green. Pointing ``FIRESTARTER_CONFIG_DIR`` at an empty temp dir applies
+# the same isolation the direct-DB tests get via ``skip_local_override=True``
+# (Phase 36 Pitfall-4) at the subprocess boundary, keeping the suite
+# deterministic everywhere. (HOME cannot be used for this — the editable
+# user-site install of ``firestarter`` and its deps is HOME-relative, so
+# overriding HOME breaks the subprocess import.)
+_CLEAN_CONFIG_DIR = tempfile.mkdtemp(prefix="fs-characterization-cfg-")
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +134,7 @@ def run_firestarter(*args: str) -> tuple[str, str, int]:
         capture_output=True,
         text=True,
         timeout=15,
+        env={**os.environ, "FIRESTARTER_CONFIG_DIR": _CLEAN_CONFIG_DIR},
     )
     return (
         normalize_output(result.stdout),

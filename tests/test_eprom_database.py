@@ -98,8 +98,9 @@ class TestConvertToProgrammer:
         eprom = db.get_eprom("W27C512")
         assert eprom is not None
         config = db.convert_to_programmer(eprom)
-        for key in ("memory-size", "type", "algorithm", "pin-count", "vpp_mv", "flags"):
+        for key in ("memory-size", "algorithm", "pin-count", "vpp_mv", "flags"):
             assert key in config, f"Missing required key: {key}"
+        assert "type" not in config
 
     def test_convert_to_programmer_empty_input_returns_empty(self):
         """convert_to_programmer with None/empty input must return {}."""

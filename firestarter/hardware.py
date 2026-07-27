@@ -7,6 +7,8 @@ Hardware Management Module
 """
 
 import logging
+import re
+import statistics
 import time
 from typing import Optional, Tuple  # noqa: UP035
 
@@ -26,6 +28,11 @@ from firestarter.exceptions import (
 from firestarter.serial_comm import SerialCommunicator
 
 logger = logging.getLogger("Hardware")
+
+# Tolerant match for the FIRST "%u.%uV" pair in a 0xE4/0xE5 DATA message
+# (e.g. "VPP: 20.9V, Internal VCC: 5.0V") -- guards against catalog format
+# wording drift (Pitfall 3 / T-111-DRIFT).
+_VOLTAGE_RE = re.compile(r"(\d+)\.(\d+)\s*V")
 
 
 class HardwareManager:
@@ -101,6 +108,40 @@ class HardwareManager:
         except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
             logger.error(f"Failed to read hardware revision: {e}")
             return False
+        finally:
+            if comm:
+                comm.disconnect()
+
+    def read_hardware_revision_value(self, flags: int = 0) -> Optional[str]:
+        """Value-returning sibling of get_hardware_revision: returns the
+        coarse revision-bucket string (or None on any transport error / a
+        non-ready ack) instead of only logging it.
+
+        Mirrors get_hardware_revision's exact find_and_connect -> expect_ack
+        -> disconnect handshake but returns data rather than printing (same
+        relationship sample_vpp_mv/_sample_one_voltage bears to
+        read_vpp_voltage). This is the auto-capture source for
+        AutoCapture.hw_revision (Phase 112 Plan 04) -- a coarse bucket or an
+        honest None is an accepted outcome, never a fabricated value. Opens
+        ONE serial read (energize/query only) -- no VPP-set, no wire-dict,
+        no --force (SAFE-02 clean). Does NOT change get_hardware_revision's
+        existing bool contract -- the `dev hw` CLI command depends on that.
+        """
+        command = {"state": COMMAND_HW_VERSION}
+        if flags:
+            command["flags"] = flags
+
+        comm = None
+        try:
+            comm = SerialCommunicator.find_and_connect(command, self.config)
+            is_ok, msg = comm.expect_ack()
+            if is_ok:
+                return msg
+            logger.error(f"Failed to read hardware revision: {msg}")
+            return None
+        except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
+            logger.error(f"Failed to read hardware revision: {e}")
+            return None
         finally:
             if comm:
                 comm.disconnect()
@@ -261,3 +302,93 @@ class HardwareManager:
     ) -> bool:
         """Reads the VPE voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds, flags)
+
+    def _parse_voltage_frame(self, message: Optional[str]) -> Optional[int]:
+        """
+        Parses the FIRST "%u.%uV" pair out of a 0xE4/0xE5 DATA message (e.g.
+        "VPP: 20.9V, Internal VCC: 5.0V") and reconstructs the value as
+        v_int*1000 + v_dec*100 -- the wire only carries whole volts + one
+        tenths digit, so the result sits on a 100 mV grid (never finer).
+
+        Returns None (honest fallback, never a fabricated 0) if the message
+        does not match -- e.g. no message, garbage, or an unexpected format.
+        """
+        match = _VOLTAGE_RE.search(message or "")
+        if not match:
+            return None
+        v_int, v_dec = int(match.group(1)), int(match.group(2))
+        return v_int * 1000 + v_dec * 100
+
+    def _sample_one_voltage(
+        self, state: int, n: int = 3, flags: int = 0
+    ) -> Optional[int]:
+        """
+        Reads N DATA frames for the given rail `state` (COMMAND_READ_VPP or
+        COMMAND_READ_VPE) and returns the median reconstructed mV value.
+
+        Mirrors the _read_voltage_loop handshake (find_and_connect ->
+        expect_ack -> send_ack -> get_response) but stops after `n` frames
+        instead of looping forever, and returns a value instead of printing.
+
+        Unlike the standalone read loop (which runs until the OPERATOR hits
+        Ctrl+C), this method deliberately stops acking after `n` frames.
+        The firmware's hw_read_voltage handler now recognizes an explicit
+        `DONE` message (mirrors eprom_write's OP_MSG_DONE handling) and ends
+        the command immediately on receipt, so we send one here -- before
+        disconnecting -- instead of leaving the command dangling for the
+        firmware's watchdog to reap (dev-test-vpp-vpe-timeout debug session,
+        2026-07-03; firmware fix in hardware_operations.cpp).
+
+        Returns None on any transport error, a non-ready ack, a non-DATA
+        response, or when no sample could be parsed (honest fallback, never
+        a fabricated 0).
+        """
+        command_for_connect = {"state": state}
+        if flags:
+            command_for_connect["flags"] = flags
+        comm = None
+        samples: list = []
+        try:
+            comm = SerialCommunicator.find_and_connect(command_for_connect, self.config)
+
+            is_ok, _ = comm.expect_ack()
+            if not is_ok:
+                return None
+
+            comm.send_ack()  # start the reading loop on the firmware
+
+            for _ in range(n):
+                response = comm.get_response()
+                if response.type != "DATA":
+                    break
+                mv = self._parse_voltage_frame(response.message)
+                if mv is not None:
+                    samples.append(mv)
+                comm.send_ack()  # acknowledge data and request next reading
+
+            # Tell the firmware to end the command now, rather than letting
+            # it stay active until its own watchdog times it out.
+            comm.send_done()
+        except (
+            ProgrammerNotFoundError,
+            SerialError,
+            SerialTimeoutError,
+            HardwareOperationError,
+        ) as e:
+            logger.debug(f"Failed to sample voltage: {e}")
+            return None
+        finally:
+            if comm:
+                comm.disconnect()
+
+        return int(statistics.median(samples)) if samples else None
+
+    def sample_vpp_mv(self, n: int = 3) -> Optional[int]:
+        """Value-returning sibling of read_vpp_voltage: median VPP mV over
+        `n` samples (100 mV resolution), or None if not measured."""
+        return self._sample_one_voltage(COMMAND_READ_VPP, n=n)
+
+    def sample_vpe_mv(self, n: int = 3) -> Optional[int]:
+        """Value-returning sibling of read_vpe_voltage: median VPE mV over
+        `n` samples (100 mV resolution), or None if not measured."""
+        return self._sample_one_voltage(COMMAND_READ_VPE, n=n)

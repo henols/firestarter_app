@@ -330,6 +330,14 @@ format      = "Memory size %lu too small for chip-id check"
 params      = [{ type = "u32", render = "dec" }]
 wire_format = "id_frame"
 
+[[messages]]
+id          = 0x85
+name        = "MSG_WARN_FL4_BOOT_BLOCK_LOCKED"
+severity    = "WARN"
+format      = "boot block locked -- 0x%06lx not programmable (W29C040 section 6.6 irreversible lockout, write forced)"
+params      = [{ type = "u24", render = "hex_addr" }]
+wire_format = "id_frame"
+
 # ---------------------------------------------------------------------------
 # ERROR (0xA0..0xDF)
 # ---------------------------------------------------------------------------
@@ -444,14 +452,6 @@ name        = "MSG_ERR_CMD"
 severity    = "ERROR"
 format      = "Command error"
 params      = []
-wire_format = "id_frame"
-
-[[messages]]
-id          = 0xAE
-name        = "MSG_ERR_MEM_TYPE_UNSUPPORTED"
-severity    = "ERROR"
-format      = "Memory type 0x%02x not supported"
-params      = [{ type = "u8", render = "hex_byte" }]
 wire_format = "id_frame"
 
 [[messages]]
@@ -583,6 +583,14 @@ name        = "MSG_ERR_PROTOCOL_NOT_IMPLEMENTED"
 severity    = "ERROR"
 format      = "Protocol 0x%02x not implemented"
 params      = [{ type = "u8", render = "hex_byte" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xBC
+name        = "MSG_ERR_FL4_BOOT_BLOCK_LOCKED"
+severity    = "ERROR"
+format      = "boot block locked -- 0x%06lx not programmable (W29C040 section 6.6 irreversible lockout)"
+params      = [{ type = "u24", render = "hex_addr" }]
 wire_format = "id_frame"
 
 # ---------------------------------------------------------------------------

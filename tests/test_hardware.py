@@ -12,14 +12,19 @@ Test pattern: patch ``SerialCommunicator.find_and_connect`` to return a
 frames the firmware would emit.
 """
 
+import re
+import struct
 from typing import Iterator  # noqa: UP035
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from firestarter.config import ConfigManager
+from firestarter.constants import COMMAND_READ_VPE
 from firestarter.hardware import HardwareManager
 from firestarter.messages import MSG_END_DONE
+
+from .conftest import build_frame
 
 
 def _ok_frame_bytes() -> bytes:
@@ -135,3 +140,163 @@ def test_read_vpp_voltage_ready_not_ok_returns_false(
     ):
         ok = hw.read_vpp_voltage()
     assert ok is False
+
+
+# ---------------------------------------------------------------------------
+# Wave-0 RED scaffold (v1.21 Phase 111, VOLT-01) -- measured-voltage sampler.
+#
+# `_parse_voltage_frame` / `sample_vpp_mv` / `sample_vpe_mv` do NOT exist yet
+# on `HardwareManager` -- Plan 02 creates them. These tests are EXPECTED to
+# fail with AttributeError until then; that RED state is the Wave-0
+# deliverable (111-VALIDATION.md). Do NOT stub the production symbols here.
+# ---------------------------------------------------------------------------
+
+
+def test_parse_voltage_frame_reconstructs_mv(hw_config) -> None:
+    """`_parse_voltage_frame` reconstructs mV as v_int*1000 + v_dec*100 --
+    the Pitfall-2 KAT pinning the units contract (never read v_int alone as
+    mV, never treat the wire as raw mV)."""
+    hw = HardwareManager(hw_config)
+
+    assert hw._parse_voltage_frame("VPP: 20.9V, Internal VCC: 5.0V") == 20900
+    assert hw._parse_voltage_frame("VPE: 21.0V, Internal VCC: 5.0V") == 21000
+
+
+def test_sample_vpp_mv_returns_median(hw_config, make_comm, fake_serial) -> None:
+    """`sample_vpp_mv()` feeds three synthetic 0xE4 frames and returns the
+    median reconstructed mV value (20900 for a constant 20.9V rail)."""
+    fake_serial.feed(_ok_frame_bytes())  # ready handshake
+    for _ in range(3):
+        fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 20, 9, 5, 0)))
+    comm = make_comm()
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        assert hw.sample_vpp_mv() == 20900
+
+
+def test_sample_vpe_mv_uses_state_12(hw_config, make_comm, fake_serial) -> None:
+    """`sample_vpe_mv()` mirrors `sample_vpp_mv()` but parses 0xE5 frames and
+    connects with `state == COMMAND_READ_VPE` (12)."""
+    fake_serial.feed(_ok_frame_bytes())  # ready handshake
+    for _ in range(3):
+        fake_serial.feed(build_frame(0xE5, struct.pack(">HHHH", 21, 0, 5, 0)))
+    comm = make_comm()
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ) as mock_connect:
+        assert hw.sample_vpe_mv() == 21000
+
+    command_for_connect = mock_connect.call_args[0][0]
+    assert command_for_connect["state"] == COMMAND_READ_VPE
+
+
+def test_sample_none_returns_none_on_error(hw_config, make_comm, fake_serial) -> None:
+    """Transport failure and an in-band ERROR frame both return exactly
+    `None` -- never a fabricated `0` (T-111-INPUT honest-fallback)."""
+    from firestarter.exceptions import ProgrammerNotFoundError
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=ProgrammerNotFoundError("no port"),
+    ):
+        result = hw.sample_vpp_mv()
+    assert result is None
+
+    fake_serial.feed(_ok_frame_bytes())  # ready handshake
+    fake_serial.feed(_error_frame_bytes())  # error instead of a DATA frame
+    comm = make_comm()
+
+    hw2 = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        result2 = hw2.sample_vpp_mv()
+    assert result2 is None
+
+
+def test_sample_median_of_even_n_off_grid(hw_config, make_comm, fake_serial) -> None:
+    """Median of an even-N sample set (20900, 21000) is 20950, cast to
+    `int` -- pins the even-N off-grid rounding behavior (Pitfall 5)."""
+    fake_serial.feed(_ok_frame_bytes())  # ready handshake
+    fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 20, 9, 5, 0)))
+    fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 21, 0, 5, 0)))
+    comm = make_comm()
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        result = hw.sample_vpp_mv(n=2)
+
+    assert isinstance(result, int)
+    assert result == 20950
+
+
+# ---------------------------------------------------------------------------
+# dev-test-vpp-vpe-timeout fix (2026-07-03) -- `_sample_one_voltage` now
+# sends an explicit DONE after its n-sample loop and BEFORE disconnecting,
+# so the firmware's hw_read_voltage handler (which now recognizes OP_MSG_DONE,
+# mirroring eprom_write) ends the command immediately instead of relying on
+# its 1s watchdog. This replaces the superseded drain/retry host-side
+# mitigation (reverted commits f7ab92a, 2352b5f) with the real firmware fix.
+# ---------------------------------------------------------------------------
+
+
+def test_sample_vpp_mv_sends_done_before_disconnect(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """After the n-sample loop, `_sample_one_voltage` calls `send_done()`
+    on the still-open connection before `disconnect()` -- proving the
+    firmware is told to end the command instead of being left dangling."""
+    fake_serial.feed(_ok_frame_bytes())  # ready handshake
+    for _ in range(3):
+        fake_serial.feed(build_frame(0xE4, struct.pack(">HHHH", 20, 9, 5, 0)))
+    comm = make_comm()
+
+    manager = Mock()
+    manager.attach_mock(Mock(wraps=comm.send_done), "send_done")
+    manager.attach_mock(Mock(wraps=comm.disconnect), "disconnect")
+    comm.send_done = manager.send_done
+    comm.disconnect = manager.disconnect
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        result = hw.sample_vpp_mv()
+
+    # A clean n-sample read still returns the median.
+    assert result == 20900
+    manager.send_done.assert_called_once()
+    manager.disconnect.assert_called_once()
+    assert [c[0] for c in manager.mock_calls] == ["send_done", "disconnect"]
+
+
+def test_voltage_format_pin() -> None:
+    """Pin the 0xE4/0xE5 `CATALOG` format strings against the sampler's
+    tolerant regex -- a codegen regen that changes the wording silently
+    breaks the parser otherwise (Pitfall 3 / T-111-DRIFT)."""
+    from firestarter.messages import CATALOG
+
+    pattern = r"(\d+)\.(\d+)\s*V"
+
+    rendered_vpp = CATALOG[0xE4].format % (20, 9, 5, 0)
+    match_vpp = re.search(pattern, rendered_vpp)
+    assert match_vpp is not None
+    assert match_vpp.groups() == ("20", "9")
+
+    rendered_vpe = CATALOG[0xE5].format % (21, 0, 5, 0)
+    match_vpe = re.search(pattern, rendered_vpe)
+    assert match_vpe is not None
+    assert match_vpe.groups() == ("21", "0")

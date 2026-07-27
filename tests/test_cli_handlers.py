@@ -152,12 +152,15 @@ def test_info_2732_list_valued_pin_no_crash(runner: CliRunner) -> None:
     assert "Traceback (most recent call last)" not in result.output
 
 
-def test_info_vpp_exceeds_max_no_crash(runner: CliRunner) -> None:
-    """`firestarter info M2716` exits 0 — vpp-exceeds-max status, distinct vpp/oe.
+def test_info_nmos_25v_no_crash(runner: CliRunner) -> None:
+    """`firestarter info M2716` exits 0 — supported 25V NMOS, distinct vpp/oe.
 
-    info deliberately bypasses resolve_chip so it DISPLAYS non-supported chips
-    without refusing (per Phase 68 spec). M2716 is a vpp-exceeds-max chip with
-    distinct vpp and oe pins. REAL presenter required (Pitfall 1).
+    info renders a chip with distinct vpp and oe pins without crashing. REAL
+    presenter required (Pitfall 1).
+
+    Phase 79 (NMOS-02): M2716 graduated from 'vpp-exceeds-max' to 'supported'
+    at the raised 25V ceiling; info still exits 0 (it displayed before and
+    resolves now).
     """
     db = EpromDatabase(skip_local_override=True)
     app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
@@ -248,18 +251,22 @@ def test_read_operator_returns_false(runner: CliRunner) -> None:
 
 
 def test_read_non_supported_typed_refusal(runner: CliRunner) -> None:
-    """`firestarter read M2716 out.bin` exits 1 with typed support_status refusal.
+    """`firestarter read AT28C04 out.bin` exits 1 with typed support_status refusal.
 
-    SC#3 vpp-exceeds-max (M2716). The Phase 66 ChipNotImplementedError guard in
+    SC#3 non-supported chip. The Phase 66 ChipNotImplementedError guard in
     resolve_chip refuses before any wire dict is built. The @map_typed_errors
     decorator converts ChipNotImplementedError -> exit 1 + "Chip not usable:"
     message. No Traceback in output.
+
+    Re-anchored from M2716 in Phase 79: M2716 graduated to 'supported' (NMOS-02),
+    so the 'vpp-exceeds-max' category is empty — AT28C04 (adapter-required) is the
+    still-non-supported exemplar.
     """
     app = make_app_context()
-    result = runner.invoke(cli, ["read", "M2716", "out.bin"], obj=app)
+    result = runner.invoke(cli, ["read", "AT28C04", "out.bin"], obj=app)
     assert result.exit_code == 1
     assert "Traceback (most recent call last)" not in result.output
-    assert "M2716" in result.output
+    assert "AT28C04" in result.output
 
 
 def test_read_protocol_not_implemented_typed_refusal(runner: CliRunner) -> None:
@@ -328,6 +335,50 @@ def test_write_no_blank_check_polarity(runner: CliRunner) -> None:
     assert result2.exit_code == 0
     _, kwargs2 = operator.write_eprom.call_args
     assert kwargs2["operation_flags"] & FLAG_SKIP_BLANK_CHECK
+
+
+def test_write_b_decouples_skip_erase_phase92(runner: CliRunner) -> None:
+    """Phase 92 decouple: ``write -b`` skips ONLY the blank check, NOT the erase.
+
+    Regression guard for the Phase-90/91 footgun: ``-b`` used to imply
+    ``skip_erase=not blank_check``, so ``write -b`` on a non-blank
+    electrically-erasable chip silently skipped the required erase (leaving
+    un-erasable 0->1 bits while the firmware reported "successful"). After the
+    decouple, ``-b`` no longer sets FLAG_SKIP_ERASE; ``--skip-erase`` is the
+    explicit opt-in.
+    """
+    from firestarter.constants import FLAG_SKIP_BLANK_CHECK, FLAG_SKIP_ERASE
+
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = True
+
+    # `write -b`: blank-check skipped, erase NOT skipped (the decouple).
+    app = make_app_context(eprom_operator=operator)
+    r = runner.invoke(cli, ["write", "W27C512", "in.bin", "-b"], obj=app)
+    assert r.exit_code == 0
+    f = operator.write_eprom.call_args.kwargs["operation_flags"]
+    assert f & FLAG_SKIP_BLANK_CHECK
+    assert not (f & FLAG_SKIP_ERASE)
+
+    # `write -b --skip-erase`: both skipped (explicit opt-in).
+    operator.write_eprom.reset_mock()
+    app2 = make_app_context(eprom_operator=operator)
+    r2 = runner.invoke(
+        cli, ["write", "W27C512", "in.bin", "-b", "--skip-erase"], obj=app2
+    )
+    assert r2.exit_code == 0
+    f2 = operator.write_eprom.call_args.kwargs["operation_flags"]
+    assert f2 & FLAG_SKIP_BLANK_CHECK
+    assert f2 & FLAG_SKIP_ERASE
+
+    # plain `write`: neither skipped (erase runs, blank check runs).
+    operator.write_eprom.reset_mock()
+    app3 = make_app_context(eprom_operator=operator)
+    r3 = runner.invoke(cli, ["write", "W27C512", "in.bin"], obj=app3)
+    assert r3.exit_code == 0
+    f3 = operator.write_eprom.call_args.kwargs["operation_flags"]
+    assert not (f3 & FLAG_SKIP_BLANK_CHECK)
+    assert not (f3 & FLAG_SKIP_ERASE)
 
 
 def test_verify_happy_path(runner: CliRunner) -> None:
@@ -787,23 +838,27 @@ def test_dev_fault_inject_fail(runner: CliRunner) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_info_vpp_exceeds_max_shows_status(runner: CliRunner, caplog) -> None:
-    """`firestarter info M2716` shows "Support status" and "exceeds" in log output.
+def test_info_non_supported_shows_status(runner: CliRunner, caplog) -> None:
+    """`firestarter info AT28C04` shows "Support status" and "adapter" in log output.
 
     DB-04 SC#1: non-supported chips must render a status-specific line in info.
-    M2716 is vpp-exceeds-max (VPP 25V exceeds programmer max 22V). Exit must be
-    0 — info displays, never refuses. Log captured via caplog (WARNING level).
+    AT28C04 is adapter-required (24-pin 5V EEPROM). Exit must be 0 — info displays,
+    never refuses. Log captured via caplog (WARNING level).
+
+    Re-anchored from M2716 in Phase 79: M2716 graduated to 'supported' (NMOS-02),
+    so the 'vpp-exceeds-max' category is empty — AT28C04 is the still-non-supported
+    exemplar for the info status-line contract.
     """
     import logging
 
     db = EpromDatabase(skip_local_override=True)
     app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
     with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
-        result = runner.invoke(cli, ["info", "M2716"], obj=app)
+        result = runner.invoke(cli, ["info", "AT28C04"], obj=app)
     assert result.exit_code == 0
     log_text = " ".join(r.getMessage() for r in caplog.records)
     assert "Support status" in log_text
-    assert "exceeds" in log_text.lower()
+    assert "adapter" in log_text.lower()
 
 
 def test_info_adapter_required_shows_status(runner: CliRunner, caplog) -> None:
@@ -853,17 +908,21 @@ def test_info_protocol_not_impl_shows_status(runner: CliRunner, caplog) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_read_vpp_exceeds_max_status_refusal(runner: CliRunner) -> None:
-    """`firestarter read M2716 out.bin` exits 1 with vpp-exceeds-max reason verbatim.
+def test_read_non_supported_status_refusal(runner: CliRunner) -> None:
+    """`firestarter read AT28C04 out.bin` exits 1 with the status reason verbatim.
 
-    DB-04 SC#2/#4 vpp-exceeds-max: reason string is rendered directly (no
-    "Chip not usable:" prefix). The guard fires in resolve_chip before any
-    serial byte. M2716 VPP=25V exceeds programmer max (22V).
+    DB-04 SC#2/#4: the reason string is rendered directly (no "Chip not usable:"
+    prefix). The guard fires in resolve_chip before any serial byte. AT28C04 is
+    adapter-required.
+
+    Re-anchored from M2716 in Phase 79: M2716 graduated to 'supported' (NMOS-02),
+    so the 'vpp-exceeds-max' category is empty — AT28C04 is the still-non-supported
+    exemplar for the verbatim-reason refusal contract.
     """
     app = make_app_context()
-    result = runner.invoke(cli, ["read", "M2716", "out.bin"], obj=app)
+    result = runner.invoke(cli, ["read", "AT28C04", "out.bin"], obj=app)
     assert result.exit_code == 1
-    assert "exceeds" in result.output.lower()
+    assert "adapter" in result.output.lower()
     assert "Chip not usable:" not in result.output
     assert "Traceback (most recent call last)" not in result.output
 

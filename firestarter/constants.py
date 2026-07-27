@@ -39,6 +39,17 @@ MAX_DATA_CHUNK = BUFFER_SIZE - 2  # 510
 # per CLAUDE.md constant-parity rule (FRAME-05 / D-06).
 CMD_FRAME_MAX = 512
 
+# IN-02 (Phase 98-03/98-05): <=256K (262144 byte) size boundary for 0x08
+# (EPROM_QUICK) 32-pin parts where pin 31 (A18 on DIP32_STD) is structurally
+# unused as an address line and is safe to repurpose as DIP32_27C020's
+# PGM/RW strobe. Chips above this boundary (512K AM27C040, 1M AM27C080)
+# legitimately use pin 31 = A18 and MUST stay on DIP32_STD (D-04 alias guard).
+# tools/build_db.py imports this constant (single host-side source of truth)
+# rather than redefining it. Firmware parity: firestarter.h #define
+# MAX_27C020_SIZE 262144 — a divergence is a hardware-damage A18 risk;
+# see tests/test_revision_constants_parity.py.
+MAX_27C020_SIZE = 262144
+
 
 # Wire-protocol command codes — Firmware sync: firestarter.h
 # cmd field values sent in JSON commands to the Arduino firmware.
@@ -93,6 +104,11 @@ FLAG_VERBOSE = 0x80
 # Used by consistency_check_eprom() to emit knob values in per-read JSON commands.
 JSON_KEY_READ_SETTLING_DELAY = "read-settling-delay"
 JSON_KEY_READ_STROBE_US = "read-strobe-us"
+# Per-chip page size wire field (PGSZ-03 / CR-01) — Firmware sync: json_parser.c (key_page_size)
+# Emitted by eprom_operations.py only when the DB supplies a datasheet-sourced page_size
+# (emit-when-present, mirrors read-strobe-us pattern). When absent, firmware falls back
+# to flash4_page_size(mem_size) heuristic. 0 = use firmware default.
+JSON_KEY_PAGE_SIZE = "page-size"
 
 # RURP Control Register Bits — mirror of firestarter/include/rurp_pinout.h
 # Documentary only — Python does not write the control register directly

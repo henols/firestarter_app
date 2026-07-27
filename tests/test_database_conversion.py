@@ -4,6 +4,7 @@ pin translation across representative chip families (D-14.1).
 
 import pytest
 
+from firestarter.constants import FLAG_CAN_ERASE
 from firestarter.database import EpromDatabase
 
 
@@ -74,6 +75,51 @@ def test_convert_bus_config_has_pin_mappings(db: EpromDatabase) -> None:
     # actual key set varies per pinout — assert non-empty.
     assert isinstance(bus, dict)
     assert len(bus) > 0
+
+
+def test_convert_w27c512_flag_can_erase(db: EpromDatabase) -> None:
+    """W27C512 (0x07 EE-EPROM, electrical.type=EEPROM) carries FLAG_CAN_ERASE on
+    the wire — locks the canonical electrical-type derivation (ERASE-01 / D-01/D-02)."""
+    full = db.get_eprom("W27C512")
+    assert full is not None
+    out = db.convert_to_programmer(full)
+    assert out["flags"] & FLAG_CAN_ERASE
+
+
+def test_convert_uv_eprom_no_flag_can_erase(db: EpromDatabase) -> None:
+    """M27C512 is a genuine UV-EPROM — negative control: FLAG_CAN_ERASE must be
+    clear so the erase flag cannot bleed to a non-erasable family (T-77-SCOPE)."""
+    full = db.get_eprom("M27C512")
+    assert full is not None
+    out = db.convert_to_programmer(full)
+    assert out["flags"] & FLAG_CAN_ERASE == 0
+
+
+def test_convert_at28c256_flash_eeprom_flag_can_erase(db: EpromDatabase) -> None:
+    """AT28C256 (Flash/EEPROM, routed to 0x0D) carries FLAG_CAN_ERASE — the flag is
+    firmware-inert on the 0x0D configure_eeprom28c path (D-03), so setting it is safe."""
+    full = db.get_eprom("AT28C256")
+    assert full is not None
+    out = db.convert_to_programmer(full)
+    assert out["flags"] & FLAG_CAN_ERASE
+
+
+def test_convert_w29c040_no_flag_can_erase(db: EpromDatabase) -> None:
+    """W29C040 (Flash/EEPROM, algorithm 0x05) must NOT carry FLAG_CAN_ERASE.
+
+    FIX-01a / T-93-CANERASE (Phase 94 Plan 01): flash4 (0x05) auto-erases per
+    page during the page-write; no separate 12V bulk erase is needed or safe.
+    The old pinning test (D-05 / Phase 82) asserted the hazardous flag=0x02 —
+    that assertion was wrong; this test replaces it with the correct invariant.
+    """
+    full = db.get_eprom("W29C040")
+    assert full is not None
+    out = db.convert_to_programmer(full)
+    assert out["flags"] & FLAG_CAN_ERASE == 0, (
+        f"FIX-01a: W29C040 (algorithm 0x05) wire flags {out['flags']:#04x} must NOT "
+        f"carry FLAG_CAN_ERASE ({FLAG_CAN_ERASE:#04x}); flash4 auto-erases per page "
+        f"(T-93-CANERASE / SAFE-01 Item 2)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -151,3 +197,39 @@ def test_search_chip_id_returns_list(db: EpromDatabase) -> None:
             chip_id_int = chip_id_val
         matches = db.search_chip_id(chip_id_int)
         assert isinstance(matches, list)
+
+
+# ---------------------------------------------------------------------------
+# Phase 84 — D-40 label-only CAN_ERASE pinning assertions
+# Proves that the FM1608 SRAM→FRAM relabel (fm-fram-full) and the SST39SF040
+# sst-keep decision do NOT change FLAG_CAN_ERASE.  These tests are the D-40
+# label-only-for-CAN_ERASE proof and should remain green through any subsequent
+# build_db.py regeneration.
+# ---------------------------------------------------------------------------
+
+
+def test_sst39sf040_flag_can_erase_unchanged(db: EpromDatabase) -> None:
+    """SST39SF040 (Flash/EEPROM, algo 0x06) carries FLAG_CAN_ERASE — the Phase-77/82
+    auto-erase path must not be broken.  sst-keep decision: no relabel, this test
+    confirms the flag is ON and remains ON (D-40 / RULE_PHASE84_RELABEL guard)."""
+    full = db.get_eprom("SST39SF040")
+    assert full is not None
+    out = db.convert_to_programmer(full)
+    assert out["flags"] & FLAG_CAN_ERASE, (
+        "SST39SF040 must carry FLAG_CAN_ERASE (auto-erase path); "
+        "electrical.type must stay Flash/EEPROM (sst-keep D-40 decision)"
+    )
+
+
+def test_fm1608_flag_can_erase_off(db: EpromDatabase) -> None:
+    """FM1608 (FRAM, algo 0x28/0x29) must NOT carry FLAG_CAN_ERASE — FRAM is not
+    electrically erasable in the same sense as EEPROM/Flash.  The fm-fram-full
+    relabel (SRAM→FRAM) must not accidentally set this flag (D-40 label-only proof).
+    CAN_ERASE is gated on electrical-type ∈ {EEPROM, Flash/EEPROM}; FRAM ∉ that set."""
+    full = db.get_eprom("FM1608")
+    assert full is not None
+    out = db.convert_to_programmer(full)
+    assert out["flags"] & FLAG_CAN_ERASE == 0, (
+        "FM1608 FRAM must NOT carry FLAG_CAN_ERASE; "
+        "FRAM ∉ {EEPROM, Flash/EEPROM} — relabel must be label-only (D-40)"
+    )

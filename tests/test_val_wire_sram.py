@@ -79,16 +79,16 @@ def test_sram_wire_dict_algorithm_in_sram_protocols(make_comm, fake_serial) -> N
 
 
 def test_sram_wire_dict_dispatches_to_configure_sram(make_comm, fake_serial) -> None:
-    """dispatch(algorithm, type) returns 'configure_sram' for the SRAM rep chip."""
+    """dispatch(algorithm, 0) returns 'configure_sram' for the SRAM rep chip; wire carries no `type` key (HOST-01)."""
     db = EpromDatabase()
     chip = db.get_eprom(_REP_CHIP)
     assert chip is not None, f"rep_chip '{_REP_CHIP}' not found in EpromDatabase"
     wire = db.convert_to_programmer(chip)
+    assert "type" not in wire
     algo = wire.get("algorithm", 0)
-    mem_type = wire.get("type", 0)
-    handler = dispatch(algo, mem_type)
+    handler = dispatch(algo, 0)
     assert handler == _EXPECTED_HANDLER, (
-        f"dispatch({algo:#04x}, {mem_type}) -> '{handler}', "
+        f"dispatch({algo:#04x}, 0) -> '{handler}', "
         f"expected '{_EXPECTED_HANDLER}' for '{_REP_CHIP}'"
     )
 
@@ -107,12 +107,12 @@ def test_sram_wire_dict_never_dispatches_to_configure_eprom(
     chip = db.get_eprom(_REP_CHIP)
     assert chip is not None, f"rep_chip '{_REP_CHIP}' not found in EpromDatabase"
     wire = db.convert_to_programmer(chip)
+    assert "type" not in wire
     algo = wire.get("algorithm", 0)
-    mem_type = wire.get("type", 0)
-    handler = dispatch(algo, mem_type)
+    handler = dispatch(algo, 0)
     assert handler != "configure_eprom", (
         f"BLOCKER-2 SAFETY VIOLATION: SRAM rep chip '{_REP_CHIP}' "
-        f"(algo={algo:#04x}, type={mem_type}) dispatches to configure_eprom — "
+        f"(algo={algo:#04x}) dispatches to configure_eprom — "
         f"12V VPP on a 5V SRAM part causes electrical destruction"
     )
 

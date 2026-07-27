@@ -1,10 +1,10 @@
 """
-Tier-2 host wire round-trip tests for the flash3 family (HARN-01 / D-07).
+Tier-2 host wire round-trip tests for the nor_unlock family (HARN-01 / D-07).
 
-Validates — WITHOUT a serial port — that the host wire dict for the flash3
+Validates — WITHOUT a serial port — that the host wire dict for the nor_unlock
 family's representative chip (sourced from tools/validation_matrix_spec.json)
 carries algorithm == 6 (0x06 FLASH_AMD_ALT) and dispatches to
-``configure_flash3`` through the production dispatch() logic.
+``configure_flash_nor_unlock`` through the production dispatch() logic.
 
 Design (D-10 Don't-Hand-Roll):
   - Representative chip name is read from validation_matrix_spec.json.
@@ -33,10 +33,10 @@ from check_dispatch import dispatch  # noqa: E402
 _SPEC_PATH = Path(__file__).parent.parent / "tools" / "validation_matrix_spec.json"
 _SPEC = json.loads(_SPEC_PATH.read_text(encoding="utf-8"))
 
-_FLASH3_FAMILY = next(f for f in _SPEC["families"] if f["id"] == "flash3")
-_REP_CHIP = _FLASH3_FAMILY["rep_chip"]
-_EXPECTED_PROTOCOLS = set(_FLASH3_FAMILY["protocols"])  # {6}
-_EXPECTED_HANDLER = _FLASH3_FAMILY["handler"]  # "configure_flash3"
+_NOR_UNLOCK_FAMILY = next(f for f in _SPEC["families"] if f["id"] == "nor_unlock")
+_REP_CHIP = _NOR_UNLOCK_FAMILY["rep_chip"]
+_EXPECTED_PROTOCOLS = set(_NOR_UNLOCK_FAMILY["protocols"])  # {6}
+_EXPECTED_HANDLER = _NOR_UNLOCK_FAMILY["handler"]  # "configure_flash_nor_unlock"
 
 
 # ---------------------------------------------------------------------------
@@ -44,13 +44,13 @@ _EXPECTED_HANDLER = _FLASH3_FAMILY["handler"]  # "configure_flash3"
 # ---------------------------------------------------------------------------
 
 
-def test_flash3_rep_chip_sourced_from_spec() -> None:
+def test_nor_unlock_rep_chip_sourced_from_spec() -> None:
     """Representative chip name comes from validation_matrix_spec.json."""
     assert _REP_CHIP, "rep_chip must be non-empty in the spec"
     assert isinstance(_REP_CHIP, str)
 
 
-def test_flash3_wire_dict_has_algorithm_field(make_comm, fake_serial) -> None:
+def test_nor_unlock_wire_dict_has_algorithm_field(make_comm, fake_serial) -> None:
     """Wire dict built via EpromDatabase.convert_to_programmer() carries algorithm key."""
     db = EpromDatabase()
     chip = db.get_eprom(_REP_CHIP)
@@ -59,31 +59,31 @@ def test_flash3_wire_dict_has_algorithm_field(make_comm, fake_serial) -> None:
     assert "algorithm" in wire, "wire dict must have 'algorithm' key"
 
 
-def test_flash3_wire_dict_algorithm_is_0x06(make_comm, fake_serial) -> None:
-    """Wire dict algorithm == 6 (0x06 FLASH_AMD_ALT) for the flash3 rep chip."""
+def test_nor_unlock_wire_dict_algorithm_is_0x06(make_comm, fake_serial) -> None:
+    """Wire dict algorithm == 6 (0x06 FLASH_AMD_ALT) for the nor_unlock rep chip."""
     db = EpromDatabase()
     chip = db.get_eprom(_REP_CHIP)
     assert chip is not None, f"rep_chip '{_REP_CHIP}' not found in EpromDatabase"
     wire = db.convert_to_programmer(chip)
     algo = wire.get("algorithm", 0)
     assert algo in _EXPECTED_PROTOCOLS, (
-        f"wire algorithm {algo} for '{_REP_CHIP}' not in expected flash3 protocols "
+        f"wire algorithm {algo} for '{_REP_CHIP}' not in expected nor_unlock protocols "
         f"{_EXPECTED_PROTOCOLS}"
     )
 
 
-def test_flash3_wire_dict_dispatches_to_configure_flash3(
+def test_nor_unlock_wire_dict_dispatches_to_configure_flash_nor_unlock(
     make_comm, fake_serial
 ) -> None:
-    """dispatch(algorithm, type) returns 'configure_flash3' for the flash3 rep chip."""
+    """dispatch(algorithm, 0) returns 'configure_flash_nor_unlock' for the nor_unlock rep chip; wire carries no `type` key (HOST-01)."""
     db = EpromDatabase()
     chip = db.get_eprom(_REP_CHIP)
     assert chip is not None, f"rep_chip '{_REP_CHIP}' not found in EpromDatabase"
     wire = db.convert_to_programmer(chip)
+    assert "type" not in wire
     algo = wire.get("algorithm", 0)
-    mem_type = wire.get("type", 0)
-    handler = dispatch(algo, mem_type)
+    handler = dispatch(algo, 0)
     assert handler == _EXPECTED_HANDLER, (
-        f"dispatch({algo:#04x}, {mem_type}) -> '{handler}', "
+        f"dispatch({algo:#04x}, 0) -> '{handler}', "
         f"expected '{_EXPECTED_HANDLER}' for '{_REP_CHIP}'"
     )

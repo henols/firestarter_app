@@ -28,12 +28,31 @@ from typing import Any, Callable, Dict, List, Literal, Optional  # noqa: UP035
 
 import click
 import click.shell_completion
+from rich.console import Console
+from rich.prompt import Confirm
 
 from firestarter import __version__ as version
 from firestarter.chip_resolver import resolve_chip
-from firestarter.config import ConfigManager
+from firestarter.chip_test import (
+    OP_ID,
+    VERDICT_BAD,
+    VERDICT_MARGINAL,
+    VERDICT_NA,
+    VERDICT_OK,
+    VERDICT_SKIPPED,
+    count_applicable,
+    derive_plan,
+    run_plan,
+)
+from firestarter.config import ConfigManager, get_config_dir
 from firestarter.constants import FLAG_CHIP_ENABLE, FLAG_OUTPUT_ENABLE
 from firestarter.database import EpromDatabase
+from firestarter.diagnostic_report import (
+    AutoCapture,
+    DiagnosticReport,
+    TransportHealth,
+    build_db_diff,
+)
 from firestarter.eprom_info import EpromConsolePresenter, print_eprom_list_table
 from firestarter.eprom_operations import EpromOperator, build_flags
 from firestarter.exceptions import (
@@ -159,8 +178,15 @@ def build_arg_flags(args: object) -> int:
     force = getattr(args, "force", False)
     verbose = getattr(args, "verbose", False)
     vpe_as_vpp = getattr(args, "vpe_as_vpp", False)
+    # Phase 92 decouple: skip-erase is its own explicit flag, NOT implied by
+    # `not blank_check`. See _build_op_flags for the rationale (write -b must
+    # still erase an erase-capable chip).
     flags = build_flags(
-        blank_check, force, vpe_as_vpp, verbose, skip_erase=not blank_check
+        blank_check,
+        force,
+        vpe_as_vpp,
+        verbose,
+        skip_erase=getattr(args, "skip_erase", False),
     )
 
     if hasattr(args, "input_enable"):
@@ -219,6 +245,7 @@ def _build_op_flags(
     force: bool = False,
     verbose: bool = False,
     vpe_as_vpp: bool = False,
+    skip_erase: bool = False,
     input_enable: Optional[bool] = None,
     chip_disable: Optional[bool] = None,
 ) -> int:
@@ -229,16 +256,23 @@ def _build_op_flags(
     rules build_arg_flags uses (post-41-01 truthiness semantics):
 
         - blank_check / force / vpe_as_vpp / verbose -> build_flags(...)
+        - skip_erase -> FLAG_SKIP_ERASE (explicit; see decouple note below)
         - input_enable presence (any value, even False) -> apply OE mask rule
         - chip_disable presence (any value, even False) -> apply CE mask rule
 
     The OE/CE flags use None to mean "this command does not take this flag"
     so they behave like the main.py `hasattr(args, "input_enable")` gate:
     only `dev reg` and `dev addr` opt into them.
+
+    Phase 92 decouple (was `skip_erase=not blank_check`): `-b`/`--no-blank-check`
+    no longer implies skip-erase. Skipping the blank check must NOT skip the
+    erase that electrically-erasable parts (FLAG_CAN_ERASE: flash3/flash4/EEPROM
+    /EPROM-EEPROM) require — `write -b` on a non-blank such chip used to silently
+    skip the erase, leaving un-erasable 0->1 bits while the firmware's DQ7-only
+    poll reported "successful" (the Phase-90/91 "12V-VPP regression" false alarm).
+    `skip_erase` is now an explicit opt-in (write `--skip-erase`), default False.
     """
-    flags = build_flags(
-        blank_check, force, vpe_as_vpp, verbose, skip_erase=not blank_check
-    )
+    flags = build_flags(blank_check, force, vpe_as_vpp, verbose, skip_erase=skip_erase)
     if input_enable is not None:
         flags |= 0 if input_enable else FLAG_OUTPUT_ENABLE
     if chip_disable is not None:
@@ -436,7 +470,16 @@ def read(
     is_flag=True,
     flag_value=False,
     default=True,
-    help="Do not perform blank check before write (and skip erase).",
+    help="Skip the blank check before write (erase still runs if the chip supports it).",
+)
+@click.option(
+    "--skip-erase",
+    "skip_erase",
+    is_flag=True,
+    default=False,
+    help="Also skip the pre-write erase (for already-blank or non-erasable/pre-erased parts). "
+    "WARNING: skipping erase on a non-blank electrically-erasable chip leaves un-erased bits "
+    "that cannot be reprogrammed.",
 )
 @click.option(
     "-f",
@@ -453,6 +496,7 @@ def write(
     eprom: str,
     input_file: str,
     blank_check: bool,
+    skip_erase: bool,
     force: bool,
     address: Optional[str],
     vpe_as_vpp: bool,
@@ -464,6 +508,11 @@ def write(
     flips ``blank_check`` to False (mirrors argparse ``store_false default=True``).
     The inverse ``--blank-check`` polarity lives on the ``erase`` command —
     both polarities coexist verbatim per the rationale lock.
+
+    Phase 92 decouple: ``-b`` now skips ONLY the blank check. The pre-write erase
+    still runs for electrically-erasable chips (FLAG_CAN_ERASE) so ``write -b`` on
+    a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip the erase
+    (previously implied by ``-b``) for already-blank or non-erasable parts.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.write_eprom(
@@ -472,7 +521,10 @@ def write(
         input_file,
         address_str=address,
         operation_flags=_build_op_flags(
-            blank_check=blank_check, force=force, vpe_as_vpp=vpe_as_vpp
+            blank_check=blank_check,
+            force=force,
+            vpe_as_vpp=vpe_as_vpp,
+            skip_erase=skip_erase,
         ),
     )
     sys.exit(0 if ok else 1)
@@ -1059,7 +1111,7 @@ def dev_addr(
     "output_dir",
     type=str,
     default=None,
-    help="Output dir for per-run binaries (default consistency-check-<chip>-<board>-<TS>/).",  # noqa: E501
+    help="Output dir for per-run binaries (default firestarter-runs/consistency-check-<chip>-<board>-<TS>/).",  # noqa: E501
 )
 @click.option(
     "--keep-files/--no-keep-files",
@@ -1150,7 +1202,7 @@ def dev_consistency_check(
     "output_dir",
     type=str,
     default=None,
-    help="Output dir for per-cycle binaries (default write-cycle-<chip>-<board>-<TS>/).",
+    help="Output dir for per-cycle binaries (default firestarter-runs/write-cycle-<chip>-<board>-<TS>/).",  # noqa: E501
 )
 @click.option(
     "-f",
@@ -1591,3 +1643,293 @@ def dev_validate_family(
 
     _write_artifact(hw_cells, output_dir)
     sys.exit(overall_verdict)
+
+
+# ---------------------------------------------------------------------------
+# `dev test` -- community chip-validation sweep (Phase 112, D-01..D-05)
+# ---------------------------------------------------------------------------
+
+# Per-verdict -> exit-code mapping (D-01): OK/NA/SKIPPED are exit-clean;
+# `marginal` is an inconclusive result (exit 2); BAD beats marginal via
+# `max` over the whole result set, mirroring dev_validate_family's own
+# `if verdict_int > overall_verdict` pattern (cli_handlers.py:1622-1623).
+_VERDICT_EXIT_CODES = {
+    VERDICT_OK: 0,
+    VERDICT_NA: 0,
+    VERDICT_SKIPPED: 0,
+    VERDICT_MARGINAL: 2,
+    VERDICT_BAD: 1,
+}
+
+
+def _verdict_code(verdict: str) -> int:
+    """Map a single StepResult verdict to its 0/1/2 exit-code contribution."""
+    return _VERDICT_EXIT_CODES.get(verdict, 0)
+
+
+def _sanitize_chip_token(chip: str) -> str:
+    """Filesystem-safe token for the dev-test-<chip>.{json,md} artifact names.
+
+    Replaces path separators and other filesystem-unsafe characters with `_`
+    so an arbitrary chip name (e.g. containing `/`, spaces, or parens like
+    `DS1220(RW)`) never escapes the output directory or breaks on a
+    case-sensitive/insensitive filesystem boundary. Deterministic: the same
+    chip name always sanitizes to the same token.
+    """
+    safe_chars = []
+    for ch in chip:
+        if ch.isalnum() or ch in ("-", "_", "."):
+            safe_chars.append(ch)
+        else:
+            safe_chars.append("_")
+    return "".join(safe_chars)
+
+
+def _chip_id_fields(
+    app: "AppContext", chip: str, results: list
+) -> tuple[Optional[int], Optional[int], Optional[str]]:
+    """Derive (chip_id_expected, chip_id_actual, mismatch_reason) for AutoCapture.
+
+    `chip_id_expected` is read directly off the DB entry (host-side, never
+    from firmware). `chip_id_actual`/`chip_id_mismatch_reason` are recovered
+    from the id step's `StepResult.reason` text (the ONLY place
+    `chip_test._dispatch_id` records the detected id, RPT-02) when a mismatch
+    was reported; on a clean/NA/SKIPPED id step there is no actual-id
+    disagreement to surface, so both stay `None`.
+    """
+    full = app.db.get_eprom(chip) or {}
+    prog = app.db.convert_to_programmer(full) if full else {}
+    chip_id_expected = prog.get("chip-id") or None
+
+    chip_id_actual: Optional[int] = None
+    mismatch_reason: Optional[str] = None
+    for r in results:
+        if r.op == OP_ID and r.reason and "mismatch" in r.reason.lower():
+            mismatch_reason = r.reason
+            # reason text: "chip-ID mismatch: expected 0x.., detected 0x.."
+            try:
+                detected_hex = r.reason.rsplit("0x", 1)[-1]
+                chip_id_actual = int(detected_hex, 16)
+            except (ValueError, IndexError):
+                chip_id_actual = None
+            break
+    return chip_id_expected, chip_id_actual, mismatch_reason
+
+
+def _is_interactive() -> bool:
+    """TTY check factored into its own function so tests can monkeypatch it
+    directly (D-02) -- `click.testing.CliRunner.invoke` replaces `sys.stdin`
+    with its own stream for the duration of the call, so a test-time
+    `patch("sys.stdin.isatty", ...)` applied before `invoke()` does not
+    survive; patching `firestarter.cli_handlers._is_interactive` does.
+    """
+    return sys.stdin.isatty()
+
+
+def _make_sampler(app: "AppContext", report: DiagnosticReport) -> Any:
+    """Build the before/after sampler thunk closing over `hardware_manager`.
+
+    Only constructed for a `--destructive` run (D-04). Reuses the existing
+    `sample_vpp_mv`/`sample_vpe_mv` monitor path (COMMAND_READ_VPP/VPE,
+    energize+measure only -- SAFE-02) -- no VPP-set call is made here or
+    anywhere in this module. `chip_test.run_plan` calls this as an opaque
+    `sampler(phase)` callable and never imports `hardware.py` itself (D-04
+    decoupling, chip_test.py:542-553).
+    """
+
+    def _sampler(phase: str) -> None:
+        vpp = app.hardware_manager.sample_vpp_mv()
+        vpe = app.hardware_manager.sample_vpe_mv()
+        if phase == "before":
+            report.vpp_before_mv = vpp
+            report.vpe_before_mv = vpe
+        elif phase == "after":
+            report.vpp_after_mv = vpp
+            report.vpe_after_mv = vpe
+
+    return _sampler
+
+
+@dev.command(name="test")
+@click.argument("chip", shell_complete=_complete_eprom)
+@click.option(
+    "--destructive",
+    is_flag=True,
+    default=False,
+    help=(
+        "Run the full write/erase/verify sweep (sacrifices the chip). "
+        "CLI-only flag -- never read from config or environment (SAFE-01)."
+    ),
+)
+@click.option(
+    "--output-dir",
+    "output_dir",
+    type=str,
+    default=None,
+    help=(
+        "Write dev-test-<chip>.json and dev-test-<chip>.md into this "
+        "directory, overriding the default location. Default: "
+        "<config dir>/reports (honors FIRESTARTER_CONFIG_DIR; "
+        "e.g. ~/.firestarter/reports). The report is always written."
+    ),
+)
+@click.option(
+    "-y",
+    "--yes",
+    "assume_yes",
+    is_flag=True,
+    default=False,
+    help="Bypass the --destructive confirm prompt on a TTY.",
+)
+@click.option(
+    "--submit",
+    "submit",
+    is_flag=True,
+    default=False,
+    help=(
+        "After the report is rendered and saved, file it to the "
+        "maintainer's GitHub tracker (explicit + interactive-only; "
+        "never on a bare run)."
+    ),
+)
+@click.pass_obj
+@map_typed_errors
+def dev_test(
+    app: "AppContext",
+    chip: str,
+    destructive: bool,
+    output_dir: Optional[str],
+    assume_yes: bool,
+    submit: bool,
+) -> None:
+    """Run the community chip-validation sweep for CHIP (SWEEP-01..05, RPT-01..05).
+
+    Without --destructive: id + read + blank-check only (chip stays
+    pristine). With --destructive: adds write/erase/verify (sacrifices the
+    chip) -- gated behind a TTY confirm unless -y/--yes is given.
+
+    Issues ZERO interactive prompts about tester-supplied identity (Phase
+    112 Plan 04 reversal, operator-approved per 112-UAT.md): shield
+    revision, chip origin, and pot-adjustment are no longer asked -- the
+    report auto-captures what the firmware/DB can supply and is honest
+    ("not measured"/None) about what it cannot.
+
+    Prints a rendered report to stdout on every run. With --output-dir,
+    additionally writes dev-test-<chip>.json and dev-test-<chip>.md.
+
+    With --submit (SUB-01/02, Phase 113), files the already-rendered,
+    already-persisted report to the maintainer's GitHub tracker via a lazy
+    `submit_report` call -- the sweep is never re-run. Submission requires
+    the explicit flag; a bare run never submits.
+
+    Exit code (D-01): 0 if every step is OK/NA/SKIPPED, 2 if any step is
+    marginal (and none BAD), 1 if any step is BAD (including a chip-ID
+    mismatch) -- computed as max over per-step exit codes.
+    """
+    interactive = _is_interactive()
+
+    # SAFE-03: the ONLY interactive input left in this handler is the
+    # --destructive safety confirm -- it is a safety gate, not tester-input
+    # collection, and MUST stay. On a TTY (and not -y/--yes), require an
+    # explicit "yes" before sacrificing the chip. Off-TTY, --destructive
+    # itself is consent (no confirm possible without a TTY, D-02).
+    if interactive and destructive and not assume_yes:
+        proceed = Confirm.ask(
+            "--destructive will sacrifice the chip. Continue?", default=False
+        )
+        if not proceed:
+            click.echo("Aborted -- chip left untouched.")
+            sys.exit(0)
+
+    # SAFE-04: hard-fail BEFORE any hardware is energized when the chip name
+    # is absent from the DB entirely (case A). Keyed strictly off
+    # `get_eprom` emptiness -- NEVER a `resolve_chip` support-status refusal
+    # -- so an in-DB-but-unsupported chip (case B, e.g. adapter-required)
+    # still runs the full community-validation sweep below.
+    if not app.db.get_eprom(chip):
+        raise ChipNotFoundError(f"{chip}: not found in database")
+
+    plan = derive_plan(chip, app.db, destructive=destructive)
+
+    # fw_board_identity stays None: EpromOperator.comm is a transient
+    # per-operation connection torn down after every operator call (see
+    # 112-02-SUMMARY.md) -- there is no live comm to read programmer_info
+    # off of after run_plan returns without opening a new, extraneous
+    # connection, which would violate the orchestrator-only contract
+    # (SAFE-02). hw_revision IS reachable via a dedicated, orchestrator-safe
+    # energize/query read (Part A, hardware.py) and is populated below.
+    auto_capture = AutoCapture(
+        host_version=version,
+        fw_board_identity=None,
+        hw_revision=app.hardware_manager.read_hardware_revision_value(),
+        chip=chip,
+        protocol=None,
+    )
+    transport = TransportHealth()
+    report = DiagnosticReport(
+        auto_capture=auto_capture,
+        transport=transport,
+        plan=plan,
+    )
+
+    sampler = _make_sampler(app, report) if destructive else None
+    results = run_plan(plan, app.eprom_operator, app.db, sampler=sampler)
+    report.results = results
+    report.banner = count_applicable(plan, results)
+
+    if not destructive:
+        # Phase-111 D-04: standalone non-destructive VPP+VPE read fills the
+        # non-split slots; before/after stay None (-> NOT_MEASURED). Rejected:
+        # sampling around the whole run_plan call (111-CONTEXT.md).
+        report.vpp_mv = app.hardware_manager.sample_vpp_mv()
+        report.vpe_mv = app.hardware_manager.sample_vpe_mv()
+
+    full = app.db.get_eprom(chip)
+    if full:
+        prog = app.db.convert_to_programmer(full)
+        auto_capture.protocol = str(prog.get("algorithm"))
+    (
+        auto_capture.chip_id_expected,
+        auto_capture.chip_id_actual,
+        auto_capture.chip_id_mismatch_reason,
+    ) = _chip_id_fields(app, chip, results)
+
+    report.db_diff = build_db_diff(chip, app.db, results)
+
+    console = Console()
+    report.render(console)
+
+    # The report is ALWAYS persisted. --output-dir overrides the default
+    # location, which is <config dir>/reports (honors FIRESTARTER_CONFIG_DIR;
+    # default ~/.firestarter/reports).
+    out_path = Path(output_dir) if output_dir else Path(get_config_dir()) / "reports"
+    out_path.mkdir(parents=True, exist_ok=True)
+    safe_chip = _sanitize_chip_token(chip)
+
+    json_file = out_path / f"dev-test-{safe_chip}.json"
+    json_file.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+
+    md_lines = [
+        f"# dev test -- {chip}",
+        "",
+        "| Step | Verdict | Reason |",
+        "| ---- | ------- | ------ |",
+    ]
+    for r in results:
+        md_lines.append(f"| {r.op} | {r.verdict} | {r.reason or '-'} |")
+    md_lines.append("")
+    md_lines.append(report.to_json_block())
+    md_file = out_path / f"dev-test-{safe_chip}.md"
+    md_file.write_text("\n".join(md_lines) + "\n", encoding="utf-8")
+
+    console.print(f"[dim]Report written to {json_file}[/dim]")
+
+    if submit:
+        from firestarter import submit as submit_mod
+
+        submit_mod.submit_report(report, chip, json_file, console=console)
+
+    if not results:
+        sys.exit(0)
+    code = max(_verdict_code(r.verdict) for r in results)
+    sys.exit(code)

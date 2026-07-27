@@ -5,13 +5,34 @@ import xml.etree.ElementTree as ET
 
 import requests
 
+from firestarter.constants import MAX_27C020_SIZE
+
 # ==========================================
 # 1. CONFIGURATION
 # ==========================================
-MINIPRO_XML_URL = "https://gitlab.com/DavidGriffith/minipro/-/raw/master/infoic.xml"
+# Pinned to the SHA recorded in tools/DECODE-NOTES.md §0/§3 (the Phase-86 regen
+# provenance of record) so the fetch is deterministic and the baseline re-pin is
+# reproducible. Was /-/raw/master/ — switched to the pinned commit per D-05
+# discretion (DECODE-NOTES.md §3). Short form: a8efaedc.
+MINIPRO_XML_URL = (
+    "https://gitlab.com/DavidGriffith/minipro/-/raw/"
+    "a8efaedc236c1d9718bd28299dfbb99536b010ff/infoic.xml"
+)
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "firestarter", "data")
 OUTPUT_FILE = os.path.join(_DATA_DIR, "chip_database.json")
 PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
+# VAR-05 / D-10: curated non-upstream chip supplement, merged post-decode (see
+# the EXTRA_CHIPS block in main()). Physically-real chips absent from infoic.xml.
+EXTRA_CHIPS_FILE = os.path.join(os.path.dirname(__file__), "extra_chips.json")
+# IN-02 (98-03 host half, 98-05 mirrored into firestarter/constants.py as the
+# single host-side source of truth): named boundary for the DIP32_27C020
+# size-keyed resolve_pinout_key arm — 256K (262144 bytes), the largest 0x08
+# 32-pin part where A18 (bit 18 = mask 0x40000) is structurally unused. Chips
+# above this boundary (512K AM27C040, 1M AM27C080) legitimately use pin 31 =
+# A18 and MUST stay on DIP32_STD (D-04 alias guard). Cross-references the
+# firmware-side constant of the same name/value in
+# firestarter/include/firestarter.h (added by 98-05); see
+# tests/test_revision_constants_parity.py for the cross-repo assertion.
 
 # ==========================================
 # 2. PINOUT LIBRARY (The Missing Physical Layer)
@@ -114,7 +135,28 @@ NMOS_TRUE_VPP_MV: dict[str, int] = {
 }
 # RURP boost regulator theoretical ceiling (build_db.py comment + hw evidence).
 # Chips requiring VPP above this cannot be programmed on any RURP revision.
-RURP_VPP_CEILING_MV = 22000
+RURP_VPP_CEILING_MV = 25000
+
+# PGSZ-01 / CR-01: datasheet-sourced per-chip page size map.
+# Keyed on the canonical part number (first alias in the comma-separated list).
+# Each entry carries a [CITED:] datasheet reference — DO NOT author [ASSUMED] values.
+# Chips absent from this map omit the page_size field → firmware falls back to
+# flash4_page_size(mem_size) heuristic (safe, proven-correct for these chips).
+# Only in-repo datasheet PDFs are authoritative sources.
+_PAGE_SIZE_BY_PART: dict[str, int] = {
+    # [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C040.pdf §6.2
+    #         "Every page contains 256 bytes of data."]
+    "W29C040": 256,
+    # W29C042 shares the same DB entry as W29C040 (same family, same page structure)
+    # but is not individually documented in the in-repo datasheet — omitted per
+    # PGSZ-01 discipline. The shared entry gets W29C040's citation via part-number lookup.
+    # [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C020.pdf §6.2
+    #         "Every page contains 128 bytes of data." + FEATURES "128 bytes per page"]
+    "W29C020": 128,
+    # W29C020C and W29C022 share the same DB entry as W29C020 (same family).
+    # Not individually documented in the in-repo datasheet — omitted per PGSZ-01
+    # discipline. The shared entry gets W29C020's citation via part-number lookup.
+}
 
 # CR-01 Option A (Phase 66 gap-closure): algorithm sentinel for non-supported chips.
 # dispatch(0x00, None) falls into the mem_type fallback chain (protocol==0 path):
@@ -258,7 +300,16 @@ def resolve_pinout_key(
             elif proto_id == 0x0D:
                 key = "DIP32_28C512_EEPROM"  # 5V EEPROM; WE=30, no VPP
             elif proto_id in {0x07, 0x08, 0x10}:
-                key = "DIP32_STD"  # UV-EPROM / Intel-flash; VPP=pin 1
+                if proto_id == 0x08 and mem_size <= MAX_27C020_SIZE:
+                    # D-02/D-04: ≤256K 0x08 chips (27C010/27C020 class) have pin 31 = PGM
+                    # (NOT A18 — A18 = bit 18 = mask 0x40000 is unused at ≤256K).
+                    # 512K AM27C040 (524288) and 1M AM27C080 (1048576) legitimately use
+                    # pin 31 = A18 and MUST stay on DIP32_STD (host-side D-04 alias guard).
+                    key = (
+                        "DIP32_27C020"  # PGM on pin 31 (off address bus); VPP on pin 1
+                    )
+                else:
+                    key = "DIP32_STD"  # UV-EPROM / Intel-flash; VPP=pin 1
             else:
                 key = None
         else:
@@ -270,12 +321,109 @@ def resolve_pinout_key(
     return key
 
 
+def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
+    """Principled chip classifier — the SOLE classification path (Phase 86 VAR-02).
+
+    Replaces the deleted Rule 1 / Rule 2 (WARNING-5) / Rule 3 override stack and
+    the two-pass `_etype` derivation with one function keyed on the fields minipro
+    itself uses to classify a device: `type` (MP_MEMORY=0x01 / MP_SRAM=0x04),
+    `protocol_id` (the algorithm-family / dispatch axis), `pm_idx` (physical-layout
+    cluster, already consumed by resolve_pinout_key), and `flags` (the 0x10
+    electrically-erasable bit). The variant HIGH byte is documented as minipro's
+    T56/T76 `algo_number` (DECODE-NOTES.md §2) and is deliberately NOT a
+    classification input.
+
+    Returns (etype, algorithm, pinout_key) where:
+      - etype is the electrical.type string,
+      - algorithm is the firmware-dispatch protocol_id integer,
+      - pinout_key is the (possibly re-routed) pinout key. Only the type=4 28-pin
+        SRAM/FRAM arm re-routes the pinout (subsuming Rule 3's pinout fix);
+        every other arm returns pinout_key unchanged.
+
+    Arm order (RESEARCH §"Recommended classifier shape"):
+      1. SRAM/FRAM/NVRAM class — type=4 (MP_SRAM) authoritative, or an SRAM-family
+         protocol; algorithm 0x28 (SRAM_STD) when the chip arrived with an
+         EPROM-family proto (0x07/0x08/0x0B), else proto_id. (subsumes Rule 3)
+      2. 5V-EEPROM pinout clusters — DIP24_2816 / DIP28_28C64 / DIP28_28C256, or
+         DIP28_2764 with the electrically-erasable bit set → EEPROM / 0x0D
+         (configure_eeprom28c, no VPP). (subsumes Rule 1 + Rule 2 / WARNING-5)
+      3. EPROM-family proto (0x07/0x08/0x0B) → EEPROM if flags&0x10 else UV-EPROM,
+         algorithm proto_id (keeps 12V VPP; W27C512 etc. land here).
+      4. Flash families (0x05/0x06/0x0D/0x10) → Flash/EEPROM, algorithm proto_id.
+      4b. X88C64 fix — proto 0x34 (XICOR NovRAM/EEPROM) → EEPROM, algorithm
+          proto_id (display-only; the chip stays protocol-not-implemented /
+          non-dispatchable; DECODE-NOTES.md §4).
+      5. default → UV-EPROM, algorithm proto_id.
+
+    [VERIFIED: minipro minipro.h#L70 MP_SRAM=0x04; database.c#L1918 variant>>8 =
+     algo_number @ a8efaedc — see tools/DECODE-NOTES.md §2/§4/§5]
+    """
+    # 1. SRAM / FRAM / NVRAM class (was Rule 3). type=4 (MP_SRAM) is authoritative.
+    if type_int == 4 or proto_id in {0x0E, 0x27, 0x28, 0x29}:
+        if proto_id in {0x07, 0x08, 0x0B}:
+            algorithm = 0x28
+            # Rule 3 pinout re-route for 28-pin SRAM/FRAM that arrived with an
+            # EPROM-family proto (FM1608 8K -> JEDEC SRAM; FM16W08/1808 16K+ ->
+            # DIP28_28C256). 24-pin SRAM (FM1208) already resolves to DIP24_6116
+            # via resolve_pinout_key (pm_idx=0) — leave it.
+            if pinout_key is not None and pinout_key.startswith("DIP28"):
+                if mem_size <= 8192:
+                    pinout_key = "DIP28_JEDEC_SRAM_8K"
+                else:
+                    pinout_key = "DIP28_28C256"
+        else:
+            algorithm = proto_id
+        return "SRAM", algorithm, pinout_key
+
+    # 2. 5V-EEPROM pinout clusters (was Rule 1 + Rule 2 / WARNING-5).
+    #    These pinouts have no programming VPP; route to configure_eeprom28c (0x0D).
+    #    SCOPE (matches the deleted Rule 1 + Rule 2 exactly — do NOT broaden):
+    #      - DIP24_2816 (was Rule 1): force 0x0D for any proto (24-pin 28C family).
+    #      - DIP28_28C64 / DIP28_28C256 / (DIP28_2764 with flags&0x10) (was Rule 2):
+    #        flip ONLY EPROM-family proto (0x07/0x08/0x0B) chips. Genuine 5V FLASH
+    #        on the same DIP28 layout (AT29C256/AT29LV256, proto 0x05) is NOT a 28C
+    #        EEPROM — it must keep its Flash algorithm (handled by arm 4 below). The
+    #        old Rule 2 keyed on proto==0x07, so flash-proto chips were never flipped.
+    if pinout_key == "DIP24_2816":
+        return "EEPROM", 0x0D, pinout_key
+    if proto_id in {0x07, 0x08, 0x0B} and (
+        pinout_key in {"DIP28_28C64", "DIP28_28C256"}
+        or (pinout_key == "DIP28_2764" and (flags & 0x10))
+    ):
+        return "EEPROM", 0x0D, pinout_key
+
+    # 3. EPROM-family proto — flags&0x10 distinguishes CMOS EEPROM from UV-EPROM.
+    if proto_id in {0x07, 0x08, 0x0B}:
+        return ("EEPROM" if (flags & 0x10) else "UV-EPROM"), proto_id, pinout_key
+
+    # 4. Flash families.
+    if proto_id in {0x05, 0x06, 0x0D, 0x10}:
+        return "Flash/EEPROM", proto_id, pinout_key
+
+    # 4b. X88C64 (proto 0x34 XICOR NovRAM/EEPROM) — display-only EEPROM type;
+    #     algorithm stays proto_id; chip remains protocol-not-implemented.
+    if proto_id == 0x34:
+        return "EEPROM", proto_id, pinout_key
+
+    # 5. default.
+    return "UV-EPROM", proto_id, pinout_key
+
+
 def interpret_timing(raw_hex, protocol_id):
     # [VERIFIED: minipro database.c#L866 @ a8efaedc]
     # Raw pulse_delay is microseconds for ALL protocols — no multiplier.
     try:
         val = int(raw_hex, 16)
-    except Exception:
+    except (TypeError, ValueError):
+        # WR-05 (98-03): narrowed from bare `except Exception` so an unparseable
+        # pulse_delay is visible (not silently masked as a valid 0 us timing) —
+        # an upstream infoic.xml decode fault would otherwise ship wrong timing
+        # to the firmware unnoticed.
+        print(
+            f"WARN: chip with protocol {protocol_id:#04x} has unparseable "
+            f"pulse_delay {raw_hex!r} — defaulting to 0 us",
+            file=sys.stderr,
+        )
         val = 0
 
     if protocol_id in (0x07, 0x08, 0x0B):
@@ -484,163 +632,39 @@ def main():
                     )
                     continue
 
-                # Step 3: Pass 1 — FLAGS-BASED _etype (must run BEFORE algorithm
-                # overrides). WARNING-5 and fm1608 need the pre-override _etype
-                # to detect mistagged chips. Two-pass pattern preserved (RESEARCH
-                # Pitfall 2).
-                # Priority:
-                #   1. XML type=4 → SRAM/RAM family (per minipro/src/database.c).
-                #      FM1608 (FRAM) is tagged type=4 with proto=0x07 — without
-                #      this guard we'd misclassify as UV-EPROM and risk 12V VPP
-                #      on address pins.
-                #   2. SRAM-class proto_id (configure_sram dispatch family).
-                #   3. flags bit 0x10 = electrically erasable → Flash/EEPROM.
-                #   4. Default → UV-EPROM.
-                if type_int == 4:
-                    _etype = "SRAM"
-                elif proto_id in {0x0E, 0x27, 0x28, 0x29}:
-                    _etype = "SRAM"
-                elif flags & 0x10:
-                    _etype = "Flash/EEPROM"
-                else:
-                    _etype = "UV-EPROM"
+                # Step 3: Principled classification (Phase 86 VAR-02).
+                # The single classify() call replaces the deleted Rule 1 / Rule 2
+                # (WARNING-5) / Rule 3 override stack AND the two-pass _etype
+                # derivation. It keys on type/proto/pm_idx/flags (NOT the variant
+                # high byte — DECODE-NOTES.md §2), returning the final
+                # (electrical.type, algorithm) plus a possibly re-routed pinout for
+                # the type=4 28-pin SRAM/FRAM case (subsuming Rule 3's pinout fix).
+                # resolve_pinout_key (variant LOW byte) is UNCHANGED. Per D-06 no
+                # residual post-classify override remains; check_dispatch.py
+                # 0-violations (D-08) is the structural safety backstop.
+                _etype, proto_id, pinout_key = classify(
+                    type_int, proto_id, pm_idx, flags, pinout_key, mem_size
+                )
 
-                # Step 4: Rule 1 — 28C EEPROM algorithm correction.
-                # Any chip resolving to DIP24_2816 is a 24-pin 5V EEPROM (variant_lo=0x10
-                # confirmed 28C family). Force algorithm=0x0D (configure_eeprom28c, 5V
-                # page-write + DQ7 polling, SDP-disable, NO VPP regulator assertion).
-                # This replaces the old safety-skip (D-05) AND fixes the 10 chips
-                # (AM28C16A, CAT28C16A, XL2804A, etc.) that slipped through the old
-                # flags&0x10 predicate (RESEARCH Pitfall 1 + §"Dangerous 24-pin EEPROMs").
-                # [VERIFIED: RESEARCH.md §"Algorithm Override Rules" + §"Dangerous 24-pin EEPROMs"]
-                if pinout_key == "DIP24_2816":
-                    orig_proto = proto_id
-                    proto_id = 0x0D
-                    print(
-                        f"INFO: {mfg_name}/{name} algorithm 0x{orig_proto:02X}->0x0D "
-                        f"(Rule 1: 28C-EEPROM family, variant_lo=0x10; "
-                        f"configure_eeprom28c, no VPP)",
-                        file=sys.stderr,
-                    )
-
-                # Step 5: Rule 2 — WARNING-5 generalised safety net.
-                # A chip that resolves to a 5V EEPROM pinout but carries proto_id=0x07
-                # (EPROM_STD) would route to configure_eprom (12V VPP on pin 1/27) —
-                # hardware damage. Flip to 0x0D. Named Rule 2 per D-05.
+                # Phase 84 D-40 per-chip cosmetic relabel (fm-fram-full decision).
+                # Runs AFTER Pass-2 so the override is applied on top of the
+                # protocol-based _etype derivation.  Keyed on part_number; does NOT
+                # touch proto_id / pinout / vpp / algorithm — label-only correction.
                 #
-                # Three sub-cases require different discriminators:
-                #   DIP28_28C256 (pm_idx=20): always an EEPROM pinout — no UV-EPROM
-                #     can land here via the principled rules. The flags & 0x10 guard is
-                #     omitted because some 28C256-class chips have flags=0xC000 with no
-                #     erasable bit (e.g. CAT28C256). Pinout is the discriminator.
-                #     Exception: type=4 SRAM/NVRAM chips (e.g. DS1230, M48T35) that
-                #     resolve to DIP28_28C256 via pm_idx=0 mem_size>8K must NOT be
-                #     caught by Rule 2 — Rule 3 handles them (proto → 0x28 SRAM_STD).
-                #   DIP28_2764 (pm_idx=21 or pm_idx=22 else): genuine UV-EPROMs DO land
-                #     here (27C64/27C128). Use _etype == "Flash/EEPROM" from Pass 1 to
-                #     identify mistagged 5V EEPROMs that slipped through.
-                #   DIP28_28C64 (pm_idx=18 or pm_idx=19): the entire 28C64/28C17 family
-                #     is 5V EEPROMs with no VPP pin (pin 1 = NC on the 28C64 layout).
-                #     No genuine UV-EPROM uses this pinout cluster, so the guard is
-                #     unconditional (no flags check needed).
-                #     [VERIFIED: exhaustive infoic.xml survey — all pm_idx=18/19 DIP28
-                #      chips are AT28C/BV/LV, AM28C, CAT28C/LV, M28C/LV, X28C families;
-                #      datasheet cross-check confirms no VPP pin on 28C64 layout]
+                # FM1608 (RAMTRON FRAM, algo=0x28/0x29 SRAM_512K_1M):
+                #   SRAM → FRAM. CAN_ERASE is unaffected (FRAM ∉ {EEPROM,
+                #   Flash/EEPROM}). VPP display stays hidden (companion guard in
+                #   ic_layout.py + eprom_info.py: "not in {'SRAM','FRAM'}").
                 #
-                # References: WARNING-5 in .planning/v1.0-MILESTONE-AUDIT.md
-                # and .planning/INTEGRATION-CHECK.md.
-                if (
-                    (
-                        pinout_key == "DIP28_28C256"
-                        and proto_id == 0x07
-                        and type_int != 4  # SRAM-class chips handled by Rule 3
-                    )
-                    or (
-                        pinout_key == "DIP28_2764"
-                        and proto_id == 0x07
-                        and _etype == "Flash/EEPROM"
-                    )
-                    or (pinout_key == "DIP28_28C64" and proto_id == 0x07)
-                ):
-                    print(
-                        f"INFO: {mfg_name}/{name} algorithm override 0x07->0x0D "
-                        f"(Rule 2 WARNING-5: 5V EEPROM on EPROM pinout ({pinout_key}) — "
-                        f"route through configure_eeprom28c)",
-                        file=sys.stderr,
-                    )
-                    proto_id = 0x0D
-
-                # Step 6: Rule 3 — fm1608/SRAM override.
-                # SRAM-tagged chips (type=4) with EPROM-family protocol_id. Upstream
-                # infoic.xml tags Ramtron parallel FRAM (FM1208/1608/16W08/1808/18L08)
-                # with type="4" (SRAM/RAM-family) but protocol_id 0x07/0x0B (EPROM
-                # family). configure_eprom (0x07/0x0B dispatch) engages 12V VPP —
-                # hardware-damage path for 5V FRAM.
-                # Restore correct dispatch by flipping proto_id to 0x28 (SRAM_STD) and
-                # overriding pinout for 28-pin variants. Named Rule 3 per D-05.
-                # Reference: fm1608-db-mismatch in
-                #   .planning/phases/04-hardware-validation-rurp-shield/04-HW-VALIDATION.md
-                if type_int == 4 and proto_id in (0x07, 0x08, 0x0B):
-                    proto_id = 0x28
-                    if pin_count == 28:
-                        # Memory-size discriminator: 8K chips use the 13-address
-                        # DIP28_JEDEC_SRAM_8K layout; 16K+ chips use the 15-address
-                        # DIP28_28C256 layout (same physical layout family, more
-                        # address pins to reach A13/A14). Covers FM1608 (8K) +
-                        # FM16W08 (16K) + FM1808/FM18L08 (32K) all routed correctly.
-                        if mem_size <= 8192:
-                            pinout_key = "DIP28_JEDEC_SRAM_8K"
-                            size_label = "8K"
-                        else:
-                            pinout_key = "DIP28_28C256"
-                            size_label = f"{mem_size // 1024}K"
-                        print(
-                            f"INFO: {mfg_name}/{name} type=4 SRAM override "
-                            f"algorithm 0x{proto_id - 0x21:02X}->0x28 + pinout->{pinout_key} "
-                            f"(Rule 3: SRAM/FRAM {size_label}; configure_sram dispatch)",
-                            file=sys.stderr,
-                        )
-                    # 24-pin SRAM chips (FM1208) route to DIP24_6116 via resolve_pinout_key
-                    # (pm_idx=0). configure_sram doesn't engage VPP so the vpp-pin field
-                    # is not a hazard here.
-
-                # Step 7: Pass 2 — PROTOCOL-AWARE _etype re-derivation.
-                # Re-derive electrical.type after ALL algorithm overrides have run.
-                # The firmware dispatch is the ground truth for ERASE capability:
-                #   - 0x07/0x08/0x0B → configure_eprom (12V VPP)
-                #       flags & 0x10 = True  → "EEPROM"   (electrically erasable)
-                #       flags & 0x10 = False → "UV-EPROM" (UV erase only)
-                #   - 0x0D / 0x05 / 0x06 / 0x10 → Flash/EEPROM family
-                #   - 0x0E/0x27/0x28/0x29 → SRAM
-                # For proto=0x07/0x08/0x0B, the flags bit 0x10 discriminates CMOS
-                # electrically-erasable EEPROMs (W27C512, SST27SF/VF512, W27C257, etc.)
-                # from genuine UV-EPROMs. Both share the configure_eprom dispatch and
-                # 12V VPP, but EEPROMs support electrical erase while UV-EPROMs require
-                # UV light. Without this check, Pass 2 would overwrite the correct
-                # flags-based _etype from Pass 1 with "UV-EPROM" for all 0x07 chips.
-                # [VERIFIED: infoic.xml survey — all DIP28_27512/27256 chips with
-                #  flags & 0x10 set (W27C*, SST27*F*) are CMOS EEPROMs per datasheet;
-                #  all genuine UV-EPROMs on these pinouts have flags & 0x10 = False]
-                # This keeps the in-DB type consistent with ic_layout.py's
-                # protocol-aware Type/Can-be-erased display. Must run AFTER all
-                # overrides (Rules 1/2/3) because those rely on the flags-based
-                # _etype from Pass 1 to detect mistagged chips. Two-pass pattern
-                # preserved per RESEARCH.md Pitfall 2 (PATTERNS §execution order).
-                if proto_id in {0x0E, 0x27, 0x28, 0x29}:
-                    _etype = "SRAM"
-                elif proto_id in {0x07, 0x08, 0x0B}:
-                    # Preserve flags-based EEPROM classification for electrically-
-                    # erasable chips that share the configure_eprom (0x07/0x08/0x0B)
-                    # dispatch and 12V VPP but are NOT UV-erasable. (BUG-A fix)
-                    if flags & 0x10:
-                        _etype = "EEPROM"
-                    else:
-                        _etype = "UV-EPROM"
-                elif proto_id in {0x05, 0x06, 0x0D, 0x10}:
-                    _etype = "Flash/EEPROM"
-                # else: leave _etype at the flags-based value (uncommon path —
-                # any new proto_id added to KNOWN_PROTOCOLS but not classified
-                # above falls back to whatever the flags-based block decided).
+                # SST39SF040: KEEP Flash/EEPROM (sst-keep D-40 STOP — relabeling to
+                #   'Flash' would flip FLAG_CAN_ERASE OFF, breaking Phase-77/82-proven
+                #   auto-erase). Observation recorded in DECODE-AUDIT.md (plan 84-04).
+                _PHASE84_RELABEL = {"FM1608": "FRAM"}
+                part_aliases_set = {a.split("@")[0].strip() for a in name.split(",")}
+                for _relabel_pn, _relabel_etype in _PHASE84_RELABEL.items():
+                    if _relabel_pn in part_aliases_set:
+                        _etype = _relabel_etype
+                        break
 
                 # Site C: DB-03 NMOS VPP correction.
                 # Must run AFTER all fm1608/WARNING-5 overrides (ordering invariant).
@@ -726,6 +750,20 @@ def main():
                         ),
                         "chip_id_check": True if (flags & 0x20) else False,
                         "chip_id_value": ic.get("chip_id"),
+                        # PGSZ-01 / CR-01: datasheet-sourced per-chip page size.
+                        # Looked up by the FIRST alias of the comma-separated part
+                        # name (canonical key). Absent chips omit the field entirely
+                        # so they ride the firmware flash4_page_size() heuristic.
+                        **(
+                            {
+                                "page_size": _PAGE_SIZE_BY_PART[
+                                    name.split(",")[0].split("@")[0].strip()
+                                ]
+                            }
+                            if name.split(",")[0].split("@")[0].strip()
+                            in _PAGE_SIZE_BY_PART
+                            else {}
+                        ),
                     },
                     "pinout": pinout_key,
                 }
@@ -754,10 +792,46 @@ def main():
             if chips:
                 complete_db[mfg_name] = chips
 
+    # ==========================================
+    # VAR-05 / D-10: NON-UPSTREAM CHIP SUPPLEMENT (post-decode merge)
+    # ==========================================
+    # Merge tools/extra_chips.json into complete_db AFTER the infoic.xml decode
+    # loop and BEFORE the JSON write. These are physically-real 24-pin UV-EPROM
+    # oddballs (2516, 2532) that are ABSENT from minipro's infoic.xml entirely —
+    # so they ship first-class in chip_database.json via this curated, provenance-
+    # cited supplement instead of per-operator ~/.firestarter/database.json edits.
+    #
+    # This is NOT a return of the deleted Rule 1/2/3: those patched chips that were
+    # already IN infoic.xml (a decode correction); the supplement adds chips with NO
+    # upstream record at all (a categorically different concern). The supplement
+    # records arrive FULLY-SPECIFIED and are deliberately NOT routed through
+    # classify() / resolve_pinout_key — they have no infoic.xml fields to decode.
+    # Each record carries its own source/datasheet provenance (D-11) and is byte-
+    # faithful here (the merge does not mutate any wire value).
+    supplement_count = 0
+    if os.path.exists(EXTRA_CHIPS_FILE):
+        with open(EXTRA_CHIPS_FILE) as ef:
+            extra_db = json.load(ef)
+        for mfg_name, extra_chips in extra_db.items():
+            if not isinstance(extra_chips, list):
+                continue
+            complete_db.setdefault(mfg_name, []).extend(extra_chips)
+            supplement_count += len(extra_chips)
+        print(
+            f"VAR-05 supplement: merged {supplement_count} non-upstream chip(s) "
+            f"from {EXTRA_CHIPS_FILE} (post-decode)."
+        )
+    else:
+        print(f"VAR-05 supplement: {EXTRA_CHIPS_FILE} not found — skipping merge.")
+
     with open(OUTPUT_FILE, "w") as f:
         json.dump(complete_db, f, indent=2, sort_keys=True)
 
-    print(f"Done! {total_chips} chips processed. Saved to {OUTPUT_FILE}")
+    print(
+        f"Done! {total_chips} upstream chips processed "
+        f"+ {supplement_count} non-upstream supplement chip(s) "
+        f"= {total_chips + supplement_count} total. Saved to {OUTPUT_FILE}"
+    )
 
 
 if __name__ == "__main__":

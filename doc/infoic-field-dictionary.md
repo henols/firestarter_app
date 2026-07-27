@@ -76,8 +76,8 @@ DIP24 `variant_lo`: `0x00` = `DIP24_2716`, `0x01` = `DIP24_2732`.
 
 | protocol_id | IC2_ALG Constant    | Firestarter Label   | Firmware Handler        | Notes                                                      |
 |-------------|---------------------|---------------------|-------------------------|------------------------------------------------------------|
-| `0x05`      | `IC2_ALG_F29EE`     | `FLASH_AMD_STD`     | `configure_flash4`      | AMD/Fujitsu 5V page-write flash                            |
-| `0x06`      | `IC2_ALG_W29F32P`   | `FLASH_AMD_ALT`     | `configure_flash3`      | Winbond/SST AMD-unlock 5V flash                            |
+| `0x05`      | `IC2_ALG_F29EE`     | `FLASH_AMD_STD`     | `configure_flash_5v_page` | AMD/Fujitsu 5V page-write flash                            |
+| `0x06`      | `IC2_ALG_W29F32P`   | `FLASH_AMD_ALT`     | `configure_flash_nor_unlock` | Winbond/SST AMD-unlock 5V flash                            |
 | `0x07`      | `IC2_ALG_ROM28P_1`  | `EPROM_STD`         | `configure_eprom`       | 28-pin UV-EPROM primary; some EEPROMs mistagged here       |
 | `0x08`      | `IC2_ALG_ROM32P`    | `EPROM_QUICK`       | `configure_eprom`       | 32-pin UV-EPROM (27C010/020/040)                           |
 | `0x0B`      | `IC2_ALG_ROM24P_1`  | `EPROM_LEGACY`      | `configure_eprom`       | 24-pin legacy EPROM (2716/2732)                            |

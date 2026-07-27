@@ -200,40 +200,24 @@ class EpromSpecBuilder:
             }
         }
 
-    def get_chip_type_string(
-        self, chip_type_int: int, protocol_id: int | None = None
-    ) -> str:
+    def get_chip_type_string(self, protocol_id: int | None = None) -> str:
         """Return a user-facing chip-type label.
 
-        When protocol_id is supplied, use it to disambiguate the chip family
-        more precisely than the numeric mem_type alone (which collapses
-        UV-EPROM, 5V EEPROM, and Intel-flash into the same value 1). The
-        protocol-based labels are aligned with the algorithm-family names
-        in firestarter/CLAUDE.md so the displayed type matches the firmware
-        dispatch path the chip actually takes.
+        When protocol_id is supplied, use it to look up the protocol-based
+        display label. The protocol-based labels are aligned with the
+        algorithm-family names in firestarter/CLAUDE.md so the displayed
+        type matches the firmware dispatch path the chip actually takes.
+        Falls back to the bare string "Unknown" when the protocol is absent
+        or unrecognized.
         """
         if protocol_id is not None:
-            proto_display = {
-                0x05: "Flash/EEPROM (5V, AMD-std)",
-                0x06: "Flash/EEPROM (5V, AMD-alt sector-erase)",
-                0x07: "UV-EPROM / MTP-Flash (12V VPP)",
-                0x08: "UV-EPROM (12V VPP, quick pulse)",
-                0x0B: "UV-EPROM (legacy 24-pin)",
-                0x0D: "EEPROM (5V parallel, 28C-family)",
-                0x0E: "SRAM (32-pin)",
-                0x10: "Flash (Intel 28F, 12V VPP)",
-                0x27: "SRAM (24-pin)",
-                0x28: "SRAM (28-pin)",
-                0x29: "SRAM/NVRAM (32-pin)",
-                # 0x35 (ITE EC MCU, 0 DB chips) and 0x39 (phantom, 0 DB chips) removed
-                # in Phase 57 (DEC-05); no DB chip uses either protocol. Firmware still
-                # dispatches both → configure_flash4 for forward-compat (memory.cpp:89);
-                # host routes them to not_implemented (excluded from KNOWN_PROTOCOLS).
-            }
-            if protocol_id in proto_display:
-                return proto_display[protocol_id]
-        type_map = {1: "EPROM", 2: "Flash type 2", 3: "Flash type 3", 4: "SRAM"}
-        return type_map.get(chip_type_int, f"Unknown ({chip_type_int})")
+            # 0x35 (ITE EC MCU, 0 DB chips) and 0x39 (phantom, 0 DB chips) removed
+            # in Phase 57 (DEC-05); no DB chip uses either protocol. Firmware still
+            # dispatches both → configure_flash4 for forward-compat (memory.cpp:89);
+            # host routes them to not_implemented (excluded from KNOWN_PROTOCOLS).
+            if protocol_id in self._PROTOCOL_DISPLAY_NAME:
+                return self._PROTOCOL_DISPLAY_NAME[protocol_id]
+        return "Unknown"
 
     def _interpret_flags(self, flags: int) -> list[str]:
         """Interpret the info-flags value and return a list of properties.
@@ -332,15 +316,6 @@ class EpromSpecBuilder:
                 ),
             ),
             (
-                0x11,
-                "Flash Memory",
-                (
-                    "Firmware Hub (FWH) programming protocol",
-                    "Used in BIOS chips",
-                    "Requires specific interfaces and commands",
-                ),
-            ),
-            (
                 0x27,
                 "SRAM",
                 (
@@ -367,12 +342,26 @@ class EpromSpecBuilder:
                     "Simple read/write operations",
                 ),
             ),
+            (
+                # Phase 102 D-04: added — X88C64 (1 DB chip) can surface in
+                # `info`. Bullet is a minimal, non-minipro-heritage placeholder
+                # (Phase 102 D-03/D-05: name-only scope, prose reconciliation
+                # deferred to Phase 103 DOC-01 — see SUMMARY for the exact text
+                # flagged as Phase-103-owned).
+                0x34,
+                "EEPROM - XICOR 8051-bus",
+                (
+                    "XICOR 8051-multiplexed bus; not implemented on RURP (FUT-01)",
+                    "",
+                    "",
+                ),
+            ),
         ]
-        for pid, ptype, desc_tuple in protocol_info_data:
+        for pid, _ptype, desc_tuple in protocol_info_data:
             if pid == protocol_id:
                 return {
                     "id_hex": f"0x{pid:02X}",
-                    "type": ptype,
+                    "type": self._PROTOCOL_DISPLAY_NAME.get(pid, _ptype),
                     "description_points": list(desc_tuple),
                 }
         return None
@@ -465,13 +454,44 @@ class EpromSpecBuilder:
             )
         return layout_data
 
+    # Canonical protocol display names (Phase 102 D-01 single source). Both the
+    # get_chip_type_string fallback path (proto_display, legacy user-override
+    # entries lacking electrical.type) and _get_protocol_info_structured's
+    # `type` field (the `firestarter info` "Protocol:" line) read from this ONE
+    # dict — preventing the two vocabularies from re-diverging (the recurring
+    # IN-01 class of bug). Values are ASCII-normalized copies of
+    # firestarter/doc/PROTOCOLS.md column-2 canonical names (Phase 102 D-02:
+    # em-dash "—" / en-dash "–" rendered as ASCII "-" for terminal/pipe/grep
+    # safety — a documented punctuation deviation from the doc, recorded for
+    # Phase 103's divergence log). 0x34 added / 0x11 dropped / 0x35+0x39 stay
+    # excluded per Phase 102 D-04 (full coverage reconcile vs the 12-protocol
+    # canonical DB set).
+    _PROTOCOL_DISPLAY_NAME = {
+        0x05: "Flash - 5V page-write (EEPROM-like)",
+        0x06: "Flash - AMD/SST unlock-sequence NOR",
+        0x07: "EPROM - 28-pin UV/EE, 13V VPP",
+        0x08: "EPROM - 32-pin UV/EE, 13V VPP",
+        0x0B: "EPROM - 24-pin legacy, 12-25V direct-VPE",
+        0x0D: "EEPROM - 5V parallel, SDP + DQ7 poll",
+        0x0E: "SRAM - 32-pin battery-backed NVRAM",
+        0x10: "Flash - Intel 28F command-register, 12V VPP mandatory",
+        0x27: "SRAM - 24-pin async, 5V",
+        0x28: "SRAM/FRAM - 28-pin",
+        0x29: "SRAM - 32-pin large battery-backed NVRAM, 512K-1M",
+        0x34: "EEPROM - XICOR 8051-bus",
+    }
+
     # Curated map from electrical.type DB ground truth to display label (D-01).
-    # These are the four distinct values present in chip_database.json.
+    # These are the distinct values present in chip_database.json.
     # Falls back to get_chip_type_string (protocol-based) when electrical_type
     # is absent or empty (legacy user-override entries without electrical.type).
+    # Phase 84 fm-fram-full: "FRAM" added so FM1608 displays "FRAM" (not the
+    # protocol-based fallback).  CAN_ERASE is unaffected (FRAM ∉ {EEPROM,
+    # Flash/EEPROM} in database.py:605).
     _ELECTRICAL_TYPE_LABEL = {
         "EEPROM": "EEPROM",
         "Flash/EEPROM": "Flash/EEPROM",
+        "FRAM": "FRAM",
         "SRAM": "SRAM",
         "UV-EPROM": "UV-EPROM",
     }
@@ -479,7 +499,6 @@ class EpromSpecBuilder:
     def resolve_type_label(
         self,
         electrical_type: Optional[str],  # noqa: UP006
-        type_int: int = 0,
         protocol_id: Optional[int] = None,  # noqa: UP006
     ) -> str:
         """Return the user-facing chip-type display label (D-04 single source of truth).
@@ -498,7 +517,6 @@ class EpromSpecBuilder:
             electrical_type: Raw ``electrical.type`` string from the DB record
                 (e.g. ``"EEPROM"``, ``"UV-EPROM"``, ``"Flash/EEPROM"``, ``"SRAM"``).
                 Pass ``None`` or ``""`` for legacy entries.
-            type_int: The mapped ``type`` integer (mem_type) — used by the fallback.
             protocol_id: The mapped ``protocol-id`` integer — used by the fallback
                 for more precise disambiguation.
 
@@ -508,7 +526,7 @@ class EpromSpecBuilder:
         etype = electrical_type or ""
         if etype in self._ELECTRICAL_TYPE_LABEL:
             return self._ELECTRICAL_TYPE_LABEL[etype]
-        return self.get_chip_type_string(type_int, protocol_id)
+        return self.get_chip_type_string(protocol_id)
 
     def build_specifications(  # noqa: UP006
         self,
@@ -538,7 +556,6 @@ class EpromSpecBuilder:
         etype = electrical_type or ""
         chip_type_str = self.resolve_type_label(
             electrical_type,
-            eprom_data.get("type", 0),
             eprom_data.get("protocol-id"),
         )
 
@@ -569,13 +586,14 @@ class EpromSpecBuilder:
 
         # D-07-VPP: gate on vpp_mv > 0, not the always-zero flags & 0x08.
         # Coerce defensively: user-override entries may supply vpp_mv as a string.
-        # Exclude SRAM: volatile, no programming voltage; vpp_mv=12000 is an
-        # upstream infoic.xml decode artifact for SRAM entries, not a real VPP.
+        # Exclude SRAM and FRAM: volatile/no-program-VPP; vpp_mv=12000 is an
+        # upstream infoic.xml decode artifact for SRAM/FRAM entries, not a real VPP.
+        # Phase 84 fm-fram-full: FRAM added alongside SRAM (Pitfall-2 guard).
         try:
             _vpp_mv = int(eprom_data.get("vpp_mv", 0) or 0)
         except (TypeError, ValueError):
             _vpp_mv = 0
-        if etype != "SRAM" and _vpp_mv > 0:
+        if etype not in {"SRAM", "FRAM"} and _vpp_mv > 0:
             output_data["vpp_str"] = f"{eprom_data.get('vpp_volts', 'N/A')}v"
 
         # Chip ID: always render a row, but show "-" when the chip has no
@@ -681,8 +699,8 @@ def main():  # Test function
         )
 
     logger.info(f"\n--- Testing get_chip_type_string ---")  # noqa: F541
-    logger.info(f"Type 1: {spec_builder.get_chip_type_string(1)}")
-    logger.info(f"Type 5: {spec_builder.get_chip_type_string(5)}")
+    logger.info(f"Protocol 0x08 (known): {spec_builder.get_chip_type_string(0x08)}")
+    logger.info(f"Protocol 0x99 (unknown): {spec_builder.get_chip_type_string(0x99)}")
 
     logger.info(f"\n--- Testing flag interpretation (example flags) ---")  # noqa: F541
     example_flags = 0x000000B0  # Has ID, Elec. Erasable, Can be Elec. Erased

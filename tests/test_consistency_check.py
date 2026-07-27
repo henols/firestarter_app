@@ -299,6 +299,51 @@ class TestConsistencyCheck:
             f"Still exists at: {out_dir}"
         )
 
+    def test_default_output_dir_nested_under_runs_folder(self, tmp_path, monkeypatch):
+        """When output_dir is omitted, the auto-named run folder is grouped under
+        the DEFAULT_RUN_OUTPUT_DIR parent instead of being created directly in the
+        launch (current working) directory.
+        """
+        from firestarter.eprom_operations import DEFAULT_RUN_OUTPUT_DIR
+
+        identical = _identical_payload()
+        fake_sm, _ = _make_fake_state_machine_with_payloads(
+            [identical, identical, identical]
+        )
+        monkeypatch.setattr(EpromOperator, "_operation_context", _make_fake_ctx())
+        monkeypatch.setattr(EpromOperator, "_run_state_machine", fake_sm)
+        # Run from an isolated cwd so the relative parent folder lands in tmp_path.
+        monkeypatch.chdir(tmp_path)
+
+        op = EpromOperator(ConfigManager())
+        rc = op.consistency_check_eprom(
+            "TEST_CHIP",
+            eprom_data_dict={"memory-size": _PAYLOAD_SIZE},
+            runs=3,
+            output_dir=None,  # exercise the default-naming branch
+            keep_files=True,
+            quiet=True,
+        )
+
+        assert rc == 0
+        parent = tmp_path / DEFAULT_RUN_OUTPUT_DIR
+        assert parent.is_dir(), (
+            f"Default runs must be grouped under ./{DEFAULT_RUN_OUTPUT_DIR}/, "
+            f"not dumped directly in the launch directory. Contents of cwd: "
+            f"{sorted(p.name for p in tmp_path.iterdir())}"
+        )
+        run_dirs = [
+            d for d in parent.iterdir() if d.name.startswith("consistency-check-")
+        ]
+        assert len(run_dirs) == 1, (
+            f"Expected one auto-named consistency-check folder under "
+            f"{DEFAULT_RUN_OUTPUT_DIR}/, found: {[d.name for d in run_dirs]}"
+        )
+        # No timestamped folder leaked directly into the launch directory.
+        assert not list(tmp_path.glob("consistency-check-*")), (
+            "Auto-named run folder must NOT be created directly in the cwd."
+        )
+
     def test_runs_boundary_rejected(self, tmp_path, monkeypatch, caplog):
         """D-10 Test 6 (REPRO-03): runs < 2 rejected with exit 2 BEFORE state machine."""  # noqa: E501
         # Track that the state machine is NEVER called for invalid runs
@@ -469,11 +514,18 @@ class TestDispatchChain:
         # Stub database lookups so dispatch reaches the operator method.
         # get_eprom_config must also be stubbed (Phase 66-05): resolve_chip now calls
         # get_eprom_config FIRST to read support_status before calling convert_to_programmer.
+        # Phase 106-03 (HOST-04): resolve_chip also requires a usable
+        # programming.algorithm on the same raw record, or it refuses before
+        # convert_to_programmer is reached.
         monkeypatch.setattr(
             EpromDatabase,
             "get_eprom_config",
             lambda self, name: (
-                {"part_number": name, "support_status": "supported"},
+                {
+                    "part_number": name,
+                    "support_status": "supported",
+                    "programming": {"algorithm": 7},
+                },
                 "TEST",
             ),
         )

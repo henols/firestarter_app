@@ -43,27 +43,6 @@ PROTOCOL_MAP = {
     0x28: "SRAM_STD",
 }
 
-# Algorithm integer (upstream protocol_id from infoic.xml) → firmware mem_type integer.
-# Firmware dispatches on protocol first; mem_type is kept consistent for fallback paths.
-_ALGO_MEM_TYPE = {
-    0x05: 5,  # FLASH_AMD_STD     → TYPE_FLASH_TYPE_4
-    0x06: 3,  # FLASH_AMD_ALT     → TYPE_FLASH_TYPE_3
-    0x07: 1,  # EPROM_STD         → TYPE_EPROM
-    0x08: 1,  # EPROM_QUICK       → TYPE_EPROM
-    0x0B: 1,  # EPROM_LEGACY      → TYPE_EPROM
-    0x0D: 1,  # EEPROM_POLL       → TYPE_EPROM (firmware dispatches on protocol prefix)
-    0x0E: 4,  # SRAM_32PIN        → TYPE_SRAM
-    0x10: 1,  # FLASH_INTEL       → TYPE_EPROM (firmware dispatches on protocol prefix)
-    0x27: 4,  # SRAM_24PIN        → TYPE_SRAM
-    0x28: 4,  # SRAM_STD          → TYPE_SRAM
-    0x29: 4,  # SRAM_512K_1M      → TYPE_SRAM
-    # 0x35 (IC2_ALG_ITE — an ITE EC MCU, not a memory algorithm) and 0x39 (phantom —
-    # no IC2_ALG constant) removed in Phase 57 (DEC-05) to match build_db.py's
-    # canonical allowlist; no DB chip uses either protocol. Firmware still dispatches
-    # 0x35 and 0x39 → configure_flash4 for forward-compat (memory.cpp:89), but the
-    # host excludes them from KNOWN_PROTOCOLS so they route to not_implemented here.
-}
-
 # Module-level constants
 types = {"memory": 0x01, "flash": 0x03, "sram": 0x04}
 ROM_CE = 0x100
@@ -415,18 +394,6 @@ class EpromDatabase:
         # Read algorithm integer directly — set by build_db.py from upstream protocol_id
         protocol_id = programming.get("algorithm", 0)
 
-        # Derive mem_type from algorithm (D3). Fall back to electrical.type substring
-        # only when algorithm is absent / 0 (legacy user-override DB entries).
-        if protocol_id and protocol_id in _ALGO_MEM_TYPE:
-            determined_type = _ALGO_MEM_TYPE[protocol_id]
-        else:
-            type_str = electrical.get("type", "")
-            determined_type = 1  # Default to EPROM
-            if "Flash" in type_str:
-                determined_type = 2  # Generic Flash (legacy fallback only)
-            elif "SRAM" in type_str:
-                determined_type = 4
-
         # The new DB doesn't have the raw flags, so we infer what we can
         info_flags = 0
         if programming.get("chip_id_check"):
@@ -442,7 +409,6 @@ class EpromDatabase:
             "name": ic.get("part_number"),
             "manufacturer": manufacturer,
             "memory-size": electrical.get("size_bytes", 0),
-            "type": determined_type,
             "pin-count": pin_count,
             "vpp_volts": vpp,
             "vpp_mv": vpp_mv,
@@ -459,6 +425,13 @@ class EpromDatabase:
         chip_id_val = programming.get("chip_id_value")
         if chip_id_val:
             data["chip-id"] = int(chip_id_val, 16)
+
+        # PGSZ-01 / CR-01: carry datasheet-sourced per-chip page_size when present.
+        # Set by build_db.py only for chips with a [CITED:] datasheet entry; absent
+        # for all other chips so they ride the firmware flash4_page_size() heuristic.
+        page_size_val = programming.get("page_size")
+        if page_size_val:
+            data["page_size"] = int(page_size_val)
 
         if pin_count and pinout_key:
             bus_config = self.get_bus_config(pin_count, pinout_key)
@@ -575,7 +548,6 @@ class EpromDatabase:
         # Keys to keep from the full data
         programmer_data = {
             "memory-size": full_eprom_data.get("memory-size", 0),
-            "type": full_eprom_data.get("type", 0),
             "algorithm": full_eprom_data.get("protocol-id", 0),
             "pin-count": full_eprom_data.get("pin-count", 0),
             "vpp_mv": vpp_mv,
@@ -589,14 +561,37 @@ class EpromDatabase:
         if "bus-config" in full_eprom_data:
             programmer_data["bus-config"] = full_eprom_data["bus-config"]
 
-        # Calculate the simple 'flags' key for the programmer
-        # Inferring from mapped 'type': Type 2 (Flash 2) and Type 3 (Flash 3) are electrically erasable.  # noqa: E501
-        # New requirement: FLAG_CAN_ERASE should be set if info-flags has the 0x00000010 bit.  # noqa: E501
+        # PGSZ-03 / CR-01: emit page-size wire field only when the DB supplies a
+        # datasheet-sourced per-chip page_size (emit-when-present, mirrors chip-id).
+        # Absent chips send nothing → firmware uses flash4_page_size(mem_size) heuristic.
+        if full_eprom_data.get("page_size"):
+            programmer_data["page-size"] = full_eprom_data["page_size"]
+
+        # Calculate the simple 'flags' key for the programmer.
+        # Canonical erase-capability ground truth (D-01/D-02): set FLAG_CAN_ERASE
+        # directly from electrical.type ∈ {"EEPROM","Flash/EEPROM"} rather than the
+        # fragile synthetic `info-flags & 0x10` round-trip injected by _map_data.
+        # This reads the same canonical field _map_data keys off (line ~434), so the
+        # derivation cannot silently drift under a future _map_data refactor. A missing
+        # key degrades safely to flag-clear (A1), identical to the old path. RF-01:
+        # zero behavioral delta for all chips (the synthetic path already matched).
+        # D-03 (firmware-inert on 0x0D): setting the flag on Flash/EEPROM parts is safe
+        # because the 0x0D configure_eeprom28c path (firestarter/src/proms/eeprom_28c.cpp)
+        # never reads is_flag_set(FLAG_CAN_ERASE) — it uses only FLAG_FORCE and
+        # FLAG_SKIP_BLANK_CHECK — so no extra voltage rail is routed. No firmware edit.
         simple_flags = 0
-        if (
-            full_eprom_data.get("info-flags", 0) & 0x00000010
-        ):  # Check for "Can be electrically erased" bit
-            simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
+        algo = programmer_data["algorithm"]  # already computed above from protocol-id
+        if full_eprom_data.get("electrical-type", "") in ("EEPROM", "Flash/EEPROM"):
+            if algo != 5:
+                # FIX-01a / T-93-CANERASE: flash4 (0x05) auto-erases per page during
+                # the page-write; no separate 12V bulk erase is needed or safe.
+                # Setting FLAG_CAN_ERASE for 0x05 routes firmware flash4_write_init →
+                # flash4_erase_execute which asserts CTRL_VPP_REGULATOR_ENABLE on a
+                # 5V-only chip (12V on a 5V part — hardware-damage hazard).
+                # Scope: algorithm==5 only. 0x07 and 0x0D paths are unchanged.
+                # D-03 note: 0x0D configure_eeprom28c never reads FLAG_CAN_ERASE, so
+                # leaving it set on 0x0D is firmware-inert and must stay unchanged.
+                simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
         programmer_data["flags"] = simple_flags
 
         return programmer_data
