@@ -11,11 +11,12 @@ Uno, Arduino Leonardo, or a 328PB-Uno, and an RURP shield. In one sentence:
 quick smoke check, then run `firestarter dev test <chip>` against real
 hardware.**
 
-> **Draft note:** this doc is authored *before* the corresponding beta cut, from
-> the known behavior of the install/flash/channel-select feature. It will be
-> finalized with live per-board bench findings once that bench validation
-> lands. If a step here doesn't match what you see, please file an issue (see
-> the bottom of this doc) — you may be looking at the freshest ground truth.
+> **Bench-validated:** every per-board step below was run end-to-end on real
+> Arduino Uno, Arduino Leonardo, and 328PB-Uno hardware against the `3.0.0b11`
+> beta — fresh-venv `pip install --pre firestarter` → bare `fw -i` beta
+> auto-route → `.hex` flash + avrdude verify → `fw`/`hw` smoke all pass. If a
+> step here doesn't match what you see, please file an issue (see the bottom of
+> this doc).
 
 **What this doc is NOT:** it does not walk you through writing or verifying a
 chip. The steps below only prove that the beta app + beta firmware you just
@@ -67,6 +68,18 @@ you're not sure which you have, it's safer to first try `-b uno328pb`; if
 avrdude's signature check rejects the flash, you likely have a plain Uno —
 retry with `-b uno` instead. Don't guess and force it; let avrdude's signature
 check tell you.
+
+> **328PB-Uno known quirks (from bench validation):** (1) a bare `firestarter
+> fw` on a 328PB-Uno prints a trailing *"Could not find firmware version or URL
+> for board 'uno328pb' in the latest release"* — this is harmless: `fw` also
+> checks the **stable** channel for updates, and the 328PB ships **only**
+> beta/prerelease `.hex` (no stable build), so that lookup finds nothing. The
+> firmware-version read itself still succeeds (you'll see the correct
+> `3.0.0b11 ... controller: uno328pb` line above it). (2) The 328PB-Uno has been
+> less stable than the Uno/Leonardo on heavier operations in the past (occasional
+> read timeouts / voltage-read drift); the install + flash + smoke chain here is
+> reliable, but if a later `dev test` run is flaky on this board, retry and
+> capture the exact output rather than assuming a chip verdict.
 
 ---
 
