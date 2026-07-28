@@ -58,6 +58,12 @@ urls = { "Homepage" = "https://github.com/henols/firestarter_app" }
 dev = [
     "pytest>=7.0",
 ]
+# USB DFU firmware install for the PY32F071 board target. Optional because it is
+# only needed for that board, and because pyusb pulls in a libusb backend that
+# AVR users (avrdude over serial) never touch.
+py32 = [
+    "pyusb>=1.2.1",
+]
 test = [
     "pytest>=8.0",
     "syrupy>=5.0",

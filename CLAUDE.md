@@ -43,6 +43,7 @@ serial_comm.py                      # send over serial, handle response
 - `firestarter/address_parser.py` — hex/decimal address + size parsing (Phase 38 STRUCT-03)
 - `firestarter/chip_resolver.py` — `resolve_chip(name, db) -> programmer_config` (Phase 39 DATA-01; replaces 9× chip-lookup copy-paste)
 - `firestarter/cli_handlers.py` — Click command handlers (14 `@cli.command()` + `dev` group with 4 sub-commands) + `@map_typed_errors` decorator + `AppContext` dataclass (Phase 41 CLI-01..04 + Phase 42 ERR-01)
+- `firestarter/py32_dfu.py` — USB DFU firmware-install backend for the `py32f071` board (DfuSe + plain DFU 1.1, Intel-HEX/raw-bin loader, pyusb via the optional `[py32]` extra). `firmware.py::flash_method()` routes boards here instead of avrdude; see `doc/PY32F071-FIRMWARE-INSTALL.md` for bootloader entry. **Unverified against silicon** — no PY32F071 board exists yet
 - `firestarter/exceptions.py` — consolidated typed-exception hierarchy: `ChipNotFoundError`, `FirmwareOutdatedError`, `SerialError`, `SerialTimeoutError`, `EpromOperationError`, `HardwareOperationError` (Phase 38 STRUCT-04)
 - `firestarter/main.py` — Click CLI entry point
 - `tools/build_db.py` — database pipeline: parses the upstream `infoic.xml`, outputs JSON

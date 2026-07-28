@@ -59,6 +59,7 @@ from firestarter.exceptions import (
     ChipNotFoundError,
     ChipNotImplementedError,
     EpromOperationError,
+    FirmwareOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
     ProtocolNotImplementedError,
@@ -153,6 +154,11 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
             # the authoritative status-specific message. Drop the generic
             # "Chip not usable:" prefix so the DB string is the single source
             # of truth for both info display and chip-op refusal.
+            raise click.ClickException(str(e)) from e
+        except FirmwareOperationError as e:
+            # Raised by the USB DFU install path. The message is already
+            # operator-actionable (how to enter the bootloader, or how to install
+            # pyusb), so it is rendered verbatim rather than prefixed.
             raise click.ClickException(str(e)) from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
@@ -818,9 +824,23 @@ def _maybe_auto_route_to_pre_click(
 @click.option(
     "-b",
     "--board",
-    type=click.Choice(["uno", "uno328pb", "leonardo"]),
+    type=click.Choice(["uno", "uno328pb", "leonardo", "py32f071"]),
     default="uno",
     help="Microcontroller board (optional), defaults to 'uno'.",
+)
+@click.option(
+    "--usb-id",
+    "usb_id",
+    type=str,
+    default=None,
+    metavar="VID:PID",
+    help="Restrict USB DFU install to one device, e.g. 1a86:8012 (py32f071 only).",
+)
+@click.option(
+    "--dfu-probe",
+    "dfu_probe",
+    is_flag=True,
+    help="List attached USB DFU devices and exit (py32f071 bootloader discovery).",
 )
 @click.option(
     "--avrdude-path",
@@ -859,6 +879,8 @@ def fw(
     stable: bool,
     list_releases: bool,
     board: str,
+    usb_id: Optional[str],
+    dfu_probe: bool,
     avrdude_path: Optional[str],
     avrdude_config_path: Optional[str],
     force: bool,
@@ -899,6 +921,19 @@ def fw(
     # D-14 narrow UsageError upgrade (was: fw_parser.error in main.py:798).
     if json_output and not list_releases:
         raise click.UsageError("--json requires --list")
+
+    # USB DFU discovery: reports what is on the bus and exits. Deliberately
+    # placed before every network path — it needs no release metadata, and it is
+    # the first thing to run on a board whose bootloader identity is unconfirmed.
+    if dfu_probe:
+        found = app.firmware_manager.probe_dfu(usb_id=usb_id)
+        if not found:
+            print("No USB DFU devices found.")
+            sys.exit(1)
+        print("Attached USB DFU devices:")
+        for line in found:
+            print(f"  {line}")
+        sys.exit(0)
 
     if list_releases:
         channel_filter: Literal["all", "pre", "stable"]
@@ -941,6 +976,13 @@ def fw(
     # reading it back here is the equivalent operation.
     port_override = app.config_manager.get_value("port", None)
 
+    # Did the operator actually type --board, or is this the "uno" default? A
+    # typed --board that disagrees with the attached programmer is a conflict the
+    # service layer must refuse rather than silently override.
+    board_explicit = (
+        ctx.get_parameter_source("board") != click.core.ParameterSource.DEFAULT
+    )
+
     ok = app.firmware_manager.manage_firmware_update(
         install_flag=install,
         avrdude_path_override=avrdude_path,
@@ -950,6 +992,8 @@ def fw(
         flags=_build_op_flags(force=force),
         channel=channel,
         pinned_version=firmware_version,
+        usb_id=usb_id,
+        board_explicit=board_explicit,
     )
     sys.exit(0 if ok else 1)
 

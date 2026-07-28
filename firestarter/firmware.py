@@ -33,7 +33,7 @@ from firestarter.constants import (
     FLAG_FORCE,
 )
 from firestarter.exceptions import (
-    FirmwareOperationError,  # noqa: F401  — orphan kept reachable (D-01; wired later)
+    FirmwareOperationError,  # wired by the USB DFU install path (was D-01 orphan)
     FirmwareOutdatedError,
     ProgrammerNotFoundError,
     SerialError,
@@ -65,6 +65,69 @@ class ReleaseInfo(TypedDict):
 
 
 HOME_PATH = os.path.join(os.path.expanduser("~"), ".firestarter")
+
+# ---------------------------------------------------------------------------
+# Board → install method
+#
+# AVR boards are flashed by avrdude over their serial bootloader. PY32F071 has
+# no AVR bootloader and no avrdude support: it is flashed over USB DFU by
+# firestarter/py32_dfu.py, which needs no external binary. Unknown boards
+# default to avrdude so adding another AVR variant needs no change here.
+# ---------------------------------------------------------------------------
+
+FLASH_METHOD_AVRDUDE = "avrdude"
+FLASH_METHOD_DFU = "dfu"
+
+_BOARD_FLASH_METHODS = {
+    "uno": FLASH_METHOD_AVRDUDE,
+    "uno328pb": FLASH_METHOD_AVRDUDE,
+    "leonardo": FLASH_METHOD_AVRDUDE,
+    "py32f071": FLASH_METHOD_DFU,
+}
+
+# Methods that talk to the chip over USB directly and therefore need no serial
+# port. A board sitting in its DFU bootloader exposes no CDC port at all, so
+# manage_firmware_update must not demand one.
+_PORTLESS_FLASH_METHODS = frozenset({FLASH_METHOD_DFU})
+
+
+def flash_method(board: Optional[str]) -> str:
+    """Return the install method for a board name (case-insensitive)."""
+    return _BOARD_FLASH_METHODS.get((board or "").lower(), FLASH_METHOD_AVRDUDE)
+
+
+def asset_candidates(board: str) -> List[str]:  # noqa: UP006
+    """Release-asset filenames to accept for a board, most preferred first.
+
+    DFU boards accept a raw `.bin` first and Intel `.hex` as a fallback:
+    `py32_dfu.load_image()` reads either, and which one the firmware release
+    publishes for PY32F071 is not settled yet. AVR boards keep the single
+    historical `.hex` name unchanged.
+    """
+    if flash_method(board) == FLASH_METHOD_DFU:
+        return [f"firestarter_{board}.bin", f"firestarter_{board}.hex"]
+    return [f"firestarter_{board}.hex"]
+
+
+def _asset_label(board: str) -> str:
+    """Human-readable asset name(s) for log messages."""
+    names = asset_candidates(board)
+    return " or ".join(repr(name) for name in names)
+
+
+def _pick_asset(assets: object, board: str) -> Optional[str]:
+    """Resolve the download URL of the first matching asset, else None."""
+    if not isinstance(assets, list):
+        return None
+    by_name = {}
+    for asset in assets:
+        if isinstance(asset, dict):
+            by_name[asset.get("name")] = asset.get("browser_download_url")
+    for name in asset_candidates(board):
+        url = by_name.get(name)
+        if url:
+            return url
+    return None
 
 
 class FirmwareManager:
@@ -152,12 +215,7 @@ class FirmwareManager:
             response.raise_for_status()  # Raise an exception for HTTP errors
             release_data = response.json()
             latest_version = release_data.get("tag_name")
-            firmware_asset_name = f"firestarter_{board}.hex"
-            download_url = None
-            for asset in release_data.get("assets", []):
-                if asset.get("name") == firmware_asset_name:
-                    download_url = asset.get("browser_download_url")
-                    break
+            download_url = _pick_asset(release_data.get("assets", []), board)
 
             if not latest_version or not download_url:
                 logger.error(
@@ -234,8 +292,6 @@ class FirmwareManager:
                             descending, takes highest; falls back to stable if none (D-05).
         channel='pinned'  → fetches /releases/tags/{version} directly (D-09).
         """  # noqa: E501
-        firmware_asset_name = f"firestarter_{board}.hex"
-
         if channel == "stable":
             return self.fetch_latest_release_info(board=board)
 
@@ -256,14 +312,10 @@ class FirmwareManager:
                 )
                 return None, None
 
-            download_url = None
-            for asset in release_data.get("assets", []):
-                if asset.get("name") == firmware_asset_name:
-                    download_url = asset.get("browser_download_url")
-                    break
+            download_url = _pick_asset(release_data.get("assets", []), board)
             if not download_url:
                 logger.error(
-                    f"Release {version!r} has no asset {firmware_asset_name!r} for board {board!r}."  # noqa: E501
+                    f"Release {version!r} has no asset {_asset_label(board)} for board {board!r}."  # noqa: E501
                 )
                 return None, None
             return release_data.get("tag_name"), download_url
@@ -297,15 +349,11 @@ class FirmwareManager:
             candidates.sort(key=lambda t: t[0], reverse=True)
             _, picked = candidates[0]
 
-            download_url = None
-            for asset in picked.get("assets", []):
-                if asset.get("name") == firmware_asset_name:
-                    download_url = asset.get("browser_download_url")
-                    break
+            download_url = _pick_asset(picked.get("assets", []), board)
             if not download_url:
                 logger.error(
                     f"Pre-release {picked.get('tag_name')!r} has no asset "
-                    f"{firmware_asset_name!r} for board {board!r}."
+                    f"{_asset_label(board)} for board {board!r}."
                 )
                 return None, None
             return picked.get("tag_name"), download_url
@@ -333,7 +381,6 @@ class FirmwareManager:
         Returns a flat list of ReleaseInfo dicts (D-12 schema: version, tag, channel,
         published, asset_url).
         """
-        firmware_asset_name = f"firestarter_{board}.hex"
         try:
             all_releases = self._fetch_all_releases()
         except requests.RequestException as e:
@@ -363,11 +410,7 @@ class FirmwareManager:
                 continue
 
             # Resolve board-matching asset.
-            asset_url = None
-            for asset in r.get("assets", []):
-                if asset.get("name") == firmware_asset_name:
-                    asset_url = asset.get("browser_download_url")
-                    break
+            asset_url = _pick_asset(r.get("assets", []), board)
             if not asset_url:
                 continue  # Silently omit releases without the board asset (D-11).
 
@@ -536,6 +579,101 @@ class FirmwareManager:
         logger.error("Firmware installation failed on all attempted ports.")
         return False
 
+    def _install_with_dfu(
+        self,
+        image_path: str,
+        board: str,
+        usb_id: Optional[str] = None,
+    ) -> bool:
+        """Install firmware over the board's USB DFU bootloader.
+
+        No external flashing binary is involved — the DFU transfer is
+        implemented in `firestarter/py32_dfu.py` on top of pyusb. The board must
+        already be in bootloader mode; see `doc/PY32F071-FIRMWARE-INSTALL.md` for
+        the three ways to get it there.
+        """
+        # Imported lazily so a missing pyusb only affects DFU boards.
+        from firestarter.py32_dfu import DfuError, Py32DfuFlasher
+
+        start_time = time.time()
+        logger.info(f"Installing firmware on {board} over USB DFU...")
+        try:
+            flasher = Py32DfuFlasher(usb_id=usb_id)
+            ok = flasher.flash(image_path)
+        except DfuError as e:
+            # DfuError carries an operator-actionable message (how to enter the
+            # bootloader, or how to install pyusb) — surface it as the module's
+            # own error type rather than leaking a USB-layer exception.
+            raise FirmwareOperationError(str(e)) from e
+
+        if ok:
+            logger.info(
+                f"Firmware successfully updated on {board} "
+                f"({time.time() - start_time:.2f}s)"
+            )
+        return ok
+
+    @staticmethod
+    def _hint_dfu_board() -> None:
+        """If a USB DFU device is on the bus, say so — never raise.
+
+        A PY32F071 in bootloader mode presents no serial port, so the generic
+        "cannot determine port" error is misleading if the operator forgot
+        `--board py32f071`.
+        """
+        try:
+            from firestarter.py32_dfu import dfu_device_present
+
+            if dfu_device_present():
+                logger.info(
+                    "A USB DFU device is attached. If this is a PY32F071 board in "
+                    "bootloader mode, install with: firestarter fw --install "
+                    "--board py32f071"
+                )
+        except Exception:  # noqa: BLE001 — a hint must never break the flow
+            pass
+
+    @staticmethod
+    def probe_dfu(usb_id: Optional[str] = None) -> List[str]:  # noqa: UP006
+        """Describe attached DFU devices. Raises FirmwareOperationError on failure.
+
+        This is the instrument for the first bench session with real PY32F071
+        silicon: it reports the USB ID the bootloader presents, whether it speaks
+        DfuSe or plain DFU 1.1, its transfer size and its erase-sector geometry —
+        the facts this module currently has to discover at runtime because no
+        board exists to confirm them.
+        """
+        from firestarter.py32_dfu import DfuError, Py32DfuFlasher
+
+        try:
+            return Py32DfuFlasher(usb_id=usb_id).probe()
+        except DfuError as e:
+            raise FirmwareOperationError(str(e)) from e
+
+    def _install_firmware(
+        self,
+        hex_file_path: str,
+        board: str,
+        avrdude_path_override: Optional[str],
+        avrdude_config_override: Optional[str],
+        target_port: Optional[str],
+        usb_id: Optional[str] = None,
+    ) -> bool:
+        """Dispatch to the flasher for this board.
+
+        The AVR path is unchanged and still owns its own port/profile handling;
+        only the choice of flasher moved out of `manage_firmware_update`.
+        """
+        if flash_method(board) == FLASH_METHOD_DFU:
+            return self._install_with_dfu(hex_file_path, board, usb_id=usb_id)
+        return self._install_with_avrdude(
+            hex_file_path=hex_file_path,
+            board=board,
+            avrdude_path_override=avrdude_path_override,
+            avrdude_config_override=avrdude_config_override,
+            target_port=target_port,
+        )
+
     def manage_firmware_update(
         self,
         install_flag: bool = False,
@@ -546,6 +684,8 @@ class FirmwareManager:
         flags: int = 0,
         channel: Literal["stable", "pre", "pinned"] = "stable",
         pinned_version: Optional[str] = None,
+        usb_id: Optional[str] = None,
+        board_explicit: bool = False,
     ) -> bool:
         """
         Manages the firmware update process: checks version, prompts user, and installs if needed.
@@ -559,16 +699,40 @@ class FirmwareManager:
             preferred_port=port_override, flags=flags
         )
 
-        # Use the port where firmware was checked, or CLI override for flashing
-        port_to_use = port_override or connected_port
-        if not port_to_use:
+        # Use board detected from firmware if available, else use CLI override or default  # noqa: E501
+        # Resolved BEFORE the port check: a DFU board sitting in its bootloader
+        # answers no identity query and exposes no serial port, so the board is
+        # what decides whether a port is required at all.
+        board_to_use = current_board or board_override
+
+        # A detected board silently wins over --board. That is right when --board
+        # was left at its default, and dangerous when it was not: asking for
+        # --board py32f071 while an AVR programmer happens to be attached would
+        # retarget the install at the AVR board and flash it. Refuse the conflict
+        # instead of picking a side.
+        if (
+            board_explicit
+            and current_board
+            and board_override
+            and current_board.lower() != board_override.lower()
+        ):
             logger.error(
-                "Cannot determine port for programmer. Please specify with --port."
+                f"--board {board_override} was requested but the programmer on "
+                f"{connected_port} identifies as {current_board}. Refusing to "
+                f"install: unplug the {current_board} board, or drop --board to "
+                f"target it."
             )
             return False
 
-        # Use board detected from firmware if available, else use CLI override or default  # noqa: E501
-        board_to_use = current_board or board_override
+        # Use the port where firmware was checked, or CLI override for flashing
+        port_to_use = port_override or connected_port
+        method = flash_method(board_to_use)
+        if not port_to_use and method not in _PORTLESS_FLASH_METHODS:
+            logger.error(
+                "Cannot determine port for programmer. Please specify with --port."
+            )
+            self._hint_dfu_board()
+            return False
 
         latest_version, download_url = self.fetch_release_info(
             channel=channel, version=pinned_version, board=board_to_use
@@ -637,12 +801,13 @@ class FirmwareManager:
                 logger.error("Firmware download failed. Installation aborted.")
                 return False
 
-            install_success = self._install_with_avrdude(
+            install_success = self._install_firmware(
                 hex_file_path=hex_file,
                 board=board_to_use,
                 avrdude_path_override=avrdude_path_override,
                 avrdude_config_override=avrdude_config_override,
                 target_port=port_to_use,
+                usb_id=usb_id,
             )
             # Clean up downloaded file
             if os.path.exists(hex_file):
