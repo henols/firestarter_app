@@ -289,6 +289,42 @@ format      = "SDP unlock emitted in %lu us"
 params      = [{ type = "u32", render = "dec" }]
 wire_format = "id_frame"
 
+[[messages]]
+id          = 0x60
+name        = "MSG_INFO_SDP_LOCK"
+severity    = "INFO"
+format      = "SDP lock: enabling write protection"
+params      = []
+wire_format = "id_frame"
+
+# D-12: the honesty lives in the message TEXT, not in a status code --
+# response_code is deliberately never written on the SDP path (117 D-05 /
+# 118 D-02), so an untouched path still reports OK. This is the ONE line
+# that must state BOTH that the sequence was emitted AND that the
+# protection state cannot be read back, so a host reading the id alone can
+# never infer a protection state from it.
+[[messages]]
+id          = 0x61
+name        = "MSG_INFO_SDP_LOCK_DONE_US"
+severity    = "INFO"
+format      = "SDP lock sequence emitted in %lu us; protection state is not readable"
+params      = [{ type = "u32", render = "dec" }]
+wire_format = "id_frame"
+
+# D-16: this is a MEASUREMENT, with no budget comparison attached -- a
+# per-byte runtime compare in the hot path is what 118 D-10 declined, and
+# D-16 preserves that declination. gh#11 is a completion/data-landed
+# CONFLATION bug (Phase 117's finding), never a sampling-rate or
+# timing-budget bug; this single report line exists so the page-load
+# loop's worst-case interval is visible without adding a runtime check.
+[[messages]]
+id          = 0x62
+name        = "MSG_INFO_PAGE_LOAD_WORST_US"
+severity    = "INFO"
+format      = "Page load worst byte interval %lu us"
+params      = [{ type = "u32", render = "dec" }]
+wire_format = "id_frame"
+
 # ---------------------------------------------------------------------------
 # WARN (0x80..0x9F)
 # ---------------------------------------------------------------------------
