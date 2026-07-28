@@ -17,7 +17,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from firestarter import firmware, py32_dfu
+from firestarter import channel, firmware, py32_dfu
+from firestarter.exceptions import FirmwareOperationError
 from firestarter.firmware import FirmwareManager
 from firestarter.py32_dfu import (
     DFU_DNLOAD,
@@ -458,6 +459,88 @@ class TestBoardRouting:
     def test_asset_pick_ignores_other_boards(self):
         assets = [{"name": "firestarter_leonardo.hex", "browser_download_url": "u"}]
         assert firmware._pick_asset(assets, "uno") is None
+
+
+class TestBetaChannelGate:
+    """py32f071 install is beta-only: enabled off `beta`, disabled off `main`.
+
+    The channel is the app's own version — a PEP 440 pre-release means a beta
+    build, the same predicate D-23 uses to auto-route `--install` to `--pre`.
+    """
+
+    @pytest.mark.parametrize(
+        ("version", "expected"),
+        [
+            ("3.0.0b13", True),  # beta channel
+            ("3.0.0rc1", True),  # release candidate
+            ("2.0.7_dev", True),  # dev checkout must keep the feature
+            ("3.0.0", False),  # stable — merged to main
+            ("3.1.4", False),
+            ("not-a-version", False),  # unparseable fails CLOSED
+        ],
+    )
+    def test_prerelease_detection(self, monkeypatch, version, expected):
+        import firestarter as _pkg
+
+        monkeypatch.setattr(_pkg, "__version__", version)
+        assert channel.is_prerelease_build() is expected
+
+    def test_board_hidden_from_choices_on_stable(self, monkeypatch):
+        monkeypatch.setattr(channel, "is_prerelease_build", lambda: False)
+        assert channel.available_boards(
+            ("uno", "uno328pb", "leonardo", "py32f071")
+        ) == [
+            "uno",
+            "uno328pb",
+            "leonardo",
+        ]
+
+    def test_board_present_in_choices_on_beta(self, monkeypatch):
+        monkeypatch.setattr(channel, "is_prerelease_build", lambda: True)
+        assert "py32f071" in channel.available_boards(
+            ("uno", "uno328pb", "leonardo", "py32f071")
+        )
+
+    def test_avr_boards_are_never_gated(self, monkeypatch):
+        monkeypatch.setattr(channel, "is_prerelease_build", lambda: False)
+        for board in ("uno", "uno328pb", "leonardo"):
+            assert channel.is_board_available(board) is True
+
+    def test_dfu_install_refused_on_stable(self, monkeypatch):
+        """The service layer refuses too — the gate is not CLI-only."""
+        monkeypatch.setattr(firmware, "is_board_available", lambda board: False)
+        fm = FirmwareManager(config_manager=MagicMock())
+        with pytest.raises(FirmwareOperationError, match="pre-release builds only"):
+            fm._install_with_dfu("/tmp/fw.hex", "py32f071")
+
+    def test_dfu_probe_refused_on_stable(self, monkeypatch):
+        monkeypatch.setattr(channel, "is_prerelease_build", lambda: False)
+        fm = FirmwareManager(config_manager=MagicMock())
+        with pytest.raises(FirmwareOperationError, match="pre-release builds only"):
+            fm.probe_dfu()
+
+    def test_avr_install_untouched_by_the_gate_on_stable(self, monkeypatch):
+        """A stable build must still flash AVR boards exactly as before."""
+        monkeypatch.setattr(channel, "is_prerelease_build", lambda: False)
+        fm = FirmwareManager(config_manager=MagicMock())
+        called = {}
+
+        def fake_avrdude(**kwargs):
+            called["board"] = kwargs["board"]
+            return True
+
+        monkeypatch.setattr(fm, "_install_with_avrdude", fake_avrdude)
+        assert (
+            fm._install_firmware(
+                hex_file_path="/tmp/fw.hex",
+                board="leonardo",
+                avrdude_path_override=None,
+                avrdude_config_override=None,
+                target_port="/dev/ttyACM0",
+            )
+            is True
+        )
+        assert called["board"] == "leonardo"
 
 
 class TestPortlessInstall:

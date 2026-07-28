@@ -11,6 +11,45 @@ hardware.
 
 ---
 
+## 0. Availability — pre-release builds only
+
+This install path ships on **beta** and is **disabled on stable**. The PY32F071
+target has never run on real silicon, so a stable build must not offer users a
+flash operation nobody has ever completed.
+
+The gate is the app's own version (`firestarter/channel.py`): a PEP 440
+pre-release — `3.0.0b13`, `3.0.0rc1`, or a `_dev` checkout — means a beta build,
+and a final release like `3.0.0` means stable. That is the same predicate the app
+already uses to decide a beta install should default to `--pre` (D-23), so this
+introduces no new notion of "which channel am I".
+
+| | beta build | stable build |
+|---|---|---|
+| `fw --help` board list | `[uno\|uno328pb\|leonardo\|py32f071]` | `[uno\|uno328pb\|leonardo]` |
+| `--usb-id`, `--dfu-probe` | shown | hidden |
+| `fw --board py32f071` | accepted | exit 2, invalid value |
+| `fw --dfu-probe` | runs | exit 2, no such option |
+| `_install_with_dfu()` / `probe_dfu()` | run | raise `FirmwareOperationError` |
+
+The refusal is enforced twice on purpose. The CLI gate keeps the feature out of
+`--help` and rejects the flags; the service-layer gate in `firmware.py` catches
+library callers that never touch Click, so hiding a flag is never the only thing
+standing between a stable build and the flash path.
+
+Nothing here reads an environment variable. A channel gate that an env var can
+flip is not a gate — the firmware side already learned that
+`-D X=${sysenv.VAR}` fails *open* and quietly ships the gated thing. Installing
+the optional `[py32]` extra does not enable the feature either; it only adds
+pyusb.
+
+AVR install paths are completely untouched by the gate, on both channels.
+
+**To graduate the board to stable**, delete it from `BETA_ONLY_BOARDS` in
+`firestarter/channel.py` — one tuple, one line — once the target is
+bench-validated.
+
+---
+
 ## 1. Why not avrdude
 
 `avrdude` flashes AVR parts through an AVR bootloader. PY32F071 is a Cortex-M0+

@@ -24,6 +24,7 @@ from firestarter.avr_tool import (
     AvrdudeConfigNotFoundError,
     AvrdudeNotFoundError,
 )
+from firestarter.channel import beta_only_message, is_board_available
 from firestarter.config import ConfigManager
 from firestarter.constants import (
     COMMAND_FW_VERSION,
@@ -597,6 +598,12 @@ class FirmwareManager:
         already be in bootloader mode; see `doc/PY32F071-FIRMWARE-INSTALL.md` for
         the three ways to get it there.
         """
+        # Channel gate enforced here, not only in the CLI: this is the single
+        # choke point every DFU install passes through, including library callers
+        # that never touch Click.
+        if not is_board_available(board):
+            raise FirmwareOperationError(beta_only_message(board))
+
         # Imported lazily so a missing pyusb only affects DFU boards.
         from firestarter.py32_dfu import DfuError, Py32DfuFlasher
 
@@ -648,6 +655,11 @@ class FirmwareManager:
         the facts this module currently has to discover at runtime because no
         board exists to confirm them.
         """
+        from firestarter.channel import is_prerelease_build
+
+        if not is_prerelease_build():
+            raise FirmwareOperationError(beta_only_message("py32f071"))
+
         from firestarter.py32_dfu import DfuError, Py32DfuFlasher
 
         try:

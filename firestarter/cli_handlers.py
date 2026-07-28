@@ -32,6 +32,7 @@ from rich.console import Console
 from rich.prompt import Confirm
 
 from firestarter import __version__ as version
+from firestarter.channel import available_boards
 from firestarter.chip_resolver import resolve_chip
 from firestarter.chip_test import (
     OP_ID,
@@ -128,6 +129,16 @@ def _complete_eprom(
         for e in db.get_eproms(False)
         if e["name"].lower().startswith(incomplete.lower())
     ]
+
+
+# Release-channel gate — see channel.py. Evaluated at import time on purpose: a
+# wheel's __version__ is fixed when it is built, so the choice list a stable
+# install renders in `fw --help` is decided once and is decided correctly. Tests
+# exercise channel.available_boards() / is_board_available() directly rather than
+# reloading this module.
+_ALL_BOARDS: tuple[str, ...] = ("uno", "uno328pb", "leonardo", "py32f071")
+_BOARD_CHOICES: list[str] = available_boards(_ALL_BOARDS)
+_PY32_ENABLED: bool = "py32f071" in _BOARD_CHOICES
 
 
 def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
@@ -824,7 +835,7 @@ def _maybe_auto_route_to_pre_click(
 @click.option(
     "-b",
     "--board",
-    type=click.Choice(["uno", "uno328pb", "leonardo", "py32f071"]),
+    type=click.Choice(_BOARD_CHOICES),
     default="uno",
     help="Microcontroller board (optional), defaults to 'uno'.",
 )
@@ -834,12 +845,14 @@ def _maybe_auto_route_to_pre_click(
     type=str,
     default=None,
     metavar="VID:PID",
+    hidden=not _PY32_ENABLED,
     help="Restrict USB DFU install to one device, e.g. 1a86:8012 (py32f071 only).",
 )
 @click.option(
     "--dfu-probe",
     "dfu_probe",
     is_flag=True,
+    hidden=not _PY32_ENABLED,
     help="List attached USB DFU devices and exit (py32f071 bootloader discovery).",
 )
 @click.option(
@@ -926,6 +939,11 @@ def fw(
     # placed before every network path — it needs no release metadata, and it is
     # the first thing to run on a board whose bootloader identity is unconfirmed.
     if dfu_probe:
+        # `hidden` keeps the option out of --help; it does not reject it. On a
+        # stable build the flag must fail as an unknown-usage error, not silently
+        # run a py32-only diagnostic.
+        if not _PY32_ENABLED:
+            raise click.UsageError("no such option: --dfu-probe")
         found = app.firmware_manager.probe_dfu(usb_id=usb_id)
         if not found:
             print("No USB DFU devices found.")
