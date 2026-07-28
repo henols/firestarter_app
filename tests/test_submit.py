@@ -214,7 +214,7 @@ def test_build_body_includes_json_by_default():
 
 def test_build_issue_url_targets_hardcoded_repo():
     url = submit.build_issue_url("My Title", "My Body")
-    assert url.startswith("https://github.com/henols/firestarter_app/issues/new?")
+    assert url.startswith(f"https://github.com/{submit.SUBMIT_REPO}/issues/new?")
 
 
 def test_build_issue_url_percent_encodes():
@@ -232,7 +232,9 @@ def test_build_issue_url_not_derived_from_git_remote():
     # D-01/T-113-05: SUBMIT_REPO is a hardcoded constant, never inferred.
     url = submit.build_issue_url("t", "b")
     assert submit.SUBMIT_REPO in url
-    assert submit.SUBMIT_REPO == "henols/firestarter_app"
+    # Literal on purpose: the project-wide tracker per firestarter_prom#6,
+    # NOT the repo this code lives in. A silent retarget must fail here.
+    assert submit.SUBMIT_REPO == "henols/firestarter_prom"
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +268,7 @@ def test_submit_via_gh_exact_argv_and_stdin_body():
     run_fn = Mock(
         return_value=Mock(
             returncode=0,
-            stdout="https://github.com/henols/firestarter_app/issues/1\n",
+            stdout="https://github.com/henols/firestarter_prom/issues/1\n",
         )
     )
     result = submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
@@ -276,7 +278,7 @@ def test_submit_via_gh_exact_argv_and_stdin_body():
             "issue",
             "create",
             "--repo",
-            "henols/firestarter_app",
+            submit.SUBMIT_REPO,
             "--title",
             "My Title",
             "--body-file",
@@ -287,7 +289,7 @@ def test_submit_via_gh_exact_argv_and_stdin_body():
         capture_output=True,
         check=False,
     )
-    assert result == "https://github.com/henols/firestarter_app/issues/1"
+    assert result == "https://github.com/henols/firestarter_prom/issues/1"
 
 
 def test_submit_via_gh_returns_none_on_failure():
@@ -305,7 +307,7 @@ def test_submit_via_gh_argv_carries_nothing_permission_gated():
     run_fn = Mock(
         return_value=Mock(
             returncode=0,
-            stdout="https://github.com/henols/firestarter_app/issues/1\n",
+            stdout="https://github.com/henols/firestarter_prom/issues/1\n",
         )
     )
     submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
@@ -352,7 +354,7 @@ def test_submit_via_gh_success_prints_nothing():
     run_fn = Mock(
         return_value=Mock(
             returncode=0,
-            stdout="https://github.com/henols/firestarter_app/issues/1\n",
+            stdout="https://github.com/henols/firestarter_prom/issues/1\n",
         )
     )
     console = Mock()
@@ -387,7 +389,7 @@ def test_browser_tier_small_body_opens_once():
     )
     browser_open.assert_called_once_with(url)
     assert url is not None
-    assert url.startswith("https://github.com/henols/firestarter_app/issues/new?")
+    assert url.startswith(f"https://github.com/{submit.SUBMIT_REPO}/issues/new?")
 
 
 def test_browser_tier_under_cap_returns_the_url():
@@ -527,7 +529,7 @@ def test_browser_reachable_true_returns_the_url():
         "t", _small_body(), saved, browser_open=browser_open, console=console
     )
     assert url is not None
-    assert url.startswith("https://github.com/henols/firestarter_app/issues/new?")
+    assert url.startswith(f"https://github.com/{submit.SUBMIT_REPO}/issues/new?")
     console.print.assert_not_called()
 
 
@@ -644,7 +646,7 @@ def test_offtty_prints_body_and_url_never_sends():
     )
 
     assert any("| id | OK |" in m for m in printed)
-    assert any("github.com/henols/firestarter_app/issues/new" in m for m in printed)
+    assert any(f"github.com/{submit.SUBMIT_REPO}/issues/new" in m for m in printed)
     browser_open.assert_not_called()
     run_fn.assert_not_called()
     confirm_fn.assert_not_called()
@@ -685,7 +687,7 @@ def test_tty_confirm_gh_available_dispatches_to_gh_not_browser():
             Mock(returncode=0),  # gh auth status
             Mock(
                 returncode=0,
-                stdout="https://github.com/henols/firestarter_app/issues/9\n",
+                stdout="https://github.com/henols/firestarter_prom/issues/9\n",
             ),  # gh issue create
         ]
     )
