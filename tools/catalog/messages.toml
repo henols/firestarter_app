@@ -273,6 +273,22 @@ format      = "Cmd: 0x%02x"
 params      = [{ type = "u8", render = "hex_byte" }]
 wire_format = "id_frame"
 
+[[messages]]
+id          = 0x5E
+name        = "MSG_INFO_SDP_UNLOCK"
+severity    = "INFO"
+format      = "SDP unlock: disabling write protection"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x5F
+name        = "MSG_INFO_SDP_UNLOCK_DONE_US"
+severity    = "INFO"
+format      = "SDP unlock emitted in %lu us"
+params      = [{ type = "u32", render = "dec" }]
+wire_format = "id_frame"
+
 # ---------------------------------------------------------------------------
 # WARN (0x80..0x9F)
 # ---------------------------------------------------------------------------
@@ -336,6 +352,22 @@ name        = "MSG_WARN_FL4_BOOT_BLOCK_LOCKED"
 severity    = "WARN"
 format      = "boot block locked -- 0x%06lx not programmable (W29C040 section 6.6 irreversible lockout, write forced)"
 params      = [{ type = "u24", render = "hex_addr" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x86
+name        = "MSG_WARN_SDP_UNLOCK_SKIPPED"
+severity    = "WARN"
+format      = "SDP unlock skipped -- write will not land on an SDP-protected part"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x87
+name        = "MSG_WARN_SDP_TBLC_EXCEEDED"
+severity    = "WARN"
+format      = "SDP unlock exceeded t_BLC budget: %lu us"
+params      = [{ type = "u32", render = "dec" }]
 wire_format = "id_frame"
 
 # ---------------------------------------------------------------------------
