@@ -401,6 +401,13 @@ def submit_report(
     `gh_available()`, falling back to `submit_via_browser` if the `gh`
     attempt returns `None`; otherwise dispatches straight to
     `submit_via_browser`.
+
+    Step 6: a SUCCESSFUL `gh` submission echoes the created issue URL. This
+    exists because the URL was previously returned by `submit_via_gh` and
+    then dropped on the floor, so a tester who had just filed a report saw
+    exactly the same thing as one whose submission failed -- nothing. The
+    browser tier stays quiet on success: the opened tab is its own receipt,
+    and nothing is filed until the tester presses Submit there.
     """
     isatty_fn = isatty_fn or (lambda: sys.stdin.isatty())
 
@@ -450,6 +457,10 @@ def submit_report(
                 browser_open=browser_open,
                 console=console,
             )
+        elif url:
+            _print(f"Report filed: {url}", console=console)
+        else:
+            _print(f"Report filed to {SUBMIT_REPO}.", console=console)
         return
 
     submit_via_browser(

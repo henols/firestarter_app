@@ -712,6 +712,66 @@ def test_tty_confirm_gh_available_dispatches_to_gh_not_browser():
     browser_open.assert_not_called()
 
 
+def test_tty_confirm_gh_success_echoes_the_created_issue_url():
+    # Step 6: the URL submit_via_gh returns must reach the tester. Before this,
+    # a successful submission printed nothing -- indistinguishable from a
+    # failed one (proven live: firestarter_prom#18 was filed with no output).
+    report = _make_report()
+    created = f"https://github.com/{submit.SUBMIT_REPO}/issues/18"
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),  # gh auth status
+            Mock(returncode=0, stdout=created + "\n"),  # gh issue create
+        ]
+    )
+    browser_open = Mock()
+    console = Mock()
+    printed: list[str] = []
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="dev-test-w27c512.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=console,
+    )
+
+    assert any(created in m for m in printed)
+    # A success must never be narrated as a degradation.
+    assert not any("degrad" in m.lower() for m in printed)
+    browser_open.assert_not_called()
+
+
+def test_tty_confirm_gh_success_with_blank_stdout_still_confirms():
+    # returncode 0 means gh created it; blank stdout must not read as silence.
+    report = _make_report()
+    run_fn = Mock(
+        side_effect=[Mock(returncode=0), Mock(returncode=0, stdout="  \n")],
+    )
+    console = Mock()
+    printed: list[str] = []
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="dev-test-w27c512.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=run_fn,
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=console,
+    )
+
+    assert any(submit.SUBMIT_REPO in m and "filed" in m.lower() for m in printed)
+
+
 def test_tty_confirm_gh_unavailable_dispatches_to_browser():
     report = _make_report()
     which_fn = Mock(return_value=None)
