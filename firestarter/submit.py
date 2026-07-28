@@ -23,6 +23,16 @@ output for home-dir paths, serial device names, `/tmp` paths, and the
 current username -- and carries a dedup fingerprint (SUB-03) in its
 issue title.
 
+The `gh` tier's create argv is permission-independent by construction
+(D-1, quick task 260728-ahy): it carries only the repo, title, and stdin
+body -- no triage/write-gated argument -- so a community tester with only
+read access on the target repo can file. Maintainer-side triage still
+applies the `gsd-inbox` label post-hoc (`gh issue edit <n> --add-label
+gsd-inbox`); detection continues to rely on the `[dev test]` title marker
+plus the fenced-JSON `schema_version` (D-04, unchanged). A non-zero `gh`
+exit and an unreachable browser both narrate their failure through the
+`console` seam instead of reporting phantom success (D-2).
+
 `SUBMIT_REPO` is a hardcoded module constant (D-01): the target repo is
 NEVER inferred from cwd or a git remote, so a community tester's own fork
 never receives their own report.
@@ -51,6 +61,11 @@ from firestarter.diagnostic_report import is_submittable
 # ---------------------------------------------------------------------------
 
 SUBMIT_REPO = "henols/firestarter_app"  # D-01: hardcoded, never remote-inferred
+# GSD_INBOX_LABEL is a maintainer-side triage tag ONLY (D-1, quick 260728-ahy):
+# never sent on the `gh issue create` argv (that arg is triage/write-gated and a
+# community tester lacks it); a maintainer applies it post-hoc via
+# `gh issue edit <n> --add-label gsd-inbox`. Detection stays on the `[dev test]`
+# title marker + fenced-JSON `schema_version` (D-04), unaffected by this constant.
 GSD_INBOX_LABEL = "gsd-inbox"
 
 # Encoded-URL byte thresholds (D-05): escalate (drop fenced JSON) past this,
@@ -207,12 +222,21 @@ def gh_available(
     return proc.returncode == 0
 
 
-def submit_via_gh(title: str, body: str, *, run_fn: Any = subprocess.run) -> str | None:
+def submit_via_gh(
+    title: str, body: str, *, run_fn: Any = subprocess.run, console: Any = None
+) -> str | None:
     """File the issue via `gh issue create`, body piped over stdin (no cap).
 
-    The argv is a LIST passed to `run_fn` -- never a shell string, never
-    `shell=True` (T-113-01, the command-injection control). Returns the
-    created issue URL (`proc.stdout.strip()`) on returncode 0, else `None`.
+    The create argv carries only the repo, title, and stdin body -- nothing
+    that requires triage/write access on the target repo, so the tier is
+    permission-independent by construction: a community tester with only
+    read access can file. The argv is a LIST passed to `run_fn` -- never a
+    shell string, never a shell-interpreted invocation (T-113-01, the
+    command-injection control). Returns the created issue URL (`proc.stdout.strip()`) on
+    returncode 0, else `None` -- and on a non-zero exit, the captured
+    `stderr` (or the exit status when `stderr` is blank) is printed through
+    the `console` seam before falling back, so a permission failure is
+    never silent.
     """
     proc = run_fn(
         [
@@ -221,8 +245,6 @@ def submit_via_gh(title: str, body: str, *, run_fn: Any = subprocess.run) -> str
             "create",
             "--repo",
             SUBMIT_REPO,
-            "--label",
-            GSD_INBOX_LABEL,
             "--title",
             title,
             "--body-file",
@@ -235,6 +257,19 @@ def submit_via_gh(title: str, body: str, *, run_fn: Any = subprocess.run) -> str
     )
     if proc.returncode == 0:
         return proc.stdout.strip()
+
+    err = (getattr(proc, "stderr", "") or "").strip()
+    if err:
+        _print(
+            f"gh issue create failed: {err} -- degrading to the browser tier.",
+            console=console,
+        )
+    else:
+        _print(
+            f"gh issue create failed (exit {proc.returncode}) -- degrading "
+            "to the browser tier.",
+            console=console,
+        )
     return None
 
 

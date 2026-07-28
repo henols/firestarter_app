@@ -277,8 +277,6 @@ def test_submit_via_gh_exact_argv_and_stdin_body():
             "create",
             "--repo",
             "henols/firestarter_app",
-            "--label",
-            "gsd-inbox",
             "--title",
             "My Title",
             "--body-file",
@@ -293,9 +291,80 @@ def test_submit_via_gh_exact_argv_and_stdin_body():
 
 
 def test_submit_via_gh_returns_none_on_failure():
-    run_fn = Mock(return_value=Mock(returncode=1, stdout=""))
+    run_fn = Mock(return_value=Mock(returncode=1, stdout="", stderr=""))
     result = submit.submit_via_gh("t", "b", run_fn=run_fn)
     assert result is None
+
+
+def test_submit_via_gh_argv_carries_nothing_permission_gated():
+    # D-1/T-ahy-05: the ONE assertion a mocked run_fn can honestly make
+    # about the real-world failure -- no permission-gated argument is ever
+    # sent on the create path. A mocked run_fn cannot prove GitHub accepts
+    # the create call; it CAN prove the argv never carries the label flag
+    # or the GSD_INBOX_LABEL value.
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout="https://github.com/henols/firestarter_app/issues/1\n",
+        )
+    )
+    submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    assert argv[0] == "gh"
+    assert "--label" not in argv
+    assert submit.GSD_INBOX_LABEL not in argv
+    assert "gsd-inbox" not in " ".join(argv)
+    assert "shell" not in run_fn.call_args.kwargs
+
+
+def test_submit_via_gh_failure_prints_captured_stderr():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=1,
+            stdout="",
+            stderr="GraphQL: Resource not accessible by personal access token",
+        )
+    )
+    console = Mock()
+    printed: list[str] = []
+    console.print.side_effect = lambda msg: printed.append(msg)
+    result = submit.submit_via_gh("t", "b", run_fn=run_fn, console=console)
+    assert result is None
+    assert any(
+        "GraphQL: Resource not accessible by personal access token" in m
+        for m in printed
+    )
+
+
+def test_submit_via_gh_failure_with_blank_stderr_still_reports():
+    run_fn = Mock(return_value=Mock(returncode=3, stdout="", stderr=""))
+    console = Mock()
+    printed: list[str] = []
+    console.print.side_effect = lambda msg: printed.append(msg)
+    result = submit.submit_via_gh("t", "b", run_fn=run_fn, console=console)
+    assert result is None
+    assert any(m.strip() and "3" in m for m in printed)
+    assert not any("Mock" in m for m in printed)
+
+
+def test_submit_via_gh_success_prints_nothing():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout="https://github.com/henols/firestarter_app/issues/1\n",
+        )
+    )
+    console = Mock()
+    submit.submit_via_gh("t", "b", run_fn=run_fn, console=console)
+    console.print.assert_not_called()
+
+
+def test_gsd_inbox_label_constant_retained():
+    # D-1: the label constant survives for MAINTAINER-side triage
+    # (`gh issue edit <n> --add-label gsd-inbox`), even though it is no
+    # longer sent on the community-tester create path.
+    assert submit.GSD_INBOX_LABEL == "gsd-inbox"
 
 
 # ---------------------------------------------------------------------------
