@@ -6,8 +6,11 @@ bullet).
 Scans `firestarter/src/proms/eeprom_28c.cpp`'s `eeprom28c_write_init`
 function and asserts zero logging-macro (`LOG_*`, `firestarter/include/
 logging_id.h`) call sites appear between the command-emit anchor
-(`flash_execute_command(EEPROM_SDP_DISABLE)`) and the completion-wait anchor
-(`eeprom28c_wait_for_write(...)`) that immediately follows it. Phase 118's
+(`eeprom28c_emit_command_sequence(handle, EEPROM_SDP_DISABLE, ...)`) and the
+completion-wait anchor (`eeprom28c_wait_for_sdp_completion(...)`) that
+immediately follows it. Both anchor tuples below are append-only and still
+carry their pre-Phase-117 predecessors (`flash_execute_command(
+EEPROM_SDP_DISABLE)` and `eeprom28c_wait_for_write(...)`). Phase 118's
 OBS-01 will add report lines around this sequence -- this gate is what keeps
 them *around* it rather than *inside* it (a log call issued mid-sequence
 would itself perturb the inter-byte timing window the SDP-disable write
@@ -75,23 +78,33 @@ _FUNC_NAME = "eeprom28c_write_init"
 _FUNC_DEF_PATTERN = re.compile(r"\bvoid\s+" + _FUNC_NAME + r"\s*\([^)]*\)\s*\{")
 
 # Command-emit anchors -- the call(s) that kick off the SDP command sequence.
-# On today's tree this matches the flash_execute_command(EEPROM_SDP_DISABLE)
-# call site at eeprom_28c.cpp:109. Phase 117 replaces this emitter with a
-# 0x0D-local one on handle->firestarter_set_data (FIX-01) -- when that lands,
-# ADD the new emitter's call-site pattern to this tuple rather than deleting
-# or replacing this entry; a rename that leaves this tuple matching zero
-# times fails closed (see _resolve_window below), it does not silently pass.
+# The first entry matched the pre-Phase-117 flash_execute_command(
+# EEPROM_SDP_DISABLE) call site. Phase 117 (FIX-01) replaced that emitter with
+# the 0x0D-local eeprom28c_emit_command_sequence() driven through
+# handle->firestarter_set_data, so the second entry is what matches on today's
+# tree. Per the anti-hollow contract this tuple is APPEND-ONLY: the superseded
+# pattern stays so a revert or a partial re-introduction is still anchored, and
+# a future rename that leaves this tuple matching zero times fails closed (see
+# _resolve_window below) rather than silently passing.
 _EMIT_ANCHOR_PATTERNS = (
     re.compile(r"flash_execute_command\s*\(\s*EEPROM_SDP_DISABLE\s*\)"),
+    re.compile(
+        r"eeprom28c_emit_command_sequence\s*\(\s*handle\s*,\s*EEPROM_SDP_DISABLE\b"
+    ),
 )
 
 # Completion-wait anchors -- the call that blocks until the SDP-disable write
-# cycle completes. On today's tree this matches the eeprom28c_wait_for_write(
-# call site immediately following the emit anchor. If Phase 117 renames or
-# replaces this wait mechanism, ADD the new call-site pattern to this tuple
-# rather than deleting or replacing this entry (same anti-hollow contract as
-# _EMIT_ANCHOR_PATTERNS above).
-_WAIT_ANCHOR_PATTERNS = (re.compile(r"eeprom28c_wait_for_write\s*\("),)
+# cycle completes, immediately following the emit anchor. The first entry
+# matched the pre-Phase-117 eeprom28c_wait_for_write( call site; Phase 117
+# deleted that function outright (FIX-02 replaced its inverted read-back with
+# an unconditional t_WC wait plus a bounded DQ6 toggle poll, and FIX-06 split
+# the page path into eeprom28c_wait_for_page_write), so the second entry is
+# what matches on today's tree. Same append-only anti-hollow contract as
+# _EMIT_ANCHOR_PATTERNS above.
+_WAIT_ANCHOR_PATTERNS = (
+    re.compile(r"eeprom28c_wait_for_write\s*\("),
+    re.compile(r"eeprom28c_wait_for_sdp_completion\s*\("),
+)
 
 # Deny list: every logging-call macro this codebase defines
 # (firestarter/include/logging_id.h). Every one of them shares the `LOG_`

@@ -123,8 +123,15 @@ def _extract_byte_flip_pairs(source_text: str, decl_name: str) -> list[tuple[int
     opening `{` of its initializer list to the matching closing `}` --
     never a bare file-wide regex, which would false-positive on this
     project's own non-initializer usages of the same literal bytes.
+
+    The bracket group accepts BOTH an implicit extent (`NAME[] = {`, the
+    shape at v1.22 Phase 116) and an explicit one (`NAME[6] = {`, the shape
+    Phase 117 needed once `EEPROM_SDP_DISABLE` was given external linkage --
+    a C++ `extern` declaration cannot name an incomplete array type). The
+    trailing `=` is still required, so this matches only the initializer and
+    never the bare `extern const byte_flip_t NAME[6];` declaration.
     """
-    decl_pattern = re.compile(rf"\b{re.escape(decl_name)}\s*\[\s*\]\s*=\s*")
+    decl_pattern = re.compile(rf"\b{re.escape(decl_name)}\s*\[\s*\d*\s*\]\s*=\s*")
     match = decl_pattern.search(source_text)
     if not match:
         raise ValueError(f"Declaration {decl_name!r} not found in source text")
