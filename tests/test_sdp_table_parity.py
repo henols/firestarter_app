@@ -216,6 +216,78 @@ def test_unlock_table_terminal_byte_differs_from_erase_terminal_byte() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Test 2b: EEPROM_SDP_ENABLE three-way parity (Plan 119-06, LOCK-05)
+# ---------------------------------------------------------------------------
+
+_ENABLE_CONTEXT = (
+    "Second, independent, source-text oracle for D-10's three-way AA-55-A0 "
+    "identity: the firmware guard in test_sdp_harness.cpp "
+    "(test_lock05_three_way_enable_table_identity, LOCK-05, plan 119-06) proves "
+    "EEPROM_SDP_ENABLE, FLASH_ENABLE_WRITE_PROTECTION and FLASH_ENABLE_WRITE are "
+    "byte-identical AND three distinct objects at link time. This test proves the "
+    "byte-identity half again, independently, by parsing the same three "
+    "declarations as source text instead. Two oracles with different failure "
+    "modes is the point -- a source-text refactor that broke the firmware "
+    "guard's linkage would still be caught here, and vice versa. This also "
+    "keeps the host gate's coverage in step with the firmware, which is "
+    "CORRECTION-4 item 4's spirit."
+)
+
+
+@_requires_fw
+def test_eeprom_sdp_enable_matches_flash_enable_write_and_write_protection() -> None:
+    """Second, independent, source-text oracle for D-10's three-way AA-55-A0
+    identity (Plan 119-06, closing LOCK-05).
+
+    The firmware guard in test_sdp_harness.cpp is a link-time comparison of
+    the actual PRODUCTION objects (EEPROM_SDP_ENABLE, FLASH_ENABLE_WRITE_PROTECTION,
+    FLASH_ENABLE_WRITE) plus their pairwise pointer distinctness. This test
+    re-proves the byte-identity half by parsing the same three declarations
+    as source text -- a different failure mode than the firmware guard's: a
+    text-level divergence that somehow still linked identically, or a
+    firmware refactor that changed the declaration syntax without changing
+    the linked bytes, would be caught by ONE of the two oracles but not
+    necessarily the other.
+    """
+    enable_pairs = _extract_byte_flip_pairs(
+        _sdp_src_path().read_text(encoding="utf-8"), "EEPROM_SDP_ENABLE"
+    )
+    write_protection_pairs = _extract_byte_flip_pairs(
+        _FLASH_UTILS_H.read_text(encoding="utf-8"),
+        "FLASH_ENABLE_WRITE_PROTECTION",
+    )
+    write_pairs = _extract_byte_flip_pairs(
+        _FLASH_UTILS_H.read_text(encoding="utf-8"), "FLASH_ENABLE_WRITE"
+    )
+
+    assert len(enable_pairs) == 3, (
+        f"EEPROM_SDP_ENABLE must have exactly 3 pairs, found {len(enable_pairs)}"
+    )
+    assert len(write_protection_pairs) == 3, (
+        "FLASH_ENABLE_WRITE_PROTECTION must have exactly 3 pairs, found "
+        f"{len(write_protection_pairs)}"
+    )
+    assert len(write_pairs) == 3, (
+        f"FLASH_ENABLE_WRITE must have exactly 3 pairs, found {len(write_pairs)}"
+    )
+
+    _assert_pairs_equal(
+        enable_pairs,
+        write_protection_pairs,
+        f"{_ENABLE_CONTEXT}\nDiverging pair: EEPROM_SDP_ENABLE vs FLASH_ENABLE_WRITE_PROTECTION.",
+    )
+    _assert_pairs_equal(
+        enable_pairs,
+        write_pairs,
+        f"{_ENABLE_CONTEXT}\nDiverging pair: EEPROM_SDP_ENABLE vs FLASH_ENABLE_WRITE.",
+    )
+
+    assert enable_pairs[-1] == (0x5555, 0xA0), (
+        f"EEPROM_SDP_ENABLE's last pair must be (0x5555, 0xA0), found {enable_pairs[-1]}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Test 3: non-vacuous proof
 # ---------------------------------------------------------------------------
 
