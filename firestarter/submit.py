@@ -35,7 +35,10 @@ exit and an unreachable browser both narrate their failure through the
 
 `SUBMIT_REPO` is a hardcoded module constant (D-01): the target repo is
 NEVER inferred from cwd or a git remote, so a community tester's own fork
-never receives their own report.
+never receives their own report. It names `henols/firestarter_prom`, the
+project-wide tracker -- deliberately NOT the repo this module lives in
+(firestarter_prom#6 centralizes issue creation there and disables it on
+`henols/firestarter` and `henols/firestarter_app`).
 """
 
 from __future__ import annotations
@@ -60,7 +63,14 @@ from firestarter.diagnostic_report import is_submittable
 # Module constants (D-01, D-05)
 # ---------------------------------------------------------------------------
 
-SUBMIT_REPO = "henols/firestarter_app"  # D-01: hardcoded, never remote-inferred
+# D-01: hardcoded, never remote-inferred. Target is the project-wide tracker,
+# NOT the repo this code lives in: `henols/firestarter_prom` is the single
+# repository for issue tracking per firestarter_prom#6 ("New GitHub issues must
+# be allowed only in henols/firestarter_prom"; creation is to be disabled in
+# `henols/firestarter` and `henols/firestarter_app`). A `dev test` report spans
+# host + firmware + shield and cannot reliably attribute itself to one layer,
+# so the cross-repository tracker is also the only correct destination for it.
+SUBMIT_REPO = "henols/firestarter_prom"
 # GSD_INBOX_LABEL is a maintainer-side triage tag ONLY (D-1, quick 260728-ahy):
 # never sent on the `gh issue create` argv (that arg is triage/write-gated and a
 # community tester lacks it); a maintainer applies it post-hoc via
@@ -188,14 +198,14 @@ def build_body(
 
 
 def build_issue_url(title: str, body: str) -> str:
-    """`https://github.com/henols/firestarter_app/issues/new?...` (D-01).
+    """`https://github.com/<SUBMIT_REPO>/issues/new?...` (D-01).
 
     Percent-encodes `title`/`body` via `urllib.parse.urlencode(quote_via=quote)`.
     Deliberately OMITS the `labels` query param (RESEARCH Pitfall 1): GitHub
     silently drops or 404s the `labels` param for community testers without
-    write access on `henols/firestarter_app` -- triage relies on the
-    `[dev test]` title marker plus the fenced-JSON `schema_version` instead.
-    Server-side template-based labeling is deferred to Phase 114.
+    write access on the target repo -- triage relies on the `[dev test]` title
+    marker plus the fenced-JSON `schema_version` instead. This mirrors the `gh`
+    tier, whose create argv is likewise permission-independent (D-1).
     """
     query = urlencode({"title": title, "body": body}, quote_via=quote)
     return f"https://github.com/{SUBMIT_REPO}/issues/new?{query}"
