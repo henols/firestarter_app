@@ -499,6 +499,38 @@ def test_oversize_hard_stop_no_json_fence_still_hard_stops():
     browser_open.assert_not_called()
 
 
+def test_browser_unreachable_returns_none_and_prints_url_and_local_path():
+    from pathlib import Path
+
+    browser_open = Mock(return_value=False)
+    saved = Path("/home/alice/.firestarter/reports/dev-test-x.json")
+    console = Mock()
+    printed: list[str] = []
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    result = submit.submit_via_browser(
+        "My Title", _small_body(), saved, browser_open=browser_open, console=console
+    )
+
+    browser_open.assert_called_once()
+    assert result is None
+    joined = "\n".join(printed)
+    assert "issues/new" in joined
+    assert str(saved) in joined
+
+
+def test_browser_reachable_true_returns_the_url():
+    browser_open = Mock(return_value=True)
+    saved = SimpleNamespace(name="dev-test-x.json")
+    console = Mock()
+    url = submit.submit_via_browser(
+        "t", _small_body(), saved, browser_open=browser_open, console=console
+    )
+    assert url is not None
+    assert url.startswith("https://github.com/henols/firestarter_app/issues/new?")
+    console.print.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # Task 2: submit_report -- D-03 refuse gate + D-04 TTY/off-TTY dispatch
 # ---------------------------------------------------------------------------
@@ -730,6 +762,65 @@ def test_tty_confirm_gh_create_fails_falls_back_to_browser():
     )
 
     browser_open.assert_called_once()
+
+
+def test_submit_report_gh_failure_surfaces_stderr_before_browser_fallback():
+    # Honest ordering: the stderr-narrating print from Task 1's gh-failure
+    # path, plus submit_report's own degradation statement, must both
+    # appear BEFORE the browser_open fallback call -- not merely alongside
+    # it. A single shared `printed` list (fed by both console.print AND a
+    # browser_open side_effect sentinel) is the only way a mocked test can
+    # honestly prove ordering across two different injected seams.
+    report = _make_report()
+    which_fn = Mock(return_value="/usr/bin/gh")
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),  # gh auth status: authed
+            Mock(
+                returncode=1,
+                stdout="",
+                stderr="GraphQL: Resource not accessible by personal access token",
+            ),  # gh issue create: fails
+        ]
+    )
+    confirm_fn = Mock(return_value=True)
+    isatty_fn = Mock(return_value=True)
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    def _browser_open_sentinel(url):
+        printed.append("BROWSER_OPEN_SENTINEL")
+        return True
+
+    browser_open = Mock(side_effect=_browser_open_sentinel)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=console,
+    )
+
+    stderr_idx = next(
+        i
+        for i, m in enumerate(printed)
+        if "GraphQL: Resource not accessible by personal access token" in m
+    )
+    degrade_idx = next(
+        i for i, m in enumerate(printed) if "degrad" in m.lower() and "GraphQL" not in m
+    )
+    sentinel_idx = printed.index("BROWSER_OPEN_SENTINEL")
+
+    assert stderr_idx < sentinel_idx
+    assert degrade_idx < sentinel_idx
 
 
 def test_tty_body_sent_to_gh_is_sanitized():

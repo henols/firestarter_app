@@ -308,6 +308,12 @@ def submit_via_browser(
     console (not the issue body, so the full path is fine here) and
     returns `None`. `browser_open` is called at most once, and only when
     strictly under the hard cap.
+
+    A falsy `browser_open` result (no browser could be launched -- e.g.
+    headless environment) also returns `None` and prints an actionable
+    manual-filing message carrying the full issue URL plus the full local
+    report path, so the caller can never mistake an unreachable browser
+    for a filed report (D-2, quick task 260728-ahy).
     """
     url = build_issue_url(title, body)
     n = len(url.encode("utf-8"))
@@ -335,7 +341,15 @@ def submit_via_browser(
         )
         return None
 
-    browser_open(url)
+    opened = browser_open(url)
+    if not opened:
+        _print(
+            "Could not open a browser -- file the report manually by "
+            f"pasting this URL: {url}\nThe complete report is saved "
+            f"locally at {saved_json_path}.",
+            console=console,
+        )
+        return None
     return url
 
 
@@ -418,8 +432,13 @@ def submit_report(
         return
 
     if gh_available(which_fn=which_fn, run_fn=run_fn):
-        url = submit_via_gh(title, body, run_fn=run_fn)
+        url = submit_via_gh(title, body, run_fn=run_fn, console=console)
         if url is None:
+            _print(
+                "The gh tier failed to file the report -- degrading to "
+                "the browser tier.",
+                console=console,
+            )
             submit_via_browser(
                 title,
                 body,
