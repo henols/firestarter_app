@@ -176,11 +176,21 @@ no serial port:
   nothing to compare against the release, so `--install` (or `--force`) is
   required — the app will not silently install over unknown firmware.
 
-The release asset must be published as `firestarter_py32f071.bin` (preferred) or
-`firestarter_py32f071.hex`. The PY32 CI workflow on the firmware branch currently
-uploads a GitHub **Actions artifact** named `firestarter-py32f071.hex` — wrong
-prefix, wrong separator, wrong publication channel. That has to change before
-`--install` can resolve anything.
+The release asset is `firestarter_py32f071.hex` — the same
+`firestarter_<board>.hex` convention as the AVR boards, and the safer of the two
+image formats for DFU because Intel HEX carries its own load address instead of
+being assumed to start at `0x08000000`. A raw `firestarter_py32f071.bin` is also
+accepted, which is what a local CMake build produces, so an unreleased image can
+be flashed without converting it.
+
+Publication is the remaining blocker on the firmware side. The PY32 workflow
+builds correct binaries but uploads them as a GitHub **Actions artifact** — a ZIP
+bundle, on a different API from releases, expiring after 90 days and requiring
+auth. The host reads release *assets*. The fix is not to add a release step to
+that workflow: `beta-build.yml` rewrites `include/version.h` and auto-commits it
+before building, so an image built in any other job carries a stale version
+string. The PY32F071 build has to move into that job, next to `pio run`. See
+`platform/py32f071/README.md` § "Release integration" in the firmware repo.
 
 ---
 

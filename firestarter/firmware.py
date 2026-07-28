@@ -99,13 +99,18 @@ def flash_method(board: Optional[str]) -> str:
 def asset_candidates(board: str) -> List[str]:  # noqa: UP006
     """Release-asset filenames to accept for a board, most preferred first.
 
-    DFU boards accept a raw `.bin` first and Intel `.hex` as a fallback:
-    `py32_dfu.load_image()` reads either, and which one the firmware release
-    publishes for PY32F071 is not settled yet. AVR boards keep the single
-    historical `.hex` name unchanged.
+    Every board — AVR and DFU alike — publishes `firestarter_<board>.hex`, so
+    that is what a release lookup prefers. Intel HEX is also the safer of the two
+    for a DFU write: it carries its own load address, which `load_image()` reads
+    and the flash-envelope guard then validates, whereas a raw `.bin` can only be
+    *assumed* to start at `FLASH_BASE`.
+
+    DFU boards additionally accept a raw `.bin`, which is what a local CMake
+    build produces alongside the hex, so a developer can flash an unreleased
+    image without converting it.
     """
     if flash_method(board) == FLASH_METHOD_DFU:
-        return [f"firestarter_{board}.bin", f"firestarter_{board}.hex"]
+        return [f"firestarter_{board}.hex", f"firestarter_{board}.bin"]
     return [f"firestarter_{board}.hex"]
 
 

@@ -433,24 +433,27 @@ class TestBoardRouting:
         assert firmware.asset_candidates("uno") == ["firestarter_uno.hex"]
         assert firmware._asset_label("uno") == "'firestarter_uno.hex'"
 
-    def test_dfu_board_prefers_bin_and_accepts_hex(self):
+    def test_dfu_board_prefers_hex_and_accepts_bin(self):
+        # .hex is what the firmware release publishes (same convention as the AVR
+        # boards) and carries its own load address; .bin is the local-build escape
+        # hatch.
         assert firmware.asset_candidates("py32f071") == [
-            "firestarter_py32f071.bin",
             "firestarter_py32f071.hex",
+            "firestarter_py32f071.bin",
         ]
 
-    def test_asset_pick_prefers_bin_for_dfu_board(self):
+    def test_asset_pick_prefers_hex_for_dfu_board(self):
         assets = [
-            {"name": "firestarter_py32f071.hex", "browser_download_url": "hex-url"},
             {"name": "firestarter_py32f071.bin", "browser_download_url": "bin-url"},
-        ]
-        assert firmware._pick_asset(assets, "py32f071") == "bin-url"
-
-    def test_asset_pick_falls_back_to_hex_for_dfu_board(self):
-        assets = [
-            {"name": "firestarter_py32f071.hex", "browser_download_url": "hex-url"}
+            {"name": "firestarter_py32f071.hex", "browser_download_url": "hex-url"},
         ]
         assert firmware._pick_asset(assets, "py32f071") == "hex-url"
+
+    def test_asset_pick_falls_back_to_bin_for_dfu_board(self):
+        assets = [
+            {"name": "firestarter_py32f071.bin", "browser_download_url": "bin-url"}
+        ]
+        assert firmware._pick_asset(assets, "py32f071") == "bin-url"
 
     def test_asset_pick_ignores_other_boards(self):
         assets = [{"name": "firestarter_leonardo.hex", "browser_download_url": "u"}]
