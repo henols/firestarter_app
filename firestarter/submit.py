@@ -235,8 +235,9 @@ def submit_via_gh(
     command-injection control). Returns the created issue URL (`proc.stdout.strip()`) on
     returncode 0, else `None` -- and on a non-zero exit, the captured
     `stderr` (or the exit status when `stderr` is blank) is printed through
-    the `console` seam before falling back, so a permission failure is
-    never silent.
+    the `console` seam, so a permission failure is never silent. Narrating
+    the *fallback* is deliberately left to the caller: this function does
+    not decide whether a browser tier follows.
     """
     proc = run_fn(
         [
@@ -260,16 +261,9 @@ def submit_via_gh(
 
     err = (getattr(proc, "stderr", "") or "").strip()
     if err:
-        _print(
-            f"gh issue create failed: {err} -- degrading to the browser tier.",
-            console=console,
-        )
+        _print(f"gh issue create failed: {err}", console=console)
     else:
-        _print(
-            f"gh issue create failed (exit {proc.returncode}) -- degrading "
-            "to the browser tier.",
-            console=console,
-        )
+        _print(f"gh issue create failed (exit {proc.returncode}).", console=console)
     return None
 
 
