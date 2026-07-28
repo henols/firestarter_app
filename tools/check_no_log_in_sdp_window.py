@@ -111,6 +111,34 @@ _POLL_FUNC_NAME = "eeprom28c_wait_for_sdp_completion"
 # function to compute the scanned span.
 _FUNC_NAME = "eeprom28c_write_init"
 
+# v1.22 Phase 119 Plan 04 (D-14): eeprom28c_emit_sdp_sequence_timed() -- the
+# shared micros()-bracket-plus-report-pair helper both the SDP-disable
+# (eeprom28c_write_init / eeprom28c_sdp_unlock_execute) and the new SDP-enable
+# (eeprom28c_sdp_lock_execute) sequences call -- MUST NEVER be added as a
+# third scanned window (a third name in _EMITTER_FUNC_NAME/_POLL_FUNC_NAME,
+# or a third _find_function_body call in _resolve_windows/scan). That
+# helper's body contains LOG_ID / LOG_ID_U32 / LOG_WARN_ID_U32 calls BY
+# DESIGN (D-12/D-14) -- it is the report/measurement wrapper AROUND the
+# emit call, not the timing window itself. The real inter-byte SDP timing
+# window this checker exists to protect remains exactly
+# eeprom28c_emit_command_sequence's body (_EMITTER_FUNC_NAME above), which
+# is still shared by both sequences and still scanned; scanning the helper
+# too would turn every one of its by-design report lines into a false
+# FAIL:.
+#
+# Two further tripwires this checker's own resolver depends on, recorded
+# here so a future editor does not have to rediscover them (RESEARCH F-M):
+#   1. _func_def_pattern (above) requires the return type to be literally
+#      `void` -- if eeprom28c_emit_command_sequence were ever changed to
+#      return e.g. `bool`, window resolution for _EMITTER_FUNC_NAME would
+#      silently stop matching and _resolve_windows would fail closed with
+#      a "not found (or not brace-balanced)" ValueError (the correct, safe
+#      failure mode -- but worth knowing why, rather than treating it as a
+#      mystery).
+#   2. Step 2 of window resolution (the poll body) fails closed the same
+#      way if eeprom28c_wait_for_sdp_completion is ever deleted or renamed
+#      without a matching update to _POLL_FUNC_NAME.
+
 
 def _func_def_pattern(func_name: str) -> re.Pattern[str]:
     """Build a function-DEFINITION-only pattern (body-opening `{`), never
@@ -131,9 +159,13 @@ def _func_def_pattern(func_name: str) -> re.Pattern[str]:
 # not by window resolution itself. The first entry matched the pre-Phase-117
 # flash_execute_command(EEPROM_SDP_DISABLE) call site. Phase 117 (FIX-01)
 # replaced that emitter with the 0x0D-local eeprom28c_emit_command_sequence()
-# driven through handle->firestarter_set_data, so the second entry is what
-# matches on today's tree. Per the anti-hollow contract this tuple is
-# APPEND-ONLY: the superseded pattern stays so a revert or a partial
+# driven through handle->firestarter_set_data, so the second entry matched
+# eeprom28c_write_init's direct call site through Phase 118. Phase 119 Plan 04
+# (D-14) factored a shared eeprom28c_emit_sdp_sequence_timed() helper that
+# eeprom28c_write_init now calls instead of eeprom28c_emit_command_sequence
+# directly (the helper itself calls the emitter), so the third entry below is
+# what matches on today's tree. Per the anti-hollow contract this tuple is
+# APPEND-ONLY: every superseded pattern stays so a revert or a partial
 # re-introduction is still anchored, and a future rename that leaves this
 # tuple matching zero times fails closed (see _resolve_windows below) rather
 # than silently passing.
@@ -141,6 +173,11 @@ _EMIT_ANCHOR_PATTERNS = (
     re.compile(r"flash_execute_command\s*\(\s*EEPROM_SDP_DISABLE\s*\)"),
     re.compile(
         r"eeprom28c_emit_command_sequence\s*\(\s*handle\s*,\s*EEPROM_SDP_DISABLE\b"
+    ),
+    # v1.22 Phase 119 D-14: eeprom28c_write_init's call site is now the
+    # shared timed-emit helper, not the emitter directly.
+    re.compile(
+        r"eeprom28c_emit_sdp_sequence_timed\s*\(\s*handle\s*,\s*EEPROM_SDP_DISABLE\b"
     ),
 )
 
