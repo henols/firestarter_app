@@ -54,6 +54,8 @@ from firestarter.exceptions import (
     SerialTimeoutError,
 )
 from firestarter.frame_parser import _crc8_ccitt, cobs_encode
+from firestarter.messages import MSG_WARN_SDP_UNLOCK_SKIPPED
+from firestarter.sdp_capability import SDP_PROTOCOL_ID
 from firestarter.serial_comm import SerialCommunicator
 from firestarter.utils import extract_hex_to_decimal
 
@@ -1606,6 +1608,53 @@ class EpromOperator:
                 buffer_size=buf_size,
                 eprom_data_dict=cmd_data,  # FIX-01b: boot-block hint context
             )
+
+            # D-15 (Phase 120 / v1.22 HOST-06): when --skip-sdp-unlock was set,
+            # require firmware's MSG_WARN_SDP_UNLOCK_SKIPPED (0x86) ack that it
+            # actually honoured the opt-out. An unknown *command* produces a
+            # loud error (D-14, plan 120-08); an unknown *flag bit* produces
+            # silence — old firmware simply ignores 0x100 and runs the unlock
+            # it was told to skip, then reports success. The absence of 0x86
+            # is the only signal available, so its absence converts that
+            # silent failure into a loud one, using machinery (0x86) that
+            # already shipped in Phase 118 for a different purpose — zero
+            # firmware change. This check MUST read self.comm.seen_message_ids
+            # here, inside the _operation_context `with` block: that block's
+            # `finally` calls _disconnect_programmer(), which sets self.comm to
+            # None, so a read after the block exits would raise or silently
+            # see nothing.
+            #
+            # Honest limitation (state, do not overclaim): this DETECTS after
+            # the fact, it does not PREVENT. On old firmware the unlock has
+            # already been emitted by the time the user is told.
+            #
+            # No version floor is used instead (D-16): the host structurally
+            # cannot distinguish 3.0.0b11 from a later pre-release because
+            # _probe_port's capture regex truncates the suffix, and widening
+            # it would touch the ring-fenced transport version-capture path.
+            #
+            # Scoped to protocol 0x0D (D-18, plan 120-09's is_protocol_0x0d
+            # predicate, mirrored here from eprom_data_dict): firmware ONLY
+            # reads FLAG_SKIP_SDP_UNLOCK — and only emits MSG_WARN_SDP_UNLOCK_
+            # SKIPPED — on protocol-0x0D writes. On any other protocol the bit
+            # is emitted on the wire (D-18 warn-and-proceed, unconditional
+            # per D-19) but firmware never acts on it and never answers with
+            # 0x86, on old AND new firmware alike — that is not the silent-
+            # failure case HOST-06 names, so requiring the ack there would be
+            # a false positive on every non-0x0D --skip-sdp-unlock write.
+            is_protocol_0x0d = eprom_data_dict.get("protocol-id") == SDP_PROTOCOL_ID
+            if is_protocol_0x0d and (operation_flags & FLAG_SKIP_SDP_UNLOCK):
+                if MSG_WARN_SDP_UNLOCK_SKIPPED not in self.comm.seen_message_ids:
+                    logger.error(
+                        f"--skip-sdp-unlock was requested for {eprom_name.upper()}, "
+                        "but the firmware did not acknowledge it "
+                        "(no MSG_WARN_SDP_UNLOCK_SKIPPED / 0x86 ack observed). "
+                        "The automatic SDP unlock ran anyway, despite the opt-out. "
+                        "This usually means the connected firmware predates the "
+                        "flag. Run `firestarter fw --install` to update firmware, "
+                        "then retry."
+                    )
+                    is_ok = False
 
             if is_ok:
                 logger.info(
