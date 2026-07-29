@@ -1904,3 +1904,55 @@ def test_safe02_only_known_operator_methods_no_attribute_error():
     results = run_plan(plan, operator, _REAL_DB)  # must not raise AttributeError
 
     assert len(results) == len(plan.steps)
+
+
+# ---------------------------------------------------------------------------
+# DEVTEST-01 host half (Phase 121 D-12): the 0x0D sweep never fabricates an
+# erase, and an all-OK 0x0D sweep no longer auto-tags community-fail
+# ---------------------------------------------------------------------------
+
+
+def test_devtest01_0x0d_sweep_erase_is_na_and_erase_eprom_never_called():
+    """DEVTEST-01 end-to-end sweep leg: for a protocol-0x0D chip (AT28C256),
+    `run_plan` over a plan derived at `write_scope="full"` produces an erase
+    result whose verdict is NA, with the family-fact reason surviving into
+    the `StepResult`, and `operator.erase_eprom` is NEVER called. A `NA`
+    verdict alone does not prove nothing was dispatched -- this negative-call
+    assertion is the load-bearing line (Phase 121 D-12)."""
+    name = "AT28C256"
+    full = _REAL_DB.get_eprom(name)
+    assert full["protocol-id"] == 13  # 0x0D
+
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    erase_step = _step(plan, "erase")
+    assert erase_step.supported is False
+
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+
+    erase_result = _result(results, OP_ERASE)
+    assert erase_result.verdict == VERDICT_NA
+    assert "0x0D" in erase_result.reason
+    assert "FLAG_CAN_ERASE" not in erase_result.reason
+    operator.erase_eprom.assert_not_called()
+
+
+def test_devtest01_0x0d_all_ok_sweep_no_longer_tags_community_fail():
+    """DEVTEST-01 ladder leg: an all-OK protocol-0x0D sweep whose erase step
+    is NA no longer produces the `community-fail` ladder tag -- that
+    fabricated-erase-poisons-an-otherwise-passing-chip's-ladder-state bug is
+    exactly what DEVTEST-01 closes. The resulting `ladder_state` is the
+    `community-reported` value, and `community-fail` is asserted absent."""
+    from firestarter.diagnostic_report import build_db_diff
+
+    name = "AT28C256"
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+
+    verdicts = {r.verdict for r in results}
+    assert VERDICT_BAD not in verdicts
+
+    db_diff = build_db_diff(name, _REAL_DB, results)
+    assert db_diff.ladder_state == "community-reported"
+    assert db_diff.ladder_state != "community-fail"

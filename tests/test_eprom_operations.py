@@ -1125,19 +1125,26 @@ class TestSdpOperationsWireShape:
             ok = operator.sdp_lock("at28c256", _at28c256_programmer_dict())
         assert ok is False
 
-    def test_sdp_command_flags_carry_the_db_can_erase_bit(
+    def test_sdp_command_flags_do_not_carry_the_db_can_erase_bit(
         self, make_comm, fake_serial
     ) -> None:
-        """v1.22 HOST-01: the composed command_dict["flags"] for an at28c256
-        input is 2 (FLAG_CAN_ERASE), NOT 0.
+        """REVERSAL RECORD (Phase 121 D-12): this test previously asserted the
+        composed command_dict["flags"] for an at28c256 input is 2
+        (FLAG_CAN_ERASE), NOT 0 -- on the claim that
+        `database.py`'s (former) `algo != 5` exclusion set FLAG_CAN_ERASE
+        (0x02) for every EEPROM / Flash-EEPROM part with algorithm != 5,
+        including all 84 protocol-0x0D chips, and that this was safe because
+        configure_eeprom28c never reads the bit (firmware-inert).
 
-        database.py:570-595 sets FLAG_CAN_ERASE (0x02) for every EEPROM /
-        Flash-EEPROM part with algorithm != 5 -- which is all 84 protocol-0x0D
-        chips, including at28c256 -- and configure_eeprom28c never reads it
-        (firmware-inert, documented in that comment block). This leg exists so
-        a future reader does not mistake `flags: 2` on the wire for a defect.
-        It is deliberately NOT a suppression: the wider 0x0D flag-surface
-        honesty problem is out of scope for this phase.
+        D-12 reverses that POLICY, not the fact: configure_eeprom28c still
+        never reads FLAG_CAN_ERASE -- the firmware-inertness claim was never
+        wrong. What changed is that an inert-but-false capability
+        advertisement is still false: DEVTEST-01's `dev test` sweep reads it
+        and plans a real erase step that reports OK having done nothing.
+        `database.py` now excludes algorithm 13 (0x0D) as well as 5, so the
+        wire flags for at28c256 are 0, not 2. This leg now exists to catch a
+        regression the other way -- a future reader must not reintroduce the
+        bit for 0x0D.
         """
         captured: dict = {}
 
@@ -1156,7 +1163,7 @@ class TestSdpOperationsWireShape:
         ):
             operator.sdp_unlock("at28c256", _at28c256_programmer_dict())
 
-        assert captured["command_dict"]["flags"] == 2
+        assert captured["command_dict"]["flags"] == 0
 
     def test_skip_sdp_unlock_bit_reaches_the_wire(self, make_comm, fake_serial) -> None:
         """v1.22 HOST-02: build_flags(skip_sdp_unlock=True) passed as
