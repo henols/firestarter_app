@@ -63,6 +63,15 @@ COMMAND_VERIFY = 6
 COMMAND_DEV_ADDRESS = 7
 COMMAND_DEV_REGISTERS = 8
 
+# Both SDP commands are unconditional in firmware (firestarter.h:61-62) — never
+# DEV_TOOLS-gated, because they are real user-facing operations in every build.
+# Their COMMAND_NAMES entries below are load-bearing, not cosmetic:
+# COMMAND_NAMES[cmd] is dereferenced at eprom_operations.py:301 and again at
+# :377 (_setup_operation / _operation_context) — a missing entry is a KeyError
+# at operation setup, not a cosmetic display gap.
+COMMAND_SDP_UNLOCK = 9
+COMMAND_SDP_LOCK = 10
+
 COMMAND_READ_VPP = 11
 COMMAND_READ_VPE = 12
 COMMAND_FW_VERSION = 13
@@ -78,6 +87,8 @@ COMMAND_NAMES = {
     COMMAND_VERIFY: "VERIFY",
     COMMAND_DEV_ADDRESS: "DEV_ADDRESS",
     COMMAND_DEV_REGISTERS: "DEV_REGISTERS",
+    COMMAND_SDP_UNLOCK: "SDP_UNLOCK",
+    COMMAND_SDP_LOCK: "SDP_LOCK",
     COMMAND_READ_VPP: "READ_VPP",
     COMMAND_READ_VPE: "READ_VPE",
     COMMAND_FW_VERSION: "FW_VERSION",
