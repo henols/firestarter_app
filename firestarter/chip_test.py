@@ -808,49 +808,36 @@ _UV_WRITE_REGION_LENGTH = 256
 # module import completes).
 _DEFAULT_REGION = (_WRITE_REGION_START, _WRITE_REGION_LENGTH)
 
-# UV detection at EXECUTION time: `_dispatch_multi_run`'s `eprom_data` is
-# `resolve_chip`'s PROGRAMMER dict (via `convert_to_programmer`), which does
-# NOT carry `electrical-type` -- only `derive_plan`'s guard-bypassing `full`
-# dict does. Algorithm 0x0B (EPROM_LEGACY/protocol-id 11) IS carried through
-# to the programmer dict as `algorithm`, and is UV-EPROM-exclusive across the
-# whole chip database (verified: no non-UV chip uses protocol-id 0x0B) --
-# this is the execution-time UV signal `_write_region_for` uses. `full`-style
-# dicts (bench-free unit tests, or any future caller with the richer dict)
-# are also honored via the `electrical-type` field when present.
-_PROTOCOL_UV_EPROM = 0x0B
 
+def _write_region_for(step: Step | None, eprom_data: dict[str, Any]) -> tuple[int, int]:
+    """Return the write/verify region `derive_plan` already decided (D-02).
 
-def _write_region_for(eprom_data: dict[str, Any]) -> tuple[int, int]:
-    """Choose the (start, length) write/verify region for `eprom_data`.
+    This function READS `step.write_region` -- the value `derive_plan` set
+    exactly once, from `Plan.is_uv` (`is_uv_eprom(full)`, 301/301 exact) and
+    `full["memory-size"]` -- and returns it unchanged when present. It
+    returns the engine default `(_WRITE_REGION_START, _WRITE_REGION_LENGTH)`
+    when `step` is `None` or carries no region (`step.write_region is
+    None`).
 
-    UV-EPROM chips get a small, top-anchored, high-address window
-    `[mem_size - _UV_WRITE_REGION_LENGTH, mem_size)` (PATT-03): the
-    high-address base (all high bits set) makes `generate_pattern`'s
-    address-XOR-fold exercise the upper-address decode -- the Bug-A
-    upper-address read-path fault surface -- and the tiny window lets an
-    eraser-less tester safely retry. The WIDTH always comes from the
-    `_UV_WRITE_REGION_LENGTH` module constant, NEVER from any DB field
-    (SC4: a bad DB entry cannot widen it); `memory-size` only bounds where
-    the window is placed. Non-UV chips (and UV chips whose memory-size is
-    missing/too small to fit the window) get the engine default region.
-
-    UV detection accepts EITHER `electrical-type == "UV-EPROM"` (the `full`
-    DB dict, used by bench-free unit tests) OR `algorithm ==
-    _PROTOCOL_UV_EPROM` (the programmer dict `_dispatch_multi_run` actually
-    sees at execution time, via `resolve_chip`/`convert_to_programmer`,
-    which drops `electrical-type`).
+    This function must NEVER re-derive UV-ness. Before Phase 121 Plan 06 it
+    guessed UV-ness at execution time from `eprom_data.get("electrical-type")
+    == "UV-EPROM"` OR `eprom_data.get("algorithm") == 0x0B` -- but
+    `_dispatch_multi_run`'s `eprom_data` is `resolve_chip`'s PROGRAMMER dict
+    (via `convert_to_programmer`), which never carries `electrical-type`,
+    and `algorithm == 0x0B` matches only 32 of 301 UV parts (measured), so
+    269 UV parts silently fell through to the engine default. Under D-01, a
+    missed UV part receiving a full-device write instead of the small
+    top-anchored window is a chip-destroying bug, not a coverage gap -- the
+    guess is deleted here, not merely bypassed. `eprom_data` is accepted for
+    call-site symmetry with `_dispatch_multi_run`'s existing signature but is
+    otherwise unused by this function: the WIDTH always comes from a module
+    constant (`_WRITE_REGION_LENGTH` / `_UV_WRITE_REGION_LENGTH`), never from
+    any DB field (SC4) -- `eprom_data`/`memory-size` play no role here
+    because `derive_plan` already resolved the concrete region.
     """
-    is_uv = (
-        eprom_data.get("electrical-type", "") == "UV-EPROM"
-        or eprom_data.get("algorithm") == _PROTOCOL_UV_EPROM
-    )
-    if is_uv:
-        mem_size = int(eprom_data.get("memory-size", 0) or 0)
-        if mem_size >= _UV_WRITE_REGION_LENGTH:
-            return mem_size - _UV_WRITE_REGION_LENGTH, _UV_WRITE_REGION_LENGTH
-        # Defensive fallback: mem_size missing/too small to fit the window
-        # would produce a negative start -- use the engine default instead.
-    return _WRITE_REGION_START, _WRITE_REGION_LENGTH
+    if step is not None and step.write_region is not None:
+        return step.write_region
+    return _DEFAULT_REGION
 
 
 def _run_step(
@@ -932,7 +919,7 @@ def _dispatch_step(
     # `operator.erase_eprom()` (RESEARCH Pitfall 1a).
     if step.op in _MULTI_RUN_OPS:
         return _dispatch_multi_run(
-            step.op, name, eprom_data, operator, runs=runs, sampler=sampler
+            step.op, name, eprom_data, operator, runs=runs, sampler=sampler, step=step
         )
     return StepResult(
         op=step.op,
@@ -1037,24 +1024,27 @@ def _dispatch_multi_run(
     *,
     runs: int,
     sampler: Any = None,
+    step: Step | None = None,
 ) -> StepResult:
     """Run a destructive/verify op `runs` times; `marginal` on disagreement.
 
     Collects a per-run bool outcome (the operator method's own return value)
-    for write/erase; write/verify ALSO builds the expected address-derived
-    pattern and reads back via `operator.verify_eprom`'s outcome plus a
-    fresh `read_eprom` to compute the `Fingerprint` (PATT-02). Disagreement
-    across the N per-run outcomes -> `marginal`, never coerced to a
-    confident OK/BAD (D-06, the AM27C020 structural case). The write/verify
-    region is chosen per-chip by `_write_region_for` (PATT-03) -- UV-EPROM
-    chips get a small top-anchored high-address window; other chips keep
-    the engine default region.
+    for write/write-partial/erase; write/write-partial/verify ALSO builds
+    the expected address-derived pattern and reads back via
+    `operator.verify_eprom`'s outcome plus a fresh `read_eprom` to compute
+    the `Fingerprint` (PATT-02). Disagreement across the N per-run outcomes
+    -> `marginal`, never coerced to a confident OK/BAD (D-06, the AM27C020
+    structural case). The write/verify region is READ from `step.
+    write_region` via `_write_region_for(step, eprom_data)` (D-02, Phase 121
+    Plan 06) -- `derive_plan` already decided it; this function never
+    re-derives UV-ness.
 
     `sampler` (D-04, Phase 112) is invoked as `sampler("before")` /
     `sampler("after")` tightly bracketing EACH `operator.write_eprom(...)`
-    call -- ONLY in the `op == OP_WRITE` branch, never around OP_VERIFY or
-    OP_ERASE, and never around the whole run loop (a write droop must stay
-    distinguishable from a read droop). `sampler=None` adds zero calls.
+    call -- in the `op in (OP_WRITE, OP_WRITE_PARTIAL)` branch (a partial
+    write is still a write), never around OP_VERIFY or OP_ERASE, and never
+    around the whole run loop (a write droop must stay distinguishable from
+    a read droop). `sampler=None` adds zero calls.
 
     Fail-closed (121-02, T-121-05/06/08): `op` MUST be a member of the live
     `_MULTI_RUN_OPS` allow-list. The refusal is hoisted here, above
@@ -1085,9 +1075,9 @@ def _dispatch_multi_run(
     fingerprint: Fingerprint | None = None
     tmp_source_path: str | None = None
 
-    region_start, region_length = _write_region_for(eprom_data)
+    region_start, region_length = _write_region_for(step, eprom_data)
     expected = generate_pattern(region_start, region_length)
-    if op in (OP_WRITE, OP_VERIFY):
+    if op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY):
         tmp_fh = tempfile.NamedTemporaryFile(
             prefix="chip_test_pattern_", suffix=".bin", delete=False
         )
@@ -1099,7 +1089,7 @@ def _dispatch_multi_run(
 
     try:
         for _ in range(runs):
-            if op == OP_WRITE:
+            if op in (OP_WRITE, OP_WRITE_PARTIAL):
                 _sample(sampler, "before")
                 outcomes.append(operator.write_eprom(name, eprom_data, tmp_source_path))
                 _sample(sampler, "after")
@@ -1112,16 +1102,16 @@ def _dispatch_multi_run(
             else:
                 # Unreachable in practice: the fail-closed `_MULTI_RUN_OPS`
                 # guard at the top of this function already refused any op
-                # outside {OP_WRITE, OP_VERIFY, OP_ERASE} before this loop
-                # could start (121-02, T-121-05). Kept explicit rather than a
-                # bare `else: # OP_ERASE` -- the pre-fix shape that silently
-                # routed an unmapped op to `erase_eprom()` (RESEARCH
-                # Pitfall 1a).
+                # outside {OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY, OP_ERASE}
+                # before this loop could start (121-02, T-121-05; 121-06,
+                # D-06). Kept explicit rather than a bare `else: # OP_ERASE`
+                # -- the pre-fix shape that silently routed an unmapped op to
+                # `erase_eprom()` (RESEARCH Pitfall 1a).
                 raise AssertionError(
                     f"unreachable: op {op!r} passed the _MULTI_RUN_OPS guard"
                 )
 
-        if op in (OP_WRITE, OP_VERIFY):
+        if op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY):
             # Readback for the fingerprint is best-effort: a readback failure
             # (e.g. the SAME boot-block-locked condition that failed the
             # write/verify runs themselves) must NOT convert an otherwise
