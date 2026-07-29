@@ -281,11 +281,17 @@ format      = "SDP unlock: disabling write protection"
 params      = []
 wire_format = "id_frame"
 
+# D-15: the honesty lives in the message TEXT, not in a status code --
+# response_code is deliberately never written on the SDP path (117 D-05 /
+# 118 D-02). Phase 120 F-120-03 found this line lacked the caveat its 0x61
+# lock-done sibling carries and answered it host-side only (120 D-10);
+# Phase 121 D-15 closes it here so both directions carry the same
+# protection-state-is-not-readable guarantee.
 [[messages]]
 id          = 0x5F
 name        = "MSG_INFO_SDP_UNLOCK_DONE_US"
 severity    = "INFO"
-format      = "SDP unlock emitted in %lu us"
+format      = "SDP unlock sequence emitted in %lu us; protection state is not readable"
 params      = [{ type = "u32", render = "dec" }]
 wire_format = "id_frame"
 
