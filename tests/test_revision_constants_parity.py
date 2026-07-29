@@ -28,12 +28,86 @@ the firmware sub-repo). CTRL_* mirrors `firestarter/include/rurp_pinout.h`
 (not `firestarter.h`); the same `firestarter.h` proxy covers both headers
 since they live alongside each other in the firmware checkout (RESEARCH
 Open Question 1, resolved).
+
+Phase 120 Plan 07 — Rebuild the COMMAND_*/FLAG_* legs into a real
+header-parsing two-way gate (HOST-03).
+
+The two `skipif`-guarded functions this plan replaces
+(`test_command_values_match_firmware`, `test_flag_values_match_firmware`)
+were 100% hollow with respect to firmware drift: they asserted hardcoded
+Python literals with the corresponding `firestarter.h` define named only
+in a trailing comment, and never actually read the header. That is
+precisely why `CMD_SDP_UNLOCK 9` / `CMD_SDP_LOCK 10` landed in Phase 119
+unnoticed by this file. This plan replaces both legs with a real,
+bidirectional, header-parsing gate:
+
+  - `_strip_comments` + a depth-tracking `#define` extractor read
+    `firestarter/include/firestarter.h` (via the `FIRMWARE_HEADER` path
+    constant below, which now doubles as BOTH the skipif-guard proxy AND
+    the fixture-injection seam the planted-violation legs below
+    monkeypatch) and yield every `CMD_*`/`FLAG_*` define, its raw value
+    token, and its preprocessor nesting depth. Every match is yielded —
+    never filtered by whether its value parses as an integer, because
+    that would silently exempt `CMD_FRAME_MAX` (whose value is the macro
+    `DATA_BUFFER_SIZE`, not a literal).
+  - `_EXEMPT_FW_TO_HOST` is a frozen, deliberately-NOT-auto-derived
+    four-entry name-PAIR map (never a skip-set) covering the only four
+    firmware names with no direct 1:1 `CMD_` → `COMMAND_` correspondence:
+    `CMD_IDLE` (no host counterpart at all — firmware-internal state),
+    `CMD_FRAME_MAX` (has its own dedicated gate, `test_cmd_frame_max_parity`,
+    below), and the `#ifdef DEV_TOOLS`-conditional pair `CMD_DEV_ADDRESS` /
+    `CMD_DEV_REGISTER` — the latter is also NAME-MISMATCHED: firmware is
+    singular, the host is plural (`COMMAND_DEV_REGISTERS`, which has
+    callers and must never be renamed to satisfy this gate).
+  - `test_every_firmware_cmd_define_maps_two_way_to_constants_py` and
+    `test_every_firmware_flag_define_maps_two_way_to_constants_py` assert
+    BOTH directions: every firmware define maps to a host constant of the
+    same value (or a named exemption), AND every host constant traces back
+    to a firmware define — so a host constant with no firmware backing
+    also fails the gate, not only the reverse.
+  - `test_every_firmware_cmd_has_a_command_names_entry` (D-13) is a
+    SEPARATE leg from value parity: it asserts every non-exempt CMD_*'s
+    mapped host constant is also a key in `COMMAND_NAMES`, since
+    `COMMAND_NAMES[cmd]` is dereferenced at `eprom_operations.py:301` and
+    `:377` — a missing entry is a `KeyError` at operation setup, not a
+    cosmetic display gap.
+  - `test_conditionally_compiled_defines_are_exactly_the_dev_tools_pair`
+    turns "these two are `#ifdef DEV_TOOLS`-conditional" from an assumption
+    living only in a comment into a machine-checked fact over the parsed
+    depth values.
+  - Five further legs (`test_planted_*`, `test_missing_command_names_entry_is_detected`,
+    `test_gate_fails_closed_on_an_unreadable_header_path`) prove the gate
+    can actually fail: three isolated planted-violation fixtures under
+    `tests/fixtures/` (one drift, one host-missing, one firmware-missing —
+    three separate files rather than one three-drift file, because a
+    fixture failing for two reasons at once could not prove which check
+    fired), a `monkeypatch.delitem` on `COMMAND_NAMES` distinguishing the
+    crash path from the drift path, and a fail-closed leg proving an
+    unreadable header path is an ERROR, never a silent pass with an empty
+    define set (an empty set would make every downstream assertion
+    vacuously true).
+
+**Known, explained, residual gap (D-13):** in host-only CI, `FW_ABSENT` is
+true and every header-reading leg above skips — so a host-only PR does NOT
+catch a missing `COMMAND_NAMES` entry or a firmware/host value drift by
+itself. Splitting `COMMAND_NAMES` coverage into its own always-on test was
+considered and declined, in favour of keeping ONE gate with the
+`FW_ABSENT` skipif retained (host-only CI must stay green). The cost of
+that choice is recorded here rather than silently carried. The three
+planted-violation legs and the fail-closed leg below partially offset this
+gap: they read files under `tests/fixtures/` or a `tmp_path`, which are
+always present regardless of firmware-checkout presence, so those four
+legs do NOT skip in host-only CI even though they cannot exercise the REAL
+header there.
 """
 
+import re
+import sys
 from pathlib import Path
 
 import pytest
 
+from firestarter import constants
 from firestarter.constants import (
     REVISION_0,
     REVISION_1,
@@ -51,6 +125,12 @@ from firestarter.constants import (
 # absent the three new parity functions skip cleanly. When present, rurp_pinout.h
 # is always alongside it (same include/ directory), so this single proxy covers
 # both headers (RESEARCH Open Question 1, resolved).
+#
+# Phase 120 Plan 07: FIRMWARE_HEADER now doubles as a SECOND seam beyond the
+# FW_ABSENT skipif proxy above -- it is the fixture-injection point the
+# planted-violation legs below `monkeypatch.setattr` to point the rebuilt
+# gate at a committed fixture under tests/fixtures/ instead of the real,
+# untouched firestarter.h.
 # ---------------------------------------------------------------------------
 FIRMWARE_HEADER = (
     Path(__file__).parent.parent.parent / "firestarter" / "include" / "firestarter.h"
@@ -73,75 +153,452 @@ def test_revision_byte_values_match_firmware_enum():
     # 0xFF is reserved as the EEPROM-override-absent sentinel — NOT a REVISION_ value.
 
 
-@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
-def test_command_values_match_firmware():
-    """Assert each COMMAND_* Python constant matches the hard-coded literal from
-    `firestarter/include/firestarter.h` (CMD_* defines). Phase 36 TEST-04 /
-    D-11 extension — widens GATE-1.8c to the full command surface.
+# ---------------------------------------------------------------------------
+# Phase 120 Plan 07 (HOST-03) — real header-parsing two-way parity gate.
+# ---------------------------------------------------------------------------
 
-    COMMAND_DEV_ADDRESS (0x07) and COMMAND_DEV_REGISTERS (0x08) are inside
-    `#ifdef DEV_TOOLS` in the firmware header. The Python side defines them
-    unconditionally so the parity assertions below stand as Python-value-only
-    checks (not against a header literal that may not be compiled in) — noted
-    with a `#ifdef DEV_TOOLS in firmware` comment per RESEARCH Pitfall 7.
+_MISSING = object()
+
+# Frozen four-entry firmware -> host name-PAIR map (never a skip-set).
+# Deliberately NOT auto-derived: the whole point of this gate is to catch an
+# unreviewed drift rather than mirror it, so adding a fifth exemption must be
+# a deliberate edit to this dict literal.
+#   - CMD_IDLE: firmware-internal state; no shipped host path emits cmd 0
+#     (Phase 119 D-01 / RESEARCH F-B2). No host counterpart at all.
+#   - CMD_FRAME_MAX: CMD_-prefixed but not a command code, and its value is
+#     the macro DATA_BUFFER_SIZE, not a literal -- it has its own dedicated
+#     gate (test_cmd_frame_max_parity, below), so this leg checks only that
+#     the host `CMD_FRAME_MAX` constant exists, never its value.
+#   - CMD_DEV_ADDRESS: conditionally compiled (#ifdef DEV_TOOLS in firmware);
+#     host defines COMMAND_DEV_ADDRESS unconditionally.
+#   - CMD_DEV_REGISTER: conditionally compiled AND NAME-MISMATCHED --
+#     firmware is singular, host is plural (COMMAND_DEV_REGISTERS). Do NOT
+#     rename the host constant to match: it has callers, and a naive
+#     `CMD_X` -> `COMMAND_X` map would misreport this as a real gap and
+#     invite exactly that wrong "fix".
+_EXEMPT_FW_TO_HOST: dict[str, str | None] = {
+    "CMD_IDLE": None,
+    "CMD_FRAME_MAX": "CMD_FRAME_MAX",
+    "CMD_DEV_ADDRESS": "COMMAND_DEV_ADDRESS",
+    "CMD_DEV_REGISTER": "COMMAND_DEV_REGISTERS",
+}
+
+_DEFINE_PATTERN = re.compile(
+    r"^[ \t]*#[ \t]*define[ \t]+((?:CMD|FLAG)_[A-Za-z0-9_]+)[ \t]+(\S+)",
+    re.MULTILINE,
+)
+_PP_OPEN_PATTERN = re.compile(r"^[ \t]*#[ \t]*(if|ifdef|ifndef)\b")
+_PP_CLOSE_PATTERN = re.compile(r"^[ \t]*#[ \t]*endif\b")
+
+
+def _strip_comments(text: str) -> str:
+    """Blank out `//` and `/* */` comment spans, preserving both string
+    length and newline positions.
+
+    This is LOAD-BEARING here, not hygiene: firestarter.h's comment block
+    above `CMD_SDP_UNLOCK` (lines 50-60) literally contains the strings
+    `constants.py CMD_SDP_*`, `COMMAND_NAMES` and `#ifdef DEV_TOOLS`, and
+    the block above `FLAG_SKIP_SDP_UNLOCK` (:141-147) contains
+    `--skip-sdp-unlock / constants.py`. A scan over uncleaned text would
+    match those comment strings as if they were real defines or real
+    preprocessor conditionals.
     """
-    from firestarter.constants import (
-        COMMAND_BLANK_CHECK,
-        COMMAND_CHECK_CHIP_ID,
-        COMMAND_CONFIG,
-        COMMAND_DEV_ADDRESS,
-        COMMAND_DEV_REGISTERS,
-        COMMAND_ERASE,
-        COMMAND_FW_VERSION,
-        COMMAND_HW_VERSION,
-        COMMAND_READ,
-        COMMAND_READ_VPE,
-        COMMAND_READ_VPP,
-        COMMAND_VERIFY,
-        COMMAND_WRITE,
+    out = []
+    i = 0
+    n = len(text)
+    while i < n:
+        two = text[i : i + 2]
+        if two == "//":
+            j = text.find("\n", i)
+            if j == -1:
+                j = n
+            out.append(" " * (j - i))
+            i = j
+        elif two == "/*":
+            j = text.find("*/", i + 2)
+            if j == -1:
+                j = n
+            else:
+                j += 2
+            out.append("".join(c if c == "\n" else " " for c in text[i:j]))
+            i = j
+        else:
+            out.append(text[i])
+            i += 1
+    return "".join(out)
+
+
+_GUARD_IFNDEF_PATTERN = re.compile(r"^[ \t]*#[ \t]*ifndef[ \t]+(\w+)")
+_GUARD_DEFINE_PATTERN = re.compile(r"^[ \t]*#[ \t]*define[ \t]+(\w+)\b")
+
+
+def _find_header_guard_line_indices(lines: list[str]) -> tuple[int, int] | None:
+    """Detect the classic `#ifndef GUARD` / `#define GUARD` header-guard
+    idiom wrapping the WHOLE file, and return its `(open_idx, close_idx)`
+    line indices, or `None` if the file does not start with that shape.
+
+    `firestarter.h` opens with `#ifndef __FIRESTARTER_H__` /
+    `#define __FIRESTARTER_H__` and its LAST line is the matching `#endif`
+    -- this universal boilerplate wraps every real define in the file at
+    nesting depth +1, which would make `test_conditionally_compiled_defines_
+    are_exactly_the_dev_tools_pair`'s "depth > 0" assertion vacuously true
+    for every define, not just the two DEV_TOOLS ones. The fixtures under
+    tests/fixtures/ are plain snippets with no header guard, so this never
+    fires for them -- only the real header shape is recognised.
+    """
+    first_idx = next(
+        (i for i, line in enumerate(lines) if line.lstrip().startswith("#")), None
+    )
+    if first_idx is None:
+        return None
+    m = _GUARD_IFNDEF_PATTERN.match(lines[first_idx])
+    if m is None:
+        return None
+    guard_name = m.group(1)
+
+    next_idx = None
+    for j in range(first_idx + 1, len(lines)):
+        if not lines[j].strip():
+            continue
+        next_idx = j
+        break
+    if next_idx is None:
+        return None
+    m2 = _GUARD_DEFINE_PATTERN.match(lines[next_idx])
+    if m2 is None or m2.group(1) != guard_name:
+        return None
+
+    last_idx = next(
+        (i for i in range(len(lines) - 1, -1, -1) if lines[i].lstrip().startswith("#")),
+        None,
+    )
+    if last_idx is None or not _PP_CLOSE_PATTERN.match(lines[last_idx]):
+        return None
+
+    return first_idx, last_idx
+
+
+def _extract_defines(text: str) -> list[tuple[str, str, int]]:
+    """Walk comment-stripped `text` line by line, tracking preprocessor
+    nesting depth (`#if`/`#ifdef`/`#ifndef` increment, `#endif` decrements,
+    `#else`/`#elif` do NOT change depth -- they stay inside the same
+    conditional block), and yield `(name, raw_value, depth)` for every line
+    matching a `#define` of a name beginning `CMD_` or `FLAG_`.
+
+    Every match is yielded, unconditionally -- never filtered by whether
+    `raw_value` parses as an integer, because that would silently exempt
+    `CMD_FRAME_MAX` (value: the macro `DATA_BUFFER_SIZE`).
+
+    The whole-file header-guard idiom (see `_find_header_guard_line_indices`)
+    is treated as depth-neutral boilerplate, never counted as a real
+    conditional-compilation block -- otherwise every define in the file
+    would sit at depth >= 1 regardless of any real `#ifdef`.
+    """
+    cleaned = _strip_comments(text)
+    lines = cleaned.splitlines()
+    guard = _find_header_guard_line_indices(lines)
+    guard_open_idx, guard_close_idx = guard if guard is not None else (None, None)
+
+    depth = 0
+    results: list[tuple[str, str, int]] = []
+    for idx, line in enumerate(lines):
+        if idx == guard_open_idx or idx == guard_close_idx:
+            continue  # whole-file header guard -- depth-neutral boilerplate
+        if _PP_OPEN_PATTERN.match(line):
+            depth += 1
+            continue
+        if _PP_CLOSE_PATTERN.match(line):
+            depth -= 1
+            continue
+        m = _DEFINE_PATTERN.match(line)
+        if m:
+            results.append((m.group(1), m.group(2), depth))
+    return results
+
+
+def _host_name(fw_name: str) -> str:
+    """Map a NON-EXEMPT firmware define name to its host counterpart name.
+
+    Exempt names are handled by the caller directly via
+    `_EXEMPT_FW_TO_HOST` -- this helper only implements the two blanket
+    rules: `CMD_` -> `COMMAND_`, and `FLAG_*` unchanged (the two sides use
+    identical `FLAG_*` names).
+    """
+    if fw_name.startswith("CMD_"):
+        return "COMMAND_" + fw_name[len("CMD_") :]
+    return fw_name
+
+
+def _read_header_text() -> str:
+    """Read `FIRMWARE_HEADER`'s text, failing closed.
+
+    An absent or unreadable header path is an ERROR, never a silent pass:
+    returning an empty define set would make every downstream two-way
+    assertion vacuously true (T-120-23). This is also the seam the planted-
+    violation legs (below) exercise by `monkeypatch.setattr`-ing
+    `FIRMWARE_HEADER` at module scope before calling any `_check_*` helper.
+    """
+    if not FIRMWARE_HEADER.is_file():
+        raise AssertionError(
+            f"firmware header not found at {FIRMWARE_HEADER} -- an absent "
+            "or unreadable header must be a hard failure, never a silent "
+            "pass with an empty define set"
+        )
+    return FIRMWARE_HEADER.read_text(encoding="utf-8")
+
+
+def _host_command_constants() -> dict[str, int]:
+    return {
+        name: value
+        for name, value in vars(constants).items()
+        if name.startswith("COMMAND_")
+        and name != "COMMAND_NAMES"
+        and isinstance(value, int)
+    }
+
+
+def _host_flag_constants() -> dict[str, int]:
+    return {
+        name: value
+        for name, value in vars(constants).items()
+        if name.startswith("FLAG_") and isinstance(value, int)
+    }
+
+
+def _check_cmd_two_way() -> None:
+    """Bidirectional CMD_* parity check body.
+
+    Factored out so both the real gate leg and the planted-violation legs
+    (Task 3) exercise the EXACT SAME code path, rather than a parallel
+    reimplementation duplicating (and potentially diverging from) the real
+    logic.
+
+    Collects every discrepancy before raising once, so a real failure names
+    every offending pair rather than stopping at the first one.
+    """
+    header_text = _read_header_text()
+    defines = _extract_defines(header_text)
+    cmd_defines = [(n, v, d) for (n, v, d) in defines if n.startswith("CMD_")]
+    host_cmds = _host_command_constants()
+
+    errors: list[str] = []
+    expected_host_names: set[str] = set()
+
+    for name, raw_value, _depth in cmd_defines:
+        exempt = name in _EXEMPT_FW_TO_HOST
+        mapped = _EXEMPT_FW_TO_HOST[name] if exempt else _host_name(name)
+
+        if exempt and mapped is None:
+            derived = "COMMAND_" + name[len("CMD_") :]
+            if getattr(constants, derived, _MISSING) is not _MISSING:
+                errors.append(
+                    f"{name} is exempt (no host counterpart expected) but "
+                    f"host constant {derived} exists"
+                )
+            continue
+
+        expected_host_names.add(mapped)
+        host_value = getattr(constants, mapped, _MISSING)
+        if host_value is _MISSING:
+            errors.append(f"{name} has no host constant {mapped} in constants.py")
+            continue
+
+        if name == "CMD_FRAME_MAX":
+            # Value is the macro DATA_BUFFER_SIZE, not a literal -- has its
+            # own dedicated gate (test_cmd_frame_max_parity).
+            continue
+
+        try:
+            fw_value = int(raw_value, 0)
+        except ValueError:
+            errors.append(
+                f"{name} = {raw_value!r} is not an integer literal and is "
+                "not the exempted CMD_FRAME_MAX -- update _EXEMPT_FW_TO_HOST "
+                "if this is deliberate"
+            )
+            continue
+
+        if host_value != fw_value:
+            errors.append(
+                f"{name} = {fw_value} (firmware) != {mapped} = {host_value} (host)"
+            )
+
+    # Reverse direction: every host COMMAND_* constant must trace back to
+    # some extracted firmware CMD_* define -- a host constant with no
+    # firmware define also fails.
+    for host_name in sorted(host_cmds):
+        if host_name not in expected_host_names:
+            errors.append(
+                f"host constant {host_name} has no corresponding firmware "
+                "CMD_* define in firestarter.h"
+            )
+
+    assert not errors, "CMD_* two-way parity failures:\n" + "\n".join(
+        f"  - {e}" for e in errors
     )
 
-    assert COMMAND_READ == 0x01  # CMD_READ
-    assert COMMAND_WRITE == 0x02  # CMD_WRITE
-    assert COMMAND_ERASE == 0x03  # CMD_ERASE
-    assert COMMAND_BLANK_CHECK == 0x04  # CMD_BLANK_CHECK
-    assert COMMAND_CHECK_CHIP_ID == 0x05  # CMD_CHECK_CHIP_ID
-    assert COMMAND_VERIFY == 0x06  # CMD_VERIFY
-    # CMD_DEV_ADDRESS and CMD_DEV_REGISTER are #ifdef DEV_TOOLS in firmware —
-    # assert Python values as standalone literals only:
-    assert COMMAND_DEV_ADDRESS == 0x07  # #ifdef DEV_TOOLS in firmware
-    assert COMMAND_DEV_REGISTERS == 0x08  # #ifdef DEV_TOOLS in firmware
-    assert COMMAND_READ_VPP == 0x0B  # CMD_READ_VPP
-    assert COMMAND_READ_VPE == 0x0C  # CMD_READ_VPE
-    assert COMMAND_FW_VERSION == 0x0D  # CMD_FW_VERSION (D-09: confirmed present)
-    assert COMMAND_CONFIG == 0x0E  # CMD_CONFIG
-    assert COMMAND_HW_VERSION == 0x0F  # CMD_HW_VERSION
+
+def _check_flag_two_way() -> None:
+    """Bidirectional FLAG_* parity check body, plus a machine-checked
+    count/max-value invariant: exactly nine FLAG_* defines on each side,
+    maximum value 0x100 on each side.
+
+    `CTRL_VPP_VPE_DROP_ENABLE = 0x100` is a control-register bit in a
+    SEPARATE namespace (mirror of rurp_pinout.h, its own parity leg is
+    `test_ctrl_values_match_firmware` below) -- a FLAG_*-scoped extractor
+    never sees it, so the two 0x100s are never conflated here.
+    """
+    header_text = _read_header_text()
+    defines = _extract_defines(header_text)
+    flag_defines = [(n, v, d) for (n, v, d) in defines if n.startswith("FLAG_")]
+    host_flags = _host_flag_constants()
+
+    errors: list[str] = []
+    expected_host_names: set[str] = set()
+
+    for name, raw_value, _depth in flag_defines:
+        mapped = _host_name(name)  # FLAG_* names are unchanged host-side
+        expected_host_names.add(mapped)
+        host_value = host_flags.get(mapped, _MISSING)
+        if host_value is _MISSING:
+            errors.append(f"{name} has no host constant {mapped} in constants.py")
+            continue
+        try:
+            fw_value = int(raw_value, 0)
+        except ValueError:
+            errors.append(f"{name} = {raw_value!r} is not an integer literal")
+            continue
+        if host_value != fw_value:
+            errors.append(
+                f"{name} = {hex(fw_value)} (firmware) != "
+                f"{mapped} = {hex(host_value)} (host)"
+            )
+
+    for host_name in sorted(host_flags):
+        if host_name not in expected_host_names:
+            errors.append(
+                f"host constant {host_name} has no corresponding firmware "
+                "FLAG_* define in firestarter.h"
+            )
+
+    if len(flag_defines) != 9:
+        errors.append(
+            f"expected exactly nine firmware FLAG_* defines, found "
+            f"{len(flag_defines)}: {sorted(n for n, _v, _d in flag_defines)}"
+        )
+    if len(host_flags) != 9:
+        errors.append(
+            f"expected exactly nine host FLAG_* constants, found "
+            f"{len(host_flags)}: {sorted(host_flags)}"
+        )
+
+    int_fw_values = []
+    for _n, v, _d in flag_defines:
+        try:
+            int_fw_values.append(int(v, 0))
+        except ValueError:
+            pass
+    if int_fw_values and max(int_fw_values) != 0x100:
+        errors.append(
+            f"firmware FLAG_* max is {hex(max(int_fw_values))}, expected 0x100"
+        )
+    if host_flags and max(host_flags.values()) != 0x100:
+        errors.append(
+            f"host FLAG_* max is {hex(max(host_flags.values()))}, expected 0x100"
+        )
+
+    assert not errors, "FLAG_* two-way parity failures:\n" + "\n".join(
+        f"  - {e}" for e in errors
+    )
+
+
+def _check_command_names_coverage() -> None:
+    """D-13's leg: every NON-EXEMPT firmware CMD_*'s mapped host constant
+    must also be a key in `COMMAND_NAMES`, not merely a `constants.py`
+    module attribute. This closes the crash path as well as the
+    value-drift path: `COMMAND_NAMES[cmd]` is dereferenced at
+    `eprom_operations.py:301` and again at `:377`
+    (`_setup_operation` / `_operation_context`), so a missing entry is a
+    `KeyError` at operation setup, not a cosmetic display gap.
+    """
+    header_text = _read_header_text()
+    defines = _extract_defines(header_text)
+    cmd_defines = [(n, v, d) for (n, v, d) in defines if n.startswith("CMD_")]
+    host_cmds = _host_command_constants()
+
+    errors: list[str] = []
+    for name, _raw_value, _depth in cmd_defines:
+        if name in _EXEMPT_FW_TO_HOST:
+            continue  # non-exempt only, per HOST-03's scope
+        mapped = _host_name(name)
+        host_value = host_cmds.get(mapped)
+        if host_value is None:
+            # Already reported by the two-way leg -- nothing new here.
+            continue
+        if host_value not in constants.COMMAND_NAMES:
+            errors.append(
+                f"{mapped} (value {host_value}, firmware {name}) has no "
+                "COMMAND_NAMES entry -- COMMAND_NAMES[cmd] is dereferenced "
+                "at eprom_operations.py:301 and :377, so this is a "
+                "KeyError at operation setup, not a cosmetic gap"
+            )
+
+    assert not errors, "COMMAND_NAMES coverage failures:\n" + "\n".join(
+        f"  - {e}" for e in errors
+    )
 
 
 @pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
-def test_flag_values_match_firmware():
-    """Assert each FLAG_* Python constant matches the hard-coded literal from
-    `firestarter/include/firestarter.h` (FLAG_* defines). Phase 36 TEST-04 /
-    D-11 extension — widens GATE-1.8c to the full control-flag surface."""
-    from firestarter.constants import (
-        FLAG_CAN_ERASE,
-        FLAG_CHIP_ENABLE,
-        FLAG_FORCE,
-        FLAG_OUTPUT_ENABLE,
-        FLAG_SKIP_BLANK_CHECK,
-        FLAG_SKIP_ERASE,
-        FLAG_VERBOSE,
-        FLAG_VPE_AS_VPP,
-    )
+def test_every_firmware_cmd_define_maps_two_way_to_constants_py() -> None:
+    """Two-way CMD_* parity: every firmware `CMD_*` define in
+    firestarter.h maps to a `constants.py` COMMAND_* constant of the same
+    value (or a named exemption in `_EXEMPT_FW_TO_HOST`), and every host
+    COMMAND_* constant traces back to a firmware CMD_* define. Replaces the
+    pre-rebuild hollow leg that asserted host literals with the firmware
+    define named only in a trailing comment and never read the header
+    (T-120-22 / T-120-25)."""
+    _check_cmd_two_way()
 
-    assert FLAG_FORCE == 0x01  # FLAG_FORCE
-    assert FLAG_CAN_ERASE == 0x02  # FLAG_CAN_ERASE
-    assert FLAG_SKIP_ERASE == 0x04  # FLAG_SKIP_ERASE
-    assert FLAG_SKIP_BLANK_CHECK == 0x08  # FLAG_SKIP_BLANK_CHECK
-    assert FLAG_VPE_AS_VPP == 0x10  # FLAG_VPE_AS_VPP
-    assert FLAG_OUTPUT_ENABLE == 0x20  # FLAG_OUTPUT_ENABLE
-    assert FLAG_CHIP_ENABLE == 0x40  # FLAG_CHIP_ENABLE
-    assert FLAG_VERBOSE == 0x80  # FLAG_VERBOSE
+
+@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+def test_every_firmware_flag_define_maps_two_way_to_constants_py() -> None:
+    """Two-way FLAG_* parity, plus a machine-checked count/max-value
+    invariant: exactly nine FLAG_* defines on each side, maximum 0x100 on
+    each side. See `_check_flag_two_way`'s docstring for why
+    `CTRL_VPP_VPE_DROP_ENABLE`'s separate 0x100 is never conflated with
+    this one (T-120-22)."""
+    _check_flag_two_way()
+
+
+@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+def test_every_firmware_cmd_has_a_command_names_entry() -> None:
+    """D-13's leg: every non-exempt firmware CMD_* must have a
+    `COMMAND_NAMES` entry, not merely a `constants.py` constant. This
+    closes the crash path as well as the value-drift path --
+    `COMMAND_NAMES[cmd]` is dereferenced at `eprom_operations.py:301` and
+    again at `:377` (`_setup_operation` / `_operation_context`), so a
+    missing entry is a `KeyError` at operation setup, not a cosmetic
+    display gap (T-120-24)."""
+    _check_command_names_coverage()
+
+
+@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+def test_conditionally_compiled_defines_are_exactly_the_dev_tools_pair() -> None:
+    """Turns "these two are #ifdef DEV_TOOLS-conditional" from an
+    assumption living only in a comment into a machine-checked fact: the
+    set of extracted CMD_*/FLAG_* define names found at preprocessor
+    nesting depth greater than zero must equal exactly
+    `{CMD_DEV_ADDRESS, CMD_DEV_REGISTER}`. This is what would have flagged
+    Phase 119's placement of `CMD_SDP_UNLOCK` / `CMD_SDP_LOCK` OUTSIDE the
+    `#ifdef DEV_TOOLS` block as a deliberate choice rather than luck."""
+    header_text = _read_header_text()
+    defines = _extract_defines(header_text)
+    conditional_names = {n for n, _v, d in defines if d > 0}
+    assert conditional_names == {"CMD_DEV_ADDRESS", "CMD_DEV_REGISTER"}, (
+        "expected conditionally-compiled CMD_*/FLAG_* defines to be exactly "
+        f"{{CMD_DEV_ADDRESS, CMD_DEV_REGISTER}}, found "
+        f"{sorted(conditional_names)}"
+    )
 
 
 @pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
@@ -238,3 +695,105 @@ def test_max_27c020_size_parity() -> None:
     from firestarter.constants import MAX_27C020_SIZE
 
     assert MAX_27C020_SIZE == 262144  # firestarter.h #define MAX_27C020_SIZE 262144
+
+
+# ---------------------------------------------------------------------------
+# Planted-violation and fail-closed legs (Phase 120 Plan 07, Task 3).
+#
+# None of the five legs below carry the FW_ABSENT skipif on the same basis:
+# three of them (value-drift / host-missing / fw-missing) read a fixture
+# file under tests/fixtures/, which is always present in the repo regardless
+# of whether the firmware sub-repo checkout exists, and the fourth
+# (fail-closed) reads a deliberately-nonexistent tmp_path. This partially
+# offsets D-13's residual host-only-CI skip gap: a host-only PR still
+# exercises the checker's failure modes even though it cannot exercise them
+# against the REAL header. The fifth (COMMAND_NAMES delitem) DOES read the
+# real header and DOES carry the skipif, since it is not fixture-driven.
+# ---------------------------------------------------------------------------
+
+_FIXTURES_DIR = Path(__file__).parent / "fixtures"
+_FIXTURE_VALUE_DRIFT = _FIXTURES_DIR / "planted_constants_value_drift.h"
+_FIXTURE_HOST_MISSING = _FIXTURES_DIR / "planted_constants_host_missing.h"
+_FIXTURE_FW_MISSING = _FIXTURES_DIR / "planted_constants_fw_missing.h"
+
+
+def test_planted_value_drift_is_detected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """planted_constants_value_drift.h (CMD_VERIFY = 106, real value 6) must
+    trip the two-way CMD_* leg's underlying check -- and ONLY that check,
+    proving leg isolation. Calls the SAME `_check_cmd_two_way` helper the
+    real leg calls, not a parallel reimplementation."""
+    assert _FIXTURE_VALUE_DRIFT.is_file(), (
+        f"committed fixture missing: {_FIXTURE_VALUE_DRIFT}"
+    )
+    monkeypatch.setattr(sys.modules[__name__], "FIRMWARE_HEADER", _FIXTURE_VALUE_DRIFT)
+    with pytest.raises(AssertionError) as excinfo:
+        _check_cmd_two_way()
+    message = str(excinfo.value)
+    assert "CMD_VERIFY = 106" in message
+    assert "COMMAND_VERIFY = 6" in message
+    assert "has no host constant" not in message
+
+
+def test_planted_host_missing_define_is_detected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """planted_constants_host_missing.h (adds CMD_DEBUG_DUMP, no host
+    counterpart) must trip the forward-direction "no host constant" report
+    -- and must NOT report a value drift, proving leg isolation."""
+    assert _FIXTURE_HOST_MISSING.is_file(), (
+        f"committed fixture missing: {_FIXTURE_HOST_MISSING}"
+    )
+    monkeypatch.setattr(sys.modules[__name__], "FIRMWARE_HEADER", _FIXTURE_HOST_MISSING)
+    with pytest.raises(AssertionError) as excinfo:
+        _check_cmd_two_way()
+    message = str(excinfo.value)
+    assert "CMD_DEBUG_DUMP" in message
+    assert "has no host constant" in message
+    assert "!=" not in message
+
+
+def test_planted_firmware_missing_flag_is_detected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """planted_constants_fw_missing.h (deletes FLAG_VPE_AS_VPP) must trip
+    the reverse-direction "no firmware define" report naming the host
+    FLAG_* constant -- and must NOT report a value drift."""
+    assert _FIXTURE_FW_MISSING.is_file(), (
+        f"committed fixture missing: {_FIXTURE_FW_MISSING}"
+    )
+    monkeypatch.setattr(sys.modules[__name__], "FIRMWARE_HEADER", _FIXTURE_FW_MISSING)
+    with pytest.raises(AssertionError) as excinfo:
+        _check_flag_two_way()
+    message = str(excinfo.value)
+    assert "FLAG_VPE_AS_VPP" in message
+    assert "no corresponding firmware" in message
+    assert "!=" not in message
+
+
+@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+def test_missing_command_names_entry_is_detected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Distinguishes a missing NAME ENTRY from a missing CONSTANT -- the
+    crash path from the drift path. Deletes one of this phase's own two new
+    SDP entries from `COMMAND_NAMES` (via `monkeypatch.delitem`, reverted
+    automatically after the test) and asserts the COMMAND_NAMES-coverage
+    check raises naming that command."""
+    monkeypatch.delitem(constants.COMMAND_NAMES, constants.COMMAND_SDP_UNLOCK)
+    with pytest.raises(AssertionError) as excinfo:
+        _check_command_names_coverage()
+    assert "COMMAND_SDP_UNLOCK" in str(excinfo.value)
+
+
+def test_gate_fails_closed_on_an_unreadable_header_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unreadable/absent header path must be an ERROR, never a silent
+    pass -- an empty define set would make every downstream assertion
+    vacuously true. Points FIRMWARE_HEADER at a path that does not exist
+    under tmp_path and asserts the read helper raises rather than
+    returning an empty define set."""
+    missing = tmp_path / "does_not_exist.h"
+    monkeypatch.setattr(sys.modules[__name__], "FIRMWARE_HEADER", missing)
+    with pytest.raises(AssertionError, match="firmware header not found"):
+        _check_cmd_two_way()
