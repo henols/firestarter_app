@@ -1,0 +1,80 @@
+/*
+ * DELIBERATELY-VIOLATING fixture for
+ * tests/test_revision_constants_parity.py (Phase 120 Plan 07, HOST-03,
+ * D-12/D-13's anti-hollow two-way CMD_*/FLAG_* gate).
+ *
+ * This file is a minimal, standalone, never-compiled C header. It is not
+ * built by platformio.ini and is not referenced from any firmware target or
+ * build_src_filter. It exists ONLY so the paired pytest can point
+ * test_revision_constants_parity.py's module-level FIRMWARE_HEADER path
+ * constant at it (via `monkeypatch.setattr` on FIRMWARE_HEADER, never an
+ * edit to the real firestarter.h) and prove the rebuilt gate actually fails
+ * in the REVERSE direction -- a host constant with no firmware define.
+ *
+ * It is a faithful copy of firestarter/include/firestarter.h's CMD_* region
+ * (lines 34-68) and FLAG_* region (lines 131-148), preserving every define,
+ * every #ifdef DEV_TOOLS conditional, and every value -- with exactly ONE
+ * planted removal: FLAG_VPE_AS_VPP (0x10), which constants.py DOES define,
+ * is absent below. No existing CMD_* or FLAG_* value is changed and
+ * nothing new is added.
+ *
+ * This fixture deliberately does NOT trip:
+ *   - the value-drift leg (every remaining CMD_*/FLAG_* value below is
+ *     unchanged from the real header)
+ *   - the host-missing-define leg (nothing is added)
+ *   - the COMMAND_NAMES-coverage leg (this fixture only removes a FLAG_*,
+ *     never a CMD_*, so no command's COMMAND_NAMES entry is affected)
+ *   - the conditional-compilation leg (the #ifdef DEV_TOOLS block below is
+ *     unchanged; FLAG_* defines are never conditionally compiled)
+ * A fixture that failed for two reasons at once could not prove which
+ * check fired -- this isolation is why three separate fixtures exist
+ * instead of one three-drift fixture.
+ *
+ * "Fixing" this file (i.e. re-adding the FLAG_VPE_AS_VPP line) would
+ * silently hollow HOST-03's firmware-missing-counterpart detection leg --
+ * the anti-hollow gate this project has required since the v1.12
+ * hollow-GATE-03 tech debt. Do NOT "fix" this file. If the real header's
+ * FLAG_* region ever changes shape, update this fixture to match the new
+ * shape (keeping exactly one planted removal of a host-defined FLAG_*),
+ * do not delete the violation.
+ */
+
+#define CMD_FRAME_MAX DATA_BUFFER_SIZE
+
+#define CMD_IDLE 0
+#define CMD_READ 1
+#define CMD_WRITE 2
+#define CMD_ERASE 3
+#define CMD_BLANK_CHECK 4
+#define CMD_CHECK_CHIP_ID 5
+#define CMD_VERIFY 6
+
+#ifdef DEV_TOOLS
+#define CMD_DEV_ADDRESS 7
+#define CMD_DEV_REGISTER 8
+#endif
+
+#define CMD_SDP_UNLOCK 9
+#define CMD_SDP_LOCK 10
+
+#define CMD_READ_VPP 11
+#define CMD_READ_VPE 12
+#define CMD_FW_VERSION 13
+#define CMD_CONFIG 14
+#define CMD_HW_VERSION 15
+
+// Control flags
+#define FLAG_FORCE 0x01
+#define FLAG_CAN_ERASE 0x02
+#define FLAG_SKIP_ERASE 0x04
+#define FLAG_SKIP_BLANK_CHECK 0x08
+// PLANTED VIOLATION -- FLAG_VPE_AS_VPP (0x10) deliberately removed below.
+// constants.py still defines it; this fixture proves the reverse-direction
+// (firmware-missing) check catches a host constant with no firmware define.
+
+#define FLAG_OUTPUT_ENABLE 0x20
+#define FLAG_CHIP_ENABLE 0x40
+
+#define FLAG_VERBOSE 0x80
+
+#define FLAG_SKIP_SDP_UNLOCK 0x100
