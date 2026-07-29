@@ -2053,8 +2053,10 @@ def dev_sdp(app: AppContext, eprom: str, mode: str, assume_yes: bool) -> None:
         # filters the entire INFO band out at serial_comm.py:424, so the
         # operation layer literally cannot see the firmware's `0x5F`/`0x61`
         # duration frame to plumb one through. No lock/unlock state boolean
-        # appears either -- HOST-05's honesty floor.
-        logger.info(
+        # appears either -- HOST-05's honesty floor. click.echo (not
+        # logger.info) so this always reaches the user's console/CliRunner
+        # capture regardless of log-level/handler wiring.
+        click.echo(
             f"SDP {mode} sequence for {chip_upper} was emitted. The "
             "resulting protection state cannot be read back on this chip "
             "family, so this is not a claim about the chip's actual state."

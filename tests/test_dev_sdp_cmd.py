@@ -23,6 +23,8 @@ the confirm/serial call rather than after. This is the same lesson as
 
 from __future__ import annotations
 
+import re
+import struct
 from unittest.mock import Mock, patch
 
 import pytest
@@ -33,8 +35,18 @@ from firestarter.config import ConfigManager
 from firestarter.database import EpromDatabase
 from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
+from firestarter.exceptions import EpromOperationError
 from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
+from firestarter.messages import (
+    MSG_END_DONE,
+    MSG_ERR_UNKNOWN_CMD,
+    MSG_INIT_DONE,
+    MSG_MAIN_DONE,
+    MSG_WARN_SDP_TBLC_EXCEEDED,
+)
+
+from .conftest import build_frame
 
 # --- Concrete chip names, drawn from 120-SDP-PARTITION.md section 3 ---
 
@@ -373,3 +385,174 @@ def test_no_port_opened_on_any_refusal_with_a_real_operator(runner: CliRunner) -
     assert result.exit_code != 0, result.output
     mock_confirm.ask.assert_not_called()
     mock_find_and_connect.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Report honesty (D-10) + exit-code contract (D-11) + firmware-too-old (D-14)
+# ---------------------------------------------------------------------------
+
+
+def test_summary_line_carries_the_unreadable_state_caveat_on_both_directions(
+    runner: CliRunner,
+) -> None:
+    """v1.22 HOST-05: symmetry matters because firmware's `0x5F`
+    (`MSG_INFO_SDP_UNLOCK_DONE_US`) frame carries no honesty caveat where
+    `0x61` (`MSG_INFO_SDP_LOCK_DONE_US`) does (F-120-03) -- so the host
+    summary line is the ONLY carrier of the caveat on the unlock direction.
+    The catalog fix itself is deferred to Phase 121/122; this test pins the
+    host-side symmetry that stands in for it until then."""
+    operator = Mock(spec=EpromOperator)
+    operator.sdp_lock.return_value = True
+    operator.sdp_unlock.return_value = True
+    app = make_app_context(eprom_operator=operator)
+
+    with _off_tty():
+        enable_result = runner.invoke(
+            cli, ["dev", "sdp", _ALLOWED_CHIP, "enable", "-y"], obj=app
+        )
+        disable_result = runner.invoke(
+            cli, ["dev", "sdp", _ALLOWED_CHIP, "disable", "-y"], obj=app
+        )
+
+    assert enable_result.exit_code == 0, enable_result.output
+    assert disable_result.exit_code == 0, disable_result.output
+    assert "cannot be read back" in enable_result.output
+    assert "cannot be read back" in disable_result.output
+
+
+def test_summary_line_carries_no_duration_figure(runner: CliRunner) -> None:
+    """v1.22 HOST-05/D-10: the host summary line itself contains no
+    microsecond unit and no digit-plus-unit duration token. Scoped to the
+    summary line specifically (not the whole captured output, which may
+    legitimately contain a firmware `0x5F`/`0x61` frame carrying the real
+    figure -- this test only asserts about the host's OWN line).
+
+    This is mechanically enforced, not merely a discipline:
+    `get_response()` filters the entire INFO band (`NON_RESPONSE_PREFIXES =
+    ["INFO", "DEBUG"]`) out at `serial_comm.py:424`, so the operation layer
+    literally cannot see the firmware's duration frame to plumb a figure
+    through even if someone tried."""
+    operator = Mock(spec=EpromOperator)
+    operator.sdp_lock.return_value = True
+    app = make_app_context(eprom_operator=operator)
+
+    with _off_tty():
+        result = runner.invoke(
+            cli, ["dev", "sdp", _ALLOWED_CHIP, "enable", "-y"], obj=app
+        )
+    assert result.exit_code == 0, result.output
+
+    summary_line = next(
+        line for line in result.output.splitlines() if "was emitted" in line
+    )
+    assert not re.search(r"\d+\s*(us|µs|ms|s)\b", summary_line, re.IGNORECASE), (
+        summary_line
+    )
+
+
+def test_no_fabricated_lock_state_boolean_in_the_report(runner: CliRunner) -> None:
+    """v1.22 HOST-05: the outcome sentence is framed as "the sequence was
+    emitted" plus the caveat -- a positive framing assertion, not a brittle
+    forbidden-substring word-list, so this leg does not rot as wording
+    evolves. This is HOST-05's honesty floor: the host-side application of
+    Phase 117 D-05 / Phase 118 D-02 / Phase 119 D-12 -- honesty in the
+    message text, never in a status a caller could misread as a state
+    claim."""
+    operator = Mock(spec=EpromOperator)
+    operator.sdp_lock.return_value = True
+    app = make_app_context(eprom_operator=operator)
+
+    with _off_tty():
+        result = runner.invoke(
+            cli, ["dev", "sdp", _ALLOWED_CHIP, "enable", "-y"], obj=app
+        )
+    assert result.exit_code == 0, result.output
+
+    summary_line = next(
+        line for line in result.output.splitlines() if "was emitted" in line
+    )
+    assert "was emitted" in summary_line
+    assert "cannot be read back" in summary_line
+    assert "not a claim about the chip's actual state" in summary_line
+
+
+def test_tblc_warn_prints_at_warning_and_exit_code_stays_zero(
+    runner: CliRunner, make_comm, fake_serial
+) -> None:
+    """v1.22 HOST-05/D-11: since the protection state is unreadable either
+    way, no exit code can honestly encode more than "the sequence was
+    emitted" -- a `MSG_WARN_SDP_TBLC_EXCEEDED` (0x87) frame prints at
+    WARNING and does NOT change the exit code away from 0."""
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        return make_comm()
+
+    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+    fake_serial.feed(build_frame(MSG_WARN_SDP_TBLC_EXCEEDED, struct.pack(">I", 650)))
+    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+    real_operator = EpromOperator(ConfigManager())
+    app = make_app_context(eprom_operator=real_operator)
+
+    with (
+        _off_tty(),
+        patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ),
+    ):
+        result = runner.invoke(
+            cli, ["dev", "sdp", _ALLOWED_CHIP, "enable", "-y"], obj=app
+        )
+
+    assert "t_BLC budget" in result.output or "TBLC" in result.output.upper()
+    assert result.exit_code == 0, result.output
+
+
+def test_firmware_too_old_is_reported_when_unknown_cmd_comes_back(
+    runner: CliRunner,
+) -> None:
+    """v1.22 HOST-05/D-14: D-14 keys on the message **id**, not the text.
+    This is the command half of HOST-06's asymmetry -- an unknown COMMAND
+    produces an error and is detectable, whereas an unknown flag BIT
+    produces silence, which is why the flag half needs plan 120-09's ack
+    requirement instead."""
+    operator = Mock(spec=EpromOperator)
+    operator.sdp_lock.side_effect = EpromOperationError(
+        "Unknown command: 9", error_code=MSG_ERR_UNKNOWN_CMD
+    )
+    app = make_app_context(eprom_operator=operator)
+
+    with _off_tty():
+        result = runner.invoke(
+            cli, ["dev", "sdp", _ALLOWED_CHIP, "enable", "-y"], obj=app
+        )
+
+    assert result.exit_code != 0, result.output
+    assert "firestarter fw --install" in result.output, result.output
+    assert "outdated" in result.output.lower() or "does not implement" in (
+        result.output.lower()
+    )
+
+
+def test_success_exit_zero_and_failure_exit_one(runner: CliRunner) -> None:
+    """v1.22 HOST-05/D-11: plain binary exit-code contract -- 0 on ok, 1 on
+    not-ok, no tri-state introduced."""
+    operator_ok = Mock(spec=EpromOperator)
+    operator_ok.sdp_lock.return_value = True
+    app_ok = make_app_context(eprom_operator=operator_ok)
+    with _off_tty():
+        result_ok = runner.invoke(
+            cli, ["dev", "sdp", _ALLOWED_CHIP, "enable", "-y"], obj=app_ok
+        )
+    assert result_ok.exit_code == 0, result_ok.output
+
+    operator_fail = Mock(spec=EpromOperator)
+    operator_fail.sdp_lock.return_value = False
+    app_fail = make_app_context(eprom_operator=operator_fail)
+    with _off_tty():
+        result_fail = runner.invoke(
+            cli, ["dev", "sdp", _ALLOWED_CHIP, "enable", "-y"], obj=app_fail
+        )
+    assert result_fail.exit_code == 1, result_fail.output
