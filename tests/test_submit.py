@@ -8,12 +8,22 @@ Unit tests for firestarter.submit (v1.21 Phase 113).
 
 No PATH, network, or browser is ever touched -- every seam (`which_fn`,
 `run_fn`) is injected with a `Mock`.
+
+Phase 121 Plan 11 (DEVTEST-05/06) added: `find_prior_report`/`comment_via_gh`
+unit legs (D-09/D-11); `submit_report`'s dedup-first/always-ask/comment-on-
+duplicate behavioural legs (D-09/D-10/D-11); and a deny-set widening of the
+negative-argv idiom covering both `gh` paths' short forms (DEVTEST-06,
+RESEARCH Pitfall 6) -- see the "Task 3: deny-set negative argv" section
+below for the deliberate-break proof demonstrating the single-flag
+assertion it replaces would have missed the short `-l` form.
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import Mock
+
+import pytest
 
 from firestarter import submit
 
@@ -390,6 +400,172 @@ def test_gsd_inbox_label_constant_retained():
     # (`gh issue edit <n> --add-label gsd-inbox`), even though it is no
     # longer sent on the community-tester create path.
     assert submit.GSD_INBOX_LABEL == "gsd-inbox"
+
+
+# ---------------------------------------------------------------------------
+# Task 3: deny-set negative argv on BOTH gh paths (DEVTEST-06, D-09/D-11,
+# RESEARCH Pitfall 6) -- widens the single-flag idiom above, does not
+# replace it. `gh issue create`'s write/triage-gated flags are broader than
+# `--label` alone: `-l`/`--label`, `-a`/`--assignee`, `-m`/`--milestone`,
+# `-p`/`--project` (the last explicitly requires the `project` OAuth scope
+# per `gh issue create --help`). `gh issue comment` has NO label/assignee/
+# milestone/project flag at all -- its meaningful negatives are the
+# mutating/hijacking flags: `--delete-last`, `--edit-last`, `--yes`,
+# `-w`/`--web`, `-e`/`--editor`.
+# ---------------------------------------------------------------------------
+
+_CREATE_DENY_SET = [
+    "-l",
+    "--label",
+    "-a",
+    "--assignee",
+    "-m",
+    "--milestone",
+    "-p",
+    "--project",
+]
+
+_COMMENT_DENY_SET = [
+    "--delete-last",
+    "--edit-last",
+    "--yes",
+    "-w",
+    "--web",
+    "-e",
+    "--editor",
+]
+
+
+@pytest.mark.parametrize("flag", _CREATE_DENY_SET)
+def test_gh_create_argv_carries_no_permission_gated_flag(flag):
+    # Deny-set, not equality: an equality assertion against a fixed expected
+    # argv silently stops protecting the moment someone updates that list.
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout="https://github.com/henols/firestarter_prom/issues/1\n",
+        )
+    )
+    submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    assert flag not in argv
+    # The retained value-absence + list-argv + no-shell assertions (the
+    # pre-existing idiom this widens).
+    assert submit.GSD_INBOX_LABEL not in argv
+    assert "gsd-inbox" not in " ".join(argv)
+    assert "shell" not in run_fn.call_args.kwargs
+
+
+@pytest.mark.parametrize("flag", _COMMENT_DENY_SET)
+def test_gh_comment_argv_carries_no_mutating_flag(flag):
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0, stdout="https://github.com/x/y/issues/1#issuecomment-1\n"
+        )
+    )
+    submit.comment_via_gh("https://github.com/x/y/issues/1", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    assert flag not in argv
+    assert "shell" not in run_fn.call_args.kwargs
+
+
+def test_gh_comment_argv_targets_the_project_wide_tracker():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0, stdout="https://github.com/x/y/issues/1#issuecomment-1\n"
+        )
+    )
+    submit.comment_via_gh("https://github.com/x/y/issues/1", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    repo_idx = argv.index("--repo")
+    assert argv[repo_idx + 1] == submit.SUBMIT_REPO
+
+
+def test_gh_comment_body_arrives_on_stdin():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0, stdout="https://github.com/x/y/issues/1#issuecomment-1\n"
+        )
+    )
+    submit.comment_via_gh("https://github.com/x/y/issues/1", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert "--body-file" in argv
+    body_idx = argv.index("--body-file")
+    assert argv[body_idx + 1] == "-"
+    # Body arrives on stdin (`input=`), never as an inline argument.
+    assert "My Body" not in argv
+    assert run_fn.call_args.kwargs["input"] == "My Body"
+
+
+def test_dedup_query_argv_is_read_only():
+    # Keeps a future edit from turning the read-only dedup probe into
+    # something that writes: no create/edit/comment/close/delete
+    # subcommand token, and no write-gated flag from either deny-set.
+    run_fn = Mock(return_value=Mock(returncode=0, stdout="[]"))
+    submit.find_prior_report("abc123def456", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    for mutating_token in ("create", "edit", "comment", "close", "delete"):
+        assert mutating_token not in argv
+    for flag in _CREATE_DENY_SET + _COMMENT_DENY_SET:
+        assert flag not in argv
+    assert "shell" not in run_fn.call_args.kwargs
+
+
+@pytest.mark.parametrize(
+    "returncode,stdout,expected",
+    [
+        (
+            0,
+            '[{"number": 18, "title": "t", "url": "https://x/18"}]',
+            ("https://x/18", True),
+        ),
+        (0, "[]", (None, True)),
+        (4, "", (None, False)),
+        (1, "", (None, False)),
+    ],
+    ids=[
+        "duplicate-found",
+        "no-duplicate",
+        "unauthenticated-exit-4",
+        "generic-nonzero-exit-1",
+    ],
+)
+def test_dedup_distinguishes_all_three_signals(returncode, stdout, expected):
+    # Pins that the exit code alone is NEVER the discriminator: exit 0
+    # covers both "duplicate found" and "no duplicate" -- only the parsed
+    # payload tells them apart.
+    run_fn = Mock(return_value=Mock(returncode=returncode, stdout=stdout))
+    result = submit.find_prior_report("abc123def456", run_fn=run_fn)
+    assert result == expected
+
+
+def test_every_interactive_run_asks_even_when_the_check_fails():
+    report = _make_report()
+    find_prior_report_fn = Mock(return_value=(None, False))
+    confirm_fn = Mock(return_value=False)
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    confirm_fn.assert_called_once()
+    assert any("could not run" in m.lower() for m in printed)
 
 
 # ---------------------------------------------------------------------------
