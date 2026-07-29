@@ -287,12 +287,24 @@ class Step:
     Phase 109 (D-01, SAFE-01) a `destructive=False` call to `derive_plan`
     structurally OMITS these steps from `Plan.steps` -- see `Plan.
     locked_destructive` for where they are recorded instead.
+
+    `write_region` (D-02, this plan) is the CONSEQUENCE of `Plan.is_uv`: set
+    once by `derive_plan` as `(start, length)` on both the write step and the
+    verify step (a verify's region is definitionally the preceding write's --
+    D-07). `None` means "use the engine default region". The WIDTH always
+    originates from a module constant (`_WRITE_REGION_LENGTH` or
+    `_UV_WRITE_REGION_LENGTH`) and NEVER from a DB field (SC4 -- a malicious
+    or misconfigured DB entry must not be able to widen the write window);
+    `memory-size` only bounds WHERE the window is placed. `derive_plan` sets
+    this field and only this field; every downstream reader (`run_plan`, the
+    execution layer) may only READ it, never re-derive it.
     """
 
     op: str
     supported: bool
     reason: str
     destructive: bool = False
+    write_region: tuple[int, int] | None = None
 
 
 @dataclass
@@ -306,13 +318,54 @@ class Plan:
     it exists solely so the SWEEP-05 banner / Phase-110 report can still
     count M (the steps a `--destructive` run would execute) without a
     second `derive_plan` call and without ever giving the executor a code
-    path to a destructive op in a non-destructive run.
+    path to a destructive op in a non-destructive run. As of Phase 121
+    (this plan's D-02 correction) this list becomes permanently empty in
+    production after plan `121-09` lands -- no CLI path will reach
+    `write_scope="none"` any longer. The field and the N-of-M banner are
+    nonetheless KEPT, not deleted: the banner renders unconditionally and
+    still carries signal whenever the chip-ID destructive gate closes or
+    `resolve_chip` refuses a step (RESEARCH C-6). Removal is an explicitly
+    deferred cleanup, not this phase's work.
+
+    `is_uv` (D-02, this plan) is THE DECISION: whether this chip is a
+    UV-erasable EPROM, decided EXACTLY ONCE by `derive_plan` from the `full`
+    DB dict's `electrical-type` field (the only axis that is both complete
+    and exact -- 301 of 301 UV parts, 0 non-UV wrongly included; see
+    `is_uv_eprom`). `run_plan` and the execution layer may only READ this
+    field -- nothing downstream may re-derive UV-ness from a proxy (e.g. the
+    execution-time `algorithm == 0x0B` guess, which only matches 32 of 301).
     """
 
     name: str
     steps: list[Step] = field(default_factory=list)
     reason: str = ""
     locked_destructive: list[tuple[str, str]] = field(default_factory=list)
+    is_uv: bool = False
+
+
+def is_uv_eprom(full: dict) -> bool:
+    """Exact, name-keyed UV-EPROM predicate (D-02, DEVTEST-03 axis).
+
+    Measured exact at 301/301 against the live database: every DB entry
+    whose `electrical-type` is `"UV-EPROM"` and none whose isn't. Takes the
+    **`full`** DB dict from `db.get_eprom(name)` -- NEVER `resolve_chip`'s
+    /`convert_to_programmer`'s programmer dict, which does not carry
+    `electrical-type` and is unreachable from `derive_plan`'s callers at
+    execution time.
+
+    Rejected alternatives: the execution-time `algorithm == 0x0B` proxy
+    (`_write_region_for`'s pre-existing guess) matches only 32 of 301 UV
+    parts -- 269 silently fall through; widening to
+    `{0x07, 0x08, 0x0B}` recovers 301/301 but wrongly includes 28 non-UV
+    EEPROMs (e.g. `W27C512`), forfeiting the `0x0B`-implies-UV exclusivity
+    property. Neither alternative is exact; only the `electrical-type` field
+    is.
+
+    Consequence under D-01: a UV part that fails this test receives an
+    UNPROMPTED FULL-DEVICE WRITE. A guess here is a chip-destroying bug, not
+    a coverage gap.
+    """
+    return full.get("electrical-type", "") == "UV-EPROM"
 
 
 def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:

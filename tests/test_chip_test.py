@@ -73,6 +73,7 @@ from firestarter.chip_test import (
     count_applicable,
     derive_plan,
     generate_pattern,
+    is_uv_eprom,  # exact 301/301 UV-EPROM axis (D-02, 121-05)
     prepass_images,
     run_plan,
 )
@@ -282,6 +283,68 @@ def test_fingerprint_evidence_fields():
 #   AT28C04,AT28HC04 -- support_status "adapter-required" (resolve_chip refuses)
 
 _REAL_DB = EpromDatabase(skip_local_override=True)
+
+
+# ---------------------------------------------------------------------------
+# is_uv_eprom -- exact 301/301 UV-EPROM axis (D-02, 121-05 Task 1)
+# ---------------------------------------------------------------------------
+
+
+def test_is_uv_eprom_exact_301_over_real_db():
+    # Enumerate the real database rather than hardcoding a spot check, so a
+    # future DB change that moves the count is caught (acceptance criterion).
+    eproms = _REAL_DB.get_eproms()
+    assert sum(1 for e in eproms if is_uv_eprom(e)) == 301
+
+
+def test_is_uv_eprom_simple_true_false_missing():
+    assert is_uv_eprom({"electrical-type": "UV-EPROM"}) is True
+    assert is_uv_eprom({"electrical-type": "EEPROM"}) is False
+    assert is_uv_eprom({}) is False
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        # ST M27C512 -- genuine UV-EPROM, algorithm 0x07. The execution-time
+        # algorithm proxy would MISS this (0x07 is not 0x0B).
+        ("M27C512", True),
+        # AM27C020 -- genuine UV-EPROM, algorithm 0x08. Same miss as above.
+        ("AM27C020", True),
+        # Winbond W27C512 -- routinely confused with the ST M27C512
+        # (.planning memory reference_st_m27c512_vs_winbond_w27c512.md);
+        # electrical-type is EEPROM, not UV-EPROM.
+        ("W27C512", False),
+        # Atmel AT28C256 -- ordinary EEPROM, not UV.
+        ("AT28C256", False),
+    ],
+)
+def test_is_uv_eprom_four_chip_table(name, expected):
+    full = _REAL_DB.get_eprom(name)
+    assert full is not None, f"{name} missing from live DB"
+    assert is_uv_eprom(full) is expected
+
+
+def test_is_uv_eprom_exact_where_algorithm_proxy_is_not():
+    # M27C512 (algorithm 0x07) and AM27C020 (algorithm 0x08) both return
+    # True from is_uv_eprom, while the algorithm==0x0B proxy would miss both.
+    for name in ("M27C512", "AM27C020"):
+        full = _REAL_DB.get_eprom(name)
+        assert full["electrical-type"] == "UV-EPROM"
+        assert full["protocol-id"] != 0x0B
+        assert is_uv_eprom(full) is True
+
+
+# ---------------------------------------------------------------------------
+# Plan.is_uv / Step.write_region -- carried fields, defaulted (D-02)
+# ---------------------------------------------------------------------------
+
+
+def test_plan_and_step_carried_fields_default():
+    p = Plan(name="x")
+    s = Step(op=OP_WRITE, supported=True, reason="")
+    assert p.is_uv is False
+    assert s.write_region is None
 
 
 def test_derive_plan_id_check_first():
