@@ -42,8 +42,13 @@ not removing, the curation this module performs.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any
+# D-03 purity (Task 2): the module's top-level import set is a subset of
+# {"__future__", "typing"} — no click, no serial, no firestarter.* imports.
+# `Mapping` is imported from `typing` (not `collections.abc`) to keep that
+# invariant literal; ruff's UP035 (prefer collections.abc) is suppressed
+# below since this file has no runtime dependency on the deprecated alias
+# beyond a lazily-evaluated annotation (`from __future__ import annotations`).
+from typing import Any, Mapping  # noqa: UP035
 
 # The DB's `protocol-id` value (mirrored from `programming.algorithm` by
 # `database.py:_map_data`) that identifies the `0x0D` / EEPROM_PARALLEL
@@ -199,11 +204,13 @@ def sdp_capability_for_entry(
     """Decide SDP capability for a `db.get_eprom()`-shaped full entry dict.
 
     Unanimity rule: if any alias token of `entry["name"]` is not on the
-    allow-list, the whole entry is refused — fail-closed, because an entry
-    whose tokens are split across allow and refuse (e.g.
-    `EXEL/XL2816A,XLE28C16A,XLS28C16A`, which refuses as a whole entry even
-    though none of its tokens are on the allow side here) must never be
-    partially permitted.
+    allow-list, the whole entry is refused — fail-closed, because a single
+    DB entry can only be answered once, never token-by-token. For example
+    `EXEL/XL2816A,XLE28C16A,XLS28C16A` refuses as a whole entry even though
+    two of its three tokens (`XLE28C16A`, `XLS28C16A`) look like `28C`-
+    generation parts that might otherwise seem plausibly SDP-capable — the
+    partition's own answer for this entry is REFUSE, and no per-token
+    leniency is applied.
 
     Pure: no serial, no Click, no DB construction, no file I/O.
     """
