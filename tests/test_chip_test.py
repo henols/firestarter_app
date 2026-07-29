@@ -679,41 +679,50 @@ def test_derive_plan_na_erase_advisory_only_records_write():
 
 
 def test_derive_plan_partial_same_ops_as_full_different_region():
-    # Same step op sequence as "full", but a different write_region on the
-    # write and verify steps. M27C512 (UV-EPROM, memory-size 65536):
-    # "full" uses the same top-anchored window as "partial" here (both are
-    # UV), so compare against a NON-UV chip to see the region actually
-    # differ between the two scopes -- M8720 (non-UV) gets the engine
-    # default under "full" but the top-anchored-window formula under
-    # "partial" (partial is not is_uv-gated, D-02).
+    # Same step op sequence as "full" EXCEPT the write op string itself --
+    # "partial" emits OP_WRITE_PARTIAL ("write-partial") instead of OP_WRITE
+    # (D-06, Phase 121 Plan 06) -- plus a different write_region on the write
+    # and verify steps. M27C512 (UV-EPROM, memory-size 65536): "full" uses
+    # the same top-anchored window as "partial" here (both are UV), so
+    # compare against a NON-UV chip to see the region actually differ
+    # between the two scopes -- M8720 (non-UV) gets the engine default under
+    # "full" but the top-anchored-window formula under "partial" (partial is
+    # not is_uv-gated, D-02).
     plan_full = derive_plan("M8720", _REAL_DB, write_scope="full")
     plan_partial = derive_plan("M8720", _REAL_DB, write_scope="partial")
 
     ops_full = [s.op for s in plan_full.steps]
     ops_partial = [s.op for s in plan_partial.steps]
-    assert ops_full == ops_partial
+    # Only the write op string differs (OP_WRITE -> OP_WRITE_PARTIAL);
+    # everything else (id, read, blank-check, verify, erase) is identical.
+    assert [op if op != "write-partial" else "write" for op in ops_partial] == ops_full
+    assert ops_partial.count("write-partial") == 1
+    assert "write" not in ops_partial
 
     write_full = _step(plan_full, "write")
-    write_partial = _step(plan_partial, "write")
+    write_partial = _step(plan_partial, "write-partial")
     verify_full = _step(plan_full, "verify")
     verify_partial = _step(plan_partial, "verify")
 
     assert write_full.write_region != write_partial.write_region
     assert verify_full.write_region != verify_partial.write_region
-    # verify's region equals the write step's for BOTH scopes (D-07).
+    # verify's region equals the write step's for BOTH scopes (D-07); the
+    # verify op string stays the plain "verify" for both (D-07, no
+    # "verify-partial" partner).
     assert write_full.write_region == verify_full.write_region
     assert write_partial.write_region == verify_partial.write_region
 
 
 def test_derive_plan_partial_write_region_uv_memory_size():
     # write_scope="partial" on a UV part with memory-size 65536 yields a
-    # write step whose write_region is (65280, 256) (acceptance criterion).
+    # write-partial step whose write_region is (65280, 256) (acceptance
+    # criterion), and a plain "verify" step (D-07) with the equal region.
     full = _REAL_DB.get_eprom("M27C512")
     assert full["electrical-type"] == "UV-EPROM"
     assert full["memory-size"] == 65536
 
     plan = derive_plan("M27C512", _REAL_DB, write_scope="partial")
-    write_step = _step(plan, "write")
+    write_step = _step(plan, "write-partial")
     verify_step = _step(plan, "verify")
     assert write_step.write_region == (65280, 256)
     assert verify_step.write_region == (65280, 256)
@@ -730,7 +739,7 @@ def test_derive_plan_partial_write_region_missing_memory_size_falls_back():
     spy_db.convert_to_programmer.return_value = prog
 
     plan = derive_plan("SYNTHETIC", spy_db, write_scope="partial")
-    write_step = _step(plan, "write")
+    write_step = _step(plan, "write-partial")
     assert write_step.write_region == (0, 256)
 
 

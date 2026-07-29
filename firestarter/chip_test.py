@@ -269,11 +269,20 @@ _PROTOCOL_FLASH4 = 0x05
 _SRAM_FRAM_ETYPES = frozenset({"SRAM", "FRAM"})
 _SRAM_PROTO_IDS = frozenset({0x0E, 0x27, 0x28, 0x29})
 
-# Ordered op vocabulary (id-check FIRST per SWEEP-03).
+# Ordered op vocabulary (id-check FIRST per SWEEP-03). Seven strings as of
+# Phase 121 D-06/D-07 (this plan): `OP_WRITE_PARTIAL` joins the vocabulary so
+# the partial-vs-full distinction is visible in the op name itself -- every
+# consumer that reads `StepResult.op` (the `dedup_fingerprint` hash, the
+# report renderer) sees it without learning a new field. D-07 deliberately
+# stops the vocabulary here: no `verify-partial` partner exists, because a
+# verify's region is definitionally the preceding write's region (D-07,
+# `Step.write_region` is set equal on both steps by `derive_plan`) -- a
+# partner string would encode zero new information.
 OP_ID = "id"
 OP_READ = "read"
 OP_BLANK_CHECK = "blank-check"
 OP_WRITE = "write"
+OP_WRITE_PARTIAL = "write-partial"
 OP_VERIFY = "verify"
 OP_ERASE = "erase"
 
@@ -482,10 +491,14 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     # write_scope="none" the step is OMITTED from the executable `steps`
     # list -- structurally absent, not skipped at exec time (D-01, SAFE-01)
     # -- and recorded on the advisory `locked_destructive` list instead.
+    # write_scope="partial" emits `OP_WRITE_PARTIAL` instead of `OP_WRITE`
+    # (D-06, Phase 121 Plan 06) so the partial-vs-full distinction is visible
+    # in the op string itself, everywhere `StepResult.op` is read.
     if write_execute:
+        write_op = OP_WRITE_PARTIAL if write_scope == _WRITE_SCOPE_PARTIAL else OP_WRITE
         steps.append(
             Step(
-                op=OP_WRITE,
+                op=write_op,
                 supported=True,
                 reason="",
                 destructive=True,
@@ -592,7 +605,15 @@ VERDICT_MARGINAL = "marginal"
 
 # Ops that mutate the chip -- gated by the id-first destructive_gate (SWEEP-03)
 # and run N>=2 with a `marginal`-on-disagreement policy (SWEEP-04, Task 3).
-_DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_ERASE})
+# This is the ONLY live safety use of either frozenset in this module: it is
+# the exact set `run_plan`'s chip-ID destructive gate (`if step.op in
+# _DESTRUCTIVE_OPS and destructive_gate_closed:`) consults before admitting a
+# step. `OP_WRITE_PARTIAL` joins it here (D-06, Phase 121 Plan 06) precisely
+# because a partial write is still a write -- a write-shaped op absent from
+# this frozenset would write to a misidentified chip ungated by the chip-ID
+# mismatch check, which is a critical-severity correctness bug, not a
+# cosmetic omission.
+_DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE})
 # LIVE DISPATCH ALLOW-LIST (121-02, T-121-05/06/07). Originally documented as
 # only the N>=2 disagreement-policy set (D-06: destructive/verify ONLY --
 # write, erase, verify; read disagreement is a divergence metric, never a
@@ -606,9 +627,11 @@ _DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_ERASE})
 # both `_dispatch_step` and `_dispatch_multi_run` gate on -- the host mirror
 # of Phase 119 D-06/D-07's firmware NULL-`main` refusal
 # (`operation_utils.cpp::op_execute_stateful_operation`). Made LIVE, not
-# documented dead: any future op added to the vocabulary (e.g. Plan 121-06's
-# `OP_WRITE_PARTIAL`) MUST be added here or it fails closed by construction.
-_MULTI_RUN_OPS = frozenset({OP_WRITE, OP_ERASE, OP_VERIFY})
+# documented dead: `OP_WRITE_PARTIAL` (Phase 121 Plan 06, D-06) is added here
+# too -- any future op added to the vocabulary MUST be added to both
+# frozensets in this block or it fails closed by construction (proven by a
+# deliberate-break test, plan 121-06 Task 3).
+_MULTI_RUN_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE, OP_VERIFY})
 
 _DESTRUCTIVE_GATE_REASON = (
     "chip-ID mismatch — destructive steps gated (chip left pristine)"
