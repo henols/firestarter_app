@@ -974,9 +974,7 @@ def test_unhandled_op_fails_closed_names_the_op_in_the_reason():
 def test_dispatch_step_refuses_an_op_outside_the_multi_run_allow_list():
     operator = _mock_operator()
     step = Step(op=_UNMAPPED_OP, supported=True, reason="")
-    result = _dispatch_step(
-        "AT28C256", step, {"memory-size": 32768}, operator, runs=2
-    )
+    result = _dispatch_step("AT28C256", step, {"memory-size": 32768}, operator, runs=2)
 
     assert result.verdict == VERDICT_BAD
     # Load-bearing: none of the three chip-mutating operator methods ran.

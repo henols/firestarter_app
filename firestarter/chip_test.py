@@ -451,9 +451,21 @@ VERDICT_MARGINAL = "marginal"
 # Ops that mutate the chip -- gated by the id-first destructive_gate (SWEEP-03)
 # and run N>=2 with a `marginal`-on-disagreement policy (SWEEP-04, Task 3).
 _DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_ERASE})
-# Steps whose per-run outcome is compared for the N>=2 disagreement policy
-# (D-06: destructive/verify ONLY -- write, erase, verify; read disagreement is
-# a divergence metric, never a verdict flip).
+# LIVE DISPATCH ALLOW-LIST (121-02, T-121-05/06/07). Originally documented as
+# only the N>=2 disagreement-policy set (D-06: destructive/verify ONLY --
+# write, erase, verify; read disagreement is a divergence metric, never a
+# verdict flip) -- but RESEARCH C-5 / Open Question 4 found this frozenset had
+# ZERO references anywhere in the tree before this change: `_dispatch_step`'s
+# trailing `return _dispatch_multi_run(...)` was unconditional, and
+# `_dispatch_multi_run`'s run loop ended in a bare `else: # OP_ERASE`, so ANY
+# op string reached `operator.erase_eprom()` and reported `VERDICT_OK`
+# (RESEARCH Pitfall 1a, proven empirically: an unmapped op called
+# erase_eprom() twice and returned OK). This is now the dispatch allow-list
+# both `_dispatch_step` and `_dispatch_multi_run` gate on -- the host mirror
+# of Phase 119 D-06/D-07's firmware NULL-`main` refusal
+# (`operation_utils.cpp::op_execute_stateful_operation`). Made LIVE, not
+# documented dead: any future op added to the vocabulary (e.g. Plan 121-06's
+# `OP_WRITE_PARTIAL`) MUST be added here or it fails closed by construction.
 _MULTI_RUN_OPS = frozenset({OP_WRITE, OP_ERASE, OP_VERIFY})
 
 _DESTRUCTIVE_GATE_REASON = (
@@ -740,9 +752,25 @@ def _dispatch_step(
         )
     if step.op == OP_READ:
         return _dispatch_read(name, eprom_data, operator, runs=runs)
-    # write / verify / erase: multi-run marginal policy (D-05/D-06).
-    return _dispatch_multi_run(
-        step.op, name, eprom_data, operator, runs=runs, sampler=sampler
+    # write / verify / erase: multi-run marginal policy (D-05/D-06). Dispatch
+    # ONLY when `step.op` is on the live `_MULTI_RUN_OPS` allow-list --
+    # anything else refuses fail-closed (121-02, T-121-07). Before this
+    # guard, this `return` was unconditional, so any op string outside
+    # {OP_ID, OP_BLANK_CHECK, OP_READ} fell through to
+    # `_dispatch_multi_run`'s own terminal `else` and reached
+    # `operator.erase_eprom()` (RESEARCH Pitfall 1a).
+    if step.op in _MULTI_RUN_OPS:
+        return _dispatch_multi_run(
+            step.op, name, eprom_data, operator, runs=runs, sampler=sampler
+        )
+    return StepResult(
+        op=step.op,
+        verdict=VERDICT_BAD,
+        run_count=0,
+        reason=(
+            f"op {step.op!r} matched no dispatch arm — refused fail-closed "
+            "rather than falling through to _dispatch_multi_run"
+        ),
     )
 
 
@@ -856,7 +884,32 @@ def _dispatch_multi_run(
     call -- ONLY in the `op == OP_WRITE` branch, never around OP_VERIFY or
     OP_ERASE, and never around the whole run loop (a write droop must stay
     distinguishable from a read droop). `sampler=None` adds zero calls.
+
+    Fail-closed (121-02, T-121-05/06/08): `op` MUST be a member of the live
+    `_MULTI_RUN_OPS` allow-list. The refusal is hoisted here, above
+    `_write_region_for`/`generate_pattern` and any temp-file creation, so an
+    unrecognised op creates no temp file, computes no pattern, and -- the
+    load-bearing property -- never reaches ANY of `write_eprom`,
+    `verify_eprom`, or `erase_eprom`. This is the host mirror of Phase 119
+    D-06/D-07's generic op-layer NULL-`main` refusal
+    (`firestarter/src/operation_utils.cpp::op_execute_stateful_operation`;
+    read-only reference, not re-implemented here). Before this guard, this
+    function's run loop ended in a bare `else: # OP_ERASE`, so an unmapped op
+    called `operator.erase_eprom()` once per run and reported `VERDICT_OK`
+    (RESEARCH Pitfall 1a, proven empirically: 2 runs -> 2 calls -> OK).
     """
+    if op not in _MULTI_RUN_OPS:
+        return StepResult(
+            op=op,
+            verdict=VERDICT_BAD,
+            run_count=0,
+            reason=(
+                f"op {op!r} is not in the multi-run dispatch allow-list "
+                "(_MULTI_RUN_OPS) — refused fail-closed rather than falling "
+                "through to erase_eprom"
+            ),
+        )
+
     outcomes: list[bool] = []
     fingerprint: Fingerprint | None = None
     tmp_source_path: str | None = None
@@ -883,8 +936,19 @@ def _dispatch_multi_run(
                 outcomes.append(
                     operator.verify_eprom(name, eprom_data, tmp_source_path)
                 )
-            else:  # OP_ERASE
+            elif op == OP_ERASE:
                 outcomes.append(operator.erase_eprom(name, eprom_data))
+            else:
+                # Unreachable in practice: the fail-closed `_MULTI_RUN_OPS`
+                # guard at the top of this function already refused any op
+                # outside {OP_WRITE, OP_VERIFY, OP_ERASE} before this loop
+                # could start (121-02, T-121-05). Kept explicit rather than a
+                # bare `else: # OP_ERASE` -- the pre-fix shape that silently
+                # routed an unmapped op to `erase_eprom()` (RESEARCH
+                # Pitfall 1a).
+                raise AssertionError(
+                    f"unreachable: op {op!r} passed the _MULTI_RUN_OPS guard"
+                )
 
         if op in (OP_WRITE, OP_VERIFY):
             # Readback for the fingerprint is best-effort: a readback failure
