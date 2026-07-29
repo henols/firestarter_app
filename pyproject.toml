@@ -91,6 +91,16 @@ addopts = "-ra -q"
 [tool.ruff]
 target-version = "py39"
 line-length = 88
+# extend-exclude (not exclude, to keep ruff's built-in defaults):
+# (1) tests/golden/v1.3-COVERAGE-MATRIX.md is asserted byte-identical to
+#     tools/audit_coverage_matrix.py's output by
+#     tests/test_audit_coverage_matrix.py::test_golden_file_matches, and
+#     ruff 0.16+ formats Python code blocks embedded in markdown, so a
+#     formatter run and the generator would fight over the same bytes.
+# (2) tests/fixtures/ holds deliberately-violating planted source for the
+#     source-scan gates -- it is fixture input, never project source, and
+#     Phase 121 adds the first Python files to that directory.
+extend-exclude = ["tests/golden", "tests/fixtures"]
 
 [tool.ruff.lint]
 # E: pycodestyle errors (style violations that ruff-format does not fix)
