@@ -52,10 +52,19 @@ from firestarter.chip_test import BannerCounts, Plan, StepResult
 # Module constants (D-02, D-03) -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.1"  # D-02: single-sourced, baked into to_dict() output
+SCHEMA_VERSION = "1.2"  # D-02: single-sourced, baked into to_dict() output
 # 1.1 (Phase 114, GRAD-01): additive db_diff.ladder_state key -- backward
 # compatible, existing consumers reading current_support_status/
 # proposed_disposition are unaffected.
+# 1.2 (Phase 121 Plan 06/07, D-06): the bump marks the seventh op string
+# (`OP_WRITE_PARTIAL = "write-partial"`, chip_test.py) entering the report
+# vocabulary. It breaks no consumer: `tools/parse_devtest_issue.py` accepts
+# `schema_version` by PRESENCE ONLY (see `_extract_fenced_report`), never an
+# exact-value match, so this bump is invisible to that parser. Reports
+# already in the wild from `3.0.0b11` carry `"1.1"` and the six-string
+# vocabulary (id/read/blank-check/write/verify/erase) and MUST keep parsing
+# and keep grouping -- pinned by a frozen literal fixture in
+# `tests/test_parse_devtest_issue.py`.
 NOT_MEASURED = "not measured"  # D-03: honest fallback, never a false 0
 
 # Elevated-counter threshold for `transport_suspect` (dormant today -- no
@@ -192,6 +201,21 @@ def dedup_fingerprint(report: DiagnosticReport) -> str:
     `hashlib.sha256` is used here purely for its distribution properties,
     truncated to 12 hex characters (collision-safe at this scale, short
     enough for an issue title).
+
+    Phase 121 D-06/D-08 depends on two properties of hashing `result.op`
+    (not just `result.verdict`) into `parts`, both proven by test rather
+    than argued: (1) a partial run (`OP_WRITE_PARTIAL = "write-partial"`)
+    and a full run (`OP_WRITE = "write"`) of the same chip with identical
+    verdicts/classifications differ here purely because the op strings
+    differ -- no extra code needed. (2) because
+    `tools/parse_devtest_issue.py::count_agreeing` groups SAVED report
+    bodies by this ALREADY-EMBEDDED fingerprint (never re-hashing), a
+    partial run can NEVER land in the same group as a full run, so it can
+    never contribute to that group's N>=2 promotion count. Phase 114's
+    GRAD-01 no-auto-graduate lock therefore holds end to end THROUGH THE
+    FINGERPRINT -- not through the `ladder_state` tag, which is identical
+    for both run shapes (`build_db_diff` below has no op-name branch at
+    all).
     """
     ac = report.auto_capture
     parts = [ac.chip or "", str(ac.protocol or "")]

@@ -83,7 +83,12 @@ def test_detect_realistic_dev_test_body_parses():
     obj = parse_devtest_body(title, body)
 
     assert obj is not None
-    assert obj["schema_version"] == "1.1"
+    # 1.2 (Phase 121 Plan 07, D-06): bumped for the seventh op string
+    # (write-partial); this test builds a report via the CURRENT builders,
+    # so it reflects the CURRENT SCHEMA_VERSION -- the frozen b11-shaped
+    # ("1.1") fixture lives in the LEGACY section below and is never
+    # regenerated from live code.
+    assert obj["schema_version"] == "1.2"
     assert obj["auto_capture"]["chip"] == "M8720"
 
 
