@@ -236,6 +236,42 @@ class SerialCommunicator:
             level = logging.ERROR
         elif response.type == "WARN":
             level = logging.WARNING
+        elif response.type == "INFO":
+            # D-09 / HOST-05 / F-120-02: before this arm, the whole INFO band
+            # fell through to the `logging.DEBUG` initialiser above, while
+            # `_setup_logging` (cli_handlers.py:83) sets the root logger to
+            # `logging.INFO` unless `-v` is passed. That meant every Phase
+            # 118/119 SDP report line — emitted unconditionally by firmware —
+            # was silently discarded by the host for a whole phase: a
+            # two-repo requirement that passed its own phase's verification
+            # and was still false end to end.
+            #
+            # This promotion is deliberately scoped to the `INFO` label only.
+            # `OK`, `INIT`, `MAIN`, `END` and `DATA` are protocol-phase frames
+            # and stay on the `logging.DEBUG` default — promoting them would
+            # flood default-verbosity output.
+            #
+            # The blast radius is SIX unconditionally-emitted INFO-band ids,
+            # not five: `0x5E`, `0x5F`, `0x60`, `0x61`, `0x62` via
+            # `LOG_ID`/`LOG_ID_U32`, plus `0x5B` `MSG_INFO_HW` — emitted via
+            # the unconditional `LOG_WARN_ID_U8` alias at
+            # `rurp_hw_rev_utils.h:96` (`logging_id.h:115` makes that macro an
+            # unconditional plain `LOG_ID_U8` despite its name), while its
+            # *catalog* severity is INFO. Every other INFO id in the tree is
+            # `FLAG_VERBOSE`-gated in firmware and therefore only sent when
+            # the host passed `-v`.
+            #
+            # That `0x5B` case is Phase 35's CR-02 hard-fail-loud revision
+            # warning — this arm makes it visible at default verbosity for
+            # the first time, a partial fix for a second, older observability
+            # defect independent of the SDP work.
+            #
+            # Side effect: under `-v`, an INFO frame's rendered prefix changes
+            # from `I:` to `INFO:`, because the one-character abbreviation
+            # below applies only while `rurp_logger.isEnabledFor(logging.DEBUG)`
+            # and the type is in `NON_RESPONSE_PREFIXES` — at `-v` the DEBUG
+            # gate is open regardless of this arm's level assignment.
+            level = logging.INFO
 
         # Shorten prefix for debug, full for others
         log_prefix = (
