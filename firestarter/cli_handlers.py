@@ -68,6 +68,8 @@ from firestarter.exceptions import (
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.hardware import HardwareManager
 from firestarter.logging_utils import SingleLineStatusHandler
+from firestarter.messages import MSG_ERR_UNKNOWN_CMD
+from firestarter.sdp_capability import sdp_capability
 
 logger = logging.getLogger("Firestarter")
 
@@ -1933,3 +1935,129 @@ def dev_test(
         sys.exit(0)
     code = max(_verdict_code(r.verdict) for r in results)
     sys.exit(code)
+
+
+@dev.command(name="sdp")
+@click.argument("eprom", shell_complete=_complete_eprom)
+@click.argument("mode", type=click.Choice(["enable", "disable"], case_sensitive=False))
+@click.option(
+    "-y",
+    "--yes",
+    "assume_yes",
+    is_flag=True,
+    default=False,
+    help=(
+        "Bypass the confirm prompt on a TTY. This is the single explicit "
+        "scripting escape hatch: off a TTY this flag is REQUIRED -- without "
+        "it the command refuses rather than proceeding unattended."
+    ),
+)
+@click.pass_obj
+@map_typed_errors
+def dev_sdp(app: AppContext, eprom: str, mode: str, assume_yes: bool) -> None:
+    """Enable or disable Software Data Protection (SDP) on an AT28C-family EEPROM.
+
+    ``enable`` turns software data protection ON, so the part refuses writes
+    until it is explicitly unlocked again. ``disable`` turns it OFF. On this
+    chip family the resulting protection state cannot be read back afterward
+    (Phase 117 D-05, Phase 119 D-12), so neither direction can be confirmed --
+    a successful run means only that the command sequence was **emitted**,
+    nothing more.
+
+    Refused on protocol-0x0D parts with no SDP command decoder at all (the
+    two FRAM parts and the pre-SDP ``2804``/``2816``/``2817`` generation), and
+    on every non-0x0D protocol.
+    """
+    mode = mode.lower()
+    chip_upper = eprom.upper()
+
+    # Gate 1 -- absent chip (SAFE-04, copied verbatim from dev_test's own
+    # hard-fail). Keyed strictly off `get_eprom` emptiness -- NEVER a
+    # `resolve_chip` support-status refusal -- so an in-DB-but-unsupported
+    # chip (e.g. adapter-required) still reaches the capability gate below,
+    # which must be the one to answer for it (D-08).
+    if not app.db.get_eprom(eprom):
+        raise ChipNotFoundError(f"{eprom}: not found in database")
+
+    # Gate 2 -- capability. This gate deliberately outranks Gate 3
+    # (support-status): an adapter-required 0x0D part with no SDP command
+    # decoder must hear "this part has no SDP" rather than "get an adapter",
+    # because no adapter would have helped here -- and all NINE
+    # adapter-required 0x0D parts are in the refused set (not a hypothetical
+    # subset), so this ordering is load-bearing on every one of them.
+    allowed, reason = sdp_capability(eprom, app.db)
+    if not allowed:
+        raise click.ClickException(reason)
+
+    # Gate 3 -- support status (adapter-required / vpp-exceeds-max / etc. for
+    # chips that pass Gate 2 but are still not `supported`).
+    eprom_data = resolve_chip(eprom, db=app.db)
+
+    # Gate 4 -- consent. D-05: the subcommand IS the mode -- no
+    # `--destructive`-style flag exists, because a flag mandatory on every
+    # invocation carries no information. D-07: one code path, two strings --
+    # both directions mutate chip state through the same unobservable
+    # mechanism and share this gate. D-06 deliberately INVERTS `dev test`'s
+    # off-TTY behaviour: there, `--destructive` itself is the consent, so
+    # off-TTY proceeds; here there is no such flag, so the mere absence of a
+    # TTY is strictly weaker than the gate it would stand in for, and MUST
+    # refuse instead of silently proceeding.
+    interactive = _is_interactive()
+    if interactive and not assume_yes:
+        if mode == "enable":
+            prompt = (
+                f"Enabling SDP on {chip_upper} will make it refuse writes "
+                "until explicitly unlocked again, and the resulting "
+                "protection state cannot be read back afterward. Continue?"
+            )
+        else:
+            prompt = (
+                f"Disabling SDP on {chip_upper} removes its write protection. Continue?"
+            )
+        proceed = Confirm.ask(prompt, default=False)
+        if not proceed:
+            click.echo(f"Aborted -- {chip_upper} left untouched.")
+            sys.exit(0)
+    elif not interactive and not assume_yes:
+        raise click.ClickException(
+            f"{chip_upper}: refusing to run off a TTY without -y/--yes -- "
+            "pass -y to proceed unattended."
+        )
+
+    # Serial call. D-14: an `EpromOperationError` whose `error_code` is
+    # `MSG_ERR_UNKNOWN_CMD` means the attached firmware predates
+    # CMD_SDP_LOCK/CMD_SDP_UNLOCK (Phase 119) and does not recognise this
+    # command at all. This exploits the one real asymmetry in the wire
+    # surface (HOST-06): an unknown COMMAND produces an error and is
+    # therefore detectable after the fact, whereas an unknown flag BIT
+    # produces silence. Keyed on the message **id**, never the message text.
+    try:
+        if mode == "enable":
+            ok = app.eprom_operator.sdp_lock(eprom, eprom_data)
+        else:
+            ok = app.eprom_operator.sdp_unlock(eprom, eprom_data)
+    except EpromOperationError as e:
+        if e.error_code == MSG_ERR_UNKNOWN_CMD:
+            raise FirmwareOutdatedError(
+                f"{chip_upper}: attached firmware does not implement SDP "
+                f"{mode} (unknown command) -- upgrade with "
+                "'firestarter fw --install'."
+            ) from e
+        raise
+
+    if ok:
+        # D-10 summary line -- honest and symmetric on both directions: the
+        # claim is that the sequence was EMITTED, never that the resulting
+        # state was verified. No duration figure appears here -- this is
+        # mechanically enforced, not merely a discipline: get_response()
+        # filters the entire INFO band out at serial_comm.py:424, so the
+        # operation layer literally cannot see the firmware's `0x5F`/`0x61`
+        # duration frame to plumb one through. No lock/unlock state boolean
+        # appears either -- HOST-05's honesty floor.
+        logger.info(
+            f"SDP {mode} sequence for {chip_upper} was emitted. The "
+            "resulting protection state cannot be read back on this chip "
+            "family, so this is not a claim about the chip's actual state."
+        )
+
+    sys.exit(0 if ok else 1)
