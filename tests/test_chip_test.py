@@ -65,6 +65,8 @@ from firestarter.chip_test import (
     Plan,
     Step,
     _diff_offsets,  # test-internal: the shared divergence primitive (D-04)
+    _dispatch_multi_run,  # test-internal: fail-closed dispatch proof (121-02)
+    _dispatch_step,  # test-internal: fail-closed dispatch proof (121-02)
     _write_region_for,  # test-internal: UV small-region selector (PATT-03)
     address_fold_byte,
     classify_fingerprint,
@@ -917,6 +919,70 @@ def test_marginal_on_disagreeing_verify_runs():
 
     verify_result = _result(results, OP_VERIFY)
     assert verify_result.verdict == VERDICT_MARGINAL
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed dispatch on an unmapped op (T-121-05/06/07, 121-02 Task 1)
+# ---------------------------------------------------------------------------
+#
+# RESEARCH Pitfall 1a, reproduced against the pre-fix tree:
+# _dispatch_multi_run("write-partial", "AT28C256", {"memory-size": 32768},
+# operator, runs=2) fell through the run loop's terminal `else: # OP_ERASE`
+# arm and _dispatch_step's unconditional trailing
+# `return _dispatch_multi_run(...)`, calling operator.erase_eprom() TWICE and
+# reporting VERDICT_OK for an op string nobody wrote a handler for. This is
+# the host mirror of the firmware NULL-`main` phantom-success class Phase 119
+# D-06/D-07 fixed at the op layer (`operation_utils.cpp::
+# op_execute_stateful_operation`). The op string used below is deliberately
+# NOT "write-partial" (that string does not exist in this tree yet -- it is
+# added by Plan 121-06, AFTER this fail-closed guard lands) and is not any of
+# the six existing OP_* values, so this proof can never be accidentally
+# satisfied by a later plan's op addition. Every test's load-bearing
+# assertion is a NEGATIVE call assertion on `operator.erase_eprom` (never a
+# verdict-only or exit-code-only check --
+# `reference_dev_test_absent_chip_false_green_trap.md`).
+
+_UNMAPPED_OP = "unmapped-op-for-fail-closed-proof"
+
+
+def test_unhandled_op_fails_closed_never_erases():
+    operator = _mock_operator()
+    result = _dispatch_multi_run(
+        _UNMAPPED_OP, "AT28C256", {"memory-size": 32768}, operator, runs=2
+    )
+
+    # Load-bearing: an unmapped op must never reach erase_eprom.
+    operator.erase_eprom.assert_not_called()
+    assert result.verdict != VERDICT_OK
+
+
+def test_unhandled_op_fails_closed_names_the_op_in_the_reason():
+    operator = _mock_operator()
+    result = _dispatch_multi_run(
+        _UNMAPPED_OP, "AT28C256", {"memory-size": 32768}, operator, runs=2
+    )
+
+    assert _UNMAPPED_OP in result.reason
+    assert "refus" in result.reason.lower()
+    assert result.run_count == 0
+    # Load-bearing: nothing ran -- no operator method of any kind was called.
+    operator.write_eprom.assert_not_called()
+    operator.verify_eprom.assert_not_called()
+    operator.erase_eprom.assert_not_called()
+
+
+def test_dispatch_step_refuses_an_op_outside_the_multi_run_allow_list():
+    operator = _mock_operator()
+    step = Step(op=_UNMAPPED_OP, supported=True, reason="")
+    result = _dispatch_step(
+        "AT28C256", step, {"memory-size": 32768}, operator, runs=2
+    )
+
+    assert result.verdict == VERDICT_BAD
+    # Load-bearing: none of the three chip-mutating operator methods ran.
+    operator.write_eprom.assert_not_called()
+    operator.verify_eprom.assert_not_called()
+    operator.erase_eprom.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
