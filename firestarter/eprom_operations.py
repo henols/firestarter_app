@@ -32,6 +32,8 @@ from firestarter.constants import (
     COMMAND_FW_VERSION,
     COMMAND_NAMES,
     COMMAND_READ,
+    COMMAND_SDP_LOCK,
+    COMMAND_SDP_UNLOCK,
     COMMAND_VERIFY,
     COMMAND_WRITE,
     FLAG_FORCE,
@@ -1647,6 +1649,102 @@ class EpromOperator:
             if is_ok:
                 logger.info(
                     f"Erase for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {final_msg or ''}"  # noqa: E501
+                )
+            return is_ok
+
+    def sdp_unlock(
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        operation_flags: int = 0,
+    ) -> bool:
+        """Emit the SDP-disable (unlock) command sequence (cmd 9).
+
+        This operation is **payload-free**: firmware leaves ``init``/``end``
+        NULL for CMD_SDP_UNLOCK (Phase 119 LOCK-02 / D-13), so no ``#`` data
+        frame is written and there is no host ``DONE`` round-trip. Phase 119's
+        correction still applies here: NULL ``init``/``end`` does NOT skip the
+        INIT and END frame pairs themselves — both ``_execute_phase("INIT", ...)``
+        and ``_execute_phase("END", ...)`` still run and both ack; only the
+        ``DONE`` round-trip and the data frame are absent (no
+        ``main_phase_handler`` is passed below, so ``_run_state_machine`` falls
+        through to ``_main_phase_simple``, exactly like ``erase_eprom``).
+
+        A ``True`` return means only that the command sequence was **emitted**
+        over the wire — it is never a claim that silicon actually left the
+        protected state. Protection state is not readable on this chip family
+        (Phase 119 D-12, Phase 117 D-05), so no return value from this method
+        can honestly say more than "the sequence was sent and the firmware
+        reported OK".
+
+        The capability refusal deciding *which* parts may reach this method at
+        all lives in ``firestarter/sdp_capability.py`` and is enforced by the
+        caller before the serial port is even opened. This method is a thin
+        transport wrapper and deliberately does not re-check that capability
+        itself, so there is exactly one place that decision is made.
+        """
+        with self._operation_context(
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_SDP_UNLOCK,
+            operation_flags,
+        ) as (cmd_data, _, op_name):
+            if not cmd_data:
+                return False
+            logger.info(f"Unlocking SDP for {eprom_name.upper()}")
+            start_time = time.time()
+            is_ok, final_msg = self._run_state_machine(op_name)
+            if is_ok:
+                logger.info(
+                    f"SDP unlock for {eprom_name.upper()} emitted ({time.time() - start_time:.2f}s). {final_msg or ''}"  # noqa: E501
+                )
+            return is_ok
+
+    def sdp_lock(
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        operation_flags: int = 0,
+    ) -> bool:
+        """Emit the SDP-enable (lock) command sequence (cmd 10).
+
+        This operation is **payload-free**: firmware leaves ``init``/``end``
+        NULL for CMD_SDP_LOCK (Phase 119 LOCK-02 / D-13), so no ``#`` data
+        frame is written and there is no host ``DONE`` round-trip. Phase 119's
+        correction still applies here: NULL ``init``/``end`` does NOT skip the
+        INIT and END frame pairs themselves — both ``_execute_phase("INIT", ...)``
+        and ``_execute_phase("END", ...)`` still run and both ack; only the
+        ``DONE`` round-trip and the data frame are absent (no
+        ``main_phase_handler`` is passed below, so ``_run_state_machine`` falls
+        through to ``_main_phase_simple``, exactly like ``erase_eprom``).
+
+        A ``True`` return means only that the command sequence was **emitted**
+        over the wire — it is never a claim that silicon actually entered the
+        protected state. Protection state is not readable on this chip family
+        (Phase 119 D-12, Phase 117 D-05), so no return value from this method
+        can honestly say more than "the sequence was sent and the firmware
+        reported OK".
+
+        The capability refusal deciding *which* parts may reach this method at
+        all lives in ``firestarter/sdp_capability.py`` and is enforced by the
+        caller before the serial port is even opened. This method is a thin
+        transport wrapper and deliberately does not re-check that capability
+        itself, so there is exactly one place that decision is made.
+        """
+        with self._operation_context(
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_SDP_LOCK,
+            operation_flags,
+        ) as (cmd_data, _, op_name):
+            if not cmd_data:
+                return False
+            logger.info(f"Locking SDP for {eprom_name.upper()}")
+            start_time = time.time()
+            is_ok, final_msg = self._run_state_machine(op_name)
+            if is_ok:
+                logger.info(
+                    f"SDP lock for {eprom_name.upper()} emitted ({time.time() - start_time:.2f}s). {final_msg or ''}"  # noqa: E501
                 )
             return is_ok
 
