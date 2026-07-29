@@ -39,6 +39,7 @@ from firestarter.constants import (
     FLAG_FORCE,
     FLAG_SKIP_BLANK_CHECK,
     FLAG_SKIP_ERASE,
+    FLAG_SKIP_SDP_UNLOCK,
     FLAG_VERBOSE,
     FLAG_VPE_AS_VPP,
     JSON_KEY_READ_SETTLING_DELAY,
@@ -168,8 +169,21 @@ def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional
 
 
 def build_flags(
-    blank_check=True, force=False, vpe_as_vpp=False, verbose=False, skip_erase=False
+    blank_check=True,
+    force=False,
+    vpe_as_vpp=False,
+    verbose=False,
+    skip_erase=False,
+    *,
+    skip_sdp_unlock: bool = False,
 ):
+    # skip_sdp_unlock is keyword-only BY REQUIREMENT, not by style: both
+    # production callers (cli_handlers.py build_arg_flags / _build_op_flags)
+    # pass the first four parameters positionally, so a positional insertion
+    # here would silently shift `verbose` and `skip_erase` for every command.
+    # tests/test_bug_characterization.py's BUG-1 contract pins this signature
+    # shape (a PlainArgs bag with no __contains__ must not raise TypeError) —
+    # it is re-run as named task work in this same plan, unmodified.
     flags = 0
     if not blank_check:
         flags |= FLAG_SKIP_BLANK_CHECK
@@ -181,6 +195,16 @@ def build_flags(
         flags |= FLAG_VPE_AS_VPP
     if verbose:
         flags |= FLAG_VERBOSE
+    # The FLAG_SKIP_SDP_UNLOCK bit is mapped HERE, inside build_flags, rather
+    # than OR-ed in afterwards by a caller the way FLAG_OUTPUT_ENABLE /
+    # FLAG_CHIP_ENABLE are in cli_handlers._build_op_flags — D-19: every wire
+    # flag bit stays mapped in the one function that maps wire flags.
+    # Emitted unconditionally when requested: firmware never reads this bit on
+    # a protocol other than 0x0D, so no per-protocol branch belongs in a
+    # flag-mapping function. D-18's "warn and proceed" for a non-0x0D chip is
+    # the handler's job (plan 120-09), not this function's.
+    if skip_sdp_unlock:
+        flags |= FLAG_SKIP_SDP_UNLOCK
 
     return flags
 
