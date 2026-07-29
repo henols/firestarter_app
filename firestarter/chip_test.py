@@ -261,6 +261,14 @@ def classify_fingerprint(
 # check rather than introduce a new cross-module constant.
 _PROTOCOL_FLASH4 = 0x05
 
+# Protocol 0x0D (EEPROM_POLL / "28C family", firmware's configure_eeprom28c)
+# has no erase operation at all -- Phase 121 D-12 clears FLAG_CAN_ERASE for
+# this protocol at the source (database.py:582-...) so derive_plan's
+# generic NA-erase else-branch fires for it "for free". This constant exists
+# so the family-fact NA reason arm below names the protocol by symbol, not a
+# bare literal.
+_PROTOCOL_EEPROM_28C = 0x0D
+
 # SRAM/FRAM electrical types and protocol ids: blank-check has no meaningful
 # concept for volatile/byte-rewritable memory. derive_plan owns this NA
 # decision up front (RESEARCH nuance recommendation (a)) rather than relying
@@ -543,6 +551,18 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
             reason = "flash4 (0x05) auto-erases per page; no separate erase op"
         elif etype == "UV-EPROM":
             reason = "UV-EPROM has no electrical erase (UV light only)"
+        elif protocol == _PROTOCOL_EEPROM_28C:
+            # Phase 121 D-12 deliberately routes protocol 0x0D through this
+            # generic else (no 0x0D-local supported/unsupported branch was
+            # added) -- but the generic fallback's flag-keyed wording below
+            # names an internal mechanism, not a fact a community tester can
+            # act on. DEVTEST-01 requires the FAMILY FACT: protocol 0x0D and
+            # the 28C family simply has no erase operation, ever -- never
+            # the flag name.
+            reason = (
+                "protocol 0x0D (28C family) has no erase operation; "
+                "each page write auto-erases internally"
+            )
         else:
             reason = "FLAG_CAN_ERASE not set for this chip"
         # NA erase is never a supported executable step regardless of the
