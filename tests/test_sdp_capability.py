@@ -37,6 +37,25 @@ allow-list (sdp_capability.SDP_CAPABLE_TOKENS) is checked against. Production
 holds only the ALLOW half; the REFUSE half living here -- not re-derived from
 production -- is what makes the gate non-vacuous rather than a tautology that
 would pass no matter what SDP_CAPABLE_TOKENS contained.
+
+  5. Named refusal (DIP24_2816): all 19 algorithm==13 entries on pinout
+     DIP24_2816 -- the highest-harm group under F-120-01 -- are refused with
+     REASON_NOT_CAPABLE, a fact now derived from infoic.xml bit 15 rather
+     than asserted on a judgement call.
+  6. Named refusal (FRAM): both FRAM parts (FM28V020, MB85R256H) refuse with
+     REASON_FRAM present and REASON_NOT_CAPABLE absent, proving the FRAM
+     branch fires ahead of the generic allow-list branch.
+  7. Named refusal (HOST-04 pre-SDP class): every entry whose token set
+     intersects PRE_SDP_NAMED_TOKENS -- exactly 8 entries, spanning two
+     pinouts (RESEARCH F-03) -- is refused.
+  8. Named refusal (adapter-required): all 9 support_status ==
+     "adapter-required" algorithm==13 entries are refused by capability,
+     exercising D-08's ordering on the whole population, not a hypothetical
+     subset.
+  9. Structural invariants: the allow-set contains no adapter-required part
+     and no DIP24_2816 part -- consequences of the derivation, never its
+     rule (RESEARCH F-03 still holds: DIP28_28C64 splits 15 ALLOW / 20
+     REFUSE).
 """
 
 import json
@@ -360,3 +379,193 @@ def test_synthetic_unknown_0x0d_entry_is_refused_non_vacuous() -> None:
             "a synthetic part_number not present in either expected "
             "partition set -- the HOST-04 exhaustiveness gate is vacuous."
         )
+
+
+# ---------------------------------------------------------------------------
+# Leg 5: all 19 DIP24_2816 parts are refused
+# ---------------------------------------------------------------------------
+
+
+def test_all_dip24_2816_parts_are_refused() -> None:
+    """The highest-harm group under F-120-01 (120-RESEARCH.md), now refused
+    wholesale as a *derived* fact: infoic.xml flags bit 15 is 0 on every one
+    of these 19 entries, not a curated judgement call."""
+    db = json.loads(_DB_FILE.read_text(encoding="utf-8"))
+    selected = _select_0x0d_chips(db)
+
+    dip24_2816 = [
+        (mfr, chip) for mfr, chip in selected if chip.get("pinout") == "DIP24_2816"
+    ]
+    assert len(dip24_2816) == 19, (
+        "HOST-04: expected exactly 19 algorithm==13 entries on pinout "
+        f"DIP24_2816, found {len(dip24_2816)}."
+    )
+
+    offenders = []
+    for mfr, chip in dip24_2816:
+        part_number = chip.get("part_number", "?")
+        entry = {"name": part_number, "protocol-id": chip["programming"]["algorithm"]}
+        allowed, reason = sdp.sdp_capability_for_entry(entry, part_number)
+        if allowed or sdp.REASON_NOT_CAPABLE not in reason:
+            offenders.append(
+                f"{mfr}/{part_number}: allowed={allowed} reason={reason!r}"
+            )
+
+    assert not offenders, (
+        "HOST-04: every DIP24_2816 algorithm==13 part must be refused with "
+        "REASON_NOT_CAPABLE. Offenders:\n" + "\n".join(offenders)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Leg 6: both FRAM parts are refused with the FRAM reason (branch order)
+# ---------------------------------------------------------------------------
+
+
+def test_both_fram_parts_are_refused_with_the_fram_reason() -> None:
+    """FM28V020 and MB85R256H both carry electrical.type == "EEPROM" in the
+    DB -- nothing in the DB says FRAM -- so no structural rule can find them;
+    this is why HOST-04 says the FRAM refusal is "resolved in code" via the
+    FRAM_TOKENS branch, which must fire ahead of the generic
+    SDP_CAPABLE_TOKENS check (proven here by asserting REASON_NOT_CAPABLE is
+    absent from the reason)."""
+    db = json.loads(_DB_FILE.read_text(encoding="utf-8"))
+    selected = _select_0x0d_chips(db)
+
+    fram = [
+        (mfr, chip)
+        for mfr, chip in selected
+        if chip.get("part_number", "?") in {"FM28V020", "MB85R256H"}
+    ]
+    assert len(fram) == 2, (
+        "HOST-04: expected exactly 2 algorithm==13 FRAM entries (FM28V020, "
+        f"MB85R256H), found {len(fram)}."
+    )
+
+    offenders = []
+    for mfr, chip in fram:
+        part_number = chip.get("part_number", "?")
+        entry = {"name": part_number, "protocol-id": chip["programming"]["algorithm"]}
+        allowed, reason = sdp.sdp_capability_for_entry(entry, part_number)
+        if allowed or sdp.REASON_FRAM not in reason or sdp.REASON_NOT_CAPABLE in reason:
+            offenders.append(
+                f"{mfr}/{part_number}: allowed={allowed} reason={reason!r}"
+            )
+
+    assert not offenders, (
+        "HOST-04: both FRAM parts must be refused with REASON_FRAM present "
+        "and REASON_NOT_CAPABLE absent (proves branch order). Offenders:\n"
+        + "\n".join(offenders)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Leg 7: HOST-04's named pre-SDP class (plus second sources) is refused
+# ---------------------------------------------------------------------------
+
+
+def test_host04_named_pre_sdp_class_is_refused() -> None:
+    """2804/2816 sit on DIP24_2816 while 2817 sits on DIP28_28C64 -- the trio
+    spans two pinouts and no pinout rule can express it (RESEARCH F-03),
+    which is why the token table -- not a structural predicate -- is the
+    thing a reviewer must not "simplify" away."""
+    db = json.loads(_DB_FILE.read_text(encoding="utf-8"))
+    selected = _select_0x0d_chips(db)
+
+    named = [
+        (mfr, chip)
+        for mfr, chip in selected
+        if set(sdp.split_part_number_tokens(chip.get("part_number", "")))
+        & sdp.PRE_SDP_NAMED_TOKENS
+    ]
+    assert len(named) == 8, (
+        "HOST-04: expected exactly 8 algorithm==13 entries whose token set "
+        f"intersects PRE_SDP_NAMED_TOKENS, found {len(named)}: "
+        f"{[chip.get('part_number', '?') for _mfr, chip in named]}."
+    )
+
+    offenders = []
+    for mfr, chip in named:
+        part_number = chip.get("part_number", "?")
+        entry = {"name": part_number, "protocol-id": chip["programming"]["algorithm"]}
+        allowed, reason = sdp.sdp_capability_for_entry(entry, part_number)
+        if allowed:
+            offenders.append(
+                f"{mfr}/{part_number}: allowed={allowed} reason={reason!r}"
+            )
+
+    assert not offenders, (
+        "HOST-04: every named pre-SDP-class entry must be refused. "
+        "Offenders:\n" + "\n".join(offenders)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Leg 8: all 9 adapter-required parts are refused by capability
+# ---------------------------------------------------------------------------
+
+
+def test_all_nine_adapter_required_parts_are_refused_by_capability() -> None:
+    """Makes D-08's capability-before-support-status ordering load-bearing on
+    all nine adapter-required parts, not a hypothetical subset: an
+    adapter-required 0x0D part with no SDP must hear "this part has no SDP"
+    rather than "get an adapter", because no adapter would have helped."""
+    db = json.loads(_DB_FILE.read_text(encoding="utf-8"))
+    selected = _select_0x0d_chips(db)
+
+    adapter_required = [
+        (mfr, chip)
+        for mfr, chip in selected
+        if chip.get("support_status") == "adapter-required"
+    ]
+    assert len(adapter_required) == 9, (
+        "HOST-04: expected exactly 9 algorithm==13 entries with "
+        f"support_status == 'adapter-required', found {len(adapter_required)}."
+    )
+
+    offenders = []
+    for mfr, chip in adapter_required:
+        part_number = chip.get("part_number", "?")
+        entry = {"name": part_number, "protocol-id": chip["programming"]["algorithm"]}
+        allowed, reason = sdp.sdp_capability_for_entry(entry, part_number)
+        if allowed:
+            offenders.append(
+                f"{mfr}/{part_number}: allowed={allowed} reason={reason!r}"
+            )
+
+    assert not offenders, (
+        "HOST-04: every adapter-required algorithm==13 part must be refused "
+        "by capability. Offenders:\n" + "\n".join(offenders)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Leg 9: structural invariants -- consequences of the derivation, not its rule
+# ---------------------------------------------------------------------------
+
+
+def test_allow_set_contains_no_adapter_required_and_no_dip24_2816_part() -> None:
+    """Two structural invariants the derived partition happens to satisfy --
+    consequences of the derivation, never its rule (RESEARCH F-03 still
+    holds: DIP28_28C64 splits 15 ALLOW / 20 REFUSE, so no structural rule
+    expresses this partition). These exist to catch a careless
+    hand-widening of the allow-list table."""
+    db = json.loads(_DB_FILE.read_text(encoding="utf-8"))
+    selected = _select_0x0d_chips(db)
+
+    offenders = []
+    for mfr, chip in selected:
+        part_number = chip.get("part_number", "?")
+        if part_number not in EXPECTED_ALLOW_PART_NUMBERS:
+            continue
+        if chip.get("support_status") == "adapter-required":
+            offenders.append(
+                f"{mfr}/{part_number}: adapter-required part on the allow side"
+            )
+        if chip.get("pinout") == "DIP24_2816":
+            offenders.append(f"{mfr}/{part_number}: DIP24_2816 part on the allow side")
+
+    assert not offenders, (
+        "HOST-04: the allow-set must contain no adapter-required part and no "
+        "DIP24_2816 part. Offenders:\n" + "\n".join(offenders)
+    )
