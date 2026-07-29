@@ -22,9 +22,20 @@ Test taxonomy (RESEARCH Test Map):
                                     dedup_fingerprint, D-03)
   MALFORMED -- test_malformed_*   (oversized / truncated / missing JSON ->
                                     None, never raises)
+  LEGACY    -- test_legacy_*, test_mixed_schema_*  (D-06 back-compat, Phase
+                                    121 Plan 07: a frozen literal `3.0.0b11`
+                                    body -- schema_version "1.1", the six
+                                    original op strings, no `write-partial`
+                                    -- still parses and still groups by its
+                                    embedded dedup_fingerprint. This module
+                                    needs NO code change for the D-06
+                                    schema_version 1.2 bump: schema_version
+                                    is accepted by presence only.)
 """
 
 from __future__ import annotations
+
+import json
 
 from firestarter.chip_test import VERDICT_OK, Plan, StepResult
 from firestarter.database import EpromDatabase
@@ -323,3 +334,168 @@ def test_malformed_never_raises_across_all_negative_cases():
         except Exception as exc:  # noqa: BLE001 -- explicit no-raise assertion
             raise AssertionError(f"count_agreeing raised on {body!r}: {exc}") from exc
         assert counts == {}
+
+
+# ---------------------------------------------------------------------------
+# LEGACY (D-06 back-compat, Phase 121 Plan 07) -- a frozen `3.0.0b11` body
+# shape, hand-written and NEVER regenerated from current code. `3.0.0b11`
+# predates the `write-partial` op (Phase 121 Plan 06) and the 1.1 -> 1.2
+# schema_version bump (Plan 07) -- this fixture pins exactly what a tester's
+# machine still in the wild on that release produces, and proves this
+# module needs zero change to keep accepting it: `schema_version` is
+# checked by PRESENCE only (`_extract_fenced_report`), never an exact-value
+# match, and `count_agreeing` groups purely by the embedded
+# `dedup_fingerprint`, never by `schema_version`.
+# ---------------------------------------------------------------------------
+
+_B11_TITLE = "[dev test] M8720 — PASS (b11deadbeef)"
+
+# Frozen `3.0.0b11` artifact shape -- schema_version "1.1", the six original
+# op strings only (id/read/blank-check/write/verify/erase), NO
+# "write-partial". Must never be regenerated from live `to_dict()` output --
+# the whole point is pinning a shape this codebase can no longer produce.
+_B11_BODY = (
+    "| Step | Verdict | Reason |\n"
+    "| ---- | ------- | ------ |\n"
+    "| id | OK | chip id matched |\n"
+    "| write | OK |  |\n"
+    "| verify | OK |  |\n"
+    "\n```json\n"
+    + json.dumps(
+        {
+            "schema_version": "1.1",
+            "generated": "2026-05-01T12:00:00Z",
+            "auto_capture": {
+                "host_version": "3.0.0b11",
+                "fw_board_identity": "3.0.0b11:leonardo",
+                "hw_revision": "Rev 2.0-class",
+                "chip": "M8720",
+                "protocol": "0x08",
+                "chip_id_expected": 4660,
+                "chip_id_actual": 4660,
+                "chip_id_mismatch_reason": None,
+            },
+            "transport_health": {
+                "cobs_errors": "not measured",
+                "crc_failures": "not measured",
+                "retries": "not measured",
+                "timeouts": "not measured",
+                "transport_suspect": False,
+            },
+            "steps": [
+                {
+                    "op": "id",
+                    "verdict": "OK",
+                    "reason": "chip id matched",
+                    "error_code": None,
+                    "fingerprint": None,
+                },
+                {
+                    "op": "read",
+                    "verdict": "OK",
+                    "reason": "",
+                    "error_code": None,
+                    "fingerprint": None,
+                },
+                {
+                    "op": "blank-check",
+                    "verdict": "NA",
+                    "reason": "not applicable pre-write",
+                    "error_code": None,
+                    "fingerprint": None,
+                },
+                {
+                    "op": "write",
+                    "verdict": "OK",
+                    "reason": "",
+                    "error_code": None,
+                    "fingerprint": None,
+                },
+                {
+                    "op": "verify",
+                    "verdict": "OK",
+                    "reason": "",
+                    "error_code": None,
+                    "fingerprint": "clean",
+                },
+                {
+                    "op": "erase",
+                    "verdict": "NA",
+                    "reason": "not applicable, EEPROM",
+                    "error_code": None,
+                    "fingerprint": None,
+                },
+            ],
+            "banner": {"n_ran": 5, "m_applicable": 5, "locked_steps": []},
+            "voltage": {
+                "vpp_before_mv": "not measured",
+                "vpp_after_mv": "not measured",
+                "vpe_before_mv": "not measured",
+                "vpe_after_mv": "not measured",
+                "vpp_mv": "not measured",
+                "vpe_mv": "not measured",
+            },
+            "is_submittable": True,
+            "dedup_fingerprint": "b11deadbeef",
+            "db_diff": {
+                "current_support_status": "supported",
+                "proposed_disposition": "suggests: candidate for community-reported (advisory)",
+                "ladder_state": "community-reported",
+            },
+        },
+        indent=2,
+    )
+    + "\n```"
+)
+
+
+def test_legacy_vocabulary_b11_body_still_parses():
+    """A literal, hand-written `3.0.0b11` body -- schema_version "1.1", six
+    original op strings, a dedup_fingerprint -- is accepted by
+    parse_devtest_body with the `[dev test]` title marker, and its fields
+    are readable (D-06 back-compat)."""
+    obj = parse_devtest_body(_B11_TITLE, _B11_BODY)
+
+    assert obj is not None
+    assert obj["schema_version"] == "1.1"
+    assert obj["auto_capture"]["chip"] == "M8720"
+    assert [step["op"] for step in obj["steps"]] == [
+        "id",
+        "read",
+        "blank-check",
+        "write",
+        "verify",
+        "erase",
+    ]
+    assert "write-partial" not in [step["op"] for step in obj["steps"]]
+    assert obj["dedup_fingerprint"] == "b11deadbeef"
+
+    diff = extract_db_diff(obj)
+    assert diff["ladder_state"] == "community-reported"
+
+
+def test_legacy_vocabulary_b11_body_still_groups():
+    """count_agreeing over a list containing one b11-shaped body and one
+    current-schema body with the SAME embedded fingerprint yields a single
+    group of two -- an old report and a new one describing the same run
+    still aggregate (D-06 back-compat)."""
+    current_body = _B11_BODY.replace(
+        '"schema_version": "1.1"', '"schema_version": "1.2"'
+    )
+
+    counts = count_agreeing([_B11_BODY, current_body])
+
+    assert counts == {"b11deadbeef": 2}
+
+
+def test_mixed_schema_versions_group_independently():
+    """Bodies whose embedded fingerprints differ group separately regardless
+    of schema version -- the version field is never used as a grouping key
+    (D-06 back-compat)."""
+    other_fingerprint_body = _B11_BODY.replace(
+        '"dedup_fingerprint": "b11deadbeef"', '"dedup_fingerprint": "aaaa11112222"'
+    ).replace('"schema_version": "1.1"', '"schema_version": "1.2"')
+
+    counts = count_agreeing([_B11_BODY, other_fingerprint_body])
+
+    assert counts == {"b11deadbeef": 1, "aaaa11112222": 1}
