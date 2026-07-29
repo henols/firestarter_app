@@ -49,6 +49,7 @@ from unittest.mock import Mock
 import pytest
 
 from firestarter.chip_test import (
+    _DESTRUCTIVE_GATE_REASON,  # test-internal: chip-ID gate reason (SWEEP-03)
     _UV_WRITE_REGION_LENGTH,  # test-internal: engine module constant (PATT-03)
     OP_BLANK_CHECK,
     OP_ERASE,
@@ -56,6 +57,7 @@ from firestarter.chip_test import (
     OP_READ,
     OP_VERIFY,
     OP_WRITE,
+    OP_WRITE_PARTIAL,  # 121-06 D-06: the seventh op string
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
@@ -1481,6 +1483,123 @@ def test_generate_pattern_and_classify_fingerprint_source_unchanged():
     classify_src = inspect.getsource(chip_test_mod.classify_fingerprint)
     assert "_WRITE_REGION_START" not in classify_src
     assert "_UV_WRITE_REGION_LENGTH" not in classify_src
+
+
+# ---------------------------------------------------------------------------
+# OP_WRITE_PARTIAL through the production run_plan path (D-06/D-07, Phase 121
+# Plan 06, Task 3) -- RESEARCH Pitfall 4: every region proof here drives
+# run_plan/resolve_chip with the REAL programmer-dict shape production uses;
+# none of these tests call `_write_region_for` with a `full`-shaped dict.
+# ---------------------------------------------------------------------------
+
+
+def _capturing_write(captured: dict):
+    """`operator.write_eprom` side_effect that captures the tmp source file's
+    bytes at call time (Task 3) -- `_dispatch_multi_run` deletes the tmp file
+    in its `finally` block once the run loop returns, so the bytes MUST be
+    read back from inside the call itself, not after `run_plan` returns."""
+
+    def _write(name: str, eprom_data: dict, source_path: str) -> bool:
+        captured["bytes"] = Path(source_path).read_bytes()
+        return True
+
+    return _write
+
+
+def test_write_region_via_run_plan_uses_the_plan_carried_window():
+    # M27C512 (UV-EPROM, memory-size 65536): write_scope="partial" carries
+    # the top-anchored (65280, 256) window on the write-partial step (D-02).
+    # Driving run_plan end to end (real resolve_chip/convert_to_programmer),
+    # operator.write_eprom must be called with a pattern file containing
+    # EXACTLY _UV_WRITE_REGION_LENGTH bytes generated for that base.
+    name = "M27C512"
+    expected_id = _real_expected_chip_id(name)
+    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    write_step = _step(plan, OP_WRITE_PARTIAL)
+    assert write_step.write_region == (65280, 256)
+
+    operator = _mock_operator()
+    operator.check_eprom_id.return_value = (True, expected_id)
+    captured: dict = {}
+    operator.write_eprom.side_effect = _capturing_write(captured)
+    operator.read_eprom.side_effect = _writes_bytes_to_output_file(
+        generate_pattern(65280, 256)
+    )
+
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    operator.write_eprom.assert_called()
+    write_result = _result(results, OP_WRITE_PARTIAL)
+    assert write_result.verdict == VERDICT_OK
+    assert len(captured["bytes"]) == _UV_WRITE_REGION_LENGTH == 256
+    assert captured["bytes"] == generate_pattern(65280, 256)
+
+
+def test_write_region_via_run_plan_uv_part_full_scope_uses_full_window():
+    # Correction recorded in 121-06-SUMMARY.md: measured (unchanged since
+    # 121-05's derive_plan), write_scope="full" for a UV part ALSO uses the
+    # top-anchored window -- identical to "partial"'s, because derive_plan's
+    # "full" arm is is_uv-gated onto `_top_anchored_or_default` exactly like
+    # "partial". The REGION does not distinguish the two scopes for a UV
+    # part; the OP STRING does (OP_WRITE here vs OP_WRITE_PARTIAL for the
+    # partial plan) -- which is precisely why D-06 introduces a dedicated op
+    # string: dedup_fingerprint hashes on `op`, so the region axis alone
+    # could not keep a UV part's full and partial runs from cross-agreeing
+    # (T-121-24).
+    name = "M27C512"
+    expected_id = _real_expected_chip_id(name)
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    write_step = _step(plan, OP_WRITE)
+    assert write_step.write_region == (65280, 256)
+
+    operator = _mock_operator()
+    operator.check_eprom_id.return_value = (True, expected_id)
+    captured: dict = {}
+    operator.write_eprom.side_effect = _capturing_write(captured)
+    operator.read_eprom.side_effect = _writes_bytes_to_output_file(
+        generate_pattern(65280, 256)
+    )
+
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    operator.write_eprom.assert_called()
+    write_result = _result(results, OP_WRITE)
+    assert write_result.verdict == VERDICT_OK
+    assert captured["bytes"] == generate_pattern(65280, 256)
+    # Same region as the partial plan (see correction above); op strings
+    # differ ("write" vs "write-partial"), which is the actual distinguisher.
+    assert write_step.write_region == (65280, 256)
+
+
+def test_partial_write_gated_on_id_mismatch():
+    # A mismatched chip-ID must gate the write-partial step exactly as it
+    # gates a full write (T-121-21) -- the load-bearing line is
+    # `write_eprom.assert_not_called()`; the SKIPPED verdict alone is not
+    # sufficient proof (a verdict can be produced after the fact).
+    name = "M27C512"
+    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+
+    operator = _mock_operator()
+    operator.check_eprom_id.return_value = (False, 0x9999)
+
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    write_result = _result(results, OP_WRITE_PARTIAL)
+    assert write_result.verdict == VERDICT_SKIPPED
+    assert write_result.reason == _DESTRUCTIVE_GATE_REASON
+    operator.write_eprom.assert_not_called()
+
+
+def test_verify_region_matches_the_preceding_partial_write_region():
+    # On a partial plan, the verify step's write_region equals the write
+    # step's (D-07), and the verify step's op is the plain "verify" string
+    # -- no "verify-partial" partner exists.
+    plan = derive_plan("M27C512", _REAL_DB, write_scope="partial")
+    write_step = _step(plan, OP_WRITE_PARTIAL)
+    verify_step = _step(plan, OP_VERIFY)
+
+    assert verify_step.op == OP_VERIFY
+    assert verify_step.write_region == write_step.write_region == (65280, 256)
 
 
 # ---------------------------------------------------------------------------
