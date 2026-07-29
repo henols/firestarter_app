@@ -486,9 +486,9 @@ def test_derive_plan_eeprom_erase_supported_when_can_erase_set():
 
     assert prog["flags"] & FLAG_CAN_ERASE
 
-    # destructive=True: erase is a supported step in the executable steps
-    # list (D-01 -- destructive=False would structurally omit it).
-    plan = derive_plan("AS29F002T", _REAL_DB, destructive=True)
+    # write_scope="full": erase is a supported step in the executable steps
+    # list (D-01 -- write_scope="none" would structurally omit it).
+    plan = derive_plan("AS29F002T", _REAL_DB, write_scope="full")
     erase_step = _step(plan, "erase")
     assert erase_step.supported is True
 
@@ -514,24 +514,24 @@ def test_derive_plan_blank_check_supported_for_regular_eeprom():
 
 def test_derive_plan_read_and_verify_always_present():
     # read is always present in the executable steps list, regardless of
-    # destructive. verify is present only on a destructive plan (112-05
-    # SC2/SWEEP-05: verify is gated behind `destructive` exactly like
+    # write_scope. verify is present only on a write-executing plan (112-05
+    # SC2/SWEEP-05: verify is gated behind write_scope exactly like
     # write/erase, D-01) -- see test_derive_plan_verify_gated_behind_destructive
-    # for the non-destructive-omission coverage.
+    # for the write_scope="none"-omission coverage.
     for name in ("M8720", "AM2716", "AE29F1008", "DS1220(RW)"):
         plan = derive_plan(name, _REAL_DB)
         read_step = _step(plan, "read")
         assert read_step.supported is True
 
-        plan_destructive = derive_plan(name, _REAL_DB, destructive=True)
+        plan_destructive = derive_plan(name, _REAL_DB, write_scope="full")
         verify_step = _step(plan_destructive, "verify")
         assert verify_step.supported is True
 
 
 def test_derive_plan_write_present_and_destructive():
-    # destructive=True: write remains in the executable steps list, exactly
-    # as Phase 108 produced it (D-01 destructive path unchanged).
-    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    # write_scope="full": write remains in the executable steps list,
+    # exactly as Phase 108 produced it (D-01 write-executing path unchanged).
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     write_step = _step(plan, "write")
     assert write_step.supported is True
     assert write_step.destructive is True
@@ -552,35 +552,59 @@ def test_derive_plan_erase_condition_checks_flag_and_protocol():
 
 def test_derive_plan_destructive_flag_strips_not_annotates():
     # Phase 109 (D-01, SAFE-01) INVERTS the Phase-108 annotate-only
-    # contract: destructive=False must structurally OMIT write/erase from
-    # the executable steps list; destructive=True keeps them exactly as
-    # Phase 108 produced them.
-    plan_default = derive_plan("M8720", _REAL_DB, destructive=False)
-    plan_destructive = derive_plan("M8720", _REAL_DB, destructive=True)
-    ops_default = {s.op for s in plan_default.steps}
-    ops_destructive = {s.op for s in plan_destructive.steps}
+    # contract: write_scope="none" must structurally OMIT write/erase from
+    # the executable steps list; write_scope="full" keeps them exactly as
+    # Phase 108 produced them (121-05 D-02: the kwarg is now the
+    # three-valued write_scope, not a destructive bool -- behaviour
+    # unchanged for these two scopes; the compared op sequences below are
+    # the behavioural-equivalence proof required by 121-05 Task 2).
+    plan_default = derive_plan("M8720", _REAL_DB, write_scope="none")
+    plan_destructive = derive_plan("M8720", _REAL_DB, write_scope="full")
+    ops_default = [s.op for s in plan_default.steps]
+    ops_destructive = [s.op for s in plan_destructive.steps]
 
-    assert "write" not in ops_default
-    assert "erase" not in ops_default
-    assert "write" in ops_destructive
-    assert "erase" in ops_destructive
-    # verify is now stripped from the non-destructive plan alongside
-    # write/erase (112-05 SC2/SWEEP-05: verify gated behind `destructive`,
+    # Recorded op sequences (SUMMARY): write_scope="none" ->
+    # ["id", "read", "blank-check"]; write_scope="full" ->
+    # ["id", "read", "blank-check", "write", "verify", "erase"] -- identical
+    # to the pre-121-05 destructive=False/True sequences for this chip.
+    assert ops_default == ["id", "read", "blank-check"]
+    assert ops_destructive == [
+        "id",
+        "read",
+        "blank-check",
+        "write",
+        "verify",
+        "erase",
+    ]
+    assert plan_default.locked_destructive == [
+        (OP_WRITE, 'write_scope="none": write omitted (D-01)'),
+        (OP_VERIFY, 'write_scope="none": verify omitted (D-01)'),
+        (OP_ERASE, 'write_scope="none": erase omitted (D-01)'),
+    ]
+    assert plan_destructive.locked_destructive == []
+    ops_default_set = set(ops_default)
+    ops_destructive_set = set(ops_destructive)
+    assert "write" not in ops_default_set
+    assert "erase" not in ops_default_set
+    assert "write" in ops_destructive_set
+    assert "erase" in ops_destructive_set
+    # verify is now stripped from the write_scope="none" plan alongside
+    # write/erase (112-05 SC2/SWEEP-05: verify gated behind write_scope,
     # D-01) -- only id/read/blank-check remain.
-    assert ops_default == ops_destructive - {"write", "erase", "verify"}
+    assert ops_default_set == ops_destructive_set - {"write", "erase", "verify"}
 
 
 def test_derive_plan_strip_default_only_destructive_ops_removed():
     # strip_default (109-01 Task 1 behavior, corrected by 112-05 SC2/SWEEP-05):
     # write/erase are removed from the executable steps list when
-    # destructive=False because they mutate the chip (_DESTRUCTIVE_OPS).
-    # verify is gated at plan-construction time in derive_plan behind the
-    # `destructive` flag (D-01) -- it is NOT added to _DESTRUCTIVE_OPS
-    # (verify does not mutate the chip; the runtime id-first gate stays
-    # scoped to write/erase), but a bare verify with no preceding write
-    # would compare a freshly-generated pattern against unrelated chip
-    # contents, so it is omitted from the non-destructive plan too.
-    plan = derive_plan("M8720", _REAL_DB, destructive=False)
+    # write_scope="none" because they mutate the chip (_DESTRUCTIVE_OPS).
+    # verify is gated at plan-construction time in derive_plan behind
+    # write_scope (D-01) -- it is NOT added to _DESTRUCTIVE_OPS (verify
+    # does not mutate the chip; the runtime id-first gate stays scoped to
+    # write/erase), but a bare verify with no preceding write would compare
+    # a freshly-generated pattern against unrelated chip contents, so it is
+    # omitted from the write_scope="none" plan too.
+    plan = derive_plan("M8720", _REAL_DB, write_scope="none")
     ops = {s.op for s in plan.steps}
     assert ops == {"id", "read", "blank-check"}
     assert "write" not in ops
@@ -593,14 +617,14 @@ def test_derive_plan_verify_gated_behind_destructive():
     # (protocol 0x08, EEPROM, FLAG_CAN_ERASE set) is the module's
     # established erasable-chip fixture (see the fixture comment near
     # _REAL_DB above).
-    plan_default = derive_plan("M8720", _REAL_DB, destructive=False)
+    plan_default = derive_plan("M8720", _REAL_DB, write_scope="none")
     nd_ops = [s.op for s in plan_default.steps]
     assert nd_ops == [OP_ID, OP_READ, OP_BLANK_CHECK]
     assert OP_VERIFY not in nd_ops
     locked_ops = {op for op, _reason in plan_default.locked_destructive}
     assert OP_VERIFY in locked_ops
 
-    plan_destructive = derive_plan("M8720", _REAL_DB, destructive=True)
+    plan_destructive = derive_plan("M8720", _REAL_DB, write_scope="full")
     d_ops = [s.op for s in plan_destructive.steps]
     assert OP_VERIFY in d_ops
     assert d_ops.index(OP_VERIFY) > d_ops.index(OP_WRITE)
@@ -611,8 +635,8 @@ def test_derive_plan_advisory_populated_when_non_destructive():
     # advisory_populated: locked_destructive is a non-empty list of
     # (op, reason) tuples covering the omitted write, verify (112-05
     # SC2/SWEEP-05), and erase (since M8720's erase is a supported
-    # destructive op) when destructive=False.
-    plan = derive_plan("M8720", _REAL_DB, destructive=False)
+    # destructive op) when write_scope="none".
+    plan = derive_plan("M8720", _REAL_DB, write_scope="none")
     assert plan.locked_destructive
     locked_ops = {op for op, _reason in plan.locked_destructive}
     assert locked_ops == {"write", "verify", "erase"}
@@ -621,9 +645,9 @@ def test_derive_plan_advisory_populated_when_non_destructive():
 
 
 def test_derive_plan_destructive_keeps_and_empties_advisory():
-    # destructive_keeps: destructive=True keeps write/erase in steps exactly
-    # as Phase 108 produced them, and locked_destructive is empty.
-    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    # destructive_keeps: write_scope="full" keeps write/erase in steps
+    # exactly as Phase 108 produced them, and locked_destructive is empty.
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     ops = {s.op for s in plan.steps}
     assert "write" in ops
     assert "erase" in ops
@@ -640,13 +664,110 @@ def test_derive_plan_na_erase_advisory_only_records_write():
     full = _REAL_DB.get_eprom("AM2716")
     assert full["electrical-type"] == "UV-EPROM"
 
-    plan = derive_plan("AM2716", _REAL_DB, destructive=False)
+    plan = derive_plan("AM2716", _REAL_DB, write_scope="none")
     locked_ops = {op for op, _reason in plan.locked_destructive}
     assert locked_ops == {"write", "verify"}
 
     erase_step = _step(plan, "erase")
     assert erase_step.supported is False
     assert "erase" not in {s.op for s in plan.steps if s.op == "erase" and s.supported}
+
+
+# ---------------------------------------------------------------------------
+# write_scope="partial" -- new third mode (D-02, 121-05 Task 3 leg 1)
+# ---------------------------------------------------------------------------
+
+
+def test_derive_plan_partial_same_ops_as_full_different_region():
+    # Same step op sequence as "full", but a different write_region on the
+    # write and verify steps. M27C512 (UV-EPROM, memory-size 65536):
+    # "full" uses the same top-anchored window as "partial" here (both are
+    # UV), so compare against a NON-UV chip to see the region actually
+    # differ between the two scopes -- M8720 (non-UV) gets the engine
+    # default under "full" but the top-anchored-window formula under
+    # "partial" (partial is not is_uv-gated, D-02).
+    plan_full = derive_plan("M8720", _REAL_DB, write_scope="full")
+    plan_partial = derive_plan("M8720", _REAL_DB, write_scope="partial")
+
+    ops_full = [s.op for s in plan_full.steps]
+    ops_partial = [s.op for s in plan_partial.steps]
+    assert ops_full == ops_partial
+
+    write_full = _step(plan_full, "write")
+    write_partial = _step(plan_partial, "write")
+    verify_full = _step(plan_full, "verify")
+    verify_partial = _step(plan_partial, "verify")
+
+    assert write_full.write_region != write_partial.write_region
+    assert verify_full.write_region != verify_partial.write_region
+    # verify's region equals the write step's for BOTH scopes (D-07).
+    assert write_full.write_region == verify_full.write_region
+    assert write_partial.write_region == verify_partial.write_region
+
+
+def test_derive_plan_partial_write_region_uv_memory_size():
+    # write_scope="partial" on a UV part with memory-size 65536 yields a
+    # write step whose write_region is (65280, 256) (acceptance criterion).
+    full = _REAL_DB.get_eprom("M27C512")
+    assert full["electrical-type"] == "UV-EPROM"
+    assert full["memory-size"] == 65536
+
+    plan = derive_plan("M27C512", _REAL_DB, write_scope="partial")
+    write_step = _step(plan, "write")
+    verify_step = _step(plan, "verify")
+    assert write_step.write_region == (65280, 256)
+    assert verify_step.write_region == (65280, 256)
+
+
+def test_derive_plan_partial_write_region_missing_memory_size_falls_back():
+    # write_scope="partial" on a chip with memory-size 0/missing yields the
+    # engine default (0, 256) (acceptance criterion) -- proven via a spy DB
+    # since every real DB entry carries a real memory-size.
+    full = {"electrical-type": "UV-EPROM", "protocol-id": 7}  # no memory-size key
+    prog = {"algorithm": 7, "flags": 0, "chip-id": 0}
+    spy_db = Mock(spec=["get_eprom", "convert_to_programmer"])
+    spy_db.get_eprom.return_value = full
+    spy_db.convert_to_programmer.return_value = prog
+
+    plan = derive_plan("SYNTHETIC", spy_db, write_scope="partial")
+    write_step = _step(plan, "write")
+    assert write_step.write_region == (0, 256)
+
+
+# ---------------------------------------------------------------------------
+# write_scope rejects anything else fail-closed (D-02, 121-05 Task 3 leg 2)
+# ---------------------------------------------------------------------------
+
+
+def test_derive_plan_write_scope_rejects_unknown_value():
+    with pytest.raises(ValueError) as excinfo:
+        derive_plan("M8720", _REAL_DB, write_scope="bogus")
+    message = str(excinfo.value)
+    assert "bogus" in message
+    assert "none" in message
+    assert "partial" in message
+    assert "full" in message
+
+
+# ---------------------------------------------------------------------------
+# Plan.is_uv wiring proof, through derive_plan (D-02, 121-05 Task 3 leg 3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name,expected_is_uv",
+    [
+        ("M27C512", True),
+        ("AM27C020", True),
+        ("W27C512", False),
+        ("AT28C256", False),
+    ],
+)
+def test_derive_plan_is_uv_wired_from_is_uv_eprom(name, expected_is_uv):
+    # Proven through derive_plan (NOT by calling is_uv_eprom directly) so
+    # the wiring itself is proven, using the four-chip table from Task 1.
+    plan = derive_plan(name, _REAL_DB, write_scope="none")
+    assert plan.is_uv is expected_is_uv
 
 
 # ---------------------------------------------------------------------------
@@ -1386,7 +1507,7 @@ def test_generate_pattern_and_classify_fingerprint_source_unchanged():
 
 
 def test_count_applicable_uv_counts():
-    plan = derive_plan("AM2716", _REAL_DB, destructive=False)
+    plan = derive_plan("AM2716", _REAL_DB, write_scope="none")
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
@@ -1409,7 +1530,7 @@ def test_count_applicable_eeprom_counts():
 
     assert prog["flags"] & FLAG_CAN_ERASE
 
-    plan = derive_plan("M8720", _REAL_DB, destructive=False)
+    plan = derive_plan("M8720", _REAL_DB, write_scope="none")
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
@@ -1432,7 +1553,7 @@ def test_count_applicable_bad_counts_as_ran():
     # longer runs on a non-destructive plan (112-05 SC2/SWEEP-05 fix).
     operator = _mock_operator()
     operator.read_eprom.return_value = False
-    plan = derive_plan("AM2716", _REAL_DB, destructive=False)
+    plan = derive_plan("AM2716", _REAL_DB, write_scope="none")
     results = run_plan(plan, operator, _REAL_DB)
 
     read_result = _result(results, OP_READ)
@@ -1451,7 +1572,7 @@ def test_count_applicable_skipped_does_not_count_as_ran():
 
     operator = _mock_operator()
     operator.check_eprom_id.return_value = (False, 0x9999)
-    plan = derive_plan(name, _REAL_DB, destructive=True)
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
     results = run_plan(plan, operator, _REAL_DB)
 
     write_result = _result(results, OP_WRITE)
@@ -1460,7 +1581,7 @@ def test_count_applicable_skipped_does_not_count_as_ran():
     counts = count_applicable(plan, results)
     # write/erase were gated SKIPPED -- excluded from N despite being
     # counted in M (they are `plan.steps` supported entries here, since
-    # destructive=True keeps them in steps rather than locked_destructive).
+    # write_scope="full" keeps them in steps rather than locked_destructive).
     ran_ops = {r.op for r in results if r.verdict not in (VERDICT_NA, VERDICT_SKIPPED)}
     assert "write" not in ran_ops
     assert "erase" not in ran_ops
@@ -1470,7 +1591,7 @@ def test_count_applicable_skipped_does_not_count_as_ran():
 def test_count_applicable_m_from_single_plan_never_rederives(monkeypatch):
     import firestarter.chip_test as chip_test_mod
 
-    plan = derive_plan("AM2716", _REAL_DB, destructive=False)
+    plan = derive_plan("AM2716", _REAL_DB, write_scope="none")
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
@@ -1484,10 +1605,10 @@ def test_count_applicable_m_from_single_plan_never_rederives(monkeypatch):
 
 
 def test_count_applicable_n_equals_m_when_destructive():
-    # Same chip (M8720), destructive=True: locked_destructive is empty and
+    # Same chip (M8720), write_scope="full": locked_destructive is empty and
     # every applicable step actually executes -- N == M (banner would not
     # trigger).
-    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
@@ -1531,7 +1652,7 @@ def test_safe02_routes_via_resolve_chip_for_every_executed_step(monkeypatch):
     monkeypatch.setattr(chip_test_mod, "resolve_chip", spy)
 
     operator = _mock_operator()
-    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     # M8720's id step is NA (chip-id sentinel 0) -- every OTHER step here is
     # supported, so all of them must resolve through the spy.
     executed_steps = [s for s in plan.steps if s.supported]
@@ -1668,7 +1789,7 @@ def test_safe02_only_known_operator_methods_no_attribute_error():
     with pytest.raises(AttributeError):
         operator.set_vpp  # out-of-spec attribute access -- sanity check
 
-    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     results = run_plan(plan, operator, _REAL_DB)  # must not raise AttributeError
 
     assert len(results) == len(plan.steps)
