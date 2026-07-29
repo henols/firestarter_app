@@ -56,12 +56,32 @@ would pass no matter what SDP_CAPABLE_TOKENS contained.
      and no DIP24_2816 part -- consequences of the derivation, never its
      rule (RESEARCH F-03 still holds: DIP28_28C64 splits 15 ALLOW / 20
      REFUSE).
+  10. F-06 dict-shape anti-vacuity: resolve_chip()'s real programmer dict
+      lacks protocol-id/name/electrical-type; sdp_capability is proven
+      name-keyed against it, and sdp_capability_for_entry raises rather than
+      silently defaulting when handed that dict -- the failure mode that
+      made check_eprom_blank's _SRAM_PROTO_IDS short-circuit vacuous in
+      production.
+  11. Import purity (D-03): sdp_capability.py's top-level imports are a
+      subset of {"__future__", "typing"} -- pinned via ast for Phase 121's
+      GATE-01.
+  12. Runtime local-override refusal: a synthetic algorithm==13 entry
+      reaching the live DB only through the ~/.firestarter/database.json
+      merge seam (database.py:187-199, invisible to CI) is refused at
+      runtime -- proving the fail-closed property on the one path CI
+      cannot see.
 """
 
+import ast
 import json
 from pathlib import Path
+from unittest.mock import patch
+
+import pytest
 
 from firestarter import sdp_capability as sdp
+from firestarter.chip_resolver import resolve_chip
+from firestarter.database import EpromDatabase
 
 # Absolute path to the firestarter_app directory (independent of cwd).
 _FA_DIR = Path(__file__).parent.parent
@@ -569,3 +589,122 @@ def test_allow_set_contains_no_adapter_required_and_no_dip24_2816_part() -> None
         "HOST-04: the allow-set must contain no adapter-required part and no "
         "DIP24_2816 part. Offenders:\n" + "\n".join(offenders)
     )
+
+
+# ---------------------------------------------------------------------------
+# Leg 10: F-06 dict-shape anti-vacuity -- the predicate is name-keyed, and a
+# programmer dict (resolve_chip()'s output) is provably rejected rather than
+# silently misread.
+# ---------------------------------------------------------------------------
+
+
+def test_predicate_is_name_keyed_and_a_programmer_dict_is_rejected() -> None:
+    """Pins the real measured shape of resolve_chip()'s output: neither
+    protocol-id, name nor electrical-type survive convert_to_programmer.
+    check_eprom_blank's _SRAM_PROTO_IDS short-circuit reads exactly those
+    absent keys and was measured returning False for a real SRAM part --
+    vacuous in production (RESEARCH F-06). A dict-keyed sdp_capability would
+    reproduce that identical silent vacuity; this predicate is name-keyed
+    instead and raises rather than defaulting when handed the wrong shape.
+    PROJECT.md SIXTH CORRECTION item 6's KEEP disposition for
+    _SRAM_PROTO_IDS stands -- only its stated reason is corrected here; this
+    plan changes no production code in eprom_operations.py."""
+    real_db = EpromDatabase(skip_local_override=True)
+    programmer_dict = resolve_chip("at28c256", db=real_db)
+
+    assert "protocol-id" not in programmer_dict, (
+        "resolve_chip()'s programmer dict must not carry 'protocol-id' -- "
+        f"got keys {sorted(programmer_dict)}."
+    )
+    assert "name" not in programmer_dict, (
+        "resolve_chip()'s programmer dict must not carry 'name' -- "
+        f"got keys {sorted(programmer_dict)}."
+    )
+    assert "electrical-type" not in programmer_dict, (
+        "resolve_chip()'s programmer dict must not carry 'electrical-type' -- "
+        f"got keys {sorted(programmer_dict)}."
+    )
+
+    allowed, _reason = sdp.sdp_capability("at28c256", real_db)
+    assert allowed is True, "sdp_capability must be name-keyed and not need the dict"
+
+    with pytest.raises(KeyError):
+        sdp.sdp_capability_for_entry(programmer_dict, "at28c256")
+
+
+# ---------------------------------------------------------------------------
+# Leg 11: import purity (D-03) -- sdp_capability.py stays stdlib-only
+# ---------------------------------------------------------------------------
+
+
+def test_sdp_capability_module_imports_nothing_but_stdlib_typing() -> None:
+    """D-03 purity, required so Phase 121's GATE-01 has a stable shape to
+    assert against: the predicate must stay importable by both the Click
+    handler and the operations layer with no serial, no Click and no
+    DB-loader coupling, and this leg is what keeps that true under later
+    edits."""
+    module_path = _FA_DIR / "firestarter" / "sdp_capability.py"
+    tree = ast.parse(module_path.read_text(encoding="utf-8"))
+
+    imported_modules: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                imported_modules.add(alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            if node.module is not None:
+                imported_modules.add(node.module.split(".")[0])
+
+    assert imported_modules <= {"__future__", "typing"}, (
+        "HOST-04/D-03: sdp_capability.py's top-level imports must be a "
+        f"subset of {{'__future__', 'typing'}}; found {imported_modules}."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Leg 12: fail-closed on the one path CI cannot see -- a local database.json
+# override reaching the live DB at runtime.
+# ---------------------------------------------------------------------------
+
+
+def test_local_override_0x0d_entry_is_refused_at_runtime(tmp_path) -> None:
+    """D-02's decisive fact: ~/.firestarter/database.json merges into the
+    live DB at database.py:187-199 and CI never sees it, so the fail-closed
+    property has to be a *runtime* property of production code -- a CI-only
+    gate would not see the one path where a wrong answer reaches real
+    silicon. Isolates the config dir via the same
+    patch("firestarter.config.DATABASE_FILE", ...) idiom test_config.py
+    already uses (test_get_local_database_returns_parsed_json); never writes
+    to the operator's real home directory."""
+    synthetic_part_number = "ZZFAKE0X0DLOCALOVERRIDE99"
+    db_path = tmp_path / "local_database.json"
+    db_path.write_text(
+        json.dumps(
+            {
+                "SYNTHETIC_LOCAL_MFR_120_05": [
+                    {
+                        "part_number": synthetic_part_number,
+                        "programming": {"algorithm": _ALGORITHM_0X0D},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    # Point PIN_MAP_FILE at a path that does not exist so no local pin-map
+    # override -- real or otherwise -- is read during this test.
+    missing_pin_map_path = tmp_path / "no-pin-maps.json"
+
+    with (
+        patch("firestarter.config.DATABASE_FILE", str(db_path)),
+        patch("firestarter.config.PIN_MAP_FILE", str(missing_pin_map_path)),
+    ):
+        # skip_local_override defaults False -- exercises the real merge seam.
+        db = EpromDatabase()
+
+    allowed, reason = sdp.sdp_capability(synthetic_part_number, db)
+    assert not allowed, (
+        f"HOST-04: a synthetic local-override algorithm==13 entry must be "
+        f"refused, got allowed={allowed} reason={reason!r}."
+    )
+    assert sdp.REASON_NOT_CAPABLE in reason
