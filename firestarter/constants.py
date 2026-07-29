@@ -109,6 +109,17 @@ FLAG_CHIP_ENABLE = 0x40
 
 FLAG_VERBOSE = 0x80
 
+# Ninth and highest wire flag. Firmware's ctrl_flags is uint32_t, so 0x100 is
+# in range, and firmware's flag block ENDS here (firestarter.h:148) — there is
+# no 0x200 flag, contrary to ROADMAP.md:363 and Phase 120's *Depends on* line
+# (F-120-05, corrected in 120-02-SUMMARY.md).
+# NOTE: CTRL_VPP_VPE_DROP_ENABLE further below also has the value 0x100, but
+# it lives in the separate control-register namespace (mirror of
+# rurp_pinout.h), is documentary only (Python never writes the control
+# register), and has its own separate parity leg. The two 0x100s are
+# unrelated wire vs. control-register values and must not be conflated.
+FLAG_SKIP_SDP_UNLOCK = 0x100
+
 # Dev sweep knobs — Firmware sync: json_parser.c (key_read_settling, key_read_strobe)
 # JSON key name strings for host-tunable read-timing parameters.
 # MUST stay in sync with the PROGMEM key strings in firmware json_parser.c.
