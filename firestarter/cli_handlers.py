@@ -598,6 +598,33 @@ def write(
             "normal write."
         )
 
+    # D-13 warn-and-proceed (v1.22 GATE-02, contributes-only): a DELIBERATE
+    # SIBLING `if`, not an `elif` chained onto the block above — this checks
+    # `--skip-erase`, an entirely different flag from the D-04/D-18 block's
+    # `skip_sdp_unlock`, so both blocks must be free to fire independently on
+    # the same 0x0D chip (e.g. a capability-refused 0x0D part gets the D-04
+    # auto-set line AND this line together). Do NOT refuse, do NOT abort, do
+    # NOT suppress the bit: nothing on the 0x0D path reads an erase-capability
+    # bit, and after Phase 121 D-12 (`convert_to_programmer`) the host no
+    # longer advertises one either, so the flag is inert here regardless of
+    # whether this message fires. The bit is still emitted (unconditionally,
+    # via `_build_op_flags` below) so a blanket-flag script across a mixed
+    # batch of chips still produces byte-identical wire frames whether or not
+    # this line printed. RESEARCH C-8: this arm deliberately does NOT extend
+    # to `-b`/`--no-blank-check` — since Phase 92 that flag skips only the
+    # blank check, not the erase, and it is genuinely useful on a non-blank
+    # 0x0D part precisely because there is no erase to make the part blank;
+    # a "nothing to skip" line on that flag would be a false statement. That
+    # distinction is recorded as a GATE-02 documentation obligation (plan
+    # 121-13), not a second runtime warning here.
+    if skip_erase and is_protocol_0x0d:
+        click.echo(
+            f"{eprom.upper()}: --skip-erase has nothing to skip on this "
+            "chip's protocol — the 28C family (protocol 0x0D) has no erase "
+            "operation at all; each page write auto-erases internally. "
+            "Proceeding with a normal write."
+        )
+
     ok = app.eprom_operator.write_eprom(
         eprom,
         eprom_data,
