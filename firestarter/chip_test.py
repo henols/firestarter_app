@@ -368,24 +368,56 @@ def is_uv_eprom(full: dict) -> bool:
     return full.get("electrical-type", "") == "UV-EPROM"
 
 
-def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
+_WRITE_SCOPE_NONE = "none"
+_WRITE_SCOPE_PARTIAL = "partial"
+_WRITE_SCOPE_FULL = "full"
+_WRITE_SCOPES = frozenset({_WRITE_SCOPE_NONE, _WRITE_SCOPE_PARTIAL, _WRITE_SCOPE_FULL})
+
+
+def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     """Derive the ordered op list for `name` strictly from frozen DB fields.
 
     Reads `db.get_eprom(name)` then `db.convert_to_programmer(full)` --
     NEVER `chip_resolver.resolve_chip` (Pattern 1/2, T-108-06) -- so this
     works even for chips whose `support_status` would make `resolve_chip`
-    refuse them. `destructive` is read ONLY from this call's kwarg -- never
-    from config or environment (SAFE-01). When `destructive=False`, the
-    write/erase steps that a `destructive=True` call would add are
-    structurally OMITTED from the returned `Plan.steps` and instead
-    recorded as `(op, reason)` tuples on the advisory `Plan.
-    locked_destructive` field (D-01) -- `run_plan` has no code path to
-    iterate them. When `destructive=True`, `steps` contains write/erase
-    exactly as before and `locked_destructive` is empty.
+    refuse them. `write_scope` is read ONLY from this call's kwarg -- never
+    from config or environment (SAFE-01).
+
+    Three accepted literal values, fail-closed against anything else:
+
+    - `"none"` -- write/verify/erase are structurally OMITTED from the
+      returned `Plan.steps` and instead recorded as `(op, reason)` tuples on
+      the advisory `Plan.locked_destructive` field (D-01) -- `run_plan` has
+      no code path to iterate them.
+    - `"full"` -- write, verify and erase are real supported steps in that
+      order; `locked_destructive` is empty.
+    - `"partial"` -- same step list as `"full"`, but the write/verify steps'
+      `Step.write_region` is the top-anchored UV window instead of the
+      engine default. Plan `121-06` will swap this scope's emitted write op
+      to `OP_WRITE_PARTIAL`; here it is still `OP_WRITE`.
+
+    An unrecognised `write_scope` raises `ValueError` naming the offending
+    value and the three accepted literals -- this function never silently
+    falls back to a mode that writes.
+
+    `Plan.is_uv` is decided HERE and ONLY HERE, from `is_uv_eprom(full)` --
+    the only axis that is both complete and exact (301/301). `Step.
+    write_region` is likewise set HERE and ONLY HERE, on both the write step
+    and the verify step (a verify's region is definitionally the preceding
+    write's -- D-07); downstream code may only READ these two fields, never
+    re-derive them. The write-region WIDTH always comes from a module
+    constant (`_UV_WRITE_REGION_LENGTH` / `_WRITE_REGION_LENGTH`), NEVER from
+    any DB field (SC4) -- `memory-size` only bounds WHERE the window sits.
 
     Unknown chips (no DB entry) return an empty `Plan` with `reason` set --
     there is nothing to derive.
     """
+    if write_scope not in _WRITE_SCOPES:
+        raise ValueError(
+            f"derive_plan: unrecognised write_scope {write_scope!r} -- "
+            f"must be one of {sorted(_WRITE_SCOPES)!r}"
+        )
+
     full = db.get_eprom(name)
     if not full:
         return Plan(name=name, steps=[], reason=f"{name}: not found in database")
@@ -395,6 +427,24 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
     etype = full.get("electrical-type", "")
     can_erase = bool(prog.get("flags", 0) & FLAG_CAN_ERASE)
     chip_id = prog.get("chip-id", 0)
+    is_uv = is_uv_eprom(full)
+    write_execute = write_scope in (_WRITE_SCOPE_FULL, _WRITE_SCOPE_PARTIAL)
+
+    # Region computation lives HERE, in derive_plan, computed from Plan.is_uv
+    # and full["memory-size"] -- never from any DB WIDTH field (SC4). The
+    # WIDTH always comes from _UV_WRITE_REGION_LENGTH / _WRITE_REGION_LENGTH.
+    #
+    # "full" reproduces today's execution-time _write_region_for exactly:
+    # is_uv picks the top-anchored window (with its defensive fallback),
+    # non-UV gets the engine default region. "partial" always applies the
+    # top-anchored-window-or-fallback formula regardless of is_uv -- its
+    # whole purpose is the small-region write, so it is not is_uv-gated here.
+    if write_scope == _WRITE_SCOPE_FULL:
+        write_region = _top_anchored_or_default(full) if is_uv else _DEFAULT_REGION
+    elif write_scope == _WRITE_SCOPE_PARTIAL:
+        write_region = _top_anchored_or_default(full)
+    else:
+        write_region = None
 
     steps: list[Step] = []
     locked_destructive: list[tuple[str, str]] = []
@@ -429,25 +479,39 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
         steps.append(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
 
     # write: always supported, always flagged destructive. When
-    # destructive=False the step is OMITTED from the executable `steps`
+    # write_scope="none" the step is OMITTED from the executable `steps`
     # list -- structurally absent, not skipped at exec time (D-01, SAFE-01)
     # -- and recorded on the advisory `locked_destructive` list instead.
-    if destructive:
-        steps.append(Step(op=OP_WRITE, supported=True, reason="", destructive=True))
-    else:
-        locked_destructive.append((OP_WRITE, "destructive=False: write omitted (D-01)"))
-
-    # verify: always supported, but only executable on a destructive plan --
-    # it follows the same D-01 write/erase gating (there is no preceding
-    # write on a non-destructive run, so a bare verify would compare a
-    # freshly-generated pattern against unrelated chip contents). Positioned
-    # after write and before erase so the destructive step order (write,
-    # verify, erase) is unchanged.
-    if destructive:
-        steps.append(Step(op=OP_VERIFY, supported=True, reason=""))
+    if write_execute:
+        steps.append(
+            Step(
+                op=OP_WRITE,
+                supported=True,
+                reason="",
+                destructive=True,
+                write_region=write_region,
+            )
+        )
     else:
         locked_destructive.append(
-            (OP_VERIFY, "destructive=False: verify omitted (D-01)")
+            (OP_WRITE, 'write_scope="none": write omitted (D-01)')
+        )
+
+    # verify: always supported, but only executable on a write-executing
+    # plan -- it follows the same D-01 write/erase gating (there is no
+    # preceding write on a non-executing run, so a bare verify would compare
+    # a freshly-generated pattern against unrelated chip contents).
+    # Positioned after write and before erase so the destructive step order
+    # (write, verify, erase) is unchanged. Its write_region equals the write
+    # step's -- a verify's region is definitionally the preceding write's
+    # (D-07).
+    if write_execute:
+        steps.append(
+            Step(op=OP_VERIFY, supported=True, reason="", write_region=write_region)
+        )
+    else:
+        locked_destructive.append(
+            (OP_VERIFY, 'write_scope="none": verify omitted (D-01)')
         )
 
     # erase: supported only if FLAG_CAN_ERASE is set AND protocol != 0x05
@@ -455,11 +519,11 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
     # Pitfall 6). UV-EPROM never has the flag set (electrical-type is not in
     # {EEPROM, Flash/EEPROM}) so it is NA here for the same condition.
     if can_erase and protocol != _PROTOCOL_FLASH4:
-        if destructive:
+        if write_execute:
             steps.append(Step(op=OP_ERASE, supported=True, reason="", destructive=True))
         else:
             locked_destructive.append(
-                (OP_ERASE, "destructive=False: erase omitted (D-01)")
+                (OP_ERASE, 'write_scope="none": erase omitted (D-01)')
             )
     else:
         if protocol == _PROTOCOL_FLASH4:
@@ -469,15 +533,40 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
         else:
             reason = "FLAG_CAN_ERASE not set for this chip"
         # NA erase is never a supported executable step regardless of the
-        # destructive kwarg -- there is nothing to lock/omit here (it was
-        # never runnable), so it is NOT added to locked_destructive either.
+        # write_scope -- there is nothing to lock/omit here (it was never
+        # runnable), so it is NOT added to locked_destructive either.
         steps.append(
             Step(op=OP_ERASE, supported=False, reason=reason, destructive=True)
         )
 
     return Plan(
-        name=name, steps=steps, reason="", locked_destructive=locked_destructive
+        name=name,
+        steps=steps,
+        reason="",
+        locked_destructive=locked_destructive,
+        is_uv=is_uv,
     )
+
+
+def _top_anchored_or_default(full: dict) -> tuple[int, int]:
+    """Top-anchored high-address window, or the engine default region (D-02).
+
+    Always computes `(mem_size - _UV_WRITE_REGION_LENGTH,
+    _UV_WRITE_REGION_LENGTH)` from `full["memory-size"]` when it is large
+    enough to fit the window, with a defensive fallback to the engine
+    default `(_WRITE_REGION_START, _WRITE_REGION_LENGTH)` when `memory-size`
+    is missing or too small (a fallback that would otherwise produce a
+    negative start). The WIDTH always comes from the `_UV_WRITE_REGION_LENGTH`
+    module constant -- never from any DB field (SC4); `memory-size` only
+    bounds WHERE the window sits. Never returns `None` -- both callers
+    (`write_scope="full"` for a UV part, `write_scope="partial"`
+    unconditionally) want a concrete region, not "use the engine default"
+    deferred to a downstream reader.
+    """
+    mem_size = int(full.get("memory-size", 0) or 0)
+    if mem_size >= _UV_WRITE_REGION_LENGTH:
+        return mem_size - _UV_WRITE_REGION_LENGTH, _UV_WRITE_REGION_LENGTH
+    return _DEFAULT_REGION
 
 
 # ---------------------------------------------------------------------------
@@ -689,6 +778,12 @@ _WRITE_REGION_LENGTH = 256
 # entry must not be able to widen the write window. `memory-size` is only a
 # top-anchor PLACEMENT bound (where the window sits), never a WIDTH input.
 _UV_WRITE_REGION_LENGTH = 256
+
+# The engine default region as a concrete tuple (D-02) -- consumed by
+# `_top_anchored_or_default` (used by `derive_plan`'s region computation,
+# defined earlier in this module; referenced here at call time only, after
+# module import completes).
+_DEFAULT_REGION = (_WRITE_REGION_START, _WRITE_REGION_LENGTH)
 
 # UV detection at EXECUTION time: `_dispatch_multi_run`'s `eprom_data` is
 # `resolve_chip`'s PROGRAMMER dict (via `convert_to_programmer`), which does
@@ -1108,11 +1203,11 @@ def count_applicable(plan: Plan, results: list[StepResult]) -> BannerCounts:
     N = count of `results` whose verdict is in {OK, BAD, marginal} (ran);
     NA and SKIPPED results are excluded.
 
-    For a non-destructive chip run, `locked_destructive` is non-empty and
-    N < M (the banner-trigger condition). For a destructive run,
-    `locked_destructive` is empty and N == M (banner would not fire),
-    since the previously-locked ops are now real supported `steps` that
-    the run executed.
+    For a `write_scope="none"` chip run, `locked_destructive` is non-empty
+    and N < M (the banner-trigger condition). For a `write_scope="full"` (or
+    `"partial"`) run, `locked_destructive` is empty and N == M (banner would
+    not fire), since the previously-locked ops are now real supported
+    `steps` that the run executed.
     """
     m_applicable = sum(1 for s in plan.steps if s.supported) + len(
         plan.locked_destructive

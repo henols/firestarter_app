@@ -1932,7 +1932,7 @@ def dev_test(
     if not app.db.get_eprom(chip):
         raise ChipNotFoundError(f"{chip}: not found in database")
 
-    plan = derive_plan(chip, app.db, destructive=destructive)
+    plan = derive_plan(chip, app.db, write_scope="full" if destructive else "none")
 
     # fw_board_identity stays None: EpromOperator.comm is a transient
     # per-operation connection torn down after every operator call (see
