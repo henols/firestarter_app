@@ -1813,7 +1813,10 @@ def _is_interactive() -> bool:
 def _make_sampler(app: "AppContext", report: DiagnosticReport) -> Any:
     """Build the before/after sampler thunk closing over `hardware_manager`.
 
-    Only constructed for a `--destructive` run (D-04). Reuses the existing
+    Constructed on EVERY run (Phase 121 D-04: `dev test` always writes, so
+    there is no non-destructive mode left to distinguish this from -- the
+    `--destructive`-only construction this docstring used to describe was
+    superseded when that flag was deleted). Reuses the existing
     `sample_vpp_mv`/`sample_vpe_mv` monitor path (COMMAND_READ_VPP/VPE,
     energize+measure only -- SAFE-02) -- no VPP-set call is made here or
     anywhere in this module. `chip_test.run_plan` calls this as an opaque
@@ -1907,96 +1910,66 @@ def _resolve_write_scope(
     return "partial"
 
 
+# D-04: printed FIRST, unconditionally, before the SAFE-04 absent-chip
+# hard-fail and before anything that touches hardware -- an unknown chip
+# seeing this notice is harmless and honest, and printing first guarantees
+# it precedes anything that could energise the shield. States the doubled
+# run count truthfully (run_plan's runs>=2 default means every destructive
+# step executes twice) and never calls any path non-destructive or
+# read-only, because none is (D-04, RESEARCH Open Question 2).
+_ALWAYS_WRITES_NOTICE = (
+    "dev test ALWAYS WRITES to the chip -- run it only on a blank or "
+    "scratch part you are willing to sacrifice. Every write/verify/erase "
+    "step runs TWICE per invocation, so most chips receive the full device "
+    "written twice; a UV-erasable EPROM is asked first, and even a decline "
+    "still writes a small 256-byte top-anchored region -- there is no "
+    "read-only or non-destructive mode."
+)
+
+
 @dev.command(name="test")
 @click.argument("chip", shell_complete=_complete_eprom)
-@click.option(
-    "--destructive",
-    is_flag=True,
-    default=False,
-    help=(
-        "Run the full write/erase/verify sweep (sacrifices the chip). "
-        "CLI-only flag -- never read from config or environment (SAFE-01)."
-    ),
-)
-@click.option(
-    "--output-dir",
-    "output_dir",
-    type=str,
-    default=None,
-    help=(
-        "Write dev-test-<chip>.json and dev-test-<chip>.md into this "
-        "directory, overriding the default location. Default: "
-        "<config dir>/reports (honors FIRESTARTER_CONFIG_DIR; "
-        "e.g. ~/.firestarter/reports). The report is always written."
-    ),
-)
-@click.option(
-    "-y",
-    "--yes",
-    "assume_yes",
-    is_flag=True,
-    default=False,
-    help="Bypass the --destructive confirm prompt on a TTY.",
-)
-@click.option(
-    "--submit",
-    "submit",
-    is_flag=True,
-    default=False,
-    help=(
-        "After the report is rendered and saved, file it to the "
-        "maintainer's GitHub tracker (explicit + interactive-only; "
-        "never on a bare run)."
-    ),
-)
 @click.pass_obj
 @map_typed_errors
-def dev_test(
-    app: "AppContext",
-    chip: str,
-    destructive: bool,
-    output_dir: Optional[str],
-    assume_yes: bool,
-    submit: bool,
-) -> None:
+def dev_test(app: "AppContext", chip: str) -> None:
     """Run the community chip-validation sweep for CHIP (SWEEP-01..05, RPT-01..05).
 
-    Without --destructive: id + read + blank-check only (chip stays
-    pristine). With --destructive: adds write/erase/verify (sacrifices the
-    chip) -- gated behind a TTY confirm unless -y/--yes is given.
+    Takes ZERO options -- CHIP is the only argument (D-05, Phase 121). The
+    four flags this command carried through v1.21 (`--destructive`,
+    `--output-dir`, `-y`/`--yes`, `--submit`) are gone; each now errors as
+    an unknown option.
 
-    Issues ZERO interactive prompts about tester-supplied identity (Phase
-    112 Plan 04 reversal, operator-approved per 112-UAT.md): shield
-    revision, chip origin, and pot-adjustment are no longer asked -- the
-    report auto-captures what the firmware/DB can supply and is honest
-    ("not measured"/None) about what it cannot.
+    ALWAYS WRITES (D-04): every run writes to the chip, unconditionally, and
+    prints a notice saying so as its first line of output -- before the
+    absent-chip hard-fail and before anything touches hardware. A
+    UV-erasable EPROM is asked first (D-01): yes writes the whole device,
+    no writes only a small 256-byte top-anchored region (still a write,
+    never read-only or non-destructive); off a TTY the ask is treated as a
+    DECLINED prompt, not absent consent, so the 256-byte window is written
+    anyway (D-03). Every OTHER family -- explicitly including this
+    milestone's own AT28C family, an electrically-erasable EEPROM -- is
+    written in full with NO prompt at all, because that write is
+    recoverable via erase (unlike an irrecoverable UV write). The report is
+    unconditionally persisted to `<config dir>/reports` (honors
+    `FIRESTARTER_CONFIG_DIR`) and is always handed to `submit_report`
+    (DEVTEST-05/06; Plan 121-11 owns that function's internals).
 
-    Prints a rendered report to stdout on every run. With --output-dir,
-    additionally writes dev-test-<chip>.json and dev-test-<chip>.md.
-
-    With --submit (SUB-01/02, Phase 113), files the already-rendered,
-    already-persisted report to the maintainer's GitHub tracker via a lazy
-    `submit_report` call -- the sweep is never re-run. Submission requires
-    the explicit flag; a bare run never submits.
+    REVERSAL (Phase 121 D-01/D-03/D-04/D-05, operator-specified
+    2026-07-29): this supersedes v1.21's non-destructive-by-default premise
+    entirely, SAFE-01's CLI-only `--destructive` flag (removed, not merely
+    disabled), and SAFE-03's statement that the destructive confirm was
+    "the ONLY interactive input left in this handler" (superseded by the
+    UV-only ask above). Phase 112 Plan 04's deliberate removal of every
+    interactive prompt about tester-supplied identity is PARTIALLY
+    reversed in spirit by that same UV ask -- it is a new interactive
+    prompt, just not an identity-collection one; shield revision, chip
+    origin and pot-adjustment stay un-asked.
 
     Exit code (D-01): 0 if every step is OK/NA/SKIPPED, 2 if any step is
     marginal (and none BAD), 1 if any step is BAD (including a chip-ID
     mismatch) -- computed as max over per-step exit codes.
     """
-    interactive = _is_interactive()
-
-    # SAFE-03: the ONLY interactive input left in this handler is the
-    # --destructive safety confirm -- it is a safety gate, not tester-input
-    # collection, and MUST stay. On a TTY (and not -y/--yes), require an
-    # explicit "yes" before sacrificing the chip. Off-TTY, --destructive
-    # itself is consent (no confirm possible without a TTY, D-02).
-    if interactive and destructive and not assume_yes:
-        proceed = Confirm.ask(
-            "--destructive will sacrifice the chip. Continue?", default=False
-        )
-        if not proceed:
-            click.echo("Aborted -- chip left untouched.")
-            sys.exit(0)
+    click.echo(_ALWAYS_WRITES_NOTICE)
 
     # SAFE-04: hard-fail BEFORE any hardware is energized when the chip name
     # is absent from the DB entirely (case A). Keyed strictly off
@@ -2006,7 +1979,12 @@ def dev_test(
     if not app.db.get_eprom(chip):
         raise ChipNotFoundError(f"{chip}: not found in database")
 
-    plan = derive_plan(chip, app.db, write_scope="full" if destructive else "none")
+    # The chip must be known to be in the DB (SAFE-04 above) before its
+    # electrical type can be read, so the UV-scope resolution happens here,
+    # after the hard-fail.
+    interactive = _is_interactive()
+    write_scope = _resolve_write_scope(app, chip, interactive=interactive)
+    plan = derive_plan(chip, app.db, write_scope=write_scope)
 
     # fw_board_identity stays None: EpromOperator.comm is a transient
     # per-operation connection torn down after every operator call (see
@@ -2029,17 +2007,12 @@ def dev_test(
         plan=plan,
     )
 
-    sampler = _make_sampler(app, report) if destructive else None
+    # Always built (D-04): every run writes now, so there is no
+    # non-destructive mode left that would have no write step to bracket.
+    sampler = _make_sampler(app, report)
     results = run_plan(plan, app.eprom_operator, app.db, sampler=sampler)
     report.results = results
     report.banner = count_applicable(plan, results)
-
-    if not destructive:
-        # Phase-111 D-04: standalone non-destructive VPP+VPE read fills the
-        # non-split slots; before/after stay None (-> NOT_MEASURED). Rejected:
-        # sampling around the whole run_plan call (111-CONTEXT.md).
-        report.vpp_mv = app.hardware_manager.sample_vpp_mv()
-        report.vpe_mv = app.hardware_manager.sample_vpe_mv()
 
     full = app.db.get_eprom(chip)
     if full:
@@ -2056,10 +2029,11 @@ def dev_test(
     console = Console()
     report.render(console)
 
-    # The report is ALWAYS persisted. --output-dir overrides the default
-    # location, which is <config dir>/reports (honors FIRESTARTER_CONFIG_DIR;
-    # default ~/.firestarter/reports).
-    out_path = Path(output_dir) if output_dir else Path(get_config_dir()) / "reports"
+    # The report is ALWAYS persisted, unconditionally, to the reports
+    # directory under <config dir> (honors FIRESTARTER_CONFIG_DIR; default
+    # ~/.firestarter/reports) -- the removed --output-dir flag was
+    # redundant with this env-var seam, never a lost capability.
+    out_path = Path(get_config_dir()) / "reports"
     out_path.mkdir(parents=True, exist_ok=True)
     safe_chip = _sanitize_chip_token(chip)
 
@@ -2081,10 +2055,12 @@ def dev_test(
 
     console.print(f"[dim]Report written to {json_file}[/dim]")
 
-    if submit:
-        from firestarter import submit as submit_mod
+    # Unconditional (DEVTEST-05): every run reaches the filing ask, not only
+    # an explicit --submit run -- Plan 121-11 owns submit_report's internal
+    # dedup-before-ask / ask-anyway-on-failure / comment-on-duplicate logic.
+    from firestarter import submit as submit_mod
 
-        submit_mod.submit_report(report, chip, json_file, console=console)
+    submit_mod.submit_report(report, chip, json_file, console=console)
 
     if not results:
         sys.exit(0)
