@@ -320,6 +320,29 @@ def test_submit_via_gh_argv_carries_nothing_permission_gated():
     assert "shell" not in run_fn.call_args.kwargs
 
 
+def test_submit_via_gh_argv_targets_the_project_wide_tracker():
+    # 120-12: a repo-target-specific negative leg (Idiom B). A mocked run_fn
+    # cannot prove GitHub actually accepts issues at henols/firestarter_prom
+    # -- that requires a live create against the real API. What it CAN
+    # honestly prove is that the create-path argv never carries the wrong
+    # repo slug (`henols/firestarter_app`, the repo this code lives in, per
+    # firestarter_prom#6) and always carries `--repo henols/firestarter_prom`
+    # immediately adjacent, with no `shell=True` escape hatch alongside it.
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout="https://github.com/henols/firestarter_prom/issues/1\n",
+        )
+    )
+    submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    repo_idx = argv.index("--repo")
+    assert argv[repo_idx + 1] == "henols/firestarter_prom"
+    assert "henols/firestarter_app" not in " ".join(argv)
+    assert "shell" not in run_fn.call_args.kwargs
+
+
 def test_submit_via_gh_failure_prints_captured_stderr():
     run_fn = Mock(
         return_value=Mock(
