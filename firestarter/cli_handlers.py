@@ -69,7 +69,7 @@ from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.hardware import HardwareManager
 from firestarter.logging_utils import SingleLineStatusHandler
 from firestarter.messages import MSG_ERR_UNKNOWN_CMD
-from firestarter.sdp_capability import sdp_capability
+from firestarter.sdp_capability import SDP_PROTOCOL_ID, sdp_capability
 
 logger = logging.getLogger("Firestarter")
 
@@ -550,10 +550,53 @@ def write(
     blanket-flag script across a mixed batch produces identical wire frames
     (D-18). The host may also set this bit **on its own**, without the user
     passing it, when the resolved chip is protocol-0x0D and capability-refused
-    (``firestarter.sdp_capability``) — see the D-04 auto-set (plan 120-09
-    Task 2) for that behaviour.
+    (``firestarter.sdp_capability``) — see the D-04 auto-set block below,
+    which always prints a mandatory, default-visible report line when it
+    fires.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
+
+    # D-04 auto-set (v1.22 HOST-04): decided here, in the handler, because
+    # this is the last place with both the chip NAME and app.db — resolve_chip's
+    # programmer dict carries neither `protocol-id` nor `name` (RESEARCH F-06).
+    # This is a DELIBERATE DIVERGENCE from 3.0.0b11 for the capability-refused
+    # 0x0D subset, not a no-op: today's `write` already emits the SDP-disable
+    # sequence before the payload on those parts, leaving 0x2AAA<-0x55 /
+    # 0x5555<-0x20 stored as data at the bus-truncated magic addresses (an
+    # address-ranged or short write does not get overwritten by the payload).
+    # The trade-off is dissolved rather than decided on the derived 43/41
+    # partition: a part with no SDP has nothing to unlock, so suppressing its
+    # auto-unlock costs that part nothing and additionally avoids those three
+    # stored bytes. Residual risk is confined to 120-WATCHLIST.md's 9 entries.
+    sdp_entry = app.db.get_eprom(eprom)
+    is_protocol_0x0d = (
+        bool(sdp_entry) and sdp_entry.get("protocol-id") == SDP_PROTOCOL_ID
+    )
+    allowed, sdp_reason = sdp_capability(eprom, app.db)
+    if is_protocol_0x0d and not allowed and not skip_sdp_unlock:
+        skip_sdp_unlock = True
+        click.echo(
+            f"{eprom.upper()}: auto-setting --skip-sdp-unlock on your behalf "
+            f"({sdp_reason}). Firmware's automatic SDP unlock is keyed on "
+            "protocol, not on this specific part, so without this the unlock "
+            "sequence's command bytes would be stored as data at the "
+            "bus-truncated magic addresses on a part with no SDP command "
+            "decoder."
+        )
+    elif skip_sdp_unlock and not is_protocol_0x0d:
+        # D-18 warn-and-proceed: the user asked for something vacuous on this
+        # protocol. Do NOT refuse, do NOT abort, do NOT suppress the bit —
+        # firmware never reads FLAG_SKIP_SDP_UNLOCK outside protocol 0x0D, so
+        # nothing unsafe happens either way, and a blanket-flag script across
+        # a mixed batch of chips must still produce identical wire frames.
+        observed_protocol = sdp_entry.get("protocol-id") if sdp_entry else None
+        click.echo(
+            f"{eprom.upper()}: --skip-sdp-unlock has no effect on this chip's "
+            f"protocol (observed protocol {observed_protocol!r}) — firmware "
+            "only reads this bit on protocol 0x0D writes. Proceeding with a "
+            "normal write."
+        )
+
     ok = app.eprom_operator.write_eprom(
         eprom,
         eprom_data,
