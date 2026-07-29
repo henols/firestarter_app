@@ -149,8 +149,9 @@ bug in firestarter.
 
 ### 6. Smoke-test the flashed board
 
-Two quick, non-destructive checks — neither of these touches a chip in the
-socket:
+Two quick checks — neither of these touches a chip in the socket at all
+(unlike `dev test`, covered next, which always writes to whatever chip is
+seated):
 
 ```bash
 firestarter fw     # confirms: current firmware version + board identity
@@ -179,11 +180,17 @@ chip-validation sweep against a chip you have on hand:
 firestarter dev test <chip>
 ```
 
-This runs a non-destructive-by-default capability sweep against the named
-chip and produces a diagnostic report you can review and, if you'd like, file
-as a GitHub issue to help the project learn whether that chip actually works.
-For the full picture of what `dev test` does, how its results are classified,
-and what it means (and doesn't mean) for a chip's official support status, see
+**`dev test` writes to the chip — run it only on a blank or scratch part you
+are willing to sacrifice.** If the chip is a UV-erasable EPROM, the command
+stops and asks first: answering yes writes the full device, and answering no
+(or running with no terminal attached at all) still writes a small 256-byte
+region — there is no read-only answer. Every other family — including this
+project's own AT28C — is written in full, twice, with no prompt at all. Once
+the sweep finishes it produces a diagnostic report you can review and, if
+you'd like, file as a GitHub issue to help the project learn whether that
+chip actually works. For the full picture of what `dev test` does, how its
+results are classified, and what it means (and doesn't mean) for a chip's
+official support status, see
 [`community-validation.md`](community-validation.md).
 
 ---

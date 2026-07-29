@@ -129,6 +129,10 @@ so you always know both components are from the same beta cut.
 > **New to the beta channel?** See [`doc/beta-testing-install.md`](doc/beta-testing-install.md)
 > for a full stranger-friendly walkthrough: install the beta app, flash the matching beta firmware
 > to your specific board, run a smoke check, then hand off into `firestarter dev test <chip>`.
+>
+> **`dev test` writes to the chip** — run it only on a blank or scratch part.
+> A UV-erasable EPROM is asked first (yes = full device write, no/no-TTY =
+> a small 256-byte region); every other family is written in full, unprompted.
 
 #### Installing the beta app
 

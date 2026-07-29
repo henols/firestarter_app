@@ -4,9 +4,13 @@
 
 ## Community Chip-Validation Graduation Ladder
 
-`firestarter dev test <chip>` (v1.21) lets anyone with real hardware run a
-capability sweep against a chip entry and file the resulting diagnostic
-report as a GitHub issue. This document defines the **graduation ladder** —
+`firestarter dev test <chip>` **writes to the chip** — every run runs a
+capability sweep that expects a blank or scratch part. A UV-erasable EPROM is
+stopped and asked first (yes = the full device is written; no, or no TTY at
+all, still writes a small 256-byte region); every other family, including
+this project's own AT28C, is written in full — twice — with no prompt at all.
+It then offers to file the resulting diagnostic report as a GitHub issue.
+This document defines the **graduation ladder** —
 the vocabulary that describes how much trust a report has earned — and, just
 as importantly, what the ladder is **not**: it is never an automatic path to
 changing what the project claims a chip supports.
@@ -24,7 +28,7 @@ This is machine-enforced (see §Enforcement below).
 | State | Where it lives | How it is reached |
 |-------|-----------------|--------------------|
 | **(none)** — no community-* tag (`""`) | Report only | `build_db_diff()`'s default when the sweep is inconclusive (a `marginal` verdict, an `indeterminate` fingerprint classification) or when there is no change to suggest. Advisory text: "inconclusive -- needs N>=2 agreement" / "no change suggested". |
-| **`community-reported`** | Report only (`DbDiff.ladder_state`) | **Auto-tag.** A single `dev test` run whose step verdicts are all `OK` (or `NA`/`SKIPPED`, with at least one `OK`) and contain no `BAD` verdict. This is the "looks like it works" signal from one tester. |
+| **`community-reported`** | Report only (`DbDiff.ladder_state`) | **Auto-tag.** A single `dev test` run whose step verdicts are all `OK` (or `NA`/`SKIPPED`, with at least one `OK`) and contain no `BAD` verdict. This is the "looks like it works" signal from one tester. A **partial-region** write (`write-partial`, the UV stop-and-ask's decline/off-TTY branch) earns this exact same auto-tag as a full-device round-trip — see the fingerprint argument in §N≥2 below for why that is safe rather than evidence-inflating. |
 | **`community-fail`** | Report only (`DbDiff.ladder_state`) | **Auto-tag.** Any step in the sweep produced a `BAD` verdict. Signals the chip likely does NOT work as configured, on this tester's hardware. |
 | **`community-confirmed`** | **Never auto-assigned. Human-gated target only.** | Reached only after a maintainer manually reviews **N≥2 independent agreeing reports** (see §N≥2 below) and decides to promote the chip. There is no code path, tool, or CLI flag that assigns this value — it exists purely as a documented vocabulary term for triage conversation and issue labels a maintainer might apply by hand. |
 
@@ -104,6 +108,18 @@ is still just **one** data point toward the cross-report N≥2 that gates
 **A single report can never trigger a state transition — of any kind.** The
 "N agreeing" count is presented as triage input for a human to weigh; no
 code counts, gates, or acts on it automatically.
+
+**Why a partial-region write can never poison the N≥2 count.** A UV part's
+declined (or off-TTY) sweep writes only a 256-byte region and uses the
+`write-partial` op string instead of `write`; `dedup_fingerprint` hashes each
+step's `op=verdict:fingerprint_classification` tuple, so a partial run's
+fingerprint is **structurally different** from a full round-trip's fingerprint
+on the same chip. `count_agreeing` groups strictly by that fingerprint, so a
+partial run and a full run of the same chip can never land in the same
+agreement bucket — a partial run can contribute at most toward N≥2 agreement
+with *other partial runs*, never toward promoting a full-round-trip claim.
+Phase 114's GRAD-01 no-auto-graduate lock therefore holds end to end through
+the fingerprint, not through the `community-reported` tag itself.
 
 ---
 
