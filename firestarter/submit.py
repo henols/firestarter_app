@@ -278,6 +278,149 @@ def submit_via_gh(
 
 
 # ---------------------------------------------------------------------------
+# Dedup query + comment path (Task 1, D-09/D-10/D-11) -- both follow
+# submit_via_gh's seam discipline exactly: injected run_fn, list argv never a
+# shell string, explicit --repo never cwd-inferred, check=False with an
+# explicit returncode branch, narration on failure.
+# ---------------------------------------------------------------------------
+
+_DEDUP_SEARCH_LIMIT = 5
+
+
+def find_prior_report(
+    fingerprint: str, *, run_fn: Any = subprocess.run
+) -> tuple[str | None, bool]:
+    """Read-only `gh issue list` dedup query, keyed on `dedup_fingerprint` (D-09).
+
+    Returns `(url, check_ran)`: the matched prior issue's URL (or `None`
+    when no match), and whether the query actually ran at all.
+
+    THE THREE BRANCHES ARE DISTINGUISHED BY THE PARSED PAYLOAD, NEVER BY
+    EXIT CODE ALONE -- `gh issue list` returns exit 0 for BOTH "duplicate
+    found" and "no duplicate", so a bare `returncode == 0` check would
+    silently conflate a clean run with a missing duplicate:
+
+    - non-zero returncode (`gh` absent, unauthenticated -- exit 4, not 1 --
+      or offline) -> `(None, False)`: the check could not run at all.
+    - returncode 0, empty parsed JSON array -> `(None, True)`: the check
+      ran and found no duplicate.
+    - returncode 0, one or more rows -> `(first_row["url"], True)`: the
+      check ran and found a duplicate.
+
+    Parsing is defensive: malformed or empty stdout on a 0 returncode (a
+    torn `gh` output, an unexpected shape) degrades to `(None, False)` --
+    "the check could not run" -- rather than raising, because a parse
+    failure carries the same epistemic status as `gh` never having run.
+
+    The argv is a LIST passed to `run_fn` -- never a shell string -- and
+    always requests an explicit `--json` field selection (`number,title,url`)
+    rather than parsing `gh`'s default human-readable table.
+
+    LIMITATION, recorded because the check is a courtesy, never a
+    guarantee: GitHub's issue-search index is EVENTUALLY CONSISTENT, so an
+    issue filed seconds earlier by the same tester may not yet be
+    returnable by `--search`. A duplicate that slips through this window
+    is not lost -- `count_agreeing` groups saved report bodies by this same
+    fingerprint, so it lands visibly grouped on arrival rather than as
+    noise a maintainer must separately detect.
+    """
+    proc = run_fn(
+        [
+            "gh",
+            "issue",
+            "list",
+            "--repo",
+            SUBMIT_REPO,
+            "--author",
+            "@me",
+            "--search",
+            fingerprint,
+            "--state",
+            "all",
+            "--json",
+            "number,title,url",
+            "--limit",
+            str(_DEDUP_SEARCH_LIMIT),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        return None, False
+
+    stdout = getattr(proc, "stdout", "") or ""
+    try:
+        rows = json.loads(stdout)
+    except (json.JSONDecodeError, TypeError):
+        return None, False
+    if not isinstance(rows, list):
+        return None, False
+    if not rows:
+        return None, True
+
+    first = rows[0]
+    url = first.get("url") if isinstance(first, dict) else None
+    if not url:
+        return None, False
+    return url, True
+
+
+def comment_via_gh(
+    issue_url: str, body: str, *, run_fn: Any = subprocess.run, console: Any = None
+) -> str | None:
+    """Comment `body` onto `issue_url` via `gh issue comment` (D-11).
+
+    Argv is a LIST: the `gh issue comment` subcommand, the target issue,
+    the explicit `--repo` argument (always `SUBMIT_REPO`, NEVER
+    cwd-inferred), and `--body-file -` with the body piped on stdin (no
+    length cap, no shell-quoting surface). No flag that mutates or
+    hijacks is ever sent -- no `--delete-last`, no `--edit-last`, no
+    `--yes`, no `--web`, no `--editor`.
+
+    Returns the comment URL (`proc.stdout.strip()`) on returncode 0, else
+    `None` -- narrating the captured `gh` stderr (or the exit status when
+    stderr is blank) through the `console` seam, exactly like
+    `submit_via_gh`'s failure path, so a permission failure is never
+    silent.
+
+    ASSUMPTION A1 (unverified by design -- verifying it destructively
+    would post a real comment to the live tracker): commenting on a
+    public repo is assumed to need only an authenticated account, never
+    write access. This function does not depend on A1 being true for
+    correctness: when it returns `None`, `submit_report` degrades with a
+    spoken reason to the browser tier on the existing issue URL, exactly
+    as the create path already degrades on a `gh` failure -- so A1's
+    truth value is irrelevant to whether the tester can still file.
+    """
+    proc = run_fn(
+        [
+            "gh",
+            "issue",
+            "comment",
+            issue_url,
+            "--repo",
+            SUBMIT_REPO,
+            "--body-file",
+            "-",
+        ],
+        input=body,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode == 0:
+        return proc.stdout.strip()
+
+    err = (getattr(proc, "stderr", "") or "").strip()
+    if err:
+        _print(f"gh issue comment failed: {err}", console=console)
+    else:
+        _print(f"gh issue comment failed (exit {proc.returncode}).", console=console)
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Browser tier + D-05 oversize escalation (Task 1)
 # ---------------------------------------------------------------------------
 
