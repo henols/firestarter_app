@@ -97,6 +97,7 @@ def _make_fake_comm(fake_ser: _FakeSerial) -> SerialCommunicator:
     comm._fault_inject_outgoing = None
     comm.firmware_buffer_size = None
     comm.firmware_max_chunk = None
+    comm.seen_message_ids = set()
     return comm
 
 
@@ -170,6 +171,7 @@ def test_c_probe_port_propagates_protocol_not_implemented_error() -> None:
         self._fault_inject_outgoing = None
         self.firmware_buffer_size = None
         self.firmware_max_chunk = None
+        self.seen_message_ids = set()
 
     with (
         patch.object(SerialCommunicator, "__init__", mock_init),
@@ -281,6 +283,7 @@ def test_e_non_0xbb_error_at_probe_time_surfaces_as_generic_path() -> None:
         self._fault_inject_outgoing = None
         self.firmware_buffer_size = None
         self.firmware_max_chunk = None
+        self.seen_message_ids = set()
 
     with (
         patch.object(SerialCommunicator, "__init__", mock_init),
@@ -336,6 +339,7 @@ def test_a_cli_read_0xbb_at_probe_time_surfaces_unsupported_protocol(
         self._fault_inject_outgoing = None
         self.firmware_buffer_size = None
         self.firmware_max_chunk = None
+        self.seen_message_ids = set()
 
     config = ConfigManager()
     real_operator = EpromOperator(config)

@@ -33,6 +33,7 @@ from firestarter.messages import (
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
     MSG_OK_REQ_DATA,
+    MSG_WARN_SDP_UNLOCK_SKIPPED,
 )
 
 from .conftest import build_frame
@@ -101,10 +102,32 @@ def _drive_write(
 
     Returns (result, captured) where `captured["command_dict"]` is the dict
     passed to `find_and_connect`.
+
+    Plan 120-10 / D-15 note: on a protocol-0x0D chip, real (post-Phase-119)
+    firmware emits MSG_WARN_SDP_UNLOCK_SKIPPED (0x86) as part of this exact
+    frame sequence whenever FLAG_SKIP_SDP_UNLOCK reaches it -- write_eprom's
+    new D-15 check (120-10) requires that ack when the bit was set on a
+    0x0D chip, so this fixture feeds it for every 0x0D chip driven here
+    (whether or not the bit ends up set) to keep the simulated stream
+    faithful to real firmware; it is a no-op for the bit-not-set legs since
+    the D-15 check only runs when the bit is set. The WARN frame is fed
+    BEFORE INIT_DONE (inside the INIT phase window) rather than between
+    INIT_DONE and OK_REQ_DATA: _main_phase_send_data's tight MAIN-phase
+    request/response loop only tolerates MAIN/ERROR/OK-request-chunk
+    responses and raises on an interleaved WARN, whereas the INIT phase's
+    loop routes WARN through _handle_progress_response harmlessly.
     """
     input_file = tmp_path / f"{chip}.bin"
     input_file.write_bytes(b"\x01\x02\x03\x04")
 
+    from firestarter.chip_resolver import resolve_chip
+    from firestarter.sdp_capability import SDP_PROTOCOL_ID
+
+    db = EpromDatabase(skip_local_override=True)
+    is_protocol_0x0d = resolve_chip(chip, db=db).get("algorithm") == SDP_PROTOCOL_ID
+
+    if is_protocol_0x0d:
+        fake_serial.feed(build_frame(MSG_WARN_SDP_UNLOCK_SKIPPED, b""))
     fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
     fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
     fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))

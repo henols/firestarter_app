@@ -1634,15 +1634,23 @@ class EpromOperator:
             # it would touch the ring-fenced transport version-capture path.
             #
             # Scoped to protocol 0x0D (D-18, plan 120-09's is_protocol_0x0d
-            # predicate, mirrored here from eprom_data_dict): firmware ONLY
-            # reads FLAG_SKIP_SDP_UNLOCK — and only emits MSG_WARN_SDP_UNLOCK_
-            # SKIPPED — on protocol-0x0D writes. On any other protocol the bit
-            # is emitted on the wire (D-18 warn-and-proceed, unconditional
-            # per D-19) but firmware never acts on it and never answers with
-            # 0x86, on old AND new firmware alike — that is not the silent-
-            # failure case HOST-06 names, so requiring the ack there would be
-            # a false positive on every non-0x0D --skip-sdp-unlock write.
-            is_protocol_0x0d = eprom_data_dict.get("protocol-id") == SDP_PROTOCOL_ID
+            # predicate). firmware ONLY reads FLAG_SKIP_SDP_UNLOCK — and only
+            # emits MSG_WARN_SDP_UNLOCK_SKIPPED — on protocol-0x0D writes. On
+            # any other protocol the bit is emitted on the wire (D-18
+            # warn-and-proceed, unconditional per D-19) but firmware never
+            # acts on it and never answers with 0x86, on old AND new firmware
+            # alike — that is not the silent-failure case HOST-06 names, so
+            # requiring the ack there would be a false positive on every
+            # non-0x0D --skip-sdp-unlock write.
+            #
+            # NOTE: eprom_data_dict here is resolve_chip()'s composed
+            # programmer dict (the shape cli_handlers.py actually passes into
+            # write_eprom), which carries the protocol id under "algorithm"
+            # (CLAUDE.md: "the algorithm field carries the upstream
+            # protocol_id integer"), NOT under "protocol-id" — that raw-db-row
+            # key name belongs to app.db.get_eprom()'s entry, a different
+            # dict cli_handlers.py's own D-18 check reads instead.
+            is_protocol_0x0d = eprom_data_dict.get("algorithm") == SDP_PROTOCOL_ID
             if is_protocol_0x0d and (operation_flags & FLAG_SKIP_SDP_UNLOCK):
                 if MSG_WARN_SDP_UNLOCK_SKIPPED not in self.comm.seen_message_ids:
                     logger.error(
