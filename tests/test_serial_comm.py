@@ -348,6 +348,9 @@ def test_fault_inject_incoming_subclass(make_comm) -> None:
     comm = FaultInjectingSerialCommunicator.__new__(FaultInjectingSerialCommunicator)
     comm._corrupt_incoming_once = True
     comm._fault_fired = False
+    # Phase-120 (D-15 / HOST-06): bounded per-connection observed-id record,
+    # normally initialised in __init__ — mirrored here since this test bypasses it.
+    comm.seen_message_ids = set()
 
     # Build a minimal body (id + params + CRC) for _decode_id_frame
     from firestarter.frame_parser import _crc8_ccitt as _inner_crc8

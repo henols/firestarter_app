@@ -146,6 +146,8 @@ def make_comm(fake_serial):
         instance.firmware_buffer_size = None
         # Phase-54 (EVEN-01): firmware-advertised MAIN-path decode capacity (None until probed)
         instance.firmware_max_chunk = None
+        # Phase-120 (D-15 / HOST-06): bounded per-connection observed-id record
+        instance.seen_message_ids = set()
         return instance
 
     return _factory

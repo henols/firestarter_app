@@ -124,6 +124,13 @@ class SerialCommunicator:
         # with a 2-byte param is decoded. _calculate_buffer_size returns 512 (safe
         # Uno floor) when None (Phase 54 D-05 reversed; no FirmwareOutdatedError).
         self.firmware_max_chunk: Optional[int] = None
+        # D-15 (Phase 120 / v1.22 HOST-06): bounded record of every id frame
+        # successfully decoded on this connection. Populated by the
+        # _decode_id_frame override below. A set of integers only — nothing
+        # sized from frame content is ever allocated here (T-120-39), mirroring
+        # the defensive posture of the firmware_max_chunk plausibility clamp
+        # above. Per-connection instance state, not shared across connections.
+        self.seen_message_ids: set[int] = set()
 
         try:
             logger.debug(
@@ -293,6 +300,16 @@ class SerialCommunicator:
         (T-55-05 / T-55-06). 0-byte param region (old firmware) leaves
         firmware_max_chunk unchanged (graceful degradation, T-55-07).
 
+        D-15 (Phase 120 / v1.22 HOST-06): every successfully decoded id frame
+        has its id recorded into seen_message_ids, regardless of which id it
+        is. Trigger: any id for which codec.decode_id_frame returns non-None.
+        Degradation against old firmware: a firmware build that never emits a
+        given id (e.g. MSG_WARN_SDP_UNLOCK_SKIPPED / 0x86) simply leaves that
+        id absent from the set — that absence is exactly the signal callers
+        such as write_eprom's D-15 check key on. The record is bounded by
+        construction: it stores only the decoded id integer (0-255), never
+        anything sized from frame content (T-120-39).
+
         The GATE-1.8d ring-fenced _read_and_parse_lines body is not touched —
         only this override seam is used (Pitfall 4 / Open Question 3).
         """
@@ -300,6 +317,8 @@ class SerialCommunicator:
         # body layout: [id_byte][params_bytes...][crc_byte]
         if result is not None and len(body) >= 2:
             msg_id = body[0]
+            # D-15: record every successfully decoded id, bounded (set of ints).
+            self.seen_message_ids.add(msg_id)
             if msg_id == MSG_OK_READY:
                 params_bytes = body[1:-1]  # strip id byte and trailing CRC
                 if len(params_bytes) == 2:
