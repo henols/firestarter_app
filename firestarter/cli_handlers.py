@@ -248,6 +248,7 @@ def _build_op_flags(
     verbose: bool = False,
     vpe_as_vpp: bool = False,
     skip_erase: bool = False,
+    skip_sdp_unlock: bool = False,
     input_enable: Optional[bool] = None,
     chip_disable: Optional[bool] = None,
 ) -> int:
@@ -274,7 +275,19 @@ def _build_op_flags(
     poll reported "successful" (the Phase-90/91 "12V-VPP regression" false alarm).
     `skip_erase` is now an explicit opt-in (write `--skip-erase`), default False.
     """
-    flags = build_flags(blank_check, force, vpe_as_vpp, verbose, skip_erase=skip_erase)
+    # D-19: FLAG_SKIP_SDP_UNLOCK is passed into build_flags as a keyword
+    # argument, NOT OR-ed into `flags` after the call the way
+    # FLAG_OUTPUT_ENABLE / FLAG_CHIP_ENABLE are below — every wire-flag bit
+    # stays mapped in the one function that maps wire flags (build_flags),
+    # deliberately not following the OE/CE precedent in this same helper.
+    flags = build_flags(
+        blank_check,
+        force,
+        vpe_as_vpp,
+        verbose,
+        skip_erase=skip_erase,
+        skip_sdp_unlock=skip_sdp_unlock,
+    )
     if input_enable is not None:
         flags |= 0 if input_enable else FLAG_OUTPUT_ENABLE
     if chip_disable is not None:
@@ -491,6 +504,16 @@ def read(
 )
 @click.option("-a", "--address", default=None, help="Write start address in dec/hex")
 @click.option("--vpe-as-vpp", "vpe_as_vpp", is_flag=True, help="Use VPE as VPP voltage")
+@click.option(
+    "--skip-sdp-unlock",
+    "skip_sdp_unlock",
+    is_flag=True,
+    default=False,
+    help="Decline the automatic SDP unlock firmware performs at the start of every "
+    "protocol-0x0D write. WARNING: on a chip whose software data protection is "
+    "actually enabled, the write will then fail. Has NO EFFECT on any other "
+    "protocol — the host warns and proceeds.",
+)
 @click.pass_obj
 @map_typed_errors
 def write(
@@ -502,6 +525,7 @@ def write(
     force: bool,
     address: Optional[str],
     vpe_as_vpp: bool,
+    skip_sdp_unlock: bool,
 ) -> None:
     """Writes a binary file to an EPROM.
 
@@ -515,6 +539,19 @@ def write(
     still runs for electrically-erasable chips (FLAG_CAN_ERASE) so ``write -b`` on
     a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip the erase
     (previously implied by ``-b``) for already-blank or non-erasable parts.
+
+    TRAP #6 / D-17/D-18 (v1.22 HOST-02): ``--skip-sdp-unlock`` is exposed
+    on ``write`` ONLY — firmware auto-unlocks in ``eeprom28c_write_init`` and
+    nowhere else, so ``read``/``verify``/``blank``/``erase`` have nothing to
+    skip and the flag is deliberately absent from all four (D-17). On a
+    non-protocol-0x0D chip the flag has no effect: firmware never reads this
+    bit outside protocol 0x0D, so the host warns and proceeds rather than
+    refusing or silently dropping the bit — the bit is still emitted so a
+    blanket-flag script across a mixed batch produces identical wire frames
+    (D-18). The host may also set this bit **on its own**, without the user
+    passing it, when the resolved chip is protocol-0x0D and capability-refused
+    (``firestarter.sdp_capability``) — see the D-04 auto-set (plan 120-09
+    Task 2) for that behaviour.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.write_eprom(
@@ -527,6 +564,7 @@ def write(
             force=force,
             vpe_as_vpp=vpe_as_vpp,
             skip_erase=skip_erase,
+            skip_sdp_unlock=skip_sdp_unlock,
         ),
     )
     sys.exit(0 if ok else 1)
