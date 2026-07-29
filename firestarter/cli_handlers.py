@@ -42,6 +42,7 @@ from firestarter.chip_test import (
     VERDICT_SKIPPED,
     count_applicable,
     derive_plan,
+    is_uv_eprom,
     run_plan,
 )
 from firestarter.config import ConfigManager, get_config_dir
@@ -1831,6 +1832,79 @@ def _make_sampler(app: "AppContext", report: DiagnosticReport) -> Any:
             report.vpe_after_mv = vpe
 
     return _sampler
+
+
+def _is_uv_eprom(app: "AppContext", chip: str) -> bool:
+    """Read this chip's UV-erasable-EPROM axis directly off the DB entry.
+
+    Delegates to `chip_test.is_uv_eprom` on the **full** DB dict from
+    `app.db.get_eprom(chip)` -- never `resolve_chip`'s/`convert_to_
+    programmer`'s programmer dict, which carries no `electrical-type` and is
+    the wrong seam per `is_uv_eprom`'s own docstring (D-01, DEVTEST-03,
+    RESEARCH C-4). Named exactly `_is_uv_eprom` because
+    `check_devtest_orchestrator.py`'s `_HANDLER_FUNCTION_NAMES` allow-list
+    has carried that name since Phase 112 pointing at nothing -- landing the
+    handler-side helper under this name is free gate coverage rather than a
+    new allow-list entry.
+
+    Returns `False` for a chip absent from the DB; every caller reaches this
+    helper only after SAFE-04's absent-chip hard-fail has already run, so
+    that case is unreached in practice.
+    """
+    full = app.db.get_eprom(chip)
+    if not full:
+        return False
+    return is_uv_eprom(full)
+
+
+def _default_uv_write_confirm(prompt: str) -> bool:
+    """Module confirm helper `_resolve_write_scope` defaults to (D-01)."""
+    return bool(Confirm.ask(prompt, default=False))
+
+
+def _resolve_write_scope(
+    app: "AppContext",
+    chip: str,
+    *,
+    interactive: bool,
+    confirm_fn: Callable[[str], bool] = _default_uv_write_confirm,
+) -> str:
+    """Decide this run's `derive_plan(..., write_scope=...)` literal (D-01/D-03).
+
+    1. Not UV (`_is_uv_eprom` False) -> the full-write scope, **no prompt at
+       all**. A UV write is irrecoverable without a lamp; EEPROM and Flash
+       writes are recoverable via erase and SRAM/FRAM writes are essentially
+       free, so every other family -- explicitly including this milestone's
+       own AT28C family -- runs the full write/verify/erase round-trip
+       unprompted.
+    2. UV and not interactive -> the partial scope, no prompt. Per D-03 an
+       absent TTY is a DECLINED prompt, not absent consent -- the 256-byte
+       top-anchored window is still written so a piped or CI run still
+       yields write evidence.
+    3. UV and interactive -> ask, defaulting to decline. A yes returns the
+       full scope (the whole device may be written); a no returns the
+       partial scope -- never described as non-destructive or read-only,
+       because it writes a small top-anchored region.
+
+    `interactive` is taken as a parameter rather than calling
+    `_is_interactive()` internally, and `confirm_fn` is an injected
+    keyword-only callable -- both so tests can drive every branch without
+    patching module internals.
+    """
+    if not _is_uv_eprom(app, chip):
+        return "full"
+    if not interactive:
+        return "partial"
+    chip_upper = chip.upper()
+    prompt = (
+        f"{chip_upper} is a UV-erasable EPROM -- its write cannot be undone "
+        "without a UV eraser. Write the WHOLE device now? Yes writes the "
+        "entire chip; no writes only a small 256-byte top-anchored region "
+        "instead -- that still writes, it is not read-only or non-destructive."
+    )
+    if confirm_fn(prompt):
+        return "full"
+    return "partial"
 
 
 @dev.command(name="test")

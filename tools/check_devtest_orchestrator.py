@@ -123,12 +123,26 @@ FIRESTARTER_DEVTEST_SUBMIT = os.environ.get(
 # (test_check_devtest_orchestrator.py) defines its top-level functions with
 # these SAME names so the same name-filtered scan path exercises the
 # anti-hollow proof.
+#
+# RESEARCH C-4 (Phase 121 Plan 09) proved this allow-list is not merely
+# documentation: a violating helper placed in a function NOT named here
+# passes this gate with `PASS ... EXIT=0` while the IDENTICAL violation
+# placed inside `dev_test` itself trips `EXIT=1`. `_is_uv_eprom` sat in this
+# set since Phase 112 pointing at nothing (a leftover speculative name) --
+# Plan 121-09 landed the real handler-side UV predicate under that exact
+# name, and added `_resolve_write_scope` alongside it. Every future helper
+# added to the `dev test` surface MUST be listed here, or this gate silently
+# under-covers exactly that new code -- `tests/test_check_devtest_orchestrator
+# .py::test_handler_function_names_all_resolve_to_real_callables` makes this
+# a permanently-enforced invariant rather than a one-off fix.
 _HANDLER_FUNCTION_NAMES = frozenset(
     {
         "dev_test",
         "_verdict_code",
         "_sanitize_chip_token",
         "_is_uv_eprom",
+        "_resolve_write_scope",
+        "_default_uv_write_confirm",
         "_chip_id_fields",
         "_is_interactive",
         "_make_sampler",
