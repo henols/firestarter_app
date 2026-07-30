@@ -134,7 +134,7 @@ def fw_path(*parts: str) -> Path:
             f"{resolved} does not exist, but the firmware repo IS present "
             f"(marker found at {FW_REPO_MARKER}). This scan target was "
             "renamed or moved -- update this path (or the cross-repo "
-            "scan-path inventory) rather than deleting or skipping this "
+            "scan-path inventory) rather than removing or bypassing this "
             "gate."
         )
     return resolved
