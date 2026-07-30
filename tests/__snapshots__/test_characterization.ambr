@@ -138,6 +138,7 @@
     fault-inject       Demonstrate COBS resync: inject a corrupted frame...
     read               Reads the content from an EPROM and prints data to...
     reg                Direct access to registers: MSB, LSB and control...
+    sdp                Enable or disable Software Data Protection (SDP) on...
     test               Run the community chip-validation sweep for CHIP...
     validate-family    Run the per-family validation matrix Tier-3 runner...
     write-cycle        Erase → write source image → read-back N times;...
@@ -308,6 +309,19 @@
     the erase (previously implied by ``-b``) for already-blank or non-erasable
     parts.
   
+    TRAP #6 / D-17/D-18 (v1.22 HOST-02): ``--skip-sdp-unlock`` is exposed on
+    ``write`` ONLY — firmware auto-unlocks in ``eeprom28c_write_init`` and
+    nowhere else, so ``read``/``verify``/``blank``/``erase`` have nothing to
+    skip and the flag is deliberately absent from all four (D-17). On a non-
+    protocol-0x0D chip the flag has no effect: firmware never reads this bit
+    outside protocol 0x0D, so the host warns and proceeds rather than refusing
+    or silently dropping the bit — the bit is still emitted so a blanket-flag
+    script across a mixed batch produces identical wire frames (D-18). The host
+    may also set this bit **on its own**, without the user passing it, when the
+    resolved chip is protocol-0x0D and capability-refused
+    (``firestarter.sdp_capability``) — see the D-04 auto-set block below, which
+    always prints a mandatory, default-visible report line when it fires.
+  
   Options:
     -b, --no-blank-check  Skip the blank check before write (erase still runs if
                           the chip supports it).
@@ -318,6 +332,11 @@
     -f, --force           Force, even if the VPP or chip id doesn't match.
     -a, --address TEXT    Write start address in dec/hex
     --vpe-as-vpp          Use VPE as VPP voltage
+    --skip-sdp-unlock     Decline the automatic SDP unlock firmware performs at
+                          the start of every protocol-0x0D write. WARNING: on a
+                          chip whose software data protection is actually
+                          enabled, the write will then fail. Has NO EFFECT on
+                          any other protocol — the host warns and proceeds.
     --help                Show this message and exit.
   
   '''
@@ -1149,6 +1168,19 @@
     the erase (previously implied by ``-b``) for already-blank or non-erasable
     parts.
   
+    TRAP #6 / D-17/D-18 (v1.22 HOST-02): ``--skip-sdp-unlock`` is exposed on
+    ``write`` ONLY — firmware auto-unlocks in ``eeprom28c_write_init`` and
+    nowhere else, so ``read``/``verify``/``blank``/``erase`` have nothing to
+    skip and the flag is deliberately absent from all four (D-17). On a non-
+    protocol-0x0D chip the flag has no effect: firmware never reads this bit
+    outside protocol 0x0D, so the host warns and proceeds rather than refusing
+    or silently dropping the bit — the bit is still emitted so a blanket-flag
+    script across a mixed batch produces identical wire frames (D-18). The host
+    may also set this bit **on its own**, without the user passing it, when the
+    resolved chip is protocol-0x0D and capability-refused
+    (``firestarter.sdp_capability``) — see the D-04 auto-set block below, which
+    always prints a mandatory, default-visible report line when it fires.
+  
   Options:
     -b, --no-blank-check  Skip the blank check before write (erase still runs if
                           the chip supports it).
@@ -1159,6 +1191,11 @@
     -f, --force           Force, even if the VPP or chip id doesn't match.
     -a, --address TEXT    Write start address in dec/hex
     --vpe-as-vpp          Use VPE as VPP voltage
+    --skip-sdp-unlock     Decline the automatic SDP unlock firmware performs at
+                          the start of every protocol-0x0D write. WARNING: on a
+                          chip whose software data protection is actually
+                          enabled, the write will then fail. Has NO EFFECT on
+                          any other protocol — the host warns and proceeds.
     --help                Show this message and exit.
   
   '''

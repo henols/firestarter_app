@@ -124,6 +124,13 @@ class SerialCommunicator:
         # with a 2-byte param is decoded. _calculate_buffer_size returns 512 (safe
         # Uno floor) when None (Phase 54 D-05 reversed; no FirmwareOutdatedError).
         self.firmware_max_chunk: Optional[int] = None
+        # D-15 (Phase 120 / v1.22 HOST-06): bounded record of every id frame
+        # successfully decoded on this connection. Populated by the
+        # _decode_id_frame override below. A set of integers only — nothing
+        # sized from frame content is ever allocated here (T-120-39), mirroring
+        # the defensive posture of the firmware_max_chunk plausibility clamp
+        # above. Per-connection instance state, not shared across connections.
+        self.seen_message_ids: set[int] = set()
 
         try:
             logger.debug(
@@ -236,6 +243,42 @@ class SerialCommunicator:
             level = logging.ERROR
         elif response.type == "WARN":
             level = logging.WARNING
+        elif response.type == "INFO":
+            # D-09 / HOST-05 / F-120-02: before this arm, the whole INFO band
+            # fell through to the `logging.DEBUG` initialiser above, while
+            # `_setup_logging` (cli_handlers.py:83) sets the root logger to
+            # `logging.INFO` unless `-v` is passed. That meant every Phase
+            # 118/119 SDP report line — emitted unconditionally by firmware —
+            # was silently discarded by the host for a whole phase: a
+            # two-repo requirement that passed its own phase's verification
+            # and was still false end to end.
+            #
+            # This promotion is deliberately scoped to the `INFO` label only.
+            # `OK`, `INIT`, `MAIN`, `END` and `DATA` are protocol-phase frames
+            # and stay on the `logging.DEBUG` default — promoting them would
+            # flood default-verbosity output.
+            #
+            # The blast radius is SIX unconditionally-emitted INFO-band ids,
+            # not five: `0x5E`, `0x5F`, `0x60`, `0x61`, `0x62` via
+            # `LOG_ID`/`LOG_ID_U32`, plus `0x5B` `MSG_INFO_HW` — emitted via
+            # the unconditional `LOG_WARN_ID_U8` alias at
+            # `rurp_hw_rev_utils.h:96` (`logging_id.h:115` makes that macro an
+            # unconditional plain `LOG_ID_U8` despite its name), while its
+            # *catalog* severity is INFO. Every other INFO id in the tree is
+            # `FLAG_VERBOSE`-gated in firmware and therefore only sent when
+            # the host passed `-v`.
+            #
+            # That `0x5B` case is Phase 35's CR-02 hard-fail-loud revision
+            # warning — this arm makes it visible at default verbosity for
+            # the first time, a partial fix for a second, older observability
+            # defect independent of the SDP work.
+            #
+            # Side effect: under `-v`, an INFO frame's rendered prefix changes
+            # from `I:` to `INFO:`, because the one-character abbreviation
+            # below applies only while `rurp_logger.isEnabledFor(logging.DEBUG)`
+            # and the type is in `NON_RESPONSE_PREFIXES` — at `-v` the DEBUG
+            # gate is open regardless of this arm's level assignment.
+            level = logging.INFO
 
         # Shorten prefix for debug, full for others
         log_prefix = (
@@ -257,6 +300,16 @@ class SerialCommunicator:
         (T-55-05 / T-55-06). 0-byte param region (old firmware) leaves
         firmware_max_chunk unchanged (graceful degradation, T-55-07).
 
+        D-15 (Phase 120 / v1.22 HOST-06): every successfully decoded id frame
+        has its id recorded into seen_message_ids, regardless of which id it
+        is. Trigger: any id for which codec.decode_id_frame returns non-None.
+        Degradation against old firmware: a firmware build that never emits a
+        given id (e.g. MSG_WARN_SDP_UNLOCK_SKIPPED / 0x86) simply leaves that
+        id absent from the set — that absence is exactly the signal callers
+        such as write_eprom's D-15 check key on. The record is bounded by
+        construction: it stores only the decoded id integer (0-255), never
+        anything sized from frame content (T-120-39).
+
         The GATE-1.8d ring-fenced _read_and_parse_lines body is not touched —
         only this override seam is used (Pitfall 4 / Open Question 3).
         """
@@ -264,6 +317,8 @@ class SerialCommunicator:
         # body layout: [id_byte][params_bytes...][crc_byte]
         if result is not None and len(body) >= 2:
             msg_id = body[0]
+            # D-15: record every successfully decoded id, bounded (set of ints).
+            self.seen_message_ids.add(msg_id)
             if msg_id == MSG_OK_READY:
                 params_bytes = body[1:-1]  # strip id byte and trailing CRC
                 if len(params_bytes) == 2:

@@ -575,22 +575,50 @@ class EpromDatabase:
         # derivation cannot silently drift under a future _map_data refactor. A missing
         # key degrades safely to flag-clear (A1), identical to the old path. RF-01:
         # zero behavioral delta for all chips (the synthetic path already matched).
-        # D-03 (firmware-inert on 0x0D): setting the flag on Flash/EEPROM parts is safe
-        # because the 0x0D configure_eeprom28c path (firestarter/src/proms/eeprom_28c.cpp)
-        # never reads is_flag_set(FLAG_CAN_ERASE) — it uses only FLAG_FORCE and
-        # FLAG_SKIP_BLANK_CHECK — so no extra voltage rail is routed. No firmware edit.
+        #
+        # Scope (Phase 121 D-12): algorithms 5 and 13 are excluded from the flag.
+        #
+        # Algorithm 5 (flash4) — FIX-01a / T-93-CANERASE: flash4 auto-erases per
+        # page during the page-write; no separate 12V bulk erase is needed or
+        # safe. Setting FLAG_CAN_ERASE for 0x05 routes firmware
+        # flash4_write_init → flash4_erase_execute which asserts
+        # CTRL_VPP_REGULATOR_ENABLE on a 5V-only chip (12V on a 5V part —
+        # hardware-damage hazard). Scope: algorithm==5 only; the 0x07 and
+        # 0x0D paths are unaffected by this particular exclusion.
+        #
+        # Algorithm 13 / protocol 0x0D (AT28C / 28C-family SDP EEPROMs) —
+        # Phase 121 D-12: the firmware's configure_eeprom28c handler
+        # (firestarter/src/proms/eeprom_28c.cpp) has no erase operation at
+        # all, so advertising FLAG_CAN_ERASE for these 84 chips is a false
+        # capability statement. DEVTEST-01's `dev test` sweep reads that
+        # advertisement and plans a real erase step that reports OK having
+        # done nothing, auto-tagging otherwise-passing runs `community-fail`.
+        #
+        # REVERSAL RECORD (Phase 121 D-12, third recorded reversal this
+        # phase after 119 D-18 / 120 D-20): this line previously carried a
+        # D-03 note stating that leaving the flag SET on 0x0D was
+        # firmware-inert and "must stay unchanged." D-12 REVERSES that
+        # POLICY, not the FACT: the 0x0D firmware path genuinely never reads
+        # FLAG_CAN_ERASE — that part of the old note remains true — but an
+        # inert-but-false capability advertisement is still false, and
+        # DEVTEST-01 needs the host to stop making it. Blast radius
+        # re-verified before landing this change: no `chip_database.json`
+        # entry carries a `flags` key, so `diff_db.py` identity cannot
+        # break; no firmware native test and no `validation_matrix_spec.json`
+        # family pins the incoming wire flags for `eeprom28c`; the only
+        # other host reader of this bit (`serial_comm.py`'s
+        # `_log_command_details`) is DEBUG-only logging; and exactly two
+        # host tests were pinned to the old value, both inverted in this
+        # same plan. One benign behavioural delta: `firestarter erase` on a
+        # 0x0D part is now refused one layer earlier, at
+        # `eprom_operations.cpp`'s own FLAG_CAN_ERASE precondition, rather
+        # than at Phase 119's op-layer NULL-main guard — both paths emit the
+        # same `MSG_ERR_NOT_SUPPORTED` wire id, so the observable behaviour
+        # over the wire is unchanged.
         simple_flags = 0
         algo = programmer_data["algorithm"]  # already computed above from protocol-id
         if full_eprom_data.get("electrical-type", "") in ("EEPROM", "Flash/EEPROM"):
-            if algo != 5:
-                # FIX-01a / T-93-CANERASE: flash4 (0x05) auto-erases per page during
-                # the page-write; no separate 12V bulk erase is needed or safe.
-                # Setting FLAG_CAN_ERASE for 0x05 routes firmware flash4_write_init →
-                # flash4_erase_execute which asserts CTRL_VPP_REGULATOR_ENABLE on a
-                # 5V-only chip (12V on a 5V part — hardware-damage hazard).
-                # Scope: algorithm==5 only. 0x07 and 0x0D paths are unchanged.
-                # D-03 note: 0x0D configure_eeprom28c never reads FLAG_CAN_ERASE, so
-                # leaving it set on 0x0D is firmware-inert and must stay unchanged.
+            if algo not in (5, 13):
                 simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
         programmer_data["flags"] = simple_flags
 

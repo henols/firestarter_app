@@ -273,6 +273,64 @@ format      = "Cmd: 0x%02x"
 params      = [{ type = "u8", render = "hex_byte" }]
 wire_format = "id_frame"
 
+[[messages]]
+id          = 0x5E
+name        = "MSG_INFO_SDP_UNLOCK"
+severity    = "INFO"
+format      = "SDP unlock: disabling write protection"
+params      = []
+wire_format = "id_frame"
+
+# D-15: the honesty lives in the message TEXT, not in a status code --
+# response_code is deliberately never written on the SDP path (117 D-05 /
+# 118 D-02). Phase 120 F-120-03 found this line lacked the caveat its 0x61
+# lock-done sibling carries and answered it host-side only (120 D-10);
+# Phase 121 D-15 closes it here so both directions carry the same
+# protection-state-is-not-readable guarantee.
+[[messages]]
+id          = 0x5F
+name        = "MSG_INFO_SDP_UNLOCK_DONE_US"
+severity    = "INFO"
+format      = "SDP unlock sequence emitted in %lu us; protection state is not readable"
+params      = [{ type = "u32", render = "dec" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x60
+name        = "MSG_INFO_SDP_LOCK"
+severity    = "INFO"
+format      = "SDP lock: enabling write protection"
+params      = []
+wire_format = "id_frame"
+
+# D-12: the honesty lives in the message TEXT, not in a status code --
+# response_code is deliberately never written on the SDP path (117 D-05 /
+# 118 D-02), so an untouched path still reports OK. This is the ONE line
+# that must state BOTH that the sequence was emitted AND that the
+# protection state cannot be read back, so a host reading the id alone can
+# never infer a protection state from it.
+[[messages]]
+id          = 0x61
+name        = "MSG_INFO_SDP_LOCK_DONE_US"
+severity    = "INFO"
+format      = "SDP lock sequence emitted in %lu us; protection state is not readable"
+params      = [{ type = "u32", render = "dec" }]
+wire_format = "id_frame"
+
+# D-16: this is a MEASUREMENT, with no budget comparison attached -- a
+# per-byte runtime compare in the hot path is what 118 D-10 declined, and
+# D-16 preserves that declination. gh#11 is a completion/data-landed
+# CONFLATION bug (Phase 117's finding), never a sampling-rate or
+# timing-budget bug; this single report line exists so the page-load
+# loop's worst-case interval is visible without adding a runtime check.
+[[messages]]
+id          = 0x62
+name        = "MSG_INFO_PAGE_LOAD_WORST_US"
+severity    = "INFO"
+format      = "Page load worst byte interval %lu us"
+params      = [{ type = "u32", render = "dec" }]
+wire_format = "id_frame"
+
 # ---------------------------------------------------------------------------
 # WARN (0x80..0x9F)
 # ---------------------------------------------------------------------------
@@ -336,6 +394,22 @@ name        = "MSG_WARN_FL4_BOOT_BLOCK_LOCKED"
 severity    = "WARN"
 format      = "boot block locked -- 0x%06lx not programmable (W29C040 section 6.6 irreversible lockout, write forced)"
 params      = [{ type = "u24", render = "hex_addr" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x86
+name        = "MSG_WARN_SDP_UNLOCK_SKIPPED"
+severity    = "WARN"
+format      = "SDP unlock skipped -- write will not land on an SDP-protected part"
+params      = []
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0x87
+name        = "MSG_WARN_SDP_TBLC_EXCEEDED"
+severity    = "WARN"
+format      = "SDP unlock exceeded t_BLC budget: %lu us"
+params      = [{ type = "u32", render = "dec" }]
 wire_format = "id_frame"
 
 # ---------------------------------------------------------------------------

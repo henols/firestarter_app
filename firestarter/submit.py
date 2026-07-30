@@ -278,6 +278,159 @@ def submit_via_gh(
 
 
 # ---------------------------------------------------------------------------
+# Dedup query + comment path (Task 1, D-09/D-10/D-11) -- both follow
+# submit_via_gh's seam discipline exactly: injected run_fn, list argv never a
+# shell string, explicit --repo never cwd-inferred, check=False with an
+# explicit returncode branch, narration on failure.
+# ---------------------------------------------------------------------------
+
+_DEDUP_SEARCH_LIMIT = 5
+
+
+def find_prior_report(
+    fingerprint: str, *, run_fn: Any = subprocess.run
+) -> tuple[str | None, bool]:
+    """Read-only `gh issue list` dedup query, keyed on `dedup_fingerprint` (D-09).
+
+    Returns `(url, check_ran)`: the matched prior issue's URL (or `None`
+    when no match), and whether the query actually ran at all.
+
+    THE THREE BRANCHES ARE DISTINGUISHED BY THE PARSED PAYLOAD, NEVER BY
+    EXIT CODE ALONE -- `gh issue list` returns exit 0 for BOTH "duplicate
+    found" and "no duplicate", so a bare `returncode == 0` check would
+    silently conflate a clean run with a missing duplicate:
+
+    - non-zero returncode (`gh` absent, unauthenticated -- exit 4, not 1 --
+      or offline) -> `(None, False)`: the check could not run at all.
+    - returncode 0, empty parsed JSON array -> `(None, True)`: the check
+      ran and found no duplicate.
+    - returncode 0, one or more rows -> `(first_row["url"], True)`: the
+      check ran and found a duplicate.
+
+    Parsing is defensive: malformed or empty stdout on a 0 returncode (a
+    torn `gh` output, an unexpected shape) degrades to `(None, False)` --
+    "the check could not run" -- rather than raising, because a parse
+    failure carries the same epistemic status as `gh` never having run.
+
+    The argv is a LIST passed to `run_fn` -- never a shell string -- and
+    always requests an explicit `--json` field selection (`number,title,url`)
+    rather than parsing `gh`'s default human-readable table.
+
+    LIMITATION, recorded because the check is a courtesy, never a
+    guarantee: GitHub's issue-search index is EVENTUALLY CONSISTENT, so an
+    issue filed seconds earlier by the same tester may not yet be
+    returnable by `--search`. A duplicate that slips through this window
+    is not lost -- `count_agreeing` groups saved report bodies by this same
+    fingerprint, so it lands visibly grouped on arrival rather than as
+    noise a maintainer must separately detect.
+
+    `gh` truly absent from PATH (as opposed to present-but-unauthenticated)
+    makes a real `subprocess.run` raise `OSError`/`FileNotFoundError`
+    rather than return a non-zero-returncode object -- caught here and
+    folded into the same "check could not run" branch, so this function
+    never raises regardless of which of the three absent/unauthed/offline
+    conditions produced the failure.
+    """
+    try:
+        proc = run_fn(
+            [
+                "gh",
+                "issue",
+                "list",
+                "--repo",
+                SUBMIT_REPO,
+                "--author",
+                "@me",
+                "--search",
+                fingerprint,
+                "--state",
+                "all",
+                "--json",
+                "number,title,url",
+                "--limit",
+                str(_DEDUP_SEARCH_LIMIT),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None, False
+    if proc.returncode != 0:
+        return None, False
+
+    stdout = getattr(proc, "stdout", "") or ""
+    try:
+        rows = json.loads(stdout)
+    except (json.JSONDecodeError, TypeError):
+        return None, False
+    if not isinstance(rows, list):
+        return None, False
+    if not rows:
+        return None, True
+
+    first = rows[0]
+    url = first.get("url") if isinstance(first, dict) else None
+    if not url:
+        return None, False
+    return url, True
+
+
+def comment_via_gh(
+    issue_url: str, body: str, *, run_fn: Any = subprocess.run, console: Any = None
+) -> str | None:
+    """Comment `body` onto `issue_url` via `gh issue comment` (D-11).
+
+    Argv is a LIST: the `gh issue comment` subcommand, the target issue,
+    the explicit `--repo` argument (always `SUBMIT_REPO`, NEVER
+    cwd-inferred), and `--body-file -` with the body piped on stdin (no
+    length cap, no shell-quoting surface). No flag that mutates or
+    hijacks is ever sent -- no `--delete-last`, no `--edit-last`, no
+    `--yes`, no `--web`, no `--editor`.
+
+    Returns the comment URL (`proc.stdout.strip()`) on returncode 0, else
+    `None` -- narrating the captured `gh` stderr (or the exit status when
+    stderr is blank) through the `console` seam, exactly like
+    `submit_via_gh`'s failure path, so a permission failure is never
+    silent.
+
+    ASSUMPTION A1 (unverified by design -- verifying it destructively
+    would post a real comment to the live tracker): commenting on a
+    public repo is assumed to need only an authenticated account, never
+    write access. This function does not depend on A1 being true for
+    correctness: when it returns `None`, `submit_report` degrades with a
+    spoken reason to the browser tier on the existing issue URL, exactly
+    as the create path already degrades on a `gh` failure -- so A1's
+    truth value is irrelevant to whether the tester can still file.
+    """
+    proc = run_fn(
+        [
+            "gh",
+            "issue",
+            "comment",
+            issue_url,
+            "--repo",
+            SUBMIT_REPO,
+            "--body-file",
+            "-",
+        ],
+        input=body,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if proc.returncode == 0:
+        return proc.stdout.strip()
+
+    err = (getattr(proc, "stderr", "") or "").strip()
+    if err:
+        _print(f"gh issue comment failed: {err}", console=console)
+    else:
+        _print(f"gh issue comment failed (exit {proc.returncode}).", console=console)
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Browser tier + D-05 oversize escalation (Task 1)
 # ---------------------------------------------------------------------------
 
@@ -373,6 +526,8 @@ def submit_report(
     isatty_fn: Any = None,
     confirm_fn: Any = Confirm.ask,
     console: Any = None,
+    find_prior_report_fn: Any = find_prior_report,
+    comment_via_gh_fn: Any = comment_via_gh,
 ) -> None:
     """The single submission entry point (SUB-01/02) -- composes every
     Plan-02 builder over the ALREADY-COMPLETED `report`/`saved_json_path`;
@@ -381,32 +536,47 @@ def submit_report(
     Step 1 (D-03 refuse gate): when `is_submittable(report.auto_capture)`
     is `False`, prints the specific missing field name(s) among
     `chip`/`protocol`/`host_version` and returns WITHOUT calling
-    `browser_open`, `run_fn`, or `confirm_fn`.
+    `browser_open`, `run_fn`, `find_prior_report_fn`, or `confirm_fn`.
 
     Step 2: builds the sanitized body (`sanitize_dict` -> `build_body`) and
     title (`build_title`) -- the SAME sanitized body is what every
-    downstream seam (preview, off-TTY print, `gh`, browser) receives; a PII
-    vector present in a step reason never reaches a seam unscrubbed.
+    downstream seam (preview, off-TTY print, dedup-failure line, `gh`
+    create, `gh` comment, browser) receives; a PII vector present in a
+    step reason never reaches a seam unscrubbed.
 
-    Step 3 (D-04 off-TTY): when `isatty_fn()` is `False`, prints the
-    sanitized body plus the issue URL and returns WITHOUT opening the
-    browser or running `gh` -- no silent CI/off-TTY submission.
+    Step 3 (D-09 dedup query -- runs BEFORE any ask, on EVERY reached
+    path, TTY or not): `find_prior_report_fn(fingerprint, run_fn=run_fn)`
+    is called immediately after Step 2 and before the TTY branch, so
+    "the check runs first" (DEVTEST-05) holds universally, not merely on
+    an interactive run.
 
-    Step 4 (D-04 on-TTY): previews the body, then `confirm_fn(...)`; on
-    decline, aborts without sending (does NOT reuse the `-y/--yes`
-    `--destructive` bypass -- an explicit submit confirm is always
-    required).
+    Step 4 (D-04/D-10 off-TTY): prints the sanitized body and the issue
+    URL and returns WITHOUT ever calling `confirm_fn`, `submit_via_gh`, or
+    `comment_via_gh_fn` -- filing nothing (v1.21 SUB-01's ban on silent
+    off-TTY submission survives D-05's removal of the explicit flag). The
+    Step 3 dedup outcome is included in this output: the existing issue is
+    named when one was found, or an explicit line states the check could
+    not run when it was not.
 
-    Step 5 (tier dispatch): on confirm, dispatches to `submit_via_gh` when
-    `gh_available()`, falling back to `submit_via_browser` if the `gh`
-    attempt returns `None`; otherwise dispatches straight to
-    `submit_via_browser`.
+    Step 5 (the ask -- EVERY interactive run, DEVTEST-05): when Step 3
+    found a duplicate, names it and asks whether to add this run's
+    evidence as a comment (worded as "you appear to have already reported
+    this", never as a certainty, per F-5's eventually-consistent search
+    index caveat), explaining that the fingerprint excludes measured
+    voltages/error codes/reasons so a second run can still carry new
+    diagnostic detail. Otherwise asks the normal filing question -- and
+    when the dedup check could not run (D-10), an explicit line says so
+    before the SAME normal question, which is NEVER defaulted to decline
+    and is asked exactly as it would be on a clean check.
 
-    Step 6: a SUCCESSFUL `gh` submission echoes the created issue URL. This
-    exists because the URL was previously returned by `submit_via_gh` and
-    then dropped on the floor, so a tester who had just filed a report saw
-    exactly the same thing as one whose submission failed -- nothing. The
-    browser tier stays quiet on success: the opened tab is its own receipt,
+    Step 6 (dispatch): on a duplicate-comment "yes", calls
+    `comment_via_gh_fn`; a `None` return prints the failure reason and
+    degrades to the browser tier pointed at the EXISTING issue (Assumption
+    A1 handled by design: its truth value never affects correctness). On a
+    new-issue "yes", the unchanged tier dispatch: `submit_via_gh` when
+    `gh_available()`, degrading to `submit_via_browser` on a `None`
+    return, echoing the created URL on success. The browser tier stays
+    quiet on success in both branches: the opened tab is its own receipt,
     and nothing is filed until the tester presses Submit there.
     """
     isatty_fn = isatty_fn or (lambda: sys.stdin.isatty())
@@ -428,17 +598,67 @@ def submit_report(
         )
         return
 
-    sanitized = sanitize_dict(report.to_dict())
+    report_dict = report.to_dict()
+    sanitized = sanitize_dict(report_dict)
     title = build_title(report, chip)
     body = build_body(sanitized, report.results, include_json=True)
+
+    fingerprint = report_dict["dedup_fingerprint"]
+    prior_url, dedup_ran = find_prior_report_fn(fingerprint, run_fn=run_fn)
 
     if not isatty_fn():
         url = build_issue_url(title, body)
         _print(body, console=console)
         _print(url, console=console)
+        if prior_url:
+            _print(
+                f"Note: you appear to have already reported this -- see {prior_url}.",
+                console=console,
+            )
+        elif not dedup_ran:
+            _print(
+                "Note: the duplicate check could not run (gh absent, "
+                "unauthenticated, or offline).",
+                console=console,
+            )
         return
 
     _print(body, console=console)
+
+    if prior_url:
+        if not confirm_fn(
+            f"You appear to have already reported this -- see {prior_url}. "
+            "Add this run's evidence as a comment? (The dedup fingerprint "
+            "excludes measured voltages, error codes and reasons, so a "
+            "second run can still carry new diagnostic detail.)",
+            default=False,
+        ):
+            return
+        comment_url = comment_via_gh_fn(prior_url, body, run_fn=run_fn, console=console)
+        if comment_url is None:
+            _print(
+                "The gh comment failed -- degrading to the browser tier "
+                "on the existing issue.",
+                console=console,
+            )
+            submit_via_browser(
+                title,
+                body,
+                saved_json_path,
+                browser_open=browser_open,
+                console=console,
+            )
+        else:
+            _print(f"Comment added: {comment_url}", console=console)
+        return
+
+    if not dedup_ran:
+        _print(
+            "Note: the duplicate check could not run (gh absent, "
+            "unauthenticated, or offline) -- asking anyway.",
+            console=console,
+        )
+
     if not confirm_fn(f"Submit this report to {SUBMIT_REPO}?", default=False):
         return
 

@@ -8,12 +8,22 @@ Unit tests for firestarter.submit (v1.21 Phase 113).
 
 No PATH, network, or browser is ever touched -- every seam (`which_fn`,
 `run_fn`) is injected with a `Mock`.
+
+Phase 121 Plan 11 (DEVTEST-05/06) added: `find_prior_report`/`comment_via_gh`
+unit legs (D-09/D-11); `submit_report`'s dedup-first/always-ask/comment-on-
+duplicate behavioural legs (D-09/D-10/D-11); and a deny-set widening of the
+negative-argv idiom covering both `gh` paths' short forms (DEVTEST-06,
+RESEARCH Pitfall 6) -- see the "Task 3: deny-set negative argv" section
+below for the deliberate-break proof demonstrating the single-flag
+assertion it replaces would have missed the short `-l` form.
 """
 
 from __future__ import annotations
 
 from types import SimpleNamespace
 from unittest.mock import Mock
+
+import pytest
 
 from firestarter import submit
 
@@ -320,6 +330,29 @@ def test_submit_via_gh_argv_carries_nothing_permission_gated():
     assert "shell" not in run_fn.call_args.kwargs
 
 
+def test_submit_via_gh_argv_targets_the_project_wide_tracker():
+    # 120-12: a repo-target-specific negative leg (Idiom B). A mocked run_fn
+    # cannot prove GitHub actually accepts issues at henols/firestarter_prom
+    # -- that requires a live create against the real API. What it CAN
+    # honestly prove is that the create-path argv never carries the wrong
+    # repo slug (`henols/firestarter_app`, the repo this code lives in, per
+    # firestarter_prom#6) and always carries `--repo henols/firestarter_prom`
+    # immediately adjacent, with no `shell=True` escape hatch alongside it.
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout="https://github.com/henols/firestarter_prom/issues/1\n",
+        )
+    )
+    submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    repo_idx = argv.index("--repo")
+    assert argv[repo_idx + 1] == "henols/firestarter_prom"
+    assert "henols/firestarter_app" not in " ".join(argv)
+    assert "shell" not in run_fn.call_args.kwargs
+
+
 def test_submit_via_gh_failure_prints_captured_stderr():
     run_fn = Mock(
         return_value=Mock(
@@ -367,6 +400,172 @@ def test_gsd_inbox_label_constant_retained():
     # (`gh issue edit <n> --add-label gsd-inbox`), even though it is no
     # longer sent on the community-tester create path.
     assert submit.GSD_INBOX_LABEL == "gsd-inbox"
+
+
+# ---------------------------------------------------------------------------
+# Task 3: deny-set negative argv on BOTH gh paths (DEVTEST-06, D-09/D-11,
+# RESEARCH Pitfall 6) -- widens the single-flag idiom above, does not
+# replace it. `gh issue create`'s write/triage-gated flags are broader than
+# `--label` alone: `-l`/`--label`, `-a`/`--assignee`, `-m`/`--milestone`,
+# `-p`/`--project` (the last explicitly requires the `project` OAuth scope
+# per `gh issue create --help`). `gh issue comment` has NO label/assignee/
+# milestone/project flag at all -- its meaningful negatives are the
+# mutating/hijacking flags: `--delete-last`, `--edit-last`, `--yes`,
+# `-w`/`--web`, `-e`/`--editor`.
+# ---------------------------------------------------------------------------
+
+_CREATE_DENY_SET = [
+    "-l",
+    "--label",
+    "-a",
+    "--assignee",
+    "-m",
+    "--milestone",
+    "-p",
+    "--project",
+]
+
+_COMMENT_DENY_SET = [
+    "--delete-last",
+    "--edit-last",
+    "--yes",
+    "-w",
+    "--web",
+    "-e",
+    "--editor",
+]
+
+
+@pytest.mark.parametrize("flag", _CREATE_DENY_SET)
+def test_gh_create_argv_carries_no_permission_gated_flag(flag):
+    # Deny-set, not equality: an equality assertion against a fixed expected
+    # argv silently stops protecting the moment someone updates that list.
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0,
+            stdout="https://github.com/henols/firestarter_prom/issues/1\n",
+        )
+    )
+    submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    assert flag not in argv
+    # The retained value-absence + list-argv + no-shell assertions (the
+    # pre-existing idiom this widens).
+    assert submit.GSD_INBOX_LABEL not in argv
+    assert "gsd-inbox" not in " ".join(argv)
+    assert "shell" not in run_fn.call_args.kwargs
+
+
+@pytest.mark.parametrize("flag", _COMMENT_DENY_SET)
+def test_gh_comment_argv_carries_no_mutating_flag(flag):
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0, stdout="https://github.com/x/y/issues/1#issuecomment-1\n"
+        )
+    )
+    submit.comment_via_gh("https://github.com/x/y/issues/1", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    assert flag not in argv
+    assert "shell" not in run_fn.call_args.kwargs
+
+
+def test_gh_comment_argv_targets_the_project_wide_tracker():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0, stdout="https://github.com/x/y/issues/1#issuecomment-1\n"
+        )
+    )
+    submit.comment_via_gh("https://github.com/x/y/issues/1", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    repo_idx = argv.index("--repo")
+    assert argv[repo_idx + 1] == submit.SUBMIT_REPO
+
+
+def test_gh_comment_body_arrives_on_stdin():
+    run_fn = Mock(
+        return_value=Mock(
+            returncode=0, stdout="https://github.com/x/y/issues/1#issuecomment-1\n"
+        )
+    )
+    submit.comment_via_gh("https://github.com/x/y/issues/1", "My Body", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert "--body-file" in argv
+    body_idx = argv.index("--body-file")
+    assert argv[body_idx + 1] == "-"
+    # Body arrives on stdin (`input=`), never as an inline argument.
+    assert "My Body" not in argv
+    assert run_fn.call_args.kwargs["input"] == "My Body"
+
+
+def test_dedup_query_argv_is_read_only():
+    # Keeps a future edit from turning the read-only dedup probe into
+    # something that writes: no create/edit/comment/close/delete
+    # subcommand token, and no write-gated flag from either deny-set.
+    run_fn = Mock(return_value=Mock(returncode=0, stdout="[]"))
+    submit.find_prior_report("abc123def456", run_fn=run_fn)
+    argv = run_fn.call_args[0][0]
+    assert isinstance(argv, list)
+    for mutating_token in ("create", "edit", "comment", "close", "delete"):
+        assert mutating_token not in argv
+    for flag in _CREATE_DENY_SET + _COMMENT_DENY_SET:
+        assert flag not in argv
+    assert "shell" not in run_fn.call_args.kwargs
+
+
+@pytest.mark.parametrize(
+    "returncode,stdout,expected",
+    [
+        (
+            0,
+            '[{"number": 18, "title": "t", "url": "https://x/18"}]',
+            ("https://x/18", True),
+        ),
+        (0, "[]", (None, True)),
+        (4, "", (None, False)),
+        (1, "", (None, False)),
+    ],
+    ids=[
+        "duplicate-found",
+        "no-duplicate",
+        "unauthenticated-exit-4",
+        "generic-nonzero-exit-1",
+    ],
+)
+def test_dedup_distinguishes_all_three_signals(returncode, stdout, expected):
+    # Pins that the exit code alone is NEVER the discriminator: exit 0
+    # covers both "duplicate found" and "no duplicate" -- only the parsed
+    # payload tells them apart.
+    run_fn = Mock(return_value=Mock(returncode=returncode, stdout=stdout))
+    result = submit.find_prior_report("abc123def456", run_fn=run_fn)
+    assert result == expected
+
+
+def test_every_interactive_run_asks_even_when_the_check_fails():
+    report = _make_report()
+    find_prior_report_fn = Mock(return_value=(None, False))
+    confirm_fn = Mock(return_value=False)
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    confirm_fn.assert_called_once()
+    assert any("could not run" in m.lower() for m in printed)
 
 
 # ---------------------------------------------------------------------------
@@ -622,12 +821,17 @@ def test_refuse_missing_chip_names_chip():
 
 
 def test_offtty_prints_body_and_url_never_sends():
+    # find_prior_report_fn IS still invoked off-TTY (D-09: the dedup check
+    # runs before any ask, on every path) -- injected as a Mock here so
+    # run_fn/which_fn stay provably untouched by the FILING seams, which is
+    # this test's actual concern.
     report = _make_report()
     which_fn = Mock()
     run_fn = Mock()
     browser_open = Mock()
     confirm_fn = Mock()
     isatty_fn = Mock(return_value=False)
+    find_prior_report_fn = Mock(return_value=(None, True))
     printed: list[str] = []
     console = Mock()
     console.print.side_effect = lambda msg: printed.append(msg)
@@ -643,10 +847,12 @@ def test_offtty_prints_body_and_url_never_sends():
         isatty_fn=isatty_fn,
         confirm_fn=confirm_fn,
         console=console,
+        find_prior_report_fn=find_prior_report_fn,
     )
 
     assert any("| id | OK |" in m for m in printed)
     assert any(f"github.com/{submit.SUBMIT_REPO}/issues/new" in m for m in printed)
+    find_prior_report_fn.assert_called_once()
     browser_open.assert_not_called()
     run_fn.assert_not_called()
     confirm_fn.assert_not_called()
@@ -660,6 +866,7 @@ def test_tty_decline_aborts_without_sending():
     browser_open = Mock()
     confirm_fn = Mock(return_value=False)
     isatty_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
     saved = SimpleNamespace(name="dev-test-w27c512.json")
 
     submit.submit_report(
@@ -672,6 +879,7 @@ def test_tty_decline_aborts_without_sending():
         isatty_fn=isatty_fn,
         confirm_fn=confirm_fn,
         console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
     )
 
     confirm_fn.assert_called_once()
@@ -694,6 +902,7 @@ def test_tty_confirm_gh_available_dispatches_to_gh_not_browser():
     browser_open = Mock()
     confirm_fn = Mock(return_value=True)
     isatty_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
     saved = SimpleNamespace(name="dev-test-w27c512.json")
 
     submit.submit_report(
@@ -706,6 +915,7 @@ def test_tty_confirm_gh_available_dispatches_to_gh_not_browser():
         isatty_fn=isatty_fn,
         confirm_fn=confirm_fn,
         console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
     )
 
     assert run_fn.call_count == 2
@@ -739,6 +949,7 @@ def test_tty_confirm_gh_success_echoes_the_created_issue_url():
         isatty_fn=Mock(return_value=True),
         confirm_fn=Mock(return_value=True),
         console=console,
+        find_prior_report_fn=Mock(return_value=(None, True)),
     )
 
     assert any(created in m for m in printed)
@@ -767,6 +978,7 @@ def test_tty_confirm_gh_success_with_blank_stdout_still_confirms():
         isatty_fn=Mock(return_value=True),
         confirm_fn=Mock(return_value=True),
         console=console,
+        find_prior_report_fn=Mock(return_value=(None, True)),
     )
 
     assert any(submit.SUBMIT_REPO in m and "filed" in m.lower() for m in printed)
@@ -779,6 +991,7 @@ def test_tty_confirm_gh_unavailable_dispatches_to_browser():
     browser_open = Mock()
     confirm_fn = Mock(return_value=True)
     isatty_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
     saved = SimpleNamespace(name="dev-test-w27c512.json")
 
     submit.submit_report(
@@ -791,6 +1004,7 @@ def test_tty_confirm_gh_unavailable_dispatches_to_browser():
         isatty_fn=isatty_fn,
         confirm_fn=confirm_fn,
         console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
     )
 
     browser_open.assert_called_once()
@@ -809,6 +1023,7 @@ def test_tty_confirm_gh_create_fails_falls_back_to_browser():
     browser_open = Mock()
     confirm_fn = Mock(return_value=True)
     isatty_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
     saved = SimpleNamespace(name="dev-test-w27c512.json")
 
     submit.submit_report(
@@ -821,9 +1036,11 @@ def test_tty_confirm_gh_create_fails_falls_back_to_browser():
         isatty_fn=isatty_fn,
         confirm_fn=confirm_fn,
         console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
     )
 
     browser_open.assert_called_once()
+    assert run_fn.call_count == 2
 
 
 def test_submit_report_gh_failure_surfaces_stderr_before_browser_fallback():
@@ -847,6 +1064,7 @@ def test_submit_report_gh_failure_surfaces_stderr_before_browser_fallback():
     )
     confirm_fn = Mock(return_value=True)
     isatty_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
     saved = SimpleNamespace(name="dev-test-w27c512.json")
 
     printed: list[str] = []
@@ -869,6 +1087,7 @@ def test_submit_report_gh_failure_surfaces_stderr_before_browser_fallback():
         isatty_fn=isatty_fn,
         confirm_fn=confirm_fn,
         console=console,
+        find_prior_report_fn=find_prior_report_fn,
     )
 
     stderr_idx = next(
@@ -906,6 +1125,7 @@ def test_tty_body_sent_to_gh_is_sanitized():
         isatty_fn=Mock(return_value=True),
         confirm_fn=Mock(return_value=True),
         console=Mock(),
+        find_prior_report_fn=Mock(return_value=(None, True)),
     )
     create_call = run_fn.call_args_list[1]
     sent_body = create_call.kwargs["input"]
@@ -952,3 +1172,252 @@ def test_refuse_never_calls_isatty():
         console=Mock(),
     )
     isatty_fn.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Task 2: submit_report -- D-09/D-10/D-11 dedup-first, always-ask, comment
+# ---------------------------------------------------------------------------
+
+
+def test_dedup_seam_invoked_before_confirm_fn_on_every_ask_path():
+    # D-09: the dedup check runs BEFORE any ask. Assert relative call
+    # order, not merely that both were called.
+    report = _make_report()
+    order: list[str] = []
+    find_prior_report_fn = Mock(
+        side_effect=lambda *a, **k: (order.append("dedup"), (None, True))[1]
+    )
+    confirm_fn = Mock(side_effect=lambda *a, **k: (order.append("confirm"), True)[1])
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value=None),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    assert order == ["dedup", "confirm"]
+
+
+def test_no_duplicate_asks_once_and_dispatches_to_create_on_yes():
+    report = _make_report()
+    run_fn = Mock(
+        side_effect=[
+            Mock(returncode=0),  # gh auth status
+            Mock(
+                returncode=0,
+                stdout="https://github.com/henols/firestarter_prom/issues/9\n",
+            ),  # gh issue create
+        ]
+    )
+    confirm_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
+    comment_via_gh_fn = Mock()
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=run_fn,
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+    )
+
+    confirm_fn.assert_called_once()
+    ask_text = confirm_fn.call_args[0][0]
+    assert "Submit this report" in ask_text
+    comment_via_gh_fn.assert_not_called()
+    assert run_fn.call_count == 2
+
+
+def test_duplicate_found_asks_comment_question_and_dispatches_to_comment_on_yes():
+    report = _make_report()
+    prior_url = "https://github.com/henols/firestarter_prom/issues/18"
+    find_prior_report_fn = Mock(return_value=(prior_url, True))
+    comment_via_gh_fn = Mock(return_value=prior_url + "#issuecomment-1")
+    confirm_fn = Mock(return_value=True)
+    run_fn = Mock()
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=run_fn,
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+    )
+
+    confirm_fn.assert_called_once()
+    ask_text = confirm_fn.call_args[0][0]
+    assert prior_url in ask_text
+    assert "comment" in ask_text.lower()
+    comment_via_gh_fn.assert_called_once()
+    assert comment_via_gh_fn.call_args[0][0] == prior_url
+    # No new-issue create call is ever made on the duplicate branch.
+    run_fn.assert_not_called()
+
+
+def test_duplicate_comment_decline_does_not_comment():
+    report = _make_report()
+    prior_url = "https://github.com/henols/firestarter_prom/issues/18"
+    find_prior_report_fn = Mock(return_value=(prior_url, True))
+    comment_via_gh_fn = Mock()
+    confirm_fn = Mock(return_value=False)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+    )
+
+    comment_via_gh_fn.assert_not_called()
+
+
+def test_duplicate_comment_fails_falls_back_to_browser_on_existing_issue():
+    report = _make_report()
+    prior_url = "https://github.com/henols/firestarter_prom/issues/18"
+    find_prior_report_fn = Mock(return_value=(prior_url, True))
+    comment_via_gh_fn = Mock(return_value=None)
+    browser_open = Mock()
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=Mock(),
+        browser_open=browser_open,
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+    )
+
+    browser_open.assert_called_once()
+
+
+def test_dedup_check_failed_still_asks_and_prints_could_not_run_line():
+    report = _make_report()
+    find_prior_report_fn = Mock(return_value=(None, False))
+    confirm_fn = Mock(return_value=False)
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value=None),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    confirm_fn.assert_called_once()
+    ask_text = confirm_fn.call_args[0][0]
+    assert "Submit this report" in ask_text
+    assert any("could not run" in m.lower() for m in printed)
+
+
+def test_off_tty_names_existing_issue_when_duplicate_found():
+    report = _make_report()
+    prior_url = "https://github.com/henols/firestarter_prom/issues/18"
+    find_prior_report_fn = Mock(return_value=(prior_url, True))
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=False),
+        confirm_fn=Mock(),
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    assert any(prior_url in m for m in printed)
+
+
+def test_off_tty_prints_could_not_run_line_when_dedup_check_failed():
+    report = _make_report()
+    find_prior_report_fn = Mock(return_value=(None, False))
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=False),
+        confirm_fn=Mock(),
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    assert any("could not run" in m.lower() for m in printed)
+
+
+def test_comment_body_sent_is_sanitized():
+    # A PII vector present in a step reason must never reach comment_via_gh
+    # unscrubbed (mirrors test_tty_body_sent_to_gh_is_sanitized for the
+    # duplicate-comment branch).
+    report = _make_report(pii="failed reading /home/alice/scratch/file.bin")
+    prior_url = "https://github.com/henols/firestarter_prom/issues/18"
+    find_prior_report_fn = Mock(return_value=(prior_url, True))
+    comment_via_gh_fn = Mock(return_value=prior_url + "#issuecomment-1")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        SimpleNamespace(name="x.json"),
+        which_fn=Mock(return_value="/usr/bin/gh"),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=Mock(return_value=True),
+        console=Mock(),
+        find_prior_report_fn=find_prior_report_fn,
+        comment_via_gh_fn=comment_via_gh_fn,
+    )
+
+    sent_body = comment_via_gh_fn.call_args[0][1]
+    assert "alice" not in sent_body
+    assert "/home/<user>/scratch/file.bin" in sent_body

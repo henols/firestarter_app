@@ -95,13 +95,26 @@ def test_convert_uv_eprom_no_flag_can_erase(db: EpromDatabase) -> None:
     assert out["flags"] & FLAG_CAN_ERASE == 0
 
 
-def test_convert_at28c256_flash_eeprom_flag_can_erase(db: EpromDatabase) -> None:
-    """AT28C256 (Flash/EEPROM, routed to 0x0D) carries FLAG_CAN_ERASE — the flag is
-    firmware-inert on the 0x0D configure_eeprom28c path (D-03), so setting it is safe."""
+def test_convert_at28c256_flash_eeprom_flag_can_erase_cleared(
+    db: EpromDatabase,
+) -> None:
+    """REVERSAL RECORD (Phase 121 D-12): this test previously asserted AT28C256
+    (Flash/EEPROM, routed to 0x0D) carried FLAG_CAN_ERASE, on the claim that the
+    flag is firmware-inert on the 0x0D configure_eeprom28c path (D-03) and
+    therefore safe to leave set.
+
+    D-12 reverses that POLICY, not the fact: configure_eeprom28c genuinely
+    never reads FLAG_CAN_ERASE -- the D-03 firmware-inertness claim was never
+    wrong. What changed is that an inert-but-false capability advertisement is
+    still false, and DEVTEST-01's `dev test` sweep reads that advertisement and
+    plans a real erase step that reports OK having done nothing. D-12 clears
+    the flag for protocol 0x0D at the source (`database.py`), so this test now
+    asserts the bit is CLEAR.
+    """
     full = db.get_eprom("AT28C256")
     assert full is not None
     out = db.convert_to_programmer(full)
-    assert out["flags"] & FLAG_CAN_ERASE
+    assert out["flags"] & FLAG_CAN_ERASE == 0
 
 
 def test_convert_w29c040_no_flag_can_erase(db: EpromDatabase) -> None:

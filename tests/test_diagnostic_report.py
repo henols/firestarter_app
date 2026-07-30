@@ -327,6 +327,137 @@ def test_dedup_fingerprint_in_json_block():
 
 
 # ---------------------------------------------------------------------------
+# Partial-vs-full-write fingerprint differentiation (D-06/D-08, Phase 121
+# Plan 07). This is D-06/D-08's proof, not merely its argument: the GRAD-01
+# no-auto-graduate lock (Phase 114) holds end to end THROUGH THE FINGERPRINT
+# -- because `dedup_fingerprint` hashes `result.op` per step, a partial run
+# (`OP_WRITE_PARTIAL = "write-partial"`) and a full run (`OP_WRITE = "write"`)
+# of the same chip never hash equal and therefore never land in the same
+# `count_agreeing` group -- NOT through the `ladder_state` tag, which
+# `build_db_diff` assigns identically for both run shapes with zero code
+# change. A future reader who drops the op name from `dedup_fingerprint`'s
+# inputs should watch `test_fingerprint_differs_for_partial_versus_full_write`
+# and `test_partial_and_full_runs_never_cross_agree` below go RED.
+# ---------------------------------------------------------------------------
+
+
+def test_fingerprint_differs_for_partial_versus_full_write():
+    """Two reports identical in chip, protocol, verdicts and classifications,
+    differing ONLY in the write step's op (`write` vs `write-partial`),
+    produce DIFFERENT dedup_fingerprint values (D-06)."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    full_specs = [
+        ("id", VERDICT_OK, None, ""),
+        ("write", VERDICT_OK, None, ""),
+        ("verify", VERDICT_OK, None, ""),
+    ]
+    partial_specs = [
+        ("id", VERDICT_OK, None, ""),
+        ("write-partial", VERDICT_OK, None, ""),
+        ("verify", VERDICT_OK, None, ""),
+    ]
+    report_full = _minimal_report(step_specs=full_specs)
+    report_partial = _minimal_report(step_specs=partial_specs)
+
+    assert dedup_fingerprint(report_full) != dedup_fingerprint(report_partial)
+
+
+def test_fingerprint_is_stable_for_identical_partial_runs():
+    """Two independently-built reports with identical partial-run content
+    produce the SAME fingerprint -- proving the differentiation above is a
+    genuine op-name signal, not hash noise (D-06)."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    partial_specs = [
+        ("id", VERDICT_OK, None, ""),
+        ("write-partial", VERDICT_OK, None, ""),
+        ("verify", VERDICT_OK, None, ""),
+    ]
+    report_a = _minimal_report(step_specs=partial_specs)
+    report_b = _minimal_report(step_specs=partial_specs)
+
+    assert dedup_fingerprint(report_a) == dedup_fingerprint(report_b)
+
+
+def test_partial_run_still_tags_community_reported():
+    """`build_db_diff` over an all-OK result set whose write step is
+    `write-partial` yields the SAME ladder_state as the equivalent full run
+    -- `community-reported` -- with NO code change to `build_db_diff` (D-08).
+    Also asserts the human-gated `community-confirmed` state is never
+    produced, partial run or otherwise (T-121-26)."""
+    from firestarter.diagnostic_report import (
+        _LADDER_COMMUNITY_CONFIRMED,
+        build_db_diff,
+    )
+
+    partial_results = [
+        StepResult(op="id", verdict=VERDICT_OK, reason="", fingerprint=None),
+        StepResult(op="write-partial", verdict=VERDICT_OK, reason="", fingerprint=None),
+        StepResult(op="verify", verdict=VERDICT_OK, reason="", fingerprint=None),
+    ]
+    full_results = [
+        StepResult(op="id", verdict=VERDICT_OK, reason="", fingerprint=None),
+        StepResult(op="write", verdict=VERDICT_OK, reason="", fingerprint=None),
+        StepResult(op="verify", verdict=VERDICT_OK, reason="", fingerprint=None),
+    ]
+
+    diff_partial = build_db_diff("M8720", _REAL_DB, partial_results)
+    diff_full = build_db_diff("M8720", _REAL_DB, full_results)
+
+    assert diff_partial.ladder_state == "community-reported"
+    assert diff_partial.ladder_state == diff_full.ladder_state
+    assert diff_partial.ladder_state != _LADDER_COMMUNITY_CONFIRMED
+    assert diff_full.ladder_state != _LADDER_COMMUNITY_CONFIRMED
+
+
+def test_partial_and_full_runs_never_cross_agree():
+    """Feeding count_agreeing two saved bodies -- one partial, one full --
+    for the SAME chip yields TWO groups of one each, never one group of two
+    (D-06/D-08). This is the GRAD-01 lock's mechanical proof: a 256-byte
+    partial run can never count toward a full run's N>=2 promotion.
+
+    Built via the REAL pipeline (`sanitize_dict(report.to_dict())` into
+    `build_body`, `firestarter/submit.py`) so the fenced JSON `count_agreeing`
+    parses is the real artifact shape, not a hand-rolled blob.
+    """
+    from firestarter.diagnostic_report import (
+        AutoCapture,
+        DiagnosticReport,
+        TransportHealth,
+    )
+    from firestarter.submit import build_body, build_title, sanitize_dict
+    from tools.parse_devtest_issue import count_agreeing
+
+    def _saved_body(op: str) -> str:
+        results = [
+            StepResult(op="id", verdict=VERDICT_OK, reason="", fingerprint=None),
+            StepResult(op=op, verdict=VERDICT_OK, reason="", fingerprint=None),
+            StepResult(op="verify", verdict=VERDICT_OK, reason="", fingerprint=None),
+        ]
+        auto_capture = AutoCapture(
+            host_version="3.0.0b10", chip="M8720", protocol="0x08"
+        )
+        report = DiagnosticReport(
+            auto_capture=auto_capture,
+            transport=TransportHealth(),
+            plan=Plan(name="M8720"),
+            results=results,
+        )
+        sanitized = sanitize_dict(report.to_dict())
+        build_title(report, "M8720")  # exercised for realism; title unused here
+        return build_body(sanitized, report.results, include_json=True)
+
+    body_partial = _saved_body("write-partial")
+    body_full = _saved_body("write")
+
+    counts = count_agreeing([body_partial, body_full])
+
+    assert len(counts) == 2
+    assert sorted(counts.values()) == [1, 1]
+
+
+# ---------------------------------------------------------------------------
 # Single-source dual-render (RPT-01, D-01)
 # ---------------------------------------------------------------------------
 

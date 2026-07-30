@@ -36,6 +36,7 @@ Coverage:
      the real, clean `submit.py` still passes with the PASS line naming it.
 """
 
+import importlib
 import os
 import subprocess
 import sys
@@ -368,3 +369,43 @@ def test_env_override_points_at_a_clean_submit_fixture_still_passes(
         f"fixture.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     assert "PASS:" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Test 9 (Phase 121 Plan 09, RESEARCH C-4): allow-list completeness leg
+# ---------------------------------------------------------------------------
+
+
+def test_handler_function_names_all_resolve_to_real_callables() -> None:
+    """Every name in `_HANDLER_FUNCTION_NAMES` MUST resolve to a real
+    callable in `firestarter.cli_handlers` -- turns the pre-Plan-121-09
+    `_is_uv_eprom` dangling entry (present in the allow-list since Phase 112,
+    pointing at nothing) into a permanently-enforced invariant rather than a
+    one-off fix. A name that stops resolving here means a helper was
+    renamed/removed without updating this gate -- exactly the silent
+    under-coverage RESEARCH C-4 proved is possible."""
+    check_devtest_orchestrator = importlib.import_module(
+        "tools.check_devtest_orchestrator"
+    )
+    from firestarter import cli_handlers
+
+    missing = [
+        name
+        for name in check_devtest_orchestrator._HANDLER_FUNCTION_NAMES
+        if not callable(getattr(cli_handlers, name, None))
+    ]
+    assert missing == [], (
+        f"_HANDLER_FUNCTION_NAMES contains name(s) with no matching callable "
+        f"in cli_handlers: {missing}"
+    )
+
+
+def test_handler_function_names_contains_the_new_uv_scope_helpers() -> None:
+    """`_resolve_write_scope` and `_is_uv_eprom` (this plan's two new
+    handler helpers) are both named in the allow-list -- the mandatory task
+    RESEARCH C-4 called out, not merely avoiding a gate trip."""
+    check_devtest_orchestrator = importlib.import_module(
+        "tools.check_devtest_orchestrator"
+    )
+    assert "_is_uv_eprom" in check_devtest_orchestrator._HANDLER_FUNCTION_NAMES
+    assert "_resolve_write_scope" in check_devtest_orchestrator._HANDLER_FUNCTION_NAMES

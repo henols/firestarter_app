@@ -261,6 +261,14 @@ def classify_fingerprint(
 # check rather than introduce a new cross-module constant.
 _PROTOCOL_FLASH4 = 0x05
 
+# Protocol 0x0D (EEPROM_POLL / "28C family", firmware's configure_eeprom28c)
+# has no erase operation at all -- Phase 121 D-12 clears FLAG_CAN_ERASE for
+# this protocol at the source (database.py:582-...) so derive_plan's
+# generic NA-erase else-branch fires for it "for free". This constant exists
+# so the family-fact NA reason arm below names the protocol by symbol, not a
+# bare literal.
+_PROTOCOL_EEPROM_28C = 0x0D
+
 # SRAM/FRAM electrical types and protocol ids: blank-check has no meaningful
 # concept for volatile/byte-rewritable memory. derive_plan owns this NA
 # decision up front (RESEARCH nuance recommendation (a)) rather than relying
@@ -269,11 +277,20 @@ _PROTOCOL_FLASH4 = 0x05
 _SRAM_FRAM_ETYPES = frozenset({"SRAM", "FRAM"})
 _SRAM_PROTO_IDS = frozenset({0x0E, 0x27, 0x28, 0x29})
 
-# Ordered op vocabulary (id-check FIRST per SWEEP-03).
+# Ordered op vocabulary (id-check FIRST per SWEEP-03). Seven strings as of
+# Phase 121 D-06/D-07 (this plan): `OP_WRITE_PARTIAL` joins the vocabulary so
+# the partial-vs-full distinction is visible in the op name itself -- every
+# consumer that reads `StepResult.op` (the `dedup_fingerprint` hash, the
+# report renderer) sees it without learning a new field. D-07 deliberately
+# stops the vocabulary here: no `verify-partial` partner exists, because a
+# verify's region is definitionally the preceding write's region (D-07,
+# `Step.write_region` is set equal on both steps by `derive_plan`) -- a
+# partner string would encode zero new information.
 OP_ID = "id"
 OP_READ = "read"
 OP_BLANK_CHECK = "blank-check"
 OP_WRITE = "write"
+OP_WRITE_PARTIAL = "write-partial"
 OP_VERIFY = "verify"
 OP_ERASE = "erase"
 
@@ -287,12 +304,24 @@ class Step:
     Phase 109 (D-01, SAFE-01) a `destructive=False` call to `derive_plan`
     structurally OMITS these steps from `Plan.steps` -- see `Plan.
     locked_destructive` for where they are recorded instead.
+
+    `write_region` (D-02, this plan) is the CONSEQUENCE of `Plan.is_uv`: set
+    once by `derive_plan` as `(start, length)` on both the write step and the
+    verify step (a verify's region is definitionally the preceding write's --
+    D-07). `None` means "use the engine default region". The WIDTH always
+    originates from a module constant (`_WRITE_REGION_LENGTH` or
+    `_UV_WRITE_REGION_LENGTH`) and NEVER from a DB field (SC4 -- a malicious
+    or misconfigured DB entry must not be able to widen the write window);
+    `memory-size` only bounds WHERE the window is placed. `derive_plan` sets
+    this field and only this field; every downstream reader (`run_plan`, the
+    execution layer) may only READ it, never re-derive it.
     """
 
     op: str
     supported: bool
     reason: str
     destructive: bool = False
+    write_region: tuple[int, int] | None = None
 
 
 @dataclass
@@ -306,33 +335,106 @@ class Plan:
     it exists solely so the SWEEP-05 banner / Phase-110 report can still
     count M (the steps a `--destructive` run would execute) without a
     second `derive_plan` call and without ever giving the executor a code
-    path to a destructive op in a non-destructive run.
+    path to a destructive op in a non-destructive run. As of Phase 121
+    (this plan's D-02 correction) this list becomes permanently empty in
+    production after plan `121-09` lands -- no CLI path will reach
+    `write_scope="none"` any longer. The field and the N-of-M banner are
+    nonetheless KEPT, not deleted: the banner renders unconditionally and
+    still carries signal whenever the chip-ID destructive gate closes or
+    `resolve_chip` refuses a step (RESEARCH C-6). Removal is an explicitly
+    deferred cleanup, not this phase's work.
+
+    `is_uv` (D-02, this plan) is THE DECISION: whether this chip is a
+    UV-erasable EPROM, decided EXACTLY ONCE by `derive_plan` from the `full`
+    DB dict's `electrical-type` field (the only axis that is both complete
+    and exact -- 301 of 301 UV parts, 0 non-UV wrongly included; see
+    `is_uv_eprom`). `run_plan` and the execution layer may only READ this
+    field -- nothing downstream may re-derive UV-ness from a proxy (e.g. the
+    execution-time `algorithm == 0x0B` guess, which only matches 32 of 301).
     """
 
     name: str
     steps: list[Step] = field(default_factory=list)
     reason: str = ""
     locked_destructive: list[tuple[str, str]] = field(default_factory=list)
+    is_uv: bool = False
 
 
-def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
+def is_uv_eprom(full: dict) -> bool:
+    """Exact, name-keyed UV-EPROM predicate (D-02, DEVTEST-03 axis).
+
+    Measured exact at 301/301 against the live database: every DB entry
+    whose `electrical-type` is `"UV-EPROM"` and none whose isn't. Takes the
+    **`full`** DB dict from `db.get_eprom(name)` -- NEVER `resolve_chip`'s
+    /`convert_to_programmer`'s programmer dict, which does not carry
+    `electrical-type` and is unreachable from `derive_plan`'s callers at
+    execution time.
+
+    Rejected alternatives: the execution-time `algorithm == 0x0B` proxy
+    (`_write_region_for`'s pre-existing guess) matches only 32 of 301 UV
+    parts -- 269 silently fall through; widening to
+    `{0x07, 0x08, 0x0B}` recovers 301/301 but wrongly includes 28 non-UV
+    EEPROMs (e.g. `W27C512`), forfeiting the `0x0B`-implies-UV exclusivity
+    property. Neither alternative is exact; only the `electrical-type` field
+    is.
+
+    Consequence under D-01: a UV part that fails this test receives an
+    UNPROMPTED FULL-DEVICE WRITE. A guess here is a chip-destroying bug, not
+    a coverage gap.
+    """
+    return full.get("electrical-type", "") == "UV-EPROM"
+
+
+_WRITE_SCOPE_NONE = "none"
+_WRITE_SCOPE_PARTIAL = "partial"
+_WRITE_SCOPE_FULL = "full"
+_WRITE_SCOPES = frozenset({_WRITE_SCOPE_NONE, _WRITE_SCOPE_PARTIAL, _WRITE_SCOPE_FULL})
+
+
+def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     """Derive the ordered op list for `name` strictly from frozen DB fields.
 
     Reads `db.get_eprom(name)` then `db.convert_to_programmer(full)` --
     NEVER `chip_resolver.resolve_chip` (Pattern 1/2, T-108-06) -- so this
     works even for chips whose `support_status` would make `resolve_chip`
-    refuse them. `destructive` is read ONLY from this call's kwarg -- never
-    from config or environment (SAFE-01). When `destructive=False`, the
-    write/erase steps that a `destructive=True` call would add are
-    structurally OMITTED from the returned `Plan.steps` and instead
-    recorded as `(op, reason)` tuples on the advisory `Plan.
-    locked_destructive` field (D-01) -- `run_plan` has no code path to
-    iterate them. When `destructive=True`, `steps` contains write/erase
-    exactly as before and `locked_destructive` is empty.
+    refuse them. `write_scope` is read ONLY from this call's kwarg -- never
+    from config or environment (SAFE-01).
+
+    Three accepted literal values, fail-closed against anything else:
+
+    - `"none"` -- write/verify/erase are structurally OMITTED from the
+      returned `Plan.steps` and instead recorded as `(op, reason)` tuples on
+      the advisory `Plan.locked_destructive` field (D-01) -- `run_plan` has
+      no code path to iterate them.
+    - `"full"` -- write, verify and erase are real supported steps in that
+      order; `locked_destructive` is empty.
+    - `"partial"` -- same step list as `"full"`, but the write/verify steps'
+      `Step.write_region` is the top-anchored UV window instead of the
+      engine default. Plan `121-06` will swap this scope's emitted write op
+      to `OP_WRITE_PARTIAL`; here it is still `OP_WRITE`.
+
+    An unrecognised `write_scope` raises `ValueError` naming the offending
+    value and the three accepted literals -- this function never silently
+    falls back to a mode that writes.
+
+    `Plan.is_uv` is decided HERE and ONLY HERE, from `is_uv_eprom(full)` --
+    the only axis that is both complete and exact (301/301). `Step.
+    write_region` is likewise set HERE and ONLY HERE, on both the write step
+    and the verify step (a verify's region is definitionally the preceding
+    write's -- D-07); downstream code may only READ these two fields, never
+    re-derive them. The write-region WIDTH always comes from a module
+    constant (`_UV_WRITE_REGION_LENGTH` / `_WRITE_REGION_LENGTH`), NEVER from
+    any DB field (SC4) -- `memory-size` only bounds WHERE the window sits.
 
     Unknown chips (no DB entry) return an empty `Plan` with `reason` set --
     there is nothing to derive.
     """
+    if write_scope not in _WRITE_SCOPES:
+        raise ValueError(
+            f"derive_plan: unrecognised write_scope {write_scope!r} -- "
+            f"must be one of {sorted(_WRITE_SCOPES)!r}"
+        )
+
     full = db.get_eprom(name)
     if not full:
         return Plan(name=name, steps=[], reason=f"{name}: not found in database")
@@ -342,6 +444,24 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
     etype = full.get("electrical-type", "")
     can_erase = bool(prog.get("flags", 0) & FLAG_CAN_ERASE)
     chip_id = prog.get("chip-id", 0)
+    is_uv = is_uv_eprom(full)
+    write_execute = write_scope in (_WRITE_SCOPE_FULL, _WRITE_SCOPE_PARTIAL)
+
+    # Region computation lives HERE, in derive_plan, computed from Plan.is_uv
+    # and full["memory-size"] -- never from any DB WIDTH field (SC4). The
+    # WIDTH always comes from _UV_WRITE_REGION_LENGTH / _WRITE_REGION_LENGTH.
+    #
+    # "full" reproduces today's execution-time _write_region_for exactly:
+    # is_uv picks the top-anchored window (with its defensive fallback),
+    # non-UV gets the engine default region. "partial" always applies the
+    # top-anchored-window-or-fallback formula regardless of is_uv -- its
+    # whole purpose is the small-region write, so it is not is_uv-gated here.
+    if write_scope == _WRITE_SCOPE_FULL:
+        write_region = _top_anchored_or_default(full) if is_uv else _DEFAULT_REGION
+    elif write_scope == _WRITE_SCOPE_PARTIAL:
+        write_region = _top_anchored_or_default(full)
+    else:
+        write_region = None
 
     steps: list[Step] = []
     locked_destructive: list[tuple[str, str]] = []
@@ -376,25 +496,43 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
         steps.append(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
 
     # write: always supported, always flagged destructive. When
-    # destructive=False the step is OMITTED from the executable `steps`
+    # write_scope="none" the step is OMITTED from the executable `steps`
     # list -- structurally absent, not skipped at exec time (D-01, SAFE-01)
     # -- and recorded on the advisory `locked_destructive` list instead.
-    if destructive:
-        steps.append(Step(op=OP_WRITE, supported=True, reason="", destructive=True))
-    else:
-        locked_destructive.append((OP_WRITE, "destructive=False: write omitted (D-01)"))
-
-    # verify: always supported, but only executable on a destructive plan --
-    # it follows the same D-01 write/erase gating (there is no preceding
-    # write on a non-destructive run, so a bare verify would compare a
-    # freshly-generated pattern against unrelated chip contents). Positioned
-    # after write and before erase so the destructive step order (write,
-    # verify, erase) is unchanged.
-    if destructive:
-        steps.append(Step(op=OP_VERIFY, supported=True, reason=""))
+    # write_scope="partial" emits `OP_WRITE_PARTIAL` instead of `OP_WRITE`
+    # (D-06, Phase 121 Plan 06) so the partial-vs-full distinction is visible
+    # in the op string itself, everywhere `StepResult.op` is read.
+    if write_execute:
+        write_op = OP_WRITE_PARTIAL if write_scope == _WRITE_SCOPE_PARTIAL else OP_WRITE
+        steps.append(
+            Step(
+                op=write_op,
+                supported=True,
+                reason="",
+                destructive=True,
+                write_region=write_region,
+            )
+        )
     else:
         locked_destructive.append(
-            (OP_VERIFY, "destructive=False: verify omitted (D-01)")
+            (OP_WRITE, 'write_scope="none": write omitted (D-01)')
+        )
+
+    # verify: always supported, but only executable on a write-executing
+    # plan -- it follows the same D-01 write/erase gating (there is no
+    # preceding write on a non-executing run, so a bare verify would compare
+    # a freshly-generated pattern against unrelated chip contents).
+    # Positioned after write and before erase so the destructive step order
+    # (write, verify, erase) is unchanged. Its write_region equals the write
+    # step's -- a verify's region is definitionally the preceding write's
+    # (D-07).
+    if write_execute:
+        steps.append(
+            Step(op=OP_VERIFY, supported=True, reason="", write_region=write_region)
+        )
+    else:
+        locked_destructive.append(
+            (OP_VERIFY, 'write_scope="none": verify omitted (D-01)')
         )
 
     # erase: supported only if FLAG_CAN_ERASE is set AND protocol != 0x05
@@ -402,29 +540,66 @@ def derive_plan(name: str, db: Any, *, destructive: bool = False) -> Plan:
     # Pitfall 6). UV-EPROM never has the flag set (electrical-type is not in
     # {EEPROM, Flash/EEPROM}) so it is NA here for the same condition.
     if can_erase and protocol != _PROTOCOL_FLASH4:
-        if destructive:
+        if write_execute:
             steps.append(Step(op=OP_ERASE, supported=True, reason="", destructive=True))
         else:
             locked_destructive.append(
-                (OP_ERASE, "destructive=False: erase omitted (D-01)")
+                (OP_ERASE, 'write_scope="none": erase omitted (D-01)')
             )
     else:
         if protocol == _PROTOCOL_FLASH4:
             reason = "flash4 (0x05) auto-erases per page; no separate erase op"
         elif etype == "UV-EPROM":
             reason = "UV-EPROM has no electrical erase (UV light only)"
+        elif protocol == _PROTOCOL_EEPROM_28C:
+            # Phase 121 D-12 deliberately routes protocol 0x0D through this
+            # generic else (no 0x0D-local supported/unsupported branch was
+            # added) -- but the generic fallback's flag-keyed wording below
+            # names an internal mechanism, not a fact a community tester can
+            # act on. DEVTEST-01 requires the FAMILY FACT: protocol 0x0D and
+            # the 28C family simply has no erase operation, ever -- never
+            # the flag name.
+            reason = (
+                "protocol 0x0D (28C family) has no erase operation; "
+                "each page write auto-erases internally"
+            )
         else:
             reason = "FLAG_CAN_ERASE not set for this chip"
         # NA erase is never a supported executable step regardless of the
-        # destructive kwarg -- there is nothing to lock/omit here (it was
-        # never runnable), so it is NOT added to locked_destructive either.
+        # write_scope -- there is nothing to lock/omit here (it was never
+        # runnable), so it is NOT added to locked_destructive either.
         steps.append(
             Step(op=OP_ERASE, supported=False, reason=reason, destructive=True)
         )
 
     return Plan(
-        name=name, steps=steps, reason="", locked_destructive=locked_destructive
+        name=name,
+        steps=steps,
+        reason="",
+        locked_destructive=locked_destructive,
+        is_uv=is_uv,
     )
+
+
+def _top_anchored_or_default(full: dict) -> tuple[int, int]:
+    """Top-anchored high-address window, or the engine default region (D-02).
+
+    Always computes `(mem_size - _UV_WRITE_REGION_LENGTH,
+    _UV_WRITE_REGION_LENGTH)` from `full["memory-size"]` when it is large
+    enough to fit the window, with a defensive fallback to the engine
+    default `(_WRITE_REGION_START, _WRITE_REGION_LENGTH)` when `memory-size`
+    is missing or too small (a fallback that would otherwise produce a
+    negative start). The WIDTH always comes from the `_UV_WRITE_REGION_LENGTH`
+    module constant -- never from any DB field (SC4); `memory-size` only
+    bounds WHERE the window sits. Never returns `None` -- both callers
+    (`write_scope="full"` for a UV part, `write_scope="partial"`
+    unconditionally) want a concrete region, not "use the engine default"
+    deferred to a downstream reader.
+    """
+    mem_size = int(full.get("memory-size", 0) or 0)
+    if mem_size >= _UV_WRITE_REGION_LENGTH:
+        return mem_size - _UV_WRITE_REGION_LENGTH, _UV_WRITE_REGION_LENGTH
+    return _DEFAULT_REGION
 
 
 # ---------------------------------------------------------------------------
@@ -450,11 +625,33 @@ VERDICT_MARGINAL = "marginal"
 
 # Ops that mutate the chip -- gated by the id-first destructive_gate (SWEEP-03)
 # and run N>=2 with a `marginal`-on-disagreement policy (SWEEP-04, Task 3).
-_DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_ERASE})
-# Steps whose per-run outcome is compared for the N>=2 disagreement policy
-# (D-06: destructive/verify ONLY -- write, erase, verify; read disagreement is
-# a divergence metric, never a verdict flip).
-_MULTI_RUN_OPS = frozenset({OP_WRITE, OP_ERASE, OP_VERIFY})
+# This is the ONLY live safety use of either frozenset in this module: it is
+# the exact set `run_plan`'s chip-ID destructive gate (`if step.op in
+# _DESTRUCTIVE_OPS and destructive_gate_closed:`) consults before admitting a
+# step. `OP_WRITE_PARTIAL` joins it here (D-06, Phase 121 Plan 06) precisely
+# because a partial write is still a write -- a write-shaped op absent from
+# this frozenset would write to a misidentified chip ungated by the chip-ID
+# mismatch check, which is a critical-severity correctness bug, not a
+# cosmetic omission.
+_DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE})
+# LIVE DISPATCH ALLOW-LIST (121-02, T-121-05/06/07). Originally documented as
+# only the N>=2 disagreement-policy set (D-06: destructive/verify ONLY --
+# write, erase, verify; read disagreement is a divergence metric, never a
+# verdict flip) -- but RESEARCH C-5 / Open Question 4 found this frozenset had
+# ZERO references anywhere in the tree before this change: `_dispatch_step`'s
+# trailing `return _dispatch_multi_run(...)` was unconditional, and
+# `_dispatch_multi_run`'s run loop ended in a bare `else: # OP_ERASE`, so ANY
+# op string reached `operator.erase_eprom()` and reported `VERDICT_OK`
+# (RESEARCH Pitfall 1a, proven empirically: an unmapped op called
+# erase_eprom() twice and returned OK). This is now the dispatch allow-list
+# both `_dispatch_step` and `_dispatch_multi_run` gate on -- the host mirror
+# of Phase 119 D-06/D-07's firmware NULL-`main` refusal
+# (`operation_utils.cpp::op_execute_stateful_operation`). Made LIVE, not
+# documented dead: `OP_WRITE_PARTIAL` (Phase 121 Plan 06, D-06) is added here
+# too -- any future op added to the vocabulary MUST be added to both
+# frozensets in this block or it fails closed by construction (proven by a
+# deliberate-break test, plan 121-06 Task 3).
+_MULTI_RUN_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE, OP_VERIFY})
 
 _DESTRUCTIVE_GATE_REASON = (
     "chip-ID mismatch — destructive steps gated (chip left pristine)"
@@ -625,49 +822,42 @@ _WRITE_REGION_LENGTH = 256
 # top-anchor PLACEMENT bound (where the window sits), never a WIDTH input.
 _UV_WRITE_REGION_LENGTH = 256
 
-# UV detection at EXECUTION time: `_dispatch_multi_run`'s `eprom_data` is
-# `resolve_chip`'s PROGRAMMER dict (via `convert_to_programmer`), which does
-# NOT carry `electrical-type` -- only `derive_plan`'s guard-bypassing `full`
-# dict does. Algorithm 0x0B (EPROM_LEGACY/protocol-id 11) IS carried through
-# to the programmer dict as `algorithm`, and is UV-EPROM-exclusive across the
-# whole chip database (verified: no non-UV chip uses protocol-id 0x0B) --
-# this is the execution-time UV signal `_write_region_for` uses. `full`-style
-# dicts (bench-free unit tests, or any future caller with the richer dict)
-# are also honored via the `electrical-type` field when present.
-_PROTOCOL_UV_EPROM = 0x0B
+# The engine default region as a concrete tuple (D-02) -- consumed by
+# `_top_anchored_or_default` (used by `derive_plan`'s region computation,
+# defined earlier in this module; referenced here at call time only, after
+# module import completes).
+_DEFAULT_REGION = (_WRITE_REGION_START, _WRITE_REGION_LENGTH)
 
 
-def _write_region_for(eprom_data: dict[str, Any]) -> tuple[int, int]:
-    """Choose the (start, length) write/verify region for `eprom_data`.
+def _write_region_for(step: Step | None, eprom_data: dict[str, Any]) -> tuple[int, int]:
+    """Return the write/verify region `derive_plan` already decided (D-02).
 
-    UV-EPROM chips get a small, top-anchored, high-address window
-    `[mem_size - _UV_WRITE_REGION_LENGTH, mem_size)` (PATT-03): the
-    high-address base (all high bits set) makes `generate_pattern`'s
-    address-XOR-fold exercise the upper-address decode -- the Bug-A
-    upper-address read-path fault surface -- and the tiny window lets an
-    eraser-less tester safely retry. The WIDTH always comes from the
-    `_UV_WRITE_REGION_LENGTH` module constant, NEVER from any DB field
-    (SC4: a bad DB entry cannot widen it); `memory-size` only bounds where
-    the window is placed. Non-UV chips (and UV chips whose memory-size is
-    missing/too small to fit the window) get the engine default region.
+    This function READS `step.write_region` -- the value `derive_plan` set
+    exactly once, from `Plan.is_uv` (`is_uv_eprom(full)`, 301/301 exact) and
+    `full["memory-size"]` -- and returns it unchanged when present. It
+    returns the engine default `(_WRITE_REGION_START, _WRITE_REGION_LENGTH)`
+    when `step` is `None` or carries no region (`step.write_region is
+    None`).
 
-    UV detection accepts EITHER `electrical-type == "UV-EPROM"` (the `full`
-    DB dict, used by bench-free unit tests) OR `algorithm ==
-    _PROTOCOL_UV_EPROM` (the programmer dict `_dispatch_multi_run` actually
-    sees at execution time, via `resolve_chip`/`convert_to_programmer`,
-    which drops `electrical-type`).
+    This function must NEVER re-derive UV-ness. Before Phase 121 Plan 06 it
+    guessed UV-ness at execution time from `eprom_data.get("electrical-type")
+    == "UV-EPROM"` OR `eprom_data.get("algorithm") == 0x0B` -- but
+    `_dispatch_multi_run`'s `eprom_data` is `resolve_chip`'s PROGRAMMER dict
+    (via `convert_to_programmer`), which never carries `electrical-type`,
+    and `algorithm == 0x0B` matches only 32 of 301 UV parts (measured), so
+    269 UV parts silently fell through to the engine default. Under D-01, a
+    missed UV part receiving a full-device write instead of the small
+    top-anchored window is a chip-destroying bug, not a coverage gap -- the
+    guess is deleted here, not merely bypassed. `eprom_data` is accepted for
+    call-site symmetry with `_dispatch_multi_run`'s existing signature but is
+    otherwise unused by this function: the WIDTH always comes from a module
+    constant (`_WRITE_REGION_LENGTH` / `_UV_WRITE_REGION_LENGTH`), never from
+    any DB field (SC4) -- `eprom_data`/`memory-size` play no role here
+    because `derive_plan` already resolved the concrete region.
     """
-    is_uv = (
-        eprom_data.get("electrical-type", "") == "UV-EPROM"
-        or eprom_data.get("algorithm") == _PROTOCOL_UV_EPROM
-    )
-    if is_uv:
-        mem_size = int(eprom_data.get("memory-size", 0) or 0)
-        if mem_size >= _UV_WRITE_REGION_LENGTH:
-            return mem_size - _UV_WRITE_REGION_LENGTH, _UV_WRITE_REGION_LENGTH
-        # Defensive fallback: mem_size missing/too small to fit the window
-        # would produce a negative start -- use the engine default instead.
-    return _WRITE_REGION_START, _WRITE_REGION_LENGTH
+    if step is not None and step.write_region is not None:
+        return step.write_region
+    return _DEFAULT_REGION
 
 
 def _run_step(
@@ -740,9 +930,25 @@ def _dispatch_step(
         )
     if step.op == OP_READ:
         return _dispatch_read(name, eprom_data, operator, runs=runs)
-    # write / verify / erase: multi-run marginal policy (D-05/D-06).
-    return _dispatch_multi_run(
-        step.op, name, eprom_data, operator, runs=runs, sampler=sampler
+    # write / verify / erase: multi-run marginal policy (D-05/D-06). Dispatch
+    # ONLY when `step.op` is on the live `_MULTI_RUN_OPS` allow-list --
+    # anything else refuses fail-closed (121-02, T-121-07). Before this
+    # guard, this `return` was unconditional, so any op string outside
+    # {OP_ID, OP_BLANK_CHECK, OP_READ} fell through to
+    # `_dispatch_multi_run`'s own terminal `else` and reached
+    # `operator.erase_eprom()` (RESEARCH Pitfall 1a).
+    if step.op in _MULTI_RUN_OPS:
+        return _dispatch_multi_run(
+            step.op, name, eprom_data, operator, runs=runs, sampler=sampler, step=step
+        )
+    return StepResult(
+        op=step.op,
+        verdict=VERDICT_BAD,
+        run_count=0,
+        reason=(
+            f"op {step.op!r} matched no dispatch arm — refused fail-closed "
+            "rather than falling through to _dispatch_multi_run"
+        ),
     )
 
 
@@ -838,32 +1044,60 @@ def _dispatch_multi_run(
     *,
     runs: int,
     sampler: Any = None,
+    step: Step | None = None,
 ) -> StepResult:
     """Run a destructive/verify op `runs` times; `marginal` on disagreement.
 
     Collects a per-run bool outcome (the operator method's own return value)
-    for write/erase; write/verify ALSO builds the expected address-derived
-    pattern and reads back via `operator.verify_eprom`'s outcome plus a
-    fresh `read_eprom` to compute the `Fingerprint` (PATT-02). Disagreement
-    across the N per-run outcomes -> `marginal`, never coerced to a
-    confident OK/BAD (D-06, the AM27C020 structural case). The write/verify
-    region is chosen per-chip by `_write_region_for` (PATT-03) -- UV-EPROM
-    chips get a small top-anchored high-address window; other chips keep
-    the engine default region.
+    for write/write-partial/erase; write/write-partial/verify ALSO builds
+    the expected address-derived pattern and reads back via
+    `operator.verify_eprom`'s outcome plus a fresh `read_eprom` to compute
+    the `Fingerprint` (PATT-02). Disagreement across the N per-run outcomes
+    -> `marginal`, never coerced to a confident OK/BAD (D-06, the AM27C020
+    structural case). The write/verify region is READ from `step.
+    write_region` via `_write_region_for(step, eprom_data)` (D-02, Phase 121
+    Plan 06) -- `derive_plan` already decided it; this function never
+    re-derives UV-ness.
 
     `sampler` (D-04, Phase 112) is invoked as `sampler("before")` /
     `sampler("after")` tightly bracketing EACH `operator.write_eprom(...)`
-    call -- ONLY in the `op == OP_WRITE` branch, never around OP_VERIFY or
-    OP_ERASE, and never around the whole run loop (a write droop must stay
-    distinguishable from a read droop). `sampler=None` adds zero calls.
+    call -- in the `op in (OP_WRITE, OP_WRITE_PARTIAL)` branch (a partial
+    write is still a write), never around OP_VERIFY or OP_ERASE, and never
+    around the whole run loop (a write droop must stay distinguishable from
+    a read droop). `sampler=None` adds zero calls.
+
+    Fail-closed (121-02, T-121-05/06/08): `op` MUST be a member of the live
+    `_MULTI_RUN_OPS` allow-list. The refusal is hoisted here, above
+    `_write_region_for`/`generate_pattern` and any temp-file creation, so an
+    unrecognised op creates no temp file, computes no pattern, and -- the
+    load-bearing property -- never reaches ANY of `write_eprom`,
+    `verify_eprom`, or `erase_eprom`. This is the host mirror of Phase 119
+    D-06/D-07's generic op-layer NULL-`main` refusal
+    (`firestarter/src/operation_utils.cpp::op_execute_stateful_operation`;
+    read-only reference, not re-implemented here). Before this guard, this
+    function's run loop ended in a bare `else: # OP_ERASE`, so an unmapped op
+    called `operator.erase_eprom()` once per run and reported `VERDICT_OK`
+    (RESEARCH Pitfall 1a, proven empirically: 2 runs -> 2 calls -> OK).
     """
+    if op not in _MULTI_RUN_OPS:
+        return StepResult(
+            op=op,
+            verdict=VERDICT_BAD,
+            run_count=0,
+            reason=(
+                f"op {op!r} is not in the multi-run dispatch allow-list "
+                "(_MULTI_RUN_OPS) — refused fail-closed rather than falling "
+                "through to erase_eprom"
+            ),
+        )
+
     outcomes: list[bool] = []
     fingerprint: Fingerprint | None = None
     tmp_source_path: str | None = None
 
-    region_start, region_length = _write_region_for(eprom_data)
+    region_start, region_length = _write_region_for(step, eprom_data)
     expected = generate_pattern(region_start, region_length)
-    if op in (OP_WRITE, OP_VERIFY):
+    if op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY):
         tmp_fh = tempfile.NamedTemporaryFile(
             prefix="chip_test_pattern_", suffix=".bin", delete=False
         )
@@ -875,7 +1109,7 @@ def _dispatch_multi_run(
 
     try:
         for _ in range(runs):
-            if op == OP_WRITE:
+            if op in (OP_WRITE, OP_WRITE_PARTIAL):
                 _sample(sampler, "before")
                 outcomes.append(operator.write_eprom(name, eprom_data, tmp_source_path))
                 _sample(sampler, "after")
@@ -883,10 +1117,21 @@ def _dispatch_multi_run(
                 outcomes.append(
                     operator.verify_eprom(name, eprom_data, tmp_source_path)
                 )
-            else:  # OP_ERASE
+            elif op == OP_ERASE:
                 outcomes.append(operator.erase_eprom(name, eprom_data))
+            else:
+                # Unreachable in practice: the fail-closed `_MULTI_RUN_OPS`
+                # guard at the top of this function already refused any op
+                # outside {OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY, OP_ERASE}
+                # before this loop could start (121-02, T-121-05; 121-06,
+                # D-06). Kept explicit rather than a bare `else: # OP_ERASE`
+                # -- the pre-fix shape that silently routed an unmapped op to
+                # `erase_eprom()` (RESEARCH Pitfall 1a).
+                raise AssertionError(
+                    f"unreachable: op {op!r} passed the _MULTI_RUN_OPS guard"
+                )
 
-        if op in (OP_WRITE, OP_VERIFY):
+        if op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY):
             # Readback for the fingerprint is best-effort: a readback failure
             # (e.g. the SAME boot-block-locked condition that failed the
             # write/verify runs themselves) must NOT convert an otherwise
@@ -991,11 +1236,11 @@ def count_applicable(plan: Plan, results: list[StepResult]) -> BannerCounts:
     N = count of `results` whose verdict is in {OK, BAD, marginal} (ran);
     NA and SKIPPED results are excluded.
 
-    For a non-destructive chip run, `locked_destructive` is non-empty and
-    N < M (the banner-trigger condition). For a destructive run,
-    `locked_destructive` is empty and N == M (banner would not fire),
-    since the previously-locked ops are now real supported `steps` that
-    the run executed.
+    For a `write_scope="none"` chip run, `locked_destructive` is non-empty
+    and N < M (the banner-trigger condition). For a `write_scope="full"` (or
+    `"partial"`) run, `locked_destructive` is empty and N == M (banner would
+    not fire), since the previously-locked ops are now real supported
+    `steps` that the run executed.
     """
     m_applicable = sum(1 for s in plan.steps if s.supported) + len(
         plan.locked_destructive

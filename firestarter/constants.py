@@ -63,6 +63,15 @@ COMMAND_VERIFY = 6
 COMMAND_DEV_ADDRESS = 7
 COMMAND_DEV_REGISTERS = 8
 
+# Both SDP commands are unconditional in firmware (firestarter.h:61-62) — never
+# DEV_TOOLS-gated, because they are real user-facing operations in every build.
+# Their COMMAND_NAMES entries below are load-bearing, not cosmetic:
+# COMMAND_NAMES[cmd] is dereferenced at eprom_operations.py:301 and again at
+# :377 (_setup_operation / _operation_context) — a missing entry is a KeyError
+# at operation setup, not a cosmetic display gap.
+COMMAND_SDP_UNLOCK = 9
+COMMAND_SDP_LOCK = 10
+
 COMMAND_READ_VPP = 11
 COMMAND_READ_VPE = 12
 COMMAND_FW_VERSION = 13
@@ -78,6 +87,8 @@ COMMAND_NAMES = {
     COMMAND_VERIFY: "VERIFY",
     COMMAND_DEV_ADDRESS: "DEV_ADDRESS",
     COMMAND_DEV_REGISTERS: "DEV_REGISTERS",
+    COMMAND_SDP_UNLOCK: "SDP_UNLOCK",
+    COMMAND_SDP_LOCK: "SDP_LOCK",
     COMMAND_READ_VPP: "READ_VPP",
     COMMAND_READ_VPE: "READ_VPE",
     COMMAND_FW_VERSION: "FW_VERSION",
@@ -97,6 +108,17 @@ FLAG_OUTPUT_ENABLE = 0x20
 FLAG_CHIP_ENABLE = 0x40
 
 FLAG_VERBOSE = 0x80
+
+# Ninth and highest wire flag. Firmware's ctrl_flags is uint32_t, so 0x100 is
+# in range, and firmware's flag block ENDS here (firestarter.h:148) — there is
+# no 0x200 flag, contrary to ROADMAP.md:363 and Phase 120's *Depends on* line
+# (F-120-05, corrected in 120-02-SUMMARY.md).
+# NOTE: CTRL_VPP_VPE_DROP_ENABLE further below also has the value 0x100, but
+# it lives in the separate control-register namespace (mirror of
+# rurp_pinout.h), is documentary only (Python never writes the control
+# register), and has its own separate parity leg. The two 0x100s are
+# unrelated wire vs. control-register values and must not be conflated.
+FLAG_SKIP_SDP_UNLOCK = 0x100
 
 # Dev sweep knobs — Firmware sync: json_parser.c (key_read_settling, key_read_strobe)
 # JSON key name strings for host-tunable read-timing parameters.

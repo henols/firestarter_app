@@ -998,3 +998,372 @@ class TestSramBlankCheckShortCircuit:
             f"call list: {setup_called}"
         )
         assert setup_called[0][0] == "W27C512"
+
+
+# ---------------------------------------------------------------------------
+# Plan 120-06 Task 3 — pin the SDP payload-free wire shape + the emitted
+# `flags` residue + the new FLAG_SKIP_SDP_UNLOCK bit, all at the wire
+# boundary (the composed command_dict SerialCommunicator.find_and_connect
+# receives), not at the Python function-return boundary.
+# ---------------------------------------------------------------------------
+
+
+def _at28c256_programmer_dict() -> dict:
+    """A real at28c256 programmer dict via resolve_chip (protocol 0x0D / 13)."""
+    from firestarter.chip_resolver import resolve_chip
+    from firestarter.database import EpromDatabase
+
+    db = EpromDatabase(skip_local_override=True)
+    return resolve_chip("at28c256", db=db)
+
+
+def _capture_written_frames(fake_serial):
+    """Wrap fake_serial.write to record every chunk the host writes.
+
+    Returns the list the wrapper appends to; the original write behavior
+    (buffering into the BytesIO-backed fake) is preserved so the state
+    machine's own send_ack()/get_response() flow is unaffected.
+    """
+    written: list = []
+    original_write = fake_serial.write
+
+    def _wrapped(data: bytes) -> int:
+        written.append(bytes(data))
+        return original_write(data)
+
+    fake_serial.write = _wrapped
+    return written
+
+
+class TestSdpOperationsWireShape:
+    """v1.22 HOST-01 / HOST-02: sdp_unlock/sdp_lock are payload-free (cmd 9 /
+    cmd 10, no `#` data frame, no host DONE round-trip); the DB's firmware-inert
+    FLAG_CAN_ERASE residue and the new FLAG_SKIP_SDP_UNLOCK bit both reach the
+    composed command_dict.
+    """
+
+    def test_sdp_unlock_emits_cmd_9_payload_free(self, make_comm, fake_serial) -> None:
+        """v1.22 HOST-01: sdp_unlock composes cmd == 9 and drives INIT->MAIN->END
+        with no main_phase_handler — only send_ack("OK") writes occur; no `#`
+        data frame is ever written and send_done("DONE") is never called,
+        because _run_state_machine falls through to _main_phase_simple exactly
+        like erase_eprom's precedent.
+        """
+        captured: dict = {}
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            captured["command_dict"] = command_dict
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+        written = _capture_written_frames(fake_serial)
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            ok = operator.sdp_unlock("at28c256", _at28c256_programmer_dict())
+
+        assert ok is True
+        assert captured["command_dict"]["cmd"] == 9
+        # No `#`-prefixed data frame and no "DONE" round-trip were written.
+        assert not any(chunk.startswith(b"#") for chunk in written)
+        assert not any(b"DONE" in chunk for chunk in written)
+
+    def test_sdp_lock_emits_cmd_10_payload_free(self, make_comm, fake_serial) -> None:
+        """v1.22 HOST-01: sdp_lock composes cmd == 10, same payload-free shape
+        as sdp_unlock above — no `#` data frame, no host DONE round-trip.
+        """
+        captured: dict = {}
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            captured["command_dict"] = command_dict
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+        written = _capture_written_frames(fake_serial)
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            ok = operator.sdp_lock("at28c256", _at28c256_programmer_dict())
+
+        assert ok is True
+        assert captured["command_dict"]["cmd"] == 10
+        assert not any(chunk.startswith(b"#") for chunk in written)
+        assert not any(b"DONE" in chunk for chunk in written)
+
+    def test_sdp_unlock_setup_failure_returns_false(self) -> None:
+        """v1.22 HOST-01: when find_and_connect fails (as _setup_operation
+        handles it), sdp_unlock returns False without raising."""
+        from firestarter.exceptions import ProgrammerNotFoundError
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=ProgrammerNotFoundError("no port"),
+        ):
+            ok = operator.sdp_unlock("at28c256", _at28c256_programmer_dict())
+        assert ok is False
+
+    def test_sdp_lock_setup_failure_returns_false(self) -> None:
+        """v1.22 HOST-01: same setup-failure guard for sdp_lock."""
+        from firestarter.exceptions import ProgrammerNotFoundError
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=ProgrammerNotFoundError("no port"),
+        ):
+            ok = operator.sdp_lock("at28c256", _at28c256_programmer_dict())
+        assert ok is False
+
+    def test_sdp_command_flags_do_not_carry_the_db_can_erase_bit(
+        self, make_comm, fake_serial
+    ) -> None:
+        """REVERSAL RECORD (Phase 121 D-12): this test previously asserted the
+        composed command_dict["flags"] for an at28c256 input is 2
+        (FLAG_CAN_ERASE), NOT 0 -- on the claim that
+        `database.py`'s (former) `algo != 5` exclusion set FLAG_CAN_ERASE
+        (0x02) for every EEPROM / Flash-EEPROM part with algorithm != 5,
+        including all 84 protocol-0x0D chips, and that this was safe because
+        configure_eeprom28c never reads the bit (firmware-inert).
+
+        D-12 reverses that POLICY, not the fact: configure_eeprom28c still
+        never reads FLAG_CAN_ERASE -- the firmware-inertness claim was never
+        wrong. What changed is that an inert-but-false capability
+        advertisement is still false: DEVTEST-01's `dev test` sweep reads it
+        and plans a real erase step that reports OK having done nothing.
+        `database.py` now excludes algorithm 13 (0x0D) as well as 5, so the
+        wire flags for at28c256 are 0, not 2. This leg now exists to catch a
+        regression the other way -- a future reader must not reintroduce the
+        bit for 0x0D.
+        """
+        captured: dict = {}
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            captured["command_dict"] = command_dict
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            operator.sdp_unlock("at28c256", _at28c256_programmer_dict())
+
+        assert captured["command_dict"]["flags"] == 0
+
+    def test_skip_sdp_unlock_bit_reaches_the_wire(self, make_comm, fake_serial) -> None:
+        """v1.22 HOST-02: build_flags(skip_sdp_unlock=True) passed as
+        operation_flags into sdp_unlock reaches the composed command_dict's
+        "flags" value with bit 0x100 set -- the HOST-02 oracle at the wire
+        boundary rather than at the build_flags function-return boundary.
+        """
+        from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
+        from firestarter.eprom_operations import build_flags
+
+        captured: dict = {}
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            captured["command_dict"] = command_dict
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+        operator = EpromOperator(ConfigManager())
+        operation_flags = build_flags(skip_sdp_unlock=True)
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            operator.sdp_unlock(
+                "at28c256", _at28c256_programmer_dict(), operation_flags
+            )
+
+        assert captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK
+
+
+# ---------------------------------------------------------------------------
+# Plan 120-10 Task 3 — D-15 / HOST-06: the 0x86 ack requirement inside
+# write_eprom, both ack directions plus the flag-not-set case, and the
+# bounded seen_message_ids record itself.
+# ---------------------------------------------------------------------------
+
+
+def _drive_write_eprom_for_ack_check(
+    tmp_path,
+    make_comm,
+    fake_serial,
+    *,
+    skip_sdp_unlock: bool,
+    ack_present: bool,
+):
+    """Drive a full, otherwise-successful write_eprom() against a real
+    protocol-0x0D chip (at28c256) through a fake serial port.
+
+    Feed sequence mirrors test_write_skip_sdp_unlock.py's happy path:
+    [0x86 WARN, if ack_present] -> INIT_DONE -> OK_REQ_DATA -> MAIN_DONE ->
+    END_DONE. The WARN frame MUST land inside the INIT (or END) phase
+    window, never inside MAIN: _main_phase_send_data's tight
+    request/response loop only tolerates MAIN/ERROR/OK-request-chunk
+    responses and raises EpromOperationError on anything else (e.g. WARN),
+    whereas _execute_phase's INIT/END loop routes WARN through
+    _handle_progress_response harmlessly. seen_message_ids is populated as
+    each frame is decoded, so any position within the single continuous
+    INIT->MAIN->END pass that _run_state_machine completes before
+    write_eprom's post-state-machine check runs is equally valid, as long
+    as it does not desync the MAIN phase's flow control.
+    """
+    from firestarter.eprom_operations import EpromOperator, build_flags
+    from firestarter.messages import MSG_OK_REQ_DATA, MSG_WARN_SDP_UNLOCK_SKIPPED
+
+    input_file = tmp_path / "at28c256.bin"
+    input_file.write_bytes(b"\x01\x02\x03\x04")
+
+    if ack_present:
+        fake_serial.feed(build_frame(MSG_WARN_SDP_UNLOCK_SKIPPED, b""))
+    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+    fake_serial.feed(build_frame(MSG_OK_REQ_DATA, b""))
+    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        return make_comm()
+
+    operator = EpromOperator(ConfigManager())
+    operation_flags = build_flags(skip_sdp_unlock=skip_sdp_unlock)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=_fake_find_and_connect,
+    ):
+        ok = operator.write_eprom(
+            "at28c256",
+            _at28c256_programmer_dict(),
+            str(input_file),
+            operation_flags=operation_flags,
+        )
+    return ok
+
+
+def test_missing_sdp_ack_fails_the_write_loudly(
+    tmp_path, make_comm, fake_serial, caplog
+) -> None:
+    """v1.22 HOST-06 / D-15: this is the flag half of HOST-06's asymmetry --
+    an unknown command produces a loud firmware error (D-14, plan 120-08),
+    but an unknown flag bit produces SILENCE, so the ack's absence is the
+    only signal available. --skip-sdp-unlock was set; the wire stream
+    completes an otherwise-successful write (INIT -> MAIN -> END all ack)
+    but never emits MSG_WARN_SDP_UNLOCK_SKIPPED (0x86). write_eprom must
+    fail the operation and report plainly that the opt-out was not
+    honoured -- this DETECTS after the fact, it does not PREVENT: on old
+    firmware the unlock has already been emitted by the time the user is
+    told.
+    """
+    with caplog.at_level(logging.ERROR, logger="EpromOperator"):
+        ok = _drive_write_eprom_for_ack_check(
+            tmp_path,
+            make_comm,
+            fake_serial,
+            skip_sdp_unlock=True,
+            ack_present=False,
+        )
+
+    assert ok is False
+    messages = [rec.message for rec in caplog.records]
+    assert any(
+        "did not acknowledge" in m and "unlock ran anyway" in m for m in messages
+    )
+    assert any("firestarter fw --install" in m for m in messages)
+
+
+def test_sdp_ack_honoured_produces_no_complaint(
+    tmp_path, make_comm, fake_serial, caplog
+) -> None:
+    """v1.22 HOST-06 / D-15: the converse leg -- proves the check does not
+    over-fire. Same flag, same otherwise-successful stream, PLUS the 0x86
+    ack. write_eprom's return value must be unchanged from a normal
+    successful write, and no missing-ack complaint may be emitted.
+    """
+    with caplog.at_level(logging.ERROR, logger="EpromOperator"):
+        ok = _drive_write_eprom_for_ack_check(
+            tmp_path,
+            make_comm,
+            fake_serial,
+            skip_sdp_unlock=True,
+            ack_present=True,
+        )
+
+    assert ok is True
+    messages = [rec.message for rec in caplog.records]
+    assert not any("did not acknowledge" in m for m in messages)
+
+
+def test_ack_check_does_not_run_when_the_flag_was_not_set(
+    tmp_path, make_comm, fake_serial, caplog
+) -> None:
+    """v1.22 HOST-06 / D-15: --skip-sdp-unlock was NOT set. Even though the
+    0x86 ack never arrives, write_eprom's return value is unchanged and no
+    missing-ack complaint is emitted -- proving the check is scoped to the
+    flag rather than unconditional.
+    """
+    with caplog.at_level(logging.ERROR, logger="EpromOperator"):
+        ok = _drive_write_eprom_for_ack_check(
+            tmp_path,
+            make_comm,
+            fake_serial,
+            skip_sdp_unlock=False,
+            ack_present=False,
+        )
+
+    assert ok is True
+    messages = [rec.message for rec in caplog.records]
+    assert not any("did not acknowledge" in m for m in messages)
+
+
+def test_seen_message_ids_records_decoded_ids_and_stays_bounded(
+    make_comm, fake_serial
+) -> None:
+    """v1.22 HOST-06 / D-15: _decode_id_frame records every successfully
+    decoded id into the connection's bounded seen_message_ids set. An
+    unknown id that codec.decode_id_frame drops (catalog miss) does not
+    raise and is never added to the record -- the record is keyed off
+    decode SUCCESS, not raw frame arrival, and stays a plain set of
+    integers, never anything sized from frame content (T-120-39).
+    """
+    from firestarter.codec import CATALOG
+    from firestarter.messages import MSG_WARN_SDP_UNLOCK_SKIPPED
+
+    unknown_id = 0x06
+    assert unknown_id not in CATALOG, (
+        "test fixture assumption: this id must stay uncataloged"
+    )
+
+    comm = make_comm()
+    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+    fake_serial.feed(build_frame(unknown_id, b""))
+    fake_serial.feed(build_frame(MSG_WARN_SDP_UNLOCK_SKIPPED, b""))
+
+    gen = comm._read_and_parse_lines(timeout=0.2)
+    next(gen)  # MSG_INIT_DONE decodes and yields
+    # The unknown_id frame decodes to None and is dropped without a yield;
+    # the generator's internal loop continues straight to the next frame.
+    next(gen)  # MSG_WARN_SDP_UNLOCK_SKIPPED decodes and yields
+
+    assert comm.seen_message_ids == {MSG_INIT_DONE, MSG_WARN_SDP_UNLOCK_SKIPPED}
+    assert unknown_id not in comm.seen_message_ids
+    assert isinstance(comm.seen_message_ids, set)
+    assert all(isinstance(i, int) for i in comm.seen_message_ids)

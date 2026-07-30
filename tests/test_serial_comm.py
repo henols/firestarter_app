@@ -20,6 +20,7 @@ from firestarter.constants import (
 )
 from firestarter.exceptions import FirmwareOutdatedError
 from firestarter.frame_parser import (
+    Response,
     _crc8_ccitt,
     cobs_decode,
 )
@@ -347,6 +348,9 @@ def test_fault_inject_incoming_subclass(make_comm) -> None:
     comm = FaultInjectingSerialCommunicator.__new__(FaultInjectingSerialCommunicator)
     comm._corrupt_incoming_once = True
     comm._fault_fired = False
+    # Phase-120 (D-15 / HOST-06): bounded per-connection observed-id record,
+    # normally initialised in __init__ — mirrored here since this test bypasses it.
+    comm.seen_message_ids = set()
 
     # Build a minimal body (id + params + CRC) for _decode_id_frame
     from firestarter.frame_parser import _crc8_ccitt as _inner_crc8
@@ -560,3 +564,104 @@ def test_decode_id_frame_clamps_implausible_max_chunk(make_comm, raw, expected) 
         f"param {raw!r}: expected firmware_max_chunk={expected}, "
         f"got {comm.firmware_max_chunk} (clamp [1, 4096])"
     )
+
+
+# --- D-09 / HOST-05 / F-120-02: INFO-band promotion in _log_rurp_feedback ---
+#
+# Before Plan 120-03's `elif response.type == "INFO"` arm, the whole INFO
+# band fell through to the `logging.DEBUG` initialiser in
+# `_log_rurp_feedback`, while `_setup_logging` sets the root logger to
+# `logging.INFO` unless `-v` is passed. That silently discarded every Phase
+# 118/119 SDP report line at default verbosity: a two-repo requirement that
+# passed its own phase's verification and was still false end to end.
+#
+# The fix makes SIX previously-invisible ids visible at default verbosity,
+# not five: `0x5E` (MSG_INFO_SDP_UNLOCK), `0x5F` (MSG_INFO_SDP_UNLOCK_DONE_US),
+# `0x60` (MSG_INFO_SDP_LOCK), `0x61` (MSG_INFO_SDP_LOCK_DONE_US), `0x62`
+# (MSG_INFO_PAGE_LOAD_WORST_US) — plus `0x5B` MSG_INFO_HW, which is emitted
+# unconditionally through the `LOG_WARN_ID_U8` alias at
+# `rurp_hw_rev_utils.h:96` despite a catalog severity of INFO. `0x5B`'s
+# unconditional site is Phase 35's CR-02 hard-fail-loud revision warning, so
+# this fix is also a partial fix for a second, older observability defect
+# unrelated to SDP.
+#
+# A search of this whole suite for logger-level assertions and record-count
+# assertions on the `RURP` logger (`rurp_logger`) — `caplog.at_level(...,
+# logger="RURP")`, `not caplog.records`, `len(caplog.records) ==`,
+# `caplog.records == []` — found zero hits. So zero existing tests needed to
+# move; every test below is purely additive.
+
+
+def test_info_band_frame_is_promoted_to_logging_info(make_comm, caplog) -> None:
+    """D-09 / HOST-05 / F-120-02: an INFO-typed Response now logs at
+    logging.INFO on the RURP logger.
+
+    Before this arm, the record landed at logging.DEBUG and was therefore
+    invisible at default verbosity (root defaults to INFO unless -v) — every
+    Phase 118/119 SDP report line was discarded by the host for a whole
+    phase.
+    """
+    comm = make_comm()
+    response = Response(
+        type="INFO", message="SDP unlock complete", payload=None, id=None
+    )
+
+    with caplog.at_level(logging.INFO, logger="RURP"):
+        comm._log_rurp_feedback(response)
+
+    records = [r for r in caplog.records if r.name == "RURP"]
+    assert len(records) == 1
+    assert records[0].levelno == logging.INFO
+    assert "SDP unlock complete" in records[0].message
+
+
+@pytest.mark.parametrize("label", ["OK", "INIT", "MAIN", "END", "DATA"])
+def test_non_info_protocol_phase_labels_still_log_at_debug(
+    make_comm, caplog, label: str
+) -> None:
+    """Negative / scoped-promotion leg (anti-hollow contract): protocol-phase
+    labels (OK, INIT, MAIN, END, DATA) still log at logging.DEBUG, proving
+    the INFO promotion is scoped rather than a blanket level change.
+
+    Promoting these labels to INFO would flood default-verbosity output —
+    they are per-phase protocol frames emitted on every operation, not
+    one-off report lines.
+    """
+    comm = make_comm()
+    response = Response(
+        type=label, message=f"{label} frame body", payload=None, id=None
+    )
+
+    # Bound at INFO: nothing should be captured for a DEBUG-level record.
+    with caplog.at_level(logging.INFO, logger="RURP"):
+        comm._log_rurp_feedback(response)
+    assert [r for r in caplog.records if r.name == "RURP"] == []
+
+    caplog.clear()
+
+    # Bound at DEBUG: the same call now IS captured, confirming it logs at
+    # DEBUG (not that it was dropped for an unrelated reason).
+    with caplog.at_level(logging.DEBUG, logger="RURP"):
+        comm._log_rurp_feedback(response)
+    records = [r for r in caplog.records if r.name == "RURP"]
+    assert len(records) == 1
+    assert records[0].levelno == logging.DEBUG
+
+
+def test_warn_and_error_severity_arms_are_unchanged(make_comm, caplog) -> None:
+    """Regression leg: the new INFO arm does not reorder or shadow the
+    pre-existing WARN/ERROR arms — WARN still yields logging.WARNING and
+    ERROR still yields logging.ERROR."""
+    comm = make_comm()
+
+    warn_response = Response(type="WARN", message="warn body", payload=None, id=None)
+    error_response = Response(type="ERROR", message="error body", payload=None, id=None)
+
+    with caplog.at_level(logging.DEBUG, logger="RURP"):
+        comm._log_rurp_feedback(warn_response)
+        comm._log_rurp_feedback(error_response)
+
+    records = [r for r in caplog.records if r.name == "RURP"]
+    assert len(records) == 2
+    assert records[0].levelno == logging.WARNING
+    assert records[1].levelno == logging.ERROR

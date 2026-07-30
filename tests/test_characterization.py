@@ -34,6 +34,7 @@ import subprocess
 import sys  # noqa: F401
 import tempfile
 from pathlib import Path  # noqa: F401
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -365,8 +366,26 @@ def test_no_blank_check_polarity(snapshot):
 # ---------------------------------------------------------------------------
 # Hardware-absent path (D-05b / D-05c determinism)
 #
-# Monkeypatch serial.tools.list_ports.comports → [] so the "no programmer
-# found" error path is identical with/without a board attached.
+# D-19 (121-04): the load-bearing patch here is
+# ``SerialCommunicator._list_potential_ports``, NOT ``serial.tools.list_ports.comports``.
+# ``_list_potential_ports(preferred_port)`` prepends ``preferred_port`` (sourced
+# from ``config_manager.get_value("port")`` in ``find_and_connect``) BEFORE it
+# ever calls ``comports()``. A ``comports``-only patch is therefore defeated by
+# a saved port in an operator's ``~/.firestarter/config.json`` (or, in CI, by a
+# `` FIRESTARTER_CONFIG_DIR``-scoped config with a "port" key) even though no
+# real board is attached — see
+# `.planning/notes/reference_characterization_no_programmer_tests_fail_with_live_board.md`.
+# ``_list_potential_ports`` is patched via ``monkeypatch.setattr(..., raising=True)``
+# so a future rename of that method fails loudly instead of silently no-op'ing.
+# The ``comports`` patch is kept too (belt and suspenders / documents original
+# intent) but is not load-bearing on its own.
+#
+# The load-bearing ASSERTION is also not the `False` return value — a real
+# board that refuses a connection also returns False, so `result is False`
+# cannot distinguish "no programmer found" from "found a real board and it
+# refused". Both tests patch ``serial.Serial`` with a MagicMock and assert it
+# was never called, proving no port was ever opened.
+#
 # This runs IN-PROCESS (monkeypatch cannot cross the subprocess boundary).
 # ---------------------------------------------------------------------------
 
@@ -374,11 +393,20 @@ def test_no_blank_check_polarity(snapshot):
 def test_no_programmer_found_read(monkeypatch):
     """Pin: read with no serial ports found → ProgrammerNotFoundError, returns False.
 
-    Monkeypatches serial.tools.list_ports.comports to return [] so port
-    discovery is deterministic (D-05b; Pitfall 2).  Exercises find_and_connect
-    directly via EpromOperator._setup_operation.
+    Monkeypatches SerialCommunicator._list_potential_ports to return [] (the
+    real port-enumeration seam — D-19; see comment block above) so port
+    discovery is deterministic even with a live board attached or a saved
+    config port. Exercises find_and_connect directly via
+    EpromOperator._setup_operation.
     """
     monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [])
+    monkeypatch.setattr(
+        "firestarter.serial_comm.SerialCommunicator._list_potential_ports",
+        lambda preferred_port=None: [],
+        raising=True,
+    )
+    mock_serial = MagicMock()
+    monkeypatch.setattr("firestarter.serial_comm.serial.Serial", mock_serial)
 
     from firestarter.config import ConfigManager
     from firestarter.database import EpromDatabase
@@ -396,11 +424,22 @@ def test_no_programmer_found_read(monkeypatch):
     # read_eprom returns False when no programmer is found
     result = operator.read_eprom("W27C512", eprom_cmd, output_file="/dev/null")
     assert result is False
+    # Load-bearing assertion (D-19): no serial port was ever opened. The
+    # `False` return alone cannot distinguish "no programmer found" from
+    # "found a real board and it refused".
+    mock_serial.assert_not_called()
 
 
 def test_no_programmer_found_erase(monkeypatch):
     """Pin: erase with no serial ports found → ProgrammerNotFoundError, returns False."""  # noqa: E501
     monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [])
+    monkeypatch.setattr(
+        "firestarter.serial_comm.SerialCommunicator._list_potential_ports",
+        lambda preferred_port=None: [],
+        raising=True,
+    )
+    mock_serial = MagicMock()
+    monkeypatch.setattr("firestarter.serial_comm.serial.Serial", mock_serial)
 
     from firestarter.config import ConfigManager
     from firestarter.database import EpromDatabase
@@ -417,6 +456,8 @@ def test_no_programmer_found_erase(monkeypatch):
     operator = EpromOperator(config)
     result = operator.erase_eprom("W27C512", eprom_cmd)
     assert result is False
+    # Load-bearing assertion (D-19): no serial port was ever opened.
+    mock_serial.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

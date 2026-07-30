@@ -49,6 +49,7 @@ from unittest.mock import Mock
 import pytest
 
 from firestarter.chip_test import (
+    _DESTRUCTIVE_GATE_REASON,  # test-internal: chip-ID gate reason (SWEEP-03)
     _UV_WRITE_REGION_LENGTH,  # test-internal: engine module constant (PATT-03)
     OP_BLANK_CHECK,
     OP_ERASE,
@@ -56,6 +57,7 @@ from firestarter.chip_test import (
     OP_READ,
     OP_VERIFY,
     OP_WRITE,
+    OP_WRITE_PARTIAL,  # 121-06 D-06: the seventh op string
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
@@ -65,12 +67,15 @@ from firestarter.chip_test import (
     Plan,
     Step,
     _diff_offsets,  # test-internal: the shared divergence primitive (D-04)
+    _dispatch_multi_run,  # test-internal: fail-closed dispatch proof (121-02)
+    _dispatch_step,  # test-internal: fail-closed dispatch proof (121-02)
     _write_region_for,  # test-internal: UV small-region selector (PATT-03)
     address_fold_byte,
     classify_fingerprint,
     count_applicable,
     derive_plan,
     generate_pattern,
+    is_uv_eprom,  # exact 301/301 UV-EPROM axis (D-02, 121-05)
     prepass_images,
     run_plan,
 )
@@ -282,6 +287,68 @@ def test_fingerprint_evidence_fields():
 _REAL_DB = EpromDatabase(skip_local_override=True)
 
 
+# ---------------------------------------------------------------------------
+# is_uv_eprom -- exact 301/301 UV-EPROM axis (D-02, 121-05 Task 1)
+# ---------------------------------------------------------------------------
+
+
+def test_is_uv_eprom_exact_301_over_real_db():
+    # Enumerate the real database rather than hardcoding a spot check, so a
+    # future DB change that moves the count is caught (acceptance criterion).
+    eproms = _REAL_DB.get_eproms()
+    assert sum(1 for e in eproms if is_uv_eprom(e)) == 301
+
+
+def test_is_uv_eprom_simple_true_false_missing():
+    assert is_uv_eprom({"electrical-type": "UV-EPROM"}) is True
+    assert is_uv_eprom({"electrical-type": "EEPROM"}) is False
+    assert is_uv_eprom({}) is False
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        # ST M27C512 -- genuine UV-EPROM, algorithm 0x07. The execution-time
+        # algorithm proxy would MISS this (0x07 is not 0x0B).
+        ("M27C512", True),
+        # AM27C020 -- genuine UV-EPROM, algorithm 0x08. Same miss as above.
+        ("AM27C020", True),
+        # Winbond W27C512 -- routinely confused with the ST M27C512
+        # (.planning memory reference_st_m27c512_vs_winbond_w27c512.md);
+        # electrical-type is EEPROM, not UV-EPROM.
+        ("W27C512", False),
+        # Atmel AT28C256 -- ordinary EEPROM, not UV.
+        ("AT28C256", False),
+    ],
+)
+def test_is_uv_eprom_four_chip_table(name, expected):
+    full = _REAL_DB.get_eprom(name)
+    assert full is not None, f"{name} missing from live DB"
+    assert is_uv_eprom(full) is expected
+
+
+def test_is_uv_eprom_exact_where_algorithm_proxy_is_not():
+    # M27C512 (algorithm 0x07) and AM27C020 (algorithm 0x08) both return
+    # True from is_uv_eprom, while the algorithm==0x0B proxy would miss both.
+    for name in ("M27C512", "AM27C020"):
+        full = _REAL_DB.get_eprom(name)
+        assert full["electrical-type"] == "UV-EPROM"
+        assert full["protocol-id"] != 0x0B
+        assert is_uv_eprom(full) is True
+
+
+# ---------------------------------------------------------------------------
+# Plan.is_uv / Step.write_region -- carried fields, defaulted (D-02)
+# ---------------------------------------------------------------------------
+
+
+def test_plan_and_step_carried_fields_default():
+    p = Plan(name="x")
+    s = Step(op=OP_WRITE, supported=True, reason="")
+    assert p.is_uv is False
+    assert s.write_region is None
+
+
 def test_derive_plan_id_check_first():
     plan = derive_plan("M8720", _REAL_DB)
     assert plan.steps[0].op == "id"
@@ -421,9 +488,9 @@ def test_derive_plan_eeprom_erase_supported_when_can_erase_set():
 
     assert prog["flags"] & FLAG_CAN_ERASE
 
-    # destructive=True: erase is a supported step in the executable steps
-    # list (D-01 -- destructive=False would structurally omit it).
-    plan = derive_plan("AS29F002T", _REAL_DB, destructive=True)
+    # write_scope="full": erase is a supported step in the executable steps
+    # list (D-01 -- write_scope="none" would structurally omit it).
+    plan = derive_plan("AS29F002T", _REAL_DB, write_scope="full")
     erase_step = _step(plan, "erase")
     assert erase_step.supported is True
 
@@ -449,24 +516,24 @@ def test_derive_plan_blank_check_supported_for_regular_eeprom():
 
 def test_derive_plan_read_and_verify_always_present():
     # read is always present in the executable steps list, regardless of
-    # destructive. verify is present only on a destructive plan (112-05
-    # SC2/SWEEP-05: verify is gated behind `destructive` exactly like
+    # write_scope. verify is present only on a write-executing plan (112-05
+    # SC2/SWEEP-05: verify is gated behind write_scope exactly like
     # write/erase, D-01) -- see test_derive_plan_verify_gated_behind_destructive
-    # for the non-destructive-omission coverage.
+    # for the write_scope="none"-omission coverage.
     for name in ("M8720", "AM2716", "AE29F1008", "DS1220(RW)"):
         plan = derive_plan(name, _REAL_DB)
         read_step = _step(plan, "read")
         assert read_step.supported is True
 
-        plan_destructive = derive_plan(name, _REAL_DB, destructive=True)
+        plan_destructive = derive_plan(name, _REAL_DB, write_scope="full")
         verify_step = _step(plan_destructive, "verify")
         assert verify_step.supported is True
 
 
 def test_derive_plan_write_present_and_destructive():
-    # destructive=True: write remains in the executable steps list, exactly
-    # as Phase 108 produced it (D-01 destructive path unchanged).
-    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    # write_scope="full": write remains in the executable steps list,
+    # exactly as Phase 108 produced it (D-01 write-executing path unchanged).
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     write_step = _step(plan, "write")
     assert write_step.supported is True
     assert write_step.destructive is True
@@ -487,35 +554,59 @@ def test_derive_plan_erase_condition_checks_flag_and_protocol():
 
 def test_derive_plan_destructive_flag_strips_not_annotates():
     # Phase 109 (D-01, SAFE-01) INVERTS the Phase-108 annotate-only
-    # contract: destructive=False must structurally OMIT write/erase from
-    # the executable steps list; destructive=True keeps them exactly as
-    # Phase 108 produced them.
-    plan_default = derive_plan("M8720", _REAL_DB, destructive=False)
-    plan_destructive = derive_plan("M8720", _REAL_DB, destructive=True)
-    ops_default = {s.op for s in plan_default.steps}
-    ops_destructive = {s.op for s in plan_destructive.steps}
+    # contract: write_scope="none" must structurally OMIT write/erase from
+    # the executable steps list; write_scope="full" keeps them exactly as
+    # Phase 108 produced them (121-05 D-02: the kwarg is now the
+    # three-valued write_scope, not a destructive bool -- behaviour
+    # unchanged for these two scopes; the compared op sequences below are
+    # the behavioural-equivalence proof required by 121-05 Task 2).
+    plan_default = derive_plan("M8720", _REAL_DB, write_scope="none")
+    plan_destructive = derive_plan("M8720", _REAL_DB, write_scope="full")
+    ops_default = [s.op for s in plan_default.steps]
+    ops_destructive = [s.op for s in plan_destructive.steps]
 
-    assert "write" not in ops_default
-    assert "erase" not in ops_default
-    assert "write" in ops_destructive
-    assert "erase" in ops_destructive
-    # verify is now stripped from the non-destructive plan alongside
-    # write/erase (112-05 SC2/SWEEP-05: verify gated behind `destructive`,
+    # Recorded op sequences (SUMMARY): write_scope="none" ->
+    # ["id", "read", "blank-check"]; write_scope="full" ->
+    # ["id", "read", "blank-check", "write", "verify", "erase"] -- identical
+    # to the pre-121-05 destructive=False/True sequences for this chip.
+    assert ops_default == ["id", "read", "blank-check"]
+    assert ops_destructive == [
+        "id",
+        "read",
+        "blank-check",
+        "write",
+        "verify",
+        "erase",
+    ]
+    assert plan_default.locked_destructive == [
+        (OP_WRITE, 'write_scope="none": write omitted (D-01)'),
+        (OP_VERIFY, 'write_scope="none": verify omitted (D-01)'),
+        (OP_ERASE, 'write_scope="none": erase omitted (D-01)'),
+    ]
+    assert plan_destructive.locked_destructive == []
+    ops_default_set = set(ops_default)
+    ops_destructive_set = set(ops_destructive)
+    assert "write" not in ops_default_set
+    assert "erase" not in ops_default_set
+    assert "write" in ops_destructive_set
+    assert "erase" in ops_destructive_set
+    # verify is now stripped from the write_scope="none" plan alongside
+    # write/erase (112-05 SC2/SWEEP-05: verify gated behind write_scope,
     # D-01) -- only id/read/blank-check remain.
-    assert ops_default == ops_destructive - {"write", "erase", "verify"}
+    assert ops_default_set == ops_destructive_set - {"write", "erase", "verify"}
 
 
 def test_derive_plan_strip_default_only_destructive_ops_removed():
     # strip_default (109-01 Task 1 behavior, corrected by 112-05 SC2/SWEEP-05):
     # write/erase are removed from the executable steps list when
-    # destructive=False because they mutate the chip (_DESTRUCTIVE_OPS).
-    # verify is gated at plan-construction time in derive_plan behind the
-    # `destructive` flag (D-01) -- it is NOT added to _DESTRUCTIVE_OPS
-    # (verify does not mutate the chip; the runtime id-first gate stays
-    # scoped to write/erase), but a bare verify with no preceding write
-    # would compare a freshly-generated pattern against unrelated chip
-    # contents, so it is omitted from the non-destructive plan too.
-    plan = derive_plan("M8720", _REAL_DB, destructive=False)
+    # write_scope="none" because they mutate the chip (_DESTRUCTIVE_OPS).
+    # verify is gated at plan-construction time in derive_plan behind
+    # write_scope (D-01) -- it is NOT added to _DESTRUCTIVE_OPS (verify
+    # does not mutate the chip; the runtime id-first gate stays scoped to
+    # write/erase), but a bare verify with no preceding write would compare
+    # a freshly-generated pattern against unrelated chip contents, so it is
+    # omitted from the write_scope="none" plan too.
+    plan = derive_plan("M8720", _REAL_DB, write_scope="none")
     ops = {s.op for s in plan.steps}
     assert ops == {"id", "read", "blank-check"}
     assert "write" not in ops
@@ -528,14 +619,14 @@ def test_derive_plan_verify_gated_behind_destructive():
     # (protocol 0x08, EEPROM, FLAG_CAN_ERASE set) is the module's
     # established erasable-chip fixture (see the fixture comment near
     # _REAL_DB above).
-    plan_default = derive_plan("M8720", _REAL_DB, destructive=False)
+    plan_default = derive_plan("M8720", _REAL_DB, write_scope="none")
     nd_ops = [s.op for s in plan_default.steps]
     assert nd_ops == [OP_ID, OP_READ, OP_BLANK_CHECK]
     assert OP_VERIFY not in nd_ops
     locked_ops = {op for op, _reason in plan_default.locked_destructive}
     assert OP_VERIFY in locked_ops
 
-    plan_destructive = derive_plan("M8720", _REAL_DB, destructive=True)
+    plan_destructive = derive_plan("M8720", _REAL_DB, write_scope="full")
     d_ops = [s.op for s in plan_destructive.steps]
     assert OP_VERIFY in d_ops
     assert d_ops.index(OP_VERIFY) > d_ops.index(OP_WRITE)
@@ -546,8 +637,8 @@ def test_derive_plan_advisory_populated_when_non_destructive():
     # advisory_populated: locked_destructive is a non-empty list of
     # (op, reason) tuples covering the omitted write, verify (112-05
     # SC2/SWEEP-05), and erase (since M8720's erase is a supported
-    # destructive op) when destructive=False.
-    plan = derive_plan("M8720", _REAL_DB, destructive=False)
+    # destructive op) when write_scope="none".
+    plan = derive_plan("M8720", _REAL_DB, write_scope="none")
     assert plan.locked_destructive
     locked_ops = {op for op, _reason in plan.locked_destructive}
     assert locked_ops == {"write", "verify", "erase"}
@@ -556,9 +647,9 @@ def test_derive_plan_advisory_populated_when_non_destructive():
 
 
 def test_derive_plan_destructive_keeps_and_empties_advisory():
-    # destructive_keeps: destructive=True keeps write/erase in steps exactly
-    # as Phase 108 produced them, and locked_destructive is empty.
-    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    # destructive_keeps: write_scope="full" keeps write/erase in steps
+    # exactly as Phase 108 produced them, and locked_destructive is empty.
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     ops = {s.op for s in plan.steps}
     assert "write" in ops
     assert "erase" in ops
@@ -575,13 +666,119 @@ def test_derive_plan_na_erase_advisory_only_records_write():
     full = _REAL_DB.get_eprom("AM2716")
     assert full["electrical-type"] == "UV-EPROM"
 
-    plan = derive_plan("AM2716", _REAL_DB, destructive=False)
+    plan = derive_plan("AM2716", _REAL_DB, write_scope="none")
     locked_ops = {op for op, _reason in plan.locked_destructive}
     assert locked_ops == {"write", "verify"}
 
     erase_step = _step(plan, "erase")
     assert erase_step.supported is False
     assert "erase" not in {s.op for s in plan.steps if s.op == "erase" and s.supported}
+
+
+# ---------------------------------------------------------------------------
+# write_scope="partial" -- new third mode (D-02, 121-05 Task 3 leg 1)
+# ---------------------------------------------------------------------------
+
+
+def test_derive_plan_partial_same_ops_as_full_different_region():
+    # Same step op sequence as "full" EXCEPT the write op string itself --
+    # "partial" emits OP_WRITE_PARTIAL ("write-partial") instead of OP_WRITE
+    # (D-06, Phase 121 Plan 06) -- plus a different write_region on the write
+    # and verify steps. M27C512 (UV-EPROM, memory-size 65536): "full" uses
+    # the same top-anchored window as "partial" here (both are UV), so
+    # compare against a NON-UV chip to see the region actually differ
+    # between the two scopes -- M8720 (non-UV) gets the engine default under
+    # "full" but the top-anchored-window formula under "partial" (partial is
+    # not is_uv-gated, D-02).
+    plan_full = derive_plan("M8720", _REAL_DB, write_scope="full")
+    plan_partial = derive_plan("M8720", _REAL_DB, write_scope="partial")
+
+    ops_full = [s.op for s in plan_full.steps]
+    ops_partial = [s.op for s in plan_partial.steps]
+    # Only the write op string differs (OP_WRITE -> OP_WRITE_PARTIAL);
+    # everything else (id, read, blank-check, verify, erase) is identical.
+    assert [op if op != "write-partial" else "write" for op in ops_partial] == ops_full
+    assert ops_partial.count("write-partial") == 1
+    assert "write" not in ops_partial
+
+    write_full = _step(plan_full, "write")
+    write_partial = _step(plan_partial, "write-partial")
+    verify_full = _step(plan_full, "verify")
+    verify_partial = _step(plan_partial, "verify")
+
+    assert write_full.write_region != write_partial.write_region
+    assert verify_full.write_region != verify_partial.write_region
+    # verify's region equals the write step's for BOTH scopes (D-07); the
+    # verify op string stays the plain "verify" for both (D-07, no
+    # "verify-partial" partner).
+    assert write_full.write_region == verify_full.write_region
+    assert write_partial.write_region == verify_partial.write_region
+
+
+def test_derive_plan_partial_write_region_uv_memory_size():
+    # write_scope="partial" on a UV part with memory-size 65536 yields a
+    # write-partial step whose write_region is (65280, 256) (acceptance
+    # criterion), and a plain "verify" step (D-07) with the equal region.
+    full = _REAL_DB.get_eprom("M27C512")
+    assert full["electrical-type"] == "UV-EPROM"
+    assert full["memory-size"] == 65536
+
+    plan = derive_plan("M27C512", _REAL_DB, write_scope="partial")
+    write_step = _step(plan, "write-partial")
+    verify_step = _step(plan, "verify")
+    assert write_step.write_region == (65280, 256)
+    assert verify_step.write_region == (65280, 256)
+
+
+def test_derive_plan_partial_write_region_missing_memory_size_falls_back():
+    # write_scope="partial" on a chip with memory-size 0/missing yields the
+    # engine default (0, 256) (acceptance criterion) -- proven via a spy DB
+    # since every real DB entry carries a real memory-size.
+    full = {"electrical-type": "UV-EPROM", "protocol-id": 7}  # no memory-size key
+    prog = {"algorithm": 7, "flags": 0, "chip-id": 0}
+    spy_db = Mock(spec=["get_eprom", "convert_to_programmer"])
+    spy_db.get_eprom.return_value = full
+    spy_db.convert_to_programmer.return_value = prog
+
+    plan = derive_plan("SYNTHETIC", spy_db, write_scope="partial")
+    write_step = _step(plan, "write-partial")
+    assert write_step.write_region == (0, 256)
+
+
+# ---------------------------------------------------------------------------
+# write_scope rejects anything else fail-closed (D-02, 121-05 Task 3 leg 2)
+# ---------------------------------------------------------------------------
+
+
+def test_derive_plan_write_scope_rejects_unknown_value():
+    with pytest.raises(ValueError) as excinfo:
+        derive_plan("M8720", _REAL_DB, write_scope="bogus")
+    message = str(excinfo.value)
+    assert "bogus" in message
+    assert "none" in message
+    assert "partial" in message
+    assert "full" in message
+
+
+# ---------------------------------------------------------------------------
+# Plan.is_uv wiring proof, through derive_plan (D-02, 121-05 Task 3 leg 3)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name,expected_is_uv",
+    [
+        ("M27C512", True),
+        ("AM27C020", True),
+        ("W27C512", False),
+        ("AT28C256", False),
+    ],
+)
+def test_derive_plan_is_uv_wired_from_is_uv_eprom(name, expected_is_uv):
+    # Proven through derive_plan (NOT by calling is_uv_eprom directly) so
+    # the wiring itself is proven, using the four-chip table from Task 1.
+    plan = derive_plan(name, _REAL_DB, write_scope="none")
+    assert plan.is_uv is expected_is_uv
 
 
 # ---------------------------------------------------------------------------
@@ -920,6 +1117,68 @@ def test_marginal_on_disagreeing_verify_runs():
 
 
 # ---------------------------------------------------------------------------
+# Fail-closed dispatch on an unmapped op (T-121-05/06/07, 121-02 Task 1)
+# ---------------------------------------------------------------------------
+#
+# RESEARCH Pitfall 1a, reproduced against the pre-fix tree:
+# _dispatch_multi_run("write-partial", "AT28C256", {"memory-size": 32768},
+# operator, runs=2) fell through the run loop's terminal `else: # OP_ERASE`
+# arm and _dispatch_step's unconditional trailing
+# `return _dispatch_multi_run(...)`, calling operator.erase_eprom() TWICE and
+# reporting VERDICT_OK for an op string nobody wrote a handler for. This is
+# the host mirror of the firmware NULL-`main` phantom-success class Phase 119
+# D-06/D-07 fixed at the op layer (`operation_utils.cpp::
+# op_execute_stateful_operation`). The op string used below is deliberately
+# NOT "write-partial" (that string does not exist in this tree yet -- it is
+# added by Plan 121-06, AFTER this fail-closed guard lands) and is not any of
+# the six existing OP_* values, so this proof can never be accidentally
+# satisfied by a later plan's op addition. Every test's load-bearing
+# assertion is a NEGATIVE call assertion on `operator.erase_eprom` (never a
+# verdict-only or exit-code-only check --
+# `reference_dev_test_absent_chip_false_green_trap.md`).
+
+_UNMAPPED_OP = "unmapped-op-for-fail-closed-proof"
+
+
+def test_unhandled_op_fails_closed_never_erases():
+    operator = _mock_operator()
+    result = _dispatch_multi_run(
+        _UNMAPPED_OP, "AT28C256", {"memory-size": 32768}, operator, runs=2
+    )
+
+    # Load-bearing: an unmapped op must never reach erase_eprom.
+    operator.erase_eprom.assert_not_called()
+    assert result.verdict != VERDICT_OK
+
+
+def test_unhandled_op_fails_closed_names_the_op_in_the_reason():
+    operator = _mock_operator()
+    result = _dispatch_multi_run(
+        _UNMAPPED_OP, "AT28C256", {"memory-size": 32768}, operator, runs=2
+    )
+
+    assert _UNMAPPED_OP in result.reason
+    assert "refus" in result.reason.lower()
+    assert result.run_count == 0
+    # Load-bearing: nothing ran -- no operator method of any kind was called.
+    operator.write_eprom.assert_not_called()
+    operator.verify_eprom.assert_not_called()
+    operator.erase_eprom.assert_not_called()
+
+
+def test_dispatch_step_refuses_an_op_outside_the_multi_run_allow_list():
+    operator = _mock_operator()
+    step = Step(op=_UNMAPPED_OP, supported=True, reason="")
+    result = _dispatch_step("AT28C256", step, {"memory-size": 32768}, operator, runs=2)
+
+    assert result.verdict == VERDICT_BAD
+    # Load-bearing: none of the three chip-mutating operator methods ran.
+    operator.write_eprom.assert_not_called()
+    operator.verify_eprom.assert_not_called()
+    operator.erase_eprom.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Sampler hook (D-04, Phase 112 112-01) -- bracket site is _dispatch_multi_run's
 # OP_WRITE branch ONLY; sampler=None must be a proven no-op (SC4, D-04).
 # ---------------------------------------------------------------------------
@@ -1098,98 +1357,77 @@ def test_write_step_fingerprint_addr_base_matches_region_start():
 
 
 # ---------------------------------------------------------------------------
-# UV small-region top-anchored write cap (PATT-03, 109-01 Task 2)
+# _write_region_for reads Step.write_region; it no longer guesses UV-ness
+# (D-02, Phase 121 Plan 06 -- converted from the pre-121-06 execution-time
+# guess tests; see 121-06-SUMMARY.md for the conversion rationale)
 # ---------------------------------------------------------------------------
 #
-# Bench-free: `_write_region_for` is a pure selector over an `eprom_data`
-# dict, no operator/DB call. Real memory-size values are read once from
-# `_REAL_DB` to build representative UV/non-UV `eprom_data` dicts.
+# Bench-free: `_write_region_for` is a pure selector over `(step, eprom_data)`,
+# no operator/DB call. The pre-121-06 implementation guessed UV-ness from
+# `eprom_data` (`electrical-type` or `algorithm == 0x0B`); these tests now
+# prove that guess is GONE, not merely bypassed -- the selector reads ONLY
+# `step.write_region` and `eprom_data` plays no role, even when `eprom_data`
+# is shaped exactly like the old UV-triggering dict.
 
 
-def test_uv_window_top_anchored_default_length():
-    # uv_window: AM2716 (UV-EPROM, memory-size 2048) -> [1792, 2048) with
-    # the default 256 B engine constant.
+def test_write_region_for_reads_step_carried_region():
+    # step_carried: a Step carrying an explicit write_region is returned
+    # UNCHANGED regardless of eprom_data -- this is the UV top-anchored
+    # window derive_plan would compute for AM2716 (memory-size 2048).
+    step = Step(op=OP_WRITE, supported=True, reason="", write_region=(1792, 256))
+    non_uv_eprom_data = _REAL_DB.get_eprom("M8720")
+    start, length = _write_region_for(step, non_uv_eprom_data)
+    assert (start, length) == (1792, 256)
+    assert length == _UV_WRITE_REGION_LENGTH
+
+
+def test_write_region_for_no_carried_region_returns_engine_default_even_for_uv_shaped_data():
+    # Acceptance criterion (D-02): a Step carrying NO region, paired with an
+    # eprom_data dict that would previously have triggered the deleted UV
+    # guess (electrical-type "UV-EPROM" AND algorithm 0x0B, memory-size
+    # 65536), must return the engine default (0, 256) -- NOT (65280, 256).
+    # This is the behavioural proof the guess was deleted, not bypassed.
+    step = Step(op=OP_WRITE, supported=True, reason="")  # write_region=None
+    uv_shaped_eprom_data = {
+        "electrical-type": "UV-EPROM",
+        "algorithm": 0x0B,
+        "memory-size": 65536,
+    }
+    start, length = _write_region_for(step, uv_shaped_eprom_data)
+    assert (start, length) == (0, 256)
+
+
+def test_write_region_for_step_none_returns_engine_default():
+    # step=None (e.g. a defensive call site) is equivalent to "no carried
+    # region" -- the engine default, never a guess, even against a real UV
+    # chip's full DB dict.
     full = _REAL_DB.get_eprom("AM2716")
     assert full["electrical-type"] == "UV-EPROM"
-    assert full["memory-size"] == 2048
-
-    start, length = _write_region_for(full)
-    assert length == _UV_WRITE_REGION_LENGTH == 256
-    assert start == 2048 - _UV_WRITE_REGION_LENGTH == 1792
+    start, length = _write_region_for(None, full)
+    assert (start, length) == (0, 256)
 
 
-def test_uv_window_scales_with_memory_size():
-    # uv_window_scales: AM2732 (UV-EPROM, memory-size 4096) -> top-anchored
-    # to ITS mem_size, not a fixed literal.
-    full = _REAL_DB.get_eprom("AM2732")
-    assert full["electrical-type"] == "UV-EPROM"
-    assert full["memory-size"] == 4096
-
-    start, length = _write_region_for(full)
-    assert length == _UV_WRITE_REGION_LENGTH
-    assert start == 4096 - _UV_WRITE_REGION_LENGTH == 3840
-
-
-def test_nonuv_default_region_unchanged():
-    # nonuv_default: a non-UV chip (M8720, EEPROM) keeps the engine default
-    # region (start == 0, length == 256).
-    full = _REAL_DB.get_eprom("M8720")
-    assert full["electrical-type"] != "UV-EPROM"
-
-    start, length = _write_region_for(full)
-    assert start == 0
-    assert length == 256
-
-
-def test_cap_not_widenable_by_injected_db_field():
-    # cap_not_widenable (SC4): a synthetic eprom_data dict with an injected
-    # bogus size/width hint must NOT widen the UV region -- the length
-    # ALWAYS comes from the _UV_WRITE_REGION_LENGTH module constant, never
-    # from any DB field.
-    malicious = {
+def test_write_region_for_step_region_wins_over_bogus_eprom_data_width_hint():
+    # cap_not_widenable (SC4, carried forward from PATT-03): a synthetic
+    # eprom_data dict with an injected bogus size/width hint must NOT
+    # override the Step-carried region -- the selector reads ONLY
+    # step.write_region.
+    step = Step(op=OP_WRITE, supported=True, reason="", write_region=(1792, 256))
+    malicious_eprom_data = {
         "electrical-type": "UV-EPROM",
-        "memory-size": 1_048_576,  # huge, attacker-controlled placement
+        "memory-size": 1_048_576,
         "write-region-length": 999_999,  # bogus width field the selector must ignore
     }
-    start, length = _write_region_for(malicious)
-    assert length == _UV_WRITE_REGION_LENGTH
-    assert start == 1_048_576 - _UV_WRITE_REGION_LENGTH
-
-
-def test_cap_not_widenable_uv_missing_memory_size_falls_back_to_default():
-    # Defensive fallback: a UV chip with missing/too-small memory-size must
-    # not produce a negative start -- falls back to the engine default
-    # region rather than fabricating an out-of-bounds window.
-    broken = {"electrical-type": "UV-EPROM"}  # no memory-size key at all
-    start, length = _write_region_for(broken)
-    assert start == 0
-    assert length == 256
-
-
-def test_write_region_for_detects_uv_via_execution_time_programmer_dict():
-    # Execution-time gotcha: _dispatch_multi_run's eprom_data is
-    # resolve_chip's PROGRAMMER dict (via convert_to_programmer), which does
-    # NOT carry "electrical-type" -- only derive_plan's guard-bypassing
-    # `full` dict does. _write_region_for must still detect UV-EPROM via the
-    # `algorithm` field (0x0B / EPROM_LEGACY, UV-EPROM-exclusive in this DB)
-    # that IS present on the resolved programmer dict.
-    from firestarter.chip_resolver import resolve_chip
-
-    prog = resolve_chip("AM2716", db=_REAL_DB)
-    assert "electrical-type" not in prog
-    assert prog.get("algorithm") == 0x0B
-
-    start, length = _write_region_for(prog)
-    assert length == _UV_WRITE_REGION_LENGTH
-    assert start == prog["memory-size"] - _UV_WRITE_REGION_LENGTH
+    start, length = _write_region_for(step, malicious_eprom_data)
+    assert (start, length) == (1792, 256)
 
 
 def test_addr_base_absolute_matches_region_start():
     # addr_base_absolute: the region start fed to generate_pattern equals
     # the addr_base fed to classify_fingerprint (Pitfall 3) -- verified via
     # the selector + generate_pattern's own consumption contract, bench-free.
-    full = _REAL_DB.get_eprom("AM2716")
-    start, length = _write_region_for(full)
+    step = Step(op=OP_WRITE, supported=True, reason="", write_region=(1792, 256))
+    start, length = _write_region_for(step, {})
     pattern = generate_pattern(start, length)
     # The pattern's first byte must equal address_fold_byte(start) -- i.e.
     # generate_pattern was invoked with the ABSOLUTE region start, not an
@@ -1199,20 +1437,24 @@ def test_addr_base_absolute_matches_region_start():
 
 def test_dispatch_multi_run_uses_selector_for_uv_chip():
     # Integration check: _dispatch_multi_run must pass the SAME absolute
-    # `start` to both generate_pattern and classify_fingerprint's addr_base
-    # when driving a UV-EPROM chip through run_plan (no lingering bare
-    # _WRITE_REGION_START inside the UV path).
+    # `start` (as carried on the Step, the way derive_plan sets it) to both
+    # generate_pattern and classify_fingerprint's addr_base when driving a
+    # UV-EPROM chip through run_plan (no lingering bare _WRITE_REGION_START
+    # inside the UV path, and no re-derivation from eprom_data).
     from firestarter.chip_test import generate_pattern as _gen
 
-    full = _REAL_DB.get_eprom("AM2716")
-    start, length = _write_region_for(full)
-    assert start == 1792  # sanity: AM2716 is on the UV top-anchored window
-
+    start, length = 1792, 256  # AM2716's UV window, as derive_plan would set it
     expected_bytes = _gen(start, length)
     operator = _mock_operator()
     operator.read_eprom.side_effect = _writes_bytes_to_output_file(expected_bytes)
     plan = _plan_with_steps(
-        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+        Step(
+            op=OP_WRITE,
+            supported=True,
+            reason="",
+            destructive=True,
+            write_region=(start, length),
+        )
     )
     results = run_plan(
         Plan(name="AM2716", steps=plan.steps), operator, _REAL_DB, runs=2
@@ -1244,6 +1486,123 @@ def test_generate_pattern_and_classify_fingerprint_source_unchanged():
 
 
 # ---------------------------------------------------------------------------
+# OP_WRITE_PARTIAL through the production run_plan path (D-06/D-07, Phase 121
+# Plan 06, Task 3) -- RESEARCH Pitfall 4: every region proof here drives
+# run_plan/resolve_chip with the REAL programmer-dict shape production uses;
+# none of these tests call `_write_region_for` with a `full`-shaped dict.
+# ---------------------------------------------------------------------------
+
+
+def _capturing_write(captured: dict):
+    """`operator.write_eprom` side_effect that captures the tmp source file's
+    bytes at call time (Task 3) -- `_dispatch_multi_run` deletes the tmp file
+    in its `finally` block once the run loop returns, so the bytes MUST be
+    read back from inside the call itself, not after `run_plan` returns."""
+
+    def _write(name: str, eprom_data: dict, source_path: str) -> bool:
+        captured["bytes"] = Path(source_path).read_bytes()
+        return True
+
+    return _write
+
+
+def test_write_region_via_run_plan_uses_the_plan_carried_window():
+    # M27C512 (UV-EPROM, memory-size 65536): write_scope="partial" carries
+    # the top-anchored (65280, 256) window on the write-partial step (D-02).
+    # Driving run_plan end to end (real resolve_chip/convert_to_programmer),
+    # operator.write_eprom must be called with a pattern file containing
+    # EXACTLY _UV_WRITE_REGION_LENGTH bytes generated for that base.
+    name = "M27C512"
+    expected_id = _real_expected_chip_id(name)
+    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    write_step = _step(plan, OP_WRITE_PARTIAL)
+    assert write_step.write_region == (65280, 256)
+
+    operator = _mock_operator()
+    operator.check_eprom_id.return_value = (True, expected_id)
+    captured: dict = {}
+    operator.write_eprom.side_effect = _capturing_write(captured)
+    operator.read_eprom.side_effect = _writes_bytes_to_output_file(
+        generate_pattern(65280, 256)
+    )
+
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    operator.write_eprom.assert_called()
+    write_result = _result(results, OP_WRITE_PARTIAL)
+    assert write_result.verdict == VERDICT_OK
+    assert len(captured["bytes"]) == _UV_WRITE_REGION_LENGTH == 256
+    assert captured["bytes"] == generate_pattern(65280, 256)
+
+
+def test_write_region_via_run_plan_uv_part_full_scope_uses_full_window():
+    # Correction recorded in 121-06-SUMMARY.md: measured (unchanged since
+    # 121-05's derive_plan), write_scope="full" for a UV part ALSO uses the
+    # top-anchored window -- identical to "partial"'s, because derive_plan's
+    # "full" arm is is_uv-gated onto `_top_anchored_or_default` exactly like
+    # "partial". The REGION does not distinguish the two scopes for a UV
+    # part; the OP STRING does (OP_WRITE here vs OP_WRITE_PARTIAL for the
+    # partial plan) -- which is precisely why D-06 introduces a dedicated op
+    # string: dedup_fingerprint hashes on `op`, so the region axis alone
+    # could not keep a UV part's full and partial runs from cross-agreeing
+    # (T-121-24).
+    name = "M27C512"
+    expected_id = _real_expected_chip_id(name)
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    write_step = _step(plan, OP_WRITE)
+    assert write_step.write_region == (65280, 256)
+
+    operator = _mock_operator()
+    operator.check_eprom_id.return_value = (True, expected_id)
+    captured: dict = {}
+    operator.write_eprom.side_effect = _capturing_write(captured)
+    operator.read_eprom.side_effect = _writes_bytes_to_output_file(
+        generate_pattern(65280, 256)
+    )
+
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    operator.write_eprom.assert_called()
+    write_result = _result(results, OP_WRITE)
+    assert write_result.verdict == VERDICT_OK
+    assert captured["bytes"] == generate_pattern(65280, 256)
+    # Same region as the partial plan (see correction above); op strings
+    # differ ("write" vs "write-partial"), which is the actual distinguisher.
+    assert write_step.write_region == (65280, 256)
+
+
+def test_partial_write_gated_on_id_mismatch():
+    # A mismatched chip-ID must gate the write-partial step exactly as it
+    # gates a full write (T-121-21) -- the load-bearing line is
+    # `write_eprom.assert_not_called()`; the SKIPPED verdict alone is not
+    # sufficient proof (a verdict can be produced after the fact).
+    name = "M27C512"
+    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+
+    operator = _mock_operator()
+    operator.check_eprom_id.return_value = (False, 0x9999)
+
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    write_result = _result(results, OP_WRITE_PARTIAL)
+    assert write_result.verdict == VERDICT_SKIPPED
+    assert write_result.reason == _DESTRUCTIVE_GATE_REASON
+    operator.write_eprom.assert_not_called()
+
+
+def test_verify_region_matches_the_preceding_partial_write_region():
+    # On a partial plan, the verify step's write_region equals the write
+    # step's (D-07), and the verify step's op is the plain "verify" string
+    # -- no "verify-partial" partner exists.
+    plan = derive_plan("M27C512", _REAL_DB, write_scope="partial")
+    write_step = _step(plan, OP_WRITE_PARTIAL)
+    verify_step = _step(plan, OP_VERIFY)
+
+    assert verify_step.op == OP_VERIFY
+    assert verify_step.write_region == write_step.write_region == (65280, 256)
+
+
+# ---------------------------------------------------------------------------
 # count_applicable -- applicable-only N-of-M banner DATA (SWEEP-05, 109-02)
 # ---------------------------------------------------------------------------
 #
@@ -1259,7 +1618,7 @@ def test_generate_pattern_and_classify_fingerprint_source_unchanged():
 
 
 def test_count_applicable_uv_counts():
-    plan = derive_plan("AM2716", _REAL_DB, destructive=False)
+    plan = derive_plan("AM2716", _REAL_DB, write_scope="none")
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
@@ -1282,7 +1641,7 @@ def test_count_applicable_eeprom_counts():
 
     assert prog["flags"] & FLAG_CAN_ERASE
 
-    plan = derive_plan("M8720", _REAL_DB, destructive=False)
+    plan = derive_plan("M8720", _REAL_DB, write_scope="none")
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
@@ -1305,7 +1664,7 @@ def test_count_applicable_bad_counts_as_ran():
     # longer runs on a non-destructive plan (112-05 SC2/SWEEP-05 fix).
     operator = _mock_operator()
     operator.read_eprom.return_value = False
-    plan = derive_plan("AM2716", _REAL_DB, destructive=False)
+    plan = derive_plan("AM2716", _REAL_DB, write_scope="none")
     results = run_plan(plan, operator, _REAL_DB)
 
     read_result = _result(results, OP_READ)
@@ -1324,7 +1683,7 @@ def test_count_applicable_skipped_does_not_count_as_ran():
 
     operator = _mock_operator()
     operator.check_eprom_id.return_value = (False, 0x9999)
-    plan = derive_plan(name, _REAL_DB, destructive=True)
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
     results = run_plan(plan, operator, _REAL_DB)
 
     write_result = _result(results, OP_WRITE)
@@ -1333,7 +1692,7 @@ def test_count_applicable_skipped_does_not_count_as_ran():
     counts = count_applicable(plan, results)
     # write/erase were gated SKIPPED -- excluded from N despite being
     # counted in M (they are `plan.steps` supported entries here, since
-    # destructive=True keeps them in steps rather than locked_destructive).
+    # write_scope="full" keeps them in steps rather than locked_destructive).
     ran_ops = {r.op for r in results if r.verdict not in (VERDICT_NA, VERDICT_SKIPPED)}
     assert "write" not in ran_ops
     assert "erase" not in ran_ops
@@ -1343,7 +1702,7 @@ def test_count_applicable_skipped_does_not_count_as_ran():
 def test_count_applicable_m_from_single_plan_never_rederives(monkeypatch):
     import firestarter.chip_test as chip_test_mod
 
-    plan = derive_plan("AM2716", _REAL_DB, destructive=False)
+    plan = derive_plan("AM2716", _REAL_DB, write_scope="none")
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
@@ -1357,10 +1716,10 @@ def test_count_applicable_m_from_single_plan_never_rederives(monkeypatch):
 
 
 def test_count_applicable_n_equals_m_when_destructive():
-    # Same chip (M8720), destructive=True: locked_destructive is empty and
+    # Same chip (M8720), write_scope="full": locked_destructive is empty and
     # every applicable step actually executes -- N == M (banner would not
     # trigger).
-    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
@@ -1404,7 +1763,7 @@ def test_safe02_routes_via_resolve_chip_for_every_executed_step(monkeypatch):
     monkeypatch.setattr(chip_test_mod, "resolve_chip", spy)
 
     operator = _mock_operator()
-    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     # M8720's id step is NA (chip-id sentinel 0) -- every OTHER step here is
     # supported, so all of them must resolve through the spy.
     executed_steps = [s for s in plan.steps if s.supported]
@@ -1541,7 +1900,59 @@ def test_safe02_only_known_operator_methods_no_attribute_error():
     with pytest.raises(AttributeError):
         operator.set_vpp  # out-of-spec attribute access -- sanity check
 
-    plan = derive_plan("M8720", _REAL_DB, destructive=True)
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     results = run_plan(plan, operator, _REAL_DB)  # must not raise AttributeError
 
     assert len(results) == len(plan.steps)
+
+
+# ---------------------------------------------------------------------------
+# DEVTEST-01 host half (Phase 121 D-12): the 0x0D sweep never fabricates an
+# erase, and an all-OK 0x0D sweep no longer auto-tags community-fail
+# ---------------------------------------------------------------------------
+
+
+def test_devtest01_0x0d_sweep_erase_is_na_and_erase_eprom_never_called():
+    """DEVTEST-01 end-to-end sweep leg: for a protocol-0x0D chip (AT28C256),
+    `run_plan` over a plan derived at `write_scope="full"` produces an erase
+    result whose verdict is NA, with the family-fact reason surviving into
+    the `StepResult`, and `operator.erase_eprom` is NEVER called. A `NA`
+    verdict alone does not prove nothing was dispatched -- this negative-call
+    assertion is the load-bearing line (Phase 121 D-12)."""
+    name = "AT28C256"
+    full = _REAL_DB.get_eprom(name)
+    assert full["protocol-id"] == 13  # 0x0D
+
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    erase_step = _step(plan, "erase")
+    assert erase_step.supported is False
+
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+
+    erase_result = _result(results, OP_ERASE)
+    assert erase_result.verdict == VERDICT_NA
+    assert "0x0D" in erase_result.reason
+    assert "FLAG_CAN_ERASE" not in erase_result.reason
+    operator.erase_eprom.assert_not_called()
+
+
+def test_devtest01_0x0d_all_ok_sweep_no_longer_tags_community_fail():
+    """DEVTEST-01 ladder leg: an all-OK protocol-0x0D sweep whose erase step
+    is NA no longer produces the `community-fail` ladder tag -- that
+    fabricated-erase-poisons-an-otherwise-passing-chip's-ladder-state bug is
+    exactly what DEVTEST-01 closes. The resulting `ladder_state` is the
+    `community-reported` value, and `community-fail` is asserted absent."""
+    from firestarter.diagnostic_report import build_db_diff
+
+    name = "AT28C256"
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+
+    verdicts = {r.verdict for r in results}
+    assert VERDICT_BAD not in verdicts
+
+    db_diff = build_db_diff(name, _REAL_DB, results)
+    assert db_diff.ladder_state == "community-reported"
+    assert db_diff.ladder_state != "community-fail"

@@ -42,6 +42,7 @@ from firestarter.chip_test import (
     VERDICT_SKIPPED,
     count_applicable,
     derive_plan,
+    is_uv_eprom,
     run_plan,
 )
 from firestarter.config import ConfigManager, get_config_dir
@@ -68,6 +69,8 @@ from firestarter.exceptions import (
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.hardware import HardwareManager
 from firestarter.logging_utils import SingleLineStatusHandler
+from firestarter.messages import MSG_ERR_UNKNOWN_CMD
+from firestarter.sdp_capability import SDP_PROTOCOL_ID, sdp_capability
 
 logger = logging.getLogger("Firestarter")
 
@@ -246,6 +249,7 @@ def _build_op_flags(
     verbose: bool = False,
     vpe_as_vpp: bool = False,
     skip_erase: bool = False,
+    skip_sdp_unlock: bool = False,
     input_enable: Optional[bool] = None,
     chip_disable: Optional[bool] = None,
 ) -> int:
@@ -272,7 +276,19 @@ def _build_op_flags(
     poll reported "successful" (the Phase-90/91 "12V-VPP regression" false alarm).
     `skip_erase` is now an explicit opt-in (write `--skip-erase`), default False.
     """
-    flags = build_flags(blank_check, force, vpe_as_vpp, verbose, skip_erase=skip_erase)
+    # D-19: FLAG_SKIP_SDP_UNLOCK is passed into build_flags as a keyword
+    # argument, NOT OR-ed into `flags` after the call the way
+    # FLAG_OUTPUT_ENABLE / FLAG_CHIP_ENABLE are below — every wire-flag bit
+    # stays mapped in the one function that maps wire flags (build_flags),
+    # deliberately not following the OE/CE precedent in this same helper.
+    flags = build_flags(
+        blank_check,
+        force,
+        vpe_as_vpp,
+        verbose,
+        skip_erase=skip_erase,
+        skip_sdp_unlock=skip_sdp_unlock,
+    )
     if input_enable is not None:
         flags |= 0 if input_enable else FLAG_OUTPUT_ENABLE
     if chip_disable is not None:
@@ -489,6 +505,16 @@ def read(
 )
 @click.option("-a", "--address", default=None, help="Write start address in dec/hex")
 @click.option("--vpe-as-vpp", "vpe_as_vpp", is_flag=True, help="Use VPE as VPP voltage")
+@click.option(
+    "--skip-sdp-unlock",
+    "skip_sdp_unlock",
+    is_flag=True,
+    default=False,
+    help="Decline the automatic SDP unlock firmware performs at the start of every "
+    "protocol-0x0D write. WARNING: on a chip whose software data protection is "
+    "actually enabled, the write will then fail. Has NO EFFECT on any other "
+    "protocol — the host warns and proceeds.",
+)
 @click.pass_obj
 @map_typed_errors
 def write(
@@ -500,6 +526,7 @@ def write(
     force: bool,
     address: Optional[str],
     vpe_as_vpp: bool,
+    skip_sdp_unlock: bool,
 ) -> None:
     """Writes a binary file to an EPROM.
 
@@ -513,8 +540,91 @@ def write(
     still runs for electrically-erasable chips (FLAG_CAN_ERASE) so ``write -b`` on
     a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip the erase
     (previously implied by ``-b``) for already-blank or non-erasable parts.
+
+    TRAP #6 / D-17/D-18 (v1.22 HOST-02): ``--skip-sdp-unlock`` is exposed
+    on ``write`` ONLY — firmware auto-unlocks in ``eeprom28c_write_init`` and
+    nowhere else, so ``read``/``verify``/``blank``/``erase`` have nothing to
+    skip and the flag is deliberately absent from all four (D-17). On a
+    non-protocol-0x0D chip the flag has no effect: firmware never reads this
+    bit outside protocol 0x0D, so the host warns and proceeds rather than
+    refusing or silently dropping the bit — the bit is still emitted so a
+    blanket-flag script across a mixed batch produces identical wire frames
+    (D-18). The host may also set this bit **on its own**, without the user
+    passing it, when the resolved chip is protocol-0x0D and capability-refused
+    (``firestarter.sdp_capability``) — see the D-04 auto-set block below,
+    which always prints a mandatory, default-visible report line when it
+    fires.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
+
+    # D-04 auto-set (v1.22 HOST-04): decided here, in the handler, because
+    # this is the last place with both the chip NAME and app.db — resolve_chip's
+    # programmer dict carries neither `protocol-id` nor `name` (RESEARCH F-06).
+    # This is a DELIBERATE DIVERGENCE from 3.0.0b11 for the capability-refused
+    # 0x0D subset, not a no-op: today's `write` already emits the SDP-disable
+    # sequence before the payload on those parts, leaving 0x2AAA<-0x55 /
+    # 0x5555<-0x20 stored as data at the bus-truncated magic addresses (an
+    # address-ranged or short write does not get overwritten by the payload).
+    # The trade-off is dissolved rather than decided on the derived 43/41
+    # partition: a part with no SDP has nothing to unlock, so suppressing its
+    # auto-unlock costs that part nothing and additionally avoids those three
+    # stored bytes. Residual risk is confined to 120-WATCHLIST.md's 9 entries.
+    sdp_entry = app.db.get_eprom(eprom)
+    is_protocol_0x0d = (
+        bool(sdp_entry) and sdp_entry.get("protocol-id") == SDP_PROTOCOL_ID
+    )
+    allowed, sdp_reason = sdp_capability(eprom, app.db)
+    if is_protocol_0x0d and not allowed and not skip_sdp_unlock:
+        skip_sdp_unlock = True
+        click.echo(
+            f"{eprom.upper()}: auto-setting --skip-sdp-unlock on your behalf "
+            f"({sdp_reason}). Firmware's automatic SDP unlock is keyed on "
+            "protocol, not on this specific part, so without this the unlock "
+            "sequence's command bytes would be stored as data at the "
+            "bus-truncated magic addresses on a part with no SDP command "
+            "decoder."
+        )
+    elif skip_sdp_unlock and not is_protocol_0x0d:
+        # D-18 warn-and-proceed: the user asked for something vacuous on this
+        # protocol. Do NOT refuse, do NOT abort, do NOT suppress the bit —
+        # firmware never reads FLAG_SKIP_SDP_UNLOCK outside protocol 0x0D, so
+        # nothing unsafe happens either way, and a blanket-flag script across
+        # a mixed batch of chips must still produce identical wire frames.
+        observed_protocol = sdp_entry.get("protocol-id") if sdp_entry else None
+        click.echo(
+            f"{eprom.upper()}: --skip-sdp-unlock has no effect on this chip's "
+            f"protocol (observed protocol {observed_protocol!r}) — firmware "
+            "only reads this bit on protocol 0x0D writes. Proceeding with a "
+            "normal write."
+        )
+
+    # D-13 warn-and-proceed (v1.22 GATE-02, contributes-only): a DELIBERATE
+    # SIBLING `if`, not an `elif` chained onto the block above — this checks
+    # `--skip-erase`, an entirely different flag from the D-04/D-18 block's
+    # `skip_sdp_unlock`, so both blocks must be free to fire independently on
+    # the same 0x0D chip (e.g. a capability-refused 0x0D part gets the D-04
+    # auto-set line AND this line together). Do NOT refuse, do NOT abort, do
+    # NOT suppress the bit: nothing on the 0x0D path reads an erase-capability
+    # bit, and after Phase 121 D-12 (`convert_to_programmer`) the host no
+    # longer advertises one either, so the flag is inert here regardless of
+    # whether this message fires. The bit is still emitted (unconditionally,
+    # via `_build_op_flags` below) so a blanket-flag script across a mixed
+    # batch of chips still produces byte-identical wire frames whether or not
+    # this line printed. RESEARCH C-8: this arm deliberately does NOT extend
+    # to `-b`/`--no-blank-check` — since Phase 92 that flag skips only the
+    # blank check, not the erase, and it is genuinely useful on a non-blank
+    # 0x0D part precisely because there is no erase to make the part blank;
+    # a "nothing to skip" line on that flag would be a false statement. That
+    # distinction is recorded as a GATE-02 documentation obligation (plan
+    # 121-13), not a second runtime warning here.
+    if skip_erase and is_protocol_0x0d:
+        click.echo(
+            f"{eprom.upper()}: --skip-erase has nothing to skip on this "
+            "chip's protocol — the 28C family (protocol 0x0D) has no erase "
+            "operation at all; each page write auto-erases internally. "
+            "Proceeding with a normal write."
+        )
+
     ok = app.eprom_operator.write_eprom(
         eprom,
         eprom_data,
@@ -525,6 +635,7 @@ def write(
             force=force,
             vpe_as_vpp=vpe_as_vpp,
             skip_erase=skip_erase,
+            skip_sdp_unlock=skip_sdp_unlock,
         ),
     )
     sys.exit(0 if ok else 1)
@@ -1729,7 +1840,10 @@ def _is_interactive() -> bool:
 def _make_sampler(app: "AppContext", report: DiagnosticReport) -> Any:
     """Build the before/after sampler thunk closing over `hardware_manager`.
 
-    Only constructed for a `--destructive` run (D-04). Reuses the existing
+    Constructed on EVERY run (Phase 121 D-04: `dev test` always writes, so
+    there is no non-destructive mode left to distinguish this from -- the
+    `--destructive`-only construction this docstring used to describe was
+    superseded when that flag was deleted). Reuses the existing
     `sample_vpp_mv`/`sample_vpe_mv` monitor path (COMMAND_READ_VPP/VPE,
     energize+measure only -- SAFE-02) -- no VPP-set call is made here or
     anywhere in this module. `chip_test.run_plan` calls this as an opaque
@@ -1750,96 +1864,139 @@ def _make_sampler(app: "AppContext", report: DiagnosticReport) -> Any:
     return _sampler
 
 
-@dev.command(name="test")
-@click.argument("chip", shell_complete=_complete_eprom)
-@click.option(
-    "--destructive",
-    is_flag=True,
-    default=False,
-    help=(
-        "Run the full write/erase/verify sweep (sacrifices the chip). "
-        "CLI-only flag -- never read from config or environment (SAFE-01)."
-    ),
-)
-@click.option(
-    "--output-dir",
-    "output_dir",
-    type=str,
-    default=None,
-    help=(
-        "Write dev-test-<chip>.json and dev-test-<chip>.md into this "
-        "directory, overriding the default location. Default: "
-        "<config dir>/reports (honors FIRESTARTER_CONFIG_DIR; "
-        "e.g. ~/.firestarter/reports). The report is always written."
-    ),
-)
-@click.option(
-    "-y",
-    "--yes",
-    "assume_yes",
-    is_flag=True,
-    default=False,
-    help="Bypass the --destructive confirm prompt on a TTY.",
-)
-@click.option(
-    "--submit",
-    "submit",
-    is_flag=True,
-    default=False,
-    help=(
-        "After the report is rendered and saved, file it to the "
-        "maintainer's GitHub tracker (explicit + interactive-only; "
-        "never on a bare run)."
-    ),
-)
-@click.pass_obj
-@map_typed_errors
-def dev_test(
+def _is_uv_eprom(app: "AppContext", chip: str) -> bool:
+    """Read this chip's UV-erasable-EPROM axis directly off the DB entry.
+
+    Delegates to `chip_test.is_uv_eprom` on the **full** DB dict from
+    `app.db.get_eprom(chip)` -- never `resolve_chip`'s/`convert_to_
+    programmer`'s programmer dict, which carries no `electrical-type` and is
+    the wrong seam per `is_uv_eprom`'s own docstring (D-01, DEVTEST-03,
+    RESEARCH C-4). Named exactly `_is_uv_eprom` because
+    `check_devtest_orchestrator.py`'s `_HANDLER_FUNCTION_NAMES` allow-list
+    has carried that name since Phase 112 pointing at nothing -- landing the
+    handler-side helper under this name is free gate coverage rather than a
+    new allow-list entry.
+
+    Returns `False` for a chip absent from the DB; every caller reaches this
+    helper only after SAFE-04's absent-chip hard-fail has already run, so
+    that case is unreached in practice.
+    """
+    full = app.db.get_eprom(chip)
+    if not full:
+        return False
+    return is_uv_eprom(full)
+
+
+def _default_uv_write_confirm(prompt: str) -> bool:
+    """Module confirm helper `_resolve_write_scope` defaults to (D-01)."""
+    return bool(Confirm.ask(prompt, default=False))
+
+
+def _resolve_write_scope(
     app: "AppContext",
     chip: str,
-    destructive: bool,
-    output_dir: Optional[str],
-    assume_yes: bool,
-    submit: bool,
-) -> None:
+    *,
+    interactive: bool,
+    confirm_fn: Callable[[str], bool] = _default_uv_write_confirm,
+) -> str:
+    """Decide this run's `derive_plan(..., write_scope=...)` literal (D-01/D-03).
+
+    1. Not UV (`_is_uv_eprom` False) -> the full-write scope, **no prompt at
+       all**. A UV write is irrecoverable without a lamp; EEPROM and Flash
+       writes are recoverable via erase and SRAM/FRAM writes are essentially
+       free, so every other family -- explicitly including this milestone's
+       own AT28C family -- runs the full write/verify/erase round-trip
+       unprompted.
+    2. UV and not interactive -> the partial scope, no prompt. Per D-03 an
+       absent TTY is a DECLINED prompt, not absent consent -- the 256-byte
+       top-anchored window is still written so a piped or CI run still
+       yields write evidence.
+    3. UV and interactive -> ask, defaulting to decline. A yes returns the
+       full scope (the whole device may be written); a no returns the
+       partial scope -- never described as non-destructive or read-only,
+       because it writes a small top-anchored region.
+
+    `interactive` is taken as a parameter rather than calling
+    `_is_interactive()` internally, and `confirm_fn` is an injected
+    keyword-only callable -- both so tests can drive every branch without
+    patching module internals.
+    """
+    if not _is_uv_eprom(app, chip):
+        return "full"
+    if not interactive:
+        return "partial"
+    chip_upper = chip.upper()
+    prompt = (
+        f"{chip_upper} is a UV-erasable EPROM -- its write cannot be undone "
+        "without a UV eraser. Write the WHOLE device now? Yes writes the "
+        "entire chip; no writes only a small 256-byte top-anchored region "
+        "instead -- that still writes, it is not read-only or non-destructive."
+    )
+    if confirm_fn(prompt):
+        return "full"
+    return "partial"
+
+
+# D-04: printed FIRST, unconditionally, before the SAFE-04 absent-chip
+# hard-fail and before anything that touches hardware -- an unknown chip
+# seeing this notice is harmless and honest, and printing first guarantees
+# it precedes anything that could energise the shield. States the doubled
+# run count truthfully (run_plan's runs>=2 default means every destructive
+# step executes twice) and never calls any path non-destructive or
+# read-only, because none is (D-04, RESEARCH Open Question 2).
+_ALWAYS_WRITES_NOTICE = (
+    "dev test ALWAYS WRITES to the chip -- run it only on a blank or "
+    "scratch part you are willing to sacrifice. Every write/verify/erase "
+    "step runs TWICE per invocation, so most chips receive the full device "
+    "written twice; a UV-erasable EPROM is asked first, and even a decline "
+    "still writes a small 256-byte top-anchored region -- there is no "
+    "read-only or non-destructive mode."
+)
+
+
+@dev.command(name="test")
+@click.argument("chip", shell_complete=_complete_eprom)
+@click.pass_obj
+@map_typed_errors
+def dev_test(app: "AppContext", chip: str) -> None:
     """Run the community chip-validation sweep for CHIP (SWEEP-01..05, RPT-01..05).
 
-    Without --destructive: id + read + blank-check only (chip stays
-    pristine). With --destructive: adds write/erase/verify (sacrifices the
-    chip) -- gated behind a TTY confirm unless -y/--yes is given.
+    Takes ZERO options -- CHIP is the only argument (D-05, Phase 121). The
+    four flags this command carried through v1.21 (`--destructive`,
+    `--output-dir`, `-y`/`--yes`, `--submit`) are gone; each now errors as
+    an unknown option.
 
-    Issues ZERO interactive prompts about tester-supplied identity (Phase
-    112 Plan 04 reversal, operator-approved per 112-UAT.md): shield
-    revision, chip origin, and pot-adjustment are no longer asked -- the
-    report auto-captures what the firmware/DB can supply and is honest
-    ("not measured"/None) about what it cannot.
+    ALWAYS WRITES (D-04): every run writes to the chip, unconditionally, and
+    prints a notice saying so as its first line of output -- before the
+    absent-chip hard-fail and before anything touches hardware. A
+    UV-erasable EPROM is asked first (D-01): yes writes the whole device,
+    no writes only a small 256-byte top-anchored region (still a write,
+    never read-only or non-destructive); off a TTY the ask is treated as a
+    DECLINED prompt, not absent consent, so the 256-byte window is written
+    anyway (D-03). Every OTHER family -- explicitly including this
+    milestone's own AT28C family, an electrically-erasable EEPROM -- is
+    written in full with NO prompt at all, because that write is
+    recoverable via erase (unlike an irrecoverable UV write). The report is
+    unconditionally persisted to `<config dir>/reports` (honors
+    `FIRESTARTER_CONFIG_DIR`) and is always handed to `submit_report`
+    (DEVTEST-05/06; Plan 121-11 owns that function's internals).
 
-    Prints a rendered report to stdout on every run. With --output-dir,
-    additionally writes dev-test-<chip>.json and dev-test-<chip>.md.
-
-    With --submit (SUB-01/02, Phase 113), files the already-rendered,
-    already-persisted report to the maintainer's GitHub tracker via a lazy
-    `submit_report` call -- the sweep is never re-run. Submission requires
-    the explicit flag; a bare run never submits.
+    REVERSAL (Phase 121 D-01/D-03/D-04/D-05, operator-specified
+    2026-07-29): this supersedes v1.21's non-destructive-by-default premise
+    entirely, SAFE-01's CLI-only `--destructive` flag (removed, not merely
+    disabled), and SAFE-03's statement that the destructive confirm was
+    "the ONLY interactive input left in this handler" (superseded by the
+    UV-only ask above). Phase 112 Plan 04's deliberate removal of every
+    interactive prompt about tester-supplied identity is PARTIALLY
+    reversed in spirit by that same UV ask -- it is a new interactive
+    prompt, just not an identity-collection one; shield revision, chip
+    origin and pot-adjustment stay un-asked.
 
     Exit code (D-01): 0 if every step is OK/NA/SKIPPED, 2 if any step is
     marginal (and none BAD), 1 if any step is BAD (including a chip-ID
     mismatch) -- computed as max over per-step exit codes.
     """
-    interactive = _is_interactive()
-
-    # SAFE-03: the ONLY interactive input left in this handler is the
-    # --destructive safety confirm -- it is a safety gate, not tester-input
-    # collection, and MUST stay. On a TTY (and not -y/--yes), require an
-    # explicit "yes" before sacrificing the chip. Off-TTY, --destructive
-    # itself is consent (no confirm possible without a TTY, D-02).
-    if interactive and destructive and not assume_yes:
-        proceed = Confirm.ask(
-            "--destructive will sacrifice the chip. Continue?", default=False
-        )
-        if not proceed:
-            click.echo("Aborted -- chip left untouched.")
-            sys.exit(0)
+    click.echo(_ALWAYS_WRITES_NOTICE)
 
     # SAFE-04: hard-fail BEFORE any hardware is energized when the chip name
     # is absent from the DB entirely (case A). Keyed strictly off
@@ -1849,7 +2006,12 @@ def dev_test(
     if not app.db.get_eprom(chip):
         raise ChipNotFoundError(f"{chip}: not found in database")
 
-    plan = derive_plan(chip, app.db, destructive=destructive)
+    # The chip must be known to be in the DB (SAFE-04 above) before its
+    # electrical type can be read, so the UV-scope resolution happens here,
+    # after the hard-fail.
+    interactive = _is_interactive()
+    write_scope = _resolve_write_scope(app, chip, interactive=interactive)
+    plan = derive_plan(chip, app.db, write_scope=write_scope)
 
     # fw_board_identity stays None: EpromOperator.comm is a transient
     # per-operation connection torn down after every operator call (see
@@ -1872,17 +2034,12 @@ def dev_test(
         plan=plan,
     )
 
-    sampler = _make_sampler(app, report) if destructive else None
+    # Always built (D-04): every run writes now, so there is no
+    # non-destructive mode left that would have no write step to bracket.
+    sampler = _make_sampler(app, report)
     results = run_plan(plan, app.eprom_operator, app.db, sampler=sampler)
     report.results = results
     report.banner = count_applicable(plan, results)
-
-    if not destructive:
-        # Phase-111 D-04: standalone non-destructive VPP+VPE read fills the
-        # non-split slots; before/after stay None (-> NOT_MEASURED). Rejected:
-        # sampling around the whole run_plan call (111-CONTEXT.md).
-        report.vpp_mv = app.hardware_manager.sample_vpp_mv()
-        report.vpe_mv = app.hardware_manager.sample_vpe_mv()
 
     full = app.db.get_eprom(chip)
     if full:
@@ -1899,10 +2056,11 @@ def dev_test(
     console = Console()
     report.render(console)
 
-    # The report is ALWAYS persisted. --output-dir overrides the default
-    # location, which is <config dir>/reports (honors FIRESTARTER_CONFIG_DIR;
-    # default ~/.firestarter/reports).
-    out_path = Path(output_dir) if output_dir else Path(get_config_dir()) / "reports"
+    # The report is ALWAYS persisted, unconditionally, to the reports
+    # directory under <config dir> (honors FIRESTARTER_CONFIG_DIR; default
+    # ~/.firestarter/reports) -- the removed --output-dir flag was
+    # redundant with this env-var seam, never a lost capability.
+    out_path = Path(get_config_dir()) / "reports"
     out_path.mkdir(parents=True, exist_ok=True)
     safe_chip = _sanitize_chip_token(chip)
 
@@ -1924,12 +2082,142 @@ def dev_test(
 
     console.print(f"[dim]Report written to {json_file}[/dim]")
 
-    if submit:
-        from firestarter import submit as submit_mod
+    # Unconditional (DEVTEST-05): every run reaches the filing ask, not only
+    # an explicit --submit run -- Plan 121-11 owns submit_report's internal
+    # dedup-before-ask / ask-anyway-on-failure / comment-on-duplicate logic.
+    from firestarter import submit as submit_mod
 
-        submit_mod.submit_report(report, chip, json_file, console=console)
+    submit_mod.submit_report(report, chip, json_file, console=console)
 
     if not results:
         sys.exit(0)
     code = max(_verdict_code(r.verdict) for r in results)
     sys.exit(code)
+
+
+@dev.command(name="sdp")
+@click.argument("eprom", shell_complete=_complete_eprom)
+@click.argument("mode", type=click.Choice(["enable", "disable"], case_sensitive=False))
+@click.option(
+    "-y",
+    "--yes",
+    "assume_yes",
+    is_flag=True,
+    default=False,
+    help=(
+        "Bypass the confirm prompt on a TTY. This is the single explicit "
+        "scripting escape hatch: off a TTY this flag is REQUIRED -- without "
+        "it the command refuses rather than proceeding unattended."
+    ),
+)
+@click.pass_obj
+@map_typed_errors
+def dev_sdp(app: AppContext, eprom: str, mode: str, assume_yes: bool) -> None:
+    """Enable or disable Software Data Protection (SDP) on an AT28C-family EEPROM.
+
+    ``enable`` turns software data protection ON, so the part refuses writes
+    until it is explicitly unlocked again. ``disable`` turns it OFF. On this
+    chip family the resulting protection state cannot be read back afterward
+    (Phase 117 D-05, Phase 119 D-12), so neither direction can be confirmed --
+    a successful run means only that the command sequence was **emitted**,
+    nothing more.
+
+    Refused on protocol-0x0D parts with no SDP command decoder at all (the
+    two FRAM parts and the pre-SDP ``2804``/``2816``/``2817`` generation), and
+    on every non-0x0D protocol.
+    """
+    mode = mode.lower()
+    chip_upper = eprom.upper()
+
+    # Gate 1 -- absent chip (SAFE-04, copied verbatim from dev_test's own
+    # hard-fail). Keyed strictly off `get_eprom` emptiness -- NEVER a
+    # `resolve_chip` support-status refusal -- so an in-DB-but-unsupported
+    # chip (e.g. adapter-required) still reaches the capability gate below,
+    # which must be the one to answer for it (D-08).
+    if not app.db.get_eprom(eprom):
+        raise ChipNotFoundError(f"{eprom}: not found in database")
+
+    # Gate 2 -- capability. This gate deliberately outranks Gate 3
+    # (support-status): an adapter-required 0x0D part with no SDP command
+    # decoder must hear "this part has no SDP" rather than "get an adapter",
+    # because no adapter would have helped here -- and all NINE
+    # adapter-required 0x0D parts are in the refused set (not a hypothetical
+    # subset), so this ordering is load-bearing on every one of them.
+    allowed, reason = sdp_capability(eprom, app.db)
+    if not allowed:
+        raise click.ClickException(reason)
+
+    # Gate 3 -- support status (adapter-required / vpp-exceeds-max / etc. for
+    # chips that pass Gate 2 but are still not `supported`).
+    eprom_data = resolve_chip(eprom, db=app.db)
+
+    # Gate 4 -- consent. D-05: the subcommand IS the mode -- no
+    # `--destructive`-style flag exists, because a flag mandatory on every
+    # invocation carries no information. D-07: one code path, two strings --
+    # both directions mutate chip state through the same unobservable
+    # mechanism and share this gate. D-06 deliberately INVERTS `dev test`'s
+    # off-TTY behaviour: there, `--destructive` itself is the consent, so
+    # off-TTY proceeds; here there is no such flag, so the mere absence of a
+    # TTY is strictly weaker than the gate it would stand in for, and MUST
+    # refuse instead of silently proceeding.
+    interactive = _is_interactive()
+    if interactive and not assume_yes:
+        if mode == "enable":
+            prompt = (
+                f"Enabling SDP on {chip_upper} will make it refuse writes "
+                "until explicitly unlocked again, and the resulting "
+                "protection state cannot be read back afterward. Continue?"
+            )
+        else:
+            prompt = (
+                f"Disabling SDP on {chip_upper} removes its write protection. Continue?"
+            )
+        proceed = Confirm.ask(prompt, default=False)
+        if not proceed:
+            click.echo(f"Aborted -- {chip_upper} left untouched.")
+            sys.exit(0)
+    elif not interactive and not assume_yes:
+        raise click.ClickException(
+            f"{chip_upper}: refusing to run off a TTY without -y/--yes -- "
+            "pass -y to proceed unattended."
+        )
+
+    # Serial call. D-14: an `EpromOperationError` whose `error_code` is
+    # `MSG_ERR_UNKNOWN_CMD` means the attached firmware predates
+    # CMD_SDP_LOCK/CMD_SDP_UNLOCK (Phase 119) and does not recognise this
+    # command at all. This exploits the one real asymmetry in the wire
+    # surface (HOST-06): an unknown COMMAND produces an error and is
+    # therefore detectable after the fact, whereas an unknown flag BIT
+    # produces silence. Keyed on the message **id**, never the message text.
+    try:
+        if mode == "enable":
+            ok = app.eprom_operator.sdp_lock(eprom, eprom_data)
+        else:
+            ok = app.eprom_operator.sdp_unlock(eprom, eprom_data)
+    except EpromOperationError as e:
+        if e.error_code == MSG_ERR_UNKNOWN_CMD:
+            raise FirmwareOutdatedError(
+                f"{chip_upper}: attached firmware does not implement SDP "
+                f"{mode} (unknown command) -- upgrade with "
+                "'firestarter fw --install'."
+            ) from e
+        raise
+
+    if ok:
+        # D-10 summary line -- honest and symmetric on both directions: the
+        # claim is that the sequence was EMITTED, never that the resulting
+        # state was verified. No duration figure appears here -- this is
+        # mechanically enforced, not merely a discipline: get_response()
+        # filters the entire INFO band out at serial_comm.py:424, so the
+        # operation layer literally cannot see the firmware's `0x5F`/`0x61`
+        # duration frame to plumb one through. No lock/unlock state boolean
+        # appears either -- HOST-05's honesty floor. click.echo (not
+        # logger.info) so this always reaches the user's console/CliRunner
+        # capture regardless of log-level/handler wiring.
+        click.echo(
+            f"SDP {mode} sequence for {chip_upper} was emitted. The "
+            "resulting protection state cannot be read back on this chip "
+            "family, so this is not a claim about the chip's actual state."
+        )
+
+    sys.exit(0 if ok else 1)
