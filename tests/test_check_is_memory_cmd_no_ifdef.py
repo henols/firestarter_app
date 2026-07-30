@@ -47,10 +47,26 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 # Absolute path to the firestarter_app directory (cwd-independent), mirrors
 # tests/test_check_no_log_in_sdp_window.py:59.
 _FA_DIR = Path(__file__).parent.parent
 _FIXTURE = _FA_DIR / "tests" / "fixtures" / "planted_ifdef_in_predicate.h"
+_FIRESTARTER_H = _FA_DIR.parent / "firestarter" / "include" / "firestarter.h"
+
+# The firmware sub-repo may be absent in standalone CI (firestarter_app
+# checked out alone -- beta-release.yml has no sibling firestarter checkout).
+# Mirrors the FW_ABSENT skip pattern in test_sdp_table_parity.py /
+# test_revision_constants_parity.py / test_gen_validation_header.py. Only
+# the clean-source control below touches the real firmware file; every
+# other case in this module drives a fixture or temp file via
+# FIRESTARTER_CMD_ADMISSION_SRC and needs no firmware checkout.
+_FW_ABSENT = not _FIRESTARTER_H.exists()
+_requires_fw = pytest.mark.skipif(
+    _FW_ABSENT,
+    reason="firestarter firmware checkout absent (firestarter.h)",
+)
 
 
 def _run_checker(
@@ -83,6 +99,7 @@ def _line_number_of_marker(text: str, marker: str) -> int:
 # ---------------------------------------------------------------------------
 
 
+@_requires_fw
 def test_checker_exits_zero_on_clean_source() -> None:
     """python tools/check_is_memory_cmd_no_ifdef.py must exit 0 against the
     real, unmodified firestarter.h -- is_memory_cmd()'s body on today's tree
