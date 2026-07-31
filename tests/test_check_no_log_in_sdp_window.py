@@ -54,26 +54,21 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
+from tests.fw_presence import fw_path, requires_fw
 
 # Absolute path to the firestarter_app directory (cwd-independent), mirrors
 # tests/test_check_devtest_orchestrator.py:46.
 _FA_DIR = Path(__file__).parent.parent
 _FIXTURE = _FA_DIR / "tests" / "fixtures" / "planted_log_in_window.cpp"
-_EEPROM_28C_CPP = _FA_DIR.parent / "firestarter" / "src" / "proms" / "eeprom_28c.cpp"
 
-# The firmware sub-repo may be absent in standalone CI (firestarter_app
-# checked out alone -- beta-release.yml has no sibling firestarter checkout).
-# Mirrors the FW_ABSENT skip pattern in test_sdp_table_parity.py /
-# test_revision_constants_parity.py / test_gen_validation_header.py. Only
-# the clean-source control below touches the real firmware file; every
-# other case in this module drives a fixture or temp file via
-# FIRESTARTER_SDP_SRC and needs no firmware checkout.
-_FW_ABSENT = not _EEPROM_28C_CPP.exists()
-_requires_fw = pytest.mark.skipif(
-    _FW_ABSENT,
-    reason="firestarter firmware checkout absent (eeprom_28c.cpp)",
-)
+# eeprom_28c.cpp lives in the SIBLING firestarter repo. Resolved through the
+# shared `fw_path` helper -- repo presence is decided ONCE in
+# tests/fw_presence.py, keyed on the sibling's `.git` marker. `requires_fw`
+# is the ONLY skip marker this module uses. Only the clean-source control
+# below touches this real firmware file; every other case in this module
+# drives a fixture or temp file via FIRESTARTER_SDP_SRC and needs no
+# firmware checkout.
+_EEPROM_28C_CPP = fw_path("src", "proms", "eeprom_28c.cpp")
 
 
 def _run_checker(
@@ -106,7 +101,7 @@ def _line_number_of_marker(text: str, marker: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-@_requires_fw
+@requires_fw
 def test_checker_exits_zero_on_clean_source() -> None:
     """python tools/check_no_log_in_sdp_window.py must exit 0 against the
     real, unmodified eeprom_28c.cpp -- neither the emitter body nor the
