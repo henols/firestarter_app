@@ -19,8 +19,7 @@ Coverage:
 import pathlib
 import re
 
-import pytest
-
+from tests.fw_presence import fw_path, requires_fw
 from tools import check_dispatch
 
 # ---------------------------------------------------------------------------
@@ -31,25 +30,21 @@ from tools import check_dispatch
 _FA_DIR = pathlib.Path(__file__).parent.parent
 
 # Sub-repo sibling: firestarter/doc/PROTOCOLS.md (the doc leg).
-_PROTOCOLS_MD = _FA_DIR.parent / "firestarter" / "doc" / "PROTOCOLS.md"
+_PROTOCOLS_MD = fw_path("doc", "PROTOCOLS.md")
 
 # Sub-repo sibling: native firmware dispatch test (the firmware leg).
-_FW_DISPATCH_TEST = (
-    _FA_DIR.parent
-    / "firestarter"
-    / "test"
-    / "native"
-    / "avr"
-    / "test_dispatch"
-    / "test_configure_memory.cpp"
+_FW_DISPATCH_TEST = fw_path(
+    "test", "native", "avr", "test_dispatch", "test_configure_memory.cpp"
 )
 
-# Cross-repo legs read files from the sibling `firestarter/` firmware checkout.
-# When that checkout is absent (e.g. the app-only CI checkout in beta-release.yml),
-# skip the cross-repo assertions cleanly instead of failing with FileNotFoundError.
-# Mirrors the FW_ABSENT idiom in test_revision_constants_parity.py and the
-# cross-repo validation_matrix skip guard (5b6f8a5).
-FW_ABSENT = not (_PROTOCOLS_MD.exists() and _FW_DISPATCH_TEST.exists())
+# Repo presence (this module's compound proxy previously ANDed the existence
+# of these two specific paths) is now decided ONCE in tests/fw_presence.py,
+# keyed on the sibling repo's `.git` marker -- immune to a rename of either
+# path above. `requires_fw` is the ONLY skip marker this module uses; both
+# paths above are resolved through `fw_path`, so a present-repo-renamed
+# target is a named `MissingScanTargetError`, never a silent skip
+# (Phase 123 Plan 08, BASE-02/D-11 -- these two paths are also the D-11
+# scan-path inventory's `test_dispatch_mirror.py` entries).
 
 # ---------------------------------------------------------------------------
 # §0 table parser (post-Phase-100 two-table layout)
@@ -153,7 +148,7 @@ def parse_protocols_md() -> dict[int, str]:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+@requires_fw
 def test_dispatch_mirror_doc_matches_tool() -> None:
     """Every §0 protocol row must agree between PROTOCOLS.md and check_dispatch.dispatch().
 
@@ -185,7 +180,7 @@ def test_dispatch_mirror_doc_matches_tool() -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+@requires_fw
 def test_dispatch_mirror_firmware_leg_enumerates_all_protocols() -> None:
     """Every §0 protocol that maps to a real handler must appear in the native dispatch test.
 
