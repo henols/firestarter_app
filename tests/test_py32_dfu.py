@@ -34,6 +34,7 @@ from firestarter.py32_dfu import (
     ImageError,
     Py32DfuFlasher,
     SectorRange,
+    VerifyResult,
     erase_addresses,
     load_image,
     parse_dfuse_layout,
@@ -464,6 +465,185 @@ class TestUnrelatedDeviceSafety:
             lambda vid=None, pid=None: [_interface(_FakeUsbDevice())],
         )
         assert py32_dfu.dfu_device_present() is True
+
+
+# ---------------------------------------------------------------------------
+# HOST-03: DFU_UPLOAD readback verification
+# ---------------------------------------------------------------------------
+
+
+class TestReadbackVerification:
+    """HOST-03 / D-09..D-12: post-write DFU_UPLOAD readback, against the mock.
+
+    ROADMAP "Phase 127" Criterion 4: *fails **soft** (no exception, a
+    recorded soft-fail state) when a mock device reports `bitCanUpload = 0`*.
+
+    **Mock-only ceiling.** Every test in this class runs against
+    `_FakeUsbDevice`. No PY32F071 board exists, `DFU_UPLOAD`/`bitCanUpload`
+    support on real silicon is unknown, and the DfuSe-vs-plain-DFU-1.1 fork
+    exercised here is entirely untested against reality. Nothing in this
+    class claims the readback sequence is correct on a real bootloader --
+    only that it behaves as designed against a mock that answers exactly as
+    told.
+    """
+
+    def _flash(self, monkeypatch, tmp_path, payload, device, dfuse=True, attributes=0):
+        interface = _interface(device, dfuse=dfuse, attributes=attributes)
+        monkeypatch.setattr(
+            py32_dfu, "find_dfu_interfaces", lambda vid=None, pid=None: [interface]
+        )
+        image = tmp_path / "fw.bin"
+        image.write_bytes(payload)
+        flasher = Py32DfuFlasher()
+        ok = flasher.flash(str(image))
+        return flasher, ok
+
+    def test_bit_can_upload_unset_fails_soft(self, monkeypatch, tmp_path):
+        """A DfuSe device that does not advertise bitCanUpload never even
+        attempts a readback -- flash() still returns True, raises nothing,
+        and records SKIPPED_NO_UPLOAD (ROADMAP Criterion 4)."""
+        payload = bytes(range(200))  # spans several 64-byte transfer blocks
+        device = _FakeUsbDevice()
+        flasher, ok = self._flash(
+            monkeypatch, tmp_path, payload, device, dfuse=True, attributes=0
+        )
+        assert ok is True
+        assert flasher.verify_result is VerifyResult.SKIPPED_NO_UPLOAD
+        assert "bitCanUpload = 0" in flasher.verify_reason
+        assert device.uploads() == []
+
+    def test_plain_dfu11_fails_soft_with_cause_named(self, monkeypatch, tmp_path):
+        """attributes=0x02 so the skip is attributable to the dialect (D-09),
+        not to bitCanUpload -- plain DFU 1.1 never lets the host choose the
+        load address, so a readback could not be compared to anything."""
+        payload = bytes(range(200))
+        device = _FakeUsbDevice()
+        flasher, ok = self._flash(
+            monkeypatch, tmp_path, payload, device, dfuse=False, attributes=0x02
+        )
+        assert ok is True
+        assert flasher.verify_result is VerifyResult.SKIPPED_PLAIN_DFU
+        assert flasher.verify_reason == "load address not under host control"
+        assert device.uploads() == []
+
+    def test_matching_readback_verifies(self, monkeypatch, tmp_path):
+        """The payload spans several 64-byte blocks; the total bytes
+        requested across every DFU_UPLOAD call covers the whole payload --
+        proving a full-payload compare, not a spot-check (D-12)."""
+        payload = bytes(range(200))
+        device = _FakeUsbDevice(upload_image=payload, upload_block_size=64)
+        flasher, ok = self._flash(
+            monkeypatch, tmp_path, payload, device, dfuse=True, attributes=0x02
+        )
+        assert ok is True
+        assert flasher.verify_result is VerifyResult.VERIFIED
+        assert flasher.verify_reason is None
+        total_requested = sum(length for _, length in device.uploads())
+        assert total_requested >= len(payload)
+
+    def test_differing_readback_is_a_hard_failure(self, monkeypatch, tmp_path):
+        payload = bytes(range(200))
+        offset = 50
+        backing = bytearray(payload)
+        backing[offset] = (backing[offset] + 1) % 256
+        device = _FakeUsbDevice(upload_image=bytes(backing), upload_block_size=64)
+        interface = _interface(device, dfuse=True, attributes=0x02)
+        monkeypatch.setattr(
+            py32_dfu, "find_dfu_interfaces", lambda vid=None, pid=None: [interface]
+        )
+        image = tmp_path / "fw.bin"
+        image.write_bytes(payload)
+        flasher = Py32DfuFlasher()
+        with pytest.raises(DfuProtocolError) as exc_info:
+            flasher.flash(str(image))
+        message = str(exc_info.value)
+        assert f"0x{offset:08X}" in message
+        assert f"0x{payload[offset]:02X}" in message
+        assert f"0x{backing[offset]:02X}" in message
+        assert flasher.verify_result is VerifyResult.MISMATCH
+
+    def test_truncated_readback_is_a_hard_failure_too(self, monkeypatch, tmp_path):
+        payload = bytes(range(200))
+        backing = payload[:150]
+        device = _FakeUsbDevice(upload_image=backing, upload_block_size=64)
+        interface = _interface(device, dfuse=True, attributes=0x02)
+        monkeypatch.setattr(
+            py32_dfu, "find_dfu_interfaces", lambda vid=None, pid=None: [interface]
+        )
+        image = tmp_path / "fw.bin"
+        image.write_bytes(payload)
+        flasher = Py32DfuFlasher()
+        with pytest.raises(DfuProtocolError) as exc_info:
+            flasher.flash(str(image))
+        message = str(exc_info.value)
+        assert str(len(backing)) in message
+        assert str(len(payload)) in message
+        assert flasher.verify_result is VerifyResult.MISMATCH
+
+    def test_ordering_last_upload_precedes_finish(self, monkeypatch, tmp_path):
+        """D-12, asserted on the recorded sequence: _finish() leaves DFU mode
+        and the device resets off the bus, so a readback after it would be
+        reading from nothing. The last DFU_UPLOAD must be strictly before
+        the zero-length DFU_DNLOAD _finish() sends."""
+        payload = bytes(range(200))
+        device = _FakeUsbDevice(upload_image=payload, upload_block_size=64)
+        flasher, ok = self._flash(
+            monkeypatch, tmp_path, payload, device, dfuse=True, attributes=0x02
+        )
+        assert ok is True
+
+        upload_indices = [
+            i for i, call in enumerate(device.calls) if call[1] == DFU_UPLOAD
+        ]
+        zero_length_dnload_indices = [
+            i
+            for i, call in enumerate(device.calls)
+            if call[1] == DFU_DNLOAD and not call[4]
+        ]
+        assert upload_indices, "expected at least one DFU_UPLOAD call"
+        assert zero_length_dnload_indices, (
+            "expected _finish()'s terminating zero-length DFU_DNLOAD"
+        )
+        assert upload_indices[-1] < zero_length_dnload_indices[-1]
+
+    def test_mismatch_never_manifests(self, monkeypatch, tmp_path):
+        """On the MISMATCH path, device.calls contains no zero-length
+        DFU_DNLOAD at all -- _finish() never ran, so the device was never
+        told to manifest an image proven wrong (D-11)."""
+        payload = bytes(range(200))
+        backing = bytearray(payload)
+        backing[10] ^= 0xFF
+        device = _FakeUsbDevice(upload_image=bytes(backing), upload_block_size=64)
+        interface = _interface(device, dfuse=True, attributes=0x02)
+        monkeypatch.setattr(
+            py32_dfu, "find_dfu_interfaces", lambda vid=None, pid=None: [interface]
+        )
+        image = tmp_path / "fw.bin"
+        image.write_bytes(payload)
+        flasher = Py32DfuFlasher()
+        with pytest.raises(DfuProtocolError):
+            flasher.flash(str(image))
+        zero_length_dnloads = [
+            call for call in device.calls if call[1] == DFU_DNLOAD and not call[4]
+        ]
+        assert zero_length_dnloads == []
+
+    def test_pre_existing_construction_still_skips_soft(self, monkeypatch, tmp_path):
+        """The blast-radius property (D-10): a flash set up exactly the way
+        the pre-existing 58 tests set one up -- _interface(_FakeUsbDevice())
+        with no attributes= argument -- still returns True and records
+        SKIPPED_NO_UPLOAD. This is why all 58 pre-existing tests keep
+        passing unmodified, and why D-10 kept flash()'s bool contract."""
+        device = _FakeUsbDevice()
+        interface = _interface(device)
+        monkeypatch.setattr(
+            py32_dfu, "find_dfu_interfaces", lambda vid=None, pid=None: [interface]
+        )
+        image = tmp_path / "fw.bin"
+        image.write_bytes(bytes(64))
+        flasher = Py32DfuFlasher()
+        assert flasher.flash(str(image)) is True
+        assert flasher.verify_result is VerifyResult.SKIPPED_NO_UPLOAD
 
 
 # ---------------------------------------------------------------------------
