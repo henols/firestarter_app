@@ -391,7 +391,7 @@ def _require_usb() -> Any:
     try:
         import usb.core  # noqa: PLC0415
         import usb.util  # noqa: PLC0415
-    except ImportError as exc:  # pragma: no cover — environment-dependent
+    except ImportError as exc:
         raise PyusbMissingError(
             "USB firmware install needs pyusb. Install it with:\n"
             "    pip install 'firestarter[py32]'\n"
