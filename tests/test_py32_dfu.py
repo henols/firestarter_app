@@ -23,6 +23,7 @@ from firestarter.firmware import FirmwareManager
 from firestarter.py32_dfu import (
     DFU_DNLOAD,
     DFU_GETSTATUS,
+    DFU_UPLOAD,
     DFUSE_ERASE_PAGE,
     DFUSE_SET_ADDRESS,
     DFUSE_VERSION,
@@ -45,16 +46,46 @@ from firestarter.py32_dfu import (
 
 
 class _FakeUsbDevice:
-    """Records ctrl_transfer calls; answers DFU_GETSTATUS with a canned state."""
+    """Records ctrl_transfer calls; answers DFU_GETSTATUS with a canned state.
 
-    def __init__(self, status=0, state=STATE_DFU_IDLE, poll_ms=0):
+    HOST-03 / C-6 (127-08): extended, not replaced, so HOST-03's tests exercise
+    the same device model as the other 58. Two additions: a settable backing
+    image served on DFU_UPLOAD, and a ``ctrl_transfer`` signature aligned to
+    real pyusb 1.3.1 (5th param renamed ``data_or_wLength``, trailing
+    ``timeout`` added). All production call-sites in ``py32_dfu.py`` pass
+    every argument positionally, which is why the pre-alignment drift never
+    surfaced as a test failure -- see ``tests/test_pyusb_gating.py``'s ast
+    scan and ``tests/test_pyusb_api_surface.py``'s fake-vs-real comparison.
+    """
+
+    def __init__(
+        self,
+        status=0,
+        state=STATE_DFU_IDLE,
+        poll_ms=0,
+        upload_image=b"",
+        upload_block_size=64,
+    ):
         self.calls = []
         self.status = status
         self.state = state
         self.poll_ms = poll_ms
+        # HOST-03: bytes served on DFU_UPLOAD, and the DfuSe block size used
+        # to turn a requested block number into an offset into them. Both
+        # defaulted so all 58 pre-existing constructions are unaffected.
+        self.upload_image = upload_image
+        self.upload_block_size = upload_block_size
 
-    def ctrl_transfer(self, bmRequestType, bRequest, wValue=0, wIndex=0, data=None):  # noqa: N803
-        self.calls.append((bmRequestType, bRequest, wValue, wIndex, data))
+    def ctrl_transfer(
+        self,
+        bmRequestType,  # noqa: N803
+        bRequest,  # noqa: N803
+        wValue=0,  # noqa: N803
+        wIndex=0,  # noqa: N803
+        data_or_wLength=None,  # noqa: N803
+        timeout=None,
+    ):
+        self.calls.append((bmRequestType, bRequest, wValue, wIndex, data_or_wLength))
         if bRequest == DFU_GETSTATUS:
             poll = self.poll_ms
             return bytes(
@@ -67,7 +98,19 @@ class _FakeUsbDevice:
                     0,
                 ]
             )
-        return len(data) if data else 0
+        if bRequest == DFU_UPLOAD:
+            # DfuSe numbers data blocks from 2 (0 and 1 are reserved for
+            # commands). Written here as an independent local constant --
+            # not py32_dfu._DFUSE_FIRST_BLOCK -- so this fake models the
+            # DfuSe convention on its own rather than importing the module
+            # under test's private implementation detail.
+            first_upload_block = 2
+            offset = (wValue - first_upload_block) * self.upload_block_size
+            if offset < 0:
+                return b""
+            requested = data_or_wLength if isinstance(data_or_wLength, int) else 0
+            return bytes(self.upload_image[offset : offset + requested])
+        return len(data_or_wLength) if data_or_wLength else 0
 
     # -- assertions helpers ------------------------------------------------
 
@@ -77,6 +120,14 @@ class _FakeUsbDevice:
             (value, bytes(data) if data else b"")
             for _, request, value, _, data in self.calls
             if request == DFU_DNLOAD
+        ]
+
+    def uploads(self):
+        """Every DFU_UPLOAD call as ``(wBlockNum, requested_length)``."""
+        return [
+            (value, data_or_wlength)
+            for _, request, value, _, data_or_wlength in self.calls
+            if request == DFU_UPLOAD
         ]
 
     def dfuse_commands(self):
@@ -96,7 +147,9 @@ class _FakeUsbDevice:
         return [(b, p) for b, p in self.dnloads() if b != 0 and p]
 
 
-def _interface(device, name="@Internal Flash /0x08000000/64*002Kg", dfuse=True):
+def _interface(
+    device, name="@Internal Flash /0x08000000/64*002Kg", dfuse=True, attributes=0
+):
     return DfuInterface(
         device=device,
         vendor_id=0x1A86,
@@ -108,6 +161,11 @@ def _interface(device, name="@Internal Flash /0x08000000/64*002Kg", dfuse=True):
         name=name if dfuse else "PY32 bootloader",
         transfer_size=64,
         dfu_version=DFUSE_VERSION if dfuse else 0x0110,
+        # HOST-03: defaults to 0 (bitCanUpload unset) -- deliberate, so all 58
+        # pre-existing tests keep constructing a device Plan 127-09 will treat
+        # as unable to verify (the SKIPPED_NO_UPLOAD path), while flash() still
+        # returns True either way (D-10's blast-radius property).
+        attributes=attributes,
     )
 
 
