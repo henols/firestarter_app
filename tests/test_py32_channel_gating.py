@@ -300,7 +300,11 @@ def test_reject_py32_only_option_disabled_and_not_given_returns(
 ) -> None:
     """disabled + not given -> returns without raising."""
     monkeypatch.setattr(cli_handlers, "_PY32_ENABLED", False)
-    assert cli_handlers._reject_py32_only_option("--usb-id", False) is None
+    # _reject_py32_only_option is annotated `-> None`; using its return value
+    # in an expression (even `... is None`) trips mypy's func-returns-value
+    # check. The behaviour under test is "does not raise" -- calling it as a
+    # bare statement asserts exactly that and stays mypy-clean (127-11 fix).
+    cli_handlers._reject_py32_only_option("--usb-id", False)
 
 
 def test_reject_py32_only_option_enabled_and_given_returns(
@@ -308,7 +312,9 @@ def test_reject_py32_only_option_enabled_and_given_returns(
 ) -> None:
     """enabled + given -> returns without raising."""
     monkeypatch.setattr(cli_handlers, "_PY32_ENABLED", True)
-    assert cli_handlers._reject_py32_only_option("--usb-id", True) is None
+    # See test_reject_py32_only_option_disabled_and_not_given_returns above
+    # for why this is a bare call rather than `assert ... is None`.
+    cli_handlers._reject_py32_only_option("--usb-id", True)
 
 
 def test_reject_py32_only_option_enabled_and_not_given_returns(
@@ -316,7 +322,9 @@ def test_reject_py32_only_option_enabled_and_not_given_returns(
 ) -> None:
     """enabled + not given -> returns without raising."""
     monkeypatch.setattr(cli_handlers, "_PY32_ENABLED", True)
-    assert cli_handlers._reject_py32_only_option("--usb-id", False) is None
+    # See test_reject_py32_only_option_disabled_and_not_given_returns above
+    # for why this is a bare call rather than `assert ... is None`.
+    cli_handlers._reject_py32_only_option("--usb-id", False)
 
 
 # ---------------------------------------------------------------------------
