@@ -144,6 +144,39 @@ _BOARD_CHOICES: list[str] = available_boards(_ALL_BOARDS)
 _PY32_ENABLED: bool = "py32f071" in _BOARD_CHOICES
 
 
+def _reject_py32_only_option(name: str, given: bool) -> None:
+    """Refuse a py32-only CLI option outside its owning channel (HOST-02 / D-08).
+
+    ``hidden=not _PY32_ENABLED`` on an option's ``@click.option`` decorator is a
+    ``--help`` cosmetic only: it keeps the option out of the rendered help text,
+    it does not reject the option when a user types it anyway. That confusion
+    is exactly the bug HOST-02 exists to close: on a stable build, ``--usb-id``
+    was accepted (exit 0) while ``--dfu-probe`` was refused (exit 2), even
+    though both are py32-only surface.
+
+    This helper is the single sanctioned refusal mechanism for every py32-only
+    option. It is called unconditionally for each option, passing that
+    option's givenness, before either option is consumed. One shared code
+    path means the two refusals cannot drift apart from each other, and a
+    third py32-only option added later inherits the same behaviour for free
+    just by calling this helper here — see the one-code-path guard in
+    ``tests/test_py32_channel_gating.py``, which asserts this refusal's
+    message occurs exactly once in this file.
+
+    Reads ``_PY32_ENABLED`` at call time — a module global, not a captured
+    default argument — which is what makes this helper directly unit-testable
+    in-process via monkeypatch while the Click command surface built from the
+    decorators above stays frozen at import time.
+
+    The message text and the resulting exit code are preserved exactly from
+    the pre-existing ``--dfu-probe`` refusal this helper replaces, per
+    HOST-02's requirement that ``--usb-id`` be rejected exactly as
+    ``--dfu-probe`` already is.
+    """
+    if given and not _PY32_ENABLED:
+        raise click.UsageError(f"no such option: {name}")
+
+
 def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
     """Map service-layer typed exceptions to ClickException + stable exit codes (D-03)."""
 
@@ -1046,15 +1079,18 @@ def fw(
     if json_output and not list_releases:
         raise click.UsageError("--json requires --list")
 
+    # HOST-02 / D-08: both py32-only options are refused through one shared
+    # helper, called unconditionally for each option with its givenness,
+    # before either option is consumed below. `hidden=not _PY32_ENABLED` on
+    # both option declarations (above) keeps them out of --help; it does not
+    # reject them — that is this refusal's job.
+    _reject_py32_only_option("--usb-id", usb_id is not None)
+    _reject_py32_only_option("--dfu-probe", dfu_probe)
+
     # USB DFU discovery: reports what is on the bus and exits. Deliberately
     # placed before every network path — it needs no release metadata, and it is
     # the first thing to run on a board whose bootloader identity is unconfirmed.
     if dfu_probe:
-        # `hidden` keeps the option out of --help; it does not reject it. On a
-        # stable build the flag must fail as an unknown-usage error, not silently
-        # run a py32-only diagnostic.
-        if not _PY32_ENABLED:
-            raise click.UsageError("no such option: --dfu-probe")
         found = app.firmware_manager.probe_dfu(usb_id=usb_id)
         if not found:
             print("No USB DFU devices found.")
