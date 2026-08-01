@@ -1,6 +1,9 @@
 # Phase 6 (LCI-02 + LCI-03 + LCI-04): host CI — codegen drift + catalog validity + pytest. release.yml and publish.yml are tag/PyPI-only.
 # Phase 37 (D-06): pull_request trigger drops branches filter — runs on all PRs (v1.8-app-cleanup included).
 # Phase 37 (D-07): install uses .[test] extra; gate steps: ruff check, ruff format --check, mypy watermark, pytest --cov.
+# Phase 127 (D-01/D-02): adds a manual dispatch trigger and a second, isolated
+# ci-py32 job that installs the [py32] extra and runs the real-pyusb API
+# surface tests. No automatic trigger changed.
 name: Host CI
 on:
   push:
@@ -19,6 +22,7 @@ on:
     - 'docs/**'
     - '.vscode/**'
     - '.editorconfig'
+  workflow_dispatch:
 
 jobs:
   ci:
@@ -73,3 +77,35 @@ jobs:
         # console script resolves cleanly and renders Click's --help output
         # without raising. Non-zero exit fails the build.
         run: pip install -e . && firestarter --help
+
+  # Phase 127 (HOST-04 / D-01 / D-02): a separate, isolated leg that installs
+  # the [py32] extra and genuinely imports pyusb -- distinct from the
+  # primary `ci` job's `.[test]`-only install. Deliberately NOT a matrix
+  # dimension on `ci`, so a pyusb or libusb break here cannot take down the
+  # primary gate. Runs no ruff/ruff-format/mypy/coverage/codegen-drift step:
+  # the primary `ci` job already gates all of those over the whole tree.
+  ci-py32:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install package + test + py32 deps
+        run: pip install -e .[test,py32]
+
+      - name: Prove pyusb genuinely imports, and record its resolved version
+        run: python3 -c "import usb.core, importlib.metadata; print('pyusb', importlib.metadata.version('pyusb'))"
+
+      # This invocation names the gated module explicitly (by its path
+      # below), so tests/conftest.py's collect_ignore (which does not
+      # suppress a path named directly on the command line) cannot let this
+      # job pass by running zero tests: a failed `.[test,py32]` install
+      # surfaces as a collection error, a renamed module as pytest's
+      # file-not-found, and a wrongly-armed collect_ignore as pytest's
+      # nothing-collected.
+      - name: Run the real-pyusb API surface tests
+        run: pytest tests/test_pyusb_api_surface.py -q

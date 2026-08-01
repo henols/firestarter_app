@@ -32,6 +32,7 @@ import tests.conftest as conftest
 _TESTS_DIR = Path(__file__).parent
 _GATED_MODULE_NAME = "test_pyusb_api_surface.py"
 _PY32_DFU_PATH = _TESTS_DIR.parent / "firestarter" / "py32_dfu.py"
+_CI_YML_PATH = _TESTS_DIR.parent / ".github" / "workflows" / "ci.yml"
 
 
 def test_gated_module_exists() -> None:
@@ -146,3 +147,28 @@ def test_no_production_ctrl_transfer_call_passes_5th_arg_by_keyword() -> None:
             "tests/test_pyusb_api_surface.py, and a keyword argument would "
             "survive a parameter rename undetected"
         )
+
+
+def test_ci_yml_references_the_gated_module_and_the_ci_py32_job() -> None:
+    """`ci.yml` must reference the gated module, the ci-py32 job, and the
+    py32 extra by name.
+
+    Renaming the gated module requires updating THREE places: this
+    workflow's job body, the module itself, and tests/conftest.py's
+    collect_ignore (checked by test_every_collect_ignore_entry_names_a_real_file
+    above). This test is the third leg of that triangle.
+    """
+    workflow_text = _CI_YML_PATH.read_text(encoding="utf-8")
+    assert workflow_text, "ci.yml read as empty text -- non-vacuity guard tripped"
+
+    assert _GATED_MODULE_NAME in workflow_text, (
+        f"{_GATED_MODULE_NAME!r} does not appear in .github/workflows/ci.yml "
+        "-- renaming the gated module requires updating tests/conftest.py's "
+        "collect_ignore, this workflow, and the module itself"
+    )
+    assert re.search(r"^\s*ci-py32:\s*$", workflow_text, re.MULTILINE), (
+        "no job named `ci-py32` found in .github/workflows/ci.yml"
+    )
+    assert ".[test,py32]" in workflow_text, (
+        "the ci-py32 job does not appear to install the .[test,py32] extra"
+    )
