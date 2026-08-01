@@ -102,10 +102,29 @@ DFUSE_VERSION = 0x011A  # bcdDFUVersion that marks the ST dialect
 # --------------------------------------------------------------------------
 # PY32F071xB memory map (Puya UM1504 + PY32F071xB_FLASH.ld on the firmware
 # branch). Used only as a safety envelope — geometry comes from the device.
+#
+# D-13: `FLASH_SIZE` is the physical part size (128 KiB) — kept verbatim,
+# because an existing test writes `FLASH_SIZE + 1` bytes and expects a
+# refusal. It is NOT what `_check_envelope` bounds on. The firmware's own
+# linker script (`platform/py32f071/linker/PY32F071xB_FLASH.ld`) reserves
+# only the bottom 120 KiB (`APP_REGION_SIZE`, ending at `APP_REGION_END`) for
+# the application; the top `CONFIG_REGION_SIZE` (8 KiB, Sector 15) is Phase
+# 126's config-storage reservation (page 256 B / sector 8192 B per
+# `platform/py32f071/CONFIG-STORAGE.md`). `BOOTLOADER` is currently a
+# zero-length NAMED SEAM at the same origin as `FLASH` — Phase 129 giving it
+# a length would move the application's ORIGIN, so the *lower* bound of the
+# accepted span would move too, not just `APP_REGION_END`.
+#
+# `tests/test_py32_flash_map_host.py` is the fail-closed gate that keeps
+# these four constants matching the linker script — it parses the script
+# directly rather than trusting this comment.
 # --------------------------------------------------------------------------
 
 FLASH_BASE = 0x08000000
-FLASH_SIZE = 128 * 1024
+FLASH_SIZE = 128 * 1024  # physical part size — do not use for the envelope
+APP_REGION_SIZE = 120 * 1024  # mirrors LENGTH(FLASH) in the linker script
+APP_REGION_END = FLASH_BASE + APP_REGION_SIZE  # mirrors ORIGIN(CONFIG)
+CONFIG_REGION_SIZE = 8 * 1024  # mirrors LENGTH(CONFIG), the Sector 15 reservation
 DEFAULT_ERASE_PAGE_SIZE = 2048  # fallback when the device publishes no layout
 
 # Blocks are numbered from 2 in DfuSe; 0 and 1 are reserved for commands.
@@ -642,14 +661,22 @@ class Py32DfuFlasher:
         return True
 
     def _check_envelope(self, base: int, length: int) -> None:
-        """Refuse an image that cannot physically live in PY32F071xB flash."""
+        """Refuse an image reaching outside the application region.
+
+        Bounded on `APP_REGION_END` (0x0801E000), not the 128 KiB physical
+        part size — the top `CONFIG_REGION_SIZE` bytes are the firmware's
+        reserved config storage (D-13) and must never be reachable by an
+        installed image, even though DfuSe erase is payload-scoped and a
+        legitimate ≤120 KiB image would never touch it anyway.
+        """
         if length == 0:
             raise ImageError("Refusing to flash an empty image.")
-        if base < FLASH_BASE or base + length > FLASH_BASE + FLASH_SIZE:
+        if base < FLASH_BASE or base + length > APP_REGION_END:
             raise ImageError(
                 f"Image spans 0x{base:08X}..0x{base + length:08X}, outside "
-                f"PY32F071xB flash (0x{FLASH_BASE:08X}.."
-                f"0x{FLASH_BASE + FLASH_SIZE:08X})."
+                f"the accepted application region (0x{FLASH_BASE:08X}.."
+                f"0x{APP_REGION_END:08X}). The region above 0x{APP_REGION_END:08X} "
+                "is reserved for the firmware's config storage."
             )
 
     # -- DFU primitives ----------------------------------------------------
