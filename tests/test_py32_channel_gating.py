@@ -56,7 +56,13 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+import click
+import pytest
+
+from firestarter import cli_handlers
+
 _APP_DIR = Path(__file__).parent.parent
+_CLI_HANDLERS_PATH = _APP_DIR / "firestarter" / "cli_handlers.py"
 
 # Every version string used by this module's tests is a literal below, not
 # read from `firestarter.__version__` -- the point is to simulate a channel,
@@ -219,3 +225,126 @@ def test_simulated_prerelease_dfu_probe_and_usb_id_not_refused() -> None:
         _PRERELEASE_VERSION, ("fw", "--dfu-probe", "--usb-id", "1a86:8012")
     )
     assert "no such option" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# Import-time by construction -- ROADMAP Criterion 5's explicit assertion
+# ---------------------------------------------------------------------------
+
+
+def test_board_choices_are_computed_at_import_not_cached_across_a_version_change() -> (
+    None
+):
+    """ROADMAP Criterion 5, quoted verbatim: "...with an explicit assertion
+    that `_BOARD_CHOICES` is computed at import time, not cached stale across
+    a version change."
+
+    Proved *by construction*, not by inspecting `cli_handlers.py`'s source:
+    one process per simulated version, `firestarter.cli_handlers` imported
+    exactly once in each, after `firestarter.__version__` is set, guarded by
+    that child's own `sys.modules` pre-assertion (see `_CHILD_PROGRAM`). The
+    two children's reported `_BOARD_CHOICES` are therefore not the same list
+    re-read twice -- they are two independent import-time computations from
+    two independent processes, one per simulated channel.
+
+    A stronger-sounding in-process alternative -- monkeypatch the version,
+    then force `_BOARD_CHOICES` to recompute -- is weaker here: there is no
+    in-process way to force that recomputation without a module-reload
+    approach, which this module's own docstring already rejects, because it
+    would rebuild Click's command objects while `cli.py` still held
+    references to the old ones.
+    """
+    stable = _run_cli(_STABLE_VERSION, ("fw", "--help"))
+    prerelease = _run_cli(_PRERELEASE_VERSION, ("fw", "--help"))
+
+    assert stable.board_choices != prerelease.board_choices
+    assert len(stable.board_choices) == 3
+    assert "py32f071" not in stable.board_choices
+    assert len(prerelease.board_choices) == 4
+    assert "py32f071" in prerelease.board_choices
+
+
+# ---------------------------------------------------------------------------
+# In-process unit tests for _reject_py32_only_option's truth table
+# ---------------------------------------------------------------------------
+#
+# These call the helper directly rather than through a subprocess: it reads
+# _PY32_ENABLED at call time (a module global, not a captured default
+# argument), which is exactly what makes it monkeypatchable in-process while
+# the Click command surface built at import time stays frozen (see the
+# helper's own docstring in cli_handlers.py).
+
+
+def test_reject_py32_only_option_disabled_and_given_raises_usage_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """disabled + given -> raises `click.UsageError` **specifically** (that
+    is the type Click turns into exit code 2; a bare `Exception` assertion
+    would not prove that), with the exact refusal text, for both py32-only
+    option names."""
+    monkeypatch.setattr(cli_handlers, "_PY32_ENABLED", False)
+
+    with pytest.raises(click.UsageError) as usb_exc:
+        cli_handlers._reject_py32_only_option("--usb-id", True)
+    assert type(usb_exc.value) is click.UsageError
+    assert str(usb_exc.value) == "no such option: --usb-id"
+
+    with pytest.raises(click.UsageError) as dfu_exc:
+        cli_handlers._reject_py32_only_option("--dfu-probe", True)
+    assert type(dfu_exc.value) is click.UsageError
+    assert str(dfu_exc.value) == "no such option: --dfu-probe"
+
+
+def test_reject_py32_only_option_disabled_and_not_given_returns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """disabled + not given -> returns without raising."""
+    monkeypatch.setattr(cli_handlers, "_PY32_ENABLED", False)
+    assert cli_handlers._reject_py32_only_option("--usb-id", False) is None
+
+
+def test_reject_py32_only_option_enabled_and_given_returns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """enabled + given -> returns without raising."""
+    monkeypatch.setattr(cli_handlers, "_PY32_ENABLED", True)
+    assert cli_handlers._reject_py32_only_option("--usb-id", True) is None
+
+
+def test_reject_py32_only_option_enabled_and_not_given_returns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """enabled + not given -> returns without raising."""
+    monkeypatch.setattr(cli_handlers, "_PY32_ENABLED", True)
+    assert cli_handlers._reject_py32_only_option("--usb-id", False) is None
+
+
+# ---------------------------------------------------------------------------
+# One-code-path guard -- D-08's whole point
+# ---------------------------------------------------------------------------
+
+
+def test_refusal_message_and_helper_occur_exactly_once_and_three_times() -> None:
+    """An inline copy of the refusal message is the exact shape that
+    produced HOST-02's `--usb-id`-accepted-on-stable bug in the first place.
+    Source-scans `firestarter/cli_handlers.py` and asserts the message
+    occurs exactly once and the helper's own name occurs exactly three
+    times (one definition, two call sites).
+    """
+    source = _CLI_HANDLERS_PATH.read_text()
+    assert source, f"{_CLI_HANDLERS_PATH} was empty or unreadable"
+    assert "def _reject_py32_only_option" in source, (
+        "the helper's own definition is absent from cli_handlers.py -- the "
+        "count assertions below would otherwise be checking a vacuously "
+        "true condition"
+    )
+
+    assert source.count("no such option") == 1, (
+        "the refusal message occurs more than once in cli_handlers.py -- an "
+        "inline copy of the refusal has returned, the exact shape that "
+        "produced HOST-02's --usb-id-accepted-on-stable bug"
+    )
+    assert source.count("_reject_py32_only_option") == 3, (
+        "expected exactly 3 occurrences of _reject_py32_only_option (one "
+        "definition, two call sites) in cli_handlers.py"
+    )
