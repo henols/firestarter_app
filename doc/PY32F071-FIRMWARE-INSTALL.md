@@ -82,6 +82,10 @@ What it does need is raw USB access:
 pip install 'firestarter[py32]'      # adds pyusb
 ```
 
+The extra pins `pyusb>=1.3.1,<2`: the upper bound refuses a future pyusb major
+that could reorder `ctrl_transfer`'s parameters, which every call site in
+`py32_dfu.py` passes positionally.
+
 `pyusb` needs a libusb backend. On Linux that is usually already present, plus a
 udev rule (or root) to reach the device. On Windows the DFU device needs a WinUSB
 driver. This is the one place the "no external tools" goal is imperfect, and the
@@ -165,8 +169,12 @@ USB stack proven first, so it follows rather than replaces 2a/2b.
 4. **Load the image.** `.bin` is taken raw at `0x08000000`; `.hex` is parsed as
    Intel HEX and carries its own address. Both are accepted because which asset
    the firmware release publishes is not settled.
-5. **Refuse impossible writes.** An image that would fall outside
-   `0x08000000`–`0x08020000` (128 KiB) is rejected before a single byte is sent.
+5. **Refuse impossible writes.** An image that would end past `0x0801E000` — the
+   application region's end, 120 KiB above `0x08000000` — is rejected before a
+   single byte is sent. The part itself has 128 KiB of flash, but the top 8 KiB
+   (Sector 15) is reserved for the firmware's own config storage, so the accepted
+   span is smaller than the part. There is no force flag: the refusal is
+   deliberately non-overridable.
 6. **Transfer.**
    - *DfuSe* (`bcdDFUVersion 0x011A`, or an `@…` mapping string): erase each
      sector the image touches → set the address pointer → download blocks
@@ -174,7 +182,23 @@ USB stack proven first, so it follows rather than replaces 2a/2b.
    - *Plain DFU 1.1*: sequential blocks from 0, no erase, no address pointer.
      The load address is then the bootloader's business, not ours, and the host
      says so in a warning.
-7. **Tolerate the reset.** After a successful leave, the device drops off the bus.
+7. **Verify.** Before the device is ever told to leave DFU mode, the host reads
+   the whole image back over `DFU_UPLOAD` and compares it to what was sent, byte
+   for byte. Three things can happen:
+   - The device does not advertise upload support (`bitCanUpload = 0`), so
+     verification is skipped and the install reports **written but NOT verified**.
+   - The device speaks plain DFU 1.1, not DfuSe, so the host never chooses the
+     load address on that path and there is nothing to read back from —
+     **load address not under host control** — and the install again reports
+     **written but NOT verified**.
+   - The bytes differ, including a short readback: this is a **hard failure**.
+     The install exits non-zero naming the first differing offset and the
+     expected and actual byte, and the device is deliberately never told to
+     leave DFU mode, so a bad image is never manifested.
+
+   This sequence is asserted only against a fake USB device in
+   `tests/test_py32_dfu.py`; it has never run against a PY32F071.
+8. **Tolerate the reset.** After a successful leave, the device drops off the bus.
    USB errors from that point are expected and are not reported as failures.
 
 Every step above is asserted in `tests/test_py32_dfu.py` against a fake USB
@@ -254,9 +278,11 @@ Attached USB DFU devices:
    necessarily the USB product ID. Whatever `--dfu-probe` reports is the truth;
    record it and it can become a default.
 2. **The dialect.** If `bcdDFUVersion` is `0x011A` and/or an `@…` mapping string
-   appears, the DfuSe path is correct and the sector geometry is authoritative.
-   If not, the plain DFU 1.1 path runs and the load address is whatever the
-   bootloader decides — verify by reading the image back before trusting it.
+   appears, the DfuSe path is correct and the sector geometry is authoritative;
+   on this path the host now reads the image back and verifies it for you (§3
+   step 7). If not, the plain DFU 1.1 path runs and the load address is
+   whatever the bootloader decides — the host cannot read that address back, so
+   this one still has to be verified by hand before trusting it.
 
 Then, in order:
 
