@@ -1,0 +1,200 @@
+"""
+Project Name: Firestarter
+Copyright (c) 2026 Henrik Olsson
+
+Permission is hereby granted under MIT license.
+
+Phase 127 Plan 127-02 -- HOST-07 / D-19 (the [py32] extra's pyusb floor,
+raised to >=1.3.1,<2) and HOST-01 / D-17 (the accepted-deviation comment
+Plan 127-01 Task 2 recorded at flash_method()) each become checkable by an
+exit code rather than by a reader.
+
+**Why a regex scan, not a TOML parse.** tomllib is py3.11+ and this
+project's declared floor is py3.9 (ruff target-version = "py39", mypy
+python_version = "3.9"); tomli is not a dependency this project carries and
+this plan adds none. tests/test_revision_constants_parity.py already scans
+source text for exactly this class of gate -- a #define extractor over a C
+header -- so a regex scan over pyproject.toml's `py32 = [` block follows the
+same repo idiom rather than introducing a new dependency for one file.
+
+**Non-vacuity (research finding A-7).** A scan that finds nothing must
+never read as a pass. Both gates below assert their scan target was located
+at all -- the `py32 = [` block, and `def flash_method(` -- before comparing
+anything the scan found. Each gate's assertion body is factored into a
+helper the real leg and a fail-closed planted-file leg both call, the same
+shape tests/test_revision_constants_parity.py uses for its own
+header-reading gate: the fail-closed legs monkeypatch this module's
+path constant (`_PYPROJECT` / `_FIRMWARE_PY`) before invoking the shared
+helper, proving the gate can genuinely fail rather than only by inspection.
+"""
+
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+import pytest
+
+_APP_DIR = Path(__file__).parent.parent
+_PYPROJECT = _APP_DIR / "pyproject.toml"
+_FIRMWARE_PY = _APP_DIR / "firestarter" / "firmware.py"
+
+# D-19: pyusb 1.3.1 is the current release at plan time (Requires-Python
+# >=3.9.0, satisfiable on this project's py39 floor); <2 refuses a future
+# major that could reorder ctrl_transfer's parameters. Written
+# independently of pyproject.toml -- never derived from the file under test.
+_EXPECTED_PYUSB_SPEC = "pyusb>=1.3.1,<2"
+
+_PY32_BLOCK_RE = re.compile(r"^py32\s*=\s*\[(.*?)\]", re.DOTALL | re.MULTILINE)
+_TEST_BLOCK_RE = re.compile(r"^test\s*=\s*\[(.*?)\]", re.DOTALL | re.MULTILINE)
+_REQUIREMENT_RE = re.compile(r'"([^"]*)"')
+
+# D-17's five phrases (HOST-01) -- "accepted deviation" doubles as the
+# proximity-checked phrase below.
+_D17_PHRASES = (
+    "accepted deviation",
+    "D-17",
+    "HOST-01",
+    "_install_with_avrdude",
+    "avrdude-mcu-detection-fallback",
+)
+_D17_PROXIMITY_PHRASE = "accepted deviation"
+_FLASH_METHOD_DEF = "def flash_method("
+_D17_PROXIMITY_LINES = 25
+
+
+def _py32_extra_requirements(text: str) -> list[str]:
+    """Extract the quoted requirement strings inside the `py32 = [ ... ]`
+    block. Returns an empty list -- never raises -- when the block is
+    absent, so the non-vacuity assertion in each caller is the thing that
+    reports the failure, not a stack trace out of this helper."""
+    match = _PY32_BLOCK_RE.search(text)
+    if match is None:
+        return []
+    return _REQUIREMENT_RE.findall(match.group(1))
+
+
+def _read_py32_requirements() -> list[str]:
+    """Read `_PYPROJECT` (a module global, monkeypatchable) and return the
+    non-vacuity-checked list of py32 extra requirement strings.
+
+    Raises `AssertionError` if the `py32 = [` block is absent or empty --
+    the fail-closed planted-file leg below exercises exactly this raise by
+    monkeypatching `_PYPROJECT` before calling this same helper, so the
+    real gate leg and the fail-closed leg share one code path."""
+    text = _PYPROJECT.read_text(encoding="utf-8")
+    requirements = _py32_extra_requirements(text)
+    assert requirements, (
+        f"'py32 = [' block not found (or found empty) in {_PYPROJECT} -- "
+        "every downstream assertion about its contents would be vacuously "
+        "true (research finding A-7)"
+    )
+    return requirements
+
+
+def _read_d17_record() -> None:
+    """Read `_FIRMWARE_PY` (a module global, monkeypatchable) and assert
+    D-17's accepted-deviation record is present and held in proximity to
+    `def flash_method(`.
+
+    Raises `AssertionError` on any of: the function not being located at
+    all (non-vacuity), a missing phrase, or the 'accepted deviation' phrase
+    drifting more than `_D17_PROXIMITY_LINES` lines away from the function
+    it describes. The fail-closed planted-file leg below monkeypatches
+    `_FIRMWARE_PY` before calling this same helper."""
+    text = _FIRMWARE_PY.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    def_idx = next(
+        (i for i, line in enumerate(lines) if _FLASH_METHOD_DEF in line), None
+    )
+    assert def_idx is not None, (
+        f"{_FLASH_METHOD_DEF!r} not found in {_FIRMWARE_PY} -- the "
+        "proximity assertion below would be vacuously true against a "
+        "function that was never located (research finding A-7)"
+    )
+
+    missing = [phrase for phrase in _D17_PHRASES if phrase not in text]
+    assert not missing, (
+        f"D-17's accepted-deviation record is missing phrase(s) {missing!r} "
+        f"in {_FIRMWARE_PY}"
+    )
+
+    window_start = max(0, def_idx - _D17_PROXIMITY_LINES)
+    window = "\n".join(lines[window_start:def_idx])
+    assert _D17_PROXIMITY_PHRASE in window, (
+        f"{_D17_PROXIMITY_PHRASE!r} phrase found somewhere in the file but "
+        f"not within {_D17_PROXIMITY_LINES} lines preceding "
+        f"{_FLASH_METHOD_DEF!r} -- the record must not drift away from the "
+        "function it describes"
+    )
+
+
+def test_py32_block_is_non_vacuous() -> None:
+    """`_py32_extra_requirements` over the real pyproject.toml must return
+    a non-empty list -- otherwise the floor-equality gate below would be
+    comparing against nothing (research finding A-7)."""
+    requirements = _read_py32_requirements()
+    assert requirements
+
+
+def test_py32_floor_is_exactly_the_expected_spec() -> None:
+    """A silent revert to pyusb>=1.2.1, a dropped upper bound, or an added
+    second requirement in the py32 extra must all fail this gate."""
+    requirements = _read_py32_requirements()
+    assert requirements == [_EXPECTED_PYUSB_SPEC], (
+        f"py32 extra requirements {requirements!r} != [{_EXPECTED_PYUSB_SPEC!r}]"
+    )
+
+
+def test_pyusb_absent_from_the_test_extra() -> None:
+    """D-02's two-leg design as an assertion: if pyusb ever migrates into
+    the primary `test` extra, the entire pyusb-absent proof set (Plan
+    127-07) becomes vacuous with nothing going red on its own."""
+    text = _PYPROJECT.read_text(encoding="utf-8")
+    match = _TEST_BLOCK_RE.search(text)
+    assert match is not None, f"'test = [' block not found in {_PYPROJECT}"
+    test_requirements = _REQUIREMENT_RE.findall(match.group(1))
+    assert not any(req.lower().startswith("pyusb") for req in test_requirements), (
+        f"pyusb found in the primary test extra: {test_requirements!r} -- "
+        "this would make the entire pyusb-absent proof set (Plan 127-07) "
+        "vacuous with nothing going red"
+    )
+
+
+def test_py32_gate_fails_closed_on_a_planted_file_with_no_py32_block(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail-closed RED demonstration: point `_PYPROJECT` at a planted file
+    containing no `py32 = [` block and assert the shared helper raises
+    rather than silently passing on an empty match set (research finding
+    A-7)."""
+    planted = tmp_path / "pyproject.toml"
+    planted.write_text('[project]\nname = "x"\n', encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "_PYPROJECT", planted)
+    with pytest.raises(AssertionError, match=r"py32 = \["):
+        _read_py32_requirements()
+
+
+def test_d17_record_phrases_present_and_proximate_to_flash_method() -> None:
+    """D-17's five phrases must all be present in firmware.py, and the
+    'accepted deviation' phrase must occur within `_D17_PROXIMITY_LINES`
+    lines preceding `def flash_method(` -- so the record cannot drift away
+    from the function it describes."""
+    _read_d17_record()
+
+
+def test_d17_gate_fails_closed_on_a_planted_file_lacking_the_record(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail-closed RED demonstration: point `_FIRMWARE_PY` at a planted
+    file that defines `flash_method` but carries none of D-17's phrases,
+    and assert the shared helper raises."""
+    planted = tmp_path / "firmware.py"
+    planted.write_text(
+        "def flash_method(board):\n    return 'avrdude'\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(sys.modules[__name__], "_FIRMWARE_PY", planted)
+    with pytest.raises(AssertionError):
+        _read_d17_record()
