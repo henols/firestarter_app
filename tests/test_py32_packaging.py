@@ -4,10 +4,20 @@ Copyright (c) 2026 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Phase 127 Plan 127-02 -- HOST-07 / D-19 (the [py32] extra's pyusb floor,
-raised to >=1.3.1,<2) and HOST-01 / D-17 (the accepted-deviation comment
-Plan 127-01 Task 2 recorded at flash_method()) each become checkable by an
-exit code rather than by a reader.
+This module carries three independent, non-vacuous, fail-closed-proven gate
+families, kept together because each is a small textual source-scan over a
+file that a future refactor could silently drift without any test noticing:
+
+  1. **Packaging** (Plan 127-02 -- HOST-07 / D-19): the `[py32]` extra's
+     pyusb floor, raised to `>=1.3.1,<2`.
+  2. **The D-17 deviation record** (Plan 127-02 -- HOST-01): the
+     accepted-deviation comment Plan 127-01 Task 2 recorded at
+     `flash_method()`.
+  3. **Documentation parity** (Plan 127-10 -- D-15 / D-13): the install
+     doc's flash-map figure and pyusb floor must not silently outlive the
+     host constants and `pyproject.toml` entry they describe -- Phase 129
+     is expected to move the flash map, and this is what turns that move
+     into a red test here instead of a stale doc there.
 
 **Why a regex scan, not a TOML parse.** tomllib is py3.11+ and this
 project's declared floor is py3.9 (ruff target-version = "py39", mypy
@@ -18,14 +28,15 @@ header -- so a regex scan over pyproject.toml's `py32 = [` block follows the
 same repo idiom rather than introducing a new dependency for one file.
 
 **Non-vacuity (research finding A-7).** A scan that finds nothing must
-never read as a pass. Both gates below assert their scan target was located
-at all -- the `py32 = [` block, and `def flash_method(` -- before comparing
-anything the scan found. Each gate's assertion body is factored into a
-helper the real leg and a fail-closed planted-file leg both call, the same
-shape tests/test_revision_constants_parity.py uses for its own
-header-reading gate: the fail-closed legs monkeypatch this module's
-path constant (`_PYPROJECT` / `_FIRMWARE_PY`) before invoking the shared
-helper, proving the gate can genuinely fail rather than only by inspection.
+never read as a pass. Every gate below asserts its scan target was located
+at all -- the `py32 = [` block, `def flash_method(`, and the install doc's
+§3 heading -- before comparing anything the scan found. Each gate's
+assertion body is factored into a helper the real leg and a fail-closed
+planted-file leg both call, the same shape tests/test_revision_constants_parity.py
+uses for its own header-reading gate: the fail-closed legs monkeypatch this
+module's path constant (`_PYPROJECT` / `_FIRMWARE_PY` / `_INSTALL_DOC`)
+before invoking the shared helper, proving the gate can genuinely fail
+rather than only by inspection.
 """
 
 from __future__ import annotations
@@ -36,9 +47,12 @@ from pathlib import Path
 
 import pytest
 
+from firestarter import py32_dfu
+
 _APP_DIR = Path(__file__).parent.parent
 _PYPROJECT = _APP_DIR / "pyproject.toml"
 _FIRMWARE_PY = _APP_DIR / "firestarter" / "firmware.py"
+_INSTALL_DOC = _APP_DIR / "doc" / "PY32F071-FIRMWARE-INSTALL.md"
 
 # D-19: pyusb 1.3.1 is the current release at plan time (Requires-Python
 # >=3.9.0, satisfiable on this project's py39 floor); <2 refuses a future
@@ -62,6 +76,20 @@ _D17_PHRASES = (
 _D17_PROXIMITY_PHRASE = "accepted deviation"
 _FLASH_METHOD_DEF = "def flash_method("
 _D17_PROXIMITY_LINES = 25
+
+# Plan 127-10 / D-15: the install doc's non-vacuity anchor -- the same
+# section header the doc's own text calls "§3".
+_INSTALL_DOC_SECTION_3_HEADING = "## 3. What the host does during an install"
+
+# Plan 127-10: the doc must name all three non-VERIFIED outcomes using the
+# exact words the flasher/CLI actually print (or the flasher's own attribute
+# name), so a future edit cannot quietly drop the honest half of the
+# install's outcome vocabulary.
+_READBACK_OUTCOME_PHRASES = (
+    "bitCanUpload",
+    "load address not under host control",
+    "written but NOT verified",
+)
 
 
 def _py32_extra_requirements(text: str) -> list[str]:
@@ -198,3 +226,127 @@ def test_d17_gate_fails_closed_on_a_planted_file_lacking_the_record(
     monkeypatch.setattr(sys.modules[__name__], "_FIRMWARE_PY", planted)
     with pytest.raises(AssertionError):
         _read_d17_record()
+
+
+# --------------------------------------------------------------------------
+# Plan 127-10 / D-15, D-13: doc-vs-constant parity gate. The install doc's
+# flash-map figure and pyusb floor must not be able to disagree with the
+# code they describe without a red test here -- including when Phase 129
+# moves the map.
+# --------------------------------------------------------------------------
+
+
+def _read_install_doc() -> str:
+    """Read `_INSTALL_DOC` (a module global, monkeypatchable) and return its
+    text, non-vacuity-checked against the presence of the doc's own §3
+    heading.
+
+    Raises `AssertionError` if the file is absent, empty, or missing the §3
+    heading -- the fail-closed planted-file leg below exercises exactly
+    this raise, so the real gate leg and the fail-closed leg share one code
+    path (research finding A-7)."""
+    assert _INSTALL_DOC.exists(), (
+        f"{_INSTALL_DOC} does not exist -- every downstream assertion about "
+        "its contents would be vacuously true (research finding A-7)"
+    )
+    text = _INSTALL_DOC.read_text(encoding="utf-8")
+    assert text, f"{_INSTALL_DOC} is empty"
+    assert _INSTALL_DOC_SECTION_3_HEADING in text, (
+        f"{_INSTALL_DOC_SECTION_3_HEADING!r} not found in {_INSTALL_DOC} -- "
+        "the address/outcome assertions below would be vacuously true "
+        "against a doc section that was never actually located "
+        "(research finding A-7)"
+    )
+    return text
+
+
+def _assert_doc_states_app_region_end() -> None:
+    """Assert the install doc's application-region-end figure matches
+    `py32_dfu.APP_REGION_END` exactly. The expectation is built with
+    `f"0x{...:08X}"` rather than written as a literal, so this follows the
+    constant automatically when Phase 129 moves the map."""
+    text = _read_install_doc()
+    expected = f"0x{py32_dfu.APP_REGION_END:08X}"
+    assert expected in text, (
+        f"doc figure and host constant have diverged: expected the "
+        f"application-region-end figure {expected!r} "
+        f"(py32_dfu.APP_REGION_END == 0x{py32_dfu.APP_REGION_END:08X}) inside "
+        f"{_INSTALL_DOC}, but it was not found"
+    )
+
+
+def _assert_doc_states_flash_base() -> None:
+    """Assert the install doc's flash-base figure matches
+    `py32_dfu.FLASH_BASE` exactly, built the same way as
+    `_assert_doc_states_app_region_end`."""
+    text = _read_install_doc()
+    expected = f"0x{py32_dfu.FLASH_BASE:08X}"
+    assert expected in text, (
+        f"doc figure and host constant have diverged: expected the flash "
+        f"base figure {expected!r} (py32_dfu.FLASH_BASE == "
+        f"0x{py32_dfu.FLASH_BASE:08X}) inside {_INSTALL_DOC}, but it was "
+        "not found"
+    )
+
+
+def test_install_doc_is_non_vacuous() -> None:
+    """`_read_install_doc` over the real install doc must return non-empty
+    text containing the §3 heading -- otherwise every parity assertion
+    below would be comparing against nothing (research finding A-7)."""
+    text = _read_install_doc()
+    assert text
+
+
+def test_install_doc_app_region_end_matches_host_constant() -> None:
+    """The doc's application-region-end figure (§3 step 5) must not
+    silently outlive `py32_dfu.APP_REGION_END` -- a Phase-129 map move
+    turns this red instead of leaving the doc stale."""
+    _assert_doc_states_app_region_end()
+
+
+def test_install_doc_flash_base_matches_host_constant() -> None:
+    """The doc's flash-base figure must likewise track
+    `py32_dfu.FLASH_BASE`."""
+    _assert_doc_states_flash_base()
+
+
+def test_install_doc_documents_all_three_readback_outcomes() -> None:
+    """All three non-VERIFIED readback outcomes must be named in the doc
+    using the words the flasher/CLI actually use, so a future edit cannot
+    quietly drop the honest half of the install's outcome vocabulary."""
+    text = _read_install_doc()
+    missing = [phrase for phrase in _READBACK_OUTCOME_PHRASES if phrase not in text]
+    assert not missing, (
+        f"install doc is missing readback outcome phrase(s) {missing!r} in "
+        f"{_INSTALL_DOC}"
+    )
+
+
+def test_install_doc_pyusb_floor_matches_pyproject() -> None:
+    """The `[py32]` extra's requirement string(s) in `pyproject.toml` must
+    also appear in the install doc -- one comparison, both sources, so the
+    two cannot drift apart."""
+    requirements = _read_py32_requirements()
+    text = _read_install_doc()
+    for requirement in requirements:
+        assert requirement in text, (
+            f"pyproject.toml's py32 extra requirement {requirement!r} is "
+            f"not stated in {_INSTALL_DOC} -- the doc and pyproject.toml "
+            "have drifted"
+        )
+
+
+def test_install_doc_address_parity_fails_closed_on_a_planted_file_missing_the_address(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail-closed RED demonstration: point `_INSTALL_DOC` at a planted file
+    that carries the §3 heading (so non-vacuity passes) but lacks the
+    application-region-end figure, and assert the parity helper raises."""
+    planted = tmp_path / "PY32F071-FIRMWARE-INSTALL.md"
+    planted.write_text(
+        f"{_INSTALL_DOC_SECTION_3_HEADING}\nNo address in this planted file.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys.modules[__name__], "_INSTALL_DOC", planted)
+    with pytest.raises(AssertionError):
+        _assert_doc_states_app_region_end()
