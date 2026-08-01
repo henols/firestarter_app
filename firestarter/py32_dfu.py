@@ -647,7 +647,7 @@ class Py32DfuFlasher:
         self._prepare()
 
         if interface.is_dfuse:
-            self._download_dfuse(interface, base, payload)
+            finish_base, next_block = self._download_dfuse(interface, base, payload)
         else:
             logger.warning(
                 "Device does not advertise DfuSe; using plain DFU 1.1 sequential "
@@ -655,7 +655,15 @@ class Py32DfuFlasher:
                 "bootloader, not by us.",
                 base,
             )
-            self._download_plain(interface, payload)
+            finish_base, next_block = self._download_plain(interface, payload)
+
+        # D-12 / C-5: _finish() leaves DFU mode and lets the device reset off
+        # the bus, so it must be the LAST thing flash() does. Both download
+        # strategies used to call _finish() themselves, as their own last
+        # statement; it is hoisted to this single call site so the ordering
+        # is structural rather than a convention a future edit could break.
+        # Plan 127-09 inserts the readback immediately above this call.
+        self._finish(finish_base, next_block, dfuse=interface.is_dfuse)
 
         logger.info("USB DFU download complete.")
         return True
@@ -766,7 +774,7 @@ class Py32DfuFlasher:
 
     def _download_dfuse(
         self, interface: DfuInterface, base: int, payload: bytes
-    ) -> None:
+    ) -> Tuple[Optional[int], int]:  # noqa: UP006,UP045
         layout = parse_dfuse_layout(interface.name)
         if not layout:
             logger.warning(
@@ -792,16 +800,18 @@ class Py32DfuFlasher:
             self._wait_ready(f"block {block}")
             block += 1
 
-        self._finish(base, block, dfuse=True)
+        return base, block
 
-    def _download_plain(self, interface: DfuInterface, payload: bytes) -> None:
+    def _download_plain(
+        self, interface: DfuInterface, payload: bytes
+    ) -> Tuple[Optional[int], int]:  # noqa: UP006,UP045
         chunk_size = interface.transfer_size
         block = 0
         for offset in range(0, len(payload), chunk_size):
             self._dnload(block, payload[offset : offset + chunk_size])
             self._wait_ready(f"block {block}")
             block += 1
-        self._finish(None, block, dfuse=False)
+        return None, block
 
     def _finish(self, base: Optional[int], next_block: int, dfuse: bool) -> None:  # noqa: UP045
         """End the download with a zero-length DNLOAD, then leave DFU mode.
