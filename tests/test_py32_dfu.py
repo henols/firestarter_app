@@ -781,6 +781,74 @@ class TestBetaChannelGate:
         assert called["board"] == "leonardo"
 
 
+class TestInstallWithDfuVerifyLogging:
+    """HOST-03 / D-10, D-11: `_install_with_dfu`'s operator-facing wording.
+
+    These three tests are the phase's **only** log-text assertions. D-10
+    requires the verification *state* to be asserted as an enum --
+    `TestReadbackVerification` above does exactly that -- while the
+    operator-facing wording itself (the completion line must say *written
+    but NOT verified*) is a named requirement that can only be checked as
+    text. Asserting it here is consistent with D-10, not a violation of it.
+    """
+
+    def _manager(self, monkeypatch, device, dfuse=True, attributes=0):
+        fm = FirmwareManager(config_manager=MagicMock())
+        # Bypass the channel gate itself -- this class exercises verify-aware
+        # logging, not TestBetaChannelGate's gate behaviour.
+        monkeypatch.setattr(firmware, "is_board_available", lambda board: True)
+        interface = _interface(device, dfuse=dfuse, attributes=attributes)
+        monkeypatch.setattr(
+            py32_dfu, "find_dfu_interfaces", lambda vid=None, pid=None: [interface]
+        )
+        return fm
+
+    def test_unverified_install_warns_and_says_not_verified(
+        self, monkeypatch, tmp_path, caplog
+    ):
+        device = _FakeUsbDevice()  # attributes=0 -> SKIPPED_NO_UPLOAD
+        fm = self._manager(monkeypatch, device, dfuse=True, attributes=0)
+        image = tmp_path / "fw.bin"
+        image.write_bytes(bytes(64))
+        with caplog.at_level("INFO"):
+            ok = fm._install_with_dfu(str(image), "py32f071")
+        assert ok is True
+        warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+        assert any("bitCanUpload = 0" in m for m in warnings)
+        all_messages = [r.getMessage() for r in caplog.records]
+        assert any("written but NOT verified" in m for m in all_messages)
+
+    def test_verified_install_reports_verification_not_the_warning(
+        self, monkeypatch, tmp_path, caplog
+    ):
+        payload = bytes(range(200))
+        device = _FakeUsbDevice(upload_image=payload, upload_block_size=64)
+        fm = self._manager(monkeypatch, device, dfuse=True, attributes=0x02)
+        image = tmp_path / "fw.bin"
+        image.write_bytes(payload)
+        with caplog.at_level("INFO"):
+            ok = fm._install_with_dfu(str(image), "py32f071")
+        assert ok is True
+        all_messages = [r.getMessage() for r in caplog.records]
+        assert not any("written but NOT verified" in m for m in all_messages)
+        assert any("verified" in m for m in all_messages)
+
+    def test_mismatch_raises_firmware_operation_error_naming_the_offset(
+        self, monkeypatch, tmp_path
+    ):
+        payload = bytes(range(200))
+        offset = 50
+        backing = bytearray(payload)
+        backing[offset] = (backing[offset] + 1) % 256
+        device = _FakeUsbDevice(upload_image=bytes(backing), upload_block_size=64)
+        fm = self._manager(monkeypatch, device, dfuse=True, attributes=0x02)
+        image = tmp_path / "fw.bin"
+        image.write_bytes(payload)
+        with pytest.raises(FirmwareOperationError) as exc_info:
+            fm._install_with_dfu(str(image), "py32f071")
+        assert f"0x{offset:08X}" in str(exc_info.value)
+
+
 class TestPortlessInstall:
     """A board in DFU mode exposes no serial port — the install must not need one."""
 

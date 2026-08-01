@@ -621,7 +621,7 @@ class FirmwareManager:
             raise FirmwareOperationError(beta_only_message(board))
 
         # Imported lazily so a missing pyusb only affects DFU boards.
-        from firestarter.py32_dfu import DfuError, Py32DfuFlasher
+        from firestarter.py32_dfu import DfuError, Py32DfuFlasher, VerifyResult
 
         start_time = time.time()
         logger.info(f"Installing firmware on {board} over USB DFU...")
@@ -632,13 +632,34 @@ class FirmwareManager:
             # DfuError carries an operator-actionable message (how to enter the
             # bootloader, or how to install pyusb) — surface it as the module's
             # own error type rather than leaking a USB-layer exception.
+            #
+            # HOST-03 / D-11: a genuine MISMATCH never reaches this `if ok:`
+            # branch below — _verify_readback() raises DfuProtocolError (a
+            # DfuError), which lands here and is converted to
+            # FirmwareOperationError, which the CLI's map_typed_errors
+            # decorator turns into a ClickException and exit 1. Do not
+            # "helpfully" downgrade a mismatch to a warning below: soft-fail
+            # is reserved for *could not verify*, never *verified and it was
+            # wrong*.
             raise FirmwareOperationError(str(e)) from e
 
+        elapsed = time.time() - start_time
         if ok:
-            logger.info(
-                f"Firmware successfully updated on {board} "
-                f"({time.time() - start_time:.2f}s)"
-            )
+            if flasher.verify_result is VerifyResult.VERIFIED:
+                logger.info(
+                    f"Firmware successfully updated on {board} and verified "
+                    f"via DFU_UPLOAD readback ({elapsed:.2f}s)"
+                )
+            else:
+                # SKIPPED_NO_UPLOAD or SKIPPED_PLAIN_DFU — the write completed
+                # but could not be verified. Say so instead of reporting a
+                # bare success.
+                logger.warning(
+                    f"Could not verify the write on {board}: {flasher.verify_reason}"
+                )
+                logger.info(
+                    f"Firmware written but NOT verified on {board} ({elapsed:.2f}s)"
+                )
         return ok
 
     @staticmethod
