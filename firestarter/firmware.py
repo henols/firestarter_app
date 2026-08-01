@@ -92,6 +92,22 @@ _BOARD_FLASH_METHODS = {
 _PORTLESS_FLASH_METHODS = frozenset({FLASH_METHOD_DFU})
 
 
+# HOST-01 / D-17 — accepted deviation, not a defect to fix.
+#
+# The milestone plan prescribed extracting a flasher-strategy class hierarchy
+# (one strategy per install mechanism) when the py32 DFU install path landed.
+# What actually shipped is the small board -> method lookup above plus this
+# `flash_method()` router. That is a deliberate, accepted deviation: it does
+# the same dispatch job with far less new surface, and `_install_with_avrdude`
+# below is left completely untouched — rewriting it into a strategy object is
+# explicitly out of scope for Phase 127 (and for whatever lands next).
+#
+# The pending todo `avrdude-mcu-detection-fallback` was reviewed during Phase
+# 127 and deliberately not folded into this router, precisely because it
+# targets `_install_with_avrdude`, the frozen function this deviation protects.
+#
+# See `.planning/phases/127-host-dfu-installer/127-NONREGRESSION.md` for the
+# phase evidence artifact carrying this same record.
 def flash_method(board: Optional[str]) -> str:
     """Return the install method for a board name (case-insensitive)."""
     return _BOARD_FLASH_METHODS.get((board or "").lower(), FLASH_METHOD_AVRDUDE)
