@@ -24,6 +24,14 @@ which is exactly why a missing `[py32]` extra surfaces there as a hard
 collection error rather than a quiet pass: `collect_ignore` does not
 suppress a path named directly on the command line.
 
+Plan 127-08 (HOST-03/HOST-04, C-6) adds the fake-vs-real comparison below:
+`tests/test_py32_dfu.py`'s `_FakeUsbDevice` -- the *only* device model the
+58 DFU sequencing tests run against -- is compared against the real
+`usb.core.Device.ctrl_transfer` pinned above. This module is the one place
+the real signature is available to compare against, which is why the
+comparison could not be written in Plan 127-06 (it would have been red
+until 127-08 aligned the fake).
+
 **Claim ceiling.** Enumerating USB devices and pinning `ctrl_transfer`'s
 signature proves pyusb imports and that its API is shaped as expected. It
 proves NOTHING about a PY32F071 -- no PCB exists, and no DFU device is
@@ -36,6 +44,8 @@ import importlib.metadata
 import inspect
 
 import usb.core
+
+from tests.test_py32_dfu import _FakeUsbDevice
 
 # Independent expectation, written here rather than derived from
 # `inspect` at import time -- this is what makes a real pyusb parameter
@@ -149,7 +159,56 @@ def test_ctrl_transfer_timeout_is_optional() -> None:
     )
 
 
-# Plan 127-08 adds the fake-vs-real comparison test to this module (aligning
-# the in-repo fake USB device's `ctrl_transfer` signature with the real one
-# pinned above). It is deliberately NOT written here -- it would be red
-# until 127-08 lands.
+def test_fake_ctrl_transfer_signature_matches_the_real_one() -> None:
+    """`_FakeUsbDevice.ctrl_transfer`'s signature matches the real one.
+
+    `tests/test_py32_dfu.py`'s `_FakeUsbDevice` is the *only* device model
+    the 58 DFU sequencing tests run against. A silent divergence from the
+    real `usb.core.Device.ctrl_transfer` would make all of them agree with
+    each other and with nothing real -- Plan 127-08 / C-6.
+    """
+    real_signature = inspect.signature(usb.core.Device.ctrl_transfer)
+    fake_signature = inspect.signature(_FakeUsbDevice.ctrl_transfer)
+    real_names = list(real_signature.parameters.keys())
+    fake_names = list(fake_signature.parameters.keys())
+
+    # 1. Order-sensitive comparison over the full overlapping prefix,
+    #    including data_or_wLength and timeout.
+    overlap = min(len(real_names), len(fake_names))
+    assert fake_names[:overlap] == real_names[:overlap], (
+        "_FakeUsbDevice.ctrl_transfer's parameter order no longer matches "
+        "the real usb.core.Device.ctrl_transfer.\n"
+        f"  real: {real_names}\n"
+        f"  fake: {fake_names}\n"
+        "Reconcile per Plan 127-08 / C-6."
+    )
+
+    # 2. Every parameter the real signature defaults, the fake also
+    #    defaults -- a production call omitting an argument against the
+    #    real device would also be legal against the fake.
+    for name in real_names:
+        real_param = real_signature.parameters[name]
+        if real_param.default is inspect.Parameter.empty:
+            continue
+        assert name in fake_signature.parameters, (
+            f"real ctrl_transfer's defaulted parameter {name!r} is absent "
+            "from the fake's signature entirely"
+        )
+        fake_param = fake_signature.parameters[name]
+        assert fake_param.default is not inspect.Parameter.empty, (
+            f"real ctrl_transfer defaults {name!r}, but the fake's "
+            f"{name!r} is required -- a production call that omits it "
+            "would be legal against the real device but not the fake"
+        )
+
+    # 3. Non-vacuity guard: both signatures were actually obtained, and
+    #    each carries more than two parameters -- otherwise the comparison
+    #    above would be vacuously true.
+    assert len(real_names) > 2, (
+        f"real ctrl_transfer signature has only {len(real_names)} "
+        "parameters -- the comparison above would be vacuously true"
+    )
+    assert len(fake_names) > 2, (
+        f"fake ctrl_transfer signature has only {len(fake_names)} "
+        "parameters -- the comparison above would be vacuously true"
+    )
