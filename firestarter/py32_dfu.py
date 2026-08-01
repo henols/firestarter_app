@@ -29,6 +29,7 @@ it prints exactly what was found. See `doc/PY32F071-FIRMWARE-INSTALL.md`.
 
 from __future__ import annotations
 
+import enum
 import logging
 import re
 import time
@@ -91,6 +92,13 @@ STATUS_OK = 0x00
 
 # DFU functional descriptor (bDescriptorType 0x21, bLength 9).
 _DFU_FUNCTIONAL_DESCRIPTOR = 0x21
+
+# DFU 1.1 §4.1.3 Table 4.2 offset 2 (bmAttributes) -- bit 1: upload capable
+# (bitCanUpload). HOST-03: `_verify_readback` reads this bit to decide
+# whether a DFU_UPLOAD readback can even be attempted; `DfuInterface.attributes`
+# was already parsed and stored by `_parse_functional_descriptor` before this
+# constant existed, so this is a consumer of that field, not a new parser.
+_DFU_BIT_CAN_UPLOAD = 0x02
 
 # DfuSe (ST extension) commands, sent as a DNLOAD with wBlockNum == 0.
 DFUSE_SET_ADDRESS = 0x21
@@ -519,6 +527,44 @@ def dfu_device_present() -> bool:
 # --------------------------------------------------------------------------
 
 
+class VerifyResult(enum.Enum):
+    """The outcome of the post-write `DFU_UPLOAD` readback verification (D-10).
+
+    `flash()` deliberately keeps returning `bool` regardless of which member
+    ends up here -- that is a blast-radius choice: widening `flash()`'s
+    return type would ripple into `_install_with_dfu` and every existing
+    `assert flash(...) is True`. This enum is the only place the richer
+    outcome is recorded.
+
+    Exactly one of these four members is set on `Py32DfuFlasher` once a
+    `flash()` call has completed the verification step; `verify_result is
+    None` means `flash()` has not run yet (or raised before reaching it).
+
+    * `VERIFIED` -- the full payload was read back over `DFU_UPLOAD` and
+      compared byte-for-byte; it matched.
+    * `SKIPPED_NO_UPLOAD` -- the device does not advertise `bitCanUpload`;
+      a readback could not be attempted at all.
+    * `SKIPPED_PLAIN_DFU` -- the device speaks plain DFU 1.1, where the host
+      never chooses the load address, so a readback could not be compared
+      to anything meaningful.
+    * `MISMATCH` -- the readback ran and differs from the payload (including
+      a truncated read). This is the only member that is *also* paired with
+      a raised `DfuProtocolError` -- soft-fail (the two `SKIPPED_*` members)
+      covers *could not verify* only, never *verified and it was wrong*.
+
+    Honesty note: this is the first `enum` import anywhere in this codebase.
+    The project's existing result-constant idiom (see `firmware.py`'s
+    `FLASH_METHOD_*`) is module-level strings plus a dict router; D-10 named
+    an enum specifically for this state, and that locked decision -- not a
+    change of house style -- is why this class exists in that shape.
+    """
+
+    VERIFIED = enum.auto()
+    SKIPPED_NO_UPLOAD = enum.auto()
+    SKIPPED_PLAIN_DFU = enum.auto()
+    MISMATCH = enum.auto()
+
+
 class Py32DfuFlasher:
     """Writes a firmware image to a PY32F071 over its factory USB DFU bootloader."""
 
@@ -534,6 +580,10 @@ class Py32DfuFlasher:
         self.erase_page_size = erase_page_size
         self.leave = leave
         self._interface: Optional[DfuInterface] = None  # noqa: UP045
+        # HOST-03 / D-10: set by `_verify_readback` once `flash()` has run;
+        # `None` means verification has not happened yet. See `VerifyResult`.
+        self.verify_result: Optional[VerifyResult] = None  # noqa: UP045
+        self.verify_reason: Optional[str] = None  # noqa: UP045
 
     # -- discovery ---------------------------------------------------------
 
@@ -657,12 +707,22 @@ class Py32DfuFlasher:
             )
             finish_base, next_block = self._download_plain(interface, payload)
 
+        # HOST-03 / D-09..D-12: verify what was actually written before ever
+        # leaving DFU mode. _verify_readback() raises DfuProtocolError on a
+        # genuine MISMATCH (byte difference or truncated read); the two
+        # SKIPPED_* outcomes are soft and never raise. Named unqualified
+        # (_verify_readback(), not self._verify_readback()) for the same
+        # reason the _finish() comment just below does.
+        self._verify_readback(interface, base, payload)
+
         # D-12 / C-5: _finish() leaves DFU mode and lets the device reset off
         # the bus, so it must be the LAST thing flash() does. Both download
         # strategies used to call _finish() themselves, as their own last
         # statement; it is hoisted to this single call site so the ordering
         # is structural rather than a convention a future edit could break.
-        # Plan 127-09 inserts the readback immediately above this call.
+        # D-11: a MISMATCH raises inside _verify_readback(), above this line,
+        # so a bad image is never manifested -- the device is deliberately
+        # left in DFU mode instead of being told to leave and reset.
         self._finish(finish_base, next_block, dfuse=interface.is_dfuse)
 
         logger.info("USB DFU download complete.")
@@ -769,6 +829,98 @@ class Py32DfuFlasher:
             payload += address.to_bytes(4, "little")
         self._dnload(0, bytes(payload))
         self._wait_ready(f"DfuSe command 0x{command:02X}")
+
+    # -- HOST-03: post-write readback verification --------------------------
+
+    def _read_back(self, interface: DfuInterface, base: int, length: int) -> bytes:
+        """Read ``length`` bytes back from ``base`` over ``DFU_UPLOAD``.
+
+        **Mock-only ceiling:** this sequence has never run against a
+        PY32F071. No PCB exists as of this writing, no public evidence exists
+        that any tool (dfu-util included) has ever driven a PY32 upload, and
+        the DfuSe-vs-plain-DFU-1.1 fork this module implements is entirely
+        untested against real silicon -- one of its two branches has never
+        been the right one. Everything this method does is exercised only
+        against `tests/test_py32_dfu.py`'s mock device.
+
+        Issues `DFUSE_SET_ADDRESS` at `base` (the model used by
+        `_download_dfuse`), then reads UPLOAD blocks numbered from
+        `_DFUSE_FIRST_BLOCK`, requesting `min(interface.transfer_size,
+        remaining)` bytes per block. Stops once `length` bytes have been
+        collected, or the moment a block returns fewer bytes than requested
+        -- a short read is the device saying it has no more to give. The
+        return value may therefore be shorter than `length`; the caller
+        (`_verify_readback`) decides what a short read means.
+        """
+        self._dfuse_command(DFUSE_SET_ADDRESS, base)
+        collected = bytearray()
+        block = _DFUSE_FIRST_BLOCK
+        while len(collected) < length:
+            remaining = length - len(collected)
+            request_length = min(interface.transfer_size, remaining)
+            data = self._dev.ctrl_transfer(
+                _IN, DFU_UPLOAD, block, self._index, request_length
+            )
+            chunk = bytes(data)
+            collected += chunk
+            if len(chunk) < request_length:
+                break
+            block += 1
+        return bytes(collected)
+
+    def _verify_readback(
+        self, interface: DfuInterface, base: int, payload: bytes
+    ) -> None:
+        """Read the just-written image back and compare it to ``payload``.
+
+        Sets `self.verify_result` (and, for anything but a clean `VERIFIED`,
+        `self.verify_reason`) in every branch, so a caller can inspect the
+        outcome even on the branch that also raises. See `VerifyResult`'s
+        docstring for what each member means and D-09..D-12 for why the
+        branches are ordered this way.
+        """
+        if not interface.is_dfuse:
+            # D-09: plain DFU 1.1 never tells the host what address it
+            # loaded the image at, so a readback here could not be compared
+            # to anything meaningful. This converts flash()'s existing
+            # runtime warning (logged just above, in the plain-DFU branch)
+            # into a recorded fact instead of a new claim.
+            self.verify_result = VerifyResult.SKIPPED_PLAIN_DFU
+            self.verify_reason = "load address not under host control"
+            return
+
+        if not (interface.attributes & _DFU_BIT_CAN_UPLOAD):
+            self.verify_result = VerifyResult.SKIPPED_NO_UPLOAD
+            self.verify_reason = (
+                "device does not advertise upload support (bitCanUpload = 0)"
+            )
+            return
+
+        readback = self._read_back(interface, base, len(payload))
+
+        if len(readback) < len(payload):
+            self.verify_result = VerifyResult.MISMATCH
+            self.verify_reason = (
+                f"readback truncated: got {len(readback)} of {len(payload)} "
+                f"bytes (first differing offset 0x{len(readback):08X})"
+            )
+            raise DfuProtocolError(
+                f"DFU readback verification failed: {self.verify_reason}"
+            )
+
+        if readback != payload:
+            offset = next(i for i in range(len(payload)) if readback[i] != payload[i])
+            self.verify_result = VerifyResult.MISMATCH
+            self.verify_reason = (
+                f"byte mismatch at offset 0x{offset:08X}: expected "
+                f"0x{payload[offset]:02X}, got 0x{readback[offset]:02X}"
+            )
+            raise DfuProtocolError(
+                f"DFU readback verification failed: {self.verify_reason}"
+            )
+
+        self.verify_result = VerifyResult.VERIFIED
+        self.verify_reason = None
 
     # -- download strategies ----------------------------------------------
 

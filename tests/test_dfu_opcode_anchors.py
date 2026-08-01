@@ -221,16 +221,17 @@ def test_flash_base_matches_py32f071xb_memory_map() -> None:
     )
 
 
-def test_bit_can_upload_mask_is_anchored_pending_plan_127_09() -> None:
-    """The bit-1 (bitCanUpload) mask is anchored as a bare literal only --
-    the production constant it will one day be compared against does not
-    exist until Plan 127-09 creates it, so no equality assertion is written
-    here. This test just keeps the anchor itself on record with its
-    citation; it deliberately never names the not-yet-existing production
-    constant (see this module's docstring)."""
-    assert _ANCHORED_BIT_CAN_UPLOAD_MASK == 0x02, (
+def test_bit_can_upload_mask_matches_usb_dfu_11_section_4_1_3() -> None:
+    """USB DFU 1.1 §4.1.3 Table 4.2 offset 2 (bmAttributes) bit 1
+    (bitCanUpload): Plan 127-09 created `py32_dfu._DFU_BIT_CAN_UPLOAD`; this
+    closes the handoff Plan 127-03 deliberately left open by comparing it
+    against the independent literal anchored above."""
+    expected = _ANCHORED_BIT_CAN_UPLOAD_MASK
+    actual = py32_dfu._DFU_BIT_CAN_UPLOAD
+    assert actual == expected, (
         "USB DFU 1.1 §4.1.3 Table 4.2 offset 2 (bmAttributes) bit 1 "
-        "(bitCanUpload): expected mask 0x02"
+        f"(bitCanUpload): expected {expected:#04x}, "
+        f"firestarter.py32_dfu._DFU_BIT_CAN_UPLOAD == {actual:#04x}"
     )
 
 
