@@ -46,7 +46,8 @@ from tests.scan_paths import (
 # must fail this, not pass silently.
 _FLOOR = 6
 
-_TOOLS_DIR = Path(__file__).resolve().parent.parent / "tools"
+_APP_REPO_ROOT = Path(__file__).resolve().parent.parent
+_TOOLS_DIR = _APP_REPO_ROOT / "tools"
 
 
 def _resolvers_for(fw_relative_path: str) -> tuple[str, ...]:
@@ -112,12 +113,23 @@ def test_no_entry_is_a_same_repo_lookalike() -> None:
     assert SAME_REPO_LOOKALIKES, "SAME_REPO_LOOKALIKES must never be emptied"
 
     for fw_relative_path in ALL_CROSS_REPO_PATHS:
-        resolved_str = str(resolve_scan_path(fw_relative_path))
-        assert "firestarter_app" not in resolved_str, (
-            f"{fw_relative_path} resolves to {resolved_str}, which lies "
-            "INSIDE the app repo -- this is a same-repo look-alike "
-            "(package vs. sibling repo name collision) and must be moved "
-            "to SAME_REPO_LOOKALIKES, not ALL_CROSS_REPO_PATHS."
+        resolved = resolve_scan_path(fw_relative_path).resolve()
+        # Containment, not a substring match. This previously asserted
+        # `"firestarter_app" not in str(resolved)`, which conflates "is
+        # inside the app repo" with "the app repo's NAME appears anywhere
+        # in the path". Those differ the moment an ancestor directory is
+        # also called `firestarter_app` -- exactly GitHub Actions' default
+        # `work/<repo>/<repo>` layout, where the sibling firmware checkout
+        # at `/home/runner/work/firestarter_app/firestarter` is NOT in the
+        # app repo yet contains its name. That false positive failed the
+        # beta-release build in Phase 130; locally it never fired, because
+        # the devcontainer's `/workspaces/firestarter` has no such ancestor.
+        assert not resolved.is_relative_to(_APP_REPO_ROOT), (
+            f"{fw_relative_path} resolves to {resolved}, which lies "
+            f"INSIDE the app repo ({_APP_REPO_ROOT}) -- this is a "
+            "same-repo look-alike (package vs. sibling repo name "
+            "collision) and must be moved to SAME_REPO_LOOKALIKES, not "
+            "ALL_CROSS_REPO_PATHS."
         )
 
     lookalike_paths = {entry.app_relative_path for entry in SAME_REPO_LOOKALIKES}

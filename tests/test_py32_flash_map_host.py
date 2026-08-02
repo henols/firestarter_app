@@ -322,7 +322,21 @@ class TestLinkerScriptParity:
 
 
 class TestLinkerScriptParityFailsClosedOnBadInput:
-    """The three RED demonstrations (D-14). None carries `@requires_fw`."""
+    """The three RED demonstrations (D-14).
+
+    Two of the three are purely synthetic -- they build their own text and
+    need no firmware checkout, so they deliberately carry no `@requires_fw`
+    and run everywhere. The third, `test_planted_mutated_config_origin_is_
+    detected`, is different in kind: it reads the REAL linker script and
+    git-hashes it to prove the plant never touched the source of truth, so
+    it genuinely does require the sibling firmware checkout and IS gated.
+
+    This docstring previously read "None carries `@requires_fw`". That was
+    false for the planted leg and invisible locally, where the devcontainer
+    always has the sibling checkout; in a standalone CI checkout the leg hit
+    `git -C .../firestarter hash-object` with no such repo and died on
+    exit 128, failing the beta-release build (Phase 130).
+    """
 
     def test_empty_parse_trips_the_non_vacuity_guard(self) -> None:
         """`_parse_regions` over text with no MEMORY block returns an empty
@@ -333,6 +347,7 @@ class TestLinkerScriptParityFailsClosedOnBadInput:
         with pytest.raises(AssertionError, match="vacuously true"):
             _assert_non_vacuous(regions, "synthetic text")
 
+    @requires_fw
     def test_planted_mutated_config_origin_is_detected(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
