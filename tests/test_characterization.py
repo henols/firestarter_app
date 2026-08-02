@@ -25,6 +25,23 @@ D-05a (determinism): All subprocess output is pre-processed by normalize_output(
      before being passed to syrupy, scrubbing version strings, /dev/tty* device
      names, and absolute paths.  syrupy matchers are NOT used for free-form
      strings.
+
+Phase 127 Plan 04 (approved added scope): ``test_help_fw`` is the ONE exception
+     to D-01's "board-independent" premise. The Phase 127 merge added
+     ``py32f071`` to ``_ALL_BOARDS``, so ``fw --help``'s ``--board`` choices and
+     ``--usb-id``/``--dfu-probe`` visibility are channel-dependent
+     (HOST-02/HOST-08), computed once at import from ``firestarter.__version__``.
+     A single golden pinned against whichever channel happens to be
+     pip-installed can only ever be correct for one channel — it is fixed here
+     by simulating BOTH channels via ``_run_fw_help_at_version()``, the same
+     "one subprocess per simulated version, patched before the version-reading
+     module is imported" discipline ``tests/test_py32_channel_gating.py``
+     establishes for HOST-08. See that module's docstring for why this cannot
+     be done in-process, and why ``click.testing.CliRunner`` is not used here
+     (it forces ``click.formatting.FORCED_WIDTH = 80``, which wraps text one
+     word later per line than the real, unforced ``firestarter fw --help``
+     subprocess this file otherwise characterizes — confirmed by measuring
+     both against the pre-existing stable snapshot).
 """
 
 import os
@@ -222,10 +239,78 @@ def test_help_search(snapshot):
     assert stdout == snapshot
 
 
+def _run_fw_help_at_version(version: str) -> str:
+    """Run `firestarter fw --help` in a subprocess simulating `version`.
+
+    Patches `firestarter.__version__` before `firestarter.cli_handlers` is
+    ever imported in that child process -- the same "one subprocess per
+    simulated version" mechanism `tests/test_py32_channel_gating.py`
+    establishes for HOST-08, reused here because `fw --help`'s output is
+    channel-dependent (see this module's docstring).
+
+    Calls `cli_handlers.cli.main()` directly rather than through
+    `click.testing.CliRunner`: `CliRunner.isolation()` forces
+    `click.formatting.FORCED_WIDTH = 80`, which wraps `--help` text
+    differently than the *unforced* width a real `firestarter fw --help`
+    subprocess uses (a non-tty falls back to `shutil.get_terminal_size()` ->
+    80 columns, and `click.formatting.HelpFormatter` then subtracts 2 for an
+    effective width of 78) -- confirmed byte-for-byte against the pre-existing
+    stable golden below. `prog_name="firestarter"` reproduces the `Usage:
+    firestarter fw [OPTIONS]` header `run_firestarter()`'s real subprocess
+    produces, rather than Click's own default derived from `sys.argv[0]`.
+    """
+    program = (
+        "import sys, io, contextlib\n"
+        "import firestarter\n"
+        f"firestarter.__version__ = {version!r}\n"
+        "from firestarter import cli_handlers\n"
+        "buf = io.StringIO()\n"
+        "with contextlib.redirect_stdout(buf):\n"
+        "    try:\n"
+        "        cli_handlers.cli.main(\n"
+        "            args=['fw', '--help'], prog_name='firestarter'\n"
+        "        )\n"
+        "    except SystemExit:\n"
+        "        pass\n"
+        "sys.stdout.write(buf.getvalue())\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", program],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    return normalize_output(result.stdout)
+
+
 def test_help_fw(snapshot):
-    stdout, stderr, rc = run_firestarter("fw", "--help")
-    assert rc == 0
-    assert stdout == snapshot
+    """Pin `fw --help` on BOTH release channels (HOST-02 / HOST-08).
+
+    Phase 127 Plan 04 approved added scope: the merge landed in 127-01 added
+    `py32f071` to `_ALL_BOARDS`, so `--board`'s choices and the
+    `--usb-id`/`--dfu-probe` options are channel-dependent, and a single
+    golden pinned against whichever channel happened to be pip-installed can
+    only ever be correct for one channel. Both version literals below are
+    written here, not read from `firestarter.__version__` -- the point is to
+    simulate a channel, not observe the currently-installed one (mirrors
+    `tests/test_py32_channel_gating.py`'s D-07 discipline).
+
+    Each half is pinned against its OWN named snapshot, so if `--board`'s
+    real choices ever drift from what a channel should expose, one of these
+    two assertions goes red -- neither is derived from the other.
+    """
+    stable = _run_fw_help_at_version("3.0.0")
+    assert "py32f071" not in stable
+    assert "--usb-id" not in stable
+    assert "--dfu-probe" not in stable
+    assert stable == snapshot(name="test_help_fw_stable")
+
+    prerelease = _run_fw_help_at_version("3.0.0b1")
+    assert "py32f071" in prerelease
+    assert "--usb-id" in prerelease
+    assert "--dfu-probe" in prerelease
+    assert prerelease == snapshot(name="test_help_fw_prerelease")
 
 
 def test_help_hw(snapshot):

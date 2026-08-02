@@ -58,6 +58,16 @@ urls = { "Homepage" = "https://github.com/henols/firestarter_app" }
 dev = [
     "pytest>=7.0",
 ]
+# USB DFU firmware install for the PY32F071 board target. Optional because it is
+# only needed for that board, and because pyusb pulls in a libusb backend that
+# AVR users (avrdude over serial) never touch.
+# Floor raised to 1.3.1 (HOST-07 / D-19): the current pyusb release at plan
+# time, Requires-Python >=3.9.0, satisfiable on this project's py39 floor.
+# Upper bound <2 refuses a future major that could reorder ctrl_transfer's
+# parameters, which Plan 127-06's API-surface test pins against 1.3.1's shape.
+py32 = [
+    "pyusb>=1.3.1,<2",
+]
 test = [
     "pytest>=8.0",
     "syrupy>=5.0",

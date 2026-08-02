@@ -165,7 +165,51 @@
   
   '''
 # ---
-# name: test_help_fw
+# name: test_help_fw[test_help_fw_prerelease]
+  '''
+  Usage: firestarter fw [OPTIONS]
+  
+    Firmware version.
+  
+    Implements TRAP #4 (3-way --pre / --firmware-version / --stable mutex via a
+    single post-parse check at the top of the command body — WR-03; replaces the
+    earlier per-option callback _check_install_mutex which depended on Click's
+    left-to-right option-processing order) and TRAP #5 (firmware-version
+    validator via custom Click ParamType _FirmwareVersionType). D-14 narrow
+    upgrade: the post-parse `--json requires --list` check uses `raise
+    click.UsageError(...)` (exit-2 + "Usage:" formatting preserved from the
+    argparse `fw_parser.error()` form).
+  
+  Options:
+    -i, --install                   Try to install the latest firmware.
+    --pre                           Fetch latest pre-release firmware (mirrors
+                                    pip install --pre).
+    --firmware-version VERSION      Pin exact firmware version (e.g. 3.1.0,
+                                    3.1.0b2, 3.1.0rc1).
+    --stable                        Explicitly select stable channel. With
+                                    --list, filters to stable releases only.
+    --list                          List available firmware releases for the
+                                    configured board.
+    -b, --board [uno|uno328pb|leonardo|py32f071]
+                                    Microcontroller board (optional), defaults
+                                    to 'uno'.
+    --usb-id VID:PID                Restrict USB DFU install to one device, e.g.
+                                    1a86:8012 (py32f071 only).
+    --dfu-probe                     List attached USB DFU devices and exit
+                                    (py32f071 bootloader discovery).
+    --avrdude-path TEXT             Full path to avrdude (optional), set if
+                                    avrdude is not found.
+    -c, --avrdude-config-path TEXT  Full path to avrdude config (optional), set
+                                    if avrdude version is 6.3 or not found.
+    -f, --force                     Will install firmware even if the version is
+                                    the same.
+    --json                          Output --list results as JSON array (only
+                                    with --list).
+    --help                          Show this message and exit.
+  
+  '''
+# ---
+# name: test_help_fw[test_help_fw_stable]
   '''
   Usage: firestarter fw [OPTIONS]
   

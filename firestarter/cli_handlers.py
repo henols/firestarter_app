@@ -32,6 +32,7 @@ from rich.console import Console
 from rich.prompt import Confirm
 
 from firestarter import __version__ as version
+from firestarter.channel import available_boards
 from firestarter.chip_resolver import resolve_chip
 from firestarter.chip_test import (
     OP_ID,
@@ -60,6 +61,7 @@ from firestarter.exceptions import (
     ChipNotFoundError,
     ChipNotImplementedError,
     EpromOperationError,
+    FirmwareOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
     ProtocolNotImplementedError,
@@ -132,6 +134,49 @@ def _complete_eprom(
     ]
 
 
+# Release-channel gate — see channel.py. Evaluated at import time on purpose: a
+# wheel's __version__ is fixed when it is built, so the choice list a stable
+# install renders in `fw --help` is decided once and is decided correctly. Tests
+# exercise channel.available_boards() / is_board_available() directly rather than
+# reloading this module.
+_ALL_BOARDS: tuple[str, ...] = ("uno", "uno328pb", "leonardo", "py32f071")
+_BOARD_CHOICES: list[str] = available_boards(_ALL_BOARDS)
+_PY32_ENABLED: bool = "py32f071" in _BOARD_CHOICES
+
+
+def _reject_py32_only_option(name: str, given: bool) -> None:
+    """Refuse a py32-only CLI option outside its owning channel (HOST-02 / D-08).
+
+    ``hidden=not _PY32_ENABLED`` on an option's ``@click.option`` decorator is a
+    ``--help`` cosmetic only: it keeps the option out of the rendered help text,
+    it does not reject the option when a user types it anyway. That confusion
+    is exactly the bug HOST-02 exists to close: on a stable build, ``--usb-id``
+    was accepted (exit 0) while ``--dfu-probe`` was refused (exit 2), even
+    though both are py32-only surface.
+
+    This helper is the single sanctioned refusal mechanism for every py32-only
+    option. It is called unconditionally for each option, passing that
+    option's givenness, before either option is consumed. One shared code
+    path means the two refusals cannot drift apart from each other, and a
+    third py32-only option added later inherits the same behaviour for free
+    just by calling this helper here — see the one-code-path guard in
+    ``tests/test_py32_channel_gating.py``, which asserts this refusal's
+    message occurs exactly once in this file.
+
+    Reads ``_PY32_ENABLED`` at call time — a module global, not a captured
+    default argument — which is what makes this helper directly unit-testable
+    in-process via monkeypatch while the Click command surface built from the
+    decorators above stays frozen at import time.
+
+    The message text and the resulting exit code are preserved exactly from
+    the pre-existing ``--dfu-probe`` refusal this helper replaces, per
+    HOST-02's requirement that ``--usb-id`` be rejected exactly as
+    ``--dfu-probe`` already is.
+    """
+    if given and not _PY32_ENABLED:
+        raise click.UsageError(f"no such option: {name}")
+
+
 def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
     """Map service-layer typed exceptions to ClickException + stable exit codes (D-03)."""
 
@@ -156,6 +201,11 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
             # the authoritative status-specific message. Drop the generic
             # "Chip not usable:" prefix so the DB string is the single source
             # of truth for both info display and chip-op refusal.
+            raise click.ClickException(str(e)) from e
+        except FirmwareOperationError as e:
+            # Raised by the USB DFU install path. The message is already
+            # operator-actionable (how to enter the bootloader, or how to install
+            # pyusb), so it is rendered verbatim rather than prefixed.
             raise click.ClickException(str(e)) from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
@@ -929,9 +979,25 @@ def _maybe_auto_route_to_pre_click(
 @click.option(
     "-b",
     "--board",
-    type=click.Choice(["uno", "uno328pb", "leonardo"]),
+    type=click.Choice(_BOARD_CHOICES),
     default="uno",
     help="Microcontroller board (optional), defaults to 'uno'.",
+)
+@click.option(
+    "--usb-id",
+    "usb_id",
+    type=str,
+    default=None,
+    metavar="VID:PID",
+    hidden=not _PY32_ENABLED,
+    help="Restrict USB DFU install to one device, e.g. 1a86:8012 (py32f071 only).",
+)
+@click.option(
+    "--dfu-probe",
+    "dfu_probe",
+    is_flag=True,
+    hidden=not _PY32_ENABLED,
+    help="List attached USB DFU devices and exit (py32f071 bootloader discovery).",
 )
 @click.option(
     "--avrdude-path",
@@ -970,6 +1036,8 @@ def fw(
     stable: bool,
     list_releases: bool,
     board: str,
+    usb_id: Optional[str],
+    dfu_probe: bool,
     avrdude_path: Optional[str],
     avrdude_config_path: Optional[str],
     force: bool,
@@ -1010,6 +1078,27 @@ def fw(
     # D-14 narrow UsageError upgrade (was: fw_parser.error in main.py:798).
     if json_output and not list_releases:
         raise click.UsageError("--json requires --list")
+
+    # HOST-02 / D-08: both py32-only options are refused through one shared
+    # helper, called unconditionally for each option with its givenness,
+    # before either option is consumed below. `hidden=not _PY32_ENABLED` on
+    # both option declarations (above) keeps them out of --help; it does not
+    # reject them — that is this refusal's job.
+    _reject_py32_only_option("--usb-id", usb_id is not None)
+    _reject_py32_only_option("--dfu-probe", dfu_probe)
+
+    # USB DFU discovery: reports what is on the bus and exits. Deliberately
+    # placed before every network path — it needs no release metadata, and it is
+    # the first thing to run on a board whose bootloader identity is unconfirmed.
+    if dfu_probe:
+        found = app.firmware_manager.probe_dfu(usb_id=usb_id)
+        if not found:
+            print("No USB DFU devices found.")
+            sys.exit(1)
+        print("Attached USB DFU devices:")
+        for line in found:
+            print(f"  {line}")
+        sys.exit(0)
 
     if list_releases:
         channel_filter: Literal["all", "pre", "stable"]
@@ -1052,6 +1141,13 @@ def fw(
     # reading it back here is the equivalent operation.
     port_override = app.config_manager.get_value("port", None)
 
+    # Did the operator actually type --board, or is this the "uno" default? A
+    # typed --board that disagrees with the attached programmer is a conflict the
+    # service layer must refuse rather than silently override.
+    board_explicit = (
+        ctx.get_parameter_source("board") != click.core.ParameterSource.DEFAULT
+    )
+
     ok = app.firmware_manager.manage_firmware_update(
         install_flag=install,
         avrdude_path_override=avrdude_path,
@@ -1061,6 +1157,8 @@ def fw(
         flags=_build_op_flags(force=force),
         channel=channel,
         pinned_version=firmware_version,
+        usb_id=usb_id,
+        board_explicit=board_explicit,
     )
     sys.exit(0 if ok else 1)
 

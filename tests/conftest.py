@@ -15,6 +15,10 @@ infrastructure landed by Phase 6 Plan 03). It exposes:
     fake_serial         — fixture: BytesIO-backed serial port stand-in.
     make_comm           — fixture: factory for a SerialCommunicator bypassing
                           real serial I/O (uses __new__ + injected fake serial).
+    collect_ignore      — Phase 127 / Plan 127-06 (HOST-04): conditional
+                          collection gate excluding
+                          tests/test_pyusb_api_surface.py when pyusb is not
+                          importable.
 
 The reference CRC implementation here is deliberately table-free (the
 production code in firestarter.serial_comm uses a 256-byte lookup table).
@@ -23,10 +27,50 @@ polynomial, wrong seed, accidental reflection — will mismatch this
 reference and fail the test suite.
 """
 
+import importlib.util
 import io
 import struct
 
 import pytest
+
+
+# ---------------------------------------------------------------------------
+# Phase 127 / Plan 127-06 (HOST-04 / D-02) — optional-dependency collection
+# gate.
+#
+# tests/test_pyusb_api_surface.py imports `usb.core` at module scope and is
+# the FIRST test in this repo gated on an OPTIONAL DEPENDENCY rather than on
+# cross-repo file presence (`tests.fw_presence.requires_fw`) or a
+# CLI-on-PATH probe (test_characterization.py). It is meant to run only in
+# the `ci-py32` CI job, which installs the `[py32]` extra.
+#
+# `collect_ignore` is used deliberately instead of a skip marker, because it
+# produces a NON-COLLECTION rather than a skip -- so
+# tests/test_skip_census.py's `ALLOWED_SKIP_REASONS` needs no fifth entry.
+# Rejected alternatives: `pytest.importorskip("usb")` would emit a skip
+# reason absent from that allow-list; `--ignore=` in `addopts` suppresses
+# explicitly-named paths too, so `ci-py32` naming the file directly would
+# need an `addopts` override just to run it.
+#
+# Fail-closed property (load-bearing): `collect_ignore` does NOT suppress a
+# path named explicitly on the pytest command line. The `ci-py32` job
+# invokes `pytest tests/test_pyusb_api_surface.py -q` -- naming the file
+# directly -- so a missing `[py32]` extra surfaces there as a hard
+# collection error, never a quiet pass.
+#
+# The `find_spec` probe is wrapped so a broken installation raising
+# ImportError/ValueError is treated as ABSENT rather than propagating out of
+# conftest import -- a conftest that raises takes the entire suite down.
+def _pyusb_is_absent() -> bool:
+    try:
+        return importlib.util.find_spec("usb") is None
+    except (ImportError, ValueError):
+        return True
+
+
+collect_ignore: list = []
+if _pyusb_is_absent():
+    collect_ignore.append("test_pyusb_api_surface.py")
 
 # Module-level reference constants — independent of firestarter.serial_comm
 # so tests do not pass tautologically on a bug in the production constant.

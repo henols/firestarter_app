@@ -87,18 +87,23 @@ bidirectional, header-parsing gate:
     define set (an empty set would make every downstream assertion
     vacuously true).
 
-**Known, explained, residual gap (D-13):** in host-only CI, `FW_ABSENT` is
-true and every header-reading leg above skips — so a host-only PR does NOT
-catch a missing `COMMAND_NAMES` entry or a firmware/host value drift by
-itself. Splitting `COMMAND_NAMES` coverage into its own always-on test was
-considered and declined, in favour of keeping ONE gate with the
-`FW_ABSENT` skipif retained (host-only CI must stay green). The cost of
-that choice is recorded here rather than silently carried. The three
-planted-violation legs and the fail-closed leg below partially offset this
-gap: they read files under `tests/fixtures/` or a `tmp_path`, which are
-always present regardless of firmware-checkout presence, so those four
-legs do NOT skip in host-only CI even though they cannot exercise the REAL
-header there.
+**Known, explained, residual gap — split by BASE-02 (Phase 123 Plan 08):**
+in host-only CI, the shared repo-presence marker (`tests/fw_presence.py`,
+keyed on `../firestarter/.git`) is absent and every header-reading leg
+above skips — so a host-only PR does NOT catch a missing `COMMAND_NAMES`
+entry or a firmware/host value drift by itself. Splitting `COMMAND_NAMES`
+coverage into its own always-on test was considered and declined, in
+favour of keeping ONE gate with the shared `requires_fw` skip retained
+(host-only CI must stay green). The cost of that choice is recorded here
+rather than silently carried. BASE-02 changed WHAT the skip is keyed on
+(the repo marker, immune to any in-repo firmware rename) but not THAT it
+skips in host-only CI — a present repo with a renamed scan target is now a
+hard failure instead, never a silent skip. The three planted-violation legs
+and the fail-closed leg below partially offset the host-only-CI gap: they
+read files under `tests/fixtures/` or a `tmp_path`, which are always
+present regardless of firmware-checkout presence, so those four legs do NOT
+skip in host-only CI even though they cannot exercise the REAL header
+there.
 """
 
 import re
@@ -117,25 +122,27 @@ from firestarter.constants import (
     REVISION_2_3,
     REVISION_UNKNOWN,
 )
+from tests.fw_presence import fw_path, requires_fw
 
 # ---------------------------------------------------------------------------
-# Firmware-checkout presence guard (Phase 36 TEST-04 extension)
+# Firmware-checkout presence guard (Phase 36 TEST-04 extension; rekeyed onto
+# the shared `tests/fw_presence.py` helper by Phase 123 Plan 08, BASE-02).
 #
-# The firmware sub-repo may be absent in CI environments. If firestarter.h is
-# absent the three new parity functions skip cleanly. When present, rurp_pinout.h
-# is always alongside it (same include/ directory), so this single proxy covers
-# both headers (RESEARCH Open Question 1, resolved).
+# Repo presence is now decided ONCE, in `fw_presence.py`, keyed on
+# `../firestarter/.git` -- immune to any in-repo firmware rename. `requires_fw`
+# is the ONLY skip marker this module uses. When present, rurp_pinout.h is
+# always alongside firestarter.h (same include/ directory), so the one
+# `fw_path` target below covers both headers (RESEARCH Open Question 1,
+# resolved).
 #
 # Phase 120 Plan 07: FIRMWARE_HEADER now doubles as a SECOND seam beyond the
-# FW_ABSENT skipif proxy above -- it is the fixture-injection point the
+# repo-presence gate above -- it is the fixture-injection point the
 # planted-violation legs below `monkeypatch.setattr` to point the rebuilt
 # gate at a committed fixture under tests/fixtures/ instead of the real,
-# untouched firestarter.h.
+# untouched firestarter.h. Resolved via `fw_path` so a present-repo-renamed
+# header is a named `MissingScanTargetError`, never a silent skip.
 # ---------------------------------------------------------------------------
-FIRMWARE_HEADER = (
-    Path(__file__).parent.parent.parent / "firestarter" / "include" / "firestarter.h"
-)
-FW_ABSENT = not FIRMWARE_HEADER.exists()
+FIRMWARE_HEADER = fw_path("include", "firestarter.h")
 
 
 def test_revision_byte_values_match_firmware_enum():
@@ -548,7 +555,7 @@ def _check_command_names_coverage() -> None:
     )
 
 
-@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+@requires_fw
 def test_every_firmware_cmd_define_maps_two_way_to_constants_py() -> None:
     """Two-way CMD_* parity: every firmware `CMD_*` define in
     firestarter.h maps to a `constants.py` COMMAND_* constant of the same
@@ -560,7 +567,7 @@ def test_every_firmware_cmd_define_maps_two_way_to_constants_py() -> None:
     _check_cmd_two_way()
 
 
-@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+@requires_fw
 def test_every_firmware_flag_define_maps_two_way_to_constants_py() -> None:
     """Two-way FLAG_* parity, plus a machine-checked count/max-value
     invariant: exactly nine FLAG_* defines on each side, maximum 0x100 on
@@ -570,7 +577,7 @@ def test_every_firmware_flag_define_maps_two_way_to_constants_py() -> None:
     _check_flag_two_way()
 
 
-@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+@requires_fw
 def test_every_firmware_cmd_has_a_command_names_entry() -> None:
     """D-13's leg: every non-exempt firmware CMD_* must have a
     `COMMAND_NAMES` entry, not merely a `constants.py` constant. This
@@ -582,7 +589,7 @@ def test_every_firmware_cmd_has_a_command_names_entry() -> None:
     _check_command_names_coverage()
 
 
-@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+@requires_fw
 def test_conditionally_compiled_defines_are_exactly_the_dev_tools_pair() -> None:
     """Turns "these two are #ifdef DEV_TOOLS-conditional" from an
     assumption living only in a comment into a machine-checked fact: the
@@ -601,7 +608,7 @@ def test_conditionally_compiled_defines_are_exactly_the_dev_tools_pair() -> None
     )
 
 
-@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+@requires_fw
 def test_ctrl_values_match_firmware():
     """Assert each CTRL_* Python constant matches the hard-coded literal from
     `firestarter/include/rurp_pinout.h` (not `firestarter.h`).
@@ -642,7 +649,7 @@ def test_ctrl_values_match_firmware():
     )  # CTRL_VPP_VPE_DROP_ENABLE (wide layout, differs from legacy 0x01)
 
 
-@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+@requires_fw
 def test_cmd_frame_max_parity() -> None:
     """Assert host CMD_FRAME_MAX == firmware Uno DATA_BUFFER_SIZE floor (512).
 
@@ -661,16 +668,16 @@ def test_cmd_frame_max_parity() -> None:
     Host hardcodes CMD_FRAME_MAX = 512 in firestarter/constants.py. This is
     ACCEPTED for v1.10 (D-07 acceptance decision — not a bug to fix).
 
-    The skipif guard keys on firmware-header presence (same FW_ABSENT proxy used
-    by the other parity tests in this file). When firmware checkout is absent
-    (host-only CI), this test skips cleanly.
+    The `requires_fw` decorator keys on the shared repo-presence marker (same
+    one used by the other parity tests in this file). When the firmware
+    checkout is absent (host-only CI), this test skips cleanly.
     """
     from firestarter.constants import CMD_FRAME_MAX
 
     assert CMD_FRAME_MAX == 512  # == Uno DATA_BUFFER_SIZE floor (D-07)
 
 
-@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+@requires_fw
 def test_max_27c020_size_parity() -> None:
     """Assert host MAX_27C020_SIZE == firmware MAX_27C020_SIZE (IN-02).
 
@@ -688,9 +695,9 @@ def test_max_27c020_size_parity() -> None:
     gated another way firmware-side. This test FAILs at pytest time on
     divergence, matching the existing CTRL_*/FLAG_* parity discipline.
 
-    The skipif guard keys on firmware-header presence (same FW_ABSENT proxy
-    used by the other parity tests in this file) — it skips cleanly when the
-    firmware sub-repo checkout is absent.
+    The `requires_fw` decorator keys on the shared repo-presence marker (same
+    one used by the other parity tests in this file) — it skips cleanly when
+    the firmware sub-repo checkout is absent.
     """
     from firestarter.constants import MAX_27C020_SIZE
 
@@ -700,15 +707,15 @@ def test_max_27c020_size_parity() -> None:
 # ---------------------------------------------------------------------------
 # Planted-violation and fail-closed legs (Phase 120 Plan 07, Task 3).
 #
-# None of the five legs below carry the FW_ABSENT skipif on the same basis:
+# None of the five legs below carry the `requires_fw` skip on the same basis:
 # three of them (value-drift / host-missing / fw-missing) read a fixture
 # file under tests/fixtures/, which is always present in the repo regardless
 # of whether the firmware sub-repo checkout exists, and the fourth
 # (fail-closed) reads a deliberately-nonexistent tmp_path. This partially
-# offsets D-13's residual host-only-CI skip gap: a host-only PR still
+# offsets the residual host-only-CI skip gap: a host-only PR still
 # exercises the checker's failure modes even though it cannot exercise them
 # against the REAL header. The fifth (COMMAND_NAMES delitem) DOES read the
-# real header and DOES carry the skipif, since it is not fixture-driven.
+# real header and DOES carry the `requires_fw` skip, since it is not fixture-driven.
 # ---------------------------------------------------------------------------
 
 _FIXTURES_DIR = Path(__file__).parent / "fixtures"
@@ -770,7 +777,7 @@ def test_planted_firmware_missing_flag_is_detected(
     assert "!=" not in message
 
 
-@pytest.mark.skipif(FW_ABSENT, reason="firestarter firmware checkout absent")
+@requires_fw
 def test_missing_command_names_entry_is_detected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

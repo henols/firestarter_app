@@ -16,37 +16,29 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pytest
+from tests.fw_presence import fw_path, requires_fw
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _APP_DIR = _REPO_ROOT / "firestarter_app"
 _GEN_SCRIPT = _APP_DIR / "tools" / "gen_sdp_bus_config.py"
+
+# Same-repo look-alike (T-123-08-05, D-11): `_APP_DIR / "firestarter"` is the
+# Python PACKAGE (this project's own source tree), NOT the sibling firmware
+# repo -- see tests/fw_presence.py's module docstring for the general form
+# of this trap. Must never be resolved through `fw_path` (which is reserved
+# for the sibling repo) and must never be pulled into the D-11 cross-repo
+# scan-path inventory (tests/scan_paths.py's SAME_REPO_LOOKALIKES).
 _REAL_PINOUTS = _APP_DIR / "firestarter" / "data" / "pinouts.json"
-_COMMITTED_HEADER = (
-    _REPO_ROOT
-    / "firestarter"
-    / "test"
-    / "native"
-    / "avr"
-    / "_shared"
-    / "sdp_bus_config.h"
-)
 
-# The firmware sub-repo may be absent in standalone CI (firestarter_app checked
-# out alone). The committed sdp_bus_config.h lives in the firestarter repo, so
-# the cross-repo tests below skip cleanly when that checkout is absent -- they
-# run from the meta work-tree where both repos sit side by side. Mirrors the
-# FW_ABSENT skip pattern in test_revision_constants_parity.py /
-# test_gen_validation_header.py (D-11 -- scoped to this file only; TRACE-05's
-# DB invariant test must never carry this skipif).
-_FW_HEADER_ABSENT = not _COMMITTED_HEADER.exists()
-_requires_fw_header = pytest.mark.skipif(
-    _FW_HEADER_ABSENT,
-    reason="firestarter firmware checkout absent (sdp_bus_config.h)",
-)
+# The committed sdp_bus_config.h lives in the SIBLING firestarter repo, so
+# resolve it through the shared `fw_path` helper -- repo presence is decided
+# ONCE in tests/fw_presence.py, keyed on the sibling's `.git` marker. `requires_fw`
+# is the ONLY skip marker this module uses (D-11 -- scoped to this file only;
+# TRACE-05's DB invariant test must never carry this skip).
+_COMMITTED_HEADER = fw_path("test", "native", "avr", "_shared", "sdp_bus_config.h")
 
 
-@_requires_fw_header
+@requires_fw
 def test_committed_header_exists() -> None:
     """The committed header must exist in the firestarter submodule."""
     assert _COMMITTED_HEADER.exists(), (
@@ -55,7 +47,7 @@ def test_committed_header_exists() -> None:
     )
 
 
-@_requires_fw_header
+@requires_fw
 def test_committed_header_has_do_not_edit_banner() -> None:
     """Header must start with the DO NOT EDIT banner."""
     content = _COMMITTED_HEADER.read_text(encoding="utf-8")
@@ -64,7 +56,7 @@ def test_committed_header_has_do_not_edit_banner() -> None:
     ), "Header is missing the DO NOT EDIT banner"
 
 
-@_requires_fw_header
+@requires_fw
 def test_codegen_produces_byte_identical_output() -> None:
     """Re-running the codegen must produce a byte-identical header (drift gate).
 

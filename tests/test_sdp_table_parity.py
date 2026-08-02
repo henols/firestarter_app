@@ -31,10 +31,18 @@ own source has a non-initializer call site using the same literal bytes
 array initializer) that a loose pattern would false-positive on (the
 Phase-109 SAFE-02 / Phase-110 lessons recorded in STATE.md).
 
-Carries the FW_ABSENT-shaped skip marker keyed on the presence of
-eeprom_28c.cpp, so this module skips cleanly in standalone firestarter_app
-CI -- the one place in this phase where that marker is correct (it must NOT
-be present in test_sdp_db_invariant.py).
+Carries the shared `tests.fw_presence.requires_fw` skip marker, keyed on the
+sibling firestarter repo's `.git` presence (Phase 123 Plan 08, BASE-02), so
+this module skips cleanly in standalone firestarter_app CI -- the one place
+in this phase where that marker is correct (it must NOT be present in
+test_sdp_db_invariant.py). Test 3's non-vacuity leg
+(`test_altered_temp_copy_fails_parity_non_vacuous`) also carries this
+decorator now: the whole test body depends on the real, committed
+eeprom_28c.cpp, so the guard that used to be a bare inline
+`if _FW_ABSENT: pytest.skip(...)` inside the test body -- invisible to a
+decorator grep, and the one guard a decorator-only rekey pass would leave
+behind -- is now the same `@requires_fw` decorator every other leg in this
+module uses.
 """
 
 import os
@@ -44,18 +52,15 @@ from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).parent.parent.parent
-_EEPROM_28C_CPP = _REPO_ROOT / "firestarter" / "src" / "proms" / "eeprom_28c.cpp"
-_FLASH_UTILS_H = _REPO_ROOT / "firestarter" / "include" / "flash_utils.h"
+from tests.fw_presence import fw_path, requires_fw
 
-# The firmware sub-repo may be absent in standalone CI (firestarter_app
-# checked out alone). Mirrors the FW_ABSENT skip pattern in
-# test_revision_constants_parity.py / test_gen_validation_header.py.
-_FW_ABSENT = not _EEPROM_28C_CPP.exists()
-_requires_fw = pytest.mark.skipif(
-    _FW_ABSENT,
-    reason="firestarter firmware checkout absent (eeprom_28c.cpp)",
-)
+# eeprom_28c.cpp and flash_utils.h live in the SIBLING firestarter repo.
+# Resolved through the shared `fw_path` helper -- repo presence is decided
+# ONCE in tests/fw_presence.py, keyed on the sibling's `.git` marker.
+# `requires_fw` is the ONLY skip marker this module uses (D-11 -- scoped to
+# this file only; test_sdp_db_invariant.py must never carry this skip).
+_EEPROM_28C_CPP = fw_path("src", "proms", "eeprom_28c.cpp")
+_FLASH_UTILS_H = fw_path("include", "flash_utils.h")
 
 _PARITY_CONTEXT = (
     "The firmware trace suites #include flash_utils.h and drive "
@@ -168,7 +173,7 @@ def _assert_pairs_equal(
 # ---------------------------------------------------------------------------
 
 
-@_requires_fw
+@requires_fw
 def test_eeprom_sdp_disable_matches_flash_disable_write_protection() -> None:
     sdp_pairs = _extract_byte_flip_pairs(
         _sdp_src_path().read_text(encoding="utf-8"), "EEPROM_SDP_DISABLE"
@@ -192,7 +197,7 @@ def test_eeprom_sdp_disable_matches_flash_disable_write_protection() -> None:
 # ---------------------------------------------------------------------------
 
 
-@_requires_fw
+@requires_fw
 def test_unlock_table_terminal_byte_differs_from_erase_terminal_byte() -> None:
     unlock_pairs = _extract_byte_flip_pairs(
         _sdp_src_path().read_text(encoding="utf-8"), "EEPROM_SDP_DISABLE"
@@ -234,7 +239,7 @@ _ENABLE_CONTEXT = (
 )
 
 
-@_requires_fw
+@requires_fw
 def test_eeprom_sdp_enable_matches_flash_enable_write_and_write_protection() -> None:
     """Second, independent, source-text oracle for D-10's three-way AA-55-A0
     identity (Plan 119-06, closing LOCK-05).
@@ -292,13 +297,19 @@ def test_eeprom_sdp_enable_matches_flash_enable_write_and_write_protection() -> 
 # ---------------------------------------------------------------------------
 
 
+@requires_fw
 def test_altered_temp_copy_fails_parity_non_vacuous(tmp_path: Path) -> None:
     """An altered temp copy of eeprom_28c.cpp (one pair's byte flipped) MUST
     make the parity assertion fail -- proves the gate is capable of failing,
-    not a vacuous always-pass check."""
-    if _FW_ABSENT:
-        pytest.skip("firestarter firmware checkout absent (eeprom_28c.cpp)")
+    not a vacuous always-pass check.
 
+    Was a bare inline `if _FW_ABSENT: pytest.skip(...)` guard inside the test
+    body -- invisible to a decorator grep and precisely the shape a
+    decorator-only rekey pass would leave behind (Phase 123 Plan 08). Now the
+    same `@requires_fw` decorator every other leg in this module uses: the
+    whole test body reads the real, committed eeprom_28c.cpp, so it needs the
+    sibling repo present exactly like the other legs.
+    """
     original = _EEPROM_28C_CPP.read_text(encoding="utf-8")
     altered = original.replace("{0x5555, 0x20}", "{0x5555, 0x21}", 1)
     assert altered != original, (
