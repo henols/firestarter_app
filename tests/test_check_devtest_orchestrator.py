@@ -135,15 +135,13 @@ def _referenced_underscore_helpers_in_dev_test(source: str) -> set[str]:
             "the subset assertion vacuously true"
         )
 
-    # RED (task 1, pre-fix): naive whole-node walk, INCLUDES decorator_list.
-    # Left here deliberately for the RED-preserving proof (F-04); replaced by
-    # the body-only walk below in the immediately-following commit.
     referenced: set[str] = set()
-    for sub in ast.walk(dev_test_node):
-        if isinstance(sub, ast.Name):
-            referenced.add(sub.id)
-        elif isinstance(sub, ast.Attribute):
-            referenced.add(sub.attr)
+    for stmt in dev_test_node.body:
+        for sub in ast.walk(stmt):
+            if isinstance(sub, ast.Name):
+                referenced.add(sub.id)
+            elif isinstance(sub, ast.Attribute):
+                referenced.add(sub.attr)
 
     return referenced & module_level_underscore_funcs
 
@@ -571,9 +569,7 @@ def test_every_helper_referenced_by_dev_test_is_listed() -> None:
         f"update this expected set in the same commit."
     )
 
-    missing = sorted(
-        derived - check_devtest_orchestrator._HANDLER_FUNCTION_NAMES
-    )
+    missing = sorted(derived - check_devtest_orchestrator._HANDLER_FUNCTION_NAMES)
     assert missing == [], (
         f"dev_test's body references helper(s) NOT listed in "
         f"_HANDLER_FUNCTION_NAMES: {missing}. Add them to the allow-list in "
