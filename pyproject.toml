@@ -173,7 +173,10 @@ module = [
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-# Phase 42 D-06: strict-island for the 8 modules touched in v1.8.
+# Phase 42 D-06: strict-island for the 8 modules touched in v1.8, plus a
+# ninth added by Phase 132 D-02 (RETIRE-03): the new sdp_honesty module
+# joins from birth, as a deliberate strengthening -- it is not an analog
+# of firestarter.sdp_capability, which is NOT in this list.
 # eprom_operations.py DELIBERATELY EXCLUDED per D-07 (GATE-1.8d read-path ring-fence; deferred to v1.9 post-RCA).
 module = [
     "firestarter.main",
@@ -184,6 +187,7 @@ module = [
     "firestarter.address_parser",
     "firestarter.exceptions",
     "firestarter.serial_comm",
+    "firestarter.sdp_honesty",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true
