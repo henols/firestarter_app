@@ -792,6 +792,60 @@ def test_missing_command_names_entry_is_detected(
     assert "COMMAND_SDP_UNLOCK" in str(excinfo.value)
 
 
+def test_command_names_dereferences_both_sdp_commands() -> None:
+    """RETIRE-04: `firestarter dev sdp`'s removal (Phase 132) deletes the
+    only *host-surface* caller of `COMMAND_SDP_UNLOCK`/`COMMAND_SDP_LOCK`,
+    which makes their `COMMAND_NAMES` entries LOOK cosmetic. They are not:
+    the operation layer dereferences `COMMAND_NAMES[cmd]` at two points
+    during setup -- `_setup_operation` (`eprom_operations.py:329`) and
+    `_operation_context` (`eprom_operations.py:405`) -- so a dropped entry
+    is a `KeyError` at operation setup, not a display gap.
+
+    This test performs that exact dereference for BOTH commands,
+    unconditionally (no `requires_fw` skip, unlike
+    `test_missing_command_names_entry_is_detected` above), so a regression
+    is caught in every CI run including host-only CI, where the firmware
+    checkout is absent. See the matching comment above
+    `COMMAND_SDP_UNLOCK`/`COMMAND_SDP_LOCK` in `constants.py`, which names
+    this test by name -- the two halves reference each other.
+    """
+    # Removing a constant outright (not just its COMMAND_NAMES entry) must
+    # also fail this test, or the dereferences below could pass vacuously
+    # against a stale value.
+    assert constants.COMMAND_SDP_UNLOCK == 9
+    assert constants.COMMAND_SDP_LOCK == 10
+
+    assert constants.COMMAND_SDP_UNLOCK in constants.COMMAND_NAMES, (
+        "COMMAND_NAMES has no entry for COMMAND_SDP_UNLOCK "
+        f"({constants.COMMAND_SDP_UNLOCK}) -- _setup_operation "
+        "(eprom_operations.py:329) and _operation_context "
+        "(eprom_operations.py:405) both dereference COMMAND_NAMES[cmd] at "
+        "operation setup, so a dropped entry is a KeyError there, not a "
+        "cosmetic display gap."
+    )
+    assert constants.COMMAND_NAMES[constants.COMMAND_SDP_UNLOCK], (
+        "COMMAND_NAMES[COMMAND_SDP_UNLOCK] is present but falsy/empty -- "
+        "_setup_operation (eprom_operations.py:329) and _operation_context "
+        "(eprom_operations.py:405) both dereference this mapping at "
+        "operation setup and would surface an empty operation name there."
+    )
+
+    assert constants.COMMAND_SDP_LOCK in constants.COMMAND_NAMES, (
+        "COMMAND_NAMES has no entry for COMMAND_SDP_LOCK "
+        f"({constants.COMMAND_SDP_LOCK}) -- _setup_operation "
+        "(eprom_operations.py:329) and _operation_context "
+        "(eprom_operations.py:405) both dereference COMMAND_NAMES[cmd] at "
+        "operation setup, so a dropped entry is a KeyError there, not a "
+        "cosmetic display gap."
+    )
+    assert constants.COMMAND_NAMES[constants.COMMAND_SDP_LOCK], (
+        "COMMAND_NAMES[COMMAND_SDP_LOCK] is present but falsy/empty -- "
+        "_setup_operation (eprom_operations.py:329) and _operation_context "
+        "(eprom_operations.py:405) both dereference this mapping at "
+        "operation setup and would surface an empty operation name there."
+    )
+
+
 def test_gate_fails_closed_on_an_unreadable_header_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
