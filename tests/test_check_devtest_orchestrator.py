@@ -34,9 +34,29 @@ Coverage:
      injected via FIRESTARTER_DEVTEST_SUBMIT flips the checker non-zero --
      AND a clean fixture through the same env-override still passes -- AND
      the real, clean `submit.py` still passes with the PASS line naming it.
+  9. GATE-10 (Phase 131 Plan 04, D-15/F-04): a body-only AST derivation --
+     `_referenced_underscore_helpers_in_dev_test` -- collects every
+     module-level `_`-prefixed function referenced from `dev_test`'s BODY
+     statements only (never its decorator list) and asserts that set is a
+     SUBSET of `_HANDLER_FUNCTION_NAMES`, naming any omission. This converts
+     the allow-list's additive fail-open (a partial name match scans
+     successfully and silently omits a new, unlisted helper) into an
+     additive fail-closed. Direction matters: this leg proves every
+     *referenced* helper is *listed*; test 9 above
+     (`test_handler_function_names_all_resolve_to_real_callables`) proves
+     every *listed* name is *real*. Together they are bidirectional.
+  10. GATE-10 non-vacuity proof: a synthetic module source defines a
+      `dev_test` whose BODY calls an unlisted helper and whose DECORATOR
+      references a *different* unlisted helper. The same derivation helper
+      the real leg (9 above) calls is asserted to name the body-referenced
+      helper as an omission and to EXCLUDE the decorator-referenced one --
+      proving the decorator-list exclusion (F-04) positively rather than by
+      assumption, and proving the derivation is not vacuously empty.
 """
 
+import ast
 import importlib
+import inspect
 import os
 import subprocess
 import sys
@@ -58,6 +78,74 @@ def _run_checker(
         text=True,
         env=env,
     )
+
+
+# ---------------------------------------------------------------------------
+# GATE-10 (Phase 131 Plan 04, D-15/F-04): body-only AST derivation
+# ---------------------------------------------------------------------------
+#
+# Shared by BOTH the real leg (test_every_helper_referenced_by_dev_test_is_
+# listed, against the shipped cli_handlers.py) and the non-vacuity leg
+# (test_derivation_flags_an_unlisted_helper_non_vacuous, against a synthetic
+# source string) -- taking `source: str` rather than a path is what lets a
+# single helper serve both, so the non-vacuity leg exercises the exact code
+# the real leg does, not a re-implementation of the walk.
+
+
+def _referenced_underscore_helpers_in_dev_test(source: str) -> set[str]:
+    """Body-only AST derivation of every module-level `_`-prefixed helper
+    referenced from `dev_test`'s body.
+
+    Deliberately walks `dev_test.body` statement-by-statement rather than
+    `ast.walk(dev_test_node)` on the whole `FunctionDef` -- correction F-04.
+    A whole-node walk includes `decorator_list`, and the real
+    `cli_handlers.py` decorates `dev_test` with
+    `@click.argument("chip", shell_complete=_complete_eprom)`: `_complete_eprom`
+    is a shell-completion callback shared by 15 unrelated commands, not a
+    `dev test` helper, and is not (and must never be) in
+    `_HANDLER_FUNCTION_NAMES`. Walking the whole node would inject that name
+    and make the subset leg red for a locator reason, not a substantive one.
+
+    Raises ValueError if no module-level `dev_test` FunctionDef is found --
+    returning an empty set instead would make the caller's subset assertion
+    vacuously true, which is exactly the fail-open this derivation exists to
+    remove.
+    """
+    tree = ast.parse(source)
+
+    module_level_underscore_funcs = {
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name.startswith("_")
+    }
+
+    dev_test_node = next(
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "dev_test"
+        ),
+        None,
+    )
+    if dev_test_node is None:
+        raise ValueError(
+            "no module-level `dev_test` FunctionDef found in the given "
+            "source -- refusing to return an empty set, which would make "
+            "the subset assertion vacuously true"
+        )
+
+    # RED (task 1, pre-fix): naive whole-node walk, INCLUDES decorator_list.
+    # Left here deliberately for the RED-preserving proof (F-04); replaced by
+    # the body-only walk below in the immediately-following commit.
+    referenced: set[str] = set()
+    for sub in ast.walk(dev_test_node):
+        if isinstance(sub, ast.Name):
+            referenced.add(sub.id)
+        elif isinstance(sub, ast.Attribute):
+            referenced.add(sub.attr)
+
+    return referenced & module_level_underscore_funcs
 
 
 # ---------------------------------------------------------------------------
@@ -409,3 +497,93 @@ def test_handler_function_names_contains_the_new_uv_scope_helpers() -> None:
     )
     assert "_is_uv_eprom" in check_devtest_orchestrator._HANDLER_FUNCTION_NAMES
     assert "_resolve_write_scope" in check_devtest_orchestrator._HANDLER_FUNCTION_NAMES
+
+
+# ---------------------------------------------------------------------------
+# Test 10 (Phase 131 Plan 04, GATE-10 / D-15, correction F-04): derived-subset
+# leg -- converts the allow-list's additive fail-open into an additive
+# fail-closed.
+# ---------------------------------------------------------------------------
+
+# The six real names dev_test's BODY (never its decorator list) references,
+# measured live 2026-08-03 against the shipped cli_handlers.py.
+_EXPECTED_DEV_TEST_REFERENCED_HELPERS = {
+    "_chip_id_fields",
+    "_is_interactive",
+    "_make_sampler",
+    "_resolve_write_scope",
+    "_sanitize_chip_token",
+    "_verdict_code",
+}
+
+
+def test_every_helper_referenced_by_dev_test_is_listed() -> None:
+    """Every module-level `_`-prefixed helper referenced from `dev_test`'s
+    BODY is a member of `_HANDLER_FUNCTION_NAMES`.
+
+    The checker's own comment (cli_handlers.py-adjacent,
+    check_devtest_orchestrator.py:134-137) already states the obligation in
+    prose: "Every future helper added to the `dev test` surface MUST be
+    listed here, or this gate silently under-covers exactly that new code."
+    This leg converts that prose into a mechanical, permanently-enforced
+    invariant -- the exact conversion GATE-10 exists to make.
+
+    Direction matters, and is deliberately asymmetric with test 9 above
+    (test_handler_function_names_all_resolve_to_real_callables): THIS leg
+    proves every *referenced* helper is *listed*; test 9 proves every
+    *listed* name is *real*. Together they are bidirectional; neither alone
+    is. The assertion here is a SUBSET, never an equality, because
+    `_default_uv_write_confirm` and `_is_uv_eprom` are legitimately listed
+    but not referenced from `dev_test`'s body (they are called from other
+    handler-side helpers) -- an equality assertion would be red for the
+    opposite reason on day one.
+    """
+    check_devtest_orchestrator = importlib.import_module(
+        "tools.check_devtest_orchestrator"
+    )
+    from firestarter import cli_handlers
+
+    source = inspect.getsource(cli_handlers)
+    derived = _referenced_underscore_helpers_in_dev_test(source)
+
+    # Non-vacuity guard (T-131-22): a helper that silently returns `{}` --
+    # because dev_test moved, was renamed, or the walk broke -- would satisfy
+    # a subset assertion trivially. Assert real content BEFORE comparing.
+    assert derived, (
+        "_referenced_underscore_helpers_in_dev_test returned an empty set "
+        "against the real cli_handlers.py -- this would make the subset "
+        "assertion below vacuously true. dev_test may have moved, been "
+        "renamed, or the AST walk broke."
+    )
+    assert len(derived) >= 6, (
+        f"_referenced_underscore_helpers_in_dev_test returned only "
+        f"{len(derived)} name(s) ({sorted(derived)}) against the real "
+        f"cli_handlers.py -- expected at least 6. A shrinking derived set "
+        f"is itself suspicious even though the subset check below would "
+        f"still pass."
+    )
+
+    assert derived == _EXPECTED_DEV_TEST_REFERENCED_HELPERS, (
+        f"the body-only derivation returned {sorted(derived)}, expected "
+        f"exactly {sorted(_EXPECTED_DEV_TEST_REFERENCED_HELPERS)}. If this "
+        f"is a legitimate new dev_test helper, list it in "
+        f"_HANDLER_FUNCTION_NAMES (tools/check_devtest_orchestrator.py) and "
+        f"update this expected set in the same commit."
+    )
+
+    missing = sorted(
+        derived - check_devtest_orchestrator._HANDLER_FUNCTION_NAMES
+    )
+    assert missing == [], (
+        f"dev_test's body references helper(s) NOT listed in "
+        f"_HANDLER_FUNCTION_NAMES: {missing}. Add them to the allow-list in "
+        f"tools/check_devtest_orchestrator.py -- do NOT widen the checker's "
+        f"scan target to compensate."
+    )
+
+    assert "_complete_eprom" not in derived, (
+        "_complete_eprom (dev_test's shell_complete= decorator argument, "
+        "shared by 15 unrelated commands) leaked into the derived set -- "
+        "the derivation must walk dev_test's BODY statements only, never "
+        "its decorator_list (correction F-04)."
+    )
