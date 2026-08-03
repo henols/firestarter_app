@@ -71,8 +71,8 @@ from firestarter.exceptions import (
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.hardware import HardwareManager
 from firestarter.logging_utils import SingleLineStatusHandler
-from firestarter.messages import MSG_ERR_UNKNOWN_CMD
 from firestarter.sdp_capability import SDP_PROTOCOL_ID, sdp_capability
+from firestarter.sdp_honesty import emission_summary, map_unknown_cmd_to_outdated
 
 logger = logging.getLogger("Firestarter")
 
@@ -2215,9 +2215,9 @@ def dev_sdp(app: AppContext, eprom: str, mode: str, assume_yes: bool) -> None:
 
     ``enable`` turns software data protection ON, so the part refuses writes
     until it is explicitly unlocked again. ``disable`` turns it OFF. On this
-    chip family the resulting protection state cannot be read back afterward
-    (Phase 117 D-05, Phase 119 D-12), so neither direction can be confirmed --
-    a successful run means only that the command sequence was **emitted**,
+    chip family the protection state cannot be read back afterward (Phase 117
+    D-05, Phase 119 D-12), so neither direction can be confirmed -- a
+    successful run means only that the command sequence was **emitted**,
     nothing more.
 
     Refused on protocol-0x0D parts with no SDP command decoder at all (the
@@ -2280,42 +2280,25 @@ def dev_sdp(app: AppContext, eprom: str, mode: str, assume_yes: bool) -> None:
             "pass -y to proceed unattended."
         )
 
-    # Serial call. D-14: an `EpromOperationError` whose `error_code` is
-    # `MSG_ERR_UNKNOWN_CMD` means the attached firmware predates
-    # CMD_SDP_LOCK/CMD_SDP_UNLOCK (Phase 119) and does not recognise this
-    # command at all. This exploits the one real asymmetry in the wire
-    # surface (HOST-06): an unknown COMMAND produces an error and is
-    # therefore detectable after the fact, whereas an unknown flag BIT
-    # produces silence. Keyed on the message **id**, never the message text.
+    # Serial call. D-14: the unknown-cmd -> outdated-firmware mapping now
+    # lives in firestarter/sdp_honesty.py (map_unknown_cmd_to_outdated) --
+    # see that module's docstring for the full HOST-06 rationale.
     try:
         if mode == "enable":
             ok = app.eprom_operator.sdp_lock(eprom, eprom_data)
         else:
             ok = app.eprom_operator.sdp_unlock(eprom, eprom_data)
     except EpromOperationError as e:
-        if e.error_code == MSG_ERR_UNKNOWN_CMD:
-            raise FirmwareOutdatedError(
-                f"{chip_upper}: attached firmware does not implement SDP "
-                f"{mode} (unknown command) -- upgrade with "
-                "'firestarter fw --install'."
-            ) from e
+        outdated = map_unknown_cmd_to_outdated(e, mode, chip_upper)
+        if outdated is not None:
+            raise outdated from e
         raise
 
     if ok:
-        # D-10 summary line -- honest and symmetric on both directions: the
-        # claim is that the sequence was EMITTED, never that the resulting
-        # state was verified. No duration figure appears here -- this is
-        # mechanically enforced, not merely a discipline: get_response()
-        # filters the entire INFO band out at serial_comm.py:424, so the
-        # operation layer literally cannot see the firmware's `0x5F`/`0x61`
-        # duration frame to plumb one through. No lock/unlock state boolean
-        # appears either -- HOST-05's honesty floor. click.echo (not
-        # logger.info) so this always reaches the user's console/CliRunner
-        # capture regardless of log-level/handler wiring.
-        click.echo(
-            f"SDP {mode} sequence for {chip_upper} was emitted. The "
-            "resulting protection state cannot be read back on this chip "
-            "family, so this is not a claim about the chip's actual state."
-        )
+        # D-10 summary line -- see firestarter/sdp_honesty.py's docstring
+        # for the full honesty rationale. click.echo (not logger.info) so
+        # this always reaches the user's console/CliRunner capture
+        # regardless of log-level/handler wiring.
+        click.echo(emission_summary(mode, chip_upper))
 
     sys.exit(0 if ok else 1)
