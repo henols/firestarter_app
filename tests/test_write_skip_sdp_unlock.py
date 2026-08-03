@@ -36,7 +36,7 @@ from firestarter.messages import (
     MSG_WARN_SDP_UNLOCK_SKIPPED,
 )
 
-from .conftest import build_frame
+from .conftest import _FakeSerial, build_frame
 from .conftest import make_app_context as _make_app_context
 
 # --- Concrete chip names, drawn from 120-SDP-PARTITION.md section 3, mirroring
@@ -93,6 +93,40 @@ def make_app_context(
 @pytest.fixture()
 def runner() -> CliRunner:
     return CliRunner()
+
+
+def _fresh_serial_and_comm():
+    """Build an independent (fake_serial, make_comm) pair.
+
+    Mirrors conftest.py's `fake_serial`/`make_comm` fixtures exactly, but as
+    a plain function rather than a fixture pair -- needed only by the
+    two-leg RETIRE-07 tripwire test below, which drives two full,
+    independent `write` invocations in one test function. The
+    fixture-injected pair cannot be reused for a second drive: the first
+    drive's `SerialCommunicator` closes its fake serial port
+    (`_FakeSerial.close()` sets `is_open = False`) at the end of a
+    successful write, so a second `_drive_write` call sharing that same
+    fake_serial fails with "Not connected" -- this is what a same-fixture
+    two-drive test measures instead of the intended behaviour.
+    """
+    from firestarter.serial_comm import SerialCommunicator
+
+    serial = _FakeSerial()
+
+    def _factory():
+        instance = SerialCommunicator.__new__(SerialCommunicator)
+        instance.connection = serial
+        instance.port_name = "/dev/null"
+        instance.baud_rate = 250000
+        instance.timeout = 0.1
+        instance.programmer_info = None
+        instance._fault_inject_outgoing = None
+        instance.firmware_buffer_size = None
+        instance.firmware_max_chunk = None
+        instance.seen_message_ids = set()
+        return instance
+
+    return serial, _factory
 
 
 def _drive_write(
@@ -284,3 +318,77 @@ def test_non_0x0d_chip_without_the_flag_is_unchanged(
     assert "has no effect on this chip's protocol" not in result.output
     assert "auto-setting --skip-sdp-unlock" not in result.output
     assert not (captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK)
+
+
+# ---------------------------------------------------------------------------
+# RETIRE-07 / D-14 tripwire -- the named test whose failure IS the record
+# ---------------------------------------------------------------------------
+
+
+def test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on(
+    runner: CliRunner, tmp_path, make_comm, fake_serial
+) -> None:
+    """RETIRE-07 / D-14 tripwire.
+
+    Phase 132 deleted the standalone `firestarter dev sdp` subcommand
+    (RETIRE-01). That deletion was safe ONLY BECAUSE the host auto-unlocks
+    every capability-refused protocol-0x0D part by default on every `write`
+    -- no user needs a manual unlock surface as long as this stays true.
+
+    This test pins that default-on behaviour. If the auto-set default is
+    ever flipped -- the `_build_op_flags` `skip_sdp_unlock=False` default,
+    the `--skip-sdp-unlock` Click option's `default=False`, or the D-04
+    auto-set condition itself in `cli_handlers.py`'s `write()` -- this test
+    fails, and the RETIRE-01 removal decision must be revisited alongside
+    whatever change broke it.
+
+    The companion comments recording the same dependency live at the
+    decision site (the D-04 auto-set condition inside `write()` in
+    `firestarter/cli_handlers.py`) and at the flag's definition
+    (`FLAG_SKIP_SDP_UNLOCK` in `firestarter/constants.py`).
+
+    Two legs, both required:
+      1. A capability-refused 0x0D part with NO flag passed gets the skip
+         bit auto-set on the wire, and the mandatory report line fires --
+         this is the dependency itself, asserted as behaviour.
+      2. A capability-ALLOWED 0x0D part with NO flag does NOT get the bit
+         set -- proving the auto-set is conditional, not blanket. Without
+         this leg the test would still pass under a blanket unconditional
+         set, which is a different and worse behaviour than the one
+         RETIRE-01's argument actually depends on.
+    """
+    refused_result, refused_captured = _drive_write(
+        runner, _FRAM_CHIP, tmp_path, make_comm, fake_serial
+    )
+    assert refused_result.exit_code == 0, refused_result.output
+    assert refused_captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK, (
+        "RETIRE-07/D-14 TRIPWIRE FIRED: a capability-refused protocol-0x0D "
+        "part did NOT get FLAG_SKIP_SDP_UNLOCK auto-set on a plain write. "
+        "The host's SDP auto-unlock is no longer default-on for this case, "
+        "which is the removal-safety argument RETIRE-01 (Phase 132, deleting "
+        "`firestarter dev sdp`) rests on -- that removal decision must be "
+        "revisited alongside whatever change broke this."
+    )
+    assert "auto-setting --skip-sdp-unlock on your behalf" in refused_result.output, (
+        "RETIRE-07/D-14 TRIPWIRE FIRED: the mandatory auto-set report line "
+        "did not appear for a capability-refused protocol-0x0D part on a "
+        "plain write -- see the docstring of this test and the D-04 "
+        "auto-set comment in cli_handlers.py's write()."
+    )
+
+    # A second, independent (fake_serial, make_comm) pair -- the fixture-
+    # injected pair used above is already closed by the drive that just
+    # completed. See _fresh_serial_and_comm's docstring.
+    allowed_serial, allowed_comm = _fresh_serial_and_comm()
+    allowed_result, allowed_captured = _drive_write(
+        runner, _ALLOWED_CHIP, tmp_path, allowed_comm, allowed_serial
+    )
+    assert allowed_result.exit_code == 0, allowed_result.output
+    assert not (allowed_captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK), (
+        "RETIRE-07/D-14 TRIPWIRE FIRED (discriminating leg): a capability-"
+        "ALLOWED protocol-0x0D part got FLAG_SKIP_SDP_UNLOCK auto-set on a "
+        "plain write. The host's SDP auto-unlock is no longer conditional -- "
+        "it looks blanket/unconditional instead, which is a DIFFERENT and "
+        "WORSE behaviour than the one RETIRE-01's removal argument depends "
+        "on. Revisit RETIRE-01 alongside whatever change broke this."
+    )
