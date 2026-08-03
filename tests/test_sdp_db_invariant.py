@@ -1,5 +1,6 @@
 """
-DB invariant for the AT28C SDP `0x0D` identity gate (Phase 116 TRACE-05).
+DB invariant for the AT28C SDP `0x0D` identity gate (Phase 116 TRACE-05) and
+the anti-narrowing partition gate (Phase 131 Plan 03, GATE-08).
 
 Reads firestarter/data/chip_database.json directly (not through EpromDatabase),
 so this measures the shipped data rather than the loader's interpretation.
@@ -18,16 +19,37 @@ Coverage:
      the real test calls -- proves the invariant is capable of failing, not a
      vacuous always-pass check (RESEARCH F9's "hollow in one direction"
      warning).
+  5. Anti-narrowing element-wise parity: the measured 0x0D ALLOW set (via
+     `sdp_capability_for_entry`) equals the committed
+     `_COMMITTED_SDP_ALLOW_ENTRIES` snapshot exactly, element for element --
+     naming any chip that moved in either direction. This is GATE-08 / D-06 /
+     correction F-01's replacement for the (not implementable in this repo,
+     see the constant's comment) independently-derived leg.
+  6. Anti-narrowing literal triple: the measured partition is exactly
+     43 ALLOW / 41 REFUSE / 84 total, with all three counts derived from
+     `_partition_0x0d`, never hardcoded a second time.
+  7. Non-vacuous proof for the narrowing gate: a synthetic chip moved out of
+     ALLOW (renamed to a token `SDP_CAPABLE_TOKENS` does not recognise) MUST
+     make `_assert_partition_matches_committed` raise, and the raised message
+     MUST name the moved chip -- proves the narrowing gate is capable of
+     catching P-10's hole, not a vacuous always-pass check.
 
 This module intentionally carries NO FW_ABSENT-style skip marker: it reads
 only the packaged chip_database.json, which is always present in host-only
 CI. Keeping this concern in its own file (separate from
 test_sdp_bus_config_drift.py's FW_ABSENT-marked tests) prevents that skip
-marker from leaking in here and silently making TRACE-05 vacuous in CI.
+marker from leaking in here and silently making TRACE-05 / GATE-08 vacuous in
+CI (correction F-02: `test_sdp_table_parity.py` imports `fw_path` /
+`requires_fw` from `tests.fw_presence` at module scope and is therefore
+`requires_fw`-skipped whole-module under the CI-parity recipe's empty-sibling
+leg -- any narrowing gate placed there would be invisible exactly where it
+matters most).
 """
 
 import json
 from pathlib import Path
+
+from firestarter.sdp_capability import sdp_capability_for_entry
 
 # Absolute path to the firestarter_app directory (independent of cwd)
 _FA_DIR = Path(__file__).parent.parent
@@ -37,8 +59,8 @@ _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
 _ALGORITHM_0X0D = 13
 
 # ---------------------------------------------------------------------------
-# Shared helpers -- both the real-DB tests and the non-vacuity test call
-# these, so the non-vacuity leg exercises the same code the real test does.
+# Shared helpers -- both the real-DB tests and the non-vacuity tests call
+# these, so the non-vacuity legs exercise the same code the real tests do.
 # ---------------------------------------------------------------------------
 
 
@@ -71,6 +93,107 @@ def _assert_chip_id_check_false(selected: list[tuple[str, dict]]) -> None:
         "chip_id_check: false -- the identity gate must be provably dead "
         f"across the whole 0x0D bucket. Offending chips: {offenders}"
     )
+
+
+def _partition_0x0d(db: dict) -> tuple[list[str], list[str]]:
+    """Partition every algorithm==13 (0x0D) chip in `db` into ALLOW/REFUSE
+    lists of `"MANUFACTURER/PART_NUMBER"` keys, using the production
+    predicate `sdp_capability_for_entry` -- never a reimplementation.
+
+    Key is manufacturer-qualified, not part-number-only: three ALLOW part
+    numbers are duplicated across manufacturers in the shipped DB --
+    `M28010`, `M28C64,M28C64A` and `M28C64-xxW` each appear under both
+    `SGS-THOMSON` and `ST` -- so a part-number-only key would collide and
+    silently lose entries.
+
+    Bridges the DB-file shape to the predicate's shape: `chip_database.json`
+    carries `part_number` and `programming.algorithm`; `sdp_capability_for_entry`
+    reads `name` and `protocol-id`. This module deliberately reads the shipped
+    JSON directly rather than through `EpromDatabase` (see the module
+    docstring), so the synthesis below is the bridge -- and it is faithful:
+    `EpromDatabase.get_eprom("AT28C256")` was measured (2026-08-03) to return
+    `name` equal to the raw `part_number` string and `protocol-id` equal to
+    `programming.algorithm`, so the synthesized entry matches the production
+    path for both fields the predicate reads.
+
+    Both returned lists are sorted.
+    """
+    selected = _select_0x0d_chips(db)
+    allow: list[str] = []
+    refuse: list[str] = []
+    for mfr, chip in selected:
+        part_number = chip["part_number"]
+        entry = {
+            "protocol-id": chip["programming"]["algorithm"],
+            "name": part_number,
+        }
+        allowed, _reason = sdp_capability_for_entry(entry, part_number)
+        key = f"{mfr}/{part_number}"
+        (allow if allowed else refuse).append(key)
+    return sorted(allow), sorted(refuse)
+
+
+def _assert_partition_matches_committed(
+    measured_allow: list[str], committed_allow: tuple[str, ...]
+) -> None:
+    """Raise AssertionError naming both directions of the symmetric
+    difference between `measured_allow` and `committed_allow`.
+
+    Direction matters (P-10): a chip present in `committed_allow` but absent
+    from `measured_allow` LEFT the allow-set -- the narrowing signal this
+    gate exists to catch. A chip present in `measured_allow` but absent from
+    `committed_allow` ENTERED it -- the widening signal
+    `tools/check_sdp_capability_invariants.py` already gates elsewhere.
+    Named separately so a reader can tell which happened at a glance.
+    """
+    measured_set = set(measured_allow)
+    committed_set = set(committed_allow)
+    left_allow = sorted(committed_set - measured_set)
+    entered_allow = sorted(measured_set - committed_set)
+    offenders = left_allow or entered_allow
+    assert not offenders, (
+        "GATE-08: the measured 0x0D ALLOW partition no longer matches the "
+        "committed snapshot. A chip may move ALLOW->REFUSE only with a "
+        "decode reason (its flags bit changed, or the decode was wrong) -- "
+        "NEVER with a test-outcome reason (narrowing the allow-set to green "
+        "a failing field report retires the only evidence path this "
+        f"feature has). Left ALLOW (narrowing signal): {left_allow}. "
+        f"Entered ALLOW (widening signal): {entered_allow}."
+    )
+
+
+# ---------------------------------------------------------------------------
+# The committed ALLOW snapshot -- GATE-08 / D-06 / correction F-01.
+#
+# What it is: the ALLOW half of the `0x0D` SDP partition, snapshotted
+# Phase 131 plan 131-03, measured 43 of 84. Prior value: none, first
+# snapshot.
+#
+# Why it is a committed snapshot and not a derivation: D-06 leg 1 asked for
+# the partition to be recomputed from `chip_database.json` plus the
+# committed `flags` bit-15 decode and compared against what
+# `sdp_capability()` computes. That is not implementable in this repo,
+# measured 2026-08-03: `chip_database.json` contains ZERO occurrences of the
+# string "flags" (no per-chip protection metadata is shipped), and
+# `tools/infoic*.xml` -- the bit-15 source -- is gitignored
+# (`.gitignore:29`, pattern `tools/infoic*.xml`) and absent from the working
+# tree. Implementing leg 1 literally would recompute the partition using the
+# very function under test -- self-parity, which passes whenever both sides
+# drift together, and which is precisely the hole this gate exists to close
+# (correction F-01, PITFALLS P-10). So the independent side here is instead
+# a committed, sorted, manufacturer-qualified 43-entry ALLOW list; the
+# measured side comes from `_partition_0x0d`, which calls the production
+# `sdp_capability_for_entry` predicate.
+#
+# Change protocol: a chip may move ALLOW->REFUSE ONLY with a decode reason
+# -- its `flags` bit changed, or the decode was wrong -- and NEVER with a
+# test-outcome reason. Narrowing this list to green a failing field report
+# (e.g. a community `dev test` FAIL on an AT28C part) converts a real
+# finding into an `NA` step at exit 0 and quietly retires the only evidence
+# path this feature has. The widening counterpart to this gate already
+# exists: `tools/check_sdp_capability_invariants.py` plus
+# `tests/fixtures/planted_widenable_allowset.py`.
+_COMMITTED_SDP_ALLOW_ENTRIES: tuple[str, ...] = ()  # noqa: RED-PLACEHOLDER
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +267,7 @@ def test_all_0x0d_chips_have_chip_id_value_zero_sentinel() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 4: non-vacuity proof
+# Test 4: non-vacuity proof (TRACE-05)
 # ---------------------------------------------------------------------------
 
 
@@ -182,3 +305,64 @@ def test_synthetic_chip_id_check_true_is_flagged_non_vacuous() -> None:
             "synthetic chip_id_check: True row -- the TRACE-05 invariant "
             "gate is vacuous."
         )
+
+
+# ---------------------------------------------------------------------------
+# Test 5: GATE-08 anti-narrowing element-wise parity
+# ---------------------------------------------------------------------------
+
+
+def test_sdp_partition_matches_committed_allow_list_element_wise() -> None:
+    """GATE-08 / D-06 leg 1 (as amended by correction F-01): the measured
+    0x0D ALLOW partition must equal `_COMMITTED_SDP_ALLOW_ENTRIES` exactly,
+    element for element.
+
+    A chip moving ALLOW->REFUSE (P-10's narrowing-for-convenience hole)
+    reddens this leg; the only diff that greens it is a visible edit to the
+    named committed constant, governed by the change protocol on it.
+    Element-wise is what catches a single chip moving -- a count-only
+    assertion (test 6 below) does not.
+    """
+    db = json.loads(_DB_FILE.read_text(encoding="utf-8"))
+    allow, _refuse = _partition_0x0d(db)
+    _assert_partition_matches_committed(allow, _COMMITTED_SDP_ALLOW_ENTRIES)
+
+
+# ---------------------------------------------------------------------------
+# Test 6: GATE-08 anti-narrowing literal triple
+# ---------------------------------------------------------------------------
+
+
+def test_sdp_partition_counts_are_43_41_84() -> None:
+    """GATE-08 / D-06 leg 2: the measured 0x0D partition is exactly
+    43 ALLOW / 41 REFUSE / 84 total, all three measured from
+    `_partition_0x0d`, never hardcoded a second time.
+
+    A count change means a chip moved between halves and must be justified
+    by a decode reason (see the change-protocol comment on
+    `_COMMITTED_SDP_ALLOW_ENTRIES`), never a test-outcome reason.
+
+    The 84 total is deliberately redundant with
+    `test_exactly_84_algorithm_0x0d_entries` above: one asserts the bucket
+    size from the DB directly, the other asserts the partition sums back to
+    it -- a divergence between them means `_partition_0x0d` dropped an
+    entry.
+    """
+    db = json.loads(_DB_FILE.read_text(encoding="utf-8"))
+    allow, refuse = _partition_0x0d(db)
+    assert len(allow) == 43, (
+        f"GATE-08: expected 43 ALLOW entries, measured {len(allow)}. A count "
+        "change means a chip moved between ALLOW and REFUSE and must be "
+        "justified by a decode reason, never a test-outcome reason."
+    )
+    assert len(refuse) == 41, (
+        f"GATE-08: expected 41 REFUSE entries, measured {len(refuse)}. A "
+        "count change means a chip moved between ALLOW and REFUSE and must "
+        "be justified by a decode reason, never a test-outcome reason."
+    )
+    assert len(allow) + len(refuse) == 84, (
+        "GATE-08: ALLOW + REFUSE must sum back to the 84-chip 0x0D bucket "
+        f"-- measured {len(allow)} + {len(refuse)} = {len(allow) + len(refuse)}. "
+        "A divergence from test_exactly_84_algorithm_0x0d_entries means "
+        "_partition_0x0d dropped an entry."
+    )
