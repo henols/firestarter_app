@@ -39,7 +39,7 @@ from firestarter.messages import (
 from .conftest import build_frame
 
 # --- Concrete chip names, drawn from 120-SDP-PARTITION.md section 3, mirroring
-# test_dev_sdp_cmd.py's fixture chips so both suites exercise the same
+# test_sdp_honesty.py's fixture chips so both suites exercise the same
 # ground-truth entries. ---
 
 # FRAM -- capability-refused, support_status == "supported" (not adapter-required).
@@ -55,7 +55,7 @@ _ALLOWED_CHIP = "AT28C256"
 def make_app_context(**overrides: object) -> AppContext:
     """Construct an AppContext with a REAL EpromOperator + EpromDatabase.
 
-    Mirrors test_dev_sdp_cmd.py's make_app_context shape, but defaults
+    Mirrors test_sdp_honesty.py's make_app_context shape, but defaults
     eprom_operator to a real `EpromOperator` (not a Mock) because this suite
     proves the flags bit reaches the composed wire command_dict, which only
     a real EpromOperator composes.
