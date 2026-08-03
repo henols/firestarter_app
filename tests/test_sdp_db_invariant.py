@@ -39,11 +39,11 @@ only the packaged chip_database.json, which is always present in host-only
 CI. Keeping this concern in its own file (separate from
 test_sdp_bus_config_drift.py's FW_ABSENT-marked tests) prevents that skip
 marker from leaking in here and silently making TRACE-05 / GATE-08 vacuous in
-CI (correction F-02: `test_sdp_table_parity.py` imports `fw_path` /
-`requires_fw` from `tests.fw_presence` at module scope and is therefore
-`requires_fw`-skipped whole-module under the CI-parity recipe's empty-sibling
-leg -- any narrowing gate placed there would be invisible exactly where it
-matters most).
+CI (correction F-02: `test_sdp_table_parity.py` imports the sibling-repo
+presence marker from `tests.fw_presence` at module scope and is therefore
+skipped whole-module under the CI-parity recipe's empty-sibling leg -- any
+narrowing gate placed there would be invisible exactly where it matters
+most).
 """
 
 import json
@@ -193,7 +193,51 @@ def _assert_partition_matches_committed(
 # path this feature has. The widening counterpart to this gate already
 # exists: `tools/check_sdp_capability_invariants.py` plus
 # `tests/fixtures/planted_widenable_allowset.py`.
-_COMMITTED_SDP_ALLOW_ENTRIES: tuple[str, ...] = ()  # noqa: RED-PLACEHOLDER
+_COMMITTED_SDP_ALLOW_ENTRIES: tuple[str, ...] = (
+    "ATMEL/AT28BV256,AT28LV256",
+    "ATMEL/AT28BV64B,AT28LV64B",
+    "ATMEL/AT28C010,AT28C010E",
+    "ATMEL/AT28C040,AT28C040E",
+    "ATMEL/AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L",
+    "ATMEL/AT28C64B,AT28HC64B,AT28HC64BF",
+    "ATMEL/AT28LV010",
+    "ATMEL/AT28MC010",
+    "ATMEL/AT28MC020",
+    "ATMEL/AT28MC040",
+    "CATALYST(CSI)/CAT28C010",
+    "CATALYST(CSI)/CAT28C020",
+    "CATALYST(CSI)/CAT28C040",
+    "CATALYST(CSI)/CAT28C256,CAT28C257",
+    "CATALYST(CSI)/CAT28C512",
+    "CATALYST(CSI)/CAT28C64B",
+    "CATALYST(CSI)/CAT28LV256",
+    "CATALYST(CSI)/CAT28LV64,CAT28LV65",
+    "EXEL/XLE28C256,XLS28C256",
+    "EXEL/XLE28C64B,XLS28C64B",
+    "HITACHI/HN58C256AP",
+    "MAXWELL/28C010,28C010T,28C011,28C011T",
+    "MICROCHIP memory/28C256,28C256F",
+    "MICROCHIP memory/28C64B",
+    "NEC/UPD28C256",
+    "SAMSUNG/KM28C64",
+    "SAMSUNG/KM28C64A,KM28C65A",
+    "SGS-THOMSON/M28010",
+    "SGS-THOMSON/M28C64,M28C64A",
+    "SGS-THOMSON/M28C64-xxW",
+    "ST/M28010",
+    "ST/M28256",
+    "ST/M28C64,M28C64A",
+    "ST/M28C64-xxW",
+    "ST/M28LV64",
+    "WED/WE128K8",
+    "WED/WE256K8",
+    "WED/WE512K8",
+    "WED/WME128K8",
+    "XICOR/X28256,X28C256",
+    "XICOR/X28C010",
+    "XICOR/X28C64(NonStandard),X28HC64(NonStandard)",
+    "XICOR/X28C64,X28HC64",
+)
 
 
 # ---------------------------------------------------------------------------
