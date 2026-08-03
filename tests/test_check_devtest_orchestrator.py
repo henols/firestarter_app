@@ -583,3 +583,85 @@ def test_every_helper_referenced_by_dev_test_is_listed() -> None:
         "the derivation must walk dev_test's BODY statements only, never "
         "its decorator_list (correction F-04)."
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 11 (Phase 131 Plan 04, GATE-10 non-vacuity proof): a synthetic
+# dev_test referencing an unlisted helper is proven caught by the SAME
+# derivation the real leg above uses.
+# ---------------------------------------------------------------------------
+
+# A synthetic module -- never committed as a tests/fixtures/ file, matching
+# this module's existing planted-violation construction (inline strings).
+# `_sdp_leg_probe` is the exact shape Phases 133/134 will add (a new
+# `dev test` helper); `_decorator_only_helper` mirrors the real
+# `_complete_eprom` shape -- referenced ONLY from dev_test's decorator list,
+# never its body -- so this one fixture proves BOTH halves of correction
+# F-04 at once: the body-referenced unlisted helper is caught, and the
+# decorator-referenced one is excluded.
+_SYNTHETIC_UNLISTED_HELPER_SOURCE = """
+def _decorator_only_helper():
+    pass
+
+
+def _sdp_leg_probe():
+    pass
+
+
+@some_decorator(callback=_decorator_only_helper)
+def dev_test():
+    return _sdp_leg_probe()
+"""
+
+
+def test_derivation_flags_an_unlisted_helper_non_vacuous() -> None:
+    """A synthetic `dev_test` body calling an unlisted helper is caught and
+    named by the SAME derivation the real leg
+    (test_every_helper_referenced_by_dev_test_is_listed) calls -- this is
+    the anti-hollow pairing this module's own docstring makes mandatory
+    (lines 4-11): a checker with no negative-fixture test is exactly the
+    v1.12 GATE-03 failure mode.
+
+    Asserting only that "something was flagged" is not enough -- an
+    assertion that fires for the wrong reason is a defect class this
+    project has already recorded twice (memory:
+    reference_gate_authored_before_content_can_be_unreachable). So this leg
+    makes three separate, named assertions: the body-referenced unlisted
+    helper IS in the derived set; the decorator-referenced helper is NOT (the
+    positive proof of correction F-04's decorator-list exclusion); and the
+    omission list computed against `_HANDLER_FUNCTION_NAMES` names the
+    body-referenced helper specifically, not merely non-emptily.
+
+    Drives `_referenced_underscore_helpers_in_dev_test` directly -- the same
+    helper the real leg calls -- rather than re-implementing the walk, so a
+    passing suite proves the HELPER catches a real addition, not that this
+    test does.
+    """
+    check_devtest_orchestrator = importlib.import_module(
+        "tools.check_devtest_orchestrator"
+    )
+
+    derived = _referenced_underscore_helpers_in_dev_test(
+        _SYNTHETIC_UNLISTED_HELPER_SOURCE
+    )
+
+    assert "_sdp_leg_probe" in derived, (
+        f"the body-referenced helper _sdp_leg_probe was not found in the "
+        f"derived set {sorted(derived)} -- the derivation failed to see a "
+        f"real reference inside dev_test's body."
+    )
+    assert "_decorator_only_helper" not in derived, (
+        f"_decorator_only_helper -- referenced ONLY from dev_test's "
+        f"decorator list, never its body -- leaked into the derived set "
+        f"{sorted(derived)}. The derivation must exclude decorator_list "
+        f"(correction F-04)."
+    )
+
+    missing = sorted(derived - check_devtest_orchestrator._HANDLER_FUNCTION_NAMES)
+    assert missing == ["_sdp_leg_probe"], (
+        f"expected the omission list to name exactly ['_sdp_leg_probe'] "
+        f"(the body-referenced helper this synthetic source deliberately "
+        f"omits from the real _HANDLER_FUNCTION_NAMES), got {missing}. An "
+        f"empty or differently-named omission list means the subset "
+        f"comparison is not actually exercising the planted violation."
+    )
