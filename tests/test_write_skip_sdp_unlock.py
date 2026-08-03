@@ -37,6 +37,7 @@ from firestarter.messages import (
 )
 
 from .conftest import build_frame
+from .conftest import make_app_context as _make_app_context
 
 # --- Concrete chip names, drawn from 120-SDP-PARTITION.md section 3, mirroring
 # test_sdp_honesty.py's fixture chips so both suites exercise the same
@@ -52,29 +53,40 @@ _NON_0X0D_CHIP = "w27c512"
 _ALLOWED_CHIP = "AT28C256"
 
 
-def make_app_context(**overrides: object) -> AppContext:
-    """Construct an AppContext with a REAL EpromOperator + EpromDatabase.
+def make_app_context(
+    *,
+    db: EpromDatabase | Mock | None = None,
+    config_manager: ConfigManager | Mock | None = None,
+    eprom_operator: EpromOperator | Mock | None = None,
+    hardware_manager: HardwareManager | Mock | None = None,
+    firmware_manager: FirmwareManager | Mock | None = None,
+    eprom_presenter: EpromConsolePresenter | Mock | None = None,
+) -> AppContext:
+    """Typed local delegate onto tests/conftest.py's shared factory (Phase 132
+    Plan 05, RETIRE-05, D-10) -- preserves this module's one non-default
+    behaviour: `eprom_operator` defaults to a REAL `EpromOperator`, not a
+    Mock, because this suite proves the flags bit reaches the composed wire
+    command_dict, which only a real EpromOperator composes.
 
-    Mirrors test_sdp_honesty.py's make_app_context shape, but defaults
-    eprom_operator to a real `EpromOperator` (not a Mock) because this suite
-    proves the flags bit reaches the composed wire command_dict, which only
-    a real EpromOperator composes.
+    Ordering is load-bearing: `config_manager` must be resolved to a
+    concrete value BEFORE `eprom_operator` is built from it (the real
+    operator's constructor takes the config manager) -- reversing this
+    order was the source of this module's now-fixed seventh mypy error
+    (`Argument 1 to "EpromOperator" has incompatible type "object"`).
+    Everything else forwards to the shared factory unchanged; the type work
+    itself now happens there, not here.
     """
-    db = overrides.pop("db", None)
-    if db is None:
-        db = EpromDatabase(skip_local_override=True)
-    config_manager = overrides.pop("config_manager", None)
     if config_manager is None:
         config_manager = ConfigManager()
-    return AppContext(
+    if eprom_operator is None:
+        eprom_operator = EpromOperator(config_manager)
+    return _make_app_context(
         db=db,
         config_manager=config_manager,
-        eprom_operator=overrides.pop("eprom_operator", EpromOperator(config_manager)),
-        hardware_manager=overrides.pop("hardware_manager", Mock(spec=HardwareManager)),
-        firmware_manager=overrides.pop("firmware_manager", Mock(spec=FirmwareManager)),
-        eprom_presenter=overrides.pop(
-            "eprom_presenter", Mock(spec=EpromConsolePresenter)
-        ),
+        eprom_operator=eprom_operator,
+        hardware_manager=hardware_manager,
+        firmware_manager=firmware_manager,
+        eprom_presenter=eprom_presenter,
     )
 
 

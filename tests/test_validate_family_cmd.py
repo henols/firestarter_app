@@ -24,33 +24,48 @@ from firestarter.eprom_operations import EpromOperator
 from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
 
+from .conftest import make_app_context as _make_app_context
 
-def make_app_context(port: str | None = None, **overrides: object) -> AppContext:
-    """Construct a minimal AppContext for CLI tests.
 
-    If port is given, sets it in ConfigManager (no-persist); otherwise the
-    config has no port set, which triggers the SKIP-deferred path.
+def make_app_context(
+    port: str | None = None,
+    *,
+    db: EpromDatabase | Mock | None = None,
+    config_manager: ConfigManager | Mock | None = None,
+    eprom_operator: EpromOperator | Mock | None = None,
+    hardware_manager: HardwareManager | Mock | None = None,
+    firmware_manager: FirmwareManager | Mock | None = None,
+    eprom_presenter: EpromConsolePresenter | Mock | None = None,
+) -> AppContext:
+    """Typed local delegate onto tests/conftest.py's shared factory (Phase 132
+    Plan 05, RETIRE-05, D-10) -- preserves this module's one non-default
+    behaviour: the leading `port` parameter, and the explicit port-clearing
+    on a freshly-built ConfigManager.
+
+    If `port` is given, sets it on a fresh ConfigManager (no-persist);
+    otherwise the config's port is explicitly CLEARED, which triggers the
+    SKIP-deferred path this module's tests exercise. The clearing is
+    load-bearing, not defensive: ConfigManager is a process-wide singleton
+    (its instance registry lives in firestarter/config.py), so a port set
+    by an earlier test in the same session would otherwise leak into this
+    one. `port` is kept even though no call site in this module passes it
+    today -- dropping it would be a silent behavioural narrowing in a plan
+    whose subject is typing, not test coverage.
     """
-    config_manager = overrides.pop("config_manager", None)
     if config_manager is None:
         config_manager = ConfigManager()
         if port:
             config_manager.set_value("port", port, persist=False)
         else:
-            # Ensure no port is set (clear any saved value)
+            # Ensure no port is set (clear any saved value) -- see docstring.
             config_manager.set_value("port", None, persist=False)
-    db = overrides.pop("db", None)
-    if db is None:
-        db = EpromDatabase(skip_local_override=True)
-    return AppContext(
+    return _make_app_context(
         db=db,
         config_manager=config_manager,
-        eprom_operator=overrides.pop("eprom_operator", Mock(spec=EpromOperator)),
-        hardware_manager=overrides.pop("hardware_manager", Mock(spec=HardwareManager)),
-        firmware_manager=overrides.pop("firmware_manager", Mock(spec=FirmwareManager)),
-        eprom_presenter=overrides.pop(
-            "eprom_presenter", Mock(spec=EpromConsolePresenter)
-        ),
+        eprom_operator=eprom_operator,
+        hardware_manager=hardware_manager,
+        firmware_manager=firmware_manager,
+        eprom_presenter=eprom_presenter,
     )
 
 
