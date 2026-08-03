@@ -45,13 +45,12 @@ from unittest.mock import Mock, patch
 import pytest
 from click.testing import CliRunner
 
-from firestarter.cli_handlers import _ALWAYS_WRITES_NOTICE, AppContext, cli
-from firestarter.config import ConfigManager, get_config_dir
-from firestarter.database import EpromDatabase
-from firestarter.eprom_info import EpromConsolePresenter
+from firestarter.cli_handlers import _ALWAYS_WRITES_NOTICE, cli
+from firestarter.config import get_config_dir
 from firestarter.eprom_operations import EpromOperator
-from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
+
+from .conftest import make_app_context
 
 # M8720 has no chip-id in the DB (id step is always NA -- a mock
 # check_eprom_id return has no effect on its verdict), is NOT UV-erasable
@@ -81,34 +80,14 @@ def _isolate_config_dir(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("FIRESTARTER_CONFIG_DIR", str(tmp_path_factory.mktemp("fs_cfg")))
 
 
-def make_app_context(**overrides: object) -> AppContext:
-    """Construct a minimal, hardware-free AppContext for `dev test` tests.
-
-    Mirrors test_validate_family_cmd.py's make_app_context: EpromDatabase
-    uses skip_local_override=True and every manager is Mock(spec=...) unless
-    the caller overrides it. No real serial port or bench access is ever
-    opened (SC4).
-    """
-    db = overrides.pop("db", None)
-    if db is None:
-        db = EpromDatabase(skip_local_override=True)
-    config_manager = overrides.pop("config_manager", None)
-    if config_manager is None:
-        config_manager = ConfigManager()
-    return AppContext(
-        db=db,
-        config_manager=config_manager,
-        eprom_operator=overrides.pop("eprom_operator", Mock(spec=EpromOperator)),
-        hardware_manager=overrides.pop("hardware_manager", Mock(spec=HardwareManager)),
-        firmware_manager=overrides.pop("firmware_manager", Mock(spec=FirmwareManager)),
-        eprom_presenter=overrides.pop(
-            "eprom_presenter", Mock(spec=EpromConsolePresenter)
-        ),
-    )
-
-
 def make_clean_operator() -> Mock:
     """A Mock(spec=EpromOperator) whose every dispatched method reports OK.
+
+    D-10: this builder's `Mock` return type is deliberate, not an oversight --
+    see tests/conftest.py's `make_app_context` docstring (risk A) for why
+    retyping this to the real `EpromOperator` class would trade the factory's
+    argument-type errors for attribute errors at every mock-assertion call
+    site in this module.
 
     check_eprom_id returns (True, None) -- no explicit chip-id disagreement
     (id is NA for chips with no chip-id in the DB, OK for chips whose id
@@ -132,6 +111,10 @@ def make_hardware_manager(
 ) -> Mock:
     """A Mock(spec=HardwareManager) with canned sample_vpp_mv/sample_vpe_mv/
     read_hardware_revision_value.
+
+    D-10: this builder's `Mock` return type is deliberate too -- see
+    `make_clean_operator` above and tests/conftest.py's `make_app_context`
+    docstring for the reasoning.
 
     A plain int makes every call return the same value (return_value); a
     list makes each successive call return the next value (side_effect) --
