@@ -68,9 +68,12 @@ bidirectional, header-parsing gate:
   - `test_every_firmware_cmd_has_a_command_names_entry` (D-13) is a
     SEPARATE leg from value parity: it asserts every non-exempt CMD_*'s
     mapped host constant is also a key in `COMMAND_NAMES`, since
-    `COMMAND_NAMES[cmd]` is dereferenced at `eprom_operations.py:301` and
-    `:377` — a missing entry is a `KeyError` at operation setup, not a
-    cosmetic display gap.
+    `COMMAND_NAMES[cmd]` is dereferenced by `_setup_operation`
+    (`eprom_operations.py:329`) and again by `_operation_context`
+    (`:405`) — a missing entry is a `KeyError` at operation setup, not a
+    cosmetic display gap. [Corrected 2026-08-03, RETIRE-08/D-11: the
+    original `301`/`377` citation had staled; function names now lead,
+    with the line number alongside.]
   - `test_conditionally_compiled_defines_are_exactly_the_dev_tools_pair`
     turns "these two are `#ifdef DEV_TOOLS`-conditional" from an assumption
     living only in a comment into a machine-checked fact over the parsed
@@ -523,10 +526,11 @@ def _check_command_names_coverage() -> None:
     """D-13's leg: every NON-EXEMPT firmware CMD_*'s mapped host constant
     must also be a key in `COMMAND_NAMES`, not merely a `constants.py`
     module attribute. This closes the crash path as well as the
-    value-drift path: `COMMAND_NAMES[cmd]` is dereferenced at
-    `eprom_operations.py:301` and again at `:377`
-    (`_setup_operation` / `_operation_context`), so a missing entry is a
-    `KeyError` at operation setup, not a cosmetic display gap.
+    value-drift path: `COMMAND_NAMES[cmd]` is dereferenced by
+    `_setup_operation` (`eprom_operations.py:329`) and again by
+    `_operation_context` (`:405`), so a missing entry is a `KeyError` at
+    operation setup, not a cosmetic display gap. [Corrected 2026-08-03,
+    RETIRE-08/D-11: was `301`/`377`, which had staled.]
     """
     header_text = _read_header_text()
     defines = _extract_defines(header_text)
@@ -546,8 +550,9 @@ def _check_command_names_coverage() -> None:
             errors.append(
                 f"{mapped} (value {host_value}, firmware {name}) has no "
                 "COMMAND_NAMES entry -- COMMAND_NAMES[cmd] is dereferenced "
-                "at eprom_operations.py:301 and :377, so this is a "
-                "KeyError at operation setup, not a cosmetic gap"
+                "by _setup_operation (eprom_operations.py:329) and "
+                "_operation_context (:405), so this is a KeyError at "
+                "operation setup, not a cosmetic gap"
             )
 
     assert not errors, "COMMAND_NAMES coverage failures:\n" + "\n".join(
@@ -582,10 +587,11 @@ def test_every_firmware_cmd_has_a_command_names_entry() -> None:
     """D-13's leg: every non-exempt firmware CMD_* must have a
     `COMMAND_NAMES` entry, not merely a `constants.py` constant. This
     closes the crash path as well as the value-drift path --
-    `COMMAND_NAMES[cmd]` is dereferenced at `eprom_operations.py:301` and
-    again at `:377` (`_setup_operation` / `_operation_context`), so a
-    missing entry is a `KeyError` at operation setup, not a cosmetic
-    display gap (T-120-24)."""
+    `COMMAND_NAMES[cmd]` is dereferenced by `_setup_operation`
+    (`eprom_operations.py:329`) and again by `_operation_context`
+    (`:405`), so a missing entry is a `KeyError` at operation setup, not a
+    cosmetic display gap (T-120-24). [Corrected 2026-08-03, RETIRE-08/D-11:
+    was `301`/`377`, which had staled.]"""
     _check_command_names_coverage()
 
 
