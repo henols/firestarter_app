@@ -298,6 +298,11 @@ def _build_op_flags(
     verbose: bool = False,
     vpe_as_vpp: bool = False,
     skip_erase: bool = False,
+    # D-14 / RETIRE-07 tripwire, edit point 1 of 2: this default is one of
+    # the two places a developer would touch to disable the host's
+    # auto-unlock. Before changing it, read the tripwire comment at the
+    # D-04 auto-set condition inside write() below -- flipping this default
+    # invalidates the removal-safety argument RETIRE-01 rests on.
     skip_sdp_unlock: bool = False,
     input_enable: Optional[bool] = None,
     chip_disable: Optional[bool] = None,
@@ -554,6 +559,11 @@ def read(
 )
 @click.option("-a", "--address", default=None, help="Write start address in dec/hex")
 @click.option("--vpe-as-vpp", "vpe_as_vpp", is_flag=True, help="Use VPE as VPP voltage")
+# D-14 / RETIRE-07 tripwire, edit point 2 of 2: this option's `default=False`
+# is the second place a developer would touch to disable the host's
+# auto-unlock. Before changing it, read the tripwire comment at the D-04
+# auto-set condition inside write() below -- flipping this default
+# invalidates the removal-safety argument RETIRE-01 rests on.
 @click.option(
     "--skip-sdp-unlock",
     "skip_sdp_unlock",
@@ -623,6 +633,23 @@ def write(
         bool(sdp_entry) and sdp_entry.get("protocol-id") == SDP_PROTOCOL_ID
     )
     allowed, sdp_reason = sdp_capability(eprom, app.db)
+    # D-14 / RETIRE-07 tripwire -- THE decision site. This condition IS the
+    # removal-safety argument for RETIRE-01 (Phase 132 deleted the standalone
+    # `firestarter dev sdp` subcommand): that deletion was safe only BECAUSE
+    # this auto-unlock fires by default, unconditionally, for every
+    # capability-refused protocol-0x0D part on every `write` -- no user needs
+    # a manual unlock surface as long as this stays true. Flipping either
+    # default this condition depends on (`skip_sdp_unlock: bool = False` in
+    # `_build_op_flags` above, or the `--skip-sdp-unlock` Click option's
+    # `default=False` above), narrowing this condition, or making the flag
+    # default to SKIPPING the unlock invalidates the removal argument and
+    # requires RETIRE-01 to be revisited alongside the change. The companion
+    # test that pins this dependency and fails if it breaks is
+    # `test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on`
+    # in tests/test_write_skip_sdp_unlock.py; the companion note lives at
+    # FLAG_SKIP_SDP_UNLOCK's definition in constants.py. This is a comment
+    # only (D-05) -- no output is added here, and the condition itself is
+    # unchanged.
     if is_protocol_0x0d and not allowed and not skip_sdp_unlock:
         skip_sdp_unlock = True
         click.echo(
