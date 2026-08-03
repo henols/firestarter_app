@@ -410,3 +410,88 @@ def test_sdp_partition_counts_are_43_41_84() -> None:
         "A divergence from test_exactly_84_algorithm_0x0d_entries means "
         "_partition_0x0d dropped an entry."
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 7: non-vacuity proof for the narrowing gate (GATE-08's anti-hollow half)
+# ---------------------------------------------------------------------------
+
+
+def test_partition_flags_a_moved_chip_non_vacuous() -> None:
+    """Non-vacuity proof: a synthetic chip moved out of ALLOW MUST make
+    `_assert_partition_matches_committed` raise, and the message MUST name
+    the moved chip.
+
+    Builds a synthetic in-memory DB dict -- never a mutation of the shipped
+    file -- with two algorithm==13 chips: one whose part number
+    (`AT28C256`, a real ALLOW token) the real partition places in ALLOW, and
+    one whose part number (the AT28C16 REFUSE anchor) stays in REFUSE
+    throughout, as a control. The ALLOW chip is then "moved" by renaming its
+    part number to a token `SDP_CAPABLE_TOKENS` does not recognise, so it
+    falls into REFUSE -- exactly P-10's narrowing-for-convenience shape.
+
+    Drives the SAME `_partition_0x0d` / `_assert_partition_matches_committed`
+    helpers the real legs (tests 5/6 above) call, with a committed-list
+    argument scoped to this synthetic fixture (a snapshot of the partition
+    taken BEFORE the move) -- never a parallel reimplementation. Asserting
+    only that this raised is not enough (an assertion firing for the wrong
+    reason is a defect class this project has already recorded twice); the
+    raised message must also name the moved chip specifically, and must NOT
+    name the untouched control chip.
+    """
+    synthetic_db_before_move = {
+        "SYNTHETIC_MFR": [
+            {"part_number": "AT28C256", "programming": {"algorithm": 13}},
+            {
+                "part_number": "AT28C16,AT28HC16,AT28HC16L",
+                "programming": {"algorithm": 13},
+            },
+        ]
+    }
+    allow_before, refuse_before = _partition_0x0d(synthetic_db_before_move)
+    assert allow_before == ["SYNTHETIC_MFR/AT28C256"], (
+        "Fixture setup error: expected exactly the AT28C256 synthetic chip "
+        f"in ALLOW before the move, measured {allow_before!r}"
+    )
+    assert refuse_before == ["SYNTHETIC_MFR/AT28C16,AT28HC16,AT28HC16L"], (
+        "Fixture setup error: expected the control chip in REFUSE before "
+        f"the move, measured {refuse_before!r}"
+    )
+    committed_snapshot = tuple(allow_before)
+
+    synthetic_db_after_move = {
+        "SYNTHETIC_MFR": [
+            {
+                "part_number": "AT28C256_MOVED_TOKEN_NOT_RECOGNISED",
+                "programming": {"algorithm": 13},
+            },
+            {
+                "part_number": "AT28C16,AT28HC16,AT28HC16L",
+                "programming": {"algorithm": 13},
+            },
+        ]
+    }
+    allow_after, _refuse_after = _partition_0x0d(synthetic_db_after_move)
+    assert "SYNTHETIC_MFR/AT28C256" not in allow_after, (
+        "Fixture setup error: the renamed chip must no longer be recognised "
+        "as an ALLOW-token by SDP_CAPABLE_TOKENS"
+    )
+
+    try:
+        _assert_partition_matches_committed(allow_after, committed_snapshot)
+    except AssertionError as exc:
+        message = str(exc)
+        assert "SYNTHETIC_MFR/AT28C256" in message, (
+            "Non-vacuity failure: the raised message does not name the "
+            f"moved chip. Message was: {message!r}"
+        )
+        assert "AT28C16" not in message, (
+            "Non-vacuity failure: the raised message names the untouched "
+            f"control chip, which never moved. Message was: {message!r}"
+        )
+    else:
+        raise AssertionError(
+            "Non-vacuity failure: moving a synthetic chip out of ALLOW did "
+            "not make _assert_partition_matches_committed raise -- the "
+            "GATE-08 narrowing gate is vacuous."
+        )
