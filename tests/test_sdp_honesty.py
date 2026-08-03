@@ -45,96 +45,18 @@ from __future__ import annotations
 import ast
 import re
 from pathlib import Path
-from unittest.mock import Mock, patch
 
-from firestarter.cli_handlers import AppContext
-from firestarter.config import ConfigManager
-from firestarter.database import EpromDatabase
-from firestarter.eprom_info import EpromConsolePresenter
-from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import EpromOperationError
-from firestarter.firmware import FirmwareManager
-from firestarter.hardware import HardwareManager
 from firestarter.messages import MSG_ERR_TIMEOUT, MSG_ERR_UNKNOWN_CMD
 from firestarter.sdp_honesty import emission_summary, map_unknown_cmd_to_outdated
 
-# Absolute path to the firestarter_app directory (cwd-independent), mirrors
-# tests/test_sdp_capability.py's `_FA_DIR` analog.
-_FA_DIR = Path(__file__).parent.parent
-
-# --- Concrete chip names, drawn from 120-SDP-PARTITION.md section 3 -- kept
-# for now; plan 132-03 task 3 prunes every entry the rewritten module below
-# no longer references and accounts for the removal in 132-PRUNE-LEDGER.md.
-# ---
-
-# Absent from the DB entirely -- Gate 1 (SAFE-04).
-_ABSENT_CHIP = "NO_SUCH_CHIP_XYZ"
-# FRAM -- capability-refused, support_status == "supported" (not adapter-required).
-_FRAM_CHIP = "FM28V020"
-# Pre-SDP DIP24_2816 generation -- capability-refused, support_status == "supported".
-_PRESDP_DIP2816_CHIP = "2816"
-# Non-0x0D chip -- wrong-protocol refusal.
-_NON_0X0D_CHIP = "w27c512"
-# Allowed 0x0D chip -- reaches the confirm/serial gates; the survivors below
-# use this one to exercise the helper.
+# Allowed 0x0D chip (AT28C256) -- the survivors below use this one to
+# exercise the helper. Every other chip-name constant this module used to
+# carry (the absent chip, the two capability-refused parts, the wrong-
+# protocol part, and the nine adapter-required parts) was pruned with the
+# gate-order/consent-matrix cases that only they served -- see
+# 132-PRUNE-LEDGER.md section 2.
 _ALLOWED_CHIP = "AT28C256"
-
-# All nine `adapter-required` 0x0D parts (first alias token of each; see
-# 120-SDP-PARTITION.md section 3's REFUSE table). D-08's capability-before-
-# support-status ordering is load-bearing on every one of these.
-_ADAPTER_REQUIRED_CHIPS = [
-    "28C04A",
-    "28C04AF",
-    "28C16A",
-    "28C16AF",
-    "AT28C04",
-    "AT28C04E",
-    "AT28C16",
-    "AT28C16E",
-    "UPD28C04",
-]
-
-
-def make_app_context(**overrides: object) -> AppContext:
-    """Construct a minimal, hardware-free AppContext.
-
-    Mirrors test_dev_test_cmd.py's make_app_context: EpromDatabase uses
-    skip_local_override=True and every manager is Mock(spec=...) unless the
-    caller overrides it. No real serial port or bench access is ever opened.
-
-    Dead as of this rewrite -- no test below calls this any more, since the
-    four survivors exercise `firestarter/sdp_honesty.py` directly and no
-    longer need an AppContext at all. Left in place for plan 132-03 task 3
-    to remove and account for.
-    """
-    db = overrides.pop("db", None)
-    if db is None:
-        db = EpromDatabase(skip_local_override=True)
-    config_manager = overrides.pop("config_manager", None)
-    if config_manager is None:
-        config_manager = ConfigManager()
-    return AppContext(
-        db=db,
-        config_manager=config_manager,
-        eprom_operator=overrides.pop("eprom_operator", Mock(spec=EpromOperator)),
-        hardware_manager=overrides.pop("hardware_manager", Mock(spec=HardwareManager)),
-        firmware_manager=overrides.pop("firmware_manager", Mock(spec=FirmwareManager)),
-        eprom_presenter=overrides.pop(
-            "eprom_presenter", Mock(spec=EpromConsolePresenter)
-        ),
-    )
-
-
-def _off_tty():
-    """Context manager forcing the off-TTY branch (D-06). Dead as of this
-    rewrite -- see `make_app_context`'s docstring."""
-    return patch("firestarter.cli_handlers._is_interactive", return_value=False)
-
-
-def _on_tty():
-    """Context manager forcing the on-TTY branch. Dead as of this rewrite --
-    see `make_app_context`'s docstring."""
-    return patch("firestarter.cli_handlers._is_interactive", return_value=True)
 
 
 # ---------------------------------------------------------------------------
@@ -250,7 +172,11 @@ def test_sdp_honesty_module_imports_only_leaf_firestarter_modules() -> None:
     `tests/test_sdp_capability.py`'s
     `test_sdp_capability_module_imports_nothing_but_stdlib_typing` leg
     (D-03's precedent for this exact shape)."""
-    module_path = _FA_DIR / "firestarter" / "sdp_honesty.py"
+    # Absolute path to the firestarter_app directory (cwd-independent),
+    # computed inline (not a module-level constant) so this remains the
+    # module's only surviving private module-level name (_ALLOWED_CHIP).
+    fa_dir = Path(__file__).parent.parent
+    module_path = fa_dir / "firestarter" / "sdp_honesty.py"
     tree = ast.parse(module_path.read_text(encoding="utf-8"))
 
     imported_modules: set[str] = set()
