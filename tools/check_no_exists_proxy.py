@@ -138,6 +138,7 @@ _DEFAULT_TARGETS = [
         "tests/test_check_devtest_orchestrator.py",
         "tests/test_check_dispatch_invariants.py",
         "tests/test_check_is_memory_cmd_no_ifdef.py",
+        "tests/test_check_mypy_watermark.py",
         "tests/test_check_no_community_support_status_write.py",
         "tests/test_check_no_exists_proxy.py",
         "tests/test_check_no_log_in_sdp_window.py",
