@@ -1001,9 +1001,11 @@ def _dispatch_step(
     single run; read -> `runs`-times with a byte-level divergence metric
     (D-06, never a verdict flip); write/verify/erase -> `runs`-times with a
     marginal-on-disagreement policy (D-05/D-06); write/verify additionally
-    attach a `Fingerprint` (PATT-02 wiring, Pitfall 3 addr_base). The engine
-    sets NO VPP, builds NO wire dict, and passes NO --force -- it only calls
-    the operator's existing public methods.
+    attach a `Fingerprint` (PATT-02 wiring, Pitfall 3 addr_base). SDP
+    lock/unlock (v1.30 Phase 133 D-01/D-04, LEG-09) -> single run via
+    `_dispatch_sdp`, arm 5, LAST -- see below. The engine sets NO VPP, builds
+    NO wire dict, and passes NO --force -- it only calls the operator's
+    existing public methods.
 
     `sampler` (D-04) is threaded through unchanged to `_dispatch_multi_run`,
     the only op with a bracket site (OP_WRITE); `None` is the default and a
@@ -1029,6 +1031,25 @@ def _dispatch_step(
         return _dispatch_multi_run(
             step.op, name, eprom_data, operator, runs=runs, sampler=sampler, step=step
         )
+    # Arm 5, LAST (v1.30 Phase 133 D-04, LEG-09) -- immediately above the
+    # terminal fail-closed `return` below. The measured arm order above is
+    # OP_ID -> OP_BLANK_CHECK -> OP_READ -> _MULTI_RUN_OPS -> here, so all
+    # seven ops shipped before this phase return from arms 1-4 and NEVER
+    # evaluate this membership test at all -- proven mechanically by
+    # `tests/test_chip_test_sdp_leg.py::test_shipped_ops_never_reach_sdp_arm`
+    # (D-13b's sentinel), not merely asserted. Keys on `_SDP_OPS` membership
+    # of the op string rather than a new `Step.group` field (D-05) -- the op
+    # string already carries the distinction, the argument this module
+    # itself makes for `write-partial` above. Honest consequence, recorded
+    # rather than smoothed over: ROADMAP criterion 4's clause about "an op
+    # with `group=None` takes the exact pre-existing dispatch path" is then
+    # satisfied VACUOUSLY -- there is no `group` field, so no op has
+    # `group=None`. Criterion 4's *intent* (shipped ops behaviourally
+    # unchanged at zero added branching cost) is met by arm placement plus
+    # the sentinel test instead; the criterion's literal wording is not
+    # something this phase tests.
+    if step.op in _SDP_OPS:
+        return _dispatch_sdp(step.op, name, eprom_data, operator)
     return StepResult(
         op=step.op,
         verdict=VERDICT_BAD,
@@ -1268,6 +1289,59 @@ def _dispatch_multi_run(
         run_count=runs,
         fingerprint=fingerprint,
     )
+
+
+def _dispatch_sdp(
+    op: str, name: str, eprom_data: dict[str, Any], operator: Any
+) -> StepResult:
+    """Dispatch an SDP lock/unlock op to its matching `EpromOperator` method.
+
+    Signature is a FORWARD CONTRACT (v1.30 Phase 133 D-01, LEG-09): the same
+    first four positional parameters as `_dispatch_multi_run` --
+    `(op: str, name: str, eprom_data: dict[str, Any], operator: Any)` --
+    because ROADMAP Phase 134's "Depends on" line names this arm verbatim
+    and builds its four-step leg on it. No keyword-only parameters: SDP
+    emissions are single-run (D-03, `_MULTI_RUN_OPS` exclusion above), so
+    `runs` and `sampler` are deliberately absent here, not merely omitted by
+    oversight.
+
+    Structurally clones `_dispatch_multi_run`'s guard -> branch -> terminal
+    `raise AssertionError` shape (D-01) rather than importing/reusing it, so
+    the module gains no new idiom and criterion 5's deliberate-break test
+    gets a single choke point to attack.
+    """
+    if op not in _SDP_OPS:
+        return StepResult(
+            op=op,
+            verdict=VERDICT_BAD,
+            run_count=0,
+            reason=(
+                f"op {op!r} is not in the SDP dispatch allow-list "
+                "(_SDP_OPS) — refused fail-closed rather than falling "
+                "through to an operator mutation method"
+            ),
+        )
+
+    if op == OP_SDP_LOCK:
+        is_ok = operator.sdp_lock(name, eprom_data)
+    elif op == OP_SDP_UNLOCK:
+        is_ok = operator.sdp_unlock(name, eprom_data)
+    else:
+        # Unreachable in practice: the fail-closed `_SDP_OPS` guard above
+        # already refused any op outside {OP_SDP_LOCK, OP_SDP_UNLOCK} before
+        # this branch could be reached. Kept as an explicit `else: raise`,
+        # deliberately NOT a bare `else` -- the pre-Phase-121 shape that
+        # silently routed an unmapped op to `erase_eprom()` and reported OK
+        # is what this refuses to reintroduce (RESEARCH Pitfall 1a).
+        # `AssertionError` is not a `SerialError`, `HardwareOperationError`,
+        # or `EpromOperationError`, so `_run_step`'s D-08 except chain does
+        # not catch it and it escapes loudly -- the intended behaviour,
+        # proven by
+        # tests/test_chip_test_sdp_leg.py::
+        # test_dispatch_sdp_terminal_assertion_is_reachable_only_by_bypassing_the_guard.
+        raise AssertionError(f"unreachable: op {op!r} passed the _SDP_OPS guard")
+
+    return StepResult(op=op, verdict=VERDICT_OK if is_ok else VERDICT_BAD, run_count=1)
 
 
 # ---------------------------------------------------------------------------
