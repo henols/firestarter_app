@@ -40,6 +40,7 @@ import json
 from firestarter.chip_test import VERDICT_OK, Plan, StepResult
 from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import (
+    SCHEMA_VERSION,
     AutoCapture,
     DiagnosticReport,
     TransportHealth,
@@ -94,12 +95,15 @@ def test_detect_realistic_dev_test_body_parses():
     obj = parse_devtest_body(title, body)
 
     assert obj is not None
-    # 1.2 (Phase 121 Plan 07, D-06): bumped for the seventh op string
-    # (write-partial); this test builds a report via the CURRENT builders,
-    # so it reflects the CURRENT SCHEMA_VERSION -- the frozen b11-shaped
-    # ("1.1") fixture lives in the LEGACY section below and is never
-    # regenerated from live code.
-    assert obj["schema_version"] == "1.2"
+    # This test builds a report via the CURRENT builders, so it reflects
+    # the CURRENT SCHEMA_VERSION (imported, never restated as a literal --
+    # a v1.30 Phase 134 plan 134-06 repair: this assertion previously
+    # hardcoded "1.2" and broke the instant SCHEMA_VERSION bumped to "1.3"
+    # for LEG-12's sdp_hold_state key, exactly the single-sourcing
+    # discipline the rest of this test module already follows). The frozen
+    # b11-shaped ("1.1") fixture lives in the LEGACY section below and is
+    # never regenerated from live code.
+    assert obj["schema_version"] == SCHEMA_VERSION
     assert obj["auto_capture"]["chip"] == "M8720"
 
 
