@@ -36,6 +36,7 @@ from firestarter.channel import available_boards
 from firestarter.chip_resolver import resolve_chip
 from firestarter.chip_test import (
     OP_ID,
+    SDP_HOLD_NOT_RUN,
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
@@ -46,6 +47,8 @@ from firestarter.chip_test import (
     derive_plan,
     is_uv_eprom,
     run_plan,
+    sdp_hold_state,
+    sdp_oracle_applicable,
 )
 from firestarter.config import ConfigManager, get_config_dir
 from firestarter.constants import FLAG_CHIP_ENABLE, FLAG_OUTPUT_ENABLE
@@ -1938,6 +1941,51 @@ def _overall_exit_code(results: list[StepResult]) -> int:
     return 0
 
 
+def _dev_test_exit_code(results: list[StepResult], *, sdp_oracle_not_run: bool) -> int:
+    """`_overall_exit_code`'s D-15 extension (v1.30 Phase 134 plan 134-07,
+    LEG-12/LEG-13): an ALLOW-chip run whose SDP oracle (`write-inhibited`)
+    did NOT run gets an exit FLOOR of 2, so `firestarter dev test <chip>`
+    can no longer return 0 on a run that never exercised the oracle at all
+    (the P-04 shape: a not-run oracle filed as PASS by a community
+    reporter).
+
+    Composed the SAME WAY `_overall_exit_code` composes BAD-outranks-
+    marginal: the floor CONTRIBUTES a candidate code (`2`) into the set fed
+    to `_EXIT_CODE_PRECEDENCE`'s most-severe-first selection -- it is NEVER
+    the builtin numeric maximum applied between the observed code and the
+    floor value. That builtin, given `1` (BAD) and `2` (the floor), returns
+    `2` -- so a naive floor would re-launder a BAD run's exit 1 into exit 2,
+    recreating exactly the laundering D-14 removed. Composing it as a
+    precedence candidate instead keeps BAD's rank intact: a run that is
+    both BAD and NOT-RUN still exits 1, not 2.
+
+    Stated cost (D-15, recorded here because this is the one place a
+    future reader would look for it): `dev test`'s exit code stops being a
+    PURE function of step verdicts -- it gains exactly ONE non-verdict
+    term, this `sdp_oracle_not_run` flag.
+
+    Why the not-run oracle stays `SKIPPED` rather than becoming `marginal`
+    (D-15's own reasoning, restated at this call site): `_RAN_VERDICTS =
+    frozenset({OK, BAD, MARGINAL})` (`chip_test.py`) counts `marginal` as
+    *ran* -- recording a non-running oracle as `marginal` would hold
+    `N == M` in `count_applicable`'s ratio and defeat LEG-13 outright, the
+    exact laundering this milestone exists to stop.
+
+    The floor is ALLOW-only: callers gate `sdp_oracle_not_run` with
+    `sdp_oracle_applicable(plan)` at the call site, never here -- a REFUSE
+    chip's SDP steps read `NOT-RUN` legitimately (the oracle was never
+    applicable to begin with), and flooring that chip's exit code would
+    misrepresent a correct refusal as an inconclusive result.
+    """
+    codes = {_verdict_code(r.verdict) for r in results}
+    if sdp_oracle_not_run:
+        codes.add(2)
+    for code in _EXIT_CODE_PRECEDENCE:
+        if code in codes:
+            return code
+    return 0
+
+
 def _sanitize_chip_token(chip: str) -> str:
     """Filesystem-safe token for the dev-test-<chip>.{json,md} artifact names.
 
@@ -2200,6 +2248,11 @@ def dev_test(app: "AppContext", chip: str) -> None:
     results = run_plan(plan, app.eprom_operator, app.db, sampler=sampler)
     report.results = results
     report.banner = count_applicable(plan, results)
+    # LEG-12: the derive-in-engine / assign-in-handler seam. `sdp_hold_state`
+    # is computed in chip_test.py (the engine); this line only ASSIGNS it,
+    # matching every other derived field above and below (never computed
+    # inline here).
+    report.sdp_hold_state = sdp_hold_state(plan, results)
 
     full = app.db.get_eprom(chip)
     if full:
@@ -2251,5 +2304,12 @@ def dev_test(app: "AppContext", chip: str) -> None:
 
     if not results:
         sys.exit(0)
-    code = _overall_exit_code(results)
+    # D-15: the exit floor is ALLOW-only -- `sdp_oracle_applicable(plan)`
+    # gates it, so a REFUSE chip's legitimate `NOT-RUN` (the oracle was
+    # never applicable) is never floored.
+    code = _dev_test_exit_code(
+        results,
+        sdp_oracle_not_run=sdp_oracle_applicable(plan)
+        and report.sdp_hold_state.startswith(SDP_HOLD_NOT_RUN),
+    )
     sys.exit(code)
