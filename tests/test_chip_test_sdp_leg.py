@@ -149,6 +149,7 @@ from firestarter.chip_test import (
     _FF_RATIO_THRESHOLD,
     _MULTI_RUN_OPS,
     _SDP_LEG_OPS,
+    _SDP_LEG_STEP_ORDER,
     _SDP_OPS,
     FP_BLANK_CONTACT,
     FP_INDETERMINATE,
@@ -168,6 +169,7 @@ from firestarter.chip_test import (
     OP_WRITE_RESTORED,
     VERDICT_BAD,
     VERDICT_MARGINAL,
+    VERDICT_NA,
     VERDICT_OK,
     VERDICT_SKIPPED,
     Plan,
@@ -192,6 +194,7 @@ from firestarter.exceptions import (
     SerialError,
     SerialTimeoutError,
 )
+from firestarter.sdp_capability import sdp_capability
 from firestarter.sdp_honesty import unreadable_state_caveat
 
 # ---------------------------------------------------------------------------
@@ -1798,4 +1801,219 @@ def test_lock_ran_then_gate_closes():
         "OP_SDP_UNLOCK must stay OUT of _DESTRUCTIVE_OPS: were it a "
         "member, a closing gate could skip a plan-derived unlock step and "
         "ship a locked part to the caller (133-CONTEXT.md D-11, LEG-09)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# LEG-01/LEG-02/LEG-04 full-population proofs (v1.30 Phase 134, plan 134-03).
+#
+# `_allow_refuse_populations()` sources both lists from the production
+# `sdp_capability_for_entry` predicate over the LIVE database -- the same
+# way tests/test_sdp_db_invariant.py's own `_partition_0x0d` does -- never
+# a hardcoded name list, so a future DB change that moves a chip between
+# ALLOW/REFUSE is caught here too. `derive_plan`'s own emission is still
+# proven against the two-argument `sdp_capability(name, db)` (the real
+# derivation source, LEG-01) in the tests below -- this helper exists only
+# to enumerate the populations cheaply (one DB pass, not one lookup per
+# candidate name).
+# ---------------------------------------------------------------------------
+
+
+def _allow_refuse_populations() -> tuple[list[str], list[str]]:
+    from firestarter.sdp_capability import sdp_capability_for_entry
+
+    allow: list[str] = []
+    refuse: list[str] = []
+    for full in _REAL_DB.get_eproms():
+        name = full["name"]
+        allowed, _reason = sdp_capability_for_entry(full, name)
+        (allow if allowed else refuse).append(name)
+    return allow, refuse
+
+
+def test_allow_refuse_populations_sum_to_full_and_allow_nonempty():
+    """Population-count sanity: ALLOW and REFUSE sum to the FULL
+    SDP-classified population (every chip in the live DB is classified one
+    way or the other -- `sdp_capability` never refuses to answer) and
+    ALLOW is non-empty -- both numbers derived from the live DB, never
+    restated as literals in an assertion. Measured at plan time: 43 ALLOW /
+    41 REFUSE / 84 total among the protocol-0x0D subset (comment only, not
+    asserted as a literal here)."""
+    all_eproms = _REAL_DB.get_eproms()
+    allow, refuse = _allow_refuse_populations()
+
+    assert len(allow) + len(refuse) == len(all_eproms), (
+        f"ALLOW ({len(allow)}) + REFUSE ({len(refuse)}) != total DB entries "
+        f"({len(all_eproms)}) -- some chip fell through uncategorised"
+    )
+    assert len(allow) > 0, "the ALLOW population must be non-empty"
+
+
+def test_derive_plan_allow_population_emits_six_supported_ops():
+    """LEG-01 (`-k "derive and allow"`): every ALLOW chip's
+    write_scope="full" plan carries exactly the six ops of
+    _SDP_LEG_STEP_ORDER, all supported=True. The count is asserted via
+    len(_SDP_LEG_STEP_ORDER), never a literal 6 (P-08 -- the order tuple
+    is the single source)."""
+    allow, _refuse = _allow_refuse_populations()
+    assert allow, "the ALLOW population must be non-empty (measured 43)"
+
+    offenders = []
+    for name in allow:
+        plan = derive_plan(name, _REAL_DB, write_scope="full")
+        leg_steps = [s for s in plan.steps if s.op in _SDP_LEG_STEP_ORDER]
+        leg_ops = [s.op for s in leg_steps]
+        if leg_ops != list(_SDP_LEG_STEP_ORDER) or not all(
+            s.supported for s in leg_steps
+        ):
+            offenders.append((name, leg_ops, [s.supported for s in leg_steps]))
+
+    assert not offenders, (
+        f"{len(offenders)} ALLOW chip(s) did not derive the full "
+        f"{len(_SDP_LEG_STEP_ORDER)}-op supported SDP leg (showing up to "
+        f"5): {offenders[:5]}"
+    )
+
+
+def test_derive_plan_allow_dev_test_exposes_zero_cli_options():
+    """LEG-01: no new CLI option -- `dev test`'s Click command still
+    exposes ZERO `click.Option` instances. Asserted STRUCTURALLY by
+    inspecting the registered Click command's `params` -- an exit-code-only
+    check would pass vacuously even if an option were added with a
+    harmless default."""
+    import click
+
+    import firestarter.cli_handlers as cli_handlers_mod
+
+    options = [
+        p for p in cli_handlers_mod.dev_test.params if isinstance(p, click.Option)
+    ]
+    assert options == [], (
+        f"dev_test carries {len(options)} click.Option instance(s): "
+        f"{options!r} -- LEG-01 requires `dev test` to keep ZERO options"
+    )
+
+
+def test_derive_plan_allow_flips_supported_when_sdp_capability_patched(monkeypatch):
+    """LEG-01: `sdp_capability` is the DERIVATION source, not a coincidence
+    -- patch it to return a REFUSE tuple for a chip that is REALLY ALLOW,
+    and assert the derived SDP-leg steps flip to supported=False. This
+    proves derivation, not coincidence: a `derive_plan` that happened to
+    hardcode the same 43 names would not react to this patch at all."""
+    import firestarter.chip_test as chip_test_mod
+
+    allow, _refuse = _allow_refuse_populations()
+    name = allow[0]
+    allowed_real, _reason_real = sdp_capability(name, _REAL_DB)
+    assert allowed_real is True, f"fixture setup error: {name} is not really ALLOW"
+
+    monkeypatch.setattr(
+        chip_test_mod,
+        "sdp_capability",
+        lambda chip_name, db: (False, "patched: forced REFUSE for this test"),
+    )
+
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    leg_steps = [s for s in plan.steps if s.op in _SDP_LEG_STEP_ORDER]
+    assert len(leg_steps) == len(_SDP_LEG_STEP_ORDER)
+    assert all(not s.supported for s in leg_steps), (
+        f"{name} is really ALLOW, but with sdp_capability patched to "
+        "return REFUSE, derive_plan's SDP-leg steps did not flip to "
+        "supported=False -- derive_plan is not actually calling "
+        "sdp_capability as its derivation source"
+    )
+    assert all(s.reason == "patched: forced REFUSE for this test" for s in leg_steps)
+
+
+def test_derive_plan_refuse_population_emits_six_na_steps_with_reason():
+    """LEG-02 (`-k "derive and refuse"`): every REFUSE chip's
+    write_scope="full" plan carries the same six ops, all supported=False,
+    each `reason` EQUAL TO `sdp_capability(name, db)[1]` (identity against
+    the live function, never a substring match). Count pinned at
+    len(_SDP_LEG_STEP_ORDER), never a literal 6."""
+    _allow, refuse = _allow_refuse_populations()
+    assert refuse, "the REFUSE population must be non-empty (measured 41)"
+
+    offenders = []
+    for name in refuse:
+        plan = derive_plan(name, _REAL_DB, write_scope="full")
+        leg_steps = [s for s in plan.steps if s.op in _SDP_LEG_STEP_ORDER]
+        leg_ops = [s.op for s in leg_steps]
+        _allowed, expected_reason = sdp_capability(name, _REAL_DB)
+        if (
+            leg_ops != list(_SDP_LEG_STEP_ORDER)
+            or any(s.supported for s in leg_steps)
+            or any(s.reason != expected_reason for s in leg_steps)
+        ):
+            offenders.append(name)
+
+    assert not offenders, (
+        f"{len(offenders)} REFUSE chip(s) did not derive six NA SDP-leg "
+        f"steps carrying sdp_capability()'s own reason verbatim (showing "
+        f"up to 5): {offenders[:5]}"
+    )
+
+
+def test_derive_plan_refuse_run_plan_reports_na_with_no_operator_call():
+    """LEG-02: `run_plan` turns a REFUSE chip's six unsupported SDP-leg
+    steps into VERDICT_NA with NO operator call at all -- run_plan's
+    existing NA path, zero new machinery. M8720 is a measured REFUSE chip
+    (protocol 0x08 != 0x0D)."""
+    allowed, _reason = sdp_capability("M8720", _REAL_DB)
+    assert allowed is False, "fixture setup error: M8720 is not really REFUSE"
+
+    operator = _mock_operator()
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    leg_results = [r for r in results if r.op in _SDP_LEG_STEP_ORDER]
+    assert len(leg_results) == len(_SDP_LEG_STEP_ORDER)
+    assert all(r.verdict == VERDICT_NA for r in leg_results)
+    operator.sdp_lock.assert_not_called()
+    operator.sdp_unlock.assert_not_called()
+    # M8720's write_scope="full" plan ALSO carries the shipped (non-SDP)
+    # "write" step, which legitimately calls write_eprom `runs` (2) times --
+    # asserting a blanket "never called" here would be wrong. The load-
+    # bearing claim is that the SIX SDP-leg steps add NO further calls: the
+    # write-shaped ones (write-baseline-b/a, write-inhibited, write-restored)
+    # are unsupported/NA for a REFUSE chip, so they never reach
+    # `_dispatch_sdp_leg`'s own `operator.write_eprom(...)` call at all.
+    assert operator.write_eprom.call_count == 2, (
+        f"write_eprom was called {operator.write_eprom.call_count} time(s), "
+        "expected exactly 2 (the shipped write step's own runs=2) -- any "
+        "more would mean an unsupported SDP-leg step reached the operator"
+    )
+
+
+def test_derive_plan_baseline_transition_ordering():
+    """LEG-04 (`baseline_transition`): the ordering contract for an ALLOW
+    chip's write_scope="full" plan -- write-baseline-b and
+    write-baseline-a both appear STRICTLY BEFORE sdp-lock; write-inhibited
+    appears strictly after sdp-lock and strictly before sdp-unlock;
+    write-restored is the LAST step in the plan; both baseline directions
+    are present (a single-direction baseline is what D-07 rejected).
+
+    Why the B direction is load-bearing: pattern A is already what the
+    shipped `write` step writes, so a chip already holding A with a DEAD
+    write path would pass an A-only baseline -- the B direction is the
+    entire discriminating power (proven end to end by
+    test_dead_write_path_baseline_b_is_bad, above)."""
+    allow, _refuse = _allow_refuse_populations()
+    name = allow[0]
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    ops = [s.op for s in plan.steps]
+
+    assert OP_WRITE_BASELINE_B in ops and OP_WRITE_BASELINE_A in ops, (
+        "both baseline directions must be present -- a single-direction "
+        "baseline is what D-07 rejected"
+    )
+    assert ops.index(OP_WRITE_BASELINE_B) < ops.index(OP_SDP_LOCK)
+    assert ops.index(OP_WRITE_BASELINE_A) < ops.index(OP_SDP_LOCK)
+    assert ops.index(OP_WRITE_INHIBITED) > ops.index(OP_SDP_LOCK)
+    assert ops.index(OP_WRITE_INHIBITED) < ops.index(OP_SDP_UNLOCK)
+    assert ops[-1] == OP_WRITE_RESTORED, (
+        f"write-restored must be the LAST step in the plan (D-06's whole "
+        f"point -- it is the only step producing evidence the part was "
+        f"left writable), got {ops[-1]!r}"
     )
