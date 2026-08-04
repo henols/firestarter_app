@@ -537,11 +537,17 @@ def test_handler_function_names_contains_the_new_uv_scope_helpers() -> None:
 # `dev_test`'s own body -- the exit computation now calls `_overall_exit_code`
 # (which itself calls `_verdict_code` internally), so the body-only
 # derivation swaps one name for the other; the count stays six.
+#
+# v1.30 Phase 134 plan 134-07 (D-15): `_overall_exit_code` is in turn no
+# longer called directly from `dev_test`'s own body -- the exit computation
+# now calls `_dev_test_exit_code` (which itself calls `_verdict_code`
+# internally, mirroring `_overall_exit_code`'s own shape), so the body-only
+# derivation swaps THIS name too; the count stays six.
 _EXPECTED_DEV_TEST_REFERENCED_HELPERS = {
     "_chip_id_fields",
+    "_dev_test_exit_code",
     "_is_interactive",
     "_make_sampler",
-    "_overall_exit_code",
     "_resolve_write_scope",
     "_sanitize_chip_token",
 }

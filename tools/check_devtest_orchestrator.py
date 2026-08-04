@@ -154,6 +154,7 @@ _HANDLER_FUNCTION_NAMES = frozenset(
         "dev_test",
         "_verdict_code",
         "_overall_exit_code",
+        "_dev_test_exit_code",
         "_sanitize_chip_token",
         "_is_uv_eprom",
         "_resolve_write_scope",
