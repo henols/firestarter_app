@@ -298,6 +298,16 @@ OP_WRITE_PARTIAL = "write-partial"
 OP_VERIFY = "verify"
 OP_ERASE = "erase"
 
+# SDP lock/unlock op strings (v1.30 Phase 133 D-02, LEG-09). Exactly two --
+# Phase 133 defines only the two ops its own mechanism criteria exercise;
+# Phase 134's other leg ops are deliberately NOT pre-defined here (`ruff`'s
+# `F` rules do not flag unused module-level constants, so extra constants
+# would be genuinely dead code for a whole phase). Engine-local op strings,
+# NOT wire constants -- no `constants.py` / `firestarter.h` mirroring is
+# triggered by adding these.
+OP_SDP_LOCK = "sdp-lock"
+OP_SDP_UNLOCK = "sdp-unlock"
+
 
 @dataclass
 class Step:
@@ -637,7 +647,19 @@ VERDICT_MARGINAL = "marginal"
 # this frozenset would write to a misidentified chip ungated by the chip-ID
 # mismatch check, which is a critical-severity correctness bug, not a
 # cosmetic omission.
-_DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE})
+#
+# `OP_SDP_LOCK` joins it here too (v1.30 Phase 133 D-11, LEG-09): a lock
+# applied to a MISIDENTIFIED chip is exactly the harm this gate exists to
+# prevent, and membership is also what makes criterion 3's
+# gate-closed-from-the-start case observable at all -- a lock that cannot be
+# gated can never be SKIPPED. `OP_SDP_UNLOCK` is deliberately ABSENT: a
+# destructive gate closing AFTER the lock succeeded must never be able to
+# skip the unlock and ship a locked part. That asymmetry IS LEG-09. In Phase
+# 133 this absence is forward-protection for Phase 134 (where the unlock
+# becomes step 4 of the derived leg) -- it is NOT a live Phase 133 path,
+# because this phase derives no SDP step; the unlock here is only reachable
+# via a directly-constructed test Step or the cleanup registry (133-04).
+_DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE, OP_SDP_LOCK})
 # LIVE DISPATCH ALLOW-LIST (121-02, T-121-05/06/07). Originally documented as
 # only the N>=2 disagreement-policy set (D-06: destructive/verify ONLY --
 # write, erase, verify; read disagreement is a divergence metric, never a
@@ -655,7 +677,29 @@ _DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE})
 # too -- any future op added to the vocabulary MUST be added to both
 # frozensets in this block or it fails closed by construction (proven by a
 # deliberate-break test, plan 121-06 Task 3).
+#
+# `OP_SDP_LOCK`/`OP_SDP_UNLOCK` are DELIBERATELY EXCLUDED here (v1.30 Phase
+# 133 D-03, LEG-09) -- and the exclusion is one of plan 133-06's asserted
+# parity exemptions, not an omission: running a lock twice is a second
+# mutation with no comparison value, and this set's marginal-on-disagreement
+# policy is meaningless for an emission whose result cannot be read back at
+# all -- SDP protection state is not readable on this family (Phase 117 D-05,
+# Phase 119 D-12). SDP emissions are single-run; they dispatch through
+# `_dispatch_sdp` instead (`_SDP_OPS`, below).
 _MULTI_RUN_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE, OP_VERIFY})
+
+# LIVE DISPATCH ALLOW-LIST for the SDP arm (v1.30 Phase 133 D-01/D-02,
+# LEG-09). `_dispatch_sdp` refuses any op outside this frozenset. A module
+# constant is used rather than a DB field because anything that widens a
+# blast radius is an engine constant in this module (the
+# `_WRITE_REGION_LENGTH` / `_UV_WRITE_REGION_LENGTH` precedent) -- a
+# DB-supplied op string could otherwise smuggle in an op this module never
+# vetted. This module's own known failure mode is a documented-but-dead
+# frozenset -- `_MULTI_RUN_OPS` once shipped with ZERO references tree-wide
+# (RESEARCH C-5 / Open Question 4, above) -- so `_SDP_OPS` is referenced by
+# live code in `_dispatch_step`'s arm 5, and that reference is exercised by
+# `tests/test_chip_test_sdp_leg.py::test_dispatch_sdp_maps_bool_to_verdict`.
+_SDP_OPS = frozenset({OP_SDP_LOCK, OP_SDP_UNLOCK})
 
 _DESTRUCTIVE_GATE_REASON = (
     "chip-ID mismatch — destructive steps gated (chip left pristine)"
