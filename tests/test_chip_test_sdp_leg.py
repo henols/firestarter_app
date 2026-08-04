@@ -177,6 +177,7 @@ from firestarter.chip_test import (
     _dispatch_sdp,
     _dispatch_sdp_leg,
     classify_fingerprint,
+    count_applicable,
     derive_plan,
     generate_inhibited_pattern,
     generate_pattern,
@@ -2017,3 +2018,74 @@ def test_derive_plan_baseline_transition_ordering():
         f"point -- it is the only step producing evidence the part was "
         f"left writable), got {ops[-1]!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# D-18's write_scope="none" proofs (v1.30 Phase 134, plan 134-03, Task 3).
+# write_scope="none" is UNREACHABLE from `dev test` since Phase 121's
+# reversal (`_resolve_write_scope` returns only "full"/"partial") -- these
+# two tests are library/test surface, never a live gate.
+# ---------------------------------------------------------------------------
+
+
+def test_allow_write_scope_none_locks_six_sdp_leg_steps_and_moves_the_banner():
+    """D-18: an ALLOW chip's write_scope="none" plan carries NONE of the
+    six SDP-leg ops in `plan.steps` -- all six go to the advisory
+    `locked_destructive` list instead (mirroring the shipped write/verify/
+    erase treatment), each carrying a non-empty reason. These entries DO
+    count toward `count_applicable`'s M (called here, never edited), so
+    `n_ran < m_applicable` and the banner fires -- MEASURING D-18's stated
+    polarity rather than merely asserting it in prose."""
+    name = "AT28C256"
+    allowed, _reason = sdp_capability(name, _REAL_DB)
+    assert allowed is True, f"fixture setup error: {name} is not really ALLOW"
+
+    plan = derive_plan(name, _REAL_DB, write_scope="none")
+    ops = [s.op for s in plan.steps]
+    leg_ops_in_steps = [op for op in ops if op in _SDP_LEG_STEP_ORDER]
+    assert not leg_ops_in_steps, (
+        f"write_scope='none' must OMIT the six SDP-leg ops from plan.steps "
+        f"entirely (D-18); found: {leg_ops_in_steps}"
+    )
+
+    locked_leg_entries = [
+        (op, reason)
+        for op, reason in plan.locked_destructive
+        if op in _SDP_LEG_STEP_ORDER
+    ]
+    assert len(locked_leg_entries) == len(_SDP_LEG_STEP_ORDER)
+    assert {op for op, _r in locked_leg_entries} == set(_SDP_LEG_STEP_ORDER)
+    assert all(reason for _op, reason in locked_leg_entries), (
+        "every locked SDP-leg entry must carry a non-empty reason"
+    )
+
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+    counts = count_applicable(plan, results)
+    assert counts.n_ran < counts.m_applicable, (
+        f"D-18's stated polarity (the N-of-M banner fires) is not "
+        f"measured: n_ran={counts.n_ran}, m_applicable={counts.m_applicable}"
+    )
+
+
+def test_refuse_write_scope_none_is_byte_identical_to_pre_phase134():
+    """D-18 refinement (Claude's Discretion, taken on four measurements --
+    134-CONTEXT.md D-18, recorded again in 134-03-SUMMARY.md): a REFUSE
+    chip's write_scope="none" plan is BYTE-IDENTICAL to before this phase
+    -- exactly the three shipped `locked_destructive` entries, and NO
+    SDP-leg entries at all (neither a step nor a `locked_destructive`
+    entry). This is the branch that keeps LEG-10's named proof
+    (`test_empty_registry_noop`, above) green, and it is library/test
+    surface only: `write_scope="none"` is unreachable from a real `dev
+    test` run since Phase 121's reversal."""
+    name = "M8720"
+    allowed, _reason = sdp_capability(name, _REAL_DB)
+    assert allowed is False, f"fixture setup error: {name} is not really REFUSE"
+
+    plan = derive_plan(name, _REAL_DB, write_scope="none")
+    assert [s.op for s in plan.steps] == ["id", "read", "blank-check"]
+    assert plan.locked_destructive == [
+        (OP_WRITE, 'write_scope="none": write omitted (D-01)'),
+        (OP_VERIFY, 'write_scope="none": verify omitted (D-01)'),
+        (OP_ERASE, 'write_scope="none": erase omitted (D-01)'),
+    ]
