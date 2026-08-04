@@ -39,15 +39,25 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 from click.testing import CliRunner
 
-from firestarter.cli_handlers import _ALWAYS_WRITES_NOTICE, cli
+from firestarter.chip_test import (
+    SDP_HOLD_HELD,
+    SDP_HOLD_NOT_HELD,
+    SDP_HOLD_NOT_RUN,
+    VERDICT_OK,
+    StepResult,
+)
+from firestarter.cli_handlers import _ALWAYS_WRITES_NOTICE, _dev_test_exit_code, cli
 from firestarter.config import get_config_dir
+from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
 from firestarter.eprom_operations import EpromOperator
+from firestarter.exceptions import ChipNotFoundError
 from firestarter.hardware import HardwareManager
 
 from .conftest import make_app_context
@@ -178,6 +188,106 @@ def make_leaked_lock_operator(
     operator.sdp_lock.return_value = sdp_lock_ok
     operator.sdp_unlock.return_value = sdp_unlock_ok
     return operator
+
+
+def make_held_lock_operator(
+    *,
+    sdp_lock_ok: bool = True,
+    sdp_unlock_ok: bool = True,
+) -> Mock:
+    """A read-back-capable ALLOW-chip operator simulating a GENUINELY HELD
+    SDP lock (v1.30 Phase 134 plan 134-07, LEG-12's HELD case): every
+    `write_eprom` call persists the bytes it is given EXCEPT the one call
+    carrying `FLAG_SKIP_SDP_UNLOCK` (`_dispatch_sdp_leg`'s `OP_WRITE_INHIBITED`
+    arm sets this flag on that call ONLY, per D-01) -- that call returns
+    `True` (the state machine completed and the ack was observed, D-01's
+    precondition signal) but does NOT persist, simulating a die that refuses
+    the write internally. `read_eprom` always returns whatever was most
+    recently persisted, so the inhibited step's own read-back stays pattern
+    A (unchanged) -- the oracle's `HELD` verdict, per D-03's `(True, A) ->
+    OK` arm.
+
+    A SEPARATE double from `make_leaked_lock_operator` above (whose
+    `write_eprom` persists EVERY call unconditionally, including the
+    inhibited one -- LEG-06's `NOT-HELD` shape). No fixture in this
+    milestone can simulate a genuinely locked die (the Evidence Ceiling,
+    `.planning/REQUIREMENTS.md`); this is the closest honest proxy for the
+    opposite outcome from `make_leaked_lock_operator`.
+    """
+    state: dict[str, bytes] = {"data": b""}
+
+    def _write(name, eprom_data, source_path, flags=0):
+        payload = Path(source_path).read_bytes()
+        if flags & FLAG_SKIP_SDP_UNLOCK:
+            # The inhibited-write call (D-01's one narrowing): the part
+            # refuses the write internally -- state stays unchanged -- but
+            # the state machine still completes and the ack is observed.
+            return True
+        state["data"] = payload
+        return True
+
+    def _read(name, eprom_data, output_file=None, **kwargs):
+        if output_file is not None:
+            Path(output_file).write_bytes(state["data"])
+        return True
+
+    operator = Mock(spec=EpromOperator)
+    operator.check_eprom_id.return_value = (True, None)
+    operator.check_eprom_blank.return_value = True
+    operator.verify_eprom.return_value = True
+    operator.erase_eprom.return_value = True
+    operator.write_eprom.side_effect = _write
+    operator.read_eprom.side_effect = _read
+    operator.sdp_lock.return_value = sdp_lock_ok
+    operator.sdp_unlock.return_value = sdp_unlock_ok
+    return operator
+
+
+def make_clean_notrun_operator() -> Mock:
+    """An ALLOW-chip operator whose `write_eprom` raises `ChipNotFoundError`
+    on every call (v1.30 Phase 134 plan 134-07, D-15 item 1's fixture): the
+    ONE route that puts the SDP oracle into `NOT-RUN` with ZERO `BAD`/
+    `marginal` verdicts ANYWHERE in the run, so D-15's exit floor's own
+    contribution is observable in isolation from D-14's BAD-outranks-
+    marginal precedence (the BAD+NOT-RUN pin below exercises that
+    interaction separately).
+
+    `ChipNotFoundError` (unlike `ChipNotImplementedError`, ALSO raiseable
+    here but a subclass of `EpromOperationError` and so caught by that
+    EARLIER, BAD-mapping `except` clause first -- measured, not assumed)
+    is a bare `Exception` subclass, so `_run_step`'s belt-and-suspenders
+    `except (ChipNotImplementedError, ChipNotFoundError)` clause -- written
+    for "a resolve-time-only exception raised instead during dispatch" --
+    is the one reached, mapping the step to `SKIPPED` via `_skip_result`,
+    never `BAD`. Every `write_eprom`-dispatched step (the shipped `write`,
+    both baseline directions) SKIPs the same way; `_baseline_closes_sdp_gate`
+    treats `SKIPPED` as gate-closing exactly like `BAD`/`marginal` (D-08's
+    "a contact fault is as disqualifying as a dead write path"), so the
+    four `_SDP_LEG_GATED_OPS` -- including `write-inhibited` -- SKIP too,
+    all with ZERO `BAD`/`marginal` in the whole run. `read`/`verify`
+    (neither dispatches through `write_eprom`) stay `OK`.
+    """
+    operator = Mock(spec=EpromOperator)
+    operator.check_eprom_id.return_value = (True, None)
+    operator.check_eprom_blank.return_value = True
+    operator.write_eprom.side_effect = ChipNotFoundError(
+        "simulated: operation not implemented on this host build (test fixture)"
+    )
+    operator.verify_eprom.return_value = True
+    operator.erase_eprom.return_value = True
+    operator.read_eprom.return_value = True
+    return operator
+
+
+def _normalize_console_text(output: str) -> str:
+    """Strip Rich's box-drawing borders and collapse whitespace so a
+    substring assertion survives BOTH column padding and Rich's own
+    word-wrapping of a long cell (e.g. `sdp_hold_state`'s `NOT-RUN` reason,
+    which wraps across three console lines at the default width) into one
+    logical line. Presence-only -- never used for a byte-exact assertion.
+    """
+    stripped = re.sub(r"[│┃┏┓┗┛┡┩┳┻╇━┌┐└┘├┤┬┴┼─]", " ", output)
+    return " ".join(stripped.split())
 
 
 def make_hardware_manager(
@@ -866,3 +976,216 @@ class TestExitPrecedenceLeg06:
         assert verdicts["sdp-lock"] == "OK", verdicts
         assert verdicts["sdp-unlock"] == "OK", verdicts
         assert verdicts["write-restored"] == "OK", verdicts
+
+
+# ---------------------------------------------------------------------------
+# LEG-12 (v1.30 Phase 134 plan 134-07): the HELD/NOT-HELD/NOT-RUN(reason)
+# hold state, both surfaces, end to end through the real CLI. Evidence
+# Ceiling (`.planning/REQUIREMENTS.md`): every fixture below pins the host's
+# RESPONSE to a scripted read-back -- a locked die is unrepresentable in
+# either repo's stubs, so the causal claim "the lock inhibited the write" is
+# NOT provable this milestone. These tests prove the REPORTED value reaches
+# both surfaces correctly, never that a real part was physically inhibited.
+# ---------------------------------------------------------------------------
+
+
+class TestHoldStateLeg12:
+    """`report.sdp_hold_state = sdp_hold_state(plan, results)` (the
+    derive-in-engine / assign-in-handler seam this plan wires) reaches BOTH
+    the console (`render()`'s own row, D-07) and the JSON artifact
+    (`to_dict()`'s `sdp_hold_state` key, plan 134-06) for every one of the
+    three values. Each assertion checks the JSON artifact with a STRICT
+    equality against the imported `SDP_HOLD_*` constant (never a retyped
+    literal) and the console with a substring check on the NORMALIZED text
+    (`_normalize_console_text` strips Rich's box-drawing borders and
+    collapses word-wrapping) -- `NOT-HELD` contains the substring `HELD`,
+    so the console checks below assert the `sdp_hold_state ` PREFIX
+    together with the value, never a bare `"HELD" in output` that a
+    NOT-HELD run would also satisfy."""
+
+    def test_hold_state_held_reaches_both_surfaces(self, runner: CliRunner) -> None:
+        """HELD: the inhibited write is correctly refused (read-back stays
+        pattern A, D-03's `(True, A) -> OK` arm) -- `sdp_hold_state` reads
+        `HELD` in both surfaces, and the run exits 0 (no floor applies)."""
+        operator = make_held_lock_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        assert result.exit_code == 0, result.output
+        data = _load_report(_CHIP_ALLOW)
+        assert data["sdp_hold_state"] == SDP_HOLD_HELD, data["sdp_hold_state"]
+        normalized = _normalize_console_text(result.output)
+        assert "sdp_hold_state HELD" in normalized, normalized
+
+    def test_hold_state_not_held_reaches_both_surfaces(self, runner: CliRunner) -> None:
+        """NOT-HELD: the leaked-lock operator's inhibited write genuinely
+        lands (read-back equals B, D-03's `(True, B) -> BAD` arm) --
+        `sdp_hold_state` reads `NOT-HELD` in both surfaces (LEG-06's own
+        shape, now proven at the hold-state field too, not just the step
+        verdict `test_leaked_lock_exits_1` already pins)."""
+        operator = make_leaked_lock_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        data = _load_report(_CHIP_ALLOW)
+        assert data["sdp_hold_state"] == SDP_HOLD_NOT_HELD, data["sdp_hold_state"]
+        normalized = _normalize_console_text(result.output)
+        assert "sdp_hold_state NOT-HELD" in normalized, normalized
+
+    def test_hold_state_not_run_reason_reaches_both_surfaces(
+        self, runner: CliRunner
+    ) -> None:
+        """NOT-RUN: the dead-write-path operator (`make_clean_operator`'s
+        `read_eprom` never persists real bytes, so the baseline read-back
+        length-gates BAD) closes D-08's baseline gate before `write-
+        inhibited` is ever dispatched. `sdp_hold_state` reads
+        `NOT-RUN: <reason>` in BOTH surfaces, with the REASON itself
+        surviving into both -- LEG-12 says `NOT-RUN(reason)`, and a reason
+        reaching only the JSON is half the requirement. Also demonstrates
+        the phase's central safety property end to end
+        (`operator.sdp_lock.assert_not_called()`) and the banner's dropped
+        ratio (`n_ran < m_applicable`, LEG-13's own mechanism, D-15)."""
+        operator = make_clean_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        data = _load_report(_CHIP_ALLOW)
+        hold_state = data["sdp_hold_state"]
+        assert hold_state.startswith(f"{SDP_HOLD_NOT_RUN}:"), hold_state
+        reason = hold_state.split(":", 1)[1].strip()
+        assert reason, hold_state  # non-empty reason, never a bare "NOT-RUN:"
+        normalized = _normalize_console_text(result.output)
+        assert f"sdp_hold_state {hold_state}" in normalized, normalized
+        operator.sdp_lock.assert_not_called()
+        banner = data["banner"]
+        assert banner["n_ran"] < banner["m_applicable"], banner
+
+
+# ---------------------------------------------------------------------------
+# D-15 (v1.30 Phase 134 plan 134-07): the exit-floor composition, pinned in
+# every order assumption A3 names. `pytest -k "exit"` selects these
+# alongside `TestExitPrecedenceLeg06` above.
+# ---------------------------------------------------------------------------
+
+
+class TestExitFloorD15:
+    """`_dev_test_exit_code`'s ALLOW-only floor: a NOT-RUN oracle on an
+    ALLOW chip can no longer exit 0, but the floor never outranks a BAD
+    step (D-14's precedence stays on top), and a REFUSE chip's legitimate
+    NOT-RUN is never floored at all."""
+
+    def test_clean_notrun_floors_to_2(self, runner: CliRunner) -> None:
+        """ALLOW chip, oracle NOT-RUN, NO BAD and NO marginal anywhere in
+        the run -- exit 2, purely from D-15's floor (without it, the
+        codes-observed set would be `{0}` and this run would exit 0, the
+        exact P-04 shape this milestone exists to stop: `firestarter dev
+        test at28c256` returning 0 and being filed as PASS)."""
+        operator = make_clean_notrun_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        data = _load_report(_CHIP_ALLOW)
+        verdicts = {s["verdict"] for s in data["steps"]}
+        assert "BAD" not in verdicts, verdicts
+        assert "marginal" not in verdicts, verdicts
+        assert data["sdp_hold_state"].startswith(f"{SDP_HOLD_NOT_RUN}:")
+        assert result.exit_code == 2, result.output
+
+    def test_bad_and_notrun_exits_1_not_2(self, runner: CliRunner) -> None:
+        """ALLOW chip, oracle NOT-RUN AND a BAD step (the dead-write-path
+        operator's baseline BAD closes the gate) -- exit 1, never 2. A
+        naive `max(code, 2)` would return 2 here (`max(1, 2) == 2`),
+        re-creating exactly the laundering D-14 removed; composing the
+        floor as a precedence CANDIDATE instead keeps BAD's rank intact."""
+        operator = make_clean_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        data = _load_report(_CHIP_ALLOW)
+        verdicts = {s["verdict"] for s in data["steps"]}
+        assert "BAD" in verdicts, verdicts
+        assert data["sdp_hold_state"].startswith(f"{SDP_HOLD_NOT_RUN}:")
+        assert result.exit_code == 1, result.output
+
+    def test_marginal_and_notrun_exits_2(self, runner: CliRunner) -> None:
+        """ALLOW chip, oracle NOT-RUN and a `marginal` step (an all-zero
+        baseline read-back: correct length, degenerate content, D-04's
+        content-degeneracy arm) -- exit 2, same as the clean-floor case
+        above, but this run reaches 2 via `_EXIT_CODE_PRECEDENCE`'s
+        `marginal` code directly, not solely via the floor -- both routes
+        to 2 must agree."""
+
+        def _all_zero_read(name, eprom_data, output_file=None, **kwargs):
+            if output_file is not None:
+                Path(output_file).write_bytes(b"\x00" * 256)
+            return True
+
+        operator = Mock(spec=EpromOperator)
+        operator.check_eprom_id.return_value = (True, None)
+        operator.check_eprom_blank.return_value = True
+        operator.write_eprom.return_value = True
+        operator.verify_eprom.return_value = True
+        operator.erase_eprom.return_value = True
+        operator.read_eprom.side_effect = _all_zero_read
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        data = _load_report(_CHIP_ALLOW)
+        verdicts = {s["verdict"] for s in data["steps"]}
+        assert "BAD" not in verdicts, verdicts
+        assert "marginal" in verdicts, verdicts
+        assert data["sdp_hold_state"].startswith(f"{SDP_HOLD_NOT_RUN}:")
+        assert result.exit_code == 2, result.output
+
+    def test_refuse_chip_notrun_exits_0(self, runner: CliRunner) -> None:
+        """A REFUSE chip (`_CHIP_NO_ID`, `sdp_capability() -> False`) whose
+        hold state reads NOT-RUN, with no BAD or marginal step, exits 0 --
+        the floor is `sdp_oracle_applicable(plan)`-gated, so a REFUSE
+        chip's legitimate NOT-RUN (the oracle was never applicable to
+        begin with) is never floored."""
+        operator = make_clean_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        data = _load_report(_CHIP_NO_ID)
+        verdicts = {s["verdict"] for s in data["steps"]}
+        assert "BAD" not in verdicts, verdicts
+        assert "marginal" not in verdicts, verdicts
+        assert data["sdp_hold_state"].startswith(f"{SDP_HOLD_NOT_RUN}:")
+        assert result.exit_code == 0, result.output
+
+    def test_identical_verdict_multiset_differing_exit_code(self) -> None:
+        """D-15's stated cost, made mechanical: `dev test`'s exit code
+        stops being a PURE function of step verdicts. Two calls to
+        `_dev_test_exit_code` against the EXACT SAME `results` list (so
+        the verdict multiset is not merely equal but IDENTICAL) differ
+        ONLY in `sdp_oracle_not_run` -- and their exit codes differ (0 vs
+        2). Unit-level (not CLI-driven): no real ALLOW-chip fixture can
+        hold the verdict multiset constant while varying only the hold
+        state through the actual engine (every engine-level route to a
+        NOT-RUN oracle changes at least one step's verdict too, per the
+        other tests in this class), so this is the direct, honest pin of
+        the composition rule itself."""
+        results = [
+            StepResult(op="read", verdict=VERDICT_OK, run_count=1),
+            StepResult(op="write-baseline-b", verdict=VERDICT_OK, run_count=1),
+        ]
+        exit_clean = _dev_test_exit_code(results, sdp_oracle_not_run=False)
+        exit_notrun = _dev_test_exit_code(results, sdp_oracle_not_run=True)
+        assert exit_clean == 0, exit_clean
+        assert exit_notrun == 2, exit_notrun
+        assert exit_clean != exit_notrun
