@@ -239,3 +239,64 @@ def test_recovery_constant_count_has_not_silently_shrunk() -> None:
         f"{_MIN_RECOVERY_CONSTANT_COUNT} members -- a silent rename/"
         "removal would otherwise narrow LEG-14's scan set unnoticed."
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 7/8: planted-violation non-vacuity legs (in-memory-copy idiom --
+# tests/test_op_registration_parity.py:753-778's precedent for exactly
+# this shape: the scan target is imported module constants, so there is
+# no source file to plant into)
+# ---------------------------------------------------------------------------
+
+
+def test_planted_forbidden_word_is_caught_non_vacuous() -> None:
+    """Planting the forbidden bulk-clear word into an in-memory copy of
+    one real recovery constant MUST make the scan fail -- proves the gate
+    is capable of failing, not a vacuous always-pass check."""
+    original = _real_scan_target()
+    altered = dict(original)
+    sample_name = next(iter(altered))
+    altered[sample_name] = (
+        altered[sample_name] + f" Do not bulk {_FORBIDDEN_RECOVERY_WORD} the part."
+    )
+    assert altered[sample_name] != original[sample_name], (
+        "Fixture setup error: the planted mutation did not change the "
+        "value -- this leg needs updating."
+    )
+
+    try:
+        _scan_recovery_constants(altered)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError(
+            "Non-vacuity failure: planting the forbidden bulk-clear word "
+            "into a copied recovery constant did not make the scan fail "
+            "-- the gate is vacuous."
+        )
+
+
+def test_planted_hyphenated_op_literal_is_caught_non_vacuous() -> None:
+    """Planting one of `_SDP_LEG_OPS`'s hyphenated op strings into an
+    in-memory copy of one real recovery constant MUST make the scan fail
+    -- folds RESEARCH OQ-5's hazard into the same non-vacuity proof."""
+    original = _real_scan_target()
+    altered = dict(original)
+    sample_name = next(iter(altered))
+    planted_op = sorted(_SDP_LEG_OPS)[0]
+    altered[sample_name] = altered[sample_name] + f" (see {planted_op})"
+    assert altered[sample_name] != original[sample_name], (
+        "Fixture setup error: the planted mutation did not change the "
+        "value -- this leg needs updating."
+    )
+
+    try:
+        _scan_recovery_constants(altered)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError(
+            "Non-vacuity failure: planting a hyphenated _SDP_LEG_OPS "
+            "literal into a copied recovery constant did not make the "
+            "scan fail -- the gate is vacuous."
+        )
