@@ -61,6 +61,36 @@ Test taxonomy:
       from _dispatch_multi_run's terminal refusal still escapes run_plan,
       proving no broad `except` was introduced (criterion 2).
 
+  SDP dispatch arm (plan 133-03, D-01/D-04/D-05/D-11, LEG-09)
+    test_unlock_exempt_from_destructive -> the standing _DESTRUCTIVE_OPS
+      asymmetry: OP_SDP_LOCK is a member (a lock applied to a
+      misidentified chip is the harm the gate exists to prevent),
+      OP_SDP_UNLOCK is deliberately absent (an unlock the gate can skip
+      ships a locked part) -- that asymmetry IS LEG-09. Also asserts
+      _SDP_OPS is disjoint from _MULTI_RUN_OPS (D-03).
+    test_dispatch_sdp_guard_refuses_foreign_op -> _dispatch_sdp's guard
+      refuses each of the seven shipped op strings with a BAD/run_count=0
+      refusal naming the op and _SDP_OPS, and touches the operator double
+      NOT AT ALL (operator.method_calls == []) -- a refusal, not a
+      mis-dispatch.
+    test_dispatch_sdp_terminal_assertion_is_reachable_only_by_bypassing_the_guard
+      -> with _SDP_OPS monkeypatched to admit a foreign op, _dispatch_sdp's
+      terminal `else: raise AssertionError` is a real refusal, not dead
+      text (this module's own documented-but-dead failure mode).
+    test_dispatch_sdp_maps_bool_to_verdict -> parametrised over
+      (OP_SDP_LOCK, "sdp_lock") / (OP_SDP_UNLOCK, "sdp_unlock") x
+      True/False, driven through run_plan behind a passing id step (gate
+      stays OPEN): operator bool return maps to OK/BAD, run_count == 1,
+      the operator method is called once with (name, ANY).
+    test_shipped_ops_never_reach_sdp_arm -> D-13b's sentinel, criterion 4's
+      mechanical proof: with _dispatch_sdp monkeypatched to raise on any
+      call, all seven shipped op strings pass through run_plan/_dispatch_step
+      without the sentinel ever firing -- proving arm 5's placement adds
+      zero branching cost to the seven ops that shipped before this plan.
+      Enumerates the seven strings explicitly and cross-checks them against
+      the module's own OP_* constants minus _SDP_OPS, so an eighth shipped
+      op added later cannot silently escape this sentinel.
+
 References:
   - .planning/phases/133-sdp-leg-mechanism/133-01-PLAN.md
   - .planning/phases/133-sdp-leg-mechanism/133-CONTEXT.md D-08 (exception
@@ -71,17 +101,28 @@ References:
   - tests/test_sdp_table_parity.py :300-341 (the non-vacuity idiom)
 """
 
-from unittest.mock import Mock
+from unittest.mock import ANY, Mock
 
 import pytest
 
 from firestarter.chip_test import (
+    _DESTRUCTIVE_OPS,
+    _MULTI_RUN_OPS,
+    _SDP_OPS,
     OP_BLANK_CHECK,
+    OP_ERASE,
+    OP_ID,
     OP_READ,
+    OP_SDP_LOCK,
+    OP_SDP_UNLOCK,
+    OP_VERIFY,
+    OP_WRITE,
+    OP_WRITE_PARTIAL,
     VERDICT_BAD,
     VERDICT_OK,
     Plan,
     Step,
+    _dispatch_sdp,
     derive_plan,
     run_plan,
 )
@@ -565,4 +606,210 @@ def test_assertion_error_propagates():
         "AssertionError escaped but was not the SAME instance injected -- "
         "criterion 2 requires the deliberate signal to propagate unchanged, "
         "not be re-wrapped or reconstructed"
+    )
+
+
+# ---------------------------------------------------------------------------
+# SDP dispatch arm (plan 133-03, D-01/D-04/D-05/D-11, LEG-09). The seven
+# shipped op strings, enumerated once here and cross-checked in
+# test_shipped_ops_never_reach_sdp_arm against the module's own OP_*
+# constants minus _SDP_OPS, so an eighth shipped op cannot silently escape
+# the sentinel below.
+# ---------------------------------------------------------------------------
+
+_SHIPPED_OP_STRINGS = [
+    OP_ID,
+    OP_READ,
+    OP_BLANK_CHECK,
+    OP_WRITE,
+    OP_WRITE_PARTIAL,
+    OP_VERIFY,
+    OP_ERASE,
+]
+
+
+def test_unlock_exempt_from_destructive():
+    """The standing _DESTRUCTIVE_OPS asymmetry that IS LEG-09 (D-11):
+    OP_SDP_LOCK is gated (a lock applied to a misidentified chip is exactly
+    the harm the id-first destructive gate exists to prevent), OP_SDP_UNLOCK
+    is deliberately absent (an unlock the gate can skip after a lock
+    succeeded ships a locked part). Also asserts _SDP_OPS stays disjoint
+    from _MULTI_RUN_OPS (D-03): running a lock twice is a second mutation
+    with no comparison value on a family whose protection state cannot be
+    read back at all."""
+    assert OP_SDP_UNLOCK not in _DESTRUCTIVE_OPS, (
+        "OP_SDP_UNLOCK must stay OUT of _DESTRUCTIVE_OPS: an unlock that CAN "
+        "be gated is an unlock that can be SKIPPED after a lock already "
+        "succeeded, which ships a locked part to the caller "
+        "(133-CONTEXT.md D-11, LEG-09)."
+    )
+    assert OP_SDP_LOCK in _DESTRUCTIVE_OPS, (
+        "OP_SDP_LOCK must be IN _DESTRUCTIVE_OPS: a lock applied to a "
+        "MISIDENTIFIED chip is exactly the harm the id-first destructive "
+        "gate exists to prevent, and gating is what makes the "
+        "gate-closed-from-the-start case observable at all "
+        "(133-CONTEXT.md D-11, LEG-09)."
+    )
+    assert _SDP_OPS.isdisjoint(_MULTI_RUN_OPS), (
+        "OP_SDP_LOCK/OP_SDP_UNLOCK must stay OUT of _MULTI_RUN_OPS: running "
+        "a lock twice is a second mutation with no comparison value, and "
+        "the marginal-on-disagreement policy is meaningless for an "
+        "emission whose result cannot be read back at all -- SDP "
+        "protection state is not readable on this family "
+        "(133-CONTEXT.md D-03)."
+    )
+
+
+def test_dispatch_sdp_guard_refuses_foreign_op():
+    """_dispatch_sdp's guard refuses every one of the seven shipped op
+    strings with a BAD/run_count=0 refusal naming the op and _SDP_OPS, and
+    touches the operator double NOT AT ALL -- what makes it a refusal
+    rather than a mis-dispatch (T-133-13)."""
+    for op in _SHIPPED_OP_STRINGS:
+        operator = _mock_operator()
+        result = _dispatch_sdp(op, "M8720", {}, operator)
+        assert result.verdict == VERDICT_BAD, (
+            f"_dispatch_sdp({op!r}, ...) verdict was {result.verdict!r}, "
+            "expected BAD -- the guard must refuse any op outside _SDP_OPS"
+        )
+        assert result.run_count == 0, (
+            f"_dispatch_sdp({op!r}, ...) run_count was {result.run_count!r}, "
+            "expected 0 -- a refused op must not be counted as having run"
+        )
+        assert op in result.reason and "_SDP_OPS" in result.reason, (
+            f"_dispatch_sdp({op!r}, ...) reason {result.reason!r} does not "
+            "name both the refused op and the allow-list it was refused "
+            "against"
+        )
+        assert operator.method_calls == [], (
+            f"_dispatch_sdp({op!r}, ...) called the operator double "
+            f"({operator.method_calls!r}) -- the guard must refuse BEFORE "
+            "touching the operator, not after a mis-dispatch"
+        )
+
+
+def test_dispatch_sdp_terminal_assertion_is_reachable_only_by_bypassing_the_guard(
+    monkeypatch,
+):
+    """_dispatch_sdp's terminal `else: raise AssertionError` is a REAL
+    refusal, not dead text -- this module's own documented-but-dead failure
+    mode (`_MULTI_RUN_OPS` once shipped with zero references tree-wide).
+    Reachable only by monkeypatching `_SDP_OPS` to admit a foreign op past
+    the guard, proving the terminal raise is live code the guard's own
+    completeness normally makes unreachable."""
+    import firestarter.chip_test as chip_test_mod
+
+    monkeypatch.setattr(chip_test_mod, "_SDP_OPS", frozenset({"bogus-sdp-op"}))
+    operator = _mock_operator()
+
+    with pytest.raises(AssertionError) as excinfo:
+        chip_test_mod._dispatch_sdp("bogus-sdp-op", "M8720", {}, operator)
+    assert "_SDP_OPS" in str(excinfo.value), (
+        f"AssertionError message {str(excinfo.value)!r} does not name "
+        "_SDP_OPS -- the terminal raise's message must name the allow-list "
+        "it was passed despite bypassing"
+    )
+    assert operator.method_calls == [], (
+        "the terminal raise fired before either sdp_lock or sdp_unlock was "
+        "called on the operator double"
+    )
+
+
+@pytest.mark.parametrize("bool_return", [True, False])
+@pytest.mark.parametrize(
+    "op,method_name", [(OP_SDP_LOCK, "sdp_lock"), (OP_SDP_UNLOCK, "sdp_unlock")]
+)
+def test_dispatch_sdp_maps_bool_to_verdict(op, method_name, bool_return):
+    """Drive a directly-constructed SDP Step through run_plan behind a
+    passing id step (M8720's chip-id sentinel is 0, so check_eprom_id's
+    default (True, 0x1234) mock return never triggers a mismatch and the
+    destructive gate stays OPEN -- the lock is not SKIPPED). Asserts the
+    operator's bool return maps to OK/BAD exactly as _dispatch_step's
+    blank-check arm does, run_count == 1, and the corresponding operator
+    method was called once with (name, ANY)."""
+    operator = _mock_operator(**{method_name: bool_return})
+    plan = _plan_with_steps(
+        Step(op=OP_ID, supported=True, reason=""),
+        Step(op=op, supported=True, reason=""),
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    result = _result(results, op)
+    assert result.verdict == (VERDICT_OK if bool_return else VERDICT_BAD), (
+        f"{op!r} with {method_name}()={bool_return!r} produced verdict "
+        f"{result.verdict!r}"
+    )
+    assert result.run_count == 1, (
+        f"{op!r}'s run_count was {result.run_count!r}, expected 1 -- SDP "
+        "emissions are single-run (D-03)"
+    )
+    getattr(operator, method_name).assert_called_once_with("M8720", ANY)
+
+
+def test_shipped_ops_never_reach_sdp_arm(monkeypatch):
+    """D-13b's sentinel, criterion 4's mechanical proof (D-04, LEG-09):
+    _dispatch_step's arm 5 (`if step.op in _SDP_OPS: return
+    _dispatch_sdp(...)`) sits LAST, immediately above the terminal
+    fail-closed `return`, so all seven op strings shipped before this plan
+    return from arms 1-4 and NEVER evaluate the new membership test at all.
+
+    `_SDP_OPS` is deliberately WIDENED (monkeypatched) to also contain all
+    seven shipped op strings for the duration of this test -- this is what
+    makes the sentinel sensitive to ARM ORDER rather than merely to op-string
+    disjointness: under the correct (position-5) placement, arms 1-4 still
+    return before the widened membership test is ever reached, so the
+    sentinel stays silent regardless of what _SDP_OPS now contains. If arm 5
+    were instead placed ahead of arms 1-4, the widened set would match every
+    shipped op immediately and the sentinel would fire -- this was SEEN to
+    happen: see 133-03-SUMMARY.md's recorded mutation proof.
+
+    Enumerates the seven shipped op strings EXPLICITLY
+    (_SHIPPED_OP_STRINGS) and additionally asserts that set equals the
+    module's own shipped op set (every module-level OP_* constant minus
+    _SDP_OPS), so a future eighth shipped op cannot silently escape this
+    sentinel by omission.
+
+    If this fails, a shipped op reached the new arm -- the arm was placed
+    wrongly and criterion 4's zero-added-branching-cost claim is false
+    (133-CONTEXT.md D-04)."""
+    import firestarter.chip_test as chip_test_mod
+
+    module_op_constants = {
+        value
+        for name, value in vars(chip_test_mod).items()
+        if name.startswith("OP_") and isinstance(value, str)
+    }
+    shipped_op_set = module_op_constants - _SDP_OPS
+    assert set(_SHIPPED_OP_STRINGS) == shipped_op_set, (
+        f"_SHIPPED_OP_STRINGS {sorted(_SHIPPED_OP_STRINGS)} does not equal "
+        f"the module's shipped op set {sorted(shipped_op_set)} (all OP_* "
+        "constants minus _SDP_OPS) -- a shipped op was added to "
+        "chip_test.py without extending this sentinel's enumeration "
+        "(133-CONTEXT.md D-13b)"
+    )
+
+    sentinel = Mock(
+        side_effect=AssertionError(
+            "sentinel: a shipped op reached _dispatch_sdp -- D-04's "
+            "zero-added-branching-cost claim is false (arm 5 placed wrongly)"
+        )
+    )
+    monkeypatch.setattr(chip_test_mod, "_dispatch_sdp", sentinel)
+    # Widen _SDP_OPS to also match every shipped op -- see docstring above
+    # for why this is what makes the sentinel sensitive to arm ORDER.
+    monkeypatch.setattr(chip_test_mod, "_SDP_OPS", frozenset(shipped_op_set | _SDP_OPS))
+
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        *(Step(op=op, supported=True, reason="") for op in _SHIPPED_OP_STRINGS)
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    sentinel.assert_not_called()
+    assert len(results) == len(_SHIPPED_OP_STRINGS), (
+        f"run_plan returned {len(results)} results for "
+        f"{len(_SHIPPED_OP_STRINGS)} steps -- a step was silently dropped "
+        "or added while the sentinel was active"
     )
