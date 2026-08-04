@@ -156,6 +156,20 @@ _REGISTRY_CONSTANT_NAMES: frozenset[str] = frozenset(
         "_SDP_OPS",
         "_SDP_LEG_OPS",
         "_SDP_LEG_STEP_ORDER",
+        # v1.30 Phase 134, plan 134-04 (D-08/D-20): `_SDP_BASELINE_OPS` and
+        # `_SDP_LEG_GATED_OPS` are the baseline gate's inputs/outputs, both
+        # referenced only inside `run_plan` -- NOT inside any of the three
+        # AST-scanned functions below (`_dispatch_step`/`derive_plan`/
+        # `_dispatch_multi_run`), so adding them here is currently inert
+        # (no resolved reference set changes). Declared anyway per the
+        # module's own `_REGISTRY_CONSTANT_NAMES` discipline: any op-keyed
+        # frozenset this module could ever need to resolve transitively
+        # belongs on this list, so a later function that starts referencing
+        # either set (not just spelling out its members literally) resolves
+        # correctly without a silent gap. Deliberately NOT added to
+        # `_POLICED_REGISTRIES` -- see that dict's own comment below.
+        "_SDP_BASELINE_OPS",
+        "_SDP_LEG_GATED_OPS",
     }
 )
 
@@ -267,6 +281,17 @@ _POLICED_REGISTRIES: dict[str, frozenset[str]] = {
 # Measured 2026-08-04 (v1.30 Phase 134, plan 134-01): 7 policed registries --
 # one more than 133-06's 6, since `_SDP_LEG_OPS` (this phase's own frozenset,
 # T-134-01) is now a live, policed registry.
+#
+# `_SDP_BASELINE_OPS`/`_SDP_LEG_GATED_OPS` (plan 134-04, D-08/D-20)
+# deliberately do NOT join this dict as an 8th/9th registry, even though
+# both are real op-keyed frozensets in `chip_test.py`: they are POLICY
+# SUBSETS of the already-policed `_SDP_LEG_OPS`/`_DESTRUCTIVE_OPS`, not a
+# new surface a future op could be silently omitted from -- every op that
+# could ever join either set is already a member of `_SDP_LEG_OPS` (an
+# existing policed registry) by construction. Policing them here would add
+# roughly eighteen exemption rows asserting the unremarkable fact that a
+# read-only op is not gated by a write-path gate, without catching any real
+# omission `_SDP_LEG_OPS`'s own policing does not already catch.
 _POLICED_REGISTRY_COUNT = 7
 
 

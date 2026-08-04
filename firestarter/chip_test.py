@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from firestarter import sdp_honesty  # unreadable_state_caveat(), called not re-authored
 from firestarter.chip_resolver import resolve_chip
 from firestarter.constants import (
     FLAG_CAN_ERASE,  # 0x02 -- do NOT redefine; import
@@ -904,6 +905,38 @@ _SDP_LEG_OPS = frozenset(
     }
 )
 
+# The baseline gate's inputs and outputs (v1.30 Phase 134, plan 134-04,
+# D-08/D-20). `_SDP_BASELINE_OPS` is what `_baseline_closes_sdp_gate` is
+# evaluated FROM -- the two baseline-direction steps whose own verdict
+# decides whether a lock may be emitted. Disjoint from `_SDP_LEG_GATED_OPS`
+# by construction: a baseline op decides the gate and always runs
+# regardless of its own state (both directions must be attempted -- a
+# failing `write-baseline-b` followed by a passing `write-baseline-a` must
+# still leave the gate CLOSED, never reopened), while a gated op is what
+# the gate, once closed, SKIPS.
+_SDP_BASELINE_OPS = frozenset({OP_WRITE_BASELINE_B, OP_WRITE_BASELINE_A})
+
+# `_SDP_LEG_GATED_OPS` -- the gate's outputs, closed by
+# `_baseline_closes_sdp_gate`. `OP_SDP_UNLOCK`'s membership here is **D-20**
+# (operator decision 2026-08-04), which SUPERSEDES D-08's own
+# literally-written clause ("sdp-unlock is never attempted because nothing
+# was locked"): that clause was measured-WRONG -- `OP_SDP_UNLOCK` is
+# deliberately ABSENT from `_DESTRUCTIVE_OPS` (LEG-09), so as D-08 was
+# literally written the unlock step would RUN and report OK at a part that
+# was never locked (the P-06 emission-claim shape: an emission claim read
+# as a state claim, on a run whose premise -- a lock was emitted -- did not
+# hold). Joining `_SDP_LEG_GATED_OPS` is a DIFFERENT mechanism from
+# `_DESTRUCTIVE_OPS`/the chip-ID destructive gate above: LEG-09 stays
+# scoped EXCLUSIVELY to that gate (`test_unlock_exempt_from_destructive`,
+# `test_lock_ran_then_gate_closes`, both unchanged and still green) -- D-20
+# does not weaken it, because a *destructive*-gate closure and a
+# *baseline*-gate closure are two structurally separate flags
+# (`destructive_gate_closed` vs. `baseline_gate_closed`, wired
+# independently in `run_plan`, below).
+_SDP_LEG_GATED_OPS = frozenset(
+    {OP_SDP_LOCK, OP_WRITE_INHIBITED, OP_SDP_UNLOCK, OP_WRITE_RESTORED}
+)
+
 _DESTRUCTIVE_GATE_REASON = (
     "chip-ID mismatch — destructive steps gated (chip left pristine)"
 )
@@ -1069,6 +1102,16 @@ def run_plan(
 
     results: list[StepResult] = []
     destructive_gate_closed = False
+    # The SDP baseline gate (v1.30 Phase 134, plan 134-04, D-08/D-20) --
+    # a SEPARATE flag from `destructive_gate_closed` above, deliberately:
+    # the two gates are structurally different mechanisms (chip-ID mismatch
+    # vs. a baseline write/read-back transition that did not complete), and
+    # the SDP-leg's own gate-closure reasons (`_SDP_BASELINE_GATE_REASON`/
+    # `_SDP_UNLOCK_GATE_REASON`) must never be confused with
+    # `_DESTRUCTIVE_GATE_REASON`'s chip-ID wording. STICKY by construction
+    # (only ever set True, never reset False) so a failing `write-baseline-b`
+    # followed by a passing `write-baseline-a` cannot reopen it.
+    baseline_gate_closed = False
     # Cleanup registry (v1.30 Phase 133 D-06, LEG-10): a plain `list` of
     # zero-argument callables, deliberately GENERIC rather than a hardcoded
     # lock-to-unlock window with the unlock written inline. The inline form
@@ -1085,6 +1128,18 @@ def run_plan(
     # prevent.
     cleanup: list[Callable[[], None]] = []
 
+    # De-registration handle (v1.30 Phase 134, plan 134-04, D-11/RESEARCH
+    # §4.2). With this phase's explicit `sdp-unlock` step now a real plan
+    # step, a successful lock both REGISTERS a cleanup (above) AND the plan
+    # step RUNS the unlock explicitly -- two unlock emissions without this
+    # handle. Holds the specific callable a successful lock registered so a
+    # later successful explicit unlock can `cleanup.remove(...)` it -- by
+    # VALUE, never by wiping the whole registry (which is deliberately
+    # GENERIC, see the registry's own comment above). Reset to `None` once
+    # removed; a FAILED explicit unlock leaves it registered so the drain
+    # still retries it.
+    unlock_cleanup: Callable[[], None] | None = None
+
     # `runs < 2` stays OUTSIDE this `try` (above): nothing is registered
     # yet, so there is nothing to drain. `results`, `destructive_gate_closed`
     # and `cleanup` are all created BEFORE the `try`. `return results` stays
@@ -1097,6 +1152,23 @@ def run_plan(
 
             if step.op in _DESTRUCTIVE_OPS and destructive_gate_closed:
                 results.append(_skip_result(step.op, _DESTRUCTIVE_GATE_REASON))
+                continue
+
+            # The SDP baseline gate (v1.30 Phase 134, D-08/D-20). Ordered
+            # AFTER the chip-ID destructive gate above and BEFORE the
+            # dispatch call below -- load-bearing: the chip-ID gate fires
+            # first and renders its OWN wording, so a write-path closure is
+            # never misattributed to a chip-ID mismatch. `_SDP_LEG_GATED_OPS`
+            # never includes either baseline op itself (`_SDP_BASELINE_OPS`)
+            # -- both baseline directions always run regardless of this
+            # flag's state, because they are what DECIDE it.
+            if step.op in _SDP_LEG_GATED_OPS and baseline_gate_closed:
+                reason = (
+                    _SDP_UNLOCK_GATE_REASON
+                    if step.op == OP_SDP_UNLOCK
+                    else _SDP_BASELINE_GATE_REASON
+                )
+                results.append(_skip_result(step.op, reason))
                 continue
 
             result = _run_step(
@@ -1133,9 +1205,38 @@ def run_plan(
                     )
 
                 cleanup.append(_unlock_cleanup)
+                # Hold the handle so a later successful EXPLICIT unlock step
+                # (below) can de-register it -- see `unlock_cleanup`'s own
+                # comment above (D-11/RESEARCH §4.2).
+                unlock_cleanup = _unlock_cleanup
+
+            if (
+                step.op == OP_SDP_UNLOCK
+                and result.verdict == VERDICT_OK
+                and unlock_cleanup is not None
+            ):
+                # The explicit plan-derived unlock step SUCCEEDED: the
+                # registered cleanup from the matching lock above is no
+                # longer needed -- remove it by VALUE (`cleanup.remove`),
+                # never by wiping the whole registry, so a completed leg
+                # emits exactly one `sdp_unlock` call, not two (D-11/
+                # RESEARCH §4.2). A FAILED explicit unlock (non-OK verdict)
+                # deliberately leaves `unlock_cleanup` registered so the
+                # `finally` drain below still retries it.
+                cleanup.remove(unlock_cleanup)
+                unlock_cleanup = None
 
             if step.op == OP_ID:
                 destructive_gate_closed = _id_step_closes_gate(result)
+
+            if step.op in _SDP_BASELINE_OPS:
+                # Sticky by construction (only ever ORed True, never reset
+                # False): a failing `write-baseline-b` followed by a
+                # passing `write-baseline-a` must leave the gate CLOSED,
+                # never reopened (D-08).
+                baseline_gate_closed = (
+                    baseline_gate_closed or _baseline_closes_sdp_gate(result)
+                )
 
         return results
     finally:
@@ -1200,6 +1301,108 @@ def _id_step_closes_gate(result: StepResult) -> bool:
     stays open subject to the plan's own `--destructive` annotation.
     """
     return result.verdict in (VERDICT_BAD, VERDICT_SKIPPED)
+
+
+def _baseline_closes_sdp_gate(result: StepResult) -> bool:
+    """D-08/D-20: close the SDP baseline gate on ANY non-OK baseline verdict.
+
+    Mirrors `_id_step_closes_gate`'s shape immediately above -- a pure
+    `StepResult -> bool` predicate `run_plan` consults after running one of
+    `_SDP_BASELINE_OPS` -- but deliberately WIDER: it closes on BAD,
+    `marginal`, `SKIPPED` **and** `NA`, not `_id_step_closes_gate`'s
+    narrower `(VERDICT_BAD, VERDICT_SKIPPED)` tuple. A contact fault
+    (`marginal`) is as disqualifying as a proven-dead write path (BAD): a
+    lock must never be emitted at a part whose write path was not
+    demonstrated to transition in BOTH directions (`write-baseline-b` AND
+    `write-baseline-a`), so anything short of a clean OK on either baseline
+    direction closes the gate. `result.verdict != VERDICT_OK` expresses
+    that widening directly, rather than enumerating the four non-OK
+    verdicts by name.
+    """
+    return result.verdict != VERDICT_OK
+
+
+# LEG-12's three-valued hold-state REPORT VALUES (v1.30 Phase 134, plan
+# 134-04, D-10/D-12/D-15). These are report values, NOT op strings -- they
+# carry no `OP_` prefix and must never join `_ALL_OPS`/`_MULTIWORD_OP_VALUES`
+# in tests/test_op_registration_parity.py; a later reader must not
+# "helpfully" register them there.
+SDP_HOLD_HELD = "HELD"
+SDP_HOLD_NOT_HELD = "NOT-HELD"
+SDP_HOLD_NOT_RUN = "NOT-RUN"
+
+
+def sdp_oracle_applicable(plan: Plan) -> bool:
+    """`True` iff `plan` carries a RUNNABLE `write-inhibited` entry (LEG-12).
+
+    Derived STRUCTURALLY from the `plan` object the caller already holds --
+    never a second call to `sdp_capability`, which would be a second source
+    of truth that could drift from `derive_plan`'s own decision (the same
+    single-source-of-truth discipline D-15 applies to `count_applicable`).
+
+    `True` when `plan.steps` carries an `OP_WRITE_INHIBITED` `Step` with
+    `supported=True` (a real `dev test` run, ALLOW chip), OR when
+    `plan.locked_destructive` carries an `OP_WRITE_INHIBITED` `(op, reason)`
+    pair (the `write_scope="none"` ALLOW-chip shape, D-18). `False` for a
+    REFUSE chip: its `OP_WRITE_INHIBITED` step IS present in `plan.steps`
+    (LEG-02's NA path), but with `supported=False` -- the oracle never runs
+    for a REFUSE chip, so that presence must not count as "applicable".
+    """
+    for step in plan.steps:
+        if step.op == OP_WRITE_INHIBITED and step.supported:
+            return True
+    return any(op == OP_WRITE_INHIBITED for op, _reason in plan.locked_destructive)
+
+
+def sdp_hold_state(plan: Plan, results: list[StepResult]) -> str:
+    """LEG-12's pure `HELD`/`NOT-HELD`/`NOT-RUN(reason)` derivation.
+
+    Pure, no logger, no I/O (this module has neither and stays that way --
+    see `_UNLOCK_CLEANUP_SWALLOWED`'s own comment above). Reads `results`
+    for the `write-inhibited` `StepResult`, if any:
+
+    - verdict OK -> `SDP_HOLD_HELD` (the inhibited write was correctly
+      refused -- the part held its lock).
+    - verdict BAD -> `SDP_HOLD_NOT_HELD` (the inhibited write WAS accepted
+      -- the lock leaked, LEG-06's shape).
+    - verdict NA / `SKIPPED` / `marginal`, OR the step entirely ABSENT from
+      `results` (laundering route R6 -- a plan that never derived the step
+      at all) -> `f"{SDP_HOLD_NOT_RUN}: {reason}"`, where `reason` is that
+      result's own `reason` when one is present and non-empty, and
+      otherwise fixed prose naming the family fact -- composed by CALLING
+      `sdp_honesty.unreadable_state_caveat()`, never re-authoring its
+      sentence.
+
+    `plan` is accepted (not merely `results`) to match `count_applicable`'s
+    own two-argument signature shape, and so a future caller extending the
+    NOT-RUN reason with plan-derived context (e.g. distinguishing a REFUSE
+    chip from an absent step) has it available without changing every call
+    site; this revision derives everything it returns from `results` alone.
+
+    Returns `str` ALWAYS -- never `True`/`False`/`None` (P-06 prevention 3:
+    a JSON boolean here would read as ground truth for a state this family
+    cannot report; plan `134-06` adds the committed assertion that no such
+    boolean exists anywhere in `to_dict()`).
+    """
+    result: StepResult | None = None
+    for r in results:
+        if r.op == OP_WRITE_INHIBITED:
+            result = r
+            break
+
+    if result is not None and result.verdict == VERDICT_OK:
+        return SDP_HOLD_HELD
+    if result is not None and result.verdict == VERDICT_BAD:
+        return SDP_HOLD_NOT_HELD
+
+    if result is not None and result.reason:
+        reason = result.reason
+    else:
+        reason = (
+            "the SDP inhibited-write oracle did not run for this chip. "
+            f"{sdp_honesty.unreadable_state_caveat()}"
+        )
+    return f"{SDP_HOLD_NOT_RUN}: {reason}"
 
 
 # Region used for the write/verify address-derived pattern fingerprint
