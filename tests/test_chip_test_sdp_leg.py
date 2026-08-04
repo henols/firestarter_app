@@ -91,6 +91,30 @@ Test taxonomy:
       the module's own OP_* constants minus _SDP_OPS, so an eighth shipped
       op added later cannot silently escape this sentinel.
 
+  Cleanup registry drain (plan 133-04, D-06/D-07/D-09/D-10/D-16, LEG-10)
+    test_finally_drains_on_exception -> a run-fatal exception escaping
+      after a successful lock still leaves the registered unlock run --
+      the drain reached it even though the loop unwound.
+    test_keyboard_interrupt_drains_and_propagates -> KeyboardInterrupt
+      escapes run_plan by object IDENTITY after draining the registered
+      unlock -- proves the bare `finally` has no `except Exception`
+      between the raise and the caller (KeyboardInterrupt is not an
+      Exception subclass).
+    test_system_exit_drains_and_propagates -> the same shape with
+      SystemExit, asserting identity and the unchanged exit code.
+    test_empty_registry_noop -> a plan of purely shipped ops (no SDP step)
+      never touches operator.sdp_lock/sdp_unlock, and the returned
+      `results` list length and content are unaffected by the drain's
+      existence -- the length assertion is what would catch an accidental
+      drain-time append.
+    test_drain_continues_after_failure -> one failing cleanup (raising a
+      class named in _UNLOCK_CLEANUP_SWALLOWED) does not strand the entry
+      behind it (call_count == 2) and does not mask the original escaping
+      exception (identity-asserted in the unwinding variant).
+    test_drain_does_not_mutate_results -> AST-level: the empty-handler
+      `Try`'s `finalbody` references the name `results` zero times --
+      kept as a test (not a shell grep) so it runs in CI on every commit.
+
 References:
   - .planning/phases/133-sdp-leg-mechanism/133-01-PLAN.md
   - .planning/phases/133-sdp-leg-mechanism/133-CONTEXT.md D-08 (exception
@@ -101,6 +125,8 @@ References:
   - tests/test_sdp_table_parity.py :300-341 (the non-vacuity idiom)
 """
 
+import ast
+from pathlib import Path
 from unittest.mock import ANY, Mock
 
 import pytest
@@ -812,4 +838,312 @@ def test_shipped_ops_never_reach_sdp_arm(monkeypatch):
         f"run_plan returned {len(results)} results for "
         f"{len(_SHIPPED_OP_STRINGS)} steps -- a step was silently dropped "
         "or added while the sentinel was active"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Cleanup registry drain (plan 133-04, D-06/D-07/D-09/D-10/D-16, LEG-10).
+# Absolute path to firestarter_app/, cwd-independent (mirrors
+# tests/test_check_devtest_orchestrator.py's _FA_DIR pattern) -- used only by
+# the AST-level results-mutation proof below, which reads the INSTALLED
+# source rather than importing chip_test.py's already-compiled bytecode.
+# ---------------------------------------------------------------------------
+
+_FA_DIR = Path(__file__).parent.parent
+
+
+def _run_plan_finally_node() -> ast.Try:
+    """Parse firestarter/chip_test.py, locate `run_plan`, and return the
+    `ast.Try` node whose `handlers` list is EMPTY -- the bare `finally` with
+    no `except` clause of any width that criteria 1+2 require. Asserts
+    there is EXACTLY one such node inside `run_plan`, so this helper itself
+    cannot silently resolve to the wrong `Try` if a later plan adds another
+    try/finally elsewhere in the function.
+    """
+    source = (_FA_DIR / "firestarter" / "chip_test.py").read_text(encoding="utf-8")
+    tree = ast.parse(source, filename="chip_test.py")
+    run_plan_def = None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "run_plan":
+            run_plan_def = node
+            break
+    assert run_plan_def is not None, "run_plan not found in chip_test.py"
+
+    empty_handler_tries = [
+        node
+        for node in ast.walk(run_plan_def)
+        if isinstance(node, ast.Try) and node.handlers == [] and node.finalbody
+    ]
+    assert len(empty_handler_tries) == 1, (
+        f"expected exactly one bare try/finally (no except clauses) inside "
+        f"run_plan, found {len(empty_handler_tries)} -- the LEG-10 drain "
+        "structure is no longer uniquely locatable"
+    )
+    return empty_handler_tries[0]
+
+
+def test_finally_drains_on_exception():
+    """LEG-10 criterion 1: a run-fatal exception escaping run_plan after a
+    successful lock still leaves the registered unlock run -- the drain
+    reached it even though the loop unwound (research P-20's abort-between-
+    lock-and-unlock hazard, closed)."""
+    operator = _mock_operator(sdp_lock=True)
+    injected = ProgrammerNotFoundError("133-04 injected escape probe")
+    operator.read_eprom.side_effect = injected
+    plan = _plan_with_steps(
+        Step(op=OP_ID, supported=True, reason=""),
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+        Step(op=OP_READ, supported=True, reason=""),
+    )
+
+    with pytest.raises(ProgrammerNotFoundError) as excinfo:
+        run_plan(plan, operator, _REAL_DB)
+
+    assert excinfo.value is injected, (
+        "the exception escaping run_plan must be the SAME instance that "
+        "was injected -- a re-wrap would pass a bare pytest.raises check "
+        "but violate criterion 2's identity guarantee"
+    )
+    operator.sdp_unlock.assert_called_once_with("M8720", ANY)
+
+
+def test_keyboard_interrupt_drains_and_propagates():
+    """LEG-10 criteria 1+2: KeyboardInterrupt escapes run_plan by object
+    IDENTITY after the registered unlock has drained. KeyboardInterrupt is
+    not an Exception subclass, so this also independently proves no broad
+    `except Exception` sits between the raise and the caller."""
+    operator = _mock_operator(sdp_lock=True)
+    injected = KeyboardInterrupt()
+    operator.read_eprom.side_effect = injected
+    plan = _plan_with_steps(
+        Step(op=OP_ID, supported=True, reason=""),
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+        Step(op=OP_READ, supported=True, reason=""),
+    )
+
+    with pytest.raises(KeyboardInterrupt) as excinfo:
+        run_plan(plan, operator, _REAL_DB)
+
+    assert excinfo.value is injected, (
+        "the KeyboardInterrupt escaping run_plan must be the SAME instance "
+        "injected -- a re-wrap here would mean Ctrl-C did not stay Ctrl-C "
+        "(criterion 2)"
+    )
+    operator.sdp_unlock.assert_called_once_with("M8720", ANY)
+
+
+def test_system_exit_drains_and_propagates():
+    """LEG-10 criteria 1+2: the same shape as KeyboardInterrupt, with
+    SystemExit -- identity-asserted, plus the exit code attribute unchanged
+    (a re-wrap could preserve the class but drop the code)."""
+    operator = _mock_operator(sdp_lock=True)
+    injected = SystemExit(7)
+    operator.read_eprom.side_effect = injected
+    plan = _plan_with_steps(
+        Step(op=OP_ID, supported=True, reason=""),
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+        Step(op=OP_READ, supported=True, reason=""),
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        run_plan(plan, operator, _REAL_DB)
+
+    assert excinfo.value is injected, (
+        "the SystemExit escaping run_plan must be the SAME instance injected"
+    )
+    assert excinfo.value.code == 7, (
+        f"SystemExit.code changed to {excinfo.value.code!r}, expected 7 -- "
+        "a re-wrap could preserve the class but drop the code"
+    )
+    operator.sdp_unlock.assert_called_once_with("M8720", ANY)
+
+
+def test_empty_registry_noop():
+    """LEG-10: an empty cleanup registry (every currently-shipping run,
+    since no plan in this phase derives an SDP step) is a PROVEN no-op --
+    zero added operator calls, and the returned `results` are unaffected by
+    the drain's existence. Reuses _SHIPPED_OPS_SEQUENCE (133-01's frozen
+    before-image) rather than a fresh literal: if the drain silently
+    appended anything, this would diverge from that pre-133-04 baseline."""
+    plan = derive_plan("M8720", _REAL_DB)
+    operator = _mock_operator()
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    operator.sdp_lock.assert_not_called()
+    operator.sdp_unlock.assert_not_called()
+
+    op_sequence = [r.op for r in results]
+    assert op_sequence == _SHIPPED_OPS_SEQUENCE["op_sequence"], (
+        f"op sequence changed under an empty registry: {op_sequence!r} vs "
+        f"frozen baseline {_SHIPPED_OPS_SEQUENCE['op_sequence']!r}"
+    )
+    verdict_run_count = [(r.verdict, r.run_count) for r in results]
+    assert verdict_run_count == _SHIPPED_OPS_SEQUENCE["verdict_run_count"], (
+        f"per-step (verdict, run_count) changed under an empty registry: "
+        f"{verdict_run_count!r} vs frozen baseline "
+        f"{_SHIPPED_OPS_SEQUENCE['verdict_run_count']!r}"
+    )
+    assert len(results) == _SHIPPED_OPS_SEQUENCE["len_results"], (
+        f"run_plan returned {len(results)} results, expected "
+        f"{_SHIPPED_OPS_SEQUENCE['len_results']} -- the drain's existence "
+        "must not silently add or drop a result (this is what would catch "
+        "an accidental results.append inside the finally)"
+    )
+
+
+def test_drain_continues_after_failure():
+    """D-10: one failing cleanup (raising a class named in
+    _UNLOCK_CLEANUP_SWALLOWED) does not strand the entry behind it in the
+    registry -- the drain continues and both registered unlocks are
+    attempted (call_count == 2), run_plan returns normally, and the failure
+    is not recorded into `results` (its length still equals the plan's step
+    count).
+
+    The second, unwinding variant additionally makes the loop unwind on an
+    escaping exception and asserts the escaping exception's IDENTITY is
+    still the ORIGINAL one -- the whole point of D-10: a cleanup failure
+    must never mask the in-flight exception.
+    """
+    operator = _mock_operator(sdp_lock=True)
+    operator.sdp_unlock.side_effect = [
+        HardwareOperationError("133-04 injected cleanup failure"),
+        True,
+    ]
+    plan = _plan_with_steps(
+        Step(op=OP_ID, supported=True, reason=""),
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    assert operator.sdp_unlock.call_count == 2, (
+        f"sdp_unlock was called {operator.sdp_unlock.call_count} time(s), "
+        "expected 2 -- the entry registered behind the failing cleanup was "
+        "stranded instead of drained (D-10)"
+    )
+    assert len(results) == len(plan.steps), (
+        "the drain's caught cleanup failure must not be recorded into "
+        "results -- results must feed only run_plan's own step loop"
+    )
+
+    # Unwinding variant: the drain's caught failure must not mask an
+    # ORIGINAL escaping exception.
+    operator2 = _mock_operator(sdp_lock=True)
+    operator2.sdp_unlock.side_effect = [
+        HardwareOperationError("133-04 injected cleanup failure (variant 2)"),
+        True,
+    ]
+    injected = ProgrammerNotFoundError("133-04 injected original fault")
+    operator2.read_eprom.side_effect = injected
+    plan2 = _plan_with_steps(
+        Step(op=OP_ID, supported=True, reason=""),
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+        Step(op=OP_READ, supported=True, reason=""),
+    )
+
+    with pytest.raises(ProgrammerNotFoundError) as excinfo:
+        run_plan(plan2, operator2, _REAL_DB)
+
+    assert excinfo.value is injected, (
+        "a failing cleanup must not mask the ORIGINAL escaping exception "
+        "by object identity -- this assertion is the whole point of D-10"
+    )
+    assert operator2.sdp_unlock.call_count == 2, (
+        "the drain must continue past the caught cleanup failure even "
+        "while the loop is unwinding on an escaping exception"
+    )
+
+
+def test_drain_does_not_mutate_results():
+    """The drain must NEVER append into `results`, and must not reference
+    it at all: `results` is returned by reference, so a mutation inside
+    the `finally` IS visible to the caller, and that same list feeds seven
+    consumers in cli_handlers.py (the run_plan call site, count_applicable,
+    the generic renderer, the JSON artifact, the markdown table,
+    build_db_diff, sys.exit(max(...))) -- count_applicable would then
+    render "N greater than M" (e.g. "8 of 7 ran"). This is an AST-level
+    acceptance criterion in its own right, kept as a TEST (not a shell
+    grep) so it runs in CI on every commit."""
+    finally_try = _run_plan_finally_node()
+
+    results_refs = [
+        node
+        for node in ast.walk(ast.Module(body=finally_try.finalbody, type_ignores=[]))
+        if isinstance(node, ast.Name) and node.id == "results"
+    ]
+    assert results_refs == [], (
+        f"run_plan's cleanup-drain finally references the name 'results' "
+        f"{len(results_refs)} time(s) -- it must reference it ZERO times. "
+        "results is returned BY REFERENCE, so a finally-time mutation is "
+        "visible to the caller and feeds seven consumers in "
+        "cli_handlers.py (run_plan's call site, count_applicable, the "
+        "generic renderer, the JSON artifact, the markdown table, "
+        "build_db_diff, sys.exit(max(...))) -- count_applicable would "
+        "render N greater than M (e.g. '8 of 7 ran')."
+    )
+
+    append_calls = [
+        node
+        for node in ast.walk(ast.Module(body=finally_try.finalbody, type_ignores=[]))
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "append"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "results"
+    ]
+    assert append_calls == [], (
+        "run_plan's cleanup-drain finally calls results.append(...) -- "
+        "forbidden: the drain must never touch the list run_plan returns"
+    )
+
+
+def test_drain_swallowed_classes_match_constant():
+    """The finally's per-callable wrapper's handler names EXACTLY the
+    classes in `_UNLOCK_CLEANUP_SWALLOWED` -- resolved from the AST (not
+    assumed), and its handler body contains no `Raise` (never re-raise
+    from the finally)."""
+    import firestarter.chip_test as chip_test_mod
+
+    finally_try = _run_plan_finally_node()
+
+    inner_tries = [
+        node
+        for node in ast.walk(ast.Module(body=finally_try.finalbody, type_ignores=[]))
+        if isinstance(node, ast.Try)
+    ]
+    assert len(inner_tries) == 1, (
+        f"expected exactly one nested try/except per drain iteration inside "
+        f"the finally, found {len(inner_tries)}"
+    )
+    inner_try = inner_tries[0]
+    assert len(inner_try.handlers) == 1, (
+        f"expected exactly one except clause in the per-callable wrapper, "
+        f"found {len(inner_try.handlers)}"
+    )
+    handler = inner_try.handlers[0]
+    assert handler.type is not None, (
+        "the per-callable wrapper's except must not be bare"
+    )
+
+    handler_type_source = ast.unparse(handler.type)
+    resolved = eval(  # noqa: S307 -- trusted, static, in-repo source only
+        handler_type_source, vars(chip_test_mod)
+    )
+    assert resolved == chip_test_mod._UNLOCK_CLEANUP_SWALLOWED, (
+        f"the per-callable wrapper's except clause resolves to {resolved!r}, "
+        f"expected it to name exactly _UNLOCK_CLEANUP_SWALLOWED "
+        f"({chip_test_mod._UNLOCK_CLEANUP_SWALLOWED!r})"
+    )
+
+    raises_in_handler = [
+        node
+        for node in ast.walk(ast.Module(body=handler.body, type_ignores=[]))
+        if isinstance(node, ast.Raise)
+    ]
+    assert raises_in_handler == [], (
+        "the per-callable wrapper's except body contains a Raise -- the "
+        "drain must never re-raise from the finally (D-10)"
     )
