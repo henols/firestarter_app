@@ -74,10 +74,11 @@ from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import (
     ChipNotFoundError,
+    ChipNotImplementedError,
     SerialError,
 )
 from firestarter.hardware import HardwareManager
-from firestarter.sdp_capability import sdp_capability_for_entry
+from firestarter.sdp_capability import sdp_capability, sdp_capability_for_entry
 
 from .conftest import make_app_context
 from .fixtures.synthetic_nonzero_chip_id import (
@@ -1632,5 +1633,85 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
         assert hold_state.startswith(f"{SDP_HOLD_NOT_RUN}:"), hold_state
         reason = hold_state.split(":", 1)[1].strip()
         assert reason, hold_state
+        normalized = _normalize_console_text(result.output)
+        assert f"sdp_hold_state {hold_state}" in normalized, normalized
+
+
+class TestLaunderingRoutesR3R4:
+    """R3/R4: reachable in production today, unlike R1/R2 above -- neither
+    needs the synthetic chip-id fixture."""
+
+    def test_r3_resolve_chip_refusal_maps_baseline_steps_to_skipped_notrun(
+        self, runner: CliRunner
+    ) -> None:
+        """R3: a `resolve_chip` refusal (adapter-required / support-status
+        -- the same class of refusal the shipped
+        `TestAbsentChipHardFail::test_dev_test_present_but_unsupported_
+        still_sweeps` (AT28C16) exercises for the shipped ops) maps
+        through `_resolve_or_none` to SKIPPED for every step `_run_step`
+        dispatches -- proven here on a genuinely ALLOW chip (`_CHIP_ALLOW`,
+        where `derive_plan` marks the SDP-leg steps `supported=True`, so
+        they are NOT already NA via `sdp_capability` the way R4's REFUSE
+        chip below is). `write-baseline-b` is asserted SKIPPED directly via
+        this route; the downstream gated ops (`write-inhibited` included)
+        SKIP too, via the baseline gate the SKIPPED baseline step closes
+        (D-08 treats SKIPPED as gate-closing exactly like BAD/marginal/NA)
+        -- `sdp_lock` is never called either way."""
+        operator = make_clean_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with (
+            patch(
+                "firestarter.chip_test.resolve_chip",
+                side_effect=ChipNotImplementedError(
+                    "simulated: adapter required for this test"
+                ),
+            ),
+            _off_tty(),
+        ):
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        data = _load_report(_CHIP_ALLOW)
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["write-baseline-b"]["verdict"] == "SKIPPED", steps[
+            "write-baseline-b"
+        ]
+        assert "adapter required" in steps["write-baseline-b"]["reason"]
+        assert steps["write-inhibited"]["verdict"] == "SKIPPED", steps[
+            "write-inhibited"
+        ]
+        operator.sdp_lock.assert_not_called()
+        hold_state = data["sdp_hold_state"]
+        assert hold_state.startswith(f"{SDP_HOLD_NOT_RUN}:"), hold_state
+        reason = hold_state.split(":", 1)[1].strip()
+        assert reason, hold_state
+        normalized = _normalize_console_text(result.output)
+        assert f"sdp_hold_state {hold_state}" in normalized, normalized
+
+    def test_r4_refuse_chip_na_reason_matches_sdp_capability_identity(
+        self, runner: CliRunner
+    ) -> None:
+        """R4: `step.supported is False` (a REFUSE chip, `_CHIP_NO_ID`) --
+        `write-inhibited` is NA, carrying `sdp_capability(name, db)[1]`
+        ITSELF as its reason, compared by identity against the live
+        function (never a generic or re-worded string): a REFUSED chip
+        gets an NA step CARRYING `reason`, never a silent omission."""
+        operator = make_clean_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        allowed, expected_reason = sdp_capability(_CHIP_NO_ID, _REAL_DB)
+        assert allowed is False, "fixture setup error: _CHIP_NO_ID must be REFUSE"
+        data = _load_report(_CHIP_NO_ID)
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["write-inhibited"]["verdict"] == "NA", steps["write-inhibited"]
+        assert steps["write-inhibited"]["reason"] == expected_reason, steps[
+            "write-inhibited"
+        ]
+        operator.sdp_lock.assert_not_called()
+        hold_state = data["sdp_hold_state"]
+        assert hold_state == f"{SDP_HOLD_NOT_RUN}: {expected_reason}", hold_state
         normalized = _normalize_console_text(result.output)
         assert f"sdp_hold_state {hold_state}" in normalized, normalized

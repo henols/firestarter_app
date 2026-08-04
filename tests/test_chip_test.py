@@ -86,6 +86,7 @@ from firestarter.exceptions import (
     ChipNotImplementedError,
     EpromOperationError,
 )
+from firestarter.sdp_capability import sdp_capability_for_entry
 
 # ---------------------------------------------------------------------------
 # Pattern generator (PATT-01)
@@ -2138,3 +2139,78 @@ def test_devtest01_0x0d_all_ok_sweep_no_longer_tags_community_fail():
     # _LADDER_COMMUNITY_REPORTED. This is the CORRECTLY-measured value,
     # not a weakened assertion.
     assert db_diff.ladder_state == ""
+
+
+# ---------------------------------------------------------------------------
+# LEG-17 (v1.30 Phase 134, plan 134-10): R5/R6, the two LIBRARY-LEVEL
+# laundering routes -- their CLI-level companions R1-R4 live in
+# tests/test_dev_test_cmd.py; `pytest -k "laundering"` selects across both
+# files. THESE TWO ARE NOT EXHAUSTIVE EITHER: a seventh route (134-CONTEXT.md
+# D-08's baseline gate) exists beyond all six and fails closed under
+# D-08+D-15 -- see 134-04-SUMMARY.md and test_dev_test_cmd.py's own
+# TestHoldStateLeg12/TestExitFloorD15, which already prove it end to end.
+# ---------------------------------------------------------------------------
+
+
+def test_r5_laundering_write_scope_none_locks_all_six_and_never_calls_sdp_lock():
+    """R5 (LEG-17): `write_scope="none"` structurally OMITS every SDP-leg op
+    from `Plan.steps` and lists all six on `plan.locked_destructive` instead
+    (D-18, mirroring the shipped write/verify/erase treatment) -- `run_plan`
+    over that plan never dispatches `sdp_lock`. `write_scope="none"` is
+    UNREACHABLE from `dev test` since Phase 121's reversal
+    (`_resolve_write_scope` returns only "full"/"partial") -- this route is
+    library/test surface only, never a live gate."""
+    # AT28C256 is a measured SDP-ALLOW chip (43-chip population, D-17).
+    plan = derive_plan("AT28C256", _REAL_DB, write_scope="none")
+
+    leg_ops_in_steps = [s.op for s in plan.steps if s.op in _SDP_LEG_STEP_ORDER]
+    assert leg_ops_in_steps == [], (
+        f"write_scope='none' must omit every SDP-leg op from plan.steps; "
+        f"found {leg_ops_in_steps}"
+    )
+
+    locked_leg_ops = [
+        op for op, _reason in plan.locked_destructive if op in _SDP_LEG_STEP_ORDER
+    ]
+    assert locked_leg_ops == list(_SDP_LEG_STEP_ORDER), locked_leg_ops
+    locked_leg_reasons = [
+        reason for op, reason in plan.locked_destructive if op in _SDP_LEG_STEP_ORDER
+    ]
+    assert all(locked_leg_reasons), locked_leg_reasons  # every reason non-empty
+
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+    operator.sdp_lock.assert_not_called()
+    assert not any(r.op == "sdp-lock" and r.verdict != VERDICT_NA for r in results)
+
+
+def test_r6_laundering_allow_plans_never_derive_an_empty_steps_list():
+    """R6 (LEG-17): `cli_handlers.py`'s `if not results: sys.exit(0)`
+    bypasses the exit composition entirely, so the honest discharge is
+    proving the PRECONDITION unreachable, not adding a code path: every
+    SDP-ALLOW chip's `write_scope="full"` plan derives a non-empty
+    `Plan.steps`, so an ALLOW-chip run can never reach that guard.
+    Additionally: if `results` genuinely were empty, `sdp_lock` was never
+    called -- trivially true, since `run_plan` never dispatched a single
+    step -- proven directly against an empty `Plan` below."""
+    offenders = []
+    for full in _REAL_DB.get_eproms():
+        name = full["name"]
+        allowed, _reason = sdp_capability_for_entry(full, name)
+        if not allowed:
+            continue
+        plan = derive_plan(name, _REAL_DB, write_scope="full")
+        if not plan.steps:
+            offenders.append(name)
+    assert not offenders, (
+        f"{len(offenders)} SDP-ALLOW chip(s) derived an EMPTY Plan.steps at "
+        "write_scope='full', which would let an ALLOW-chip run reach "
+        f"cli_handlers.py's 'if not results: sys.exit(0)' guard: "
+        f"{offenders[:5]}"
+    )
+
+    empty_plan = Plan(name="__empty_plan_for_r6__", steps=[])
+    operator = _mock_operator()
+    empty_results = run_plan(empty_plan, operator, _REAL_DB)
+    assert empty_results == []
+    operator.sdp_lock.assert_not_called()
