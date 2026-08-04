@@ -139,12 +139,24 @@ _ALL_OPS: frozenset[str] = frozenset(
     if name.startswith("OP_") and isinstance(value, str)
 )
 
-# The three real, op-keyed frozensets in chip_test.py. `_op_names_referenced_in`
+# The real, op-keyed containers in chip_test.py. `_op_names_referenced_in`
 # resolves a Name reference to one of these TRANSITIVELY to its members (the
-# real, imported frozenset), rather than re-deriving membership from source
-# text a second time.
+# real, imported container), rather than re-deriving membership from source
+# text a second time. `_SDP_LEG_STEP_ORDER` (v1.30 Phase 134, plan 134-03)
+# joins this set: `derive_plan`'s own SDP-leg emission loop
+# (`for sdp_op in _SDP_LEG_STEP_ORDER:`) never spells out the six OP_*
+# identifiers directly, so without this entry the AST walk below would see
+# zero op-vocabulary references inside `derive_plan` at all -- deriving,
+# not restating, is exactly the discipline `_SDP_LEG_STEP_ORDER` itself
+# documents (P-08).
 _REGISTRY_CONSTANT_NAMES: frozenset[str] = frozenset(
-    {"_DESTRUCTIVE_OPS", "_MULTI_RUN_OPS", "_SDP_OPS", "_SDP_LEG_OPS"}
+    {
+        "_DESTRUCTIVE_OPS",
+        "_MULTI_RUN_OPS",
+        "_SDP_OPS",
+        "_SDP_LEG_OPS",
+        "_SDP_LEG_STEP_ORDER",
+    }
 )
 
 # The multi-word (hyphenated) op values -- currently four: "blank-check",
@@ -225,7 +237,11 @@ def _op_names_referenced_in(func_name: str, source: str) -> frozenset[str]:
         if node.id in _OP_CONSTANT_NAMES:
             referenced.add(getattr(chip_test_mod, node.id))
         elif node.id in _REGISTRY_CONSTANT_NAMES:
-            referenced |= getattr(chip_test_mod, node.id)
+            # `.update(...)`, not `|=`: `_SDP_LEG_STEP_ORDER` is a TUPLE
+            # (order is load-bearing, D-06), and `set |= tuple` raises
+            # TypeError (`|=` requires another `set`) where `set.update()`
+            # accepts any iterable -- measured, not assumed.
+            referenced.update(getattr(chip_test_mod, node.id))
     return frozenset(referenced)
 
 
@@ -458,14 +474,6 @@ _OP_REGISTRY_EXEMPTIONS: dict[tuple[str, str], str] = {
     ("write-partial", "_SDP_OPS"): _NOT_SDP_REASON.format(op="write-partial"),
     ("verify", "_SDP_OPS"): _NOT_SDP_REASON.format(op="verify"),
     ("erase", "_SDP_OPS"): _NOT_SDP_REASON.format(op="erase"),
-    # --- derive_plan: this phase's real, deliberately-deferred omission
-    # (D-11) -- Phase 134 discharges it. ---
-    (OP_SDP_LOCK, "derive_plan"): (
-        "Phase 134 surface -- not derived as a plan step in 133 (D-11)."
-    ),
-    (OP_SDP_UNLOCK, "derive_plan"): (
-        "Phase 134 surface -- not derived as a plan step in 133 (D-11)."
-    ),
     # --- _dispatch_multi_run: non-mutating ops (structural), plus D-03's
     # structural exclusion of both SDP ops (they never reach this loop). ---
     ("id", "_dispatch_multi_run"): _NOT_ROUTED_TO_MULTI_RUN_REASON.format(op="id"),
@@ -544,42 +552,13 @@ _OP_REGISTRY_EXEMPTIONS: dict[tuple[str, str], str] = {
     # members via `_SDP_LEG_OPS`'s transitive membership -- the four
     # TEMPORARY rows plan 134-01 added here are discharged (removed) in this
     # same commit that adds the routing, per that plan's own instruction. ---
-    # --- derive_plan: TEMPORARY -- plan 134-03 teaches derive_plan to emit
-    # these four ops as Steps (D-06). Discharge (remove these four rows) in
-    # that plan's own commit, or the stale-row guard would let a now-false
-    # exemption survive. ---
-    (OP_WRITE_BASELINE_B, "derive_plan"): (
-        "TEMPORARY — discharged by plan 134-03: write-baseline-b is not "
-        "yet emitted as a derive_plan() Step in this plan -- plan 134-03 "
-        "is what teaches derive_plan to emit the SDP leg's six steps "
-        "(D-06). This row must be removed in 134-03's own commit that "
-        "adds the emission, or the stale-row guard would let a now-false "
-        "exemption survive."
-    ),
-    (OP_WRITE_BASELINE_A, "derive_plan"): (
-        "TEMPORARY — discharged by plan 134-03: write-baseline-a is not "
-        "yet emitted as a derive_plan() Step in this plan -- plan 134-03 "
-        "is what teaches derive_plan to emit the SDP leg's six steps "
-        "(D-06). This row must be removed in 134-03's own commit that "
-        "adds the emission, or the stale-row guard would let a now-false "
-        "exemption survive."
-    ),
-    (OP_WRITE_INHIBITED, "derive_plan"): (
-        "TEMPORARY — discharged by plan 134-03: write-inhibited is not "
-        "yet emitted as a derive_plan() Step in this plan -- plan 134-03 "
-        "is what teaches derive_plan to emit the SDP leg's six steps "
-        "(D-06). This row must be removed in 134-03's own commit that "
-        "adds the emission, or the stale-row guard would let a now-false "
-        "exemption survive."
-    ),
-    (OP_WRITE_RESTORED, "derive_plan"): (
-        "TEMPORARY — discharged by plan 134-03: write-restored is not "
-        "yet emitted as a derive_plan() Step in this plan -- plan 134-03 "
-        "is what teaches derive_plan to emit the SDP leg's six steps "
-        "(D-06). This row must be removed in 134-03's own commit that "
-        "adds the emission, or the stale-row guard would let a now-false "
-        "exemption survive."
-    ),
+    # --- derive_plan: DISCHARGED (v1.30 Phase 134, plan 134-03). All six
+    # SDP-leg ops (OP_SDP_LOCK/OP_SDP_UNLOCK plus this phase's own four
+    # write-shaped ops) are now real `Step(op=...)` construction sites
+    # inside `derive_plan` (D-06's six-step emission, LEG-01/02/04) -- the
+    # six TEMPORARY/Phase-134-surface rows that used to exempt them here
+    # are removed in this same commit, per plan 134-02's own forward note
+    # and D-11's "Phase 134 discharges it". ---
 }
 
 # `_dispatch_step` needs ZERO exemptions for ANY op -- measured: all 13
@@ -937,13 +916,14 @@ def test_sdp_ops_are_accounted_in_every_policed_registry() -> None:
     future change that silently flips one from member to exempt (or back)
     fails here even if the generic leg (test 1) would somehow still pass.
 
-    The four new ops' `_dispatch_step` rows are now pinned True (v1.30
-    Phase 134, plan 134-02 discharged that TEMPORARY exemption in the same
-    commit that wired arm 6's routing). Their `derive_plan` rows are still
-    pinned False -- that TEMPORARY exemption is plan 134-03's to discharge
-    by flipping this same pin to True in its own commit, mirroring exactly
-    how `("derive_plan", OP_SDP_LOCK)` was pinned False in Phase 133 and is
-    Phase 134's (a later plan's) to flip.
+    The four new ops' `_dispatch_step` rows are pinned True (v1.30 Phase
+    134, plan 134-02 discharged that TEMPORARY exemption in the same commit
+    that wired arm 6's routing). Their `derive_plan` rows are ALSO now
+    pinned True (v1.30 Phase 134, plan 134-03 discharged that TEMPORARY
+    exemption in the same commit that taught `derive_plan` to emit the SDP
+    leg's six steps, D-06) -- mirroring `("derive_plan", OP_SDP_LOCK)` /
+    `("derive_plan", OP_SDP_UNLOCK)`, which plan 134-03 flips from False to
+    True in this same commit.
     """
     expected_membership = {
         ("_DESTRUCTIVE_OPS", OP_SDP_LOCK): True,
@@ -954,8 +934,8 @@ def test_sdp_ops_are_accounted_in_every_policed_registry() -> None:
         ("_SDP_OPS", OP_SDP_UNLOCK): True,
         ("_dispatch_step", OP_SDP_LOCK): True,
         ("_dispatch_step", OP_SDP_UNLOCK): True,
-        ("derive_plan", OP_SDP_LOCK): False,
-        ("derive_plan", OP_SDP_UNLOCK): False,
+        ("derive_plan", OP_SDP_LOCK): True,
+        ("derive_plan", OP_SDP_UNLOCK): True,
         ("_dispatch_multi_run", OP_SDP_LOCK): False,
         ("_dispatch_multi_run", OP_SDP_UNLOCK): False,
     }
@@ -970,7 +950,7 @@ def test_sdp_ops_are_accounted_in_every_policed_registry() -> None:
         expected_membership[("_SDP_OPS", new_op)] = False
         expected_membership[("_SDP_LEG_OPS", new_op)] = True
         expected_membership[("_dispatch_step", new_op)] = True
-        expected_membership[("derive_plan", new_op)] = False
+        expected_membership[("derive_plan", new_op)] = True
         expected_membership[("_dispatch_multi_run", new_op)] = False
 
     for (registry_name, op), should_be_member in expected_membership.items():

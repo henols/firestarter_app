@@ -53,6 +53,7 @@ from firestarter.exceptions import (
     ProgrammerNotFoundError,
     SerialError,
 )
+from firestarter.sdp_capability import sdp_capability  # LEG-01/02's derivation source
 
 # ---------------------------------------------------------------------------
 # Address-derived pattern generator (PATT-01, D-01/D-02)
@@ -366,6 +367,40 @@ OP_WRITE_BASELINE_A = "write-baseline-a"
 OP_WRITE_INHIBITED = "write-inhibited"
 OP_WRITE_RESTORED = "write-restored"
 
+# The leg's own D-06 step order, single-sourced (v1.30 Phase 134, plan
+# 134-03, LEG-01/02/04). `derive_plan`'s emission below appends these six
+# `Step`s in EXACTLY this order, and every count assertion downstream
+# derives "six" from `len(_SDP_LEG_STEP_ORDER)` rather than restating the
+# number as a literal (P-08's derive-don't-restate discipline).
+#
+# ⚠ CORRECTION 2, recorded here rather than silently reconciled: ROADMAP
+# criterion 1, LEG-01 and LEG-02 all say the leg is a **four**-step
+# sequence. That text predates LEG-04's requirement for TWO transition
+# directions (a single baseline write cannot discriminate a dead write path
+# from a chip already holding the target pattern), and the ROADMAP's own
+# four-step enumeration omits `write-restored` entirely -- the ONLY step
+# that produces evidence the part was left writable again, on a family
+# whose protection state cannot be read back at all (`sdp_honesty`'s
+# Evidence Ceiling). Dropping it would end every run on `sdp-unlock OK` --
+# an EMISSION claim with nothing behind it (D-06). The leg implemented here
+# is SIX steps. Both readings (the inherited four, and the measured six)
+# are recorded in 134-03-SUMMARY.md; this is not a silent widening.
+_SDP_LEG_STEP_ORDER: tuple[str, ...] = (
+    OP_WRITE_BASELINE_B,
+    OP_WRITE_BASELINE_A,
+    OP_SDP_LOCK,
+    OP_WRITE_INHIBITED,
+    OP_SDP_UNLOCK,
+    OP_WRITE_RESTORED,
+)
+
+# D-18's `write_scope="none"` advisory prose, in the same
+# `'write_scope="none": ... omitted (D-01)'` shape the shipped write/verify/
+# erase `locked_destructive` reasons already use above -- naming the SDP
+# leg's own governing decision (D-18) rather than reusing D-01's tag on a
+# reason it does not own.
+_SDP_LOCKED_REASON = 'write_scope="none": {op} omitted (D-18)'
+
 
 @dataclass
 class Step:
@@ -643,6 +678,82 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
         steps.append(
             Step(op=OP_ERASE, supported=False, reason=reason, destructive=True)
         )
+
+    # SDP leg emission (v1.30 Phase 134, D-06/D-07/D-18/D-20, LEG-01/02/04).
+    # Appended as a CONTIGUOUS block at the END of the step list, after the
+    # erase arm -- no shipped step's index moves (the existing
+    # `d_ops.index(OP_VERIFY) < d_ops.index(OP_ERASE)`-shaped comparisons
+    # stay true). Derived from `sdp_capability(name, db)` -- the injected
+    # decision source (LEG-01) -- never a re-implemented protocol/pinout
+    # heuristic; `sdp_capability` is itself fail-closed and count-pinned at
+    # 43 ALLOW / 41 REFUSE / 84 total. No new CLI option is introduced by
+    # this: `derive_plan`'s signature gains no parameter, so `dev test`
+    # keeps zero options (LEG-01's own constraint).
+    sdp_allowed, sdp_reason = sdp_capability(name, db)
+    if write_execute:
+        if sdp_allowed:
+            # ALLOW chip, a real `dev test` run: six real, executable steps,
+            # sharing the SAME write_region the shipped write arm above
+            # already computed (never re-derived -- ALLOW chips are all
+            # non-UV, per D-17, so this is always `_DEFAULT_REGION`).
+            for sdp_op in _SDP_LEG_STEP_ORDER:
+                steps.append(
+                    Step(
+                        op=sdp_op,
+                        supported=True,
+                        reason="",
+                        destructive=True,
+                        write_region=write_region,
+                    )
+                )
+        else:
+            # REFUSE chip, a real `dev test` run: six NA steps carrying
+            # sdp_capability()'s OWN refusal prose verbatim (LEG-02).
+            # `run_plan:877-879`'s existing NA path turns each into a
+            # `_skip_result(..., verdict=VERDICT_NA)` with NO operator
+            # call -- zero new machinery needed for LEG-02.
+            for sdp_op in _SDP_LEG_STEP_ORDER:
+                steps.append(
+                    Step(
+                        op=sdp_op,
+                        supported=False,
+                        reason=sdp_reason,
+                        destructive=True,
+                    )
+                )
+    elif sdp_allowed:
+        # ALLOW chip, write_scope="none": all six steps go to the advisory
+        # `locked_destructive` list instead of `steps` (D-18, mirroring the
+        # shipped write/verify/erase treatment above) -- these entries DO
+        # count toward count_applicable's M, so N < M and the banner fires,
+        # matching D-15's polarity.
+        for sdp_op in _SDP_LEG_STEP_ORDER:
+            locked_destructive.append((sdp_op, _SDP_LOCKED_REASON.format(op=sdp_op)))
+    # else: REFUSE chip, write_scope="none" -- emit NOTHING (neither a step
+    # nor a locked_destructive entry). This is a Claude's-Discretion
+    # refinement of D-18, taken on four measurements (134-CONTEXT.md D-18's
+    # plan-time refinement, recorded in 134-03-SUMMARY.md):
+    #   (1) tests/test_chip_test_sdp_leg.py::test_empty_registry_noop is
+    #       LEG-10's named evidence in REQUIREMENTS.md and asserts M8720's
+    #       (a REFUSE chip) write_scope="none" plan is UNCHANGED
+    #       (len(results) == 3) -- emitting NA steps here would turn that
+    #       proof RED, a regression-floor breach.
+    #   (2) tests/test_chip_test.py's shipped exact-equality
+    #       locked_destructive/locked_ops assertions for M8720 and AM2716
+    #       (both measured REFUSE chips) would break if six entries were
+    #       added to locked_destructive here.
+    #   (3) the house rule at tests/test_chip_test.py's NA-erase precedent:
+    #       an UNSUPPORTED step must never be fabricated as a
+    #       runnable/locked step -- a REFUSE chip's SDP steps are
+    #       unsupported by construction, so locked_destructive (an
+    #       ADVISORY-ONLY list of steps a destructive run WOULD run) is the
+    #       wrong home for them.
+    #   (4) write_scope="none" is UNREACHABLE from `dev test` since Phase
+    #       121's reversal (`_resolve_write_scope` returns only "full"/
+    #       "partial") -- so on every REACHABLE `dev test` run, REFUSE
+    #       chips DO receive the six NA steps (the `write_execute` branch
+    #       above), and LEG-02 is fully satisfied on the live path. This
+    #       branch is library/test surface only, never a live gate.
 
     return Plan(
         name=name,
