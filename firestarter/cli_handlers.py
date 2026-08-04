@@ -2145,20 +2145,52 @@ def _resolve_write_scope(
     return "partial"
 
 
+# D-09 (v1.30 Phase 134, plan 134-08): the notice's write-pass number,
+# single-sourced HERE so it exists in exactly one place (P-08 prevention
+# 2 -- derive it, never restate it). Measured at plan time: the shipped
+# `write` step's own `runs=2` default writes pattern A twice, and this
+# phase's SDP leg adds four more single-run write passes of its own
+# (write-baseline-b writes B, write-baseline-a writes A, write-inhibited
+# writes B, write-restored writes A) -- 2 + 4 = 6, against the pre-134
+# notice's stale claim of "written twice". `tests/test_dev_test_cmd.py`
+# adds a test DERIVING this same number from a live `derive_plan` result
+# and asserting it equals this constant; if that test ever measures a
+# different number, change THIS constant, never the test.
+_ALWAYS_WRITES_PASS_COUNT = 6
+
 # D-04: printed FIRST, unconditionally, before the SAFE-04 absent-chip
 # hard-fail and before anything that touches hardware -- an unknown chip
 # seeing this notice is harmless and honest, and printing first guarantees
-# it precedes anything that could energise the shield. States the doubled
-# run count truthfully (run_plan's runs>=2 default means every destructive
-# step executes twice) and never calls any path non-destructive or
-# read-only, because none is (D-04, RESEARCH Open Question 2).
+# it precedes anything that could energise the shield. D-04's ordering
+# guarantee is unchanged by this rewrite: still ONE static string, still
+# echoed by the single call below `dev_test`'s docstring (its own line
+# number stays below the `derive_plan(...)` call site's), still never
+# carrying a per-chip derived value (only the single-sourced
+# `_ALWAYS_WRITES_PASS_COUNT` above, which is the SAME number for every
+# ALLOW-shaped write-executing run, never derived per invocation).
+#
+# Rewritten for D-09/D-12 (v1.30 Phase 134): states the TRUE pass count
+# (was "written twice"; is six), names the SDP lock this phase's leg now
+# applies in prose (never the hyphenated op literal -- `_SDP_LEG_OPS`'s
+# four strings all auto-join `_MULTIWORD_OP_VALUES`, and this notice is a
+# declared non-registry measured by a live substring test,
+# `test_non_registry_still_has_no_ops`), and gives the aborted-run
+# recovery in the word "rewrite" -- protocol 0x0D has no bulk-clear
+# operation at all, so writing the part again is the only way back.
 _ALWAYS_WRITES_NOTICE = (
     "dev test ALWAYS WRITES to the chip -- run it only on a blank or "
-    "scratch part you are willing to sacrifice. Every write/verify/erase "
-    "step runs TWICE per invocation, so most chips receive the full device "
-    "written twice; a UV-erasable EPROM is asked first, and even a decline "
-    "still writes a small 256-byte top-anchored region -- there is no "
-    "read-only or non-destructive mode."
+    "scratch part you are willing to sacrifice. A full run makes "
+    f"{_ALWAYS_WRITES_PASS_COUNT} separate write passes over the write "
+    "region (the shipped write/verify/erase steps write twice per "
+    "invocation, and this phase's SDP leg adds its own baseline, "
+    "inhibited and restore writes on top); a UV-erasable EPROM is asked "
+    "first, and even a decline still writes a small 256-byte top-anchored "
+    "region -- there is no read-only or non-destructive mode. This run "
+    "also applies the chip's SDP lock: on a COMPLETED run the part is "
+    "left unlocked again. If the run is interrupted before it finishes, "
+    "the part may be left locked -- rewrite it to recover; this protocol "
+    "has no bulk-clear operation, so writing the part again is the only "
+    "way back."
 )
 
 

@@ -1405,6 +1405,33 @@ def sdp_hold_state(plan: Plan, results: list[StepResult]) -> str:
     return f"{SDP_HOLD_NOT_RUN}: {reason}"
 
 
+def sdp_left_writable(results: list[StepResult]) -> bool:
+    """D-12's loud-form predicate (v1.30 Phase 134, plan 134-08, LEG-14):
+    `True` iff `results` itself demonstrates the run confirmed the part
+    still accepts a write, i.e. the `write-restored` `StepResult` is
+    present AND its verdict is `VERDICT_OK`.
+
+    Pure, no I/O, no logger -- same discipline as `sdp_hold_state` above.
+    `False` when `write-restored` is absent entirely from `results`
+    (laundering route R6 -- a plan that never derived the step at all) OR
+    present with any verdict OTHER than OK (`BAD`/`NA`/`SKIPPED`/
+    `marginal`) -- every one of those means this run did NOT itself
+    demonstrate the part still writes, which is exactly the "did not
+    confirm the part writable again" term `cli_handlers._sdp_recovery_line`
+    keys its LOUD recovery form on.
+
+    Lives here rather than in `cli_handlers.py` for the same three reasons
+    `sdp_hold_state` does: `chip_test.py` is scanned in full (P-07), it
+    sits outside the mypy strict island (`cli_handlers.py` has only 2 of
+    headroom), and it keeps op-string knowledge (`OP_WRITE_RESTORED`,
+    `VERDICT_OK`) out of the handler.
+    """
+    for r in results:
+        if r.op == OP_WRITE_RESTORED:
+            return r.verdict == VERDICT_OK
+    return False
+
+
 # Region used for the write/verify address-derived pattern fingerprint
 # (Task 3, PATT-01/02 wiring). A small fixed region keeps the bench-free
 # engine's write/verify step cheap and matches the region-parameterized
