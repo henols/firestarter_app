@@ -151,6 +151,8 @@ from firestarter.chip_test import (
     _SDP_LEG_OPS,
     _SDP_OPS,
     FP_BLANK_CONTACT,
+    FP_INDETERMINATE,
+    FP_TRANSPORT,
     OP_BLANK_CHECK,
     OP_ERASE,
     OP_ID,
@@ -190,6 +192,7 @@ from firestarter.exceptions import (
     SerialError,
     SerialTimeoutError,
 )
+from firestarter.sdp_honesty import unreadable_state_caveat
 
 # ---------------------------------------------------------------------------
 # Operator-double harness -- copied verbatim from tests/test_chip_test.py
@@ -1196,6 +1199,202 @@ def test_non_inhibited_writes_clear_flag_skip_sdp_unlock(op, payload_fn):
     assert not (flags & FLAG_SKIP_SDP_UNLOCK), (
         f"{op!r}'s write_eprom call carried FLAG_SKIP_SDP_UNLOCK "
         f"(flags={flags!r}) -- only write-inhibited may set this bit"
+    )
+
+
+# ---------------------------------------------------------------------------
+# LEG-08's four degenerate read-back fixtures, LEG-16's dead-write-path
+# fixture, and D-05 (v1.30 Phase 134, plan 134-02 Task 3).
+#
+# ⚠ Evidence Ceiling (REQUIREMENTS.md, reusing 133-RECORD.md §6's wording
+# rather than authoring a new formulation): a locked die is
+# unrepresentable in either repo's stubs. NO fixture in this module
+# simulates real inhibition -- every fixture here pins the host's
+# RESPONSE to a scripted read-back only. The causal claim "the lock
+# inhibited the write" is NOT provable this milestone; real silicon is
+# missing with no fallback. `pytest -k "degenerate"` selects LEG-08's four
+# fixtures; `-k "dead_write_path"` selects LEG-16's.
+# ---------------------------------------------------------------------------
+
+
+def test_module_reuses_sdp_honesty_caveat_wording():
+    """This module's Evidence Ceiling comment above states the causal
+    claim "the lock inhibited the write" is NOT provable this milestone --
+    reusing 133-RECORD.md §6's wording rather than authoring a new
+    formulation. Calls the real production caveat
+    (`sdp_honesty.unreadable_state_caveat()`) rather than re-authoring its
+    sentence, so this module's own framing cannot silently drift from the
+    production string a real report row would show."""
+    caveat = unreadable_state_caveat()
+    assert caveat, "unreadable_state_caveat() must return a non-empty string"
+    assert "cannot be read back" in caveat, caveat
+
+
+def test_degenerate_readback_empty_is_bad():
+    """LEG-08, degenerate arm 1/4: an empty read-back. Measured trap this
+    defends: `classify_fingerprint(A, b"")` returns `total=0, bad=0` -- an
+    empty read-back reads as PERFECT equality; only the length gate stops
+    it (P-02)."""
+    operator = _readback_operator(b"", write_ok=True)
+
+    result = _dispatch_sdp_leg(OP_WRITE_BASELINE_A, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_BAD, (
+        f"empty read-back produced verdict {result.verdict!r}, expected "
+        "BAD (the length gate, checked before any classify_fingerprint "
+        "call)"
+    )
+
+
+def test_degenerate_readback_short_is_bad():
+    """LEG-08, degenerate arm 2/4: a truncated (short) read-back -- the
+    first 128 of 256 bytes of the expected pattern -- also never reads as
+    equality; caught by the same length gate as the empty case."""
+    region = _DEFAULT_REGION
+    a = generate_pattern(*region)
+    short = a[:128]
+    operator = _readback_operator(short, write_ok=True)
+
+    result = _dispatch_sdp_leg(OP_WRITE_BASELINE_A, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_BAD, (
+        f"short (128/256-byte) read-back produced verdict "
+        f"{result.verdict!r}, expected BAD"
+    )
+
+
+def test_degenerate_readback_all_zero_is_marginal():
+    """LEG-08, degenerate arm 3/4: correct-length but all-0x00 content
+    routes through classify_fingerprint and lands marginal (D-04) -- never
+    OK, and never a confidently-reported chip finding.
+
+    ⚠ Does NOT assert the `address-line` classification: that arm requires
+    `cmp_len > 256` (`chip_test.py`'s `classify_fingerprint`) and this
+    leg's region is exactly 256, so such an assertion would be
+    unreachable-green -- asserts only that the classification is one of
+    the labels actually reachable for a 256-byte region instead."""
+    region = _DEFAULT_REGION
+    length = region[1]
+    operator = _readback_operator(b"\x00" * length, write_ok=True)
+
+    result = _dispatch_sdp_leg(OP_WRITE_BASELINE_A, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_MARGINAL, (
+        f"all-0x00 read-back produced verdict {result.verdict!r}, expected marginal"
+    )
+    assert result.fingerprint is not None
+    assert result.fingerprint.classification in (
+        FP_BLANK_CONTACT,
+        FP_TRANSPORT,
+        FP_INDETERMINATE,
+    ), (
+        f"all-0x00 read-back's fingerprint classification "
+        f"{result.fingerprint.classification!r} is not one of the labels "
+        "classify_fingerprint can produce for a 256-byte region"
+    )
+
+
+def test_degenerate_readback_all_ff_is_marginal_blank_contact():
+    """LEG-08, degenerate arm 4/4: correct-length all-0xFF content
+    classifies as FP_BLANK_CONTACT -- a loose socket reads as a contact
+    fault, not a chip finding (D-04)."""
+    region = _DEFAULT_REGION
+    length = region[1]
+    operator = _readback_operator(b"\xff" * length, write_ok=True)
+
+    result = _dispatch_sdp_leg(OP_WRITE_BASELINE_A, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_MARGINAL, (
+        f"all-0xFF read-back produced verdict {result.verdict!r}, expected marginal"
+    )
+    assert result.fingerprint is not None
+    assert result.fingerprint.classification == FP_BLANK_CONTACT, (
+        f"all-0xFF read-back's fingerprint classification "
+        f"{result.fingerprint.classification!r} != FP_BLANK_CONTACT"
+    )
+
+
+def test_inhibited_full_b_readback_does_not_launder_as_blank_contact():
+    """D-05's non-laundering leg, through the REAL dispatcher (distinct
+    from `TestInhibitedPattern`'s version above, which calls
+    `classify_fingerprint` directly): a fully-B read-back on
+    write-inhibited reports BAD, and its attached fingerprint
+    classification is NOT FP_BLANK_CONTACT -- a leaked lock must not be
+    able to launder as a contact fault. Computed from the live generators
+    and the live threshold, never a literal (measured `ff_ratio` is
+    ~0.0039 against a live `_FF_RATIO_THRESHOLD` of 0.98 -- recorded here
+    as context only, not the assertion)."""
+    region = _DEFAULT_REGION
+    b = generate_inhibited_pattern(*region)
+    operator = _readback_operator(b, write_ok=True)
+
+    result = _dispatch_sdp_leg(OP_WRITE_INHIBITED, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_BAD
+    assert result.fingerprint is not None
+    assert result.fingerprint.classification != FP_BLANK_CONTACT, (
+        f"a fully-B read-back on write-inhibited classified as "
+        f"{result.fingerprint.classification!r} -- expected anything "
+        "OTHER than blank/contact (D-05)"
+    )
+    ff_ratio = result.fingerprint.evidence["ff_ratio"]
+    assert ff_ratio < _FF_RATIO_THRESHOLD, (
+        f"measured ff_ratio {ff_ratio!r} is not strictly below the live "
+        f"_FF_RATIO_THRESHOLD {_FF_RATIO_THRESHOLD!r}"
+    )
+
+
+def _dead_write_path_operator():
+    """LEG-16's committed dead-write-path fixture (v1.30 Phase 134, plan
+    134-02, D-07).
+
+    `write_eprom` returns `True` (the write path claims success) while
+    `read_eprom` ALWAYS yields pattern A, whatever was actually written --
+    a fixture-level stand-in for a chip whose write path never transitions
+    the die.
+
+    Why the B direction is the ENTIRE discriminating power here (D-07,
+    "Why reuse cannot satisfy LEG-16"): pattern A is already what the
+    shipped `write` step writes at `runs=2` over region `(0, 256)`, so a
+    chip that already holds A with a dead write path passes the shipped
+    write->verify pair TODAY -- reusing that pair for the baseline could
+    never detect it. `write-baseline-b` is what makes the gate real: a
+    no-op write leaves A in place, so a B-direction read-back fails to
+    match and the step goes BAD.
+
+    Evidence Ceiling: this fixture pins the host's RESPONSE to a scripted
+    read-back -- it does not and cannot simulate a real dead write path on
+    silicon.
+    """
+    region = _DEFAULT_REGION
+    a = generate_pattern(*region)
+    operator = Mock(spec=_OPERATOR_METHODS)
+    operator.check_eprom_id.return_value = (True, 0x1234)
+    operator.check_eprom_blank.return_value = True
+    operator.erase_eprom.return_value = True
+    operator.verify_eprom.return_value = True
+    operator.write_eprom.return_value = True
+
+    def _read_eprom(name, eprom_data, output_file=None, **kwargs):
+        if output_file is not None:
+            Path(output_file).write_bytes(a)
+        return True
+
+    operator.read_eprom.side_effect = _read_eprom
+    return operator
+
+
+def test_dead_write_path_baseline_b_is_bad():
+    """LEG-16: the committed dead-write-path fixture makes write-baseline-b
+    report BAD -- proving the B direction is the leg's entire
+    discriminating power (D-07)."""
+    operator = _dead_write_path_operator()
+
+    result = _dispatch_sdp_leg(OP_WRITE_BASELINE_B, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_BAD, (
+        f"write-baseline-b against the dead-write-path fixture produced "
+        f"verdict {result.verdict!r}, expected BAD (LEG-16)"
     )
 
 
