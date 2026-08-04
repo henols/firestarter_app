@@ -36,6 +36,7 @@ from firestarter.channel import available_boards
 from firestarter.chip_resolver import resolve_chip
 from firestarter.chip_test import (
     OP_ID,
+    StepResult,
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
@@ -1886,8 +1887,20 @@ def dev_validate_family(
 
 # Per-verdict -> exit-code mapping (D-01): OK/NA/SKIPPED are exit-clean;
 # `marginal` is an inconclusive result (exit 2); BAD beats marginal via
-# `max` over the whole result set, mirroring dev_validate_family's own
-# `if verdict_int > overall_verdict` pattern (cli_handlers.py:1622-1623).
+# EXPLICIT PRECEDENCE (`_overall_exit_code`, D-14), mirroring
+# dev_validate_family's own `if verdict_int > overall_verdict` pattern
+# (cli_handlers.py:1622-1623).
+#
+# v1.30 Phase 134 correction 3 (134-CONTEXT.md, D-14): this contract was
+# shipped INVERTED against both its own prose and `dev_test`'s docstring
+# below (:2119-2121) -- the mechanism used to be a bare call to Python's
+# builtin numeric maximum over `_verdict_code(r.verdict) for r in results`.
+# Because `_VERDICT_EXIT_CODES` maps `marginal -> 2` and `BAD -> 1`, that
+# numeric maximum picked 2 whenever both were present: marginal numerically
+# outranked BAD, so a run containing BOTH verdicts exited 2, not 1 -- the
+# exact opposite of what this comment and that docstring already claimed.
+# `_overall_exit_code` restores the claimed behaviour; it is a bugfix, not
+# a contract change.
 _VERDICT_EXIT_CODES = {
     VERDICT_OK: 0,
     VERDICT_NA: 0,
@@ -1900,6 +1913,29 @@ _VERDICT_EXIT_CODES = {
 def _verdict_code(verdict: str) -> int:
     """Map a single StepResult verdict to its 0/1/2 exit-code contribution."""
     return _VERDICT_EXIT_CODES.get(verdict, 0)
+
+
+# Exit codes ordered MOST-SEVERE-FIRST (D-14). `_overall_exit_code` walks
+# this tuple and returns the first code present among a run's per-step
+# codes -- an explicit precedence list, never a numeric `max` (a `max` over
+# {1, 2} incorrectly picks 2, which is exactly the bug this replaces).
+_EXIT_CODE_PRECEDENCE: tuple[int, ...] = (1, 2, 0)
+
+
+def _overall_exit_code(results: list[StepResult]) -> int:
+    """The run's overall exit code: the most severe code present, per
+    `_EXIT_CODE_PRECEDENCE` (D-14) -- BAD (exit 1) outranks marginal
+    (exit 2) outranks a clean run (exit 0).
+
+    `_verdict_code`'s `.get(verdict, 0)` stays the single vocabulary
+    source -- an unrecognised verdict still contributes exit 0, so this
+    helper introduces no sixth verdict status (ROADMAP's own constraint).
+    """
+    codes = {_verdict_code(r.verdict) for r in results}
+    for code in _EXIT_CODE_PRECEDENCE:
+        if code in codes:
+            return code
+    return 0
 
 
 def _sanitize_chip_token(chip: str) -> str:
@@ -2215,5 +2251,5 @@ def dev_test(app: "AppContext", chip: str) -> None:
 
     if not results:
         sys.exit(0)
-    code = max(_verdict_code(r.verdict) for r in results)
+    code = _overall_exit_code(results)
     sys.exit(code)
