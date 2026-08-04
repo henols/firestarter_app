@@ -49,6 +49,7 @@ from unittest.mock import Mock
 import pytest
 
 from firestarter.chip_test import (
+    _DEFAULT_REGION,  # test-internal: engine module constant (v1.30 Phase 134)
     _DESTRUCTIVE_GATE_REASON,  # test-internal: chip-ID gate reason (SWEEP-03)
     _SDP_LEG_STEP_ORDER,  # test-internal: the D-06 six-op order (v1.30 Phase 134)
     _UV_WRITE_REGION_LENGTH,  # test-internal: engine module constant (PATT-03)
@@ -2214,3 +2215,171 @@ def test_r6_laundering_allow_plans_never_derive_an_empty_steps_list():
     empty_results = run_plan(empty_plan, operator, _REAL_DB)
     assert empty_results == []
     operator.sdp_lock.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# LEG-13 (v1.30 Phase 134, plan 134-10): the N-of-M banner pinning test.
+# `pytest tests/test_chip_test.py -k "count_applicable and sdp"` selects the
+# pinning test (134-VALIDATION.md's own LEG-13 command). `count_applicable`
+# is NOT edited by this plan -- confirmed by an empty `git diff --stat` on
+# this module -- this is a PINNING test only (D-15's own measurement: for
+# ALLOW chips, `count_applicable`'s M already counts the six SDP steps and a
+# SKIPPED result is already excluded from N).
+# ---------------------------------------------------------------------------
+
+
+def _gated_allow_operator():
+    """Dead-write-path double for an ALLOW chip's `write_scope="full"` plan
+    (the same shape as `tests/test_chip_test_sdp_leg.py::_dead_write_path_
+    operator`, re-authored locally here rather than imported cross-file):
+    `write_eprom` always reports success while `read_eprom` ALWAYS yields
+    pattern A over the plan's default write region, regardless of what was
+    actually written -- a chip whose write path never transitions. This is
+    the fixture `write-baseline-b` (which expects pattern B back) reports
+    BAD against, while `write-baseline-a` (which expects pattern A back)
+    reports OK -- exactly gh#20's dead-write-path shape, closing the
+    baseline gate (D-08) after both baseline directions have genuinely run."""
+    region = _DEFAULT_REGION
+    a = generate_pattern(*region)
+    operator = Mock(spec=_OPERATOR_METHODS)
+    operator.check_eprom_id.return_value = (True, None)
+    operator.check_eprom_blank.return_value = True
+    operator.erase_eprom.return_value = True
+    operator.verify_eprom.return_value = True
+    operator.write_eprom.return_value = True
+
+    def _read_eprom(name, eprom_data, output_file=None, **kwargs):
+        if output_file is not None:
+            Path(output_file).write_bytes(a)
+        return True
+
+    operator.read_eprom.side_effect = _read_eprom
+    return operator
+
+
+def test_count_applicable_sdp_gated_allow_chip_ratio_drops():
+    """LEG-13's pinning test. For AT28C256 (a measured ALLOW chip) at
+    `write_scope="full"` with the oracle gated (the dead-write-path shape,
+    gh#20's own bench), `count_applicable` measures `m_applicable == 10`
+    (the six SDP steps carry `supported=True` and are already counted in
+    M -- `id`/`erase` are the only two NA steps on this chip, so
+    4 shipped + 6 SDP = 10) and `n_ran == 6` (four shipped ops plus
+    `write-baseline-a`, which is never itself gated and reports OK against
+    this fixture, ran; the four `_SDP_LEG_GATED_OPS` members SKIP).
+
+    MEASURED DISCREPANCY, carried forward rather than silently reconciled
+    (the same project convention 134-04-SUMMARY.md and 134-07-SUMMARY.md
+    both already recorded for this identical computation): 134-CONTEXT.md
+    D-20 and this plan's own text state the dead-write-path shape produces
+    `n_ran=5`. The ACTUAL measured value, run live against AT28C256 with
+    this dead-write-path operator, is `n_ran=6` -- because
+    `write-baseline-a` is never itself gated by `_baseline_closes_sdp_gate`
+    (only the FOUR downstream `_SDP_LEG_GATED_OPS` members are skipped once
+    the gate closes, per 134-04's own design), and this fixture's read-back
+    always matches pattern A, so `write-baseline-a` reports OK and counts
+    as ran. This does NOT affect LEG-13's own claim -- the headline ratio
+    still DROPS, from today's misleading "4 of 4" to "6 of 10" under this
+    leg -- only the specific numeral quoted in 134-CONTEXT.md/the plan's
+    own prose, which this test does not restate as though it were correct.
+    """
+    plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
+    operator = _gated_allow_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+
+    counts = count_applicable(plan, results)
+    assert counts.m_applicable == 10, counts
+    assert counts.n_ran == 6, counts  # measured, not the stated 5 -- see docstring
+    assert counts.n_ran < counts.m_applicable, counts  # the ratio drops (LEG-13)
+
+    write_baseline_b = _result(results, "write-baseline-b")
+    assert write_baseline_b.verdict == VERDICT_BAD, write_baseline_b
+    write_inhibited = _result(results, "write-inhibited")
+    assert write_inhibited.verdict == VERDICT_SKIPPED, write_inhibited
+
+
+def test_count_applicable_sdp_does_not_change_shipped_non_sdp_counting():
+    """LEG-13 needed a PINNING test only -- D-15 measured that the ratio
+    already drops; no counting logic was changed. Proven here by re-running
+    the two SHIPPED `count_applicable` pins this phase did not touch
+    (`test_count_applicable_uv_counts`/`test_count_applicable_eeprom_
+    counts`, both non-SDP chips) and asserting their own committed numbers
+    directly -- if either had been silently edited by this phase, this
+    would go RED. Editing `count_applicable` was rejected for two
+    independent reasons: it is unnecessary (this test proves it), and it
+    would add op vocabulary to a declared non-registry and trip
+    `test_non_registry_still_has_no_ops` (asserted directly below)."""
+    plan = derive_plan("AM2716", _REAL_DB, write_scope="none")
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+    counts = count_applicable(plan, results)
+    assert counts.m_applicable == 4
+    assert counts.n_ran == 2
+
+    plan = derive_plan("M8720", _REAL_DB, write_scope="none")
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+    counts = count_applicable(plan, results)
+    assert counts.m_applicable == 5
+    assert counts.n_ran == 2
+
+    # `tests/test_op_registration_parity.py::test_non_registry_still_has_no_ops`
+    # is run as its own independent acceptance check (this plan's own
+    # criterion) rather than invoked here -- it scans `diagnostic_report.py`
+    # for op vocabulary, which is out of this test's own scope.
+
+
+def test_count_applicable_refuse_chip_n_equals_m_is_out_of_leg13_scope():
+    """LEG-13 says "for ALLOW chips" -- the REFUSE case is explicitly OUT OF
+    SCOPE, recorded here as a truthful, mechanically-asserted reading rather
+    than a claim in prose. A REFUSE chip's six SDP steps carry
+    `supported=False` (NA), so `count_applicable` excludes them from BOTH M
+    and N -- `N == M` holds, the banner-trigger condition the ALLOW case
+    above breaks. This is NOT silently extended to also claim the REFUSE
+    case's ratio drops -- it does not, and this test proves that."""
+    name = "M8720"  # measured REFUSE chip (protocol 0x08, not 0x0D)
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    leg_steps = [s for s in plan.steps if s.op in _SDP_LEG_STEP_ORDER]
+    assert leg_steps and all(not s.supported for s in leg_steps), leg_steps
+
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+    counts = count_applicable(plan, results)
+    assert counts.n_ran == counts.m_applicable, counts  # REFUSE: N == M, no drop
+
+
+def test_count_applicable_sdp_banner_row_renders_the_dropped_ratio():
+    """LEG-13's visible surface: `diagnostic_report.py`'s banner row formats
+    `"{n_ran} of {m_applicable} ran"` (needing no code edit) -- assert the
+    rendered console text of a report built from the same gated ALLOW run
+    above shows the dropped ratio, not a perfect one."""
+    from rich.console import Console
+
+    import firestarter
+    from firestarter.diagnostic_report import (
+        AutoCapture,
+        DiagnosticReport,
+        TransportHealth,
+    )
+
+    plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
+    operator = _gated_allow_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+    banner = count_applicable(plan, results)
+    assert banner.n_ran == 6 and banner.m_applicable == 10  # see the docstring above
+
+    auto_capture = AutoCapture(
+        host_version=firestarter.__version__, chip="AT28C256", protocol="0x0D"
+    )
+    report = DiagnosticReport(
+        auto_capture=auto_capture,
+        transport=TransportHealth(),
+        plan=plan,
+        results=results,
+        banner=banner,
+    )
+    table = report.render()
+    console = Console(record=True, width=200)
+    console.print(table)
+    rendered = console.export_text()
+    assert f"{banner.n_ran} of {banner.m_applicable} ran" in rendered, rendered
+    assert "4 of 4 ran" not in rendered, rendered
