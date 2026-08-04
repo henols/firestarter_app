@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import hashlib
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -754,6 +755,21 @@ def _resolve_or_none(
     return eprom_data, None, ""
 
 
+# The cleanup drain's per-callable narrow exception set (v1.30 Phase 133
+# D-10, LEG-10). Named exactly the same three classes `_run_step`'s D-08
+# degrading clause and EpromOperationError clause catch on the step path --
+# declared once as a module constant so plan 133-06's op-registry parity
+# reasoning has a single named fact to point at, rather than the tuple
+# being re-typed inline at the drain site. Deliberately NOT also naming
+# ProgrammerNotFoundError/FirmwareOutdatedError: both are SerialError
+# subclasses already covered by the first tuple element, so listing them
+# again would be redundant, not narrower -- and it is precisely this
+# inclusion-by-subclass that makes a run-fatal condition surfacing during
+# cleanup swallowed here (a deliberate difference from the step path,
+# which RE-RAISES those two -- see run_plan's finally, below).
+_UNLOCK_CLEANUP_SWALLOWED = (SerialError, HardwareOperationError, EpromOperationError)
+
+
 def run_plan(
     plan: Plan,
     operator: Any,
@@ -807,6 +823,19 @@ def run_plan(
     write contract) and never aborts the write step. `sampler=None` (the
     default) is a proven no-op: it adds zero calls and leaves every existing
     caller's `StepResult` list unchanged.
+
+    A generic cleanup registry (v1.30 Phase 133 D-06, LEG-10) is drained in
+    a bare `try/finally` around the whole step loop: a successful
+    `OP_SDP_LOCK` step registers its matching unlock, and the drain runs it
+    regardless of how the loop exits -- including on a raised exception or
+    `KeyboardInterrupt`/`SystemExit`, both of which still propagate
+    unchanged afterward. An EMPTY registry (every currently-shipping run,
+    since this phase derives no SDP step) is a proven no-op mirroring the
+    `sampler=None` claim above: it adds zero calls and leaves every
+    existing caller's `StepResult` list unchanged. On the propagating path
+    the report is honestly forfeited -- the caller's `results =
+    run_plan(...)` assignment never completes, so there is nothing to
+    render (D-07's residual).
     """
     if runs < 2:
         return [
@@ -823,23 +852,123 @@ def run_plan(
 
     results: list[StepResult] = []
     destructive_gate_closed = False
+    # Cleanup registry (v1.30 Phase 133 D-06, LEG-10): a plain `list` of
+    # zero-argument callables, deliberately GENERIC rather than a hardcoded
+    # lock-to-unlock window with the unlock written inline. The inline form
+    # is literally what research P-20 prevention #2 describes and is
+    # simpler -- but Phase 134's four-step leg, and any later
+    # cleanup-needing op, would each have to re-open `run_plan` to widen
+    # the special case, and a special case widened three times is how this
+    # loop's flat shape rotted in the first place. Drained in
+    # REGISTRATION order below -- deliberately NOT `contextlib.ExitStack`:
+    # measured, not assumed, `ExitStack.close()` drains LIFO (reversing
+    # registration order) and a raising callback makes `close()` re-raise,
+    # which inside a `finally` REPLACES the in-flight exception and demotes
+    # the original to `__context__` -- precisely the masking D-10 exists to
+    # prevent.
+    cleanup: list[Callable[[], None]] = []
 
-    for step in plan.steps:
-        if not step.supported:
-            results.append(_skip_result(step.op, step.reason, verdict=VERDICT_NA))
-            continue
+    # `runs < 2` stays OUTSIDE this `try` (above): nothing is registered
+    # yet, so there is nothing to drain. `results`, `destructive_gate_closed`
+    # and `cleanup` are all created BEFORE the `try`. `return results` stays
+    # INSIDE the `try`, textually unchanged.
+    try:
+        for step in plan.steps:
+            if not step.supported:
+                results.append(_skip_result(step.op, step.reason, verdict=VERDICT_NA))
+                continue
 
-        if step.op in _DESTRUCTIVE_OPS and destructive_gate_closed:
-            results.append(_skip_result(step.op, _DESTRUCTIVE_GATE_REASON))
-            continue
+            if step.op in _DESTRUCTIVE_OPS and destructive_gate_closed:
+                results.append(_skip_result(step.op, _DESTRUCTIVE_GATE_REASON))
+                continue
 
-        result = _run_step(plan.name, step, operator, db, runs=runs, sampler=sampler)
-        results.append(result)
+            result = _run_step(
+                plan.name, step, operator, db, runs=runs, sampler=sampler
+            )
+            results.append(result)
 
-        if step.op == OP_ID:
-            destructive_gate_closed = _id_step_closes_gate(result)
+            if step.op == OP_SDP_LOCK and result.verdict == VERDICT_OK:
+                # Register the unlock ONLY on a successful lock (D-06):
+                # registering after a failed lock would attempt to unlock a
+                # part that was never locked. Routed through `_run_step`
+                # rather than calling `_dispatch_sdp` directly because
+                # `run_plan` does not have `eprom_data` in scope -- the
+                # resolve happens inside `_run_step` -- and this reuses
+                # the resolver, the dispatch arm, and plan 133-02's
+                # exception mapping.
+                #
+                # A nested `def` (not a `lambda: _run_step(...)`) so the
+                # returned `StepResult` is DISCARDED as a statement, not an
+                # expression -- it must never reach `results` (see the
+                # `finally` below) -- and so the registered callable's
+                # actual inferred return type is `None`, matching
+                # `cleanup`'s declared `Callable[[], None]` element type
+                # (a `lambda` returning the `StepResult` expression would
+                # be a real mypy `arg-type` mismatch here, not merely a
+                # style choice).
+                def _unlock_cleanup() -> None:
+                    _run_step(
+                        plan.name,
+                        Step(op=OP_SDP_UNLOCK, supported=True, reason=""),
+                        operator,
+                        db,
+                        runs=runs,
+                    )
 
-    return results
+                cleanup.append(_unlock_cleanup)
+
+            if step.op == OP_ID:
+                destructive_gate_closed = _id_step_closes_gate(result)
+
+        return results
+    finally:
+        # Bare `finally`, NO `except` clause of any width (criteria 1+2):
+        # this is the ONE construct that reaches
+        # `KeyboardInterrupt`/`SystemExit` while still letting them
+        # propagate unchanged. P-20's prevention text asking for a
+        # `try/finally` "wide enough to catch `BaseException`" is
+        # unnecessary and self-defeating here -- an `except BaseException:`
+        # would violate criterion 2 (Ctrl-C must stay Ctrl-C) and would be
+        # flagged by plan 133-05's bare-except deny-rule.
+        #
+        # The drain below NEVER appends into `results` and NEVER
+        # references it at all: `results` is returned by reference, so a
+        # mutation here would be visible to the caller, and that same list
+        # feeds seven consumers in `cli_handlers.py` (the `run_plan` call
+        # site, `count_applicable`, the generic renderer, the JSON
+        # artifact, the markdown table, `build_db_diff`, and
+        # `sys.exit(max(...))`) -- `count_applicable` would render "8 of 7
+        # ran". The registry is empty on every currently-shipping run in
+        # this phase (no plan derives an SDP step), so this is LATENT here
+        # and would DETONATE in Phase 134.
+        #
+        # Each callable gets its OWN narrow `try/except` (D-10) over
+        # exactly `_UNLOCK_CLEANUP_SWALLOWED`, and the drain CONTINUES past
+        # a caught failure rather than stranding the entries behind it in
+        # the registry -- never `raise` from this `finally`. An exception
+        # raised from a `finally` REPLACES the in-flight exception, so a
+        # raising cleanup must never be allowed to mask the original fault
+        # or the user's Ctrl-C. A run-fatal condition surfacing during
+        # cleanup is a DELIBERATE difference from the step path, not an
+        # oversight: `ProgrammerNotFoundError`/`FirmwareOutdatedError` are
+        # `SerialError` subclasses, so the `SerialError` arm of
+        # `_UNLOCK_CLEANUP_SWALLOWED` DOES catch them here, whereas
+        # `_run_step`'s D-08 clause RE-RAISES those same two on the step
+        # path.
+        #
+        # What "recorded" means here (reconciling D-10 with D-16): the
+        # attempt and its outcome are observable only through the operator
+        # double in Phase 133 -- `chip_test.py` has no logger and no
+        # `logging` import (the bench-free pure-compute engine that emits
+        # nothing), `exc.add_note()` is 3.11+ against this module's >=3.9
+        # floor, and the drain must not touch `results`. The honest
+        # residual: a failed unlock is NOT user-visible until Phase 134's
+        # `HELD`/`NOT-RUN` report field (LEG-12).
+        for cleanup_call in cleanup:
+            try:
+                cleanup_call()
+            except _UNLOCK_CLEANUP_SWALLOWED:
+                continue
 
 
 def _id_step_closes_gate(result: StepResult) -> bool:
