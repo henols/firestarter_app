@@ -159,19 +159,26 @@ from firestarter.chip_test import (
     OP_SDP_UNLOCK,
     OP_VERIFY,
     OP_WRITE,
+    OP_WRITE_BASELINE_A,
+    OP_WRITE_BASELINE_B,
+    OP_WRITE_INHIBITED,
     OP_WRITE_PARTIAL,
+    OP_WRITE_RESTORED,
     VERDICT_BAD,
+    VERDICT_MARGINAL,
     VERDICT_OK,
     VERDICT_SKIPPED,
     Plan,
     Step,
     _dispatch_sdp,
+    _dispatch_sdp_leg,
     classify_fingerprint,
     derive_plan,
     generate_inhibited_pattern,
     generate_pattern,
     run_plan,
 )
+from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
 from firestarter.database import EpromDatabase
 from firestarter.exceptions import (
     ChipNotFoundError,
@@ -966,6 +973,230 @@ class TestInhibitedPattern:
             "read-back must sit clearly below the blank/contact threshold "
             "(D-05)."
         )
+
+
+# ---------------------------------------------------------------------------
+# The oracle's read-back-equality dispatch (v1.30 Phase 134, plan 134-02,
+# D-01/D-02/D-03/D-04/D-05, LEG-05/06(engine half)/07/08/16).
+#
+# `_readback_operator` is a SEPARATE double from `_mock_operator` above --
+# `_mock_operator`'s `read_eprom` returns True while writing no file, so the
+# engine would see `actual = b""` and every oracle test would silently
+# exercise only the length gate. `pytest -k "oracle_readback"` /
+# `"lock_leaked"` / `"partial_readback"` (134-VALIDATION.md) select the
+# tests below; `-k "degenerate"` / `"dead_write_path"` selects plan
+# 134-02 Task 3's fixtures, added in a later commit.
+# ---------------------------------------------------------------------------
+
+
+def _readback_operator(payload: bytes, *, write_ok: bool = True, **returns):
+    """Read-back-capable operator double for the SDP-leg oracle.
+
+    `write_eprom` returns `write_ok`; `read_eprom` writes `payload` to the
+    `output_file` keyword argument (mirroring `EpromOperator.read_eprom`'s
+    real calling convention, `chip_test.py:_dispatch_read`'s
+    `output_file=out_path` usage) and returns `True`. Extra `**returns`
+    override any other named method's `.return_value`, mirroring
+    `_mock_operator`'s own extension idiom.
+    """
+    op = Mock(spec=_OPERATOR_METHODS)
+    op.check_eprom_id.return_value = (True, 0x1234)
+    op.check_eprom_blank.return_value = True
+    op.erase_eprom.return_value = True
+    op.verify_eprom.return_value = True
+    op.write_eprom.return_value = write_ok
+
+    def _read_eprom(name, eprom_data, output_file=None, **kwargs):
+        if output_file is not None:
+            Path(output_file).write_bytes(payload)
+        return True
+
+    op.read_eprom.side_effect = _read_eprom
+
+    for name, value in returns.items():
+        getattr(op, name).return_value = value
+        getattr(op, name).side_effect = None
+    return op
+
+
+def test_oracle_readback_true_a_produces_ok():
+    """LEG-05/D-03's polarity pin, first half: with `write_eprom` held
+    CONSTANT at `True`, a read-back equal to pattern A produces OK. Paired
+    with the next test (same bool, read-back B => BAD), this pair is
+    STRONGER than a bool-driven proof: an implementation that derives the
+    verdict from `write_eprom`'s return value cannot produce two different
+    verdicts from one identical bool -- only reading the actual bytes back
+    can flip the outcome here."""
+    region = _DEFAULT_REGION
+    a = generate_pattern(*region)
+    operator = _readback_operator(a, write_ok=True)
+
+    result = _dispatch_sdp_leg(OP_WRITE_INHIBITED, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_OK, (
+        f"(write_ok=True, read-back=A) produced {result.verdict!r}, expected OK"
+    )
+
+
+def test_oracle_readback_true_b_produces_bad():
+    """LEG-05/D-03's polarity pin, second half: the bool is STILL held
+    constant at `True` (same as the previous test) -- only the read-back
+    changes, from A to B -- yet the verdict flips to BAD. A bool-driven
+    implementation cannot produce this pair from one identical bool value.
+
+    P-03 prevention 4's `(False, A) => OK` is recorded as OVERTURNED by
+    D-01/D-03 and is NOT implemented: the `0x86` opt-out ack cannot be
+    observed as a separate signal from this module (see
+    `_dispatch_sdp_leg`'s own docstring, D-01), so D-01 instead routes
+    every failed-precondition case to `marginal`."""
+    region = _DEFAULT_REGION
+    b = generate_inhibited_pattern(*region)
+    operator = _readback_operator(b, write_ok=True)
+
+    result = _dispatch_sdp_leg(OP_WRITE_INHIBITED, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_BAD, (
+        f"(write_ok=True, read-back=B) produced {result.verdict!r}, expected BAD"
+    )
+
+
+def test_oracle_readback_false_a_produces_marginal():
+    """D-03's precondition-gate pin, direction A: `write_eprom` failing is
+    NEVER BAD (D-01/D-02) -- it routes to marginal regardless of which
+    pattern the read-back happens to match."""
+    region = _DEFAULT_REGION
+    a = generate_pattern(*region)
+    operator = _readback_operator(a, write_ok=False)
+
+    result = _dispatch_sdp_leg(OP_WRITE_INHIBITED, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_MARGINAL, (
+        f"(write_ok=False, read-back=A) produced {result.verdict!r}, "
+        "expected marginal (D-01/D-02: a failed precondition is never BAD)"
+    )
+
+
+def test_oracle_readback_false_b_produces_marginal():
+    """D-03's precondition-gate pin, direction B: pinned in BOTH read-back
+    directions -- a failed write_eprom must never be read as BAD even when
+    the read-back happens to equal B, or D-01's whole "precondition, never
+    verdict" reading collapses back into a bool-driven oracle."""
+    region = _DEFAULT_REGION
+    b = generate_inhibited_pattern(*region)
+    operator = _readback_operator(b, write_ok=False)
+
+    result = _dispatch_sdp_leg(OP_WRITE_INHIBITED, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_MARGINAL, (
+        f"(write_ok=False, read-back=B) produced {result.verdict!r}, "
+        "expected marginal in BOTH read-back directions (D-03)"
+    )
+
+
+def test_lock_leaked_write_ok_true_b_readback_is_bad():
+    """LEG-06 engine half: the `(True, B) => BAD` case again, asserted by
+    NAME so `134-VALIDATION.md`'s `-k "lock_leaked"` selector resolves this
+    leg on its own. The EXIT-CODE half of LEG-06 -- that a run containing
+    this leaked-lock result overall exits 1 -- is plan `134-05`'s; this
+    test ALONE does not discharge LEG-06."""
+    region = _DEFAULT_REGION
+    b = generate_inhibited_pattern(*region)
+    operator = _readback_operator(b, write_ok=True)
+
+    result = _dispatch_sdp_leg(OP_WRITE_INHIBITED, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_BAD, (
+        f"write_eprom reported True (the ack was observed) but the "
+        f"read-back is fully pattern B -- verdict was {result.verdict!r}, "
+        "expected BAD (the SDP lock leaked)"
+    )
+
+
+def test_partial_readback_reports_bad():
+    """LEG-07, gh#11's exact symptom: a read-back that differs from
+    pattern A in only the first 16 bytes -- spliced from the LIVE
+    pattern-B generator, never a literal -- reports BAD on write-inhibited
+    even though write_eprom reported success. Covers the "changed only
+    some bytes" branch of `(True, ≠A) => BAD`, distinct from the
+    fully-B case `test_lock_leaked_write_ok_true_b_readback_is_bad` covers.
+    """
+    region = _DEFAULT_REGION
+    a = generate_pattern(*region)
+    b = generate_inhibited_pattern(*region)
+    partial = b[:16] + a[16:]
+    assert partial != a and partial != b, (
+        "fixture setup error: the spliced partial read-back must differ "
+        "from both pattern A and pattern B"
+    )
+    operator = _readback_operator(partial, write_ok=True)
+
+    result = _dispatch_sdp_leg(OP_WRITE_INHIBITED, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_BAD, (
+        f"partial read-back (first 16 bytes changed) produced verdict "
+        f"{result.verdict!r}, expected BAD (LEG-07)"
+    )
+
+
+def test_inhibited_marginal_reason_names_both_causes():
+    """D-01/D-02: for a `(write_ok=False, ...)` inhibited result, the
+    `reason` string must name BOTH candidate causes -- the `0x86` opt-out
+    ack not honoured by the firmware, and a transport fault -- plus the
+    firmware-update instruction, so a future edit that reduces this to one
+    cause fails here."""
+    region = _DEFAULT_REGION
+    a = generate_pattern(*region)
+    operator = _readback_operator(a, write_ok=False)
+
+    result = _dispatch_sdp_leg(OP_WRITE_INHIBITED, "M8720", {}, operator)
+
+    assert "0x86 opt-out ack" in result.reason, result.reason
+    assert "transport fault" in result.reason, result.reason
+    assert "firestarter fw --install" in result.reason, result.reason
+
+
+def test_inhibited_write_sets_flag_skip_sdp_unlock():
+    """RESEARCH §4.3: `write-inhibited`'s `write_eprom` call carries
+    `FLAG_SKIP_SDP_UNLOCK` as its 4th positional (`operation_flags`)
+    argument."""
+    region = _DEFAULT_REGION
+    a = generate_pattern(*region)
+    operator = _readback_operator(a, write_ok=True)
+
+    _dispatch_sdp_leg(OP_WRITE_INHIBITED, "M8720", {}, operator)
+
+    flags = operator.write_eprom.call_args.args[3]
+    assert flags & FLAG_SKIP_SDP_UNLOCK, (
+        f"write-inhibited's write_eprom call did not carry "
+        f"FLAG_SKIP_SDP_UNLOCK: flags={flags!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    "op,payload_fn",
+    [
+        (OP_WRITE_BASELINE_B, lambda region: generate_inhibited_pattern(*region)),
+        (OP_WRITE_BASELINE_A, lambda region: generate_pattern(*region)),
+        (OP_WRITE_RESTORED, lambda region: generate_pattern(*region)),
+    ],
+)
+def test_non_inhibited_writes_clear_flag_skip_sdp_unlock(op, payload_fn):
+    """RESEARCH §4.3: the flag is CLEAR for write-baseline-b,
+    write-baseline-a AND write-restored. The write-restored leg is the
+    load-bearing case: setting the flag there would defeat that step's
+    whole purpose (it must be allowed to auto-unlock and succeed so the
+    part is left writable)."""
+    region = _DEFAULT_REGION
+    payload = payload_fn(region)
+    operator = _readback_operator(payload, write_ok=True)
+
+    _dispatch_sdp_leg(op, "M8720", {}, operator)
+
+    flags = operator.write_eprom.call_args.args[3]
+    assert not (flags & FLAG_SKIP_SDP_UNLOCK), (
+        f"{op!r}'s write_eprom call carried FLAG_SKIP_SDP_UNLOCK "
+        f"(flags={flags!r}) -- only write-inhibited may set this bit"
+    )
 
 
 # ---------------------------------------------------------------------------
