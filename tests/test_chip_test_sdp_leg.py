@@ -178,6 +178,7 @@ from firestarter.chip_test import (
     Plan,
     Step,
     StepResult,
+    _baseline_closes_sdp_gate,
     _dispatch_sdp,
     _dispatch_sdp_leg,
     classify_fingerprint,
@@ -2222,3 +2223,268 @@ def test_oracle_applicable_false_for_refuse_chip_full_and_none_scope():
 
     none_plan = derive_plan(name, _REAL_DB, write_scope="none")
     assert sdp_oracle_applicable(none_plan) is False
+
+
+# ---------------------------------------------------------------------------
+# The baseline gate, cleanup de-registration, and the LEG-09 distinction
+# (v1.30 Phase 134, plan 134-04, Task 3, D-08/D-11/D-20).
+#
+# THE SEVENTH ROUTE (LEG-17, VALIDATION.md non-vacuity obligation #6): the
+# baseline gate proven below is a SEVENTH route to a non-running oracle, on
+# top of research's R1-R6 (which plan 134-10 tests). Under D-08 + D-15 it
+# fails CLOSED (exit 1 from the baseline BAD, or >= 2 via the NOT-RUN
+# floor), so it is NOT a laundering route -- but it is tested in this same
+# family and named as the seventh here so plan 134-10's six-route test does
+# not read as exhaustive when it is not.
+# ---------------------------------------------------------------------------
+
+
+def test_baseline_gate_closes_dead_write_path_allow_chip_full_leg():
+    """D-08/D-20, gh#20's shape: for AT28C256's write_scope="full" plan
+    driven by `_dead_write_path_operator()`, `write-baseline-b` reports BAD
+    (the write path never transitions the die) and the gate closes --
+    `sdp-lock`, `write-inhibited`, `sdp-unlock` and `write-restored` all
+    render SKIPPED, `operator.sdp_lock` is never called, and each SKIPPED
+    reason carries the family fact (never the chip-ID gate's wording).
+
+    ⚠ MEASURED DISCREPANCY, recorded rather than silently reconciled (same
+    project convention as 134-02-SUMMARY.md's "exactly two" finding):
+    134-CONTEXT.md D-20 and this plan's own <behavior>/<action> text state
+    `n_ran=5, m_applicable=10` for this exact scenario. The ACTUAL measured
+    value, run live against this commit's `_dead_write_path_operator()`
+    fixture, is `n_ran=6, m_applicable=10` -- because `write-baseline-a`
+    (unlike the four `_SDP_LEG_GATED_OPS` members) is NEVER itself gated by
+    `baseline_gate_closed`: both baseline directions always run regardless
+    of the gate's state, since they are what DECIDE it (D-08's own
+    stickiness requirement -- see `test_baseline_gate_sticky_...` below --
+    is unsatisfiable if baseline-a does not run at all once the gate is
+    closed). `write-baseline-a` against this fixture reports OK (its
+    expected read-back is pattern A, and the fixture's `read_eprom` always
+    returns pattern A), so it counts as "ran" alongside the four shipped
+    ops (read/blank-check/write/verify) and `write-baseline-b` itself: 4 +
+    2 = 6 ran, 4 skipped, out of 10 applicable. This is the CORRECT,
+    measured value; the "5"/" five SKIPPED" figures elsewhere in the phase
+    record are the ones in error, not this assertion.
+    """
+    name = "AT28C256"
+    allowed, _reason = sdp_capability(name, _REAL_DB)
+    assert allowed is True, f"fixture setup error: {name} is not really ALLOW"
+
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    operator = _dead_write_path_operator()
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    baseline_b = _result(results, OP_WRITE_BASELINE_B)
+    assert baseline_b.verdict == VERDICT_BAD, (
+        f"fixture setup: write-baseline-b must report BAD, got {baseline_b.verdict!r}"
+    )
+
+    for gated_op in (OP_SDP_LOCK, OP_WRITE_INHIBITED, OP_SDP_UNLOCK, OP_WRITE_RESTORED):
+        gated_result = _result(results, gated_op)
+        assert gated_result.verdict == VERDICT_SKIPPED, (
+            f"{gated_op!r} verdict was {gated_result.verdict!r}, expected "
+            "SKIPPED once the baseline gate closed"
+        )
+        assert "no lock was emitted" in gated_result.reason, (
+            f"{gated_op!r}'s SKIPPED reason {gated_result.reason!r} does "
+            "not name the family fact 'no lock was emitted'"
+        )
+        assert _DESTRUCTIVE_GATE_REASON not in gated_result.reason, (
+            f"{gated_op!r}'s SKIPPED reason wrongly contains the chip-ID "
+            f"gate's own wording ({_DESTRUCTIVE_GATE_REASON!r}) -- D-08 "
+            "forbids attributing a write-path closure to a chip-ID "
+            "mismatch"
+        )
+    operator.sdp_lock.assert_not_called()
+
+    counts = count_applicable(plan, results)
+    assert counts.n_ran == 6, (
+        f"measured n_ran={counts.n_ran}, expected 6 -- see this test's "
+        "MEASURED DISCREPANCY docstring; do not change this to 5 to match "
+        "134-CONTEXT.md D-20's prose without re-deriving the arithmetic"
+    )
+    assert counts.m_applicable == 10, (
+        f"measured m_applicable={counts.m_applicable}, expected 10 "
+        "(4 shipped-supported + 6 SDP-leg-supported, since id and erase "
+        "are both NA for this chip)"
+    )
+
+
+@pytest.mark.parametrize(
+    "verdict", [VERDICT_BAD, VERDICT_MARGINAL, VERDICT_SKIPPED, VERDICT_NA]
+)
+def test_baseline_gate_closes_on_any_non_ok_verdict(verdict):
+    """D-08: `_baseline_closes_sdp_gate` closes on ANY non-OK verdict --
+    BAD, marginal, SKIPPED, NA -- strictly WIDER than
+    `_id_step_closes_gate`'s narrower `(BAD, SKIPPED)` tuple. A contact
+    fault (marginal) is as disqualifying as a proven-dead write path
+    (BAD)."""
+    result = StepResult(op=OP_WRITE_BASELINE_B, verdict=verdict, reason="synthetic")
+    assert _baseline_closes_sdp_gate(result) is True, (
+        f"_baseline_closes_sdp_gate did not close on verdict {verdict!r} -- "
+        "the gate must be strictly wider than _id_step_closes_gate's "
+        "(BAD, SKIPPED) tuple"
+    )
+
+
+def test_baseline_gate_stays_open_on_clean_ok():
+    """Non-vacuity mirror for the parametrized closure test above: a clean
+    OK baseline verdict must NOT close the gate -- without this, the
+    closure claim would be equally true of a gate that always returns
+    True regardless of input."""
+    result = StepResult(op=OP_WRITE_BASELINE_B, verdict=VERDICT_OK, reason="")
+    assert _baseline_closes_sdp_gate(result) is False
+
+
+def test_baseline_gate_sticky_failing_b_then_passing_a_stays_closed():
+    """D-08: sticky by construction. A failing `write-baseline-b` closes
+    the gate; a SUBSEQUENT passing `write-baseline-a` must not reopen it
+    -- both baseline directions always run regardless of the gate's state
+    (they are what DECIDE it), so this is a genuine reopening opportunity,
+    not a vacuous one."""
+    operator = _dead_write_path_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE_BASELINE_B, supported=True, reason=""),
+        Step(op=OP_WRITE_BASELINE_A, supported=True, reason=""),
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    baseline_b = _result(results, OP_WRITE_BASELINE_B)
+    baseline_a = _result(results, OP_WRITE_BASELINE_A)
+    lock_result = _result(results, OP_SDP_LOCK)
+    assert baseline_b.verdict == VERDICT_BAD, "fixture setup: baseline-b must fail"
+    assert baseline_a.verdict == VERDICT_OK, (
+        "fixture setup: baseline-a must PASS -- the whole point of this "
+        "test is that a passing baseline-a does not reopen an "
+        f"already-closed gate (measured verdict: {baseline_a.verdict!r})"
+    )
+    assert lock_result.verdict == VERDICT_SKIPPED, (
+        f"sdp-lock verdict was {lock_result.verdict!r} after a failing "
+        "write-baseline-b followed by a passing write-baseline-a -- the "
+        "gate must stay CLOSED (sticky), never reopened (D-08)"
+    )
+    operator.sdp_lock.assert_not_called()
+
+
+def test_leg09_destructive_gate_never_skips_the_explicit_unlock_step():
+    """D-20's LEG-09 distinction, pinned as a NEW test -- NOT an edit to
+    any Phase-133 named proof (`test_unlock_exempt_from_destructive`,
+    `test_lock_ran_then_gate_closes`, `test_finally_drains_on_exception`,
+    `test_empty_registry_noop`, `test_drain_continues_after_failure`,
+    `test_drain_does_not_mutate_results` all stay byte-identical).
+
+    LEG-09 is scoped EXCLUSIVELY to the *destructive* gate
+    (`_DESTRUCTIVE_OPS` membership + `test_unlock_exempt_from_destructive`)
+    -- a structurally DIFFERENT mechanism from the new *baseline* gate
+    (D-08/D-20): `destructive_gate_closed` and `baseline_gate_closed` are
+    two separate flags in `run_plan`, consulted by two separate guard
+    clauses. D-20 widening the baseline gate to include `sdp-unlock` does
+    NOT weaken LEG-09: a run where the lock ran OK and the *destructive*
+    gate closes AFTER it (via a later id-check failure) must still run the
+    explicit `sdp-unlock` step -- only the SEPARATE baseline gate may skip
+    it, and the baseline gate is OPEN here (no baseline op ran at all)."""
+    assert OP_SDP_UNLOCK not in _DESTRUCTIVE_OPS, (
+        "OP_SDP_UNLOCK must stay OUT of _DESTRUCTIVE_OPS -- LEG-09's "
+        "structural claim, re-pinned here alongside D-20's baseline-gate "
+        "widening so the two mechanisms are never conflated"
+    )
+
+    operator = _mock_operator(sdp_lock=True, sdp_unlock=True)
+    # First id step passes (gate stays open through the lock); second id
+    # step (after the lock) CLOSES the *destructive* gate.
+    operator.check_eprom_id.side_effect = [(True, 0x1234), (False, None)]
+    plan = _plan_with_steps(
+        Step(op=OP_ID, supported=True, reason=""),
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+        Step(op=OP_ID, supported=True, reason=""),
+        Step(op=OP_SDP_UNLOCK, supported=True, reason=""),
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    unlock_result = _result(results, OP_SDP_UNLOCK)
+    assert unlock_result.verdict == VERDICT_OK, (
+        f"the explicit sdp-unlock step reported {unlock_result.verdict!r} "
+        "-- a CLOSED destructive gate must never skip it (exactly what "
+        "LEG-09 exists to prevent); only the SEPARATE baseline gate may "
+        "skip it (D-20), and the baseline gate is OPEN in this scenario"
+    )
+    operator.sdp_unlock.assert_called_once_with("M8720", ANY)
+
+
+def test_deregistration_completed_leg_unlocks_exactly_once():
+    """RESEARCH §4.2 property 1: a completed leg (lock succeeds, explicit
+    unlock step also succeeds) calls `operator.sdp_unlock` EXACTLY once --
+    the registered cleanup is de-registered by the successful explicit
+    unlock, so the `finally` drain does not ALSO call it (133 D-11
+    rejected the both-paths shape precisely because of this double-count)."""
+    operator = _mock_operator(sdp_lock=True, sdp_unlock=True)
+    plan = _plan_with_steps(
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+        Step(op=OP_SDP_UNLOCK, supported=True, reason=""),
+    )
+
+    run_plan(plan, operator, _REAL_DB)
+
+    assert operator.sdp_unlock.call_count == 1, (
+        f"sdp_unlock was called {operator.sdp_unlock.call_count} time(s) "
+        "for a fully-completed leg, expected EXACTLY 1"
+    )
+
+
+def test_deregistration_interrupted_leg_still_unlocks_exactly_once_via_drain():
+    """RESEARCH §4.2 property 2: a leg that raises after a successful lock
+    but BEFORE the explicit unlock step (which never ran at all) still
+    calls `operator.sdp_unlock` EXACTLY once, via the `finally` drain --
+    mirroring Phase 133's `test_finally_drains_on_exception`, now proven
+    against this plan's de-registration logic too."""
+    operator = _mock_operator(sdp_lock=True)
+    injected = ProgrammerNotFoundError(
+        "134-04 injected escape between lock and the explicit unlock step"
+    )
+    operator.read_eprom.side_effect = injected
+    plan = _plan_with_steps(
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+        Step(op=OP_READ, supported=True, reason=""),
+        Step(op=OP_SDP_UNLOCK, supported=True, reason=""),
+    )
+
+    with pytest.raises(ProgrammerNotFoundError) as excinfo:
+        run_plan(plan, operator, _REAL_DB)
+
+    assert excinfo.value is injected
+    assert operator.sdp_unlock.call_count == 1, (
+        f"sdp_unlock was called {operator.sdp_unlock.call_count} time(s), "
+        "expected EXACTLY 1 -- the explicit unlock step never ran, so "
+        "only the drain's retained registration should fire"
+    )
+
+
+def test_deregistration_failed_explicit_unlock_retries_via_drain_twice():
+    """RESEARCH §4.2 property 3: a FAILED explicit unlock step (non-OK
+    verdict) must leave the registered handle in place, so the `finally`
+    drain retries it -- `operator.sdp_unlock` is called TWICE (once
+    explicitly, once from the drain retry), never silently once."""
+    operator = _mock_operator(sdp_lock=True)
+    operator.sdp_unlock.return_value = False  # the explicit step reports BAD
+    plan = _plan_with_steps(
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+        Step(op=OP_SDP_UNLOCK, supported=True, reason=""),
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    assert operator.sdp_unlock.call_count == 2, (
+        f"sdp_unlock was called {operator.sdp_unlock.call_count} time(s), "
+        "expected 2 -- a FAILED explicit unlock must leave the registered "
+        "handle in place so the finally drain retries it"
+    )
+    unlock_result = _result(results, OP_SDP_UNLOCK)
+    assert unlock_result.verdict == VERDICT_BAD, (
+        f"the explicit sdp-unlock step's own verdict was "
+        f"{unlock_result.verdict!r}, expected BAD (operator.sdp_unlock "
+        "returned False)"
+    )
