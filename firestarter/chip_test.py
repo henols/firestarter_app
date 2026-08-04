@@ -22,13 +22,11 @@ calls no operator/firmware method itself. Plan 108-04 extends this module
 with `run_plan` -- the non-fatal per-step executor that composes existing
 `EpromOperator` methods only (still zero new firmware dispatch, zero
 VPP-set). v1.30 Phase 134 DELIBERATELY NARROWS the "builds no wire dict"
-half of that claim: this module will pass exactly one `operation_flags` bit
+half of that claim: this module passes exactly one `operation_flags` bit
 (`FLAG_SKIP_SDP_UNLOCK`, `constants.py:137`) on exactly one op (the SDP
-leg's inhibited-write step, `OP_WRITE_INHIBITED` -- wired by plan 134-02,
-which also carries the corresponding import; `ruff`'s `F401` flags an
-unused import of a name referenced nowhere, so this plan (134-01) states
-the narrowing in prose only) -- stated explicitly here rather than
-silently violating the older, broader wording.
+leg's inhibited-write step, `OP_WRITE_INHIBITED`, wired by plan 134-02's
+`_dispatch_sdp_leg`) -- stated explicitly here rather than silently
+violating the older, broader wording.
 """
 
 from __future__ import annotations
@@ -41,7 +39,11 @@ from pathlib import Path
 from typing import Any
 
 from firestarter.chip_resolver import resolve_chip
-from firestarter.constants import FLAG_CAN_ERASE  # 0x02 -- do NOT redefine; import
+from firestarter.constants import (
+    FLAG_CAN_ERASE,  # 0x02 -- do NOT redefine; import
+    FLAG_SKIP_SDP_UNLOCK,  # 0x100 -- passed on OP_WRITE_INHIBITED ONLY (v1.30
+    # Phase 134, T-134-02, D-01). Do NOT redefine; import.
+)
 from firestarter.exceptions import (
     ChipNotFoundError,
     ChipNotImplementedError,
@@ -1236,9 +1238,12 @@ def _dispatch_step(
     marginal-on-disagreement policy (D-05/D-06); write/verify additionally
     attach a `Fingerprint` (PATT-02 wiring, Pitfall 3 addr_base). SDP
     lock/unlock (v1.30 Phase 133 D-01/D-04, LEG-09) -> single run via
-    `_dispatch_sdp`, arm 5, LAST -- see below. The engine sets NO VPP, builds
-    NO wire dict, and passes NO --force -- it only calls the operator's
-    existing public methods.
+    `_dispatch_sdp`, arm 5. The SDP leg's four write-shaped ops (v1.30 Phase
+    134 T-134-02, LEG-05/06/07/08/16) -> single run via `_dispatch_sdp_leg`,
+    arm 6, LAST -- see below. The engine sets NO VPP, builds NO wire dict
+    (except the one `FLAG_SKIP_SDP_UNLOCK` bit on `OP_WRITE_INHIBITED`, a
+    deliberate D-01 narrowing), and passes NO --force -- it only calls the
+    operator's existing public methods.
 
     `sampler` (D-04) is threaded through unchanged to `_dispatch_multi_run`,
     the only op with a bracket site (OP_WRITE); `None` is the default and a
@@ -1283,6 +1288,15 @@ def _dispatch_step(
     # something this phase tests.
     if step.op in _SDP_OPS:
         return _dispatch_sdp(step.op, name, eprom_data, operator)
+    # Arm 6 (v1.30 Phase 134 T-134-02, LEG-05/06/07/08/16) -- immediately
+    # after arm 5 and still above the terminal fail-closed `return` below.
+    # Routes the SDP leg's four write-shaped ops to the read-back-equality
+    # oracle. Placing it before arm 5 (or before arms 1-4) would break
+    # tests/test_chip_test_sdp_leg.py::test_shipped_ops_never_reach_sdp_arm,
+    # which proves every op shipped before this phase returns from an
+    # earlier arm and never evaluates this membership test at all.
+    if step.op in _SDP_LEG_OPS:
+        return _dispatch_sdp_leg(step.op, name, eprom_data, operator, step=step)
     return StepResult(
         op=step.op,
         verdict=VERDICT_BAD,
@@ -1575,6 +1589,267 @@ def _dispatch_sdp(
         raise AssertionError(f"unreachable: op {op!r} passed the _SDP_OPS guard")
 
     return StepResult(op=op, verdict=VERDICT_OK if is_ok else VERDICT_BAD, run_count=1)
+
+
+def _dispatch_sdp_leg(
+    op: str,
+    name: str,
+    eprom_data: dict[str, Any],
+    operator: Any,
+    *,
+    step: Step | None = None,
+) -> StepResult:
+    """Dispatch one of the SDP leg's four write-shaped ops to the
+    READ-BACK-EQUALITY oracle (v1.30 Phase 134, T-134-02, D-01...D-05,
+    LEG-05/06(engine half)/07/08/16).
+
+    This is the milestone's reason to exist: the verdict comes from
+    comparing the read-back bytes against what SHOULD be there, never from
+    `write_eprom`'s own bool. A write that returns without error is NOT, by
+    itself, evidence of anything -- see D-01 below.
+
+    A SEPARATE dispatcher from `_dispatch_sdp` (133 D-01's frozen four-
+    positional forward contract, unchanged here): these four ops need a
+    source payload, a read-back, and an `operation_flags` argument that
+    signature cannot carry. Structurally clones `_dispatch_sdp`'s /
+    `_dispatch_multi_run`'s guard -> branch -> terminal `raise
+    AssertionError` shape rather than importing/reusing either.
+
+    ⚠ D-01 (measured, not merely designed around): the `0x86` opt-out ack
+    is UNOBSERVABLE from this module. `_operation_context`'s `finally`
+    calls `_disconnect_programmer()` (`eprom_operations.py:405-416`), which
+    sets `self.comm = None` before `write_eprom` returns, so
+    `comm.seen_message_ids` is gone by the time this function could read
+    it. Research's truth-table branch 5 (the ack readable as a SEPARATE
+    signal) is THEREFORE NOT IMPLEMENTABLE AS WRITTEN and is not attempted
+    here. Consequence: `write_eprom`'s bool is a PRECONDITION signal only.
+    `True` is reachable only when the state machine succeeded AND (for the
+    inhibited-write op) the ack was observed internally by
+    `eprom_operations.py`'s own check (`:1654-1662`) -- so `True` proves the
+    experiment ran as designed. `False` NEVER means BAD by itself (D-01/
+    D-02) -- it routes to `marginal`, naming both candidate causes (the
+    opt-out not honoured by older firmware, or a transport fault).
+
+    ⚠ D-03's full 2x2 polarity proof holds for `OP_WRITE_INHIBITED`:
+    `(True, A) -> OK`, `(True, B) -> BAD` -- these two hold the bool
+    CONSTANT and vary only the read-back, a STRICTLY STRONGER proof than a
+    bool-driven implementation could pass, because such an implementation
+    cannot produce two different verdicts from one identical bool.
+    `(False, A) -> marginal`, `(False, B) -> marginal` pin the precondition
+    gate in both read-back directions. P-03 prevention 4's `(False, A) ->
+    OK` is OVERTURNED by D-01/D-03 and is deliberately NOT implemented here.
+
+    ⚠ No sixth verdict status (research P-09/`ROADMAP` "no new verdict
+    status"): `_verdict_code` (`cli_handlers.py`) is `.get(verdict, 0)`, so
+    an unrecognised verdict string would silently exit 0. Only
+    VERDICT_OK / VERDICT_BAD / VERDICT_MARGINAL are used below.
+    """
+    if op not in _SDP_LEG_OPS:
+        return StepResult(
+            op=op,
+            verdict=VERDICT_BAD,
+            run_count=0,
+            reason=(
+                f"op {op!r} is not in the SDP-leg dispatch allow-list "
+                "(_SDP_LEG_OPS) — refused fail-closed rather than falling "
+                "through to an operator mutation method"
+            ),
+        )
+
+    region_start, region_length = _write_region_for(step, eprom_data)
+    pattern_a = generate_pattern(region_start, region_length)
+    pattern_b = generate_inhibited_pattern(region_start, region_length)
+
+    # Per-op (source payload written, expected read-back, operation_flags).
+    # The inhibited row's asymmetry IS the oracle: it WRITES pattern B but
+    # EXPECTS to read back pattern A (unchanged) -- a leaked lock reads
+    # back B instead. FLAG_SKIP_SDP_UNLOCK is set on this op ONLY: setting
+    # it on write-restored would defeat that step's whole purpose -- it
+    # must be allowed to auto-unlock and succeed so the part is left
+    # writable (D-06's "restored" evidence).
+    if op == OP_WRITE_BASELINE_B:
+        source_payload, expected_readback, flags = pattern_b, pattern_b, 0
+    elif op == OP_WRITE_BASELINE_A:
+        source_payload, expected_readback, flags = pattern_a, pattern_a, 0
+    elif op == OP_WRITE_INHIBITED:
+        source_payload, expected_readback, flags = (
+            pattern_b,
+            pattern_a,
+            FLAG_SKIP_SDP_UNLOCK,
+        )
+    elif op == OP_WRITE_RESTORED:
+        source_payload, expected_readback, flags = pattern_a, pattern_a, 0
+    else:
+        # Unreachable in practice: the fail-closed `_SDP_LEG_OPS` guard
+        # above already refused any op outside the four named ops before
+        # this branch could be reached. Deliberately an explicit `else:
+        # raise`, not a bare `else` -- the pre-Phase-121 shape this project
+        # refuses to reintroduce (RESEARCH Pitfall 1a).
+        raise AssertionError(f"unreachable: op {op!r} passed the _SDP_LEG_OPS guard")
+
+    # Write, once (single-run: these ops are deliberately NOT _MULTI_RUN_OPS
+    # members, D-03).
+    tmp_fh = tempfile.NamedTemporaryFile(
+        prefix="chip_test_sdp_leg_", suffix=".bin", delete=False
+    )
+    try:
+        tmp_fh.write(source_payload)
+    finally:
+        tmp_fh.close()
+    tmp_source_path = tmp_fh.name
+
+    try:
+        wrote_ok = operator.write_eprom(name, eprom_data, tmp_source_path, flags)
+
+        # Read back. ⚠ Unlike `_dispatch_multi_run`'s read-back
+        # (`:1483-1493`), this read-back is NOT best-effort decoration -- it
+        # IS the verdict (D-05/LEG-05). A failed/degenerate read-back still
+        # produces a verdict below (BAD via the length gate), it never
+        # silently skips the Fingerprint the way the multi-run write/verify
+        # step does.
+        actual = b""
+        try:
+            with tempfile.TemporaryDirectory(
+                prefix="chip_test_sdp_leg_verify_"
+            ) as tmp_dir:
+                readback_path = str(Path(tmp_dir) / "readback.bin")
+                operator.read_eprom(name, eprom_data, output_file=readback_path)
+                try:
+                    actual = Path(readback_path).read_bytes()
+                except OSError:
+                    actual = b""
+        except EpromOperationError:
+            actual = b""
+    finally:
+        try:
+            Path(tmp_source_path).unlink()
+        except OSError:
+            pass
+
+    # a. LENGTH gate FIRST (D-04, P-02). Measured:
+    # `classify_fingerprint(A, b"")` returns `total=0, bad=0` -- an empty
+    # read-back reads as PERFECT equality, and `_diff_offsets` silently
+    # truncates to the common prefix and never raises. This gate runs
+    # before any `_diff_offsets`/`classify_fingerprint` call so that trap
+    # cannot fire.
+    if len(actual) != region_length:
+        return StepResult(
+            op=op,
+            verdict=VERDICT_BAD,
+            reason=(
+                f"read-back length {len(actual)} bytes != expected region "
+                f"length {region_length} bytes — the oracle had no usable "
+                "input to compare (length gate, checked before any "
+                "classify_fingerprint call)"
+            ),
+            run_count=1,
+        )
+
+    # b. CONTENT degeneracy (D-04). Correct length but degenerate content
+    # (all-0x00 / all-0xFF) routes through `classify_fingerprint` and lands
+    # `marginal` -- a loose socket or blank chip reads as a contact fault,
+    # never a confidently-reported chip finding.
+    if actual == b"\x00" * region_length or actual == b"\xff" * region_length:
+        fingerprint = classify_fingerprint(
+            expected_readback, actual, addr_base=region_start
+        )
+        return StepResult(
+            op=op,
+            verdict=VERDICT_MARGINAL,
+            reason=(
+                "correct-length but degenerate read-back content "
+                f"(classification={fingerprint.classification!r}) — a "
+                "loose socket or blank/unresponsive chip reads as a contact "
+                "fault, not a chip finding (D-04)"
+            ),
+            fingerprint=fingerprint,
+            run_count=1,
+        )
+
+    # c. Equality decision. Attach the Fingerprint in every arm.
+    fingerprint = classify_fingerprint(
+        expected_readback, actual, addr_base=region_start
+    )
+    equal = actual == expected_readback
+
+    if op == OP_WRITE_INHIBITED:
+        # D-03's full 2x2, on pattern A (unchanged) as the expected value.
+        if wrote_ok and equal:
+            verdict, reason = VERDICT_OK, ""
+        elif wrote_ok and not equal:
+            # LEG-06, the leg's whole value -- covers both a full change to
+            # B and a PARTIAL change (LEG-07, gh#11's exact symptom).
+            verdict, reason = (
+                VERDICT_BAD,
+                (
+                    "write_eprom reported success (the state machine completed "
+                    "and the 0x86 opt-out ack was observed internally) yet the "
+                    "read-back changed from pattern A — the SDP lock did not "
+                    "inhibit this write"
+                ),
+            )
+        else:
+            # D-01/D-02: a failed precondition is marginal in BOTH read-back
+            # directions -- BAD here would manufacture a chip-fault report
+            # for a community member running older firmware.
+            verdict, reason = (
+                VERDICT_MARGINAL,
+                (
+                    "write_eprom reported failure on the inhibited-write "
+                    "precondition — this is a PRECONDITION signal, not the "
+                    "verdict (D-01). Most likely causes: (1) the 0x86 opt-out "
+                    "ack was not honoured — the connected firmware may predate "
+                    "FLAG_SKIP_SDP_UNLOCK support, run `firestarter fw "
+                    "--install` to update it and retry; or (2) a transport "
+                    "fault. Neither is a chip finding."
+                ),
+            )
+    else:
+        # OP_WRITE_BASELINE_B / OP_WRITE_BASELINE_A / OP_WRITE_RESTORED:
+        # `expected_readback` is what was written.
+        if wrote_ok and equal:
+            verdict, reason = VERDICT_OK, ""
+        elif wrote_ok and not equal:
+            verdict, reason = (
+                VERDICT_BAD,
+                (
+                    "write_eprom reported success but the read-back does not "
+                    "match what was written — the write path did not "
+                    "transition (LEG-16's dead-write-path shape) or changed "
+                    "only part of the region (LEG-07)"
+                ),
+            )
+        elif (not wrote_ok) and equal:
+            # P-05's idempotent-baseline shape: must never read as OK.
+            verdict, reason = (
+                VERDICT_MARGINAL,
+                (
+                    "write_eprom reported failure yet the read-back already "
+                    "matches the intended pattern — the transition is not "
+                    "demonstrated (P-05); this must never be reported as OK"
+                ),
+            )
+        else:
+            # No opt-out flag is set on these steps, so a failed write with
+            # unchanged bytes is a plain dead write path with no host-side
+            # cause to blame (gh#20's measured shape: write-baseline-b goes
+            # BAD on that bench).
+            verdict, reason = (
+                VERDICT_BAD,
+                (
+                    "write_eprom reported failure and the read-back does not "
+                    "match the intended pattern — a dead write path with no "
+                    "host-side cause to blame"
+                ),
+            )
+
+    return StepResult(
+        op=op,
+        verdict=verdict,
+        reason=reason,
+        fingerprint=fingerprint,
+        run_count=1,
+    )
 
 
 # ---------------------------------------------------------------------------

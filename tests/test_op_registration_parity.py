@@ -537,42 +537,13 @@ _OP_REGISTRY_EXEMPTIONS: dict[tuple[str, str], str] = {
     (OP_WRITE_RESTORED, "_dispatch_multi_run"): (
         _NOT_ROUTED_TO_MULTI_RUN_SDP_LEG_REASON.format(op=OP_WRITE_RESTORED)
     ),
-    # --- _dispatch_step: TEMPORARY -- plan 134-02 wires these four ops'
-    # routing arm. Discharge (remove these four rows) in that plan's own
-    # commit, or the stale-row guard would let a now-false exemption
-    # survive. ---
-    (OP_WRITE_BASELINE_B, "_dispatch_step"): (
-        "TEMPORARY — discharged by plan 134-02: write-baseline-b's "
-        "_dispatch_step routing arm is wired in plan 134-02, not this one "
-        "(134-01 lands only the vocabulary + registry + generator). This "
-        "row must be removed in 134-02's own commit that adds the "
-        "routing, or the stale-row guard would let a now-false exemption "
-        "survive."
-    ),
-    (OP_WRITE_BASELINE_A, "_dispatch_step"): (
-        "TEMPORARY — discharged by plan 134-02: write-baseline-a's "
-        "_dispatch_step routing arm is wired in plan 134-02, not this one "
-        "(134-01 lands only the vocabulary + registry + generator). This "
-        "row must be removed in 134-02's own commit that adds the "
-        "routing, or the stale-row guard would let a now-false exemption "
-        "survive."
-    ),
-    (OP_WRITE_INHIBITED, "_dispatch_step"): (
-        "TEMPORARY — discharged by plan 134-02: write-inhibited's "
-        "_dispatch_step routing arm is wired in plan 134-02, not this one "
-        "(134-01 lands only the vocabulary + registry + generator). This "
-        "row must be removed in 134-02's own commit that adds the "
-        "routing, or the stale-row guard would let a now-false exemption "
-        "survive."
-    ),
-    (OP_WRITE_RESTORED, "_dispatch_step"): (
-        "TEMPORARY — discharged by plan 134-02: write-restored's "
-        "_dispatch_step routing arm is wired in plan 134-02, not this one "
-        "(134-01 lands only the vocabulary + registry + generator). This "
-        "row must be removed in 134-02's own commit that adds the "
-        "routing, or the stale-row guard would let a now-false exemption "
-        "survive."
-    ),
+    # --- _dispatch_step: no exemptions needed here (v1.30 Phase 134, plan
+    # 134-02). Arm 6 (`if step.op in _SDP_LEG_OPS: return
+    # _dispatch_sdp_leg(...)`) now routes all four SDP-leg ops, so
+    # `_op_names_referenced_in("_dispatch_step", ...)` resolves them as real
+    # members via `_SDP_LEG_OPS`'s transitive membership -- the four
+    # TEMPORARY rows plan 134-01 added here are discharged (removed) in this
+    # same commit that adds the routing, per that plan's own instruction. ---
     # --- derive_plan: TEMPORARY -- plan 134-03 teaches derive_plan to emit
     # these four ops as Steps (D-06). Discharge (remove these four rows) in
     # that plan's own commit, or the stale-row guard would let a now-false
@@ -611,29 +582,23 @@ _OP_REGISTRY_EXEMPTIONS: dict[tuple[str, str], str] = {
     ),
 }
 
-# `_dispatch_step` needs zero exemptions for the 9 PRE-EXISTING ops --
-# measured: all 9 resolve into it (arms 1-4 cover id/blank-check/read plus
-# every _MULTI_RUN_OPS member, arm 5 covers every _SDP_OPS member). Plan
-# 134-01 adds four TEMPORARY exemption rows for this phase's own four new
-# ops (discharged by plan 134-02, which wires their routing arm) -- so the
-# assertion narrows from "zero exemptions at all" to "zero exemptions for
-# any of the 9 pre-existing ops", and separately pins the temporary count
-# so a stray fifth row or an early/late discharge is caught.
+# `_dispatch_step` needs ZERO exemptions for ANY op -- measured: all 13
+# resolve into it (arms 1-4 cover id/blank-check/read plus every
+# _MULTI_RUN_OPS member, arm 5 covers every _SDP_OPS member, and arm 6
+# -- v1.30 Phase 134, plan 134-02 -- covers every _SDP_LEG_OPS member via
+# `_dispatch_sdp_leg`). The four TEMPORARY rows plan 134-01 added here are
+# discharged in this same plan's commit, restoring the "zero exemptions at
+# all" shape `_dispatch_step` had before Phase 134 introduced any new op.
 _dispatch_step_exempted_ops = {
     op for (op, reg) in _OP_REGISTRY_EXEMPTIONS if reg == "_dispatch_step"
 }
-assert _dispatch_step_exempted_ops <= chip_test_mod._SDP_LEG_OPS, (
-    "_dispatch_step was measured to cover all 9 pre-existing ops with no "
-    "exemptions needed -- an exemption row against it for anything other "
-    "than this phase's own (TEMPORARY, plan-134-02-discharged) SDP-leg ops "
-    "means either the measurement changed (re-verify "
-    "_POLICED_REGISTRIES['_dispatch_step']) or a stray row was added in "
-    f"error. Exempted ops: {_dispatch_step_exempted_ops!r}"
-)
-assert len(_dispatch_step_exempted_ops) == 4, (
-    "expected exactly 4 TEMPORARY _dispatch_step exemption rows (this "
-    f"phase's own 4 new ops, pre-134-02), measured "
-    f"{len(_dispatch_step_exempted_ops)}: {_dispatch_step_exempted_ops!r}"
+assert _dispatch_step_exempted_ops == set(), (
+    "_dispatch_step was measured to cover all 13 ops (9 pre-existing plus "
+    "this phase's own 4 SDP-leg ops, routed via arm 6) with NO exemptions "
+    "needed at all -- any exemption row against it means either the "
+    "measurement changed (re-verify _POLICED_REGISTRIES['_dispatch_step']) "
+    f"or a stray row was added in error. Exempted ops: "
+    f"{_dispatch_step_exempted_ops!r}"
 )
 
 # Guard: exemptions must never reference a declared non-registry -- those
@@ -972,11 +937,13 @@ def test_sdp_ops_are_accounted_in_every_policed_registry() -> None:
     future change that silently flips one from member to exempt (or back)
     fails here even if the generic leg (test 1) would somehow still pass.
 
-    The four new ops' `_dispatch_step`/`derive_plan` rows are pinned False
-    HERE too -- they are TEMPORARY exemptions plan 134-02/134-03 discharge
-    by flipping these same two pins to True in their own commits, mirroring
-    exactly how `("derive_plan", OP_SDP_LOCK)` was pinned False in Phase
-    133 and is Phase 134's (a later plan's) to flip.
+    The four new ops' `_dispatch_step` rows are now pinned True (v1.30
+    Phase 134, plan 134-02 discharged that TEMPORARY exemption in the same
+    commit that wired arm 6's routing). Their `derive_plan` rows are still
+    pinned False -- that TEMPORARY exemption is plan 134-03's to discharge
+    by flipping this same pin to True in its own commit, mirroring exactly
+    how `("derive_plan", OP_SDP_LOCK)` was pinned False in Phase 133 and is
+    Phase 134's (a later plan's) to flip.
     """
     expected_membership = {
         ("_DESTRUCTIVE_OPS", OP_SDP_LOCK): True,
@@ -1002,7 +969,7 @@ def test_sdp_ops_are_accounted_in_every_policed_registry() -> None:
         expected_membership[("_MULTI_RUN_OPS", new_op)] = False
         expected_membership[("_SDP_OPS", new_op)] = False
         expected_membership[("_SDP_LEG_OPS", new_op)] = True
-        expected_membership[("_dispatch_step", new_op)] = False
+        expected_membership[("_dispatch_step", new_op)] = True
         expected_membership[("derive_plan", new_op)] = False
         expected_membership[("_dispatch_multi_run", new_op)] = False
 
