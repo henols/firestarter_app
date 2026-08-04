@@ -72,10 +72,18 @@ from firestarter.config import get_config_dir
 from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
 from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator
-from firestarter.exceptions import ChipNotFoundError
+from firestarter.exceptions import (
+    ChipNotFoundError,
+    SerialError,
+)
 from firestarter.hardware import HardwareManager
+from firestarter.sdp_capability import sdp_capability_for_entry
 
 from .conftest import make_app_context
+from .fixtures.synthetic_nonzero_chip_id import (
+    SYNTHETIC_CHIP_NAME,
+    SyntheticNonzeroChipIdDatabase,
+)
 
 # A real, on-disk-database instance (skip_local_override=True: no
 # ~/.firestarter override, no serial) -- the same module-level idiom
@@ -1465,3 +1473,164 @@ class TestCtrlCResidualNotClosedD12:
         assert not report_path.exists()
         assert _SDP_RECOVERY_LOUD not in result.output, result.output
         assert _SDP_RECOVERY_NEUTRAL not in result.output, result.output
+
+
+# ---------------------------------------------------------------------------
+# LEG-17 (v1.30 Phase 134, plan 134-10): six laundering routes to a
+# non-running SDP oracle, R1-R6. `SKIPPED` and `NA` both map to exit 0
+# (before D-15's floor), so every one of these routes could otherwise end
+# with a community member reading PASS on a run where the oracle never
+# executed. Every route test below asserts BOTH halves of the house idiom
+# (`tests/test_dev_test_cmd.py`'s own `test_chip_id_mismatch_exits_1`
+# precedent, and Phase 114.1's lesson that an exit-code/verdict-only
+# assertion lies): `operator.sdp_lock.assert_not_called()` AND a rendered
+# `NOT-RUN` reason, in both the console and the JSON artifact.
+#
+# THESE SIX ARE NOT EXHAUSTIVE. A SEVENTH route to a non-running oracle
+# exists -- 134-CONTEXT.md D-08's baseline write/read-back gate, named the
+# "seventh route" in `134-04-SUMMARY.md` -- and it fails CLOSED under
+# D-08+D-15 (it is not a laundering route). It is not re-proven in this
+# class because it is already proven end to end, in the same
+# negative-call-plus-NOT-RUN-reason shape, by `TestHoldStateLeg12::
+# test_hold_state_not_run_reason_reaches_both_surfaces` and by
+# `TestExitFloorD15::test_clean_notrun_floors_to_2` / `test_bad_and_notrun_
+# exits_1_not_2` above (all driven through `make_clean_operator()`'s dead
+# write-path shape). A later reader must not mistake "six routes covered
+# here" for "every route to a non-running oracle" -- R5/R6's library-level
+# companions live in `tests/test_chip_test.py`; `pytest -k "laundering"`
+# selects across both files.
+# ---------------------------------------------------------------------------
+
+
+def test_all_sdp_allow_chips_have_zero_chip_id_measured_live() -> None:
+    """D-17, re-measured live at THIS plan (never inherited from a prior
+    plan's count): every SDP-ALLOW chip in the shipped database has
+    `chip-id == 0` today -- iterated via `sdp_capability_for_entry` over
+    the live database, never restated as a literal count. This is exactly
+    why routes R1/R2 below need `SyntheticNonzeroChipIdDatabase` at all:
+    without it, no real `dev test` run can ever drive the id-step-mismatch
+    -> gate-closes -> `sdp_lock` refused causal chain, because
+    `derive_plan` emits an NA id step (`chip-id` sentinel 0) for every one
+    of them and `_id_step_closes_gate` never fires on an NA."""
+    allow_count = 0
+    nonzero_chip_id_allow_chips = []
+    for full in _REAL_DB.get_eproms():
+        name = full["name"]
+        allowed, _reason = sdp_capability_for_entry(full, name)
+        if not allowed:
+            continue
+        allow_count += 1
+        if full.get("chip-id", 0):
+            nonzero_chip_id_allow_chips.append(name)
+
+    assert allow_count > 0, "the SDP-ALLOW population must be non-empty"
+    assert not nonzero_chip_id_allow_chips, (
+        f"{len(nonzero_chip_id_allow_chips)} SDP-ALLOW chip(s) now carry a "
+        f"REAL nonzero chip-id: {nonzero_chip_id_allow_chips[:5]!r} -- "
+        "routes R1/R2 may have become reachable in production; re-examine "
+        "the 'unreachable today' label on SyntheticNonzeroChipIdDatabase "
+        "and its tests before continuing to describe them that way"
+    )
+
+
+class TestLaunderingRoutesR1R2SyntheticChipId:
+    """R1/R2: driven through `SyntheticNonzeroChipIdDatabase` (D-17) so the
+    FULL causal chain is exercised -- id step -> mismatch/uncertainty ->
+    destructive gate closes -> `sdp_lock` never called -> `NOT-RUN`
+    rendered -- never by forcing the gate flag directly (that would prove
+    the gate, not the route, exactly what D-17 rejected).
+
+    UNREACHABLE IN PRODUCTION TODAY (`test_all_sdp_allow_chips_have_zero_
+    chip_id_measured_live` above): every shipped SDP-ALLOW chip has
+    `chip-id == 0`, so this exact causal chain cannot fire against any real
+    chip in the database. These two tests are defence-in-depth, correct if
+    a chip-id is ever added to an SDP-ALLOW entry, and NEVER live
+    protection today. Never describe either test (or this class) as
+    evidence that the chip-ID mismatch check is what protects an
+    SDP-ALLOW chip today -- that reading is the v1.22 C-5 overclaim class
+    D-17 explicitly names; what protects an SDP-ALLOW chip TODAY is D-08's
+    baseline gate and D-12's recovery wording, which this vacuousness is
+    exactly why they carry more weight, not less.
+    """
+
+    def test_r1_chip_id_mismatch_closes_gate_and_renders_notrun(
+        self, runner: CliRunner
+    ) -> None:
+        """R1: a detected id differing from the synthetic entry's nonzero
+        `chip-id` closes the destructive gate before any SDP-leg step
+        dispatches -- `sdp_lock` is never called, and the report renders a
+        non-empty `NOT-RUN` reason in both surfaces."""
+        operator = make_clean_operator()
+        operator.check_eprom_id.return_value = (True, 0xDEAD)
+        app = make_app_context(
+            db=SyntheticNonzeroChipIdDatabase(),
+            eprom_operator=operator,
+            hardware_manager=make_hardware_manager(),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
+        data = _load_report(SYNTHETIC_CHIP_NAME)
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["id"]["verdict"] == "BAD", steps["id"]
+        assert "mismatch" in steps["id"]["reason"], steps["id"]
+        operator.sdp_lock.assert_not_called()
+        hold_state = data["sdp_hold_state"]
+        assert hold_state.startswith(f"{SDP_HOLD_NOT_RUN}:"), hold_state
+        reason = hold_state.split(":", 1)[1].strip()
+        assert reason, hold_state  # non-empty reason, never a bare "NOT-RUN:"
+        normalized = _normalize_console_text(result.output)
+        assert f"sdp_hold_state {hold_state}" in normalized, normalized
+
+    def test_r2_id_check_not_ok_closes_gate_and_renders_notrun(
+        self, runner: CliRunner
+    ) -> None:
+        """R2a: `_id_step_closes_gate` fires on `is_ok=False` alone, with
+        no explicit numeric mismatch at all -- the gate closes on ANY id
+        uncertainty, not only a disagreeing detected id."""
+        operator = make_clean_operator()
+        operator.check_eprom_id.return_value = (False, None)
+        app = make_app_context(
+            db=SyntheticNonzeroChipIdDatabase(),
+            eprom_operator=operator,
+            hardware_manager=make_hardware_manager(),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
+        data = _load_report(SYNTHETIC_CHIP_NAME)
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["id"]["verdict"] == "BAD", steps["id"]
+        operator.sdp_lock.assert_not_called()
+        hold_state = data["sdp_hold_state"]
+        assert hold_state.startswith(f"{SDP_HOLD_NOT_RUN}:"), hold_state
+        reason = hold_state.split(":", 1)[1].strip()
+        assert reason, hold_state
+        normalized = _normalize_console_text(result.output)
+        assert f"sdp_hold_state {hold_state}" in normalized, normalized
+
+    def test_r2_transport_error_during_id_check_closes_gate_and_renders_notrun(
+        self, runner: CliRunner
+    ) -> None:
+        """R2b: a transport fault raised BY the id check (a half-seated
+        cable, not a firmware-reported disagreement) degrades the id step
+        to BAD via `_run_step`'s `(SerialError, HardwareOperationError)`
+        handler -- separately proving the gate closes on this id-check
+        failure mode too, not only on `is_ok=False`."""
+        operator = make_clean_operator()
+        operator.check_eprom_id.side_effect = SerialError("half-seated cable")
+        app = make_app_context(
+            db=SyntheticNonzeroChipIdDatabase(),
+            eprom_operator=operator,
+            hardware_manager=make_hardware_manager(),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
+        data = _load_report(SYNTHETIC_CHIP_NAME)
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["id"]["verdict"] == "BAD", steps["id"]
+        operator.sdp_lock.assert_not_called()
+        hold_state = data["sdp_hold_state"]
+        assert hold_state.startswith(f"{SDP_HOLD_NOT_RUN}:"), hold_state
+        reason = hold_state.split(":", 1)[1].strip()
+        assert reason, hold_state
+        normalized = _normalize_console_text(result.output)
+        assert f"sdp_hold_state {hold_state}" in normalized, normalized
