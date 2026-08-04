@@ -38,6 +38,10 @@ from firestarter.exceptions import (
     ChipNotFoundError,
     ChipNotImplementedError,
     EpromOperationError,
+    FirmwareOutdatedError,
+    HardwareOperationError,
+    ProgrammerNotFoundError,
+    SerialError,
 )
 
 # ---------------------------------------------------------------------------
@@ -865,8 +869,15 @@ def _run_step(
 ) -> StepResult:
     """Execute a single supported step through the guard-honoring resolver.
 
-    Wraps the ENTIRE step body (resolve + dispatch) in try/except so no
-    exception escapes to the `run_plan` loop (Pitfall 1). Reference:
+    Wraps only the DISPATCH half (the `_dispatch_step` call) of the step body
+    in try/except (Pitfall 1) -- the resolve half above it, via
+    `_resolve_or_none`, sits OUTSIDE this `try` and is covered only by that
+    function's own narrower `(ChipNotImplementedError, ChipNotFoundError)`
+    handler. An exception class other than those two raised during
+    resolution still propagates out of `run_plan` unchanged; `resolve_chip`
+    is currently a pure DB lookup plus `convert_to_programmer` transform with
+    no measured path to a `SerialError`, so this is recorded as a latent
+    residual (research assumption A2), not a closed gap. Reference:
     cli_handlers.py:1568 `dev_validate_family` -- the same
     `resolve_chip(name, db=...)` + operator-method compose pattern used here.
 
@@ -883,6 +894,39 @@ def _run_step(
     try:
         return _dispatch_step(
             name, step, eprom_data, operator, runs=runs, sampler=sampler
+        )
+    except (ProgrammerNotFoundError, FirmwareOutdatedError):
+        # D-08/LEG-11: these two SerialError subclasses are run-fatal
+        # host-setup conditions ("no programmer attached", "firmware too
+        # old"), not chip findings -- they belong to cli_handlers.py's
+        # @map_typed_errors mapper, which already renders them as
+        # ClickExceptions with stable exit codes. This clause MUST precede
+        # the (SerialError, HardwareOperationError) clause below: both are
+        # SerialError subclasses and Python matches the first satisfying
+        # except clause. If the order were inverted, a no-board or
+        # old-firmware run would degrade every remaining destructive/verify
+        # step to BAD instead of escaping once, producing a six-BAD-step
+        # report that reads as a broken chip when the real fault is a
+        # missing/outdated host setup -- this project's documented
+        # false-green no-board trap, reproduced structurally.
+        raise
+    except (SerialError, HardwareOperationError) as exc:
+        # D-08/LEG-11: a half-seated cable or other transport-level fault
+        # (SerialError itself, SerialTimeoutError, or HardwareOperationError
+        # -- a sibling of Exception, not an EpromOperationError subclass, so
+        # the existing `except EpromOperationError` clause below never
+        # reaches it) degrades THIS ONE step to a recorded BAD result;
+        # `run_plan` still returns a full report for every other step.
+        # `error_code` is deliberately omitted: neither SerialError nor
+        # HardwareOperationError carries that attribute -- only
+        # EpromOperationError does -- so copying the existing handler
+        # wholesale would raise AttributeError at the moment this handler is
+        # supposed to be recovering.
+        return StepResult(
+            op=step.op,
+            verdict=VERDICT_BAD,
+            reason=str(exc),
+            run_count=1,
         )
     except EpromOperationError as exc:
         return StepResult(
