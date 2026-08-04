@@ -65,6 +65,9 @@ from firestarter.chip_test import (
     FP_ADDRESS_LINE,
     FP_BLANK_CONTACT,
     FP_INDETERMINATE,
+    SDP_HOLD_HELD,
+    SDP_HOLD_NOT_HELD,
+    SDP_HOLD_NOT_RUN,
     VERDICT_BAD,
     VERDICT_NA,
     VERDICT_OK,
@@ -943,3 +946,166 @@ def test_voltage_split_fields_serialize():
     rendered_text = " ".join(rendered_cells)
     assert "20900" in rendered_text
     assert table.row_count > 0
+
+
+# ---------------------------------------------------------------------------
+# LEG-12's carriage half (v1.30 Phase 134, plan 134-06, D-10/D-11) --
+# `sdp_hold_state`, its no-boolean gate, the schema bump, and the D-11 re-key
+# cost.
+#
+# ⚠ Evidence Ceiling (`.planning/REQUIREMENTS.md`): none of the assertions
+# below claim anything about a real die's protection state. A locked die is
+# unrepresentable in either repo's stubs, so these fixtures pin the host's
+# scripted RESPONSE (a `StepResult.verdict` this test constructs directly)
+# to a chosen value -- never a real chip. The causal claim "the lock
+# inhibited the write" is NOT provable this milestone; these tests prove
+# only that whatever `chip_test.sdp_hold_state()` returns is carried,
+# verbatim and un-fabricated, into both report surfaces.
+# ---------------------------------------------------------------------------
+
+
+def _rendered_text(table) -> str:
+    cells = [str(cell) for column in table.columns for cell in column.cells]
+    return " ".join(cells)
+
+
+def test_hold_state_held_reaches_both_surfaces():
+    """`SDP_HOLD_HELD` (the inhibited write was correctly refused) appears
+    verbatim in to_dict()["sdp_hold_state"] AND in render()'s output text --
+    LEG-12 requires both surfaces, and D-07 is why: render()'s per-step row
+    never shows `reason`, so the hold state needs its own row to be visible
+    to a terminal reader at all."""
+    report = _minimal_report()
+    report.sdp_hold_state = SDP_HOLD_HELD
+
+    d = report.to_dict()
+    assert d["sdp_hold_state"] == SDP_HOLD_HELD
+
+    table = report.render()
+    assert SDP_HOLD_HELD in _rendered_text(table)
+
+
+def test_hold_state_not_held_reaches_both_surfaces():
+    """`SDP_HOLD_NOT_HELD` (the lock leaked, LEG-06's shape) appears
+    verbatim in both surfaces -- the report's last word about a leaked lock
+    must be legible on the console, not buried in JSON only."""
+    report = _minimal_report()
+    report.sdp_hold_state = SDP_HOLD_NOT_HELD
+
+    d = report.to_dict()
+    assert d["sdp_hold_state"] == SDP_HOLD_NOT_HELD
+
+    table = report.render()
+    assert SDP_HOLD_NOT_HELD in _rendered_text(table)
+
+
+def test_hold_state_not_run_reason_reaches_both_surfaces():
+    """The `NOT-RUN: <reason>` shape carries its REASON through to both
+    surfaces -- LEG-12 says `NOT-RUN(reason)`, and a reason that reaches
+    only the JSON is half the requirement (D-07's whole basis: `reason`
+    never reaches render()'s per-step row, so it must ride inside this
+    field's own string to be console-visible at all)."""
+    reason_text = "the SDP inhibited-write oracle did not run for this chip"
+    hold_value = f"{SDP_HOLD_NOT_RUN}: {reason_text}"
+
+    report = _minimal_report()
+    report.sdp_hold_state = hold_value
+
+    d = report.to_dict()
+    assert d["sdp_hold_state"] == hold_value
+    assert reason_text in d["sdp_hold_state"]
+
+    table = report.render()
+    rendered = _rendered_text(table)
+    assert SDP_HOLD_NOT_RUN in rendered
+    assert reason_text in rendered
+
+
+def test_hold_state_no_boolean_under_lock_or_protect_key_anywhere_in_to_dict():
+    """P-06 prevention 3 (D-10): a JSON `true` on a key like `locked` or
+    `protection_enabled` would be read as ground truth for a protection
+    state this chip family CANNOT report -- the report would be making a
+    claim the milestone's Evidence Ceiling explicitly forbids. Walks the
+    WHOLE to_dict() output recursively (not just the new field) so a future
+    field named e.g. `sdp_locked` or `write_protect_active` trips this the
+    instant it is added as a bool, anywhere in the tree."""
+
+    def _walk(node, path=""):
+        if isinstance(node, dict):
+            for key, value in node.items():
+                lowered = key.lower()
+                if isinstance(value, bool) and (
+                    "lock" in lowered or "protect" in lowered
+                ):
+                    raise AssertionError(
+                        f"bool under a lock/protect-named key at "
+                        f"{path}.{key} -- P-06 prevention 3 violation"
+                    )
+                _walk(value, f"{path}.{key}")
+        elif isinstance(node, list):
+            for i, item in enumerate(node):
+                _walk(item, f"{path}[{i}]")
+
+    for hold_value in (
+        SDP_HOLD_HELD,
+        SDP_HOLD_NOT_HELD,
+        f"{SDP_HOLD_NOT_RUN}: reason",
+    ):
+        report = _minimal_report()
+        report.sdp_hold_state = hold_value
+        _walk(report.to_dict())
+
+
+def test_hold_state_is_str_never_bool():
+    """`to_dict()["sdp_hold_state"]` is a `str` instance and NOT a `bool`
+    (in Python `bool` is a subclass of `int`, never of `str`, but this pins
+    the field's own type directly rather than relying on that fact) --
+    D-10's field is three-valued STRING, never a boolean, so a JSON `true`
+    can never be misread as ground truth for an unreadable protection
+    state."""
+    report = _minimal_report()
+    report.sdp_hold_state = SDP_HOLD_HELD
+
+    value = report.to_dict()["sdp_hold_state"]
+    assert isinstance(value, str)
+    assert not isinstance(value, bool)
+
+
+def test_schema_version_1_3_single_sourced():
+    """`to_dict()["schema_version"]` equals the IMPORTED `SCHEMA_VERSION`
+    (never a literal restated here), and the production module bumps the
+    constant to its new value in exactly ONE place (single-sourced, D-10) --
+    this is the only line in this test file that restates the quoted
+    literal, to keep this file's own count at the plan's required "at most
+    one"."""
+    import inspect
+
+    from firestarter import diagnostic_report as dr_mod
+
+    report = _minimal_report()
+    assert report.to_dict()["schema_version"] == dr_mod.SCHEMA_VERSION
+
+    source = inspect.getsource(dr_mod)
+    assert source.count('"1.3"') == 1
+
+
+def test_dedup_fingerprint_sensitive_to_sdp_step_verdict_change():
+    """D-11's re-key proof: two reports whose step lists differ ONLY in an
+    SDP step's verdict produce DIFFERENT dedup_fingerprint values -- this is
+    the property that would have been destroyed by excluding the SDP steps
+    from the hash (a leaked lock would then group with a held one, blinding
+    the mechanism that decides which reports get triaged). The ACCEPTED
+    converse cost (recorded beside `dedup_fingerprint` in the production
+    module and in this plan's SUMMARY, D-11): every ALLOW chip re-keys when
+    these steps are added, so b14/b15-era reports stop grouping with
+    v1.30-era ones and their N>=2 promotion counts reset."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    report_held = _minimal_report(
+        step_specs=[("write-inhibited", VERDICT_OK, None, "")]
+    )
+    report_leaked = _minimal_report(
+        step_specs=[("write-inhibited", VERDICT_BAD, None, "")]
+    )
+
+    assert dedup_fingerprint(report_held) != dedup_fingerprint(report_leaked)
