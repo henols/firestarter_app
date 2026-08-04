@@ -65,6 +65,14 @@ _CHIP_WITH_ID = "AS29F002T"
 # AM27512 IS UV-erasable (electrical-type "UV-EPROM", measured exact via
 # is_uv_eprom) -- the one family `_resolve_write_scope` ever asks about.
 _CHIP_UV = "AM27512"
+# AT28C256 is one of the v1.30 milestone's 43 measured SDP-ALLOW chips
+# (sdp_capability() returns True) -- verified at plan time to resolve
+# through resolve_chip as algorithm 13 (SDP_PROTOCOL_ID), chip-id 0,
+# memory-size 32768. NOT UV-erasable (electrical-type "EEPROM"), so it
+# writes in full with no prompt, same as _CHIP_NO_ID/_CHIP_WITH_ID above --
+# the only difference that matters here is that derive_plan appends the
+# six-step SDP leg (D-06) after the four shipped ops for an ALLOW chip.
+_CHIP_ALLOW = "AT28C256"
 
 
 @pytest.fixture(autouse=True)
@@ -101,6 +109,74 @@ def make_clean_operator() -> Mock:
     operator.write_eprom.return_value = True
     operator.verify_eprom.return_value = True
     operator.erase_eprom.return_value = True
+    return operator
+
+
+def make_leaked_lock_operator(
+    *,
+    write_outcomes: list[bool] | None = None,
+    sdp_lock_ok: bool = True,
+    sdp_unlock_ok: bool = True,
+) -> Mock:
+    """A read-back-capable ALLOW-chip operator (v1.30 Phase 134 plan 134-05,
+    LEG-06) whose `write_eprom` genuinely PERSISTS the bytes it is given and
+    whose `read_eprom` returns whatever was most recently persisted --
+    `Mock(spec=EpromOperator)` (the REAL class), so `sdp_lock`/`sdp_unlock`
+    exist automatically and every `assert_not_called()`/`assert_called()`
+    site needs no builder change (D-10's reasoning, same as
+    `make_clean_operator` above).
+
+    This is a SEPARATE double from both `make_clean_operator` above (whose
+    `read_eprom` writes no file at all -- every oracle-adjacent assertion
+    would silently degrade to the length gate, 134-02-SUMMARY.md's own
+    finding) and `test_chip_test_sdp_leg.py::_readback_operator` (whose
+    read-back is a single STATIC payload for every call -- unusable here
+    because the six-step leg's own baseline steps legitimately expect
+    DIFFERENT read-backs, B then A, before write-inhibited's own
+    expectation of "unchanged" -- A -- is tested). Tracking the actual
+    write state instead makes every step's read-back correct by
+    construction, regardless of call count or step order.
+
+    `sdp_lock`/`sdp_unlock` are pure bookkeeping here -- nothing in this
+    double actually enforces a lock, so a `write_eprom` call issued AFTER a
+    successful `sdp_lock` still lands for real. Driving the real CLI end to
+    end against this operator is what reproduces LEG-06's exact hazard: the
+    lock reports HELD (`sdp_lock` returns `sdp_lock_ok`), yet the inhibited
+    write still landed -- no fixture in this milestone can simulate a
+    genuinely locked die (the Evidence Ceiling), so this is the closest
+    honest proxy: a write path nothing actually gates.
+
+    `write_outcomes`, if given, overrides `write_eprom`'s own RETURN VALUE
+    by call index (0-based) while STILL persisting the bytes -- used only
+    to manufacture the shipped `write` step's own marginal disagreement
+    (the mixed BAD+marginal pin) without disturbing the state-tracking
+    read-back the SDP leg's own verdicts depend on.
+    """
+    state: dict[str, bytes] = {"data": b""}
+    calls = {"write": 0}
+
+    def _write(name, eprom_data, source_path, flags=0):
+        idx = calls["write"]
+        calls["write"] += 1
+        state["data"] = Path(source_path).read_bytes()
+        if write_outcomes is not None and idx < len(write_outcomes):
+            return write_outcomes[idx]
+        return True
+
+    def _read(name, eprom_data, output_file=None, **kwargs):
+        if output_file is not None:
+            Path(output_file).write_bytes(state["data"])
+        return True
+
+    operator = Mock(spec=EpromOperator)
+    operator.check_eprom_id.return_value = (True, None)
+    operator.check_eprom_blank.return_value = True
+    operator.verify_eprom.return_value = True
+    operator.erase_eprom.return_value = True
+    operator.write_eprom.side_effect = _write
+    operator.read_eprom.side_effect = _read
+    operator.sdp_lock.return_value = sdp_lock_ok
+    operator.sdp_unlock.return_value = sdp_unlock_ok
     return operator
 
 
@@ -697,3 +773,96 @@ class TestExitCodeMapping:
         data = _load_report(_CHIP_UV)
         steps = {s["op"] for s in data["steps"]}
         assert "write-partial" in steps
+
+
+# ---------------------------------------------------------------------------
+# D-14 / LEG-06 -- BAD outranks marginal in the exit code, end to end
+# (v1.30 Phase 134 plan 134-05). `pytest -k "exit"` selects this class per
+# 134-VALIDATION.md's LEG-06 command; `-k "lock_leaked"` selects the
+# discharging test specifically.
+# ---------------------------------------------------------------------------
+
+
+class TestExitPrecedenceLeg06:
+    """Before D-14, `dev test`'s exit computation was a bare numeric maximum
+    over each step's exit-code contribution. Because `_VERDICT_EXIT_CODES`
+    maps `marginal -> 2` and `BAD -> 1`, that maximum picked 2 whenever both
+    verdicts were present in one run -- marginal's code is numerically
+    larger than BAD's, so the milestone's headline finding (a leaked SDP
+    lock) could arrive wearing the inconclusive exit code. `_overall_exit_code`
+    (D-14) replaces it with explicit precedence: BAD outranks marginal
+    outranks clean, proven here end to end through the real CLI, never by
+    calling the helper directly."""
+
+    def test_leaked_lock_exits_1(self, runner: CliRunner) -> None:
+        """LEG-06's discharging test (134-02 proved the engine half; this is
+        the exit-code half). A write that unexpectedly succeeds after the
+        SDP lock reports BAD on `write-inhibited` and exits 1 -- never
+        SKIPPED, NA, or OK.
+
+        The exit-code assertion ALONE would not discharge LEG-06: a
+        laundering implementation could satisfy `exit_code == 1` via an
+        unrelated BAD step (e.g. a mismatched chip ID) while quietly
+        reporting the leaked write itself as SKIPPED/NA/OK. The verdict
+        assertion on `write-inhibited`'s own JSON artifact entry is what
+        closes that route -- and the `sdp_unlock` assertion proves the part
+        is not left locked even though the lock leaked.
+        """
+        operator = make_leaked_lock_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        assert result.exit_code == 1, result.output
+        data = _load_report(_CHIP_ALLOW)
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["write-inhibited"]["verdict"] == "BAD", steps["write-inhibited"]
+        operator.sdp_unlock.assert_called()
+
+    def test_mixed_bad_and_marginal_exits_1_not_2(self, runner: CliRunner) -> None:
+        """D-14's own acceptance criterion: a run containing BOTH a BAD step
+        (the leaked lock, `write-inhibited`) and a `marginal` step (the
+        shipped `write` op's two runs disagreeing, the SAME mechanism
+        `test_marginal_disagreement_exits_2` uses) exits 1, never 2.
+
+        Driven end to end through the real CLI/`run_plan` wiring -- not by
+        calling `_overall_exit_code` directly -- so this pin covers the
+        wiring, not just the helper. Before D-14 (a bare numeric maximum
+        over per-step exit codes), this exact run exited 2: marginal's
+        code (2) is numerically larger than BAD's (1).
+        """
+        operator = make_leaked_lock_operator(write_outcomes=[True, False])
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        assert result.exit_code == 1, result.output
+        data = _load_report(_CHIP_ALLOW)
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["write"]["verdict"] == "marginal", steps["write"]
+        assert steps["write-inhibited"]["verdict"] == "BAD", steps["write-inhibited"]
+
+    def test_baseline_steps_stay_ok_around_the_leaked_lock(
+        self, runner: CliRunner
+    ) -> None:
+        """Companion assertion to `test_leaked_lock_exits_1`: the leaked-lock
+        operator's state-tracking read-back must make BOTH baseline
+        directions (`write-baseline-b` then `write-baseline-a`) report OK,
+        never closing the baseline gate (D-08) -- otherwise `write-inhibited`
+        would be SKIPPED instead of genuinely dispatched, and the BAD verdict
+        this test suite depends on would not be evidence of anything."""
+        operator = make_leaked_lock_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        data = _load_report(_CHIP_ALLOW)
+        verdicts = {s["op"]: s["verdict"] for s in data["steps"]}
+        assert verdicts["write-baseline-b"] == "OK", verdicts
+        assert verdicts["write-baseline-a"] == "OK", verdicts
+        assert verdicts["sdp-lock"] == "OK", verdicts
+        assert verdicts["sdp-unlock"] == "OK", verdicts
+        assert verdicts["write-restored"] == "OK", verdicts
