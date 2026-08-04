@@ -32,10 +32,13 @@ from rich.console import Console
 from rich.prompt import Confirm
 
 from firestarter import __version__ as version
+from firestarter import sdp_honesty  # unreadable_state_caveat(), called not re-authored
 from firestarter.channel import available_boards
 from firestarter.chip_resolver import resolve_chip
 from firestarter.chip_test import (
     OP_ID,
+    SDP_HOLD_HELD,
+    SDP_HOLD_NOT_HELD,
     SDP_HOLD_NOT_RUN,
     VERDICT_BAD,
     VERDICT_MARGINAL,
@@ -48,6 +51,7 @@ from firestarter.chip_test import (
     is_uv_eprom,
     run_plan,
     sdp_hold_state,
+    sdp_left_writable,
     sdp_oracle_applicable,
 )
 from firestarter.config import ConfigManager, get_config_dir
@@ -2194,6 +2198,71 @@ _ALWAYS_WRITES_NOTICE = (
 )
 
 
+# D-12 (v1.30 Phase 134, plan 134-08): the two SDP recovery forms, named
+# module-level string constants so plan 134-09's scoped pytest scans
+# EXACTLY these two values, never the whole report (D-13's own measured
+# trap: the report legitimately contains the word "erase" in at least
+# three other places -- derive_plan's protocol-0x0D NA reason
+# (chip_test.py, ~:670-673), the shipped single-word "erase" op string
+# itself in both the markdown table and the JSON, and this module's own
+# `_ALWAYS_WRITES_NOTICE` step enumeration above -- so a whole-report grep
+# would go RED on correct text and need exemptions on day one, the 133
+# D-14 `_sample` shape). Phase 137's CLOSE-03 tool-side scanner is handed
+# `SDP_RECOVERY_CONSTANT_NAMES` below so it EXTENDS this tuple rather than
+# re-deriving or duplicating plan 134-09's pytest -- do NOT author that
+# scanner here (D-13, out of this plan's scope).
+#
+# Both constants: named the SDP lock in prose (never a hyphenated op
+# literal -- `_SDP_LEG_OPS`/`_SDP_OPS` membership is asserted against both
+# by this module's own tests), and never contain the five-letter word for
+# bulk clearing (protocol 0x0D has no such operation at all, so that word
+# would be actively wrong advice on this family).
+_SDP_RECOVERY_LOUD = (
+    "SDP lock: this run applied the chip's SDP lock and did NOT confirm "
+    "the part accepts a write again before it ended -- do not assume it "
+    "unlocked itself. Rewrite the part: this protocol has no bulk-clear "
+    "operation, so writing it again is the only way to recover it, and a "
+    f"fresh dev test run will confirm the write path again. {sdp_honesty.unreadable_state_caveat()}"
+)
+_SDP_RECOVERY_NEUTRAL = (
+    "SDP lock: this run completed and left the part unlocked again -- no "
+    f"rewrite is needed. {sdp_honesty.unreadable_state_caveat()} This is "
+    "evidence, not a guarantee, on a family whose protection state cannot "
+    "be read back."
+)
+
+# LEG-14's scan target (plan 134-09): names EXACTLY the two constants
+# above. Phase 137's CLOSE-03 extends this tuple rather than duplicating
+# the pytest that scans it.
+SDP_RECOVERY_CONSTANT_NAMES: tuple[str, ...] = (
+    "_SDP_RECOVERY_LOUD",
+    "_SDP_RECOVERY_NEUTRAL",
+)
+
+
+def _sdp_recovery_line(*, hold_state: str, left_writable: bool) -> str:
+    """D-12's two-form recovery-line selector (STRICT island; headroom 2).
+
+    Returns `_SDP_RECOVERY_LOUD` when the lock was genuinely EMITTED
+    (`hold_state` is `SDP_HOLD_HELD` or `SDP_HOLD_NOT_HELD` -- i.e. NOT a
+    `SDP_HOLD_NOT_RUN` prefix) and `left_writable` is `False` (the run did
+    not itself confirm the part still accepts a write); returns
+    `_SDP_RECOVERY_NEUTRAL` for every other case, INCLUDING every
+    `NOT-RUN` hold state (nothing was ever locked, so there is nothing to
+    warn about) and the genuinely-restored-writable case.
+
+    A line prints on the happy path too (D-12): silence is not a
+    statement, and an unconditional warning would train dismissal,
+    spending the signal on the one case it exists for. The op-string
+    knowledge this decision depends on (which `StepResult` proves "left
+    writable") lives in `chip_test.sdp_left_writable`, not here (P-07).
+    """
+    lock_emitted = hold_state in (SDP_HOLD_HELD, SDP_HOLD_NOT_HELD)
+    if lock_emitted and not left_writable:
+        return _SDP_RECOVERY_LOUD
+    return _SDP_RECOVERY_NEUTRAL
+
+
 @dev.command(name="test")
 @click.argument("chip", shell_complete=_complete_eprom)
 @click.pass_obj
@@ -2333,6 +2402,15 @@ def dev_test(app: "AppContext", chip: str) -> None:
     from firestarter import submit as submit_mod
 
     submit_mod.submit_report(report, chip, json_file, console=console)
+
+    # D-12: one of the two named recovery forms prints on EVERY completed
+    # run -- silence is not a statement, and a line here is the last thing
+    # printed before this handler decides its exit code. `click.echo`,
+    # matching `_ALWAYS_WRITES_NOTICE`'s own precedent, so it reaches
+    # console AND `CliRunner` capture regardless of log-level wiring.
+    hold_state = report.sdp_hold_state
+    left_writable = sdp_left_writable(results)
+    click.echo(_sdp_recovery_line(hold_state=hold_state, left_writable=left_writable))
 
     if not results:
         sys.exit(0)
