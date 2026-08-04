@@ -37,6 +37,7 @@ Coverage (post-121-09):
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import re
@@ -47,20 +48,40 @@ import pytest
 from click.testing import CliRunner
 
 from firestarter.chip_test import (
+    _SDP_LEG_OPS,
+    OP_WRITE,
+    OP_WRITE_PARTIAL,
     SDP_HOLD_HELD,
     SDP_HOLD_NOT_HELD,
     SDP_HOLD_NOT_RUN,
     VERDICT_OK,
     StepResult,
+    derive_plan,
+    run_plan,
 )
-from firestarter.cli_handlers import _ALWAYS_WRITES_NOTICE, _dev_test_exit_code, cli
+from firestarter.cli_handlers import (
+    _ALWAYS_WRITES_NOTICE,
+    _ALWAYS_WRITES_PASS_COUNT,
+    _SDP_RECOVERY_LOUD,
+    _SDP_RECOVERY_NEUTRAL,
+    SDP_RECOVERY_CONSTANT_NAMES,
+    _dev_test_exit_code,
+    cli,
+)
 from firestarter.config import get_config_dir
 from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
+from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import ChipNotFoundError
 from firestarter.hardware import HardwareManager
 
 from .conftest import make_app_context
+
+# A real, on-disk-database instance (skip_local_override=True: no
+# ~/.firestarter override, no serial) -- the same module-level idiom
+# test_chip_test.py/test_chip_test_sdp_leg.py already use for a
+# derive_plan(...)-against-real-data proof (v1.30 Phase 134, plan 134-08).
+_REAL_DB = EpromDatabase(skip_local_override=True)
 
 # M8720 has no chip-id in the DB (id step is always NA -- a mock
 # check_eprom_id return has no effect on its verdict), is NOT UV-erasable
@@ -276,6 +297,55 @@ def make_clean_notrun_operator() -> Mock:
     operator.verify_eprom.return_value = True
     operator.erase_eprom.return_value = True
     operator.read_eprom.return_value = True
+    return operator
+
+
+def make_restore_failed_operator() -> Mock:
+    """A read-back-capable ALLOW-chip operator whose write_eprom persists
+    genuinely for every call EXCEPT the LAST one (v1.30 Phase 134 plan
+    134-08, D-12's LOUD form, trigger 2): the lock IS emitted (the leg's
+    baseline/inhibited/unlock steps all dispatch for real, same as
+    `make_leaked_lock_operator`), but the run does NOT itself confirm the
+    part writable again -- `write-restored`'s own read-back stays whatever
+    the second-to-last call left behind, never pattern A.
+
+    A full ALLOW-chip run makes exactly `_ALWAYS_WRITES_PASS_COUNT`
+    `write_eprom` calls in a fixed order (the shipped `write` step's two
+    runs, then the leg's four single-run writes: baseline-b, baseline-a,
+    inhibited, restored -- the SAME order `_ALWAYS_WRITES_PASS_COUNT`'s
+    own derivation proves) -- so the LAST call by GLOBAL index is always
+    `write-restored`, regardless of chip. This is a SEPARATE double from
+    `make_leaked_lock_operator` (whose every call, including the last,
+    persists for real -- so its `write-restored` step genuinely succeeds
+    and its recovery line is NEUTRAL, not LOUD; this is the case a
+    whole-run "lock leaked" fixture cannot itself produce).
+    """
+    state: dict[str, bytes] = {"data": b""}
+    calls = {"write": 0}
+
+    def _write(name, eprom_data, source_path, flags=0):
+        idx = calls["write"]
+        calls["write"] += 1
+        if idx < _ALWAYS_WRITES_PASS_COUNT - 1:
+            state["data"] = Path(source_path).read_bytes()
+        # else: the LAST (write-restored) call does not persist -- the
+        # part's read-back stays at whatever the second-to-last call left.
+        return True
+
+    def _read(name, eprom_data, output_file=None, **kwargs):
+        if output_file is not None:
+            Path(output_file).write_bytes(state["data"])
+        return True
+
+    operator = Mock(spec=EpromOperator)
+    operator.check_eprom_id.return_value = (True, None)
+    operator.check_eprom_blank.return_value = True
+    operator.verify_eprom.return_value = True
+    operator.erase_eprom.return_value = True
+    operator.write_eprom.side_effect = _write
+    operator.read_eprom.side_effect = _read
+    operator.sdp_lock.return_value = True
+    operator.sdp_unlock.return_value = True
     return operator
 
 
@@ -1189,3 +1259,209 @@ class TestExitFloorD15:
         assert exit_clean == 0, exit_clean
         assert exit_notrun == 2, exit_notrun
         assert exit_clean != exit_notrun
+
+
+# ---------------------------------------------------------------------------
+# D-09 (v1.30 Phase 134, plan 134-08): the notice's write-pass count is
+# DERIVED from a live `derive_plan` result, never restated as a literal.
+# `pytest -k "notice"` selects this class.
+# ---------------------------------------------------------------------------
+
+
+class TestAlwaysWritesNoticeDerivedCountD09:
+    """P-08's own headline finding: the shipped notice-first pin
+    (`test_always_writes_notice_is_the_first_line_unconditionally`, above)
+    asserts identity against the IMPORTED `_ALWAYS_WRITES_NOTICE` constant
+    and therefore checks NO CONTENT at all -- a content-free rewrite would
+    keep it green. This class is what makes the notice's number TRUE."""
+
+    def test_pass_count_is_derived_from_a_live_plan_never_a_literal(self) -> None:
+        """Derive the plan for AT28C256 (the module's own ALLOW chip) at
+        `write_scope="full"` -- the scope `dev test` itself resolves for a
+        non-UV chip -- and compute the number of write passes FROM the
+        plan: `run_plan`'s own `runs` default for the shipped multi-run
+        write step (`OP_WRITE`/`OP_WRITE_PARTIAL`), plus one pass for each
+        of the leg's four single-run write ops (`_SDP_LEG_OPS`) that are
+        `supported=True`. Never restate `6` (or any other number) as a
+        literal here -- if this ever measures a different number than
+        `_ALWAYS_WRITES_PASS_COUNT`, the constant is wrong, not this test.
+        """
+        plan = derive_plan(_CHIP_ALLOW, _REAL_DB, write_scope="full")
+        runs = inspect.signature(run_plan).parameters["runs"].default
+
+        write_passes = 0
+        for step in plan.steps:
+            if not step.supported:
+                continue
+            if step.op in (OP_WRITE, OP_WRITE_PARTIAL):
+                write_passes += runs
+            elif step.op in _SDP_LEG_OPS:
+                write_passes += 1
+
+        assert write_passes == _ALWAYS_WRITES_PASS_COUNT, (
+            write_passes,
+            _ALWAYS_WRITES_PASS_COUNT,
+        )
+        assert str(_ALWAYS_WRITES_PASS_COUNT) in _ALWAYS_WRITES_NOTICE
+
+    def test_notice_names_sdp_lock_completed_run_and_rewrite_recovery(self) -> None:
+        """Content pins for D-09/D-12's must-haves: the notice names the
+        SDP lock in prose, states the completed-run outcome, and gives
+        the aborted-run recovery in the word "rewrite" -- and the shipped
+        notice-first ordering pin stays untouched and green (verified by
+        `git diff` showing no edit to that test, per the plan's own
+        acceptance criterion)."""
+        notice_lower = _ALWAYS_WRITES_NOTICE.lower()
+        assert "sdp lock" in notice_lower
+        assert "rewrite" in notice_lower
+        assert "completed" in notice_lower
+        assert "unlocked" in notice_lower
+
+    def test_notice_contains_no_sdp_leg_op_literal(self) -> None:
+        """No hyphenated op literal anywhere in the notice (T-134-33):
+        `_SDP_LEG_OPS`'s four strings all auto-join
+        `_MULTIWORD_OP_VALUES`, and `_ALWAYS_WRITES_NOTICE` is a declared
+        non-registry measured by `test_op_registration_parity.py`'s own
+        live substring test (`test_non_registry_still_has_no_ops`) -- this
+        is the same claim, pinned here too so a regression is caught by
+        two independent modules."""
+        assert not any(op in _ALWAYS_WRITES_NOTICE for op in _SDP_LEG_OPS)
+
+
+# ---------------------------------------------------------------------------
+# D-12 (v1.30 Phase 134, plan 134-08): the two recovery forms, proven
+# behaviourally through the real CLI. `pytest -k "recovery"` selects this
+# class. Evidence Ceiling (`.planning/REQUIREMENTS.md`): every fixture below
+# pins the host's RESPONSE to a scripted read-back -- a locked die is
+# unrepresentable in either repo's stubs, so no fixture here simulates real
+# inhibition, and the causal claim "the lock inhibited the write" is NOT
+# provable this milestone.
+# ---------------------------------------------------------------------------
+
+
+class TestSdpRecoveryFormsD12:
+    """`_sdp_recovery_line`'s two named forms, each proven to print (or not
+    print) in the right case, asserted against the imported constants --
+    never a retyped literal."""
+
+    def test_happy_path_prints_neutral_not_loud(self, runner: CliRunner) -> None:
+        """Happy path: the leg completes and `write-restored` reports OK
+        (`make_held_lock_operator`'s genuinely-held lock, same fixture
+        `TestHoldStateLeg12::test_hold_state_held_reaches_both_surfaces`
+        uses) -- the NEUTRAL form prints, the LOUD form does not."""
+        operator = make_held_lock_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        data = _load_report(_CHIP_ALLOW)
+        assert data["sdp_hold_state"] == SDP_HOLD_HELD, data["sdp_hold_state"]
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["write-restored"]["verdict"] == "OK", steps["write-restored"]
+        assert _SDP_RECOVERY_NEUTRAL in result.output, result.output
+        assert _SDP_RECOVERY_LOUD not in result.output, result.output
+
+    def test_lock_emitted_and_not_confirmed_writable_prints_loud(
+        self, runner: CliRunner
+    ) -> None:
+        """Lock emitted, part NOT confirmed writable again:
+        `make_restore_failed_operator`'s every write_eprom call persists
+        genuinely EXCEPT the last one (`write-restored`), so that step's
+        own read-back reports non-OK even though the leg's earlier steps
+        (baseline, inhibited, unlock) all genuinely dispatched -- the LOUD
+        form prints, the NEUTRAL form does not."""
+        operator = make_restore_failed_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        data = _load_report(_CHIP_ALLOW)
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["write-restored"]["verdict"] != "OK", steps["write-restored"]
+        assert not data["sdp_hold_state"].startswith(f"{SDP_HOLD_NOT_RUN}:"), data[
+            "sdp_hold_state"
+        ]
+        assert _SDP_RECOVERY_LOUD in result.output, result.output
+        assert _SDP_RECOVERY_NEUTRAL not in result.output, result.output
+
+    def test_gated_run_never_locked_prints_neutral(self, runner: CliRunner) -> None:
+        """Gated run: the baseline gate closes before a lock is ever
+        emitted (`make_clean_operator`'s file-less read-back length-gates
+        BAD, D-08) -- nothing was locked, so the NEUTRAL form prints
+        (never LOUD), and `sdp_lock` is never called."""
+        operator = make_clean_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        data = _load_report(_CHIP_ALLOW)
+        assert data["sdp_hold_state"].startswith(f"{SDP_HOLD_NOT_RUN}:")
+        operator.sdp_lock.assert_not_called()
+        assert _SDP_RECOVERY_NEUTRAL in result.output, result.output
+        assert _SDP_RECOVERY_LOUD not in result.output, result.output
+
+    def test_recovery_constant_names_resolve_to_the_two_real_constants(self) -> None:
+        """`SDP_RECOVERY_CONSTANT_NAMES` -- LEG-14's scan target for plan
+        134-09's scoped pytest -- resolves to exactly the two constants
+        this class exercises above, each non-empty."""
+        assert set(SDP_RECOVERY_CONSTANT_NAMES) == {
+            "_SDP_RECOVERY_LOUD",
+            "_SDP_RECOVERY_NEUTRAL",
+        }
+        import firestarter.cli_handlers as cli_handlers_mod
+
+        for name in SDP_RECOVERY_CONSTANT_NAMES:
+            value = getattr(cli_handlers_mod, name)
+            assert isinstance(value, str) and value, (name, value)
+
+
+# ---------------------------------------------------------------------------
+# 133 D-07's residual, inherited unchanged by D-12 (v1.30 Phase 134, plan
+# 134-08): RECORDED here, not closed. Recording it as a truthful test rather
+# than only a comment, per the plan's own instruction.
+# ---------------------------------------------------------------------------
+
+
+class TestCtrlCResidualNotClosedD12:
+    """After a Ctrl-C mid-leg, `results = run_plan(...)` (cli_handlers.py)
+    never returns, so NEITHER recovery form ever prints and there is NO
+    report at all. The mitigation is Task 1's rewritten up-front notice
+    (guaranteed to already have printed before anything could raise), NOT
+    a `finally` handler -- this plan deliberately does not add one, and
+    this test asserts the OBSERVED behaviour truthfully rather than a
+    behaviour the code does not have.
+
+    MEASURED (not assumed): Click's `BaseCommand.main` (standalone mode,
+    which `CliRunner.invoke` uses) catches `KeyboardInterrupt` itself,
+    prints "Aborted!" to stderr, and converts it to `sys.exit(1)` -- so
+    `KeyboardInterrupt` never propagates OUT of `runner.invoke()` here; it
+    surfaces as an ordinary exit code 1. What this test proves instead is
+    the thing that actually matters for D-12's residual: neither recovery
+    constant ever reaches `result.output`, and no report file is ever
+    written -- run_plan raised before `report.render()`, the JSON/markdown
+    writes, `submit_report`, and the recovery echo could run.
+    """
+
+    def test_keyboard_interrupt_mid_run_plan_leaves_no_report_and_no_recovery_line(
+        self, runner: CliRunner
+    ) -> None:
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(),
+        )
+        report_path = _reports_dir() / f"dev-test-{_CHIP_ALLOW}.json"
+        assert not report_path.exists()
+        with (
+            patch("firestarter.cli_handlers.run_plan", side_effect=KeyboardInterrupt),
+            _off_tty(),
+        ):
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        # No report was ever written -- run_plan raised before
+        # report.render(), the JSON/markdown writes, submit_report, and the
+        # recovery echo all run, so none of them ever executed.
+        assert not report_path.exists()
+        assert _SDP_RECOVERY_LOUD not in result.output, result.output
+        assert _SDP_RECOVERY_NEUTRAL not in result.output, result.output
