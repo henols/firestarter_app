@@ -167,6 +167,9 @@ from firestarter.chip_test import (
     OP_WRITE_INHIBITED,
     OP_WRITE_PARTIAL,
     OP_WRITE_RESTORED,
+    SDP_HOLD_HELD,
+    SDP_HOLD_NOT_HELD,
+    SDP_HOLD_NOT_RUN,
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
@@ -174,6 +177,7 @@ from firestarter.chip_test import (
     VERDICT_SKIPPED,
     Plan,
     Step,
+    StepResult,
     _dispatch_sdp,
     _dispatch_sdp_leg,
     classify_fingerprint,
@@ -182,6 +186,8 @@ from firestarter.chip_test import (
     generate_inhibited_pattern,
     generate_pattern,
     run_plan,
+    sdp_hold_state,
+    sdp_oracle_applicable,
 )
 from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
 from firestarter.database import EpromDatabase
@@ -2089,3 +2095,130 @@ def test_refuse_write_scope_none_is_byte_identical_to_pre_phase134():
         (OP_VERIFY, 'write_scope="none": verify omitted (D-01)'),
         (OP_ERASE, 'write_scope="none": erase omitted (D-01)'),
     ]
+
+
+# ---------------------------------------------------------------------------
+# LEG-12's pure hold-state derivation (v1.30 Phase 134, plan 134-04, Task 2,
+# D-10/D-12/D-15). `pytest -k "hold"` selects every test below.
+# ---------------------------------------------------------------------------
+
+
+def test_hold_state_held_when_write_inhibited_is_ok():
+    """`write-inhibited` verdict OK -> SDP_HOLD_HELD -- the inhibited write
+    was correctly refused, so the part held its lock."""
+    results = [StepResult(op=OP_WRITE_INHIBITED, verdict=VERDICT_OK, reason="")]
+    value = sdp_hold_state(Plan(name="AT28C256", steps=[]), results)
+    assert isinstance(value, str)
+    assert value == SDP_HOLD_HELD
+
+
+def test_hold_state_not_held_when_write_inhibited_is_bad():
+    """`write-inhibited` verdict BAD -> SDP_HOLD_NOT_HELD -- the inhibited
+    write WAS accepted; the lock leaked (LEG-06's shape)."""
+    results = [
+        StepResult(op=OP_WRITE_INHIBITED, verdict=VERDICT_BAD, reason="lock leaked")
+    ]
+    value = sdp_hold_state(Plan(name="AT28C256", steps=[]), results)
+    assert isinstance(value, str)
+    assert value == SDP_HOLD_NOT_HELD
+
+
+@pytest.mark.parametrize("verdict", [VERDICT_NA, VERDICT_SKIPPED, VERDICT_MARGINAL])
+def test_hold_state_not_run_for_na_skipped_marginal(verdict):
+    """Anything short of a clean OK/BAD on `write-inhibited` renders
+    NOT-RUN, carrying that result's own (non-empty) reason -- never HELD,
+    never NOT-HELD, never a bare boolean."""
+    reason = f"synthetic {verdict!r} reason for the hold-state test"
+    results = [StepResult(op=OP_WRITE_INHIBITED, verdict=verdict, reason=reason)]
+    value = sdp_hold_state(Plan(name="AT28C256", steps=[]), results)
+    assert isinstance(value, str)
+    assert value.startswith(SDP_HOLD_NOT_RUN), (
+        f"verdict {verdict!r} produced {value!r}, expected a string "
+        f"starting with {SDP_HOLD_NOT_RUN!r}"
+    )
+    assert reason in value, (
+        f"the result's own reason {reason!r} must appear in the NOT-RUN "
+        f"value, got {value!r}"
+    )
+
+
+def test_hold_state_not_run_when_step_absent_from_results():
+    """Laundering route R6: the `write-inhibited` step is entirely ABSENT
+    from `results` (the plan never derived it, or `run_plan` never reached
+    it) -- the absence itself must still render NOT-RUN with a non-empty
+    reason, never raise, and never silently default to HELD."""
+    value = sdp_hold_state(Plan(name="AT28C256", steps=[]), [])
+    assert isinstance(value, str)
+    assert value.startswith(SDP_HOLD_NOT_RUN)
+    assert value != SDP_HOLD_NOT_RUN, (
+        "the step-absent case must still carry a non-empty reason after "
+        "the SDP_HOLD_NOT_RUN prefix, not just the bare constant"
+    )
+    assert unreadable_state_caveat() in value, (
+        "the fixed-prose fallback must COMPOSE sdp_honesty."
+        "unreadable_state_caveat() rather than re-authoring its sentence"
+    )
+
+
+def test_hold_state_empty_reason_falls_back_to_honesty_caveat():
+    """When the `write-inhibited` result's own `reason` is empty (rather
+    than the step being entirely absent), the SAME fixed-prose fallback
+    applies -- `reason` must never be allowed to render as an empty
+    string after the `SDP_HOLD_NOT_RUN:` prefix."""
+    results = [StepResult(op=OP_WRITE_INHIBITED, verdict=VERDICT_SKIPPED, reason="")]
+    value = sdp_hold_state(Plan(name="AT28C256", steps=[]), results)
+    assert value.startswith(SDP_HOLD_NOT_RUN)
+    assert unreadable_state_caveat() in value
+    assert value != f"{SDP_HOLD_NOT_RUN}: "
+
+
+def test_hold_state_always_returns_str_never_bool_or_none():
+    """P-06 prevention 3, directly asserted: every branch's return value is
+    a `str` -- never `True`/`False`/`None`, which would read as ground
+    truth for a state this chip family cannot report."""
+    for verdict in (
+        VERDICT_OK,
+        VERDICT_BAD,
+        VERDICT_NA,
+        VERDICT_SKIPPED,
+        VERDICT_MARGINAL,
+    ):
+        results = [StepResult(op=OP_WRITE_INHIBITED, verdict=verdict, reason="x")]
+        value = sdp_hold_state(Plan(name="AT28C256", steps=[]), results)
+        assert isinstance(value, str), (
+            f"verdict {verdict!r} produced a {type(value)!r}, expected str"
+        )
+    value = sdp_hold_state(Plan(name="AT28C256", steps=[]), [])
+    assert isinstance(value, str), (
+        f"the step-absent case produced a {type(value)!r}, expected str"
+    )
+
+
+def test_oracle_applicable_true_for_allow_chip_full_and_none_scope():
+    """`sdp_oracle_applicable` is True for an ALLOW chip's plan whether the
+    leg is a real supported step (write_scope="full"/"partial") or an
+    advisory `locked_destructive` entry (write_scope="none", D-18)."""
+    name = "AT28C256"
+    allowed, _reason = sdp_capability(name, _REAL_DB)
+    assert allowed is True, f"fixture setup error: {name} is not really ALLOW"
+
+    full_plan = derive_plan(name, _REAL_DB, write_scope="full")
+    assert sdp_oracle_applicable(full_plan) is True
+
+    none_plan = derive_plan(name, _REAL_DB, write_scope="none")
+    assert sdp_oracle_applicable(none_plan) is True
+
+
+def test_oracle_applicable_false_for_refuse_chip_full_and_none_scope():
+    """`sdp_oracle_applicable` is False for a REFUSE chip's plan -- its
+    `write-inhibited` step IS present in `plan.steps` (LEG-02's NA path),
+    but with `supported=False`, so it must not count as applicable."""
+    name = "M8720"
+    allowed, _reason = sdp_capability(name, _REAL_DB)
+    assert allowed is False, f"fixture setup error: {name} is not really REFUSE"
+
+    full_plan = derive_plan(name, _REAL_DB, write_scope="full")
+    assert sdp_oracle_applicable(full_plan) is False
+
+    none_plan = derive_plan(name, _REAL_DB, write_scope="none")
+    assert sdp_oracle_applicable(none_plan) is False
