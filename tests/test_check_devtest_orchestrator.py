@@ -52,6 +52,32 @@ Coverage:
       helper as an omission and to EXCLUDE the decorator-referenced one --
       proving the decorator-list exclusion (F-04) positively rather than by
       assumption, and proving the derivation is not vacuously empty.
+  11. Broad-except deny bucket (Phase 133 D-09): a planted fixture with a
+      plain `except Exception:` (under a function name and file basename
+      that match NEITHER the exemption row) flips the checker non-zero,
+      asserting the broad-except bucket label specifically.
+  12. Broad-except form coverage (D-09): parametrised over
+      `except BaseException:`, a tuple handler containing `Exception`, and
+      a bare `except:` -- each flips the checker non-zero and names the
+      bucket, including the bare form even though ruff's E722 already
+      catches it (the bucket must not have an assumed-closed hole).
+  13. Exemption scoping proof (D-14): the real checker (no override) stays
+      GREEN, AND a fixture reproducing the exact exempted shape under a
+      DIFFERENT function name is flagged -- proving the exemption is scoped
+      to the named function, not a global whitelist of the broad form.
+  14. Stale-row guard (D-14 guard b): a fixture sharing the engine module's
+      basename but with `_sample` renamed (derived from the real source,
+      with an `altered != original` non-vacuity assertion) flips the
+      checker non-zero and names the stale-row failure.
+  15. Empty/whitespace-reason guard (D-14 guard a): the one in-process leg
+      -- `_validate_exemption_table` is called directly with an
+      empty-reason row, a whitespace-only-reason row, and (positive
+      control) the real, unmodified table.
+  16. Exemption-row resolution mirror (D-14): every row in
+      `_BROAD_EXCEPT_EXEMPTIONS` is asserted to name a real function in a
+      real default scan target -- the in-repo mirror of the stale-row
+      guard, following `test_handler_function_names_all_resolve_to_real_
+      callables`'s precedent.
 """
 
 import ast
@@ -61,6 +87,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 # Absolute path to the firestarter_app directory (cwd-independent), mirrors
 # tests/test_check_dispatch_invariants.py:22.
@@ -665,3 +693,269 @@ def test_derivation_flags_an_unlisted_helper_non_vacuous() -> None:
         f"empty or differently-named omission list means the subset "
         f"comparison is not actually exercising the planted violation."
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 11 (Phase 133 D-09): planted broad-except violation, anti-hollow proof
+# for the fourth deny bucket.
+# ---------------------------------------------------------------------------
+
+
+def test_checker_exits_nonzero_on_planted_broad_except(tmp_path: Path) -> None:
+    """A real subprocess-level `except Exception:` MUST fail the gate.
+
+    The fixture's basename ("planted_broad_except.py") and its function
+    name ("orchestrate") match NEITHER of the exemption row's (basename,
+    function) pair -- so this is a genuine, non-exempt broad-except site,
+    proven via the same real-subprocess injection pattern as tests 2-5.
+    """
+    bad = tmp_path / "planted_broad_except.py"
+    bad.write_text(
+        "def orchestrate(op):\n"
+        "    try:\n"
+        "        return op.write_eprom('chip', {}, 'path')\n"
+        "    except Exception:\n"
+        "        return None\n"
+    )
+    result = _run_checker({"FIRESTARTER_DEVTEST_SRC": str(bad)})
+    assert result.returncode != 0, (
+        f"checker exited 0 on a planted broad-except violation.\n"
+        f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "FAIL:" in result.stdout
+    assert "broad exception handler" in result.stdout.lower()
+
+
+# ---------------------------------------------------------------------------
+# Test 12 (Phase 133 D-09): every broad form, parametrised
+# ---------------------------------------------------------------------------
+
+_BROAD_EXCEPT_VARIANT_BODIES = {
+    "base_exception": (
+        "def orchestrate(op):\n"
+        "    try:\n"
+        "        return op.write_eprom('chip', {}, 'path')\n"
+        "    except BaseException:\n"
+        "        return None\n"
+    ),
+    "tuple_form": (
+        "def orchestrate(op):\n"
+        "    try:\n"
+        "        return op.write_eprom('chip', {}, 'path')\n"
+        "    except (ValueError, Exception):\n"
+        "        return None\n"
+    ),
+    "bare_except": (
+        "def orchestrate(op):\n"
+        "    try:\n"
+        "        return op.write_eprom('chip', {}, 'path')\n"
+        "    except:\n"
+        "        return None\n"
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    "body",
+    _BROAD_EXCEPT_VARIANT_BODIES.values(),
+    ids=_BROAD_EXCEPT_VARIANT_BODIES.keys(),
+)
+def test_checker_exits_nonzero_on_planted_broad_except_variants(
+    tmp_path: Path, body: str
+) -> None:
+    """`except BaseException:`, a tuple containing `Exception`, and a bare
+    `except:` MUST all fail the gate and name the broad-except bucket.
+
+    The bare form is included deliberately even though ruff's E722 already
+    catches it elsewhere in CI -- this bucket must not carry an assumed-
+    closed hole a reader would take on faith.
+    """
+    bad = tmp_path / "planted_broad_except_variant.py"
+    bad.write_text(body)
+    result = _run_checker({"FIRESTARTER_DEVTEST_SRC": str(bad)})
+    assert result.returncode != 0, (
+        f"checker exited 0 on a planted broad-except variant.\n"
+        f"body:\n{body}\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "FAIL:" in result.stdout
+    assert "broad exception handler" in result.stdout.lower()
+
+
+# ---------------------------------------------------------------------------
+# Test 13 (Phase 133 D-14): the exemption is scoped to the named function,
+# not a blanket whitelist of the broad form.
+# ---------------------------------------------------------------------------
+
+
+def test_checker_exemption_keeps_clean_source_green(tmp_path: Path) -> None:
+    """The real checker stays GREEN through the one exemption, AND a fixture
+    reproducing the exact exempted shape under a DIFFERENT function name is
+    still flagged.
+
+    Without this leg, an exemption that accidentally matched the broad
+    form globally (rather than the named (basename, function) pair) would
+    pass every other leg in this module -- this is the one that would catch
+    it.
+    """
+    clean_result = _run_checker()
+    assert clean_result.returncode == 0, (
+        f"checker exited {clean_result.returncode} on the real, clean "
+        f"sources (expected the _sample exemption to keep this GREEN).\n"
+        f"stdout:\n{clean_result.stdout}\nstderr:\n{clean_result.stderr}"
+    )
+    assert "PASS:" in clean_result.stdout
+
+    bad = tmp_path / "planted_sample_shaped_but_unexempted.py"
+    bad.write_text(
+        "def _sample_but_not_the_real_one(sampler, phase):\n"
+        "    if sampler is None:\n"
+        "        return\n"
+        "    try:\n"
+        "        sampler(phase)\n"
+        "    except Exception:\n"
+        "        pass\n"
+    )
+    flagged_result = _run_checker({"FIRESTARTER_DEVTEST_SRC": str(bad)})
+    assert flagged_result.returncode != 0, (
+        f"checker exited 0 on the exempted shape under a DIFFERENT function "
+        f"name -- the exemption is not scoped to the named function.\n"
+        f"stdout:\n{flagged_result.stdout}\nstderr:\n{flagged_result.stderr}"
+    )
+    assert "FAIL:" in flagged_result.stdout
+    assert "broad exception handler" in flagged_result.stdout.lower()
+
+
+# ---------------------------------------------------------------------------
+# Test 14 (Phase 133 D-14 guard b): stale-row guard
+# ---------------------------------------------------------------------------
+
+
+def test_checker_exemption_stale_row_fails(tmp_path: Path) -> None:
+    """A fixture sharing the engine module's basename, but with `_sample`
+    renamed, MUST fail the gate and name the stale-row problem.
+
+    Derives the fixture from the REAL engine source with a mechanical
+    rename applied (`def _sample(` -> `def _sample_renamed(`), asserting
+    `altered != original` first -- if `_sample` ever moves or is renamed
+    upstream, this replacement silently becomes a no-op and this leg would
+    otherwise pass vacuously (proving nothing).
+    """
+    real_path = _FA_DIR / "firestarter" / "chip_test.py"
+    original = real_path.read_text()
+    altered = original.replace("def _sample(", "def _sample_renamed(")
+    assert altered != original, (
+        "the `def _sample(` -> `def _sample_renamed(` replacement did not "
+        "change the source -- _sample may have moved, been renamed, or "
+        "removed upstream; this leg would be vacuous against a no-op fixture"
+    )
+
+    bad = tmp_path / "chip_test.py"
+    bad.write_text(altered)
+    result = _run_checker({"FIRESTARTER_DEVTEST_SRC": str(bad)})
+    assert result.returncode != 0, (
+        f"checker exited 0 on a fixture with a stale (renamed-away) "
+        f"exemption target.\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    )
+    assert "FAIL:" in result.stdout
+    assert "stale" in result.stdout.lower(), (
+        f"expected the stale-row message in stdout but got:\n{result.stdout}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 15 (Phase 133 D-14 guard a): the one in-process leg
+# ---------------------------------------------------------------------------
+
+
+def test_exemption_table_empty_reason_fails() -> None:
+    """`_validate_exemption_table` rejects an empty-reason row and a
+    whitespace-only-reason row, and (positive control) accepts the real,
+    unmodified table.
+
+    The ONLY in-process leg in this module: `_validate_exemption_table` is
+    a pure function that reads no module global and involves no env seam,
+    so import-time binding order (Pitfall 5 -- why every OTHER leg here
+    shells out) is irrelevant to it.
+    """
+    check_devtest_orchestrator = importlib.import_module(
+        "tools.check_devtest_orchestrator"
+    )
+    real_table = dict(check_devtest_orchestrator._BROAD_EXCEPT_EXEMPTIONS)
+
+    empty_reason_table = {**real_table, ("fake_module.py", "_fake_fn"): ""}
+    problems = check_devtest_orchestrator._validate_exemption_table(empty_reason_table)
+    assert problems, "an empty-reason exemption row was not flagged"
+    assert any("fake_module.py" in p and "_fake_fn" in p for p in problems), (
+        f"expected the empty-reason problem to name the offending row, got: {problems}"
+    )
+
+    whitespace_reason_table = {**real_table, ("fake_module.py", "_fake_fn2"): "   "}
+    problems_ws = check_devtest_orchestrator._validate_exemption_table(
+        whitespace_reason_table
+    )
+    assert problems_ws, "a whitespace-only-reason exemption row was not flagged"
+
+    # Positive control (T-133-24): without this, the guard could pass by
+    # always returning a non-empty problem list regardless of input.
+    clean_problems = check_devtest_orchestrator._validate_exemption_table(real_table)
+    assert clean_problems == [], (
+        f"the real, unmodified _BROAD_EXCEPT_EXEMPTIONS table failed "
+        f"validation: {clean_problems}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 16 (Phase 133 D-14): in-repo mirror of the stale-row guard
+# ---------------------------------------------------------------------------
+
+
+def test_exemption_table_rows_all_resolve() -> None:
+    """Every row in `_BROAD_EXCEPT_EXEMPTIONS` names a real function in a
+    real default scan target.
+
+    The in-repo mirror of the stale-row guard (which only fires at gate
+    runtime against whatever was actually scanned) -- following this file's
+    own `test_handler_function_names_all_resolve_to_real_callables`
+    precedent for the handler allow-list.
+    """
+    check_devtest_orchestrator = importlib.import_module(
+        "tools.check_devtest_orchestrator"
+    )
+    default_targets = [
+        check_devtest_orchestrator._DEFAULT_CHIP_TEST,
+        check_devtest_orchestrator._DEFAULT_DEVTEST_HANDLER,
+        check_devtest_orchestrator._DEFAULT_DEVTEST_SUBMIT,
+    ]
+
+    for (
+        row_file,
+        row_function,
+    ), reason in check_devtest_orchestrator._BROAD_EXCEPT_EXEMPTIONS.items():
+        assert reason and reason.strip(), (
+            f"exemption row ({row_file!r}, {row_function!r}) has no reason "
+            f"-- test_exemption_table_empty_reason_fails should already "
+            f"catch this at the table level, but asserting it here too "
+            f"keeps this leg self-contained."
+        )
+        matching = [t for t in default_targets if os.path.basename(t) == row_file]
+        assert matching, (
+            f"exemption row file {row_file!r} does not match any default "
+            f"scan target's basename ({[os.path.basename(t) for t in default_targets]})"
+        )
+        found = False
+        for path in matching:
+            source = Path(path).read_text()
+            tree = ast.parse(source, filename=path)
+            if any(
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == row_function
+                for node in ast.walk(tree)
+            ):
+                found = True
+                break
+        assert found, (
+            f"exemption row ({row_file!r}, {row_function!r}) does not "
+            f"resolve to a real function in any default scan target -- this "
+            f"row is STALE (mirrors the stale-row guard the gate itself "
+            f"enforces at runtime)."
+        )
