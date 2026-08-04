@@ -45,6 +45,22 @@ Test taxonomy:
     test_precedence_matrix_deriver_is_non_vacuous -> proves the delta gate
       is capable of failing (a real leg proves nothing until seen to fail).
 
+  LEG-11's four behavioural proofs (plan 133-02, D-08)
+    test_serial_timeout_degrades_one_step -> a SerialTimeoutError raised by
+      a "read" step's operator method degrades THAT step to BAD; a later
+      step still runs and is OK -- run_plan returned, it did not abort.
+    test_hardware_error_degrades_one_step -> the same shape with
+      HardwareOperationError, plus asserting error_code is None (the
+      observable consequence of the new clause omitting that field).
+    test_run_fatal_escapes -> ProgrammerNotFoundError and
+      FirmwareOutdatedError each escape run_plan by object identity (not
+      merely by class), and SerialError.__subclasses__() is pinned to the
+      measured three-class census so a future fourth subclass fails loudly
+      instead of silently bypassing the re-raise clause.
+    test_assertion_error_propagates -> the deliberate AssertionError shape
+      from _dispatch_multi_run's terminal refusal still escapes run_plan,
+      proving no broad `except` was introduced (criterion 2).
+
 References:
   - .planning/phases/133-sdp-leg-mechanism/133-01-PLAN.md
   - .planning/phases/133-sdp-leg-mechanism/133-CONTEXT.md D-08 (exception
@@ -57,8 +73,13 @@ References:
 
 from unittest.mock import Mock
 
+import pytest
+
 from firestarter.chip_test import (
     OP_BLANK_CHECK,
+    OP_READ,
+    VERDICT_BAD,
+    VERDICT_OK,
     Plan,
     Step,
     derive_plan,
@@ -296,22 +317,36 @@ _PRE_EDIT_PRECEDENCE_MATRIX = {
     "AssertionError": ("AssertionError", None, None),
 }
 
-# CURRENT expectation -- byte-identical to _PRE_EDIT_PRECEDENCE_MATRIX at
-# this commit. Plan 133-02 (D-08) is the one permitted to edit THIS
-# constant, for exactly the rows D-08 intends to change (widening
-# `_run_step`'s catch to include SerialError/HardwareOperationError while
-# re-raising ProgrammerNotFoundError/FirmwareOutdatedError first) -- and
-# 133-02 must add the changed row names to _INTENDED_PRECEDENCE_DELTA in
-# the SAME commit, or test_precedence_matrix_delta_is_exactly_intended
-# below turns RED.
+# CURRENT expectation -- advanced by plan 133-02 (D-08) for EXACTLY the
+# three rows measured to change against the edited `_run_step`:
+# SerialError, SerialTimeoutError, and HardwareOperationError now escape
+# ONLY as far as `_run_step`'s new `except (SerialError,
+# HardwareOperationError)` clause and land on BAD/error_code=None --
+# neither class carries `.error_code`. ProgrammerNotFoundError and
+# FirmwareOutdatedError still ESCAPE (re-raised by the new first clause,
+# unchanged from the pre-edit row). EpromOperationError,
+# ChipNotImplementedError, ChipNotFoundError, and AssertionError are all
+# untouched -- their rows are byte-identical to _PRE_EDIT_PRECEDENCE_MATRIX,
+# proving the existing `except EpromOperationError` and `except
+# (ChipNotImplementedError, ChipNotFoundError)` clauses were neither moved
+# nor reworded. Measured live against the post-133-02-edit engine, never
+# hand-derived.
 _EXPECTED_PRECEDENCE_MATRIX = dict(_PRE_EDIT_PRECEDENCE_MATRIX)
+_EXPECTED_PRECEDENCE_MATRIX["SerialError"] = (None, "BAD", None)
+_EXPECTED_PRECEDENCE_MATRIX["SerialTimeoutError"] = (None, "BAD", None)
+_EXPECTED_PRECEDENCE_MATRIX["HardwareOperationError"] = (None, "BAD", None)
 
-# Starts EMPTY (133-CONTEXT.md D-08; 133-01-PLAN.md must_haves). Any row
-# that changes between _PRE_EDIT_PRECEDENCE_MATRIX and
-# _EXPECTED_PRECEDENCE_MATRIX without its exception-class name appearing
-# here turns the suite RED -- this is the mechanism that proves the seven
-# shipped ops' exception handling is unchanged rather than merely assumed.
-_INTENDED_PRECEDENCE_DELTA: frozenset[str] = frozenset()
+# Named by plan 133-02 in the SAME commit as the _EXPECTED_PRECEDENCE_MATRIX
+# edit above (133-CONTEXT.md D-08; 133-01-PLAN.md must_haves) -- exactly the
+# three classes D-08's new degrade clause now catches. Any row that changes
+# between _PRE_EDIT_PRECEDENCE_MATRIX and _EXPECTED_PRECEDENCE_MATRIX
+# without its exception-class name appearing here turns the suite RED --
+# this is the mechanism that proves the remaining six rows (and therefore
+# the seven shipped ops' exception handling) are unchanged rather than
+# merely assumed.
+_INTENDED_PRECEDENCE_DELTA: frozenset[str] = frozenset(
+    {"SerialError", "SerialTimeoutError", "HardwareOperationError"}
+)
 
 
 def _compute_precedence_delta(pre, expected):
@@ -405,3 +440,129 @@ def test_precedence_matrix_deriver_is_non_vacuous():
             "the delta-gate assertion fail -- the deriver or comparison is "
             "vacuous."
         )
+
+
+# ---------------------------------------------------------------------------
+# LEG-11's four behavioural proofs (plan 133-02, D-08). Unlike the
+# precedence-matrix baseline above (which injects into OP_BLANK_CHECK's
+# `check_eprom_blank` for a controlled probe of the handler chain), these
+# tests use the shape LEG-11's own text describes: a "read" step degrading
+# without aborting a later step, and the two run-fatal classes still
+# escaping.
+# ---------------------------------------------------------------------------
+
+
+def test_serial_timeout_degrades_one_step():
+    """A SerialTimeoutError raised by the "read" step's operator method
+    degrades THAT ONE step to a recorded BAD result; run_plan still returns
+    a full report for every other step (LEG-11, criterion 2)."""
+    operator = _mock_operator()
+    operator.read_eprom.side_effect = SerialTimeoutError(
+        "133-02 injected half-seated-cable probe"
+    )
+    plan = _plan_with_steps(
+        Step(op=OP_READ, supported=True, reason=""),
+        Step(op=OP_BLANK_CHECK, supported=True, reason=""),
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    read_result = _result(results, OP_READ)
+    blank_check_result = _result(results, OP_BLANK_CHECK)
+    assert read_result.verdict == VERDICT_BAD
+    # The later step still ran -- this is what distinguishes "degraded one
+    # step" from "aborted the run" (D-08, T-133-10).
+    assert blank_check_result.verdict == VERDICT_OK
+    operator.check_eprom_blank.assert_called()
+
+
+def test_hardware_error_degrades_one_step():
+    """The same shape as above with HardwareOperationError -- a sibling of
+    Exception, not an EpromOperationError subclass, so the pre-existing
+    `except EpromOperationError` clause never reached it before this
+    plan's edit (D-08's whole basis)."""
+    operator = _mock_operator()
+    operator.read_eprom.side_effect = HardwareOperationError(
+        "133-02 injected transport-fault probe"
+    )
+    plan = _plan_with_steps(
+        Step(op=OP_READ, supported=True, reason=""),
+        Step(op=OP_BLANK_CHECK, supported=True, reason=""),
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    read_result = _result(results, OP_READ)
+    blank_check_result = _result(results, OP_BLANK_CHECK)
+    assert read_result.verdict == VERDICT_BAD
+    # Observable consequence of the new clause omitting error_code: neither
+    # SerialError nor HardwareOperationError carries that attribute.
+    assert read_result.error_code is None
+    assert blank_check_result.verdict == VERDICT_OK
+    operator.check_eprom_blank.assert_called()
+
+
+@pytest.mark.parametrize("exc_cls", [ProgrammerNotFoundError, FirmwareOutdatedError])
+def test_run_fatal_escapes(exc_cls):
+    """ProgrammerNotFoundError and FirmwareOutdatedError still ESCAPE
+    run_plan unchanged (D-08) -- these are run-fatal host-setup conditions
+    that belong to cli_handlers.py's @map_typed_errors mapper, not chip
+    findings. Escape is asserted by object IDENTITY, not just class, so a
+    re-wrap cannot pass.
+
+    Standing invariant: SerialError.__subclasses__() is pinned to the
+    measured three-class census. A fourth subclass added by a later phase
+    without updating _run_step's re-raise clause would silently bypass it
+    and become a false-green no-board report -- this assertion is what
+    would catch that."""
+    assert set(SerialError.__subclasses__()) == {
+        SerialTimeoutError,
+        ProgrammerNotFoundError,
+        FirmwareOutdatedError,
+    }, (
+        "SerialError gained or lost a subclass since D-08 was measured -- "
+        "_run_step's (ProgrammerNotFoundError, FirmwareOutdatedError) "
+        "re-raise clause is only complete against the THREE-class census "
+        "D-08 names; a new subclass here would silently fall through to "
+        "the (SerialError, HardwareOperationError) degrade clause instead "
+        "of escaping, turning a no-board/old-firmware run into a false "
+        "BAD-step report (133-CONTEXT.md D-08)."
+    )
+
+    operator = _mock_operator()
+    injected = exc_cls("133-02 injected run-fatal probe")
+    operator.read_eprom.side_effect = injected
+    plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
+
+    with pytest.raises(exc_cls) as excinfo:
+        run_plan(plan, operator, _REAL_DB)
+    assert excinfo.value is injected, (
+        "the exception that escaped run_plan is not the SAME instance that "
+        "was injected -- a re-wrap would pass a bare pytest.raises(exc_cls) "
+        "check but fail this identity assertion"
+    )
+
+
+def test_assertion_error_propagates():
+    """The deliberate AssertionError _dispatch_multi_run raises from its
+    terminal fail-closed refusal (`chip_test.py`'s
+    "unreachable: op {op!r} passed the _MULTI_RUN_OPS guard") still escapes
+    run_plan. This is the single behavioural invariant proving no broad
+    `except Exception`/`except BaseException` was introduced by this plan's
+    edit (criterion 2) -- a broad catch anywhere in `_run_step`'s chain
+    would swallow this and turn a programmer-error signal into a silent BAD
+    result instead."""
+    operator = _mock_operator()
+    injected = AssertionError(
+        "unreachable: op 'blank-check' passed the _MULTI_RUN_OPS guard"
+    )
+    operator.check_eprom_blank.side_effect = injected
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    with pytest.raises(AssertionError) as excinfo:
+        run_plan(plan, operator, _REAL_DB)
+    assert excinfo.value is injected, (
+        "AssertionError escaped but was not the SAME instance injected -- "
+        "criterion 2 requires the deliberate signal to propagate unchanged, "
+        "not be re-wrapped or reconstructed"
+    )
