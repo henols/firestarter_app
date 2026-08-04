@@ -57,15 +57,19 @@ sibling `firestarter/` firmware repo.
 
 MEASURED registry census (2026-08-04, re-run against this session's
 working tree, not inherited from ROADMAP criterion 5's "eight previously
-fail-open registries" -- that count is measurably wrong):
+fail-open registries" -- that count is measurably wrong). **Updated 2026-08-04
+(v1.30 Phase 134, plan 134-01): the op vocabulary is now 13 (9 + this
+phase's own four SDP-leg ops), and a seventh policed registry
+(`_SDP_LEG_OPS`) joins the set below:**
 
-  - **6 policed registries** (a new op must join one of these, or carry a
-    reasoned exemption): `_DESTRUCTIVE_OPS`, `_MULTI_RUN_OPS`, `_SDP_OPS`
-    (all three real op-keyed frozensets in `chip_test.py`); `_dispatch_step`
-    (its five dispatch arms, AST-derived); `derive_plan` (its `Step(op=...)`
-    construction sites, AST-derived); `_dispatch_multi_run` (its inner
-    run-loop branches, AST-derived -- a genuine op-keyed site P-23's
-    original table omitted entirely).
+  - **7 policed registries** (a new op must join one of these, or carry a
+    reasoned exemption): `_DESTRUCTIVE_OPS`, `_MULTI_RUN_OPS`, `_SDP_OPS`,
+    `_SDP_LEG_OPS` (all four real op-keyed frozensets in `chip_test.py`, the
+    last added by Phase 134); `_dispatch_step` (its dispatch arms,
+    AST-derived); `derive_plan` (its `Step(op=...)` construction sites,
+    AST-derived); `_dispatch_multi_run` (its inner run-loop branches,
+    AST-derived -- a genuine op-keyed site P-23's original table omitted
+    entirely).
   - **6 declared non-registries** (carry NO op vocabulary, or are keyed on
     a materially different axis -- re-measured, re-asserted every run by
     the inversion guard, never merely assumed): `_RAN_VERDICTS` /
@@ -112,6 +116,10 @@ from firestarter.chip_test import (
     OP_SDP_LOCK,
     OP_SDP_UNLOCK,
     OP_WRITE,
+    OP_WRITE_BASELINE_A,
+    OP_WRITE_BASELINE_B,
+    OP_WRITE_INHIBITED,
+    OP_WRITE_RESTORED,
 )
 
 # ---------------------------------------------------------------------------
@@ -136,7 +144,7 @@ _ALL_OPS: frozenset[str] = frozenset(
 # real, imported frozenset), rather than re-deriving membership from source
 # text a second time.
 _REGISTRY_CONSTANT_NAMES: frozenset[str] = frozenset(
-    {"_DESTRUCTIVE_OPS", "_MULTI_RUN_OPS", "_SDP_OPS"}
+    {"_DESTRUCTIVE_OPS", "_MULTI_RUN_OPS", "_SDP_OPS", "_SDP_LEG_OPS"}
 )
 
 # The multi-word (hyphenated) op values -- currently four: "blank-check",
@@ -147,9 +155,9 @@ _REGISTRY_CONSTANT_NAMES: frozenset[str] = frozenset(
 # identifier and is a safe literal-equality target.
 _MULTIWORD_OP_VALUES: frozenset[str] = frozenset(v for v in _ALL_OPS if "-" in v)
 
-assert len(_ALL_OPS) == 9, (
+assert len(_ALL_OPS) == 13, (
     f"measured {len(_ALL_OPS)} OP_* string constants in chip_test.py, "
-    "expected 9 -- the census baked into this module's docstring and "
+    "expected 13 -- the census baked into this module's docstring and "
     "_POLICED_REGISTRIES/_OP_REGISTRY_EXEMPTIONS needs re-measuring"
 )
 
@@ -232,6 +240,7 @@ _POLICED_REGISTRIES: dict[str, frozenset[str]] = {
     "_DESTRUCTIVE_OPS": chip_test_mod._DESTRUCTIVE_OPS,
     "_MULTI_RUN_OPS": chip_test_mod._MULTI_RUN_OPS,
     "_SDP_OPS": chip_test_mod._SDP_OPS,
+    "_SDP_LEG_OPS": chip_test_mod._SDP_LEG_OPS,
     "_dispatch_step": _op_names_referenced_in("_dispatch_step", _CHIP_TEST_SOURCE),
     "derive_plan": _op_names_referenced_in("derive_plan", _CHIP_TEST_SOURCE),
     "_dispatch_multi_run": _op_names_referenced_in(
@@ -239,11 +248,10 @@ _POLICED_REGISTRIES: dict[str, frozenset[str]] = {
     ),
 }
 
-# Measured 2026-08-04 (see module docstring's census breakdown): 6 policed
-# registries -- one more than P-23's original ten-row table counted, since
-# `_dispatch_multi_run`'s inner run-loop branches are a genuine op-keyed site
-# that table omitted entirely.
-_POLICED_REGISTRY_COUNT = 6
+# Measured 2026-08-04 (v1.30 Phase 134, plan 134-01): 7 policed registries --
+# one more than 133-06's 6, since `_SDP_LEG_OPS` (this phase's own frozenset,
+# T-134-01) is now a live, policed registry.
+_POLICED_REGISTRY_COUNT = 7
 
 
 # ---------------------------------------------------------------------------
@@ -330,11 +338,12 @@ _DECLARED_NON_REGISTRY_COUNT = 6
 
 # ---------------------------------------------------------------------------
 # `_OP_REGISTRY_EXEMPTIONS` -- (op, registry_name) -> non-empty reason.
-# Every non-member pair across the full 9-op x 6-registry grid is accounted
-# for here (guard (c) proves the grid's registry side is exhaustive; this
-# dict proves the membership side is). This is deliberately larger than the
-# four SDP-specific groups the plan text calls out by name -- those four are
-# THIS PHASE's real, newly-introduced omissions; the remaining rows are
+# Every non-member pair across the full 13-op x 7-registry grid is
+# accounted for here (guard (c) proves the grid's registry side is
+# exhaustive; this dict proves the membership side is). This is
+# deliberately larger than the four SDP-specific groups the plan text calls
+# out by name -- those four are THIS PHASE's real, newly-introduced
+# omissions; the remaining rows are
 # pre-existing structural non-memberships (e.g. a read-only op was never a
 # candidate for the destructive-mutation registry) that this new gate is the
 # first thing to ever write down explicitly. Measured, not inherited: see
@@ -370,6 +379,38 @@ _NOT_ROUTED_TO_MULTI_RUN_REASON = (
     "_MULTI_RUN_OPS members into _dispatch_multi_run at all (D-04), so "
     "{op}'s dispatch never reaches this function's run loop -- its "
     "absence here is structural."
+)
+
+_NOT_SDP_LEG_REASON = (
+    "{op} is not one of this phase's four SDP-leg ops; _SDP_LEG_OPS (v1.30 "
+    "Phase 134 T-134-01) is a scoped allow-list built for exactly "
+    "OP_WRITE_BASELINE_B/OP_WRITE_BASELINE_A/OP_WRITE_INHIBITED/"
+    "OP_WRITE_RESTORED, so {op}'s absence here is definitional, not an "
+    "omission."
+)
+
+_NOT_MULTI_RUN_SDP_LEG_REASON = (
+    "D-03: the SDP leg's ops are single-run and fold their own read-back "
+    "verification into one arm (D-07's two-baseline-ops design) -- there "
+    "is no second run for {op} to disagree with, so _MULTI_RUN_OPS's "
+    "marginal-on-disagreement policy does not apply to it."
+)
+
+_NOT_SDP_OPS_SDP_LEG_REASON = (
+    "_SDP_OPS (v1.30 Phase 133 D-01) is a scoped allow-list built for "
+    "exactly OP_SDP_LOCK/OP_SDP_UNLOCK, dispatched through "
+    "_dispatch_sdp's frozen four-positional signature (133 D-01's forward "
+    "contract, unchanged by this phase). {op} is write-shaped and needs a "
+    "source pattern plus a read-back verification, which that signature "
+    "cannot carry -- it dispatches through the ordinary write/verify path "
+    "instead, so its absence from _SDP_OPS here is structural."
+)
+
+_NOT_ROUTED_TO_MULTI_RUN_SDP_LEG_REASON = (
+    "structurally excluded: _dispatch_step only routes _MULTI_RUN_OPS "
+    "members into _dispatch_multi_run (D-04), and {op} is not a "
+    "_MULTI_RUN_OPS member (see the _MULTI_RUN_OPS exemption row above), "
+    "so this function's run loop never sees it."
 )
 
 _OP_REGISTRY_EXEMPTIONS: dict[tuple[str, str], str] = {
@@ -442,16 +483,157 @@ _OP_REGISTRY_EXEMPTIONS: dict[tuple[str, str], str] = {
         "_MULTI_RUN_OPS members into _dispatch_multi_run, and neither SDP "
         "op is a member, so this function's run loop never sees it."
     ),
+    # --- _SDP_LEG_OPS: every non-SDP-leg op, structurally (v1.30 Phase 134
+    # T-134-01, LEG-03) -- this phase's own scoped 4-member allow-list. ---
+    ("id", "_SDP_LEG_OPS"): _NOT_SDP_LEG_REASON.format(op="id"),
+    ("read", "_SDP_LEG_OPS"): _NOT_SDP_LEG_REASON.format(op="read"),
+    ("blank-check", "_SDP_LEG_OPS"): _NOT_SDP_LEG_REASON.format(op="blank-check"),
+    ("write", "_SDP_LEG_OPS"): _NOT_SDP_LEG_REASON.format(op="write"),
+    ("write-partial", "_SDP_LEG_OPS"): _NOT_SDP_LEG_REASON.format(op="write-partial"),
+    ("verify", "_SDP_LEG_OPS"): _NOT_SDP_LEG_REASON.format(op="verify"),
+    ("erase", "_SDP_LEG_OPS"): _NOT_SDP_LEG_REASON.format(op="erase"),
+    (OP_SDP_LOCK, "_SDP_LEG_OPS"): _NOT_SDP_LEG_REASON.format(op=OP_SDP_LOCK),
+    (OP_SDP_UNLOCK, "_SDP_LEG_OPS"): _NOT_SDP_LEG_REASON.format(op=OP_SDP_UNLOCK),
+    # --- _MULTI_RUN_OPS: this phase's four SDP-leg ops, single-run (D-03,
+    # mirroring the pre-existing SDP-lock/unlock exclusion above). ---
+    (OP_WRITE_BASELINE_B, "_MULTI_RUN_OPS"): _NOT_MULTI_RUN_SDP_LEG_REASON.format(
+        op=OP_WRITE_BASELINE_B
+    ),
+    (OP_WRITE_BASELINE_A, "_MULTI_RUN_OPS"): _NOT_MULTI_RUN_SDP_LEG_REASON.format(
+        op=OP_WRITE_BASELINE_A
+    ),
+    (OP_WRITE_INHIBITED, "_MULTI_RUN_OPS"): _NOT_MULTI_RUN_SDP_LEG_REASON.format(
+        op=OP_WRITE_INHIBITED
+    ),
+    (OP_WRITE_RESTORED, "_MULTI_RUN_OPS"): _NOT_MULTI_RUN_SDP_LEG_REASON.format(
+        op=OP_WRITE_RESTORED
+    ),
+    # --- _SDP_OPS: this phase's four SDP-leg ops cannot fit _dispatch_sdp's
+    # frozen four-positional signature (structural, D-07). ---
+    (OP_WRITE_BASELINE_B, "_SDP_OPS"): _NOT_SDP_OPS_SDP_LEG_REASON.format(
+        op=OP_WRITE_BASELINE_B
+    ),
+    (OP_WRITE_BASELINE_A, "_SDP_OPS"): _NOT_SDP_OPS_SDP_LEG_REASON.format(
+        op=OP_WRITE_BASELINE_A
+    ),
+    (OP_WRITE_INHIBITED, "_SDP_OPS"): _NOT_SDP_OPS_SDP_LEG_REASON.format(
+        op=OP_WRITE_INHIBITED
+    ),
+    (OP_WRITE_RESTORED, "_SDP_OPS"): _NOT_SDP_OPS_SDP_LEG_REASON.format(
+        op=OP_WRITE_RESTORED
+    ),
+    # --- _dispatch_multi_run: this phase's four SDP-leg ops never reach
+    # this run loop (structural, since they are not _MULTI_RUN_OPS members
+    # -- see above). ---
+    (OP_WRITE_BASELINE_B, "_dispatch_multi_run"): (
+        _NOT_ROUTED_TO_MULTI_RUN_SDP_LEG_REASON.format(op=OP_WRITE_BASELINE_B)
+    ),
+    (OP_WRITE_BASELINE_A, "_dispatch_multi_run"): (
+        _NOT_ROUTED_TO_MULTI_RUN_SDP_LEG_REASON.format(op=OP_WRITE_BASELINE_A)
+    ),
+    (OP_WRITE_INHIBITED, "_dispatch_multi_run"): (
+        _NOT_ROUTED_TO_MULTI_RUN_SDP_LEG_REASON.format(op=OP_WRITE_INHIBITED)
+    ),
+    (OP_WRITE_RESTORED, "_dispatch_multi_run"): (
+        _NOT_ROUTED_TO_MULTI_RUN_SDP_LEG_REASON.format(op=OP_WRITE_RESTORED)
+    ),
+    # --- _dispatch_step: TEMPORARY -- plan 134-02 wires these four ops'
+    # routing arm. Discharge (remove these four rows) in that plan's own
+    # commit, or the stale-row guard would let a now-false exemption
+    # survive. ---
+    (OP_WRITE_BASELINE_B, "_dispatch_step"): (
+        "TEMPORARY — discharged by plan 134-02: write-baseline-b's "
+        "_dispatch_step routing arm is wired in plan 134-02, not this one "
+        "(134-01 lands only the vocabulary + registry + generator). This "
+        "row must be removed in 134-02's own commit that adds the "
+        "routing, or the stale-row guard would let a now-false exemption "
+        "survive."
+    ),
+    (OP_WRITE_BASELINE_A, "_dispatch_step"): (
+        "TEMPORARY — discharged by plan 134-02: write-baseline-a's "
+        "_dispatch_step routing arm is wired in plan 134-02, not this one "
+        "(134-01 lands only the vocabulary + registry + generator). This "
+        "row must be removed in 134-02's own commit that adds the "
+        "routing, or the stale-row guard would let a now-false exemption "
+        "survive."
+    ),
+    (OP_WRITE_INHIBITED, "_dispatch_step"): (
+        "TEMPORARY — discharged by plan 134-02: write-inhibited's "
+        "_dispatch_step routing arm is wired in plan 134-02, not this one "
+        "(134-01 lands only the vocabulary + registry + generator). This "
+        "row must be removed in 134-02's own commit that adds the "
+        "routing, or the stale-row guard would let a now-false exemption "
+        "survive."
+    ),
+    (OP_WRITE_RESTORED, "_dispatch_step"): (
+        "TEMPORARY — discharged by plan 134-02: write-restored's "
+        "_dispatch_step routing arm is wired in plan 134-02, not this one "
+        "(134-01 lands only the vocabulary + registry + generator). This "
+        "row must be removed in 134-02's own commit that adds the "
+        "routing, or the stale-row guard would let a now-false exemption "
+        "survive."
+    ),
+    # --- derive_plan: TEMPORARY -- plan 134-03 teaches derive_plan to emit
+    # these four ops as Steps (D-06). Discharge (remove these four rows) in
+    # that plan's own commit, or the stale-row guard would let a now-false
+    # exemption survive. ---
+    (OP_WRITE_BASELINE_B, "derive_plan"): (
+        "TEMPORARY — discharged by plan 134-03: write-baseline-b is not "
+        "yet emitted as a derive_plan() Step in this plan -- plan 134-03 "
+        "is what teaches derive_plan to emit the SDP leg's six steps "
+        "(D-06). This row must be removed in 134-03's own commit that "
+        "adds the emission, or the stale-row guard would let a now-false "
+        "exemption survive."
+    ),
+    (OP_WRITE_BASELINE_A, "derive_plan"): (
+        "TEMPORARY — discharged by plan 134-03: write-baseline-a is not "
+        "yet emitted as a derive_plan() Step in this plan -- plan 134-03 "
+        "is what teaches derive_plan to emit the SDP leg's six steps "
+        "(D-06). This row must be removed in 134-03's own commit that "
+        "adds the emission, or the stale-row guard would let a now-false "
+        "exemption survive."
+    ),
+    (OP_WRITE_INHIBITED, "derive_plan"): (
+        "TEMPORARY — discharged by plan 134-03: write-inhibited is not "
+        "yet emitted as a derive_plan() Step in this plan -- plan 134-03 "
+        "is what teaches derive_plan to emit the SDP leg's six steps "
+        "(D-06). This row must be removed in 134-03's own commit that "
+        "adds the emission, or the stale-row guard would let a now-false "
+        "exemption survive."
+    ),
+    (OP_WRITE_RESTORED, "derive_plan"): (
+        "TEMPORARY — discharged by plan 134-03: write-restored is not "
+        "yet emitted as a derive_plan() Step in this plan -- plan 134-03 "
+        "is what teaches derive_plan to emit the SDP leg's six steps "
+        "(D-06). This row must be removed in 134-03's own commit that "
+        "adds the emission, or the stale-row guard would let a now-false "
+        "exemption survive."
+    ),
 }
 
-# `_dispatch_step` needs zero exemptions -- measured: all 9 ops resolve into
-# it (arms 1-4 cover id/blank-check/read plus every _MULTI_RUN_OPS member,
-# arm 5 covers every _SDP_OPS member), so every op is a real member.
-assert "_dispatch_step" not in {reg for (_op, reg) in _OP_REGISTRY_EXEMPTIONS}, (
-    "_dispatch_step was measured to cover all 9 ops with no exemptions "
-    "needed -- an exemption row against it means either the measurement "
-    "changed (re-verify _POLICED_REGISTRIES['_dispatch_step']) or a stray "
-    "row was added in error"
+# `_dispatch_step` needs zero exemptions for the 9 PRE-EXISTING ops --
+# measured: all 9 resolve into it (arms 1-4 cover id/blank-check/read plus
+# every _MULTI_RUN_OPS member, arm 5 covers every _SDP_OPS member). Plan
+# 134-01 adds four TEMPORARY exemption rows for this phase's own four new
+# ops (discharged by plan 134-02, which wires their routing arm) -- so the
+# assertion narrows from "zero exemptions at all" to "zero exemptions for
+# any of the 9 pre-existing ops", and separately pins the temporary count
+# so a stray fifth row or an early/late discharge is caught.
+_dispatch_step_exempted_ops = {
+    op for (op, reg) in _OP_REGISTRY_EXEMPTIONS if reg == "_dispatch_step"
+}
+assert _dispatch_step_exempted_ops <= chip_test_mod._SDP_LEG_OPS, (
+    "_dispatch_step was measured to cover all 9 pre-existing ops with no "
+    "exemptions needed -- an exemption row against it for anything other "
+    "than this phase's own (TEMPORARY, plan-134-02-discharged) SDP-leg ops "
+    "means either the measurement changed (re-verify "
+    "_POLICED_REGISTRIES['_dispatch_step']) or a stray row was added in "
+    f"error. Exempted ops: {_dispatch_step_exempted_ops!r}"
+)
+assert len(_dispatch_step_exempted_ops) == 4, (
+    "expected exactly 4 TEMPORARY _dispatch_step exemption rows (this "
+    f"phase's own 4 new ops, pre-134-02), measured "
+    f"{len(_dispatch_step_exempted_ops)}: {_dispatch_step_exempted_ops!r}"
 )
 
 # Guard: exemptions must never reference a declared non-registry -- those
@@ -784,11 +966,18 @@ def test_altered_registry_copy_fails_parity_non_vacuous() -> None:
 
 
 def test_sdp_ops_are_accounted_in_every_policed_registry() -> None:
-    """For each of OP_SDP_LOCK/OP_SDP_UNLOCK and each policed registry,
-    assert membership or a reasoned exemption, AND pin the specific expected
-    disposition per pair -- so a future change that silently flips one from
-    member to exempt (or back) fails here even if the generic leg (test 1)
-    would somehow still pass."""
+    """For each of OP_SDP_LOCK/OP_SDP_UNLOCK plus this phase's own four
+    SDP-leg ops, and each policed registry, assert membership or a reasoned
+    exemption, AND pin the specific expected disposition per pair -- so a
+    future change that silently flips one from member to exempt (or back)
+    fails here even if the generic leg (test 1) would somehow still pass.
+
+    The four new ops' `_dispatch_step`/`derive_plan` rows are pinned False
+    HERE too -- they are TEMPORARY exemptions plan 134-02/134-03 discharge
+    by flipping these same two pins to True in their own commits, mirroring
+    exactly how `("derive_plan", OP_SDP_LOCK)` was pinned False in Phase
+    133 and is Phase 134's (a later plan's) to flip.
+    """
     expected_membership = {
         ("_DESTRUCTIVE_OPS", OP_SDP_LOCK): True,
         ("_DESTRUCTIVE_OPS", OP_SDP_UNLOCK): False,
@@ -803,6 +992,19 @@ def test_sdp_ops_are_accounted_in_every_policed_registry() -> None:
         ("_dispatch_multi_run", OP_SDP_LOCK): False,
         ("_dispatch_multi_run", OP_SDP_UNLOCK): False,
     }
+    for new_op in (
+        OP_WRITE_BASELINE_B,
+        OP_WRITE_BASELINE_A,
+        OP_WRITE_INHIBITED,
+        OP_WRITE_RESTORED,
+    ):
+        expected_membership[("_DESTRUCTIVE_OPS", new_op)] = True
+        expected_membership[("_MULTI_RUN_OPS", new_op)] = False
+        expected_membership[("_SDP_OPS", new_op)] = False
+        expected_membership[("_SDP_LEG_OPS", new_op)] = True
+        expected_membership[("_dispatch_step", new_op)] = False
+        expected_membership[("derive_plan", new_op)] = False
+        expected_membership[("_dispatch_multi_run", new_op)] = False
 
     for (registry_name, op), should_be_member in expected_membership.items():
         is_member = op in _POLICED_REGISTRIES[registry_name]

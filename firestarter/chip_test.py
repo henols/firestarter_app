@@ -17,11 +17,18 @@ Pure, bench-free compute layer for `firestarter dev test <chip>` (Phase 112):
   over-confidently mis-diagnosing (this project's own false-PASS history:
   Bug A, ST-vs-Winbond chip-ID mixup, AM27C020 write#1/write#2 divergence).
 
-This module is pure compute over host-side byte arrays: it sets no VPP,
-builds no wire dict, and calls no operator/firmware method. Plan 108-04
-extends this module with `run_plan` -- the non-fatal per-step executor that
-composes existing `EpromOperator` methods only (still zero new firmware
-dispatch, zero VPP-set, zero raw wire dict).
+This module is pure compute over host-side byte arrays: it sets no VPP and
+calls no operator/firmware method itself. Plan 108-04 extends this module
+with `run_plan` -- the non-fatal per-step executor that composes existing
+`EpromOperator` methods only (still zero new firmware dispatch, zero
+VPP-set). v1.30 Phase 134 DELIBERATELY NARROWS the "builds no wire dict"
+half of that claim: this module will pass exactly one `operation_flags` bit
+(`FLAG_SKIP_SDP_UNLOCK`, `constants.py:137`) on exactly one op (the SDP
+leg's inhibited-write step, `OP_WRITE_INHIBITED` -- wired by plan 134-02,
+which also carries the corresponding import; `ruff`'s `F401` flags an
+unused import of a name referenced nowhere, so this plan (134-01) states
+the narrowing in prose only) -- stated explicitly here rather than
+silently violating the older, broader wording.
 """
 
 from __future__ import annotations
@@ -70,6 +77,31 @@ def generate_pattern(start: int, length: int) -> bytes:
     region (Phase 109's UV small-region write cap).
     """
     return bytes(address_fold_byte(start + i) for i in range(length))
+
+
+def generate_inhibited_pattern(start: int, length: int) -> bytes:
+    """The SDP leg's inhibited-write payload B (v1.30 Phase 134, D-19, LEG-03).
+
+    ⚠ P-01, the milestone's headline pitfall: `generate_pattern` is a PURE
+    function of `(start, length)`. Deriving B by calling `generate_pattern`
+    a SECOND time -- with the same region, or with a "different seed" that
+    reduces to the same region -- makes A and B byte-identical, and the
+    leg's central assertion ("the chip did not accept a write while locked")
+    a tautology that reads as correct in review. This function instead calls
+    `generate_pattern(start, length)` exactly ONCE and returns its bitwise
+    complement, so B is derived FROM A rather than independently re-derived
+    -- A and B are guaranteed to differ at every byte by construction, never
+    by chance.
+
+    A nonce or timestamp was rejected (D-19): it would break reproducibility
+    (two runs over the same region would no longer agree on B) and re-key
+    `dedup_fingerprint` (diagnostic_report.py) on every single run, since
+    `StepResult.op`'s hash is stable but this function's OUTPUT is not
+    otherwise consumed by that hash -- the reproducibility argument is the
+    one that matters here.
+    """
+    a = generate_pattern(start, length)
+    return bytes(~b & 0xFF for b in a)
 
 
 def prepass_images(length: int) -> tuple[bytes, bytes]:
@@ -308,6 +340,29 @@ OP_ERASE = "erase"
 # triggered by adding these.
 OP_SDP_LOCK = "sdp-lock"
 OP_SDP_UNLOCK = "sdp-unlock"
+
+# The SDP leg's four remaining op strings (v1.30 Phase 134, D-06/D-07,
+# LEG-01/02/03/04/16). Engine-local op strings, NOT wire constants -- no
+# `constants.py` / `firestarter.h` mirroring is triggered by adding these,
+# so this phase needs no firmware lockstep and no `.hex` re-cut. Ordered in
+# the leg's own D-06 step order (baseline-B, baseline-A, inhibited,
+# restored) so a reader scanning top-to-bottom sees the same order the leg
+# runs in.
+#
+# D-07 chose TWO baseline ops (`write-baseline-b` / `write-baseline-a`)
+# rather than one folded `sdp-baseline` op: `DiagnosticReport.render()`'s
+# terminal-facing table shows only `op` / `verdict` / `error_code` /
+# `fingerprint` -- `reason` reaches only the markdown table and the JSON
+# block, so a failing baseline *direction* hidden inside `reason` would be
+# invisible to whoever reads the terminal, on the very step that decides
+# whether a lock is emitted at all. Two op strings make the failing
+# direction legible in the op string itself, mirroring the `write-partial`
+# precedent above ("every consumer that reads `StepResult.op` sees it
+# without learning a new field").
+OP_WRITE_BASELINE_B = "write-baseline-b"
+OP_WRITE_BASELINE_A = "write-baseline-a"
+OP_WRITE_INHIBITED = "write-inhibited"
+OP_WRITE_RESTORED = "write-restored"
 
 
 @dataclass
@@ -660,7 +715,24 @@ VERDICT_MARGINAL = "marginal"
 # becomes step 4 of the derived leg) -- it is NOT a live Phase 133 path,
 # because this phase derives no SDP step; the unlock here is only reachable
 # via a directly-constructed test Step or the cleanup registry (133-04).
-_DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE, OP_SDP_LOCK})
+#
+# The four SDP-leg ops (v1.30 Phase 134, LEG-03) join here too: each one
+# mutates the part (a baseline write, the inhibited write, or the restore
+# write), so the chip-ID destructive gate must cover them exactly like any
+# other write-shaped op. `OP_SDP_UNLOCK` stays the one deliberate exception
+# above -- widening this set never touches that asymmetry.
+_DESTRUCTIVE_OPS = frozenset(
+    {
+        OP_WRITE,
+        OP_WRITE_PARTIAL,
+        OP_ERASE,
+        OP_SDP_LOCK,
+        OP_WRITE_BASELINE_B,
+        OP_WRITE_BASELINE_A,
+        OP_WRITE_INHIBITED,
+        OP_WRITE_RESTORED,
+    }
+)
 # LIVE DISPATCH ALLOW-LIST (121-02, T-121-05/06/07). Originally documented as
 # only the N>=2 disagreement-policy set (D-06: destructive/verify ONLY --
 # write, erase, verify; read disagreement is a divergence metric, never a
@@ -702,8 +774,40 @@ _MULTI_RUN_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE, OP_VERIFY})
 # `tests/test_chip_test_sdp_leg.py::test_dispatch_sdp_maps_bool_to_verdict`.
 _SDP_OPS = frozenset({OP_SDP_LOCK, OP_SDP_UNLOCK})
 
+# The SDP leg's own registry (v1.30 Phase 134, T-134-01, LEG-03). A module
+# constant, never a DB field, for the same reason `_SDP_OPS` and
+# `_WRITE_REGION_LENGTH` are: anything that widens a blast radius lives in
+# this module, never in a DB entry a malicious/misconfigured chip could
+# supply. Like `_SDP_OPS` before it, this module's known failure mode is a
+# documented-but-dead frozenset with zero tree-wide references -- plan
+# 134-04's baseline gate (`_baseline_closes_sdp_gate`, D-08/D-20) is this
+# set's live consumer.
+_SDP_LEG_OPS = frozenset(
+    {
+        OP_WRITE_BASELINE_B,
+        OP_WRITE_BASELINE_A,
+        OP_WRITE_INHIBITED,
+        OP_WRITE_RESTORED,
+    }
+)
+
 _DESTRUCTIVE_GATE_REASON = (
     "chip-ID mismatch — destructive steps gated (chip left pristine)"
+)
+
+# The SDP leg's own gate-closure reasons (v1.30 Phase 134, D-08/D-20),
+# consumed by plan 134-04's baseline gate. Both name the family FACT (the
+# baseline write/read-back transition did not complete; the part is left as
+# found) -- never a mechanism name, and never `_DESTRUCTIVE_GATE_REASON`'s
+# chip-ID wording, which would mislead a reader into thinking chip-ID
+# closed the gate when the write path did (D-08's own rejected alternative).
+_SDP_BASELINE_GATE_REASON = (
+    "baseline write/read-back transition did not complete — "
+    "no lock was emitted (part left as found)"
+)
+_SDP_UNLOCK_GATE_REASON = (
+    "baseline gate closed before a lock was emitted — "
+    "no lock was emitted, so there is nothing to unlock"
 )
 
 

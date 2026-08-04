@@ -146,6 +146,7 @@ from firestarter.chip_test import (
     _DESTRUCTIVE_GATE_REASON,
     _DESTRUCTIVE_OPS,
     _MULTI_RUN_OPS,
+    _SDP_LEG_OPS,
     _SDP_OPS,
     OP_BLANK_CHECK,
     OP_ERASE,
@@ -806,8 +807,12 @@ def test_shipped_ops_never_reach_sdp_arm(monkeypatch):
     Enumerates the seven shipped op strings EXPLICITLY
     (_SHIPPED_OP_STRINGS) and additionally asserts that set equals the
     module's own shipped op set (every module-level OP_* constant minus
-    _SDP_OPS), so a future eighth shipped op cannot silently escape this
-    sentinel by omission.
+    _SDP_OPS and minus v1.30 Phase 134's own _SDP_LEG_OPS -- the four new
+    op strings plan 134-01 adds are vocabulary only at this commit, not yet
+    dispatched anywhere, so they are excluded from "shipped" the same way
+    _SDP_OPS's own two members are), so a future eighth SHIPPED op (one
+    that actually reaches _dispatch_step's arms 1-4) cannot silently escape
+    this sentinel by omission.
 
     If this fails, a shipped op reached the new arm -- the arm was placed
     wrongly and criterion 4's zero-added-branching-cost claim is false
@@ -819,13 +824,13 @@ def test_shipped_ops_never_reach_sdp_arm(monkeypatch):
         for name, value in vars(chip_test_mod).items()
         if name.startswith("OP_") and isinstance(value, str)
     }
-    shipped_op_set = module_op_constants - _SDP_OPS
+    shipped_op_set = module_op_constants - _SDP_OPS - _SDP_LEG_OPS
     assert set(_SHIPPED_OP_STRINGS) == shipped_op_set, (
         f"_SHIPPED_OP_STRINGS {sorted(_SHIPPED_OP_STRINGS)} does not equal "
         f"the module's shipped op set {sorted(shipped_op_set)} (all OP_* "
-        "constants minus _SDP_OPS) -- a shipped op was added to "
-        "chip_test.py without extending this sentinel's enumeration "
-        "(133-CONTEXT.md D-13b)"
+        "constants minus _SDP_OPS and minus _SDP_LEG_OPS) -- a shipped op "
+        "was added to chip_test.py without extending this sentinel's "
+        "enumeration (133-CONTEXT.md D-13b)"
     )
 
     sentinel = Mock(
