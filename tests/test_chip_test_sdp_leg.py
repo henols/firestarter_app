@@ -143,11 +143,14 @@ from unittest.mock import ANY, Mock
 import pytest
 
 from firestarter.chip_test import (
+    _DEFAULT_REGION,
     _DESTRUCTIVE_GATE_REASON,
     _DESTRUCTIVE_OPS,
+    _FF_RATIO_THRESHOLD,
     _MULTI_RUN_OPS,
     _SDP_LEG_OPS,
     _SDP_OPS,
+    FP_BLANK_CONTACT,
     OP_BLANK_CHECK,
     OP_ERASE,
     OP_ID,
@@ -163,7 +166,10 @@ from firestarter.chip_test import (
     Plan,
     Step,
     _dispatch_sdp,
+    classify_fingerprint,
     derive_plan,
+    generate_inhibited_pattern,
+    generate_pattern,
     run_plan,
 )
 from firestarter.database import EpromDatabase
@@ -857,6 +863,109 @@ def test_shipped_ops_never_reach_sdp_arm(monkeypatch):
         f"{len(_SHIPPED_OP_STRINGS)} steps -- a step was silently dropped "
         "or added while the sentinel was active"
     )
+
+
+# ---------------------------------------------------------------------------
+# LEG-03's five pattern assertions (v1.30 Phase 134, plan 134-01, D-19).
+# Every assertion below is computed against the LIVE generators for the
+# REAL region -- never against a byte literal -- and the region itself is
+# derived from chip_test._DEFAULT_REGION rather than hard-coded, so a
+# future region change fails this test loudly instead of silently passing.
+# `pytest -k "pattern_b"` selects this whole class (134-VALIDATION.md).
+#
+# ⚠ P-01, the milestone's headline pitfall: `generate_pattern` is a PURE
+# function of (start, length). Every assertion here exists specifically to
+# make the idiomatic-but-wrong implementation (deriving B by calling
+# `generate_pattern` a second time) fail loudly rather than silently ship
+# a tautology that reads as correct in review.
+# ---------------------------------------------------------------------------
+
+
+class TestInhibitedPattern:
+    def test_pattern_b_same_length_as_pattern_a(self):
+        region = _DEFAULT_REGION
+        a = generate_pattern(*region)
+        b = generate_inhibited_pattern(*region)
+        assert len(b) == len(a), (
+            f"generate_inhibited_pattern{region} returned {len(b)} bytes, "
+            f"generate_pattern{region} returned {len(a)} -- B must be the "
+            "same length as A"
+        )
+
+    def test_pattern_b_differs_from_pattern_a_at_every_byte(self):
+        # "differ at every byte" -- not "differ somewhere". A one-page lock
+        # leak (a single byte failing to invert) must be detectable; a
+        # weaker "differ somewhere" assertion would let exactly that leak
+        # through undetected (P-01/D-19, LEG-03).
+        region = _DEFAULT_REGION
+        a = generate_pattern(*region)
+        b = generate_inhibited_pattern(*region)
+        differing = sum(1 for x, y in zip(a, b) if x != y)
+        assert differing == len(a), (
+            f"generate_inhibited_pattern{region} differed from "
+            f"generate_pattern{region} at only {differing}/{len(a)} bytes "
+            "-- expected EVERY byte to differ. A partial match here means "
+            "a one-page lock leak would not be detectable (P-01/D-19)."
+        )
+
+    def test_pattern_b_is_not_pattern_a_and_not_a_second_generate_pattern_call(self):
+        # The direct anti-tautology assertion: B must differ from A, AND B
+        # must differ from a fresh generate_pattern() call over the SAME
+        # region -- ruling out exactly the idiomatic-but-wrong
+        # implementation P-01 warns about (calling generate_pattern twice).
+        region = _DEFAULT_REGION
+        a = generate_pattern(*region)
+        b = generate_inhibited_pattern(*region)
+        assert b != a, "B must not equal A"
+        assert b != generate_pattern(*region), (
+            "B must not equal a second generate_pattern() call over the "
+            "same region -- if it did, generate_inhibited_pattern would be "
+            "a tautology: generate_pattern is a PURE function of "
+            "(start, length), so calling it twice for the same region "
+            "always yields the same bytes (P-01, the milestone's headline "
+            "pitfall)."
+        )
+
+    def test_neither_pattern_a_nor_pattern_b_is_all_zero_or_all_ff(self):
+        region = _DEFAULT_REGION
+        length = region[1]
+        a = generate_pattern(*region)
+        b = generate_inhibited_pattern(*region)
+        all_zero = bytes(length)
+        all_ff = b"\xff" * length
+        assert a != all_zero, "A must not be all-0x00 (degenerate pattern)"
+        assert a != all_ff, "A must not be all-0xFF (degenerate pattern)"
+        assert b != all_zero, "B must not be all-0x00 (degenerate pattern)"
+        assert b != all_ff, "B must not be all-0xFF (degenerate pattern)"
+
+    def test_pattern_b_readback_does_not_launder_as_blank_contact(self):
+        # D-05's non-laundering leg: a fully-B read-back (the shape a
+        # firmware that silently ignored the SDP lock and accepted the
+        # inhibited write would produce) must be classified as a real
+        # divergence, never as blank/contact -- otherwise a leaked lock
+        # would render as a loose socket rather than as a chip finding.
+        #
+        # Measured at this commit (context only, not the assertion): B's
+        # ff_ratio is ~0.0039 against a live _FF_RATIO_THRESHOLD of 0.98 --
+        # comfortably below the threshold, but the assertion below reads
+        # the live threshold, never this comment's number.
+        region = _DEFAULT_REGION
+        a = generate_pattern(*region)
+        b = generate_inhibited_pattern(*region)
+        fingerprint = classify_fingerprint(a, b, addr_base=region[0])
+        assert fingerprint.classification != FP_BLANK_CONTACT, (
+            f"classify_fingerprint(A, B, addr_base={region[0]}) classified "
+            f"a fully-B read-back as {fingerprint.classification!r} -- "
+            "expected anything OTHER than blank/contact (D-05): a leaked "
+            "lock must not be able to launder as a contact fault."
+        )
+        ff_ratio = fingerprint.evidence["ff_ratio"]
+        assert ff_ratio < _FF_RATIO_THRESHOLD, (
+            f"measured ff_ratio {ff_ratio!r} is not strictly below the "
+            f"live _FF_RATIO_THRESHOLD {_FF_RATIO_THRESHOLD!r} -- B's "
+            "read-back must sit clearly below the blank/contact threshold "
+            "(D-05)."
+        )
 
 
 # ---------------------------------------------------------------------------
