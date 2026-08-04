@@ -115,6 +115,17 @@ Test taxonomy:
       `Try`'s `finalbody` references the name `results` zero times --
       kept as a test (not a shell grep) so it runs in CI on every commit.
 
+  LEG-09 criterion 3 (plan 133-04, D-11)
+    test_gate_closed_from_start -> gate-closed-from-the-start: sdp_lock is
+      SKIPPED, sdp_unlock is never attempted; a mirror open-gate scenario
+      proves the claim is non-vacuous (both ARE called when the gate is
+      open).
+    test_lock_ran_then_gate_closes -> lock-ran-then-the-gate-closes: the
+      registered unlock STILL runs even though a later gate closure would
+      have skipped a plan-derived destructive step; also asserts the
+      standing OP_SDP_UNLOCK not in _DESTRUCTIVE_OPS invariant, proven by
+      a deliberate-break mutation to fail under (see 133-04-SUMMARY.md).
+
 References:
   - .planning/phases/133-sdp-leg-mechanism/133-01-PLAN.md
   - .planning/phases/133-sdp-leg-mechanism/133-CONTEXT.md D-08 (exception
@@ -132,6 +143,7 @@ from unittest.mock import ANY, Mock
 import pytest
 
 from firestarter.chip_test import (
+    _DESTRUCTIVE_GATE_REASON,
     _DESTRUCTIVE_OPS,
     _MULTI_RUN_OPS,
     _SDP_OPS,
@@ -146,6 +158,7 @@ from firestarter.chip_test import (
     OP_WRITE_PARTIAL,
     VERDICT_BAD,
     VERDICT_OK,
+    VERDICT_SKIPPED,
     Plan,
     Step,
     _dispatch_sdp,
@@ -1146,4 +1159,99 @@ def test_drain_swallowed_classes_match_constant():
     assert raises_in_handler == [], (
         "the per-callable wrapper's except body contains a Raise -- the "
         "drain must never re-raise from the finally (D-10)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# LEG-09 criterion 3 (plan 133-04, D-11). Both cases are satisfied by
+# registry behaviour: gate-closed-from-the-start -> sdp_lock is SKIPPED ->
+# nothing registers -> sdp_unlock is never attempted; lock-ran-then-the-
+# gate-closes -> the unlock is registered -> the drain still runs it.
+# ---------------------------------------------------------------------------
+
+
+def test_gate_closed_from_start():
+    """LEG-09 criterion 3, case 1: an id step that CLOSES the gate (a
+    chip-ID mismatch, `_id_step_closes_gate`'s real condition) leaves the
+    following OP_SDP_LOCK step SKIPPED with `_DESTRUCTIVE_GATE_REASON`,
+    `operator.sdp_lock` never called, and `operator.sdp_unlock` never
+    called (nothing was locked, so there is nothing to unlock -- LEG-10's
+    empty-registry no-op path).
+
+    The mirror OPEN-gate scenario is what makes this non-vacuous: without
+    it, "the unlock was never attempted" would be equally true of a
+    mechanism that can NEVER attempt it at all (the vacuity trap this
+    project's record warns about)."""
+    closed_operator = _mock_operator(check_eprom_id=(False, None), sdp_lock=True)
+    plan = _plan_with_steps(
+        Step(op=OP_ID, supported=True, reason=""),
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+    )
+
+    results = run_plan(plan, closed_operator, _REAL_DB)
+
+    lock_result = _result(results, OP_SDP_LOCK)
+    assert lock_result.verdict == VERDICT_SKIPPED, (
+        f"OP_SDP_LOCK verdict was {lock_result.verdict!r} with the gate "
+        "closed from the start, expected SKIPPED"
+    )
+    assert lock_result.reason == _DESTRUCTIVE_GATE_REASON, (
+        f"OP_SDP_LOCK's SKIPPED reason was {lock_result.reason!r}, expected "
+        f"the standing _DESTRUCTIVE_GATE_REASON {_DESTRUCTIVE_GATE_REASON!r}"
+    )
+    closed_operator.sdp_lock.assert_not_called()
+    closed_operator.sdp_unlock.assert_not_called()
+
+    # Non-vacuity mirror: same plan, gate left OPEN -- sdp_lock IS called
+    # and sdp_unlock IS called.
+    open_operator = _mock_operator(sdp_lock=True)
+    open_results = run_plan(plan, open_operator, _REAL_DB)
+    open_lock_result = _result(open_results, OP_SDP_LOCK)
+    assert open_lock_result.verdict == VERDICT_OK, (
+        f"mirror (open-gate) OP_SDP_LOCK verdict was "
+        f"{open_lock_result.verdict!r}, expected OK -- without this mirror "
+        "the never-attempted claim above would be vacuously true of a "
+        "mechanism that can never attempt it at all"
+    )
+    open_operator.sdp_lock.assert_called_once_with("M8720", ANY)
+    open_operator.sdp_unlock.assert_called_once_with("M8720", ANY)
+
+
+def test_lock_ran_then_gate_closes():
+    """LEG-09 criterion 3, case 2: the lock runs FIRST and succeeds
+    (registering its unlock), and a LATER id step closes the gate. The
+    unlock STILL runs -- the registry drain does not consult
+    `destructive_gate_closed` at all, so a later-closing gate can never
+    skip an already-registered cleanup (this is exactly what LEG-10 exists
+    to guarantee, and what would fail if OP_SDP_UNLOCK were ever added to
+    _DESTRUCTIVE_OPS -- see the standing invariant asserted below)."""
+    operator = _mock_operator(sdp_lock=True)
+    # First id step: passing, so the gate stays open through the lock.
+    # Second id step (after the lock): CLOSES the gate.
+    operator.check_eprom_id.side_effect = [(True, 0x1234), (False, None)]
+    plan = _plan_with_steps(
+        Step(op=OP_ID, supported=True, reason=""),
+        Step(op=OP_SDP_LOCK, supported=True, reason=""),
+        Step(op=OP_ID, supported=True, reason=""),
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    operator.sdp_lock.assert_called_once_with("M8720", ANY)
+    assert operator.sdp_unlock.call_count == 1, (
+        f"sdp_unlock was called {operator.sdp_unlock.call_count} time(s) "
+        "after a lock-ran-then-gate-closes sequence, expected 1 -- the "
+        "registered unlock must still drain even though a later gate "
+        "closure would have skipped a plan-derived destructive step"
+    )
+    lock_result = _result(results, OP_SDP_LOCK)
+    assert lock_result.verdict == VERDICT_OK, (
+        f"OP_SDP_LOCK verdict was {lock_result.verdict!r}, expected OK -- "
+        "the lock ran BEFORE the gate closed"
+    )
+
+    assert OP_SDP_UNLOCK not in _DESTRUCTIVE_OPS, (
+        "OP_SDP_UNLOCK must stay OUT of _DESTRUCTIVE_OPS: were it a "
+        "member, a closing gate could skip a plan-derived unlock step and "
+        "ship a locked part to the caller (133-CONTEXT.md D-11, LEG-09)"
     )
