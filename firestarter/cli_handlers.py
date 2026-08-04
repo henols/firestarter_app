@@ -36,12 +36,12 @@ from firestarter.channel import available_boards
 from firestarter.chip_resolver import resolve_chip
 from firestarter.chip_test import (
     OP_ID,
-    StepResult,
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
     VERDICT_OK,
     VERDICT_SKIPPED,
+    StepResult,
     count_applicable,
     derive_plan,
     is_uv_eprom,

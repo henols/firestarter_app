@@ -532,14 +532,18 @@ def test_handler_function_names_contains_the_new_uv_scope_helpers() -> None:
 # ---------------------------------------------------------------------------
 
 # The six real names dev_test's BODY (never its decorator list) references,
-# measured live 2026-08-03 against the shipped cli_handlers.py.
+# measured live 2026-08-04 against the shipped cli_handlers.py. v1.30 Phase
+# 134 plan 134-05 (D-14): `_verdict_code` is no longer called directly from
+# `dev_test`'s own body -- the exit computation now calls `_overall_exit_code`
+# (which itself calls `_verdict_code` internally), so the body-only
+# derivation swaps one name for the other; the count stays six.
 _EXPECTED_DEV_TEST_REFERENCED_HELPERS = {
     "_chip_id_fields",
     "_is_interactive",
     "_make_sampler",
+    "_overall_exit_code",
     "_resolve_write_scope",
     "_sanitize_chip_token",
-    "_verdict_code",
 }
 
 
