@@ -33,6 +33,25 @@ Coverage:
      make `_assert_partition_matches_committed` raise, and the raised message
      MUST name the moved chip -- proves the narrowing gate is capable of
      catching P-10's hole, not a vacuous always-pass check.
+  8. GATE-08 leg 1 (Phase 136.1 Plan 02, PROV-02/03): the production
+     transcription (`_partition_0x0d`, `SDP_CAPABLE_TOKENS`-based) is now
+     ALSO compared, element-wise, against a genuinely infoic.xml-derived
+     source -- chip_database.json's own `programming.protect_on_after`
+     field, shipped by Plan 136.1-01 -- via
+     `test_sdp_partition_matches_infoic_derived_field_element_wise`. This
+     does NOT replace test 5's hand-curated snapshot; both are kept, because
+     two independent proofs are strictly stronger than replacing one with
+     the other, and the snapshot is cheap insurance that costs nothing to
+     keep. `_COMMITTED_SDP_ALLOW_ENTRIES`'s own comment block has said since
+     Phase 131 that leg 1 was "not implementable" because chip_database.json
+     contained ZERO `flags`-derived fields; Plan 136.1-01 changed that
+     measurement -- this is leg 1, implemented for the first time.
+  9. Non-vacuous proof for leg 1's own narrowing gate: a synthetic chip's
+     `protect_on_after` field flipped `True` -> `False` between "before"/
+     "after" in-memory DBs (a field flip, not test 7's part-number-token
+     rename trick, since leg 1 doesn't read tokens at all) MUST make
+     `_assert_two_partitions_match` raise, naming the moved chip and not an
+     untouched control -- `test_partition_flags_a_moved_chip_via_db_field_non_vacuous`.
 
 This module intentionally carries NO FW_ABSENT-style skip marker: it reads
 only the packaged chip_database.json, which is always present in host-only
@@ -494,4 +513,189 @@ def test_partition_flags_a_moved_chip_non_vacuous() -> None:
             "Non-vacuity failure: moving a synthetic chip out of ALLOW did "
             "not make _assert_partition_matches_committed raise -- the "
             "GATE-08 narrowing gate is vacuous."
+        )
+
+
+# ---------------------------------------------------------------------------
+# GATE-08 leg 1 (Phase 136.1 Plan 02, PROV-02/03): a genuinely
+# infoic.xml-derived comparison, via chip_database.json's own committed
+# `protect_on_after` field (Plan 136.1-01) -- ADDED alongside, never instead
+# of, the hand-curated `_COMMITTED_SDP_ALLOW_ENTRIES` snapshot above.
+# ---------------------------------------------------------------------------
+
+
+def _partition_from_protect_on_after_field(db: dict) -> tuple[list[str], list[str]]:
+    """Partition every algorithm==13 (0x0D) chip into ALLOW/REFUSE lists of
+    `"MFR/PART_NUMBER"` keys, reading `chip["programming"]["protect_on_after"]`
+    directly -- never calling `sdp_capability_for_entry`.
+
+    This mirrors `_partition_0x0d`'s selection and key convention exactly,
+    but the ALLOW/REFUSE decision comes from the committed, infoic.xml-decoded
+    DB field (Plan 136.1-01) rather than the production predicate, making
+    this an independent second measurement of the same partition -- GATE-08
+    leg 1, previously "not implementable" per `_COMMITTED_SDP_ALLOW_ENTRIES`'s
+    own comment (chip_database.json carried zero `flags`-derived fields until
+    Plan 136.1-01 shipped).
+
+    Deliberately no `.get()` default: a chip missing `protect_on_after` must
+    raise `KeyError` rather than silently reading as REFUSE, so a future
+    regeneration that regresses and drops the field fails loudly instead of
+    quietly narrowing the measured ALLOW set.
+
+    Both returned lists are sorted.
+    """
+    selected = _select_0x0d_chips(db)
+    allow: list[str] = []
+    refuse: list[str] = []
+    for mfr, chip in selected:
+        part_number = chip["part_number"]
+        protect_on_after = chip["programming"]["protect_on_after"]
+        key = f"{mfr}/{part_number}"
+        (allow if protect_on_after else refuse).append(key)
+    return sorted(allow), sorted(refuse)
+
+
+def _assert_two_partitions_match(
+    allow_a: list[str], allow_b: list[str], label_a: str, label_b: str
+) -> None:
+    """Raise AssertionError naming both directions of the symmetric
+    difference between two MEASURED ALLOW partitions (neither one a
+    "committed literal" -- a generalization of
+    `_assert_partition_matches_committed` for comparing two independently
+    measured sources against each other rather than against a snapshot).
+    """
+    set_a = set(allow_a)
+    set_b = set(allow_b)
+    only_in_a = sorted(set_a - set_b)
+    only_in_b = sorted(set_b - set_a)
+    offenders = only_in_a or only_in_b
+    assert not offenders, (
+        f"GATE-08 leg 1: the '{label_a}' and '{label_b}' ALLOW partitions "
+        f"disagree. Only in '{label_a}': {only_in_a}. Only in '{label_b}': "
+        f"{only_in_b}."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 8: GATE-08 leg 1 -- production transcription vs. infoic-derived field
+# ---------------------------------------------------------------------------
+
+
+def test_sdp_partition_matches_infoic_derived_field_element_wise() -> None:
+    """GATE-08 leg 1 (Phase 136.1 Plan 02, PROV-02/03): the production
+    transcription (`_partition_0x0d`, `SDP_CAPABLE_TOKENS`-based) must equal,
+    element-wise, the partition derived directly from chip_database.json's
+    own `protect_on_after` field (Plan 136.1-01) -- a genuinely
+    infoic.xml-derived source, not a hand-curated snapshot.
+
+    Closes the gap `_COMMITTED_SDP_ALLOW_ENTRIES`'s own comment has named
+    since Phase 131: leg 1 was "not implementable" because chip_database.json
+    contained ZERO `flags`-derived fields at that time. Plan 136.1-01 changed
+    that measurement; this is leg 1, implemented for the first time.
+    """
+    db = json.loads(_DB_FILE.read_text(encoding="utf-8"))
+    allow_transcription, refuse_transcription = _partition_0x0d(db)
+    allow_field, refuse_field = _partition_from_protect_on_after_field(db)
+
+    _assert_two_partitions_match(
+        allow_transcription,
+        allow_field,
+        "SDP_CAPABLE_TOKENS transcription",
+        "protect_on_after field",
+    )
+
+    for label, allow, refuse in (
+        ("SDP_CAPABLE_TOKENS transcription", allow_transcription, refuse_transcription),
+        ("protect_on_after field", allow_field, refuse_field),
+    ):
+        assert len(allow) == 43, (
+            f"GATE-08 leg 1: '{label}' measures {len(allow)} ALLOW entries, "
+            "expected 43."
+        )
+        assert len(refuse) == 41, (
+            f"GATE-08 leg 1: '{label}' measures {len(refuse)} REFUSE "
+            "entries, expected 41."
+        )
+        assert len(allow) + len(refuse) == 84, (
+            f"GATE-08 leg 1: '{label}' ALLOW+REFUSE does not sum to 84."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test 9: non-vacuous proof for leg 1's own narrowing gate
+# ---------------------------------------------------------------------------
+
+
+def test_partition_flags_a_moved_chip_via_db_field_non_vacuous() -> None:
+    """Non-vacuous proof for leg 1: flipping a synthetic chip's
+    `protect_on_after` field from `True` to `False` between "before"/"after"
+    in-memory DBs MUST make `_assert_two_partitions_match` raise, naming the
+    moved chip and not an untouched control.
+
+    Mirrors test 7's synthetic-DB shape (`AT28C256` as the ALLOW chip that
+    moves, the `AT28C16,AT28HC16,AT28HC16L` control that does not), but this
+    time the synthetic dicts carry an explicit `protect_on_after` field
+    directly -- not a part-number-token rename trick -- since
+    `_partition_from_protect_on_after_field` never reads tokens at all.
+    """
+    synthetic_db_before = {
+        "SYNTHETIC_MFR": [
+            {
+                "part_number": "AT28C256",
+                "programming": {"algorithm": 13, "protect_on_after": True},
+            },
+            {
+                "part_number": "AT28C16,AT28HC16,AT28HC16L",
+                "programming": {"algorithm": 13, "protect_on_after": False},
+            },
+        ]
+    }
+    allow_before, refuse_before = _partition_from_protect_on_after_field(
+        synthetic_db_before
+    )
+    assert allow_before == ["SYNTHETIC_MFR/AT28C256"], (
+        "Fixture setup error: expected exactly the AT28C256 synthetic chip "
+        f"in ALLOW before the move, measured {allow_before!r}"
+    )
+    assert refuse_before == ["SYNTHETIC_MFR/AT28C16,AT28HC16,AT28HC16L"], (
+        "Fixture setup error: expected the control chip in REFUSE before "
+        f"the move, measured {refuse_before!r}"
+    )
+
+    synthetic_db_after = {
+        "SYNTHETIC_MFR": [
+            {
+                "part_number": "AT28C256",
+                "programming": {"algorithm": 13, "protect_on_after": False},
+            },
+            {
+                "part_number": "AT28C16,AT28HC16,AT28HC16L",
+                "programming": {"algorithm": 13, "protect_on_after": False},
+            },
+        ]
+    }
+    allow_after, _refuse_after = _partition_from_protect_on_after_field(
+        synthetic_db_after
+    )
+    assert "SYNTHETIC_MFR/AT28C256" not in allow_after, (
+        "Fixture setup error: the flipped chip must no longer measure ALLOW"
+    )
+
+    try:
+        _assert_two_partitions_match(allow_before, allow_after, "before", "after")
+    except AssertionError as exc:
+        message = str(exc)
+        assert "SYNTHETIC_MFR/AT28C256" in message, (
+            "Non-vacuity failure: the raised message does not name the "
+            f"moved chip. Message was: {message!r}"
+        )
+        assert "AT28C16" not in message, (
+            "Non-vacuity failure: the raised message names the untouched "
+            f"control chip, which never moved. Message was: {message!r}"
+        )
+    else:
+        raise AssertionError(
+            "Non-vacuity failure: flipping a synthetic chip's "
+            "protect_on_after field did not make _assert_two_partitions_match "
+            "raise -- the GATE-08 leg 1 narrowing gate is vacuous."
         )

@@ -67,6 +67,15 @@ SDP_PROTOCOL_ID = 13
 # entries — the `SGS-THOMSON` and `ST` second-source listings of the same
 # parts — which is why 43 entries yield 65 (not 86) distinct tokens; both
 # copies land on the same (ALLOW) side, so token keying stays well-defined.
+#
+# This static transcription is no longer merely asserted equal to a
+# hand-curated snapshot — `tests/test_sdp_db_invariant.py::
+# test_sdp_partition_matches_infoic_derived_field_element_wise` now proves it
+# equal, element-wise, to `chip_database.json`'s own `protect_on_after` field
+# (PROV-02/03, Phase 136.1) — and this frozenset still cannot itself read
+# that field at runtime, by design: `tools/check_sdp_capability_invariants.py`'s
+# Class 2(b) gate forbids any binding shape other than a literal
+# `frozenset(...)` of string literals, unchanged and untouched by this phase.
 SDP_CAPABLE_TOKENS: frozenset[str] = frozenset(
     {
         # ATMEL
