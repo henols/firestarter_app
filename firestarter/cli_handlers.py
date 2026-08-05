@@ -1300,312 +1300,341 @@ def dev_read(
     sys.exit(0 if ok else 1)
 
 
-@dev.command(name="reg")
-@click.argument("msb")
-@click.argument("lsb")
-@click.argument("ctrl")
-@click.option(
-    "-i",
-    "--input-enable",
-    "input_enable",
-    is_flag=True,
-    help="Input, pulls OE pin high.",
-)
-@click.option(
-    "-d",
-    "--chip-disable",
-    "chip_disable",
-    is_flag=True,
-    help="Disable, pulls CE pin high.",
-)
-@click.option(
-    "-f",
-    "--firestarter",
-    "firestarter_flag",
-    is_flag=True,
-    help=(
-        "Using Firestarter register definition.\n"
-        "By using the firestarter argumet,\n"
-        "the control register will be remaped to match\n"
-        "the hardware revision of the RURP sheild.\n"
-        "See constants.RURP_CONTROL_REGISTER_BITS (mirror of rurp_pinout.h).\n"
-        "0x100 - CTRL_VPP_VPE_DROP_ENABLE\n"
-        "0x080 - CTRL_VPP_REGULATOR_ENABLE\n"
-        "0x040 - CTRL_READ_WRITE\n"
-        "0x020 - CTRL_ADDRESS_LINE_18\n"
-        "0x010 - CTRL_ADDRESS_LINE_17\n"
-        "0x008 - CTRL_VPP_P1_ENABLE\n"
-        "0x004 - CTRL_VPE_ENABLE\n"
-        "0x002 - CTRL_VPP_A9_ENABLE\n"
-        "0x001 - CTRL_ADDRESS_LINE_16"
-    ),
-)
-@click.pass_obj
-@map_typed_errors
-def dev_reg(
-    app: AppContext,
-    msb: str,
-    lsb: str,
-    ctrl: str,
-    input_enable: bool,
-    chip_disable: bool,
-    firestarter_flag: bool,
-) -> None:
-    """Direct access to registers: MSB, LSB and control register."""
-    ok = app.eprom_operator.dev_set_registers(
-        msb,
-        lsb,
-        ctrl,
-        firestarter=firestarter_flag,
-        flags=_build_op_flags(input_enable=input_enable, chip_disable=chip_disable),
+if _DEV_TOOLS_ENABLED:
+    # CHAN-06 tripwire (Phase 136, RETIRE-07-style: names WHY before a future
+    # edit touches the gate). `dev reg` is gated behind `_DEV_TOOLS_ENABLED`,
+    # which freezes `channel.is_dev_tools_enabled()` at import time --
+    # `is_prerelease_build() OR dev_tools_enabled_by_env()`. This command is
+    # load-bearing bench tooling: it is the held-erase-rail DMM proxy an
+    # operator uses to hold a register state (and therefore a voltage rail)
+    # energised long enough for a multimeter reading outside a normal
+    # read/write cycle. Gating purely on `__version__` would silently strand
+    # that bench dependency the moment a stable version is cut, or between
+    # betas, on an editable devcontainer install -- no error, just an absent
+    # command. That is exactly why the `FIRESTARTER_DEV_TOOLS=1` bench
+    # override exists: `channel.dev_tools_enabled_by_env` (exact-match
+    # `"1"` against the `FIRESTARTER_DEV_TOOLS` environment variable, fails
+    # closed on everything else) and `channel.is_dev_tools_enabled`'s `OR`
+    # composing it with the channel check are the two companions this
+    # depends on: narrowing the accepted `FIRESTARTER_DEV_TOOLS` value, or
+    # removing that `OR`, strands the bench tooling without warning.
+    @dev.command(name="reg")
+    @click.argument("msb")
+    @click.argument("lsb")
+    @click.argument("ctrl")
+    @click.option(
+        "-i",
+        "--input-enable",
+        "input_enable",
+        is_flag=True,
+        help="Input, pulls OE pin high.",
     )
-    sys.exit(0 if ok else 1)
-
-
-@dev.command(name="addr")
-@click.argument("eprom", shell_complete=_complete_eprom)
-@click.argument("address")
-@click.option(
-    "-i",
-    "--input-enable",
-    "input_enable",
-    is_flag=True,
-    help="Input, pulls OE pin high.",
-)
-@click.option(
-    "-d",
-    "--chip-disable",
-    "chip_disable",
-    is_flag=True,
-    help="Disable, pulls CE pin high.",
-)
-@click.pass_obj
-@map_typed_errors
-def dev_addr(
-    app: AppContext,
-    eprom: str,
-    address: str,
-    input_enable: bool,
-    chip_disable: bool,
-) -> None:
-    """Direct access to address lines and control register."""
-    eprom_data = resolve_chip(eprom, db=app.db)
-    ok = app.eprom_operator.dev_set_address_mode(
-        eprom,
-        eprom_data,
-        address,
-        flags=_build_op_flags(input_enable=input_enable, chip_disable=chip_disable),
+    @click.option(
+        "-d",
+        "--chip-disable",
+        "chip_disable",
+        is_flag=True,
+        help="Disable, pulls CE pin high.",
     )
-    sys.exit(0 if ok else 1)
-
-
-@dev.command(name="consistency-check")
-@click.argument("eprom", shell_complete=_complete_eprom)
-@click.option(
-    "--runs",
-    type=int,
-    default=3,
-    help="Number of consecutive reads (default 3; minimum 2).",
-)
-@click.option(
-    "--output-dir",
-    "output_dir",
-    type=str,
-    default=None,
-    help="Output dir for per-run binaries (default firestarter-runs/consistency-check-<chip>-<board>-<TS>/).",  # noqa: E501
-)
-@click.option(
-    "--keep-files/--no-keep-files",
-    "keep_files",
-    default=True,
-    help="Keep per-run binary files after verdict (default keep).",
-)
-@click.option(
-    "--max-diffs",
-    "max_diffs",
-    type=int,
-    default=10,
-    help="Max divergent offsets to print on FAIL (default 10).",
-)
-@click.option(
-    "-q", "--quiet", is_flag=True, help="Suppress per-run tqdm progress bars (D-11)."
-)
-@click.option(
-    "-f",
-    "--force",
-    is_flag=True,
-    help="Force read, even if the chip id doesn't match (e.g. Shield-3 missing-chip case).",  # noqa: E501
-)
-@click.option(
-    "--read-settling",
-    "read_settling_us",
-    type=int,
-    default=0,
-    help="Address-settling delay before /CE assert (µs; 0=firmware default 0µs).",
-)
-@click.option(
-    "--read-strobe",
-    "read_strobe_us",
-    type=int,
-    default=0,
-    help="/CE read-strobe pulse width (µs; 0=firmware default 3µs).",
-)
-@click.pass_obj
-@map_typed_errors
-def dev_consistency_check(
-    app: AppContext,
-    eprom: str,
-    runs: int,
-    output_dir: Optional[str],
-    keep_files: bool,
-    max_diffs: int,
-    quiet: bool,
-    force: bool,
-    read_settling_us: int,
-    read_strobe_us: int,
-) -> None:
-    """Read EPROM N consecutive times and report SHA-256 divergence.
-
-    D-12 step 5 / 3-way verdict contract:
-        verdict_int = consistency_check_eprom(...)  # 0=PASS, 1=FAIL, 2=hw-error
-        sys.exit(verdict_int)  # NOT bool-to-int wrap
-
-    The bool-to-int wrap would collapse the 2=hardware-error case to 1=FAIL,
-    breaking the v1.6 RCA diagnostic.
-    """
-    eprom_data = resolve_chip(eprom, db=app.db)
-    verdict_int = app.eprom_operator.consistency_check_eprom(
-        eprom,
-        eprom_data,
-        runs=runs,
-        output_dir=output_dir,
-        keep_files=keep_files,
-        max_diffs=max_diffs,
-        quiet=quiet,
-        operation_flags=_build_op_flags(force=force),
-        read_settling_us=read_settling_us,
-        read_strobe_us=read_strobe_us,
+    @click.option(
+        "-f",
+        "--firestarter",
+        "firestarter_flag",
+        is_flag=True,
+        help=(
+            "Using Firestarter register definition.\n"
+            "By using the firestarter argumet,\n"
+            "the control register will be remaped to match\n"
+            "the hardware revision of the RURP sheild.\n"
+            "See constants.RURP_CONTROL_REGISTER_BITS (mirror of rurp_pinout.h).\n"
+            "0x100 - CTRL_VPP_VPE_DROP_ENABLE\n"
+            "0x080 - CTRL_VPP_REGULATOR_ENABLE\n"
+            "0x040 - CTRL_READ_WRITE\n"
+            "0x020 - CTRL_ADDRESS_LINE_18\n"
+            "0x010 - CTRL_ADDRESS_LINE_17\n"
+            "0x008 - CTRL_VPP_P1_ENABLE\n"
+            "0x004 - CTRL_VPE_ENABLE\n"
+            "0x002 - CTRL_VPP_A9_ENABLE\n"
+            "0x001 - CTRL_ADDRESS_LINE_16"
+        ),
     )
-    sys.exit(verdict_int)
+    @click.pass_obj
+    @map_typed_errors
+    def dev_reg(
+        app: AppContext,
+        msb: str,
+        lsb: str,
+        ctrl: str,
+        input_enable: bool,
+        chip_disable: bool,
+        firestarter_flag: bool,
+    ) -> None:
+        """Direct access to registers: MSB, LSB and control register."""
+        ok = app.eprom_operator.dev_set_registers(
+            msb,
+            lsb,
+            ctrl,
+            firestarter=firestarter_flag,
+            flags=_build_op_flags(input_enable=input_enable, chip_disable=chip_disable),
+        )
+        sys.exit(0 if ok else 1)
 
 
-@dev.command(name="write-cycle")
-@click.argument("eprom", shell_complete=_complete_eprom)
-@click.argument("source_image", type=click.Path(exists=True))
-@click.option(
-    "--runs",
-    type=int,
-    default=5,
-    help="Number of write→read-back cycles (default 5).",
-)
-@click.option(
-    "--output-dir",
-    "output_dir",
-    type=str,
-    default=None,
-    help="Output dir for per-cycle binaries (default firestarter-runs/write-cycle-<chip>-<board>-<TS>/).",  # noqa: E501
-)
-@click.option(
-    "-f",
-    "--force",
-    is_flag=True,
-    help="Force write, even if the chip id doesn't match.",
-)
-@click.pass_obj
-@map_typed_errors
-def dev_write_cycle(
-    app: AppContext,
-    eprom: str,
-    source_image: str,
-    runs: int,
-    output_dir: Optional[str],
-    force: bool,
-) -> None:
-    """Erase → write source image → read-back N times; assert SHA-256 == source SHA.
+if _DEV_TOOLS_ENABLED:
 
-    3-way verdict contract (mirrors dev consistency-check):
-        verdict_int = write_cycle_eprom(...)  # 0=PASS, 1=mismatch, 2=hw-error
-        sys.exit(verdict_int)  # NOT bool-to-int wrap — preserves 0/1/2
-
-    The bool-to-int wrap would collapse the 2=hardware-error case to 1=mismatch,
-    breaking the v1.6 RCA diagnostic. XACT-01 / Phase 53 Plan 02.
-    """
-    eprom_data = resolve_chip(eprom, db=app.db)
-    verdict_int = app.eprom_operator.write_cycle_eprom(
-        eprom,
-        eprom_data,
-        source_image_path=source_image,
-        runs=runs,
-        output_dir=output_dir,
-        operation_flags=_build_op_flags(force=force),
+    @dev.command(name="addr")
+    @click.argument("eprom", shell_complete=_complete_eprom)
+    @click.argument("address")
+    @click.option(
+        "-i",
+        "--input-enable",
+        "input_enable",
+        is_flag=True,
+        help="Input, pulls OE pin high.",
     )
-    sys.exit(verdict_int)
+    @click.option(
+        "-d",
+        "--chip-disable",
+        "chip_disable",
+        is_flag=True,
+        help="Disable, pulls CE pin high.",
+    )
+    @click.pass_obj
+    @map_typed_errors
+    def dev_addr(
+        app: AppContext,
+        eprom: str,
+        address: str,
+        input_enable: bool,
+        chip_disable: bool,
+    ) -> None:
+        """Direct access to address lines and control register."""
+        eprom_data = resolve_chip(eprom, db=app.db)
+        ok = app.eprom_operator.dev_set_address_mode(
+            eprom,
+            eprom_data,
+            address,
+            flags=_build_op_flags(input_enable=input_enable, chip_disable=chip_disable),
+        )
+        sys.exit(0 if ok else 1)
 
 
-@dev.command(name="fault-inject")
-@click.argument("eprom", shell_complete=_complete_eprom)
-@click.option(
-    "--direction",
-    type=click.Choice(["outgoing", "incoming"]),
-    default="outgoing",
-    help="outgoing = corrupt host→fw frame; incoming = mutate fw→host frame.",
-)
-@click.option(
-    "--fault-form",
-    "fault_form",
-    type=click.Choice(["corrupt-crc8", "drop-delimiter"]),
-    default="corrupt-crc8",
-    help="Fault form: corrupt-crc8 (flip CRC8 byte) or drop-delimiter (drop 0x00).",
-)
-@click.option(
-    "--mode",
-    type=click.Choice(["cycle", "latency"]),
-    default="cycle",
-    help="cycle = read-cycle resync demo (default); latency = per-frame firmware NAK "
-    "latency on an established single-port connection (53-04 refinement; no chip needed).",
-)
-@click.option(
-    "--output-dir",
-    "output_dir",
-    type=str,
-    default=None,
-    help="Output dir for transfer binaries.",
-)
-@click.pass_obj
-@map_typed_errors
-def dev_fault_inject(
-    app: AppContext,
-    eprom: str,
-    direction: str,
-    fault_form: str,
-    mode: str,
-    output_dir: Optional[str],
-) -> None:
-    """Demonstrate COBS resync: inject a corrupted frame and assert recovery on the next.
+if _DEV_TOOLS_ENABLED:
 
-    cycle mode: one corrupted transfer then asserts the same connection recovers on a
-    clean follow-on transfer (XACT-02 / Phase 53 Plan 02).
+    @dev.command(name="consistency-check")
+    @click.argument("eprom", shell_complete=_complete_eprom)
+    @click.option(
+        "--runs",
+        type=int,
+        default=3,
+        help="Number of consecutive reads (default 3; minimum 2).",
+    )
+    @click.option(
+        "--output-dir",
+        "output_dir",
+        type=str,
+        default=None,
+        help="Output dir for per-run binaries (default firestarter-runs/consistency-check-<chip>-<board>-<TS>/).",  # noqa: E501
+    )
+    @click.option(
+        "--keep-files/--no-keep-files",
+        "keep_files",
+        default=True,
+        help="Keep per-run binary files after verdict (default keep).",
+    )
+    @click.option(
+        "--max-diffs",
+        "max_diffs",
+        type=int,
+        default=10,
+        help="Max divergent offsets to print on FAIL (default 10).",
+    )
+    @click.option(
+        "-q",
+        "--quiet",
+        is_flag=True,
+        help="Suppress per-run tqdm progress bars (D-11).",
+    )
+    @click.option(
+        "-f",
+        "--force",
+        is_flag=True,
+        help="Force read, even if the chip id doesn't match (e.g. Shield-3 missing-chip case).",  # noqa: E501
+    )
+    @click.option(
+        "--read-settling",
+        "read_settling_us",
+        type=int,
+        default=0,
+        help="Address-settling delay before /CE assert (µs; 0=firmware default 0µs).",
+    )
+    @click.option(
+        "--read-strobe",
+        "read_strobe_us",
+        type=int,
+        default=0,
+        help="/CE read-strobe pulse width (µs; 0=firmware default 3µs).",
+    )
+    @click.pass_obj
+    @map_typed_errors
+    def dev_consistency_check(
+        app: AppContext,
+        eprom: str,
+        runs: int,
+        output_dir: Optional[str],
+        keep_files: bool,
+        max_diffs: int,
+        quiet: bool,
+        force: bool,
+        read_settling_us: int,
+        read_strobe_us: int,
+    ) -> None:
+        """Read EPROM N consecutive times and report SHA-256 divergence.
 
-    latency mode: opens ONE pinned port and times the firmware's per-frame NAK on a
-    corrupt CMD_FW_VERSION frame (established connection — avoids the multi-port
-    connect-retry that inflates cycle-mode's outgoing latency). Use with -p <port>.
-    """
-    if mode == "latency":
-        ok = app.eprom_operator.measure_command_nak_latency(
+        D-12 step 5 / 3-way verdict contract:
+            verdict_int = consistency_check_eprom(...)  # 0=PASS, 1=FAIL, 2=hw-error
+            sys.exit(verdict_int)  # NOT bool-to-int wrap
+
+        The bool-to-int wrap would collapse the 2=hardware-error case to 1=FAIL,
+        breaking the v1.6 RCA diagnostic.
+        """
+        eprom_data = resolve_chip(eprom, db=app.db)
+        verdict_int = app.eprom_operator.consistency_check_eprom(
+            eprom,
+            eprom_data,
+            runs=runs,
+            output_dir=output_dir,
+            keep_files=keep_files,
+            max_diffs=max_diffs,
+            quiet=quiet,
+            operation_flags=_build_op_flags(force=force),
+            read_settling_us=read_settling_us,
+            read_strobe_us=read_strobe_us,
+        )
+        sys.exit(verdict_int)
+
+
+if _DEV_TOOLS_ENABLED:
+
+    @dev.command(name="write-cycle")
+    @click.argument("eprom", shell_complete=_complete_eprom)
+    @click.argument("source_image", type=click.Path(exists=True))
+    @click.option(
+        "--runs",
+        type=int,
+        default=5,
+        help="Number of write→read-back cycles (default 5).",
+    )
+    @click.option(
+        "--output-dir",
+        "output_dir",
+        type=str,
+        default=None,
+        help="Output dir for per-cycle binaries (default firestarter-runs/write-cycle-<chip>-<board>-<TS>/).",  # noqa: E501
+    )
+    @click.option(
+        "-f",
+        "--force",
+        is_flag=True,
+        help="Force write, even if the chip id doesn't match.",
+    )
+    @click.pass_obj
+    @map_typed_errors
+    def dev_write_cycle(
+        app: AppContext,
+        eprom: str,
+        source_image: str,
+        runs: int,
+        output_dir: Optional[str],
+        force: bool,
+    ) -> None:
+        """Erase → write source image → read-back N times; assert SHA-256 == source SHA.
+
+        3-way verdict contract (mirrors dev consistency-check):
+            verdict_int = write_cycle_eprom(...)  # 0=PASS, 1=mismatch, 2=hw-error
+            sys.exit(verdict_int)  # NOT bool-to-int wrap — preserves 0/1/2
+
+        The bool-to-int wrap would collapse the 2=hardware-error case to 1=mismatch,
+        breaking the v1.6 RCA diagnostic. XACT-01 / Phase 53 Plan 02.
+        """
+        eprom_data = resolve_chip(eprom, db=app.db)
+        verdict_int = app.eprom_operator.write_cycle_eprom(
+            eprom,
+            eprom_data,
+            source_image_path=source_image,
+            runs=runs,
+            output_dir=output_dir,
+            operation_flags=_build_op_flags(force=force),
+        )
+        sys.exit(verdict_int)
+
+
+if _DEV_TOOLS_ENABLED:
+
+    @dev.command(name="fault-inject")
+    @click.argument("eprom", shell_complete=_complete_eprom)
+    @click.option(
+        "--direction",
+        type=click.Choice(["outgoing", "incoming"]),
+        default="outgoing",
+        help="outgoing = corrupt host→fw frame; incoming = mutate fw→host frame.",
+    )
+    @click.option(
+        "--fault-form",
+        "fault_form",
+        type=click.Choice(["corrupt-crc8", "drop-delimiter"]),
+        default="corrupt-crc8",
+        help="Fault form: corrupt-crc8 (flip CRC8 byte) or drop-delimiter (drop 0x00).",
+    )
+    @click.option(
+        "--mode",
+        type=click.Choice(["cycle", "latency"]),
+        default="cycle",
+        help="cycle = read-cycle resync demo (default); latency = per-frame firmware NAK "
+        "latency on an established single-port connection (53-04 refinement; no chip needed).",
+    )
+    @click.option(
+        "--output-dir",
+        "output_dir",
+        type=str,
+        default=None,
+        help="Output dir for transfer binaries.",
+    )
+    @click.pass_obj
+    @map_typed_errors
+    def dev_fault_inject(
+        app: AppContext,
+        eprom: str,
+        direction: str,
+        fault_form: str,
+        mode: str,
+        output_dir: Optional[str],
+    ) -> None:
+        """Demonstrate COBS resync: inject a corrupted frame and assert recovery on the next.
+
+        cycle mode: one corrupted transfer then asserts the same connection recovers on a
+        clean follow-on transfer (XACT-02 / Phase 53 Plan 02).
+
+        latency mode: opens ONE pinned port and times the firmware's per-frame NAK on a
+        corrupt CMD_FW_VERSION frame (established connection — avoids the multi-port
+        connect-retry that inflates cycle-mode's outgoing latency). Use with -p <port>.
+        """
+        if mode == "latency":
+            ok = app.eprom_operator.measure_command_nak_latency(
+                fault_form=fault_form,
+                output_dir=output_dir,
+            )
+            sys.exit(0 if ok else 1)
+
+        eprom_data = resolve_chip(eprom, db=app.db)
+        ok = app.eprom_operator.fault_inject_cycle(
+            eprom,
+            eprom_data,
+            direction=direction,
             fault_form=fault_form,
             output_dir=output_dir,
         )
         sys.exit(0 if ok else 1)
-
-    eprom_data = resolve_chip(eprom, db=app.db)
-    ok = app.eprom_operator.fault_inject_cycle(
-        eprom,
-        eprom_data,
-        direction=direction,
-        fault_form=fault_form,
-        output_dir=output_dir,
-    )
-    sys.exit(0 if ok else 1)
 
 
 # ---------------------------------------------------------------------------
@@ -1769,181 +1798,189 @@ def _check_r1_precondition(r1_value: int) -> bool:
     return _R1_LO <= r1_value <= _R1_HI
 
 
-@dev.command(name="validate-family")
-@click.argument(
-    "family",
-    type=click.Choice(
-        ["eprom", "eeprom28c", "flash3", "flash4", "flash_intel", "sram", "all"]
-    ),
-)
-@click.option("--board", default=None, help="Board name (e.g. leonardo, uno328pb).")
-@click.option("--chip", default=None, help="Representative chip name override.")
-@click.option(
-    "--source",
-    default=None,
-    type=click.Path(),
-    help="Source image path for write+verify oracle.",
-)
-@click.option(
-    "--output-dir",
-    "output_dir",
-    type=str,
-    default=None,
-    help="Output directory for results artifact (default: current directory).",
-)
-@click.pass_obj
-@map_typed_errors
-def dev_validate_family(
-    app: AppContext,
-    family: str,
-    board: Optional[str],
-    chip: Optional[str],
-    source: Optional[str],
-    output_dir: Optional[str],
-) -> None:
-    """Run the per-family validation matrix Tier-3 runner (HARN-01 / D-05).
+if _DEV_TOOLS_ENABLED:
 
-    Composes write_cycle_eprom / consistency_check_eprom (no re-implementation).
-    Emits validation-matrix.{json,md} results artifact (D-02).
+    @dev.command(name="validate-family")
+    @click.argument(
+        "family",
+        type=click.Choice(
+            ["eprom", "eeprom28c", "flash3", "flash4", "flash_intel", "sram", "all"]
+        ),
+    )
+    @click.option("--board", default=None, help="Board name (e.g. leonardo, uno328pb).")
+    @click.option("--chip", default=None, help="Representative chip name override.")
+    @click.option(
+        "--source",
+        default=None,
+        type=click.Path(),
+        help="Source image path for write+verify oracle.",
+    )
+    @click.option(
+        "--output-dir",
+        "output_dir",
+        type=str,
+        default=None,
+        help="Output directory for results artifact (default: current directory).",
+    )
+    @click.pass_obj
+    @map_typed_errors
+    def dev_validate_family(
+        app: AppContext,
+        family: str,
+        board: Optional[str],
+        chip: Optional[str],
+        source: Optional[str],
+        output_dir: Optional[str],
+    ) -> None:
+        """Run the per-family validation matrix Tier-3 runner (HARN-01 / D-05).
 
-    SKIP-deferred path (D-06): when no board/chip/source is available, records
-    all Tier-3 cells as SKIP-deferred and exits 0 — milestone stays closeable
-    at partial bench coverage.
+        Composes write_cycle_eprom / consistency_check_eprom (no re-implementation).
+        Emits validation-matrix.{json,md} results artifact (D-02).
 
-    3-way verdict contract (mirrors dev write-cycle + consistency-check):
-        0 = PASS  1 = FAIL  2 = hw-error
+        SKIP-deferred path (D-06): when no board/chip/source is available, records
+        all Tier-3 cells as SKIP-deferred and exits 0 — milestone stays closeable
+        at partial bench coverage.
 
-    Non-vacuous oracle (HARN-03 / D-08):
-    - Leonardo is the only authoritative PASS board; other boards are advisory.
-    - uno328pb write/program cells are hard N/A (brownout 999.2).
-    - r1 ≈ 270000 ±25% precondition aborts before any write cycle.
-    - retry_count is captured into each cell.
-    """
-    spec = _load_validation_spec()
-    families = _families_for_selection(family, spec)
+        3-way verdict contract (mirrors dev write-cycle + consistency-check):
+            0 = PASS  1 = FAIL  2 = hw-error
 
-    # D-06 SKIP-deferred: no port / board / chip / source → record all cells
-    # as SKIP-deferred, emit artifact, exit 0.
-    port = app.config_manager.get_value("port", None)
-    if not port or not board or not chip or not source:
-        _emit_skip_deferred_artifact(families, output_dir=output_dir)
-        sys.exit(0)
+        Non-vacuous oracle (HARN-03 / D-08):
+        - Leonardo is the only authoritative PASS board; other boards are advisory.
+        - uno328pb write/program cells are hard N/A (brownout 999.2).
+        - r1 ≈ 270000 ±25% precondition aborts before any write cycle.
+        - retry_count is captured into each cell.
+        """
+        spec = _load_validation_spec()
+        families = _families_for_selection(family, spec)
 
-    # Hardware path — oracle rules apply.
+        # D-06 SKIP-deferred: no port / board / chip / source → record all cells
+        # as SKIP-deferred, emit artifact, exit 0.
+        port = app.config_manager.get_value("port", None)
+        if not port or not board or not chip or not source:
+            _emit_skip_deferred_artifact(families, output_dir=output_dir)
+            sys.exit(0)
 
-    # uno328pb hard N/A for write/program cells (brownout 999.2 — backlog 999.2).
-    if board == _UNO328PB_BOARD:
-        cells: List[Dict[str, Any]] = []  # noqa: UP006
+        # Hardware path — oracle rules apply.
+
+        # uno328pb hard N/A for write/program cells (brownout 999.2 — backlog 999.2).
+        if board == _UNO328PB_BOARD:
+            cells: List[Dict[str, Any]] = []  # noqa: UP006
+            for fam in families:
+                cells.append(
+                    {
+                        "family": fam["id"],
+                        "board": board,
+                        "tier": 3,
+                        "verdict": "N/A",
+                        "reason": (
+                            "uno328pb write/program cells are N/A — brownout backlog 999.2"
+                        ),
+                        "evidence_sha": None,
+                        "retry_count": 0,
+                    }
+                )
+            _write_artifact(cells, output_dir)
+            sys.exit(0)
+
+        # r1 precondition: abort before any cycle if r1 is out of band (D-08).
+        # The r1 value is read from hardware config via the HardwareManager.
+        # In Phase 71 (software scaffold), the hardware path is exercised only
+        # in Phase 73 with real hardware; here we gate on the operator config.
+        r1_raw: Optional[int] = None
+        try:
+            hw_config = app.config_manager.get_value("r1", None)
+            if hw_config is not None:
+                r1_raw = int(hw_config)
+        except (ValueError, TypeError):
+            r1_raw = None
+
+        if r1_raw is not None and not _check_r1_precondition(r1_raw):
+            logger.error(
+                "r1 precondition failed: r1=%d is outside [%d, %d] (±25%% of 270000). "
+                "Recalibrate before running validate-family.",
+                r1_raw,
+                _R1_LO,
+                _R1_HI,
+            )
+            sys.exit(2)
+
+        # Compose cycle methods for each family (D-10 reuse-not-reimpl).
+        hw_cells: List[Dict[str, Any]] = []  # noqa: UP006
+        overall_verdict = 0
+
         for fam in families:
-            cells.append(
+            rep_chip = chip or fam.get("tier3", {}).get(
+                "test_chip", fam.get("rep_chip", "")
+            )
+            if not rep_chip:
+                logger.warning("No rep_chip for family %r — skipping.", fam["id"])
+                continue
+
+            eprom_data = resolve_chip(rep_chip, db=app.db)
+
+            # Compose write_cycle_eprom (D-10: no re-implementation of write+readback).
+            verdict_int = app.eprom_operator.write_cycle_eprom(
+                rep_chip,
+                eprom_data,
+                source_image_path=source,
+                runs=1,
+                output_dir=output_dir,
+                operation_flags=0,
+            )
+
+            # Derive evidence SHA from source image for the cell record.
+            evidence_sha: Optional[str]
+            try:
+                evidence_sha = hashlib.sha256(Path(source).read_bytes()).hexdigest()
+            except OSError:
+                evidence_sha = None
+
+            # Map verdict to oracle classification (Leonardo = authoritative).
+            # verdict_int==0: write_cycle_eprom's own source-vs-readback SHA compare
+            # returned 0 (PASS). Map directly to board-class verdict — the caller
+            # MUST NOT add a source==source self-comparison call here (vacuous).
+            # The real readback compare already happened inside write_cycle_eprom.
+            # Preserve board-class semantics via pass_type: "authoritative" on
+            # Leonardo, "advisory" on all other non-uno328pb boards (HARN-03 / D-08).
+            if verdict_int == 0:
+                pass_type = (
+                    "authoritative"
+                    if board == _AUTHORITATIVE_PASS_BOARD
+                    else "advisory"
+                )
+                cell_verdict = "PASS"
+            elif verdict_int == 1:
+                cell_verdict = "FAIL"
+                pass_type = (
+                    "authoritative"
+                    if board == _AUTHORITATIVE_PASS_BOARD
+                    else "advisory"
+                )
+            else:
+                cell_verdict = "SKIP-deferred"  # hw-error → deferred
+                pass_type = (
+                    "authoritative"
+                    if board == _AUTHORITATIVE_PASS_BOARD
+                    else "advisory"
+                )
+
+            hw_cells.append(
                 {
                     "family": fam["id"],
                     "board": board,
                     "tier": 3,
-                    "verdict": "N/A",
-                    "reason": (
-                        "uno328pb write/program cells are N/A — brownout backlog 999.2"
-                    ),
-                    "evidence_sha": None,
-                    "retry_count": 0,
+                    "verdict": cell_verdict,
+                    "pass_type": pass_type,
+                    "evidence_sha": evidence_sha,
+                    "retry_count": 1,
                 }
             )
-        _write_artifact(cells, output_dir)
-        sys.exit(0)
 
-    # r1 precondition: abort before any cycle if r1 is out of band (D-08).
-    # The r1 value is read from hardware config via the HardwareManager.
-    # In Phase 71 (software scaffold), the hardware path is exercised only
-    # in Phase 73 with real hardware; here we gate on the operator config.
-    r1_raw: Optional[int] = None
-    try:
-        hw_config = app.config_manager.get_value("r1", None)
-        if hw_config is not None:
-            r1_raw = int(hw_config)
-    except (ValueError, TypeError):
-        r1_raw = None
+            if verdict_int > overall_verdict:
+                overall_verdict = verdict_int
 
-    if r1_raw is not None and not _check_r1_precondition(r1_raw):
-        logger.error(
-            "r1 precondition failed: r1=%d is outside [%d, %d] (±25%% of 270000). "
-            "Recalibrate before running validate-family.",
-            r1_raw,
-            _R1_LO,
-            _R1_HI,
-        )
-        sys.exit(2)
-
-    # Compose cycle methods for each family (D-10 reuse-not-reimpl).
-    hw_cells: List[Dict[str, Any]] = []  # noqa: UP006
-    overall_verdict = 0
-
-    for fam in families:
-        rep_chip = chip or fam.get("tier3", {}).get(
-            "test_chip", fam.get("rep_chip", "")
-        )
-        if not rep_chip:
-            logger.warning("No rep_chip for family %r — skipping.", fam["id"])
-            continue
-
-        eprom_data = resolve_chip(rep_chip, db=app.db)
-
-        # Compose write_cycle_eprom (D-10: no re-implementation of write+readback).
-        verdict_int = app.eprom_operator.write_cycle_eprom(
-            rep_chip,
-            eprom_data,
-            source_image_path=source,
-            runs=1,
-            output_dir=output_dir,
-            operation_flags=0,
-        )
-
-        # Derive evidence SHA from source image for the cell record.
-        evidence_sha: Optional[str]
-        try:
-            evidence_sha = hashlib.sha256(Path(source).read_bytes()).hexdigest()
-        except OSError:
-            evidence_sha = None
-
-        # Map verdict to oracle classification (Leonardo = authoritative).
-        # verdict_int==0: write_cycle_eprom's own source-vs-readback SHA compare
-        # returned 0 (PASS). Map directly to board-class verdict — the caller
-        # MUST NOT add a source==source self-comparison call here (vacuous).
-        # The real readback compare already happened inside write_cycle_eprom.
-        # Preserve board-class semantics via pass_type: "authoritative" on
-        # Leonardo, "advisory" on all other non-uno328pb boards (HARN-03 / D-08).
-        if verdict_int == 0:
-            pass_type = (
-                "authoritative" if board == _AUTHORITATIVE_PASS_BOARD else "advisory"
-            )
-            cell_verdict = "PASS"
-        elif verdict_int == 1:
-            cell_verdict = "FAIL"
-            pass_type = (
-                "authoritative" if board == _AUTHORITATIVE_PASS_BOARD else "advisory"
-            )
-        else:
-            cell_verdict = "SKIP-deferred"  # hw-error → deferred
-            pass_type = (
-                "authoritative" if board == _AUTHORITATIVE_PASS_BOARD else "advisory"
-            )
-
-        hw_cells.append(
-            {
-                "family": fam["id"],
-                "board": board,
-                "tier": 3,
-                "verdict": cell_verdict,
-                "pass_type": pass_type,
-                "evidence_sha": evidence_sha,
-                "retry_count": 1,
-            }
-        )
-
-        if verdict_int > overall_verdict:
-            overall_verdict = verdict_int
-
-    _write_artifact(hw_cells, output_dir)
-    sys.exit(overall_verdict)
+        _write_artifact(hw_cells, output_dir)
+        sys.exit(overall_verdict)
 
 
 # ---------------------------------------------------------------------------
