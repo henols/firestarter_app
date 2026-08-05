@@ -210,6 +210,30 @@ _RATIONALES = {
         "  [CITED: Phase 98 Plan 01 FIX-03 — D-02/D-04 scoped pinout variant]\n"
         "  [CITED: .planning/phases/98-fix-correct-the-0x08-32-pin-write-vpp-path/98-01-PLAN.md]"
     ),
+    "PROV01_PROTECT_METADATA": (
+        "Phase 136.1 PROV-01 — flags bit 14/15 + raw page_size decode added to the\n"
+        "  programming block. Three new keys, decoded directly from each <ic> element's\n"
+        "  own flags/page_size attributes (never a cross-reference or token match):\n"
+        "    protect_off_before: bool(flags & 0x4000) — MP_OFF_PROTECT_BEFORE.\n"
+        "    protect_on_after:   bool(flags & 0x8000) — MP_PROTECT_AFTER (the same bit\n"
+        "      sdp_capability.py's SDP_CAPABLE_TOKENS transcription encodes, now\n"
+        "      committed as an explicit per-chip field for the first time).\n"
+        "    infoic_page_size_raw: the raw, un-curated upstream page_size attribute —\n"
+        "      PROV-06's corroborating axis only, NOT the same field as the existing\n"
+        "      datasheet-curated programming.page_size (PGSZ_PAGE_SIZE rule above), and\n"
+        "      not consulted by any ALLOW/REFUSE decision anywhere in this codebase.\n"
+        "  Universal: every upstream-decoded chip gains all three keys; the two\n"
+        "  tools/extra_chips.json supplement entries (2516/2532) do NOT, since they\n"
+        "  bypass this decode loop entirely (VAR-05 post-decode merge).\n"
+        "  Metadata only — no algorithm / pinout / vpp / electrical.type delta; the\n"
+        "  84/43/41 SDP ALLOW/REFUSE partition (tests/test_sdp_db_invariant.py) is\n"
+        "  unchanged.\n"
+        "  [VERIFIED: minipro src/database.c#L39-L50 @ a8efaedc236c1d9718bd28299dfbb99536b010ff —\n"
+        "   https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c#L39]\n"
+        "  [CITED: doc/infoic-field-dictionary.md CONFIRMED bit 14/15 row;\n"
+        "   .planning/phases/136.1-sdp-partition-provenance/136.1-01-PLAN.md;\n"
+        "   .planning/phases/136.1-sdp-partition-provenance/136.1-01-BLAST-RADIUS.md]"
+    ),
 }
 
 
@@ -335,6 +359,13 @@ _RULE_FIELD_PATHS = {
     # change — no algorithm / VPP / electrical.type delta.
     "RC1_DIP32_27C020": {
         ("pinout",),
+    },
+    # Phase 136.1 PROV-01: flags bit 14/15 + raw page_size decode added. Scoped to
+    # exactly these three new programming.* keys — no other field changes.
+    "PROV01_PROTECT_METADATA": {
+        ("programming", "protect_off_before"),
+        ("programming", "protect_on_after"),
+        ("programming", "infoic_page_size_raw"),
     },
 }
 
@@ -530,6 +561,28 @@ def _classify_diff(bl_chip, cu_chip):
         # No other field changes. Placed LAST (most specific scope: programming.page_size
         # only) to avoid shadowing any compound changes detected by prior rules.
         label = "PGSZ_PAGE_SIZE"
+    elif (
+        (
+            bl_prog.get("protect_off_before") != cu_prog.get("protect_off_before")
+            or bl_prog.get("protect_on_after") != cu_prog.get("protect_on_after")
+            or bl_prog.get("infoic_page_size_raw")
+            != cu_prog.get("infoic_page_size_raw")
+        )
+        and not algo_diff
+        and not timing_diff
+        and not voltage_diff
+        and not pinout_diff
+        and not type_diff
+        and not vpp_diff
+        and bl_prog.get("page_size") == cu_prog.get("page_size")
+    ):
+        # PROV01_PROTECT_METADATA: Phase 136.1 PROV-01 — only the three new
+        # protect_off_before/protect_on_after/infoic_page_size_raw keys changed
+        # (added). No other field changes, including the curated page_size (kept
+        # distinct from infoic_page_size_raw by the explicit page_size equality
+        # check above). Placed LAST (most specific: exactly these three new keys)
+        # to avoid shadowing any compound changes detected by prior rules.
+        label = "PROV01_PROTECT_METADATA"
 
     diff_paths = _diff_field_paths(bl_chip, cu_chip)
 
