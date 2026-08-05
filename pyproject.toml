@@ -156,6 +156,21 @@ python_version = "3.10"
 ignore_missing_imports = true   # needed for tqdm, rich (no stubs)
 disallow_untyped_defs = false   # gradual adoption — global stays lenient (D-10)
 check_untyped_defs = false
+# Phase 137 plan 137-02 (CLOSE-03): tests/fixtures/ holds deliberately-
+# violating planted source for the source-scan gates -- fixture input,
+# never project source (mirrors ruff's own extend-exclude above, same
+# rationale, same directory). This plan is the first to add a genuinely
+# UNPARSABLE fixture (tests/fixtures/planted_unparsable.py, a real Python
+# SyntaxError, planted on purpose for check_diagnostic_report_claims.py's
+# fail-closed-on-unparsable-source test) -- without this exclude, mypy's
+# directory walk over `tests/` aborts with exit 2 ("errors prevented
+# further checking") on that single file, invalidating the ENTIRE watermark
+# run rather than reporting a normal per-file error. None of the 6 prior
+# tests/fixtures/*.py files (all syntactically valid) ever contributed an
+# error to the watermark count, so this exclude changes only the checked-
+# file count (still comfortably above MIN_CHECKED_SOURCE_FILES=120 in
+# tools/check_mypy_watermark.py), never the error count.
+exclude = ["^tests/fixtures/"]
 # mypy_error_watermark = 35   # Updated Phase 71-07: floor after 71-06 added test_validate_family_cmd.py (6 AppContext mock-type errors). Prior: 29 (Phase 69-03).
 
 [[tool.mypy.overrides]]
