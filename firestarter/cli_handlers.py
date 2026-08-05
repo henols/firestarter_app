@@ -1263,7 +1263,12 @@ class _DevGroup(click.Group):
 @cli.group(name="dev", cls=_DevGroup)
 @map_typed_errors
 def dev() -> None:
-    """Debug command for development purposes.
+    """Development and diagnostic commands for the RURP shield.
+
+    On a stable install, only `read` and `test` are available in this
+    group -- both are fully supported for end users, despite living inside
+    a group named `dev`. The remaining subcommands are development and
+    bench tooling, available only on a pre-release install.
 
     USR button will break command and return.
     """
