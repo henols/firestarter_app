@@ -33,7 +33,12 @@ from rich.prompt import Confirm
 
 from firestarter import __version__ as version
 from firestarter import sdp_honesty  # unreadable_state_caveat(), called not re-authored
-from firestarter.channel import available_boards
+from firestarter.channel import (
+    BETA_ONLY_DEV_COMMANDS,
+    available_boards,
+    dev_command_gate_message,
+    is_dev_tools_enabled,
+)
 from firestarter.chip_resolver import resolve_chip
 from firestarter.chip_test import (
     OP_ID,
@@ -1198,11 +1203,64 @@ def fw(
 
 
 # ---------------------------------------------------------------------------
+# CHAN-01..07 (Phase 136) — dev-tools channel gate. D-01: the gate is BOTH
+# mechanisms below, not either. `_DEV_TOOLS_ENABLED` is computed ONCE, at
+# import time, from `channel.is_dev_tools_enabled()` -- mirroring
+# `_PY32_ENABLED` above: a wheel's `__version__` is fixed when it is built, so
+# the choice a stable install renders is decided once, and decided correctly,
+# rather than re-evaluated per invocation (`is_dev_tools_enabled()` is itself
+# call-time/unmemoized -- see its own docstring in channel.py -- so capturing
+# it into a module global here is what freezes the decision). `_DevGroup` is
+# the other half: it holds the six gated NAMES only
+# (`channel.BETA_ONLY_DEV_COMMANDS`), never a callback, and supplies the
+# informative refusal (CHAN-03) for a name that resolves to nothing real.
+# Genuine non-registration (CHAN-02) happens separately, below, at each of the
+# six gated `@dev.command` blocks, each guarded at module scope by
+# `_DEV_TOOLS_ENABLED`.
+# ---------------------------------------------------------------------------
+
+_DEV_TOOLS_ENABLED: bool = is_dev_tools_enabled()
+
+
+class _DevGroup(click.Group):
+    """`dev` group's Click command class (D-01's exact name).
+
+    Holds the six gated `dev` subcommand NAMES only, via
+    `channel.BETA_ONLY_DEV_COMMANDS` -- never a callback. A gated command
+    must not exist as an invokable object in a stable process; that is
+    enforced by conditional registration (the `_DEV_TOOLS_ENABLED` guards
+    below), not by this class. This class's only job is the informative
+    refusal (CHAN-03): when a gated-but-unregistered name is looked up, raise
+    a channel-specific `UsageError` instead of letting Click fall through to
+    its generic, typo-indistinguishable `No such command %r.` error.
+
+    `get_command` is the only method overridden, and that choice is not a
+    guess -- it is the empirically-settled hook from plan 136-01's spike
+    (`tests/test_click_group_gate_hook.py`): `click.Group.resolve_command()`
+    calls `self.get_command(ctx, cmd_name)` itself and only falls through to
+    its own generic error when `get_command` returns `None`, so overriding
+    `get_command` intercepts strictly before that fallback ever runs.
+    `resolve_command` therefore needs no override at all, and `list_commands`
+    needs none either: once a gated name is genuinely unregistered (Task 2,
+    below), it is already absent from `self.commands`, so it is already
+    absent from `list_commands`'s output with no extra code.
+    """
+
+    def get_command(self, ctx: click.Context, cmd_name: str) -> Optional[click.Command]:
+        real = super().get_command(ctx, cmd_name)
+        if real is not None:
+            return real
+        if cmd_name in BETA_ONLY_DEV_COMMANDS:
+            raise click.UsageError(dev_command_gate_message(cmd_name), ctx=ctx)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # dev group + 4 sub-commands (Wave 3 / D-12 step 5)
 # ---------------------------------------------------------------------------
 
 
-@cli.group(name="dev")
+@cli.group(name="dev", cls=_DevGroup)
 @map_typed_errors
 def dev() -> None:
     """Debug command for development purposes.
