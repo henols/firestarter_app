@@ -4,7 +4,7 @@ AST-based orchestrator-only gate for `dev test` (SAFE-03, Phase 109 D-02/D-03).
 Scans `firestarter/chip_test.py` (the Phase-108 test-plan engine),
 `firestarter/cli_handlers.py` (the `dev_test` handler, scoped), and
 `firestarter/submit.py` (the Phase-113 submission-flow module, in full) and
-DENIES three violation classes that would break `dev test`'s
+DENIES four violation classes that would break `dev test`'s
 orchestrator-only contract:
 
   1. VPP-set call sites -- any call whose callee name/attribute sets or
@@ -22,6 +22,17 @@ orchestrator-only contract:
      `chip_resolver.resolve_chip` + `database.convert_to_programmer` only.
   3. `force=True` keyword pass-through, or any `"--force"` string literal.
      `dev test` never forces past a firmware/host refusal.
+  4. Broad exception handlers (Phase 133 D-09/D-14) -- a bare `except:`, an
+     `except Exception:`, an `except BaseException:`, or a tuple containing
+     either. Bare `except:` is already caught by ruff's E722, but
+     `except Exception:`/`except BaseException:` are caught by NOTHING in
+     this repo today -- `BLE` is not in this project's ruff `select`
+     (`["E", "F", "I", "UP"]`), so the `# noqa: BLE001` already sitting on
+     `chip_test.py`'s `_sample` sampler handler is INERT. This bucket carries
+     one narrow, reasoned exemption for that pre-existing handler
+     (`_BROAD_EXCEPT_EXEMPTIONS`, D-14) -- a best-effort diagnostic hook
+     invoked with an opaque caller-supplied callable, never a blanket
+     allowance for the broad form.
 
 The checker also asserts the firmware is untouched: this is a host-only
 Python checker, so "zero new firmware dispatch entries" is satisfied by
@@ -65,10 +76,13 @@ real handler target, and `_scan_target_functions` still fails closed if
 
 Exit codes:
   0 -- the scanned source(s) contain zero VPP-set call sites, zero raw
-       command-dict / wire-JSON literals, and zero force=True / "--force"
-       pass-throughs (PASS: line printed).
-  1 -- at least one deny-list violation was found (FAIL: per-bucket summary
-       printed, per-bucket capped at the first 20 entries).
+       command-dict / wire-JSON literals, zero force=True / "--force"
+       pass-throughs, and zero non-exempt broad exception handlers (PASS:
+       line printed).
+  1 -- at least one deny-list violation was found, the broad-except
+       exemption table failed its own guards (empty reason / stale row), or
+       nothing was scanned (FAIL: per-bucket summary printed, per-bucket
+       capped at the first 20 entries).
 """
 
 import ast
@@ -139,6 +153,8 @@ _HANDLER_FUNCTION_NAMES = frozenset(
     {
         "dev_test",
         "_verdict_code",
+        "_overall_exit_code",
+        "_dev_test_exit_code",
         "_sanitize_chip_token",
         "_is_uv_eprom",
         "_resolve_write_scope",
@@ -146,6 +162,9 @@ _HANDLER_FUNCTION_NAMES = frozenset(
         "_chip_id_fields",
         "_is_interactive",
         "_make_sampler",
+        # v1.30 Phase 134 plan 134-08 (D-12): the recovery-line selector,
+        # called directly from `dev_test`'s own body.
+        "_sdp_recovery_line",
     }
 )
 
@@ -192,17 +211,139 @@ _WIRE_DICT_KEY_THRESHOLD = 2
 _FORCE_KEYWORD_NAME = "force"
 _FORCE_CLI_FLAG = "--force"
 
+# ---------------------------------------------------------------------------
+# Broad-except deny bucket (Phase 133 D-09/D-14)
+# ---------------------------------------------------------------------------
+#
+# Bare `except:` is already caught by ruff's E722 (this repo's `select` is
+# ["E", "F", "I", "UP"]). `except Exception:` and `except BaseException:` are
+# caught by NOTHING today -- `BLE` (flake8-blind-except) is not selected, so
+# the inert BLE001-suppression comment already sitting on chip_test.py's
+# `_sample` sampler handler suppresses a rule that never fires. This
+# frozenset names the two identifiers that constitute "broad" for the
+# single-class and tuple forms; the bare form (`node.type is None`) is
+# classified separately in `visit_ExceptHandler` since it has no name to
+# check.
+_BROAD_EXCEPT_NAMES = frozenset({"Exception", "BaseException"})
+
+# (file basename, enclosing function name) -> non-empty reason (D-14).
+#
+# Follows the house frozenset/name-map-with-rationale idiom
+# (`_HANDLER_FUNCTION_NAMES` above is the in-file precedent;
+# `_EXEMPT_FW_TO_HOST` in tests/test_revision_constants_parity.py is the
+# second -- a frozen, deliberately-NOT-auto-derived name-PAIR map, never a
+# skip-set). Matching is scoped to (basename, function) -- see
+# `_OrchestratorDenyVisitor._is_exempt` -- so a planted fixture reproducing
+# this shape under any OTHER filename or function name gets NO exemption and
+# is flagged as a genuine violation, and the stale-row guard below
+# (`_stale_exemption_row_violations`) fires only when a scanned file of this
+# exact basename no longer defines this exact function.
+#
+# Exactly one row at this commit: `chip_test.py`'s `_sample` is a
+# best-effort diagnostic hook invoked with an OPAQUE caller-supplied
+# callable (the sampler) that may raise literally anything -- its
+# swallow-all behaviour is its documented contract (see `_sample`'s own
+# docstring), and `_make_sampler` (firestarter/cli_handlers.py) is live in
+# production. Narrowing the handler instead of exempting it would change
+# shipped production behaviour, which criterion 4 of Phase 133 forbids.
+_BROAD_EXCEPT_EXEMPTIONS: dict[tuple[str, str], str] = {
+    (os.path.basename(_DEFAULT_CHIP_TEST), "_sample"): (
+        "D-14: _sample (firestarter/chip_test.py) is a best-effort "
+        "diagnostic hook invoked with an opaque caller-supplied callable "
+        "(the sampler) that may raise literally anything; its swallow-all "
+        "behaviour is its documented contract, and narrowing it would "
+        "change shipped production behaviour reachable through "
+        "_make_sampler in cli_handlers.py, which criterion 4 forbids."
+    ),
+}
+
+
+def _validate_exemption_table(table: dict[tuple[str, str], str]) -> list[str]:
+    """Guard (a): every exemption row must carry a non-empty, non-whitespace
+    reason. Returns a list of problem strings (empty when the table is
+    clean).
+
+    Deliberately PURE and argument-taking -- it reads no module global --
+    so this guard can be proven entirely in-process, without a subprocess or
+    an env-override seam: the env seams in this module exist only to
+    retarget the AST *scan*, and this function does not scan anything, it
+    only inspects the table it is handed.
+    """
+    problems: list[str] = []
+    for (file, function), reason in table.items():
+        if reason is None or not reason.strip():
+            problems.append(
+                f"broad-except exemption row ({file!r}, {function!r}) has an "
+                "empty or missing reason -- an exemption without a reason is "
+                "an unreasoned hole in the gate"
+            )
+    return problems
+
+
+def _stale_exemption_row_violations(
+    exemptions: dict[tuple[str, str], str], scanned_paths: list[str]
+) -> list[str]:
+    """Guard (b): fail when a scanned file's basename matches an exemption
+    row's file but no longer defines a function of that row's name anywhere
+    in the module.
+
+    A rotted exemption -- one whose named function was renamed or removed --
+    would otherwise silently keep permitting an omission (the hole stays
+    open even though the thing it was cut for is gone). This is the same
+    inversion as this file's own
+    `test_handler_function_names_all_resolve_to_real_callables` precedent in
+    the paired test module.
+
+    A row whose file has no same-basename counterpart among `scanned_paths`
+    in THIS run is not evaluated -- e.g. a test pointing
+    `FIRESTARTER_DEVTEST_SRC` at a differently-named fixture never matches
+    the `chip_test.py` row at all, so it cannot be stale by this check
+    (it is instead a genuine broad-except violation if it plants the form,
+    proven by the planted-RED legs). Wired here (over the actually-scanned
+    paths), not inside `_validate_exemption_table`, because it needs the
+    parsed source of the scanned files, not just the table.
+    """
+    violations: list[str] = []
+    for (row_file, row_function), _reason in exemptions.items():
+        matching = [p for p in scanned_paths if os.path.basename(p) == row_file]
+        if not matching:
+            continue
+        found = False
+        for path in matching:
+            with open(path, encoding="utf-8") as f:
+                source = f.read()
+            tree = ast.parse(source, filename=path)
+            if any(
+                isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name == row_function
+                for node in ast.walk(tree)
+            ):
+                found = True
+                break
+        if not found:
+            violations.append(
+                f"STALE exemption row ({row_file!r}, {row_function!r}): a "
+                f"scanned file named {row_file!r} no longer defines a "
+                f"function named {row_function!r} -- the exemption has "
+                "rotted and is silently permitting an omission"
+            )
+    return violations
+
 
 class _OrchestratorDenyVisitor(ast.NodeVisitor):
     """Walk a chip_test.py-shaped AST, collecting SAFE-03 deny-list hits.
 
-    Populates three violation buckets during a single tree walk:
+    Populates four violation buckets during a single tree walk:
       - `vpp_set_violations`: `ast.Call` sites whose callee name/attribute is
         in `_VPP_SET_NAMES`.
       - `raw_wire_dict_violations`: `ast.Dict` literals whose string keys
         intersect `_WIRE_DICT_KEYS` at or above `_WIRE_DICT_KEY_THRESHOLD`.
       - `force_violations`: `ast.keyword(arg="force")` with a truthy
         constant value, or any string literal exactly equal to "--force".
+      - `broad_except_violations`: a bare `except:`, an `except Exception:`,
+        an `except BaseException:`, or a tuple containing either -- unless
+        the innermost enclosing function is exempted by
+        `_BROAD_EXCEPT_EXEMPTIONS` (D-14).
 
     Each violation is recorded as a human-readable `"line N: ..."` string so
     `main()` can print an actionable per-bucket FAIL: summary.
@@ -213,6 +354,11 @@ class _OrchestratorDenyVisitor(ast.NodeVisitor):
         self.vpp_set_violations: list[str] = []
         self.raw_wire_dict_violations: list[str] = []
         self.force_violations: list[str] = []
+        self.broad_except_violations: list[str] = []
+        # Enclosing-function-name stack (D-09) -- exists ONLY so
+        # `visit_ExceptHandler` can consult a (file, function) exemption.
+        # Empty when the current node sits at module level.
+        self._function_stack: list[str] = []
 
     def _callee_name(self, func: ast.expr) -> str | None:
         if isinstance(func, ast.Attribute):
@@ -256,6 +402,55 @@ class _OrchestratorDenyVisitor(ast.NodeVisitor):
             self.force_violations.append(
                 f'{self.filename}:{node.lineno}: literal "--force" string'
             )
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._function_stack.append(node.name)
+        self.generic_visit(node)
+        self._function_stack.pop()
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._function_stack.append(node.name)
+        self.generic_visit(node)
+        self._function_stack.pop()
+
+    def _classify_broad_except(self, type_node: ast.expr | None) -> str | None:
+        """Return a human-readable label for a broad handler `type_node`, or
+        None when the handler is not broad.
+
+        `node.type is None` -- a bare `except:` -- is classified by the
+        caller directly (there is nothing to inspect here); this method only
+        handles the single-class (`ast.Name`) and tuple (`ast.Tuple`) forms.
+        """
+        if isinstance(type_node, ast.Name) and type_node.id in _BROAD_EXCEPT_NAMES:
+            return f"except {type_node.id}:"
+        if isinstance(type_node, ast.Tuple):
+            matched = [
+                elt.id
+                for elt in type_node.elts
+                if isinstance(elt, ast.Name) and elt.id in _BROAD_EXCEPT_NAMES
+            ]
+            if matched:
+                return f"except (...) tuple containing {', '.join(matched)}"
+        return None
+
+    def _is_exempt(self, enclosing_function: str | None) -> bool:
+        if enclosing_function is None:
+            return False
+        basename = os.path.basename(self.filename)
+        return (basename, enclosing_function) in _BROAD_EXCEPT_EXEMPTIONS
+
+    def visit_ExceptHandler(self, node: ast.ExceptHandler) -> None:
+        if node.type is None:
+            label = "bare except:"
+        else:
+            label = self._classify_broad_except(node.type)
+        if label is not None:
+            enclosing = self._function_stack[-1] if self._function_stack else None
+            if not self._is_exempt(enclosing):
+                self.broad_except_violations.append(
+                    f"{self.filename}:{node.lineno}: broad exception handler ({label})"
+                )
         self.generic_visit(node)
 
 
@@ -362,12 +557,25 @@ def main() -> None:
     `FIRESTARTER_DEVTEST_SUBMIT` (default: the real `firestarter/submit.py`,
     the Phase-113 submission-flow module) IN FULL, like `chip_test.py` (a
     fresh module with zero pre-existing force/VPP/wire-dict usage). Collects
-    VPP-set / raw-wire-dict / force violations across all three scan results
-    into three buckets; any non-empty bucket fails the build. All three
-    targets resolve to real files in production -- the `scanned`-empty
-    fail-closed guard below still fires if some future refactor moves any of
-    them, or renames/removes `dev_test`, without updating this checker.
+    VPP-set / raw-wire-dict / force / broad-except violations across all
+    three scan results into four buckets; any non-empty bucket fails the
+    build. All three targets resolve to real files in production -- the
+    `scanned`-empty fail-closed guard below still fires if some future
+    refactor moves any of them, or renames/removes `dev_test`, without
+    updating this checker.
+
+    Guard (a) runs FIRST, before any scanning: an exemption table with an
+    empty or missing reason fails the build immediately (Phase 133 D-14).
+    Guard (b) -- the stale-row check -- runs AFTER scanning, over the files
+    actually found, because it needs their parsed source.
     """
+    exemption_table_problems = _validate_exemption_table(_BROAD_EXCEPT_EXEMPTIONS)
+    if exemption_table_problems:
+        _print_bucket(
+            "broad-except exemption table problem(s)", exemption_table_problems
+        )
+        sys.exit(1)
+
     targets = [
         FIRESTARTER_DEVTEST_SRC,
         FIRESTARTER_DEVTEST_HANDLER,
@@ -383,6 +591,7 @@ def main() -> None:
     vpp_set_violations: list[str] = []
     raw_wire_dict_violations: list[str] = []
     force_violations: list[str] = []
+    broad_except_violations: list[str] = []
     scanned: list[str] = []
 
     full_scan_visitor = _scan_file(FIRESTARTER_DEVTEST_SRC)
@@ -391,6 +600,7 @@ def main() -> None:
         vpp_set_violations.extend(full_scan_visitor.vpp_set_violations)
         raw_wire_dict_violations.extend(full_scan_visitor.raw_wire_dict_violations)
         force_violations.extend(full_scan_visitor.force_violations)
+        broad_except_violations.extend(full_scan_visitor.broad_except_violations)
 
     handler_visitor = _scan_target_functions(
         FIRESTARTER_DEVTEST_HANDLER, _HANDLER_FUNCTION_NAMES
@@ -400,6 +610,7 @@ def main() -> None:
         vpp_set_violations.extend(handler_visitor.vpp_set_violations)
         raw_wire_dict_violations.extend(handler_visitor.raw_wire_dict_violations)
         force_violations.extend(handler_visitor.force_violations)
+        broad_except_violations.extend(handler_visitor.broad_except_violations)
 
     submit_visitor = _scan_file(FIRESTARTER_DEVTEST_SUBMIT)
     if submit_visitor is not None:
@@ -407,6 +618,7 @@ def main() -> None:
         vpp_set_violations.extend(submit_visitor.vpp_set_violations)
         raw_wire_dict_violations.extend(submit_visitor.raw_wire_dict_violations)
         force_violations.extend(submit_visitor.force_violations)
+        broad_except_violations.extend(submit_visitor.broad_except_violations)
 
     if not scanned:
         print(
@@ -416,11 +628,17 @@ def main() -> None:
         )
         sys.exit(1)
 
+    stale_exemption_violations = _stale_exemption_row_violations(
+        _BROAD_EXCEPT_EXEMPTIONS, scanned
+    )
+
     if (
         host_only_errors
         or vpp_set_violations
         or raw_wire_dict_violations
         or force_violations
+        or broad_except_violations
+        or stale_exemption_violations
     ):
         if host_only_errors:
             _print_bucket("host-only framing violation(s)", host_only_errors)
@@ -433,11 +651,18 @@ def main() -> None:
             )
         if force_violations:
             _print_bucket("force=True / --force pass-through site(s)", force_violations)
+        if broad_except_violations:
+            _print_bucket("broad exception handler(s)", broad_except_violations)
+        if stale_exemption_violations:
+            _print_bucket(
+                "stale broad-except exemption row(s)", stale_exemption_violations
+            )
         sys.exit(1)
 
     print(
         f"PASS: scanned {', '.join(os.path.relpath(s, _HERE) for s in scanned)}; "
-        "0 VPP-set, 0 raw-wire-dict, 0 --force; firmware untouched (host-only, asserted)"
+        "0 VPP-set, 0 raw-wire-dict, 0 --force, 0 broad-except; "
+        "firmware untouched (host-only, asserted)"
     )
 
 

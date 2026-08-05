@@ -34,19 +34,13 @@ Coverage (each leg names the decision id it pins):
      auto-set line is the "other applicable line" this leg pairs with D-13's.
 """
 
-from unittest.mock import Mock
-
 import pytest
 from click.testing import CliRunner
 
 from firestarter.cli_handlers import AppContext, cli
-from firestarter.config import ConfigManager
 from firestarter.constants import FLAG_SKIP_ERASE
-from firestarter.database import EpromDatabase
-from firestarter.eprom_info import EpromConsolePresenter
-from firestarter.eprom_operations import EpromOperator
-from firestarter.firmware import FirmwareManager
-from firestarter.hardware import HardwareManager
+
+from .conftest import make_app_context
 
 # Concrete chip names, verified live against the packaged DB in this session:
 #   AT28C256 -- protocol 0x0D (13), capability-ALLOWED (SDP-capable).
@@ -63,31 +57,6 @@ _AUTO_SET_LINE = "auto-setting --skip-sdp-unlock on your behalf"
 @pytest.fixture()
 def runner() -> CliRunner:
     return CliRunner()
-
-
-def make_app_context(**overrides: object) -> AppContext:
-    """Construct an AppContext with a real, hermetic EpromDatabase and a
-    Mock(spec=EpromOperator) -- matches test_cli_handlers.py's shape."""
-    db = overrides.pop("db", None)
-    if db is None:
-        db = EpromDatabase(skip_local_override=True)
-    config_manager = overrides.pop("config_manager", None)
-    if config_manager is None:
-        config_manager = ConfigManager()
-    operator = overrides.pop("eprom_operator", None)
-    if operator is None:
-        operator = Mock(spec=EpromOperator)
-        operator.write_eprom.return_value = True
-    return AppContext(
-        db=db,
-        config_manager=config_manager,
-        eprom_operator=operator,
-        hardware_manager=overrides.pop("hardware_manager", Mock(spec=HardwareManager)),
-        firmware_manager=overrides.pop("firmware_manager", Mock(spec=FirmwareManager)),
-        eprom_presenter=overrides.pop(
-            "eprom_presenter", Mock(spec=EpromConsolePresenter)
-        ),
-    )
 
 
 def _drive_write(

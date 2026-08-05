@@ -28,6 +28,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 from firestarter.config import get_local_database, get_local_pin_maps
 from firestarter.constants import FLAG_CAN_ERASE
@@ -171,8 +172,8 @@ class EpromDatabase:
     """
 
     def __init__(self, skip_local_override: bool = False):
-        self.proms = {}
-        self.pin_maps = {}
+        self.proms: dict[str, Any] = {}
+        self.pin_maps: dict[str, Any] = {}
         self._initialize_database_core(skip_local_override=skip_local_override)
         logger.debug("EpromDatabase initialized.")
 
@@ -322,7 +323,7 @@ class EpromDatabase:
         if not pin_map_data:
             return []
 
-        pin_signals = {}
+        pin_signals: dict[int, str] = {}
 
         def _assign(pins_val, signal):
             for p in pins_val if isinstance(pins_val, list) else [pins_val]:

@@ -19,6 +19,12 @@ infrastructure landed by Phase 6 Plan 03). It exposes:
                           collection gate excluding
                           tests/test_pyusb_api_surface.py when pyusb is not
                           importable.
+    make_app_context    — Phase 132 Plan 05 (RETIRE-05, D-10): typed
+                          keyword-only AppContext factory -- the shared
+                          replacement for the four surviving per-module
+                          untyped `**overrides` (typed `object`) copies.
+    app_context         — fixture: thin no-argument wrapper around
+                          make_app_context() for the common case.
 
 The reference CRC implementation here is deliberately table-free (the
 production code in firestarter.serial_comm uses a 256-byte lookup table).
@@ -27,11 +33,34 @@ polynomial, wrong seed, accidental reflection — will mismatch this
 reference and fail the test suite.
 """
 
+from __future__ import annotations
+
 import importlib.util
 import io
 import struct
+from typing import TYPE_CHECKING, cast
+from unittest.mock import Mock
 
 import pytest
+
+# Phase 132 Plan 05 (RETIRE-05, D-10): the six real-class annotations below
+# are for mypy only. Runtime imports of these same modules happen INSIDE
+# make_app_context()'s body (see that function) -- never at module scope --
+# because conftest's module-scope import set is deliberately free of any
+# `firestarter` module. This tree has a recorded import-time-binding trap:
+# the firmware-root constants, the board-choice list, and the prerelease-
+# build check all freeze at import/collection time, so pulling a
+# `firestarter` module into conftest's module scope would move when that
+# freezing happens for the ENTIRE suite. `unittest.mock` is stdlib and is
+# exempt from that concern.
+if TYPE_CHECKING:
+    from firestarter.cli_handlers import AppContext
+    from firestarter.config import ConfigManager
+    from firestarter.database import EpromDatabase
+    from firestarter.eprom_info import EpromConsolePresenter
+    from firestarter.eprom_operations import EpromOperator
+    from firestarter.firmware import FirmwareManager
+    from firestarter.hardware import HardwareManager
 
 
 # ---------------------------------------------------------------------------
@@ -195,3 +224,111 @@ def make_comm(fake_serial):
         return instance
 
     return _factory
+
+
+def make_app_context(
+    *,
+    db: EpromDatabase | Mock | None = None,
+    config_manager: ConfigManager | Mock | None = None,
+    eprom_operator: EpromOperator | Mock | None = None,
+    hardware_manager: HardwareManager | Mock | None = None,
+    firmware_manager: FirmwareManager | Mock | None = None,
+    eprom_presenter: EpromConsolePresenter | Mock | None = None,
+) -> AppContext:
+    """Construct a minimal, hardware-free AppContext (Phase 132, RETIRE-05, D-10).
+
+    Keyword-only, six parameters, one per AppContext field. Each parameter
+    defaults to `None`, meaning "build the hardware-free default": a
+    database constructed with `skip_local_override=True`, a fresh
+    ConfigManager, and a `Mock(spec=...)` double for each of the four
+    managers. Passing a value uses it verbatim (identity, not a copy). No
+    real serial port or bench access is ever opened, by any code path here.
+
+    D-10 risk A (why every value passes through `cast(...)` below, once,
+    here, and NOT at the call sites or the mock builders): a caller-supplied
+    double is typically `Mock(spec=RealClass)`, whose STATIC type is `Mock`,
+    not `RealClass`. Annotating a parameter as `RealClass | None` alone does
+    not remove an error -- it MOVES it to every call site that passes a
+    double (measured: ~25 such sites across the four surviving modules,
+    23 of them in tests/test_dev_test_cmd.py alone). Casting at the mock
+    BUILDERS instead was also rejected, measured rather than aesthetic:
+    those variables are used for mock assertions afterward
+    (`operator.write_eprom.assert_called_once_with(...)`), and a variable
+    typed as the real class has no such attribute, so every assertion site
+    becomes an [attr-defined] error instead -- a relocation, not a fix. The
+    tree already carries the receipt: test_validate_family_cmd.py:221 has a
+    `# type: ignore[attr-defined]` on exactly that shape, and
+    test_dev_test_cmd.py:597-598 carry two live errors of that same class
+    today. So: each parameter accepts the real type, a `Mock`, or `None`;
+    each of the six values is narrowed to the real field type with an
+    explicit `cast` at the one seam where a deliberately-substituted double
+    is admitted into the container.
+
+    What the cast buys, stated precisely so nobody overclaims it: a
+    wrong-typed NON-double argument -- a string, an int, the wrong manager
+    class entirely -- is still rejected at the call site, a property the
+    old untyped `**overrides` (typed `object`) splat never had. What it does NOT buy: the
+    cast does not verify that a double's `spec=` actually matches the field
+    it is cast to -- that is a runtime check, and it stays on the `spec=`
+    argument where it already lives, not here.
+
+    D-10 risk B residual, stated plainly rather than left unexamined: this
+    module (`tests.conftest`) deliberately does NOT join any mypy strict
+    island. This factory's own body is checked anyway, because
+    `check_untyped_defs` only ever governs the bodies of UNANNOTATED defs,
+    and this def is fully annotated -- it is type-checked from birth, with
+    zero `pyproject.toml` change. What that does NOT cover: conftest's
+    pre-existing unannotated fixtures (e.g. `make_comm`'s inner `_factory`)
+    remain unchecked. RETIRE-05's guarantee is specifically "this factory's
+    body is checked, and a new module importing it cannot reproduce the
+    old 30-error splat pattern" -- not "everything in conftest.py is
+    type-checked".
+    """
+    # Deferred, in-body imports -- see the module-level comment above the
+    # TYPE_CHECKING block for why these cannot move to module scope.
+    from firestarter.cli_handlers import AppContext
+    from firestarter.config import ConfigManager
+    from firestarter.database import EpromDatabase
+    from firestarter.eprom_info import EpromConsolePresenter
+    from firestarter.eprom_operations import EpromOperator
+    from firestarter.firmware import FirmwareManager
+    from firestarter.hardware import HardwareManager
+
+    if db is None:
+        db = EpromDatabase(skip_local_override=True)
+    if config_manager is None:
+        config_manager = ConfigManager()
+    if eprom_operator is None:
+        eprom_operator = Mock(spec=EpromOperator)
+    if hardware_manager is None:
+        hardware_manager = Mock(spec=HardwareManager)
+    if firmware_manager is None:
+        firmware_manager = Mock(spec=FirmwareManager)
+    if eprom_presenter is None:
+        eprom_presenter = Mock(spec=EpromConsolePresenter)
+
+    # The seam: each value here is either the real class or a deliberately
+    # admitted test double (Mock(spec=...)); the cast declares that
+    # substitution to mypy rather than suppressing a real defect. See the
+    # docstring above for what this does and does not guarantee.
+    return AppContext(
+        db=cast("EpromDatabase", db),
+        config_manager=cast("ConfigManager", config_manager),
+        eprom_operator=cast("EpromOperator", eprom_operator),
+        hardware_manager=cast("HardwareManager", hardware_manager),
+        firmware_manager=cast("FirmwareManager", firmware_manager),
+        eprom_presenter=cast("EpromConsolePresenter", eprom_presenter),
+    )
+
+
+@pytest.fixture
+def app_context() -> AppContext:
+    """Return a default AppContext for the common no-argument case.
+
+    Serves only the no-variation case; per-test variation (a real operator,
+    a fixed port, a caller-supplied database) goes through
+    `make_app_context(...)` directly -- that variation is exactly why the
+    four surviving test modules kept their own local factory instead of
+    being forced onto a single shared fixture (D-10).
+    """
+    return make_app_context()

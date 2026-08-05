@@ -477,6 +477,17 @@ def main():
                 variant = int(ic.get("variant"), 16)
                 proto_id = int(ic.get("protocol_id"), 16)
                 flags = int(ic.get("flags"), 16)
+                # PROV-01 (136.1-01): raw, un-curated upstream page_size attribute
+                # off this SAME <ic> element. Deliberately NOT the same key as the
+                # existing datasheet-curated _PAGE_SIZE_BY_PART / programming.page_size
+                # mechanism a few dozen lines below -- same English word, two
+                # different sources, never to be confused. This raw value is needed
+                # downstream only as PROV-06's corroborating axis (b15 vs
+                # infoic_page_size_raw > 1); it is not consulted by any ALLOW/REFUSE
+                # decision anywhere in this codebase. Default-safe (0x0) mirroring
+                # 120-derive-sdp-allowset.py:26's `pg = int(ic.get("page_size", "0x0"), 16)`
+                # pattern.
+                raw_page_size = int(ic.get("page_size", "0x0"), 16)
                 voltages = int(ic.get("voltages"), 16)
                 mem_size = int(ic.get("code_memory_size"), 16)
                 # pm_idx: low byte of upstream pin_map field — clusters chips by
@@ -750,6 +761,29 @@ def main():
                         ),
                         "chip_id_check": True if (flags & 0x20) else False,
                         "chip_id_value": ic.get("chip_id"),
+                        # PROV-01 (136.1-01): flags bits 14/15 + raw page_size,
+                        # decoded directly from the `flags`/`raw_page_size` values
+                        # already parsed above for THIS exact <ic> element -- never
+                        # a cross-reference or token match. (Phase 120's
+                        # 120-derive-sdp-allowset.py needed token-matching because
+                        # it worked from raw infoic.xml against an already-built
+                        # chip_database.json with no per-row flags field; this
+                        # decode has direct access to the source element and needs
+                        # none of that machinery.)
+                        # [VERIFIED: minipro src/database.c#L39-L50 @ a8efaedc236c1d9718bd28299dfbb99536b010ff
+                        #  -- MP_OFF_PROTECT_BEFORE (bit 14, 0x4000) / MP_PROTECT_AFTER
+                        #  (bit 15, 0x8000). Cross-reference:
+                        #  doc/infoic-field-dictionary.md's CONFIRMED bit 14/15 row.]
+                        # This decode is UNIVERSAL: every upstream-decoded entry
+                        # gets all three keys below, not just the 84 protocol-0x0D
+                        # bucket (mirrors the unconditional chip_id_check /
+                        # chip_id_value fields immediately above) -- a flat decode
+                        # of XML attributes into JSON fields, gated on nothing
+                        # (no protocol/pinout/family condition), never the
+                        # "structural regeneration" hard requirement 6 forbids.
+                        "protect_off_before": True if (flags & 0x4000) else False,
+                        "protect_on_after": True if (flags & 0x8000) else False,
+                        "infoic_page_size_raw": raw_page_size,
                         # PGSZ-01 / CR-01: datasheet-sourced per-chip page size.
                         # Looked up by the FIRST alias of the comma-separated part
                         # name (canonical key). Absent chips omit the field entirely

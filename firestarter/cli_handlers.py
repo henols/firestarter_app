@@ -32,19 +32,32 @@ from rich.console import Console
 from rich.prompt import Confirm
 
 from firestarter import __version__ as version
-from firestarter.channel import available_boards
+from firestarter import sdp_honesty  # unreadable_state_caveat(), called not re-authored
+from firestarter.channel import (
+    BETA_ONLY_DEV_COMMANDS,
+    available_boards,
+    dev_command_gate_message,
+    is_dev_tools_enabled,
+)
 from firestarter.chip_resolver import resolve_chip
 from firestarter.chip_test import (
     OP_ID,
+    SDP_HOLD_HELD,
+    SDP_HOLD_NOT_HELD,
+    SDP_HOLD_NOT_RUN,
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
     VERDICT_OK,
     VERDICT_SKIPPED,
+    StepResult,
     count_applicable,
     derive_plan,
     is_uv_eprom,
     run_plan,
+    sdp_hold_state,
+    sdp_left_writable,
+    sdp_oracle_applicable,
 )
 from firestarter.config import ConfigManager, get_config_dir
 from firestarter.constants import FLAG_CHIP_ENABLE, FLAG_OUTPUT_ENABLE
@@ -71,7 +84,6 @@ from firestarter.exceptions import (
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.hardware import HardwareManager
 from firestarter.logging_utils import SingleLineStatusHandler
-from firestarter.messages import MSG_ERR_UNKNOWN_CMD
 from firestarter.sdp_capability import SDP_PROTOCOL_ID, sdp_capability
 
 logger = logging.getLogger("Firestarter")
@@ -299,6 +311,11 @@ def _build_op_flags(
     verbose: bool = False,
     vpe_as_vpp: bool = False,
     skip_erase: bool = False,
+    # D-14 / RETIRE-07 tripwire, edit point 1 of 2: this default is one of
+    # the two places a developer would touch to disable the host's
+    # auto-unlock. Before changing it, read the tripwire comment at the
+    # D-04 auto-set condition inside write() below -- flipping this default
+    # invalidates the removal-safety argument RETIRE-01 rests on.
     skip_sdp_unlock: bool = False,
     input_enable: Optional[bool] = None,
     chip_disable: Optional[bool] = None,
@@ -555,6 +572,11 @@ def read(
 )
 @click.option("-a", "--address", default=None, help="Write start address in dec/hex")
 @click.option("--vpe-as-vpp", "vpe_as_vpp", is_flag=True, help="Use VPE as VPP voltage")
+# D-14 / RETIRE-07 tripwire, edit point 2 of 2: this option's `default=False`
+# is the second place a developer would touch to disable the host's
+# auto-unlock. Before changing it, read the tripwire comment at the D-04
+# auto-set condition inside write() below -- flipping this default
+# invalidates the removal-safety argument RETIRE-01 rests on.
 @click.option(
     "--skip-sdp-unlock",
     "skip_sdp_unlock",
@@ -624,6 +646,23 @@ def write(
         bool(sdp_entry) and sdp_entry.get("protocol-id") == SDP_PROTOCOL_ID
     )
     allowed, sdp_reason = sdp_capability(eprom, app.db)
+    # D-14 / RETIRE-07 tripwire -- THE decision site. This condition IS the
+    # removal-safety argument for RETIRE-01 (Phase 132 deleted the standalone
+    # `firestarter dev sdp` subcommand): that deletion was safe only BECAUSE
+    # this auto-unlock fires by default, unconditionally, for every
+    # capability-refused protocol-0x0D part on every `write` -- no user needs
+    # a manual unlock surface as long as this stays true. Flipping either
+    # default this condition depends on (`skip_sdp_unlock: bool = False` in
+    # `_build_op_flags` above, or the `--skip-sdp-unlock` Click option's
+    # `default=False` above), narrowing this condition, or making the flag
+    # default to SKIPPING the unlock invalidates the removal argument and
+    # requires RETIRE-01 to be revisited alongside the change. The companion
+    # test that pins this dependency and fails if it breaks is
+    # `test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on`
+    # in tests/test_write_skip_sdp_unlock.py; the companion note lives at
+    # FLAG_SKIP_SDP_UNLOCK's definition in constants.py. This is a comment
+    # only (D-05) -- no output is added here, and the condition itself is
+    # unchanged.
     if is_protocol_0x0d and not allowed and not skip_sdp_unlock:
         skip_sdp_unlock = True
         click.echo(
@@ -1164,14 +1203,72 @@ def fw(
 
 
 # ---------------------------------------------------------------------------
+# CHAN-01..07 (Phase 136) — dev-tools channel gate. D-01: the gate is BOTH
+# mechanisms below, not either. `_DEV_TOOLS_ENABLED` is computed ONCE, at
+# import time, from `channel.is_dev_tools_enabled()` -- mirroring
+# `_PY32_ENABLED` above: a wheel's `__version__` is fixed when it is built, so
+# the choice a stable install renders is decided once, and decided correctly,
+# rather than re-evaluated per invocation (`is_dev_tools_enabled()` is itself
+# call-time/unmemoized -- see its own docstring in channel.py -- so capturing
+# it into a module global here is what freezes the decision). `_DevGroup` is
+# the other half: it holds the six gated NAMES only
+# (`channel.BETA_ONLY_DEV_COMMANDS`), never a callback, and supplies the
+# informative refusal (CHAN-03) for a name that resolves to nothing real.
+# Genuine non-registration (CHAN-02) happens separately, below, at each of the
+# six gated `@dev.command` blocks, each guarded at module scope by
+# `_DEV_TOOLS_ENABLED`.
+# ---------------------------------------------------------------------------
+
+_DEV_TOOLS_ENABLED: bool = is_dev_tools_enabled()
+
+
+class _DevGroup(click.Group):
+    """`dev` group's Click command class (D-01's exact name).
+
+    Holds the six gated `dev` subcommand NAMES only, via
+    `channel.BETA_ONLY_DEV_COMMANDS` -- never a callback. A gated command
+    must not exist as an invokable object in a stable process; that is
+    enforced by conditional registration (the `_DEV_TOOLS_ENABLED` guards
+    below), not by this class. This class's only job is the informative
+    refusal (CHAN-03): when a gated-but-unregistered name is looked up, raise
+    a channel-specific `UsageError` instead of letting Click fall through to
+    its generic, typo-indistinguishable `No such command %r.` error.
+
+    `get_command` is the only method overridden, and that choice is not a
+    guess -- it is the empirically-settled hook from plan 136-01's spike
+    (`tests/test_click_group_gate_hook.py`): `click.Group.resolve_command()`
+    calls `self.get_command(ctx, cmd_name)` itself and only falls through to
+    its own generic error when `get_command` returns `None`, so overriding
+    `get_command` intercepts strictly before that fallback ever runs.
+    `resolve_command` therefore needs no override at all, and `list_commands`
+    needs none either: once a gated name is genuinely unregistered (Task 2,
+    below), it is already absent from `self.commands`, so it is already
+    absent from `list_commands`'s output with no extra code.
+    """
+
+    def get_command(self, ctx: click.Context, cmd_name: str) -> Optional[click.Command]:
+        real = super().get_command(ctx, cmd_name)
+        if real is not None:
+            return real
+        if cmd_name in BETA_ONLY_DEV_COMMANDS:
+            raise click.UsageError(dev_command_gate_message(cmd_name), ctx=ctx)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # dev group + 4 sub-commands (Wave 3 / D-12 step 5)
 # ---------------------------------------------------------------------------
 
 
-@cli.group(name="dev")
+@cli.group(name="dev", cls=_DevGroup)
 @map_typed_errors
 def dev() -> None:
-    """Debug command for development purposes.
+    """Development and diagnostic commands for the RURP shield.
+
+    On a stable install, only `read` and `test` are available in this
+    group -- both are fully supported for end users, despite living inside
+    a group named `dev`. The remaining subcommands are development and
+    bench tooling, available only on a pre-release install.
 
     USR button will break command and return.
     """
@@ -1208,312 +1305,341 @@ def dev_read(
     sys.exit(0 if ok else 1)
 
 
-@dev.command(name="reg")
-@click.argument("msb")
-@click.argument("lsb")
-@click.argument("ctrl")
-@click.option(
-    "-i",
-    "--input-enable",
-    "input_enable",
-    is_flag=True,
-    help="Input, pulls OE pin high.",
-)
-@click.option(
-    "-d",
-    "--chip-disable",
-    "chip_disable",
-    is_flag=True,
-    help="Disable, pulls CE pin high.",
-)
-@click.option(
-    "-f",
-    "--firestarter",
-    "firestarter_flag",
-    is_flag=True,
-    help=(
-        "Using Firestarter register definition.\n"
-        "By using the firestarter argumet,\n"
-        "the control register will be remaped to match\n"
-        "the hardware revision of the RURP sheild.\n"
-        "See constants.RURP_CONTROL_REGISTER_BITS (mirror of rurp_pinout.h).\n"
-        "0x100 - CTRL_VPP_VPE_DROP_ENABLE\n"
-        "0x080 - CTRL_VPP_REGULATOR_ENABLE\n"
-        "0x040 - CTRL_READ_WRITE\n"
-        "0x020 - CTRL_ADDRESS_LINE_18\n"
-        "0x010 - CTRL_ADDRESS_LINE_17\n"
-        "0x008 - CTRL_VPP_P1_ENABLE\n"
-        "0x004 - CTRL_VPE_ENABLE\n"
-        "0x002 - CTRL_VPP_A9_ENABLE\n"
-        "0x001 - CTRL_ADDRESS_LINE_16"
-    ),
-)
-@click.pass_obj
-@map_typed_errors
-def dev_reg(
-    app: AppContext,
-    msb: str,
-    lsb: str,
-    ctrl: str,
-    input_enable: bool,
-    chip_disable: bool,
-    firestarter_flag: bool,
-) -> None:
-    """Direct access to registers: MSB, LSB and control register."""
-    ok = app.eprom_operator.dev_set_registers(
-        msb,
-        lsb,
-        ctrl,
-        firestarter=firestarter_flag,
-        flags=_build_op_flags(input_enable=input_enable, chip_disable=chip_disable),
+if _DEV_TOOLS_ENABLED:
+    # CHAN-06 tripwire (Phase 136, RETIRE-07-style: names WHY before a future
+    # edit touches the gate). `dev reg` is gated behind `_DEV_TOOLS_ENABLED`,
+    # which freezes `channel.is_dev_tools_enabled()` at import time --
+    # `is_prerelease_build() OR dev_tools_enabled_by_env()`. This command is
+    # load-bearing bench tooling: it is the held-erase-rail DMM proxy an
+    # operator uses to hold a register state (and therefore a voltage rail)
+    # energised long enough for a multimeter reading outside a normal
+    # read/write cycle. Gating purely on `__version__` would silently strand
+    # that bench dependency the moment a stable version is cut, or between
+    # betas, on an editable devcontainer install -- no error, just an absent
+    # command. That is exactly why the `FIRESTARTER_DEV_TOOLS=1` bench
+    # override exists: `channel.dev_tools_enabled_by_env` (exact-match
+    # `"1"` against the `FIRESTARTER_DEV_TOOLS` environment variable, fails
+    # closed on everything else) and `channel.is_dev_tools_enabled`'s `OR`
+    # composing it with the channel check are the two companions this
+    # depends on: narrowing the accepted `FIRESTARTER_DEV_TOOLS` value, or
+    # removing that `OR`, strands the bench tooling without warning.
+    @dev.command(name="reg")
+    @click.argument("msb")
+    @click.argument("lsb")
+    @click.argument("ctrl")
+    @click.option(
+        "-i",
+        "--input-enable",
+        "input_enable",
+        is_flag=True,
+        help="Input, pulls OE pin high.",
     )
-    sys.exit(0 if ok else 1)
-
-
-@dev.command(name="addr")
-@click.argument("eprom", shell_complete=_complete_eprom)
-@click.argument("address")
-@click.option(
-    "-i",
-    "--input-enable",
-    "input_enable",
-    is_flag=True,
-    help="Input, pulls OE pin high.",
-)
-@click.option(
-    "-d",
-    "--chip-disable",
-    "chip_disable",
-    is_flag=True,
-    help="Disable, pulls CE pin high.",
-)
-@click.pass_obj
-@map_typed_errors
-def dev_addr(
-    app: AppContext,
-    eprom: str,
-    address: str,
-    input_enable: bool,
-    chip_disable: bool,
-) -> None:
-    """Direct access to address lines and control register."""
-    eprom_data = resolve_chip(eprom, db=app.db)
-    ok = app.eprom_operator.dev_set_address_mode(
-        eprom,
-        eprom_data,
-        address,
-        flags=_build_op_flags(input_enable=input_enable, chip_disable=chip_disable),
+    @click.option(
+        "-d",
+        "--chip-disable",
+        "chip_disable",
+        is_flag=True,
+        help="Disable, pulls CE pin high.",
     )
-    sys.exit(0 if ok else 1)
-
-
-@dev.command(name="consistency-check")
-@click.argument("eprom", shell_complete=_complete_eprom)
-@click.option(
-    "--runs",
-    type=int,
-    default=3,
-    help="Number of consecutive reads (default 3; minimum 2).",
-)
-@click.option(
-    "--output-dir",
-    "output_dir",
-    type=str,
-    default=None,
-    help="Output dir for per-run binaries (default firestarter-runs/consistency-check-<chip>-<board>-<TS>/).",  # noqa: E501
-)
-@click.option(
-    "--keep-files/--no-keep-files",
-    "keep_files",
-    default=True,
-    help="Keep per-run binary files after verdict (default keep).",
-)
-@click.option(
-    "--max-diffs",
-    "max_diffs",
-    type=int,
-    default=10,
-    help="Max divergent offsets to print on FAIL (default 10).",
-)
-@click.option(
-    "-q", "--quiet", is_flag=True, help="Suppress per-run tqdm progress bars (D-11)."
-)
-@click.option(
-    "-f",
-    "--force",
-    is_flag=True,
-    help="Force read, even if the chip id doesn't match (e.g. Shield-3 missing-chip case).",  # noqa: E501
-)
-@click.option(
-    "--read-settling",
-    "read_settling_us",
-    type=int,
-    default=0,
-    help="Address-settling delay before /CE assert (µs; 0=firmware default 0µs).",
-)
-@click.option(
-    "--read-strobe",
-    "read_strobe_us",
-    type=int,
-    default=0,
-    help="/CE read-strobe pulse width (µs; 0=firmware default 3µs).",
-)
-@click.pass_obj
-@map_typed_errors
-def dev_consistency_check(
-    app: AppContext,
-    eprom: str,
-    runs: int,
-    output_dir: Optional[str],
-    keep_files: bool,
-    max_diffs: int,
-    quiet: bool,
-    force: bool,
-    read_settling_us: int,
-    read_strobe_us: int,
-) -> None:
-    """Read EPROM N consecutive times and report SHA-256 divergence.
-
-    D-12 step 5 / 3-way verdict contract:
-        verdict_int = consistency_check_eprom(...)  # 0=PASS, 1=FAIL, 2=hw-error
-        sys.exit(verdict_int)  # NOT bool-to-int wrap
-
-    The bool-to-int wrap would collapse the 2=hardware-error case to 1=FAIL,
-    breaking the v1.6 RCA diagnostic.
-    """
-    eprom_data = resolve_chip(eprom, db=app.db)
-    verdict_int = app.eprom_operator.consistency_check_eprom(
-        eprom,
-        eprom_data,
-        runs=runs,
-        output_dir=output_dir,
-        keep_files=keep_files,
-        max_diffs=max_diffs,
-        quiet=quiet,
-        operation_flags=_build_op_flags(force=force),
-        read_settling_us=read_settling_us,
-        read_strobe_us=read_strobe_us,
+    @click.option(
+        "-f",
+        "--firestarter",
+        "firestarter_flag",
+        is_flag=True,
+        help=(
+            "Using Firestarter register definition.\n"
+            "By using the firestarter argumet,\n"
+            "the control register will be remaped to match\n"
+            "the hardware revision of the RURP sheild.\n"
+            "See constants.RURP_CONTROL_REGISTER_BITS (mirror of rurp_pinout.h).\n"
+            "0x100 - CTRL_VPP_VPE_DROP_ENABLE\n"
+            "0x080 - CTRL_VPP_REGULATOR_ENABLE\n"
+            "0x040 - CTRL_READ_WRITE\n"
+            "0x020 - CTRL_ADDRESS_LINE_18\n"
+            "0x010 - CTRL_ADDRESS_LINE_17\n"
+            "0x008 - CTRL_VPP_P1_ENABLE\n"
+            "0x004 - CTRL_VPE_ENABLE\n"
+            "0x002 - CTRL_VPP_A9_ENABLE\n"
+            "0x001 - CTRL_ADDRESS_LINE_16"
+        ),
     )
-    sys.exit(verdict_int)
+    @click.pass_obj
+    @map_typed_errors
+    def dev_reg(
+        app: AppContext,
+        msb: str,
+        lsb: str,
+        ctrl: str,
+        input_enable: bool,
+        chip_disable: bool,
+        firestarter_flag: bool,
+    ) -> None:
+        """Direct access to registers: MSB, LSB and control register."""
+        ok = app.eprom_operator.dev_set_registers(
+            msb,
+            lsb,
+            ctrl,
+            firestarter=firestarter_flag,
+            flags=_build_op_flags(input_enable=input_enable, chip_disable=chip_disable),
+        )
+        sys.exit(0 if ok else 1)
 
 
-@dev.command(name="write-cycle")
-@click.argument("eprom", shell_complete=_complete_eprom)
-@click.argument("source_image", type=click.Path(exists=True))
-@click.option(
-    "--runs",
-    type=int,
-    default=5,
-    help="Number of write→read-back cycles (default 5).",
-)
-@click.option(
-    "--output-dir",
-    "output_dir",
-    type=str,
-    default=None,
-    help="Output dir for per-cycle binaries (default firestarter-runs/write-cycle-<chip>-<board>-<TS>/).",  # noqa: E501
-)
-@click.option(
-    "-f",
-    "--force",
-    is_flag=True,
-    help="Force write, even if the chip id doesn't match.",
-)
-@click.pass_obj
-@map_typed_errors
-def dev_write_cycle(
-    app: AppContext,
-    eprom: str,
-    source_image: str,
-    runs: int,
-    output_dir: Optional[str],
-    force: bool,
-) -> None:
-    """Erase → write source image → read-back N times; assert SHA-256 == source SHA.
+if _DEV_TOOLS_ENABLED:
 
-    3-way verdict contract (mirrors dev consistency-check):
-        verdict_int = write_cycle_eprom(...)  # 0=PASS, 1=mismatch, 2=hw-error
-        sys.exit(verdict_int)  # NOT bool-to-int wrap — preserves 0/1/2
-
-    The bool-to-int wrap would collapse the 2=hardware-error case to 1=mismatch,
-    breaking the v1.6 RCA diagnostic. XACT-01 / Phase 53 Plan 02.
-    """
-    eprom_data = resolve_chip(eprom, db=app.db)
-    verdict_int = app.eprom_operator.write_cycle_eprom(
-        eprom,
-        eprom_data,
-        source_image_path=source_image,
-        runs=runs,
-        output_dir=output_dir,
-        operation_flags=_build_op_flags(force=force),
+    @dev.command(name="addr")
+    @click.argument("eprom", shell_complete=_complete_eprom)
+    @click.argument("address")
+    @click.option(
+        "-i",
+        "--input-enable",
+        "input_enable",
+        is_flag=True,
+        help="Input, pulls OE pin high.",
     )
-    sys.exit(verdict_int)
+    @click.option(
+        "-d",
+        "--chip-disable",
+        "chip_disable",
+        is_flag=True,
+        help="Disable, pulls CE pin high.",
+    )
+    @click.pass_obj
+    @map_typed_errors
+    def dev_addr(
+        app: AppContext,
+        eprom: str,
+        address: str,
+        input_enable: bool,
+        chip_disable: bool,
+    ) -> None:
+        """Direct access to address lines and control register."""
+        eprom_data = resolve_chip(eprom, db=app.db)
+        ok = app.eprom_operator.dev_set_address_mode(
+            eprom,
+            eprom_data,
+            address,
+            flags=_build_op_flags(input_enable=input_enable, chip_disable=chip_disable),
+        )
+        sys.exit(0 if ok else 1)
 
 
-@dev.command(name="fault-inject")
-@click.argument("eprom", shell_complete=_complete_eprom)
-@click.option(
-    "--direction",
-    type=click.Choice(["outgoing", "incoming"]),
-    default="outgoing",
-    help="outgoing = corrupt host→fw frame; incoming = mutate fw→host frame.",
-)
-@click.option(
-    "--fault-form",
-    "fault_form",
-    type=click.Choice(["corrupt-crc8", "drop-delimiter"]),
-    default="corrupt-crc8",
-    help="Fault form: corrupt-crc8 (flip CRC8 byte) or drop-delimiter (drop 0x00).",
-)
-@click.option(
-    "--mode",
-    type=click.Choice(["cycle", "latency"]),
-    default="cycle",
-    help="cycle = read-cycle resync demo (default); latency = per-frame firmware NAK "
-    "latency on an established single-port connection (53-04 refinement; no chip needed).",
-)
-@click.option(
-    "--output-dir",
-    "output_dir",
-    type=str,
-    default=None,
-    help="Output dir for transfer binaries.",
-)
-@click.pass_obj
-@map_typed_errors
-def dev_fault_inject(
-    app: AppContext,
-    eprom: str,
-    direction: str,
-    fault_form: str,
-    mode: str,
-    output_dir: Optional[str],
-) -> None:
-    """Demonstrate COBS resync: inject a corrupted frame and assert recovery on the next.
+if _DEV_TOOLS_ENABLED:
 
-    cycle mode: one corrupted transfer then asserts the same connection recovers on a
-    clean follow-on transfer (XACT-02 / Phase 53 Plan 02).
+    @dev.command(name="consistency-check")
+    @click.argument("eprom", shell_complete=_complete_eprom)
+    @click.option(
+        "--runs",
+        type=int,
+        default=3,
+        help="Number of consecutive reads (default 3; minimum 2).",
+    )
+    @click.option(
+        "--output-dir",
+        "output_dir",
+        type=str,
+        default=None,
+        help="Output dir for per-run binaries (default firestarter-runs/consistency-check-<chip>-<board>-<TS>/).",  # noqa: E501
+    )
+    @click.option(
+        "--keep-files/--no-keep-files",
+        "keep_files",
+        default=True,
+        help="Keep per-run binary files after verdict (default keep).",
+    )
+    @click.option(
+        "--max-diffs",
+        "max_diffs",
+        type=int,
+        default=10,
+        help="Max divergent offsets to print on FAIL (default 10).",
+    )
+    @click.option(
+        "-q",
+        "--quiet",
+        is_flag=True,
+        help="Suppress per-run tqdm progress bars (D-11).",
+    )
+    @click.option(
+        "-f",
+        "--force",
+        is_flag=True,
+        help="Force read, even if the chip id doesn't match (e.g. Shield-3 missing-chip case).",  # noqa: E501
+    )
+    @click.option(
+        "--read-settling",
+        "read_settling_us",
+        type=int,
+        default=0,
+        help="Address-settling delay before /CE assert (µs; 0=firmware default 0µs).",
+    )
+    @click.option(
+        "--read-strobe",
+        "read_strobe_us",
+        type=int,
+        default=0,
+        help="/CE read-strobe pulse width (µs; 0=firmware default 3µs).",
+    )
+    @click.pass_obj
+    @map_typed_errors
+    def dev_consistency_check(
+        app: AppContext,
+        eprom: str,
+        runs: int,
+        output_dir: Optional[str],
+        keep_files: bool,
+        max_diffs: int,
+        quiet: bool,
+        force: bool,
+        read_settling_us: int,
+        read_strobe_us: int,
+    ) -> None:
+        """Read EPROM N consecutive times and report SHA-256 divergence.
 
-    latency mode: opens ONE pinned port and times the firmware's per-frame NAK on a
-    corrupt CMD_FW_VERSION frame (established connection — avoids the multi-port
-    connect-retry that inflates cycle-mode's outgoing latency). Use with -p <port>.
-    """
-    if mode == "latency":
-        ok = app.eprom_operator.measure_command_nak_latency(
+        D-12 step 5 / 3-way verdict contract:
+            verdict_int = consistency_check_eprom(...)  # 0=PASS, 1=FAIL, 2=hw-error
+            sys.exit(verdict_int)  # NOT bool-to-int wrap
+
+        The bool-to-int wrap would collapse the 2=hardware-error case to 1=FAIL,
+        breaking the v1.6 RCA diagnostic.
+        """
+        eprom_data = resolve_chip(eprom, db=app.db)
+        verdict_int = app.eprom_operator.consistency_check_eprom(
+            eprom,
+            eprom_data,
+            runs=runs,
+            output_dir=output_dir,
+            keep_files=keep_files,
+            max_diffs=max_diffs,
+            quiet=quiet,
+            operation_flags=_build_op_flags(force=force),
+            read_settling_us=read_settling_us,
+            read_strobe_us=read_strobe_us,
+        )
+        sys.exit(verdict_int)
+
+
+if _DEV_TOOLS_ENABLED:
+
+    @dev.command(name="write-cycle")
+    @click.argument("eprom", shell_complete=_complete_eprom)
+    @click.argument("source_image", type=click.Path(exists=True))
+    @click.option(
+        "--runs",
+        type=int,
+        default=5,
+        help="Number of write→read-back cycles (default 5).",
+    )
+    @click.option(
+        "--output-dir",
+        "output_dir",
+        type=str,
+        default=None,
+        help="Output dir for per-cycle binaries (default firestarter-runs/write-cycle-<chip>-<board>-<TS>/).",  # noqa: E501
+    )
+    @click.option(
+        "-f",
+        "--force",
+        is_flag=True,
+        help="Force write, even if the chip id doesn't match.",
+    )
+    @click.pass_obj
+    @map_typed_errors
+    def dev_write_cycle(
+        app: AppContext,
+        eprom: str,
+        source_image: str,
+        runs: int,
+        output_dir: Optional[str],
+        force: bool,
+    ) -> None:
+        """Erase → write source image → read-back N times; assert SHA-256 == source SHA.
+
+        3-way verdict contract (mirrors dev consistency-check):
+            verdict_int = write_cycle_eprom(...)  # 0=PASS, 1=mismatch, 2=hw-error
+            sys.exit(verdict_int)  # NOT bool-to-int wrap — preserves 0/1/2
+
+        The bool-to-int wrap would collapse the 2=hardware-error case to 1=mismatch,
+        breaking the v1.6 RCA diagnostic. XACT-01 / Phase 53 Plan 02.
+        """
+        eprom_data = resolve_chip(eprom, db=app.db)
+        verdict_int = app.eprom_operator.write_cycle_eprom(
+            eprom,
+            eprom_data,
+            source_image_path=source_image,
+            runs=runs,
+            output_dir=output_dir,
+            operation_flags=_build_op_flags(force=force),
+        )
+        sys.exit(verdict_int)
+
+
+if _DEV_TOOLS_ENABLED:
+
+    @dev.command(name="fault-inject")
+    @click.argument("eprom", shell_complete=_complete_eprom)
+    @click.option(
+        "--direction",
+        type=click.Choice(["outgoing", "incoming"]),
+        default="outgoing",
+        help="outgoing = corrupt host→fw frame; incoming = mutate fw→host frame.",
+    )
+    @click.option(
+        "--fault-form",
+        "fault_form",
+        type=click.Choice(["corrupt-crc8", "drop-delimiter"]),
+        default="corrupt-crc8",
+        help="Fault form: corrupt-crc8 (flip CRC8 byte) or drop-delimiter (drop 0x00).",
+    )
+    @click.option(
+        "--mode",
+        type=click.Choice(["cycle", "latency"]),
+        default="cycle",
+        help="cycle = read-cycle resync demo (default); latency = per-frame firmware NAK "
+        "latency on an established single-port connection (53-04 refinement; no chip needed).",
+    )
+    @click.option(
+        "--output-dir",
+        "output_dir",
+        type=str,
+        default=None,
+        help="Output dir for transfer binaries.",
+    )
+    @click.pass_obj
+    @map_typed_errors
+    def dev_fault_inject(
+        app: AppContext,
+        eprom: str,
+        direction: str,
+        fault_form: str,
+        mode: str,
+        output_dir: Optional[str],
+    ) -> None:
+        """Demonstrate COBS resync: inject a corrupted frame and assert recovery on the next.
+
+        cycle mode: one corrupted transfer then asserts the same connection recovers on a
+        clean follow-on transfer (XACT-02 / Phase 53 Plan 02).
+
+        latency mode: opens ONE pinned port and times the firmware's per-frame NAK on a
+        corrupt CMD_FW_VERSION frame (established connection — avoids the multi-port
+        connect-retry that inflates cycle-mode's outgoing latency). Use with -p <port>.
+        """
+        if mode == "latency":
+            ok = app.eprom_operator.measure_command_nak_latency(
+                fault_form=fault_form,
+                output_dir=output_dir,
+            )
+            sys.exit(0 if ok else 1)
+
+        eprom_data = resolve_chip(eprom, db=app.db)
+        ok = app.eprom_operator.fault_inject_cycle(
+            eprom,
+            eprom_data,
+            direction=direction,
             fault_form=fault_form,
             output_dir=output_dir,
         )
         sys.exit(0 if ok else 1)
-
-    eprom_data = resolve_chip(eprom, db=app.db)
-    ok = app.eprom_operator.fault_inject_cycle(
-        eprom,
-        eprom_data,
-        direction=direction,
-        fault_form=fault_form,
-        output_dir=output_dir,
-    )
-    sys.exit(0 if ok else 1)
 
 
 # ---------------------------------------------------------------------------
@@ -1677,181 +1803,189 @@ def _check_r1_precondition(r1_value: int) -> bool:
     return _R1_LO <= r1_value <= _R1_HI
 
 
-@dev.command(name="validate-family")
-@click.argument(
-    "family",
-    type=click.Choice(
-        ["eprom", "eeprom28c", "flash3", "flash4", "flash_intel", "sram", "all"]
-    ),
-)
-@click.option("--board", default=None, help="Board name (e.g. leonardo, uno328pb).")
-@click.option("--chip", default=None, help="Representative chip name override.")
-@click.option(
-    "--source",
-    default=None,
-    type=click.Path(),
-    help="Source image path for write+verify oracle.",
-)
-@click.option(
-    "--output-dir",
-    "output_dir",
-    type=str,
-    default=None,
-    help="Output directory for results artifact (default: current directory).",
-)
-@click.pass_obj
-@map_typed_errors
-def dev_validate_family(
-    app: AppContext,
-    family: str,
-    board: Optional[str],
-    chip: Optional[str],
-    source: Optional[str],
-    output_dir: Optional[str],
-) -> None:
-    """Run the per-family validation matrix Tier-3 runner (HARN-01 / D-05).
+if _DEV_TOOLS_ENABLED:
 
-    Composes write_cycle_eprom / consistency_check_eprom (no re-implementation).
-    Emits validation-matrix.{json,md} results artifact (D-02).
+    @dev.command(name="validate-family")
+    @click.argument(
+        "family",
+        type=click.Choice(
+            ["eprom", "eeprom28c", "flash3", "flash4", "flash_intel", "sram", "all"]
+        ),
+    )
+    @click.option("--board", default=None, help="Board name (e.g. leonardo, uno328pb).")
+    @click.option("--chip", default=None, help="Representative chip name override.")
+    @click.option(
+        "--source",
+        default=None,
+        type=click.Path(),
+        help="Source image path for write+verify oracle.",
+    )
+    @click.option(
+        "--output-dir",
+        "output_dir",
+        type=str,
+        default=None,
+        help="Output directory for results artifact (default: current directory).",
+    )
+    @click.pass_obj
+    @map_typed_errors
+    def dev_validate_family(
+        app: AppContext,
+        family: str,
+        board: Optional[str],
+        chip: Optional[str],
+        source: Optional[str],
+        output_dir: Optional[str],
+    ) -> None:
+        """Run the per-family validation matrix Tier-3 runner (HARN-01 / D-05).
 
-    SKIP-deferred path (D-06): when no board/chip/source is available, records
-    all Tier-3 cells as SKIP-deferred and exits 0 — milestone stays closeable
-    at partial bench coverage.
+        Composes write_cycle_eprom / consistency_check_eprom (no re-implementation).
+        Emits validation-matrix.{json,md} results artifact (D-02).
 
-    3-way verdict contract (mirrors dev write-cycle + consistency-check):
-        0 = PASS  1 = FAIL  2 = hw-error
+        SKIP-deferred path (D-06): when no board/chip/source is available, records
+        all Tier-3 cells as SKIP-deferred and exits 0 — milestone stays closeable
+        at partial bench coverage.
 
-    Non-vacuous oracle (HARN-03 / D-08):
-    - Leonardo is the only authoritative PASS board; other boards are advisory.
-    - uno328pb write/program cells are hard N/A (brownout 999.2).
-    - r1 ≈ 270000 ±25% precondition aborts before any write cycle.
-    - retry_count is captured into each cell.
-    """
-    spec = _load_validation_spec()
-    families = _families_for_selection(family, spec)
+        3-way verdict contract (mirrors dev write-cycle + consistency-check):
+            0 = PASS  1 = FAIL  2 = hw-error
 
-    # D-06 SKIP-deferred: no port / board / chip / source → record all cells
-    # as SKIP-deferred, emit artifact, exit 0.
-    port = app.config_manager.get_value("port", None)
-    if not port or not board or not chip or not source:
-        _emit_skip_deferred_artifact(families, output_dir=output_dir)
-        sys.exit(0)
+        Non-vacuous oracle (HARN-03 / D-08):
+        - Leonardo is the only authoritative PASS board; other boards are advisory.
+        - uno328pb write/program cells are hard N/A (brownout 999.2).
+        - r1 ≈ 270000 ±25% precondition aborts before any write cycle.
+        - retry_count is captured into each cell.
+        """
+        spec = _load_validation_spec()
+        families = _families_for_selection(family, spec)
 
-    # Hardware path — oracle rules apply.
+        # D-06 SKIP-deferred: no port / board / chip / source → record all cells
+        # as SKIP-deferred, emit artifact, exit 0.
+        port = app.config_manager.get_value("port", None)
+        if not port or not board or not chip or not source:
+            _emit_skip_deferred_artifact(families, output_dir=output_dir)
+            sys.exit(0)
 
-    # uno328pb hard N/A for write/program cells (brownout 999.2 — backlog 999.2).
-    if board == _UNO328PB_BOARD:
-        cells: List[Dict[str, Any]] = []  # noqa: UP006
+        # Hardware path — oracle rules apply.
+
+        # uno328pb hard N/A for write/program cells (brownout 999.2 — backlog 999.2).
+        if board == _UNO328PB_BOARD:
+            cells: List[Dict[str, Any]] = []  # noqa: UP006
+            for fam in families:
+                cells.append(
+                    {
+                        "family": fam["id"],
+                        "board": board,
+                        "tier": 3,
+                        "verdict": "N/A",
+                        "reason": (
+                            "uno328pb write/program cells are N/A — brownout backlog 999.2"
+                        ),
+                        "evidence_sha": None,
+                        "retry_count": 0,
+                    }
+                )
+            _write_artifact(cells, output_dir)
+            sys.exit(0)
+
+        # r1 precondition: abort before any cycle if r1 is out of band (D-08).
+        # The r1 value is read from hardware config via the HardwareManager.
+        # In Phase 71 (software scaffold), the hardware path is exercised only
+        # in Phase 73 with real hardware; here we gate on the operator config.
+        r1_raw: Optional[int] = None
+        try:
+            hw_config = app.config_manager.get_value("r1", None)
+            if hw_config is not None:
+                r1_raw = int(hw_config)
+        except (ValueError, TypeError):
+            r1_raw = None
+
+        if r1_raw is not None and not _check_r1_precondition(r1_raw):
+            logger.error(
+                "r1 precondition failed: r1=%d is outside [%d, %d] (±25%% of 270000). "
+                "Recalibrate before running validate-family.",
+                r1_raw,
+                _R1_LO,
+                _R1_HI,
+            )
+            sys.exit(2)
+
+        # Compose cycle methods for each family (D-10 reuse-not-reimpl).
+        hw_cells: List[Dict[str, Any]] = []  # noqa: UP006
+        overall_verdict = 0
+
         for fam in families:
-            cells.append(
+            rep_chip = chip or fam.get("tier3", {}).get(
+                "test_chip", fam.get("rep_chip", "")
+            )
+            if not rep_chip:
+                logger.warning("No rep_chip for family %r — skipping.", fam["id"])
+                continue
+
+            eprom_data = resolve_chip(rep_chip, db=app.db)
+
+            # Compose write_cycle_eprom (D-10: no re-implementation of write+readback).
+            verdict_int = app.eprom_operator.write_cycle_eprom(
+                rep_chip,
+                eprom_data,
+                source_image_path=source,
+                runs=1,
+                output_dir=output_dir,
+                operation_flags=0,
+            )
+
+            # Derive evidence SHA from source image for the cell record.
+            evidence_sha: Optional[str]
+            try:
+                evidence_sha = hashlib.sha256(Path(source).read_bytes()).hexdigest()
+            except OSError:
+                evidence_sha = None
+
+            # Map verdict to oracle classification (Leonardo = authoritative).
+            # verdict_int==0: write_cycle_eprom's own source-vs-readback SHA compare
+            # returned 0 (PASS). Map directly to board-class verdict — the caller
+            # MUST NOT add a source==source self-comparison call here (vacuous).
+            # The real readback compare already happened inside write_cycle_eprom.
+            # Preserve board-class semantics via pass_type: "authoritative" on
+            # Leonardo, "advisory" on all other non-uno328pb boards (HARN-03 / D-08).
+            if verdict_int == 0:
+                pass_type = (
+                    "authoritative"
+                    if board == _AUTHORITATIVE_PASS_BOARD
+                    else "advisory"
+                )
+                cell_verdict = "PASS"
+            elif verdict_int == 1:
+                cell_verdict = "FAIL"
+                pass_type = (
+                    "authoritative"
+                    if board == _AUTHORITATIVE_PASS_BOARD
+                    else "advisory"
+                )
+            else:
+                cell_verdict = "SKIP-deferred"  # hw-error → deferred
+                pass_type = (
+                    "authoritative"
+                    if board == _AUTHORITATIVE_PASS_BOARD
+                    else "advisory"
+                )
+
+            hw_cells.append(
                 {
                     "family": fam["id"],
                     "board": board,
                     "tier": 3,
-                    "verdict": "N/A",
-                    "reason": (
-                        "uno328pb write/program cells are N/A — brownout backlog 999.2"
-                    ),
-                    "evidence_sha": None,
-                    "retry_count": 0,
+                    "verdict": cell_verdict,
+                    "pass_type": pass_type,
+                    "evidence_sha": evidence_sha,
+                    "retry_count": 1,
                 }
             )
-        _write_artifact(cells, output_dir)
-        sys.exit(0)
 
-    # r1 precondition: abort before any cycle if r1 is out of band (D-08).
-    # The r1 value is read from hardware config via the HardwareManager.
-    # In Phase 71 (software scaffold), the hardware path is exercised only
-    # in Phase 73 with real hardware; here we gate on the operator config.
-    r1_raw: Optional[int] = None
-    try:
-        hw_config = app.config_manager.get_value("r1", None)
-        if hw_config is not None:
-            r1_raw = int(hw_config)
-    except (ValueError, TypeError):
-        r1_raw = None
+            if verdict_int > overall_verdict:
+                overall_verdict = verdict_int
 
-    if r1_raw is not None and not _check_r1_precondition(r1_raw):
-        logger.error(
-            "r1 precondition failed: r1=%d is outside [%d, %d] (±25%% of 270000). "
-            "Recalibrate before running validate-family.",
-            r1_raw,
-            _R1_LO,
-            _R1_HI,
-        )
-        sys.exit(2)
-
-    # Compose cycle methods for each family (D-10 reuse-not-reimpl).
-    hw_cells: List[Dict[str, Any]] = []  # noqa: UP006
-    overall_verdict = 0
-
-    for fam in families:
-        rep_chip = chip or fam.get("tier3", {}).get(
-            "test_chip", fam.get("rep_chip", "")
-        )
-        if not rep_chip:
-            logger.warning("No rep_chip for family %r — skipping.", fam["id"])
-            continue
-
-        eprom_data = resolve_chip(rep_chip, db=app.db)
-
-        # Compose write_cycle_eprom (D-10: no re-implementation of write+readback).
-        verdict_int = app.eprom_operator.write_cycle_eprom(
-            rep_chip,
-            eprom_data,
-            source_image_path=source,
-            runs=1,
-            output_dir=output_dir,
-            operation_flags=0,
-        )
-
-        # Derive evidence SHA from source image for the cell record.
-        evidence_sha: Optional[str]
-        try:
-            evidence_sha = hashlib.sha256(Path(source).read_bytes()).hexdigest()
-        except OSError:
-            evidence_sha = None
-
-        # Map verdict to oracle classification (Leonardo = authoritative).
-        # verdict_int==0: write_cycle_eprom's own source-vs-readback SHA compare
-        # returned 0 (PASS). Map directly to board-class verdict — the caller
-        # MUST NOT add a source==source self-comparison call here (vacuous).
-        # The real readback compare already happened inside write_cycle_eprom.
-        # Preserve board-class semantics via pass_type: "authoritative" on
-        # Leonardo, "advisory" on all other non-uno328pb boards (HARN-03 / D-08).
-        if verdict_int == 0:
-            pass_type = (
-                "authoritative" if board == _AUTHORITATIVE_PASS_BOARD else "advisory"
-            )
-            cell_verdict = "PASS"
-        elif verdict_int == 1:
-            cell_verdict = "FAIL"
-            pass_type = (
-                "authoritative" if board == _AUTHORITATIVE_PASS_BOARD else "advisory"
-            )
-        else:
-            cell_verdict = "SKIP-deferred"  # hw-error → deferred
-            pass_type = (
-                "authoritative" if board == _AUTHORITATIVE_PASS_BOARD else "advisory"
-            )
-
-        hw_cells.append(
-            {
-                "family": fam["id"],
-                "board": board,
-                "tier": 3,
-                "verdict": cell_verdict,
-                "pass_type": pass_type,
-                "evidence_sha": evidence_sha,
-                "retry_count": 1,
-            }
-        )
-
-        if verdict_int > overall_verdict:
-            overall_verdict = verdict_int
-
-    _write_artifact(hw_cells, output_dir)
-    sys.exit(overall_verdict)
+        _write_artifact(hw_cells, output_dir)
+        sys.exit(overall_verdict)
 
 
 # ---------------------------------------------------------------------------
@@ -1860,8 +1994,20 @@ def dev_validate_family(
 
 # Per-verdict -> exit-code mapping (D-01): OK/NA/SKIPPED are exit-clean;
 # `marginal` is an inconclusive result (exit 2); BAD beats marginal via
-# `max` over the whole result set, mirroring dev_validate_family's own
-# `if verdict_int > overall_verdict` pattern (cli_handlers.py:1622-1623).
+# EXPLICIT PRECEDENCE (`_overall_exit_code`, D-14), mirroring
+# dev_validate_family's own `if verdict_int > overall_verdict` pattern
+# (cli_handlers.py:1622-1623).
+#
+# v1.30 Phase 134 correction 3 (134-CONTEXT.md, D-14): this contract was
+# shipped INVERTED against both its own prose and `dev_test`'s docstring
+# below (:2119-2121) -- the mechanism used to be a bare call to Python's
+# builtin numeric maximum over `_verdict_code(r.verdict) for r in results`.
+# Because `_VERDICT_EXIT_CODES` maps `marginal -> 2` and `BAD -> 1`, that
+# numeric maximum picked 2 whenever both were present: marginal numerically
+# outranked BAD, so a run containing BOTH verdicts exited 2, not 1 -- the
+# exact opposite of what this comment and that docstring already claimed.
+# `_overall_exit_code` restores the claimed behaviour; it is a bugfix, not
+# a contract change.
 _VERDICT_EXIT_CODES = {
     VERDICT_OK: 0,
     VERDICT_NA: 0,
@@ -1874,6 +2020,74 @@ _VERDICT_EXIT_CODES = {
 def _verdict_code(verdict: str) -> int:
     """Map a single StepResult verdict to its 0/1/2 exit-code contribution."""
     return _VERDICT_EXIT_CODES.get(verdict, 0)
+
+
+# Exit codes ordered MOST-SEVERE-FIRST (D-14). `_overall_exit_code` walks
+# this tuple and returns the first code present among a run's per-step
+# codes -- an explicit precedence list, never a numeric `max` (a `max` over
+# {1, 2} incorrectly picks 2, which is exactly the bug this replaces).
+_EXIT_CODE_PRECEDENCE: tuple[int, ...] = (1, 2, 0)
+
+
+def _overall_exit_code(results: list[StepResult]) -> int:
+    """The run's overall exit code: the most severe code present, per
+    `_EXIT_CODE_PRECEDENCE` (D-14) -- BAD (exit 1) outranks marginal
+    (exit 2) outranks a clean run (exit 0).
+
+    `_verdict_code`'s `.get(verdict, 0)` stays the single vocabulary
+    source -- an unrecognised verdict still contributes exit 0, so this
+    helper introduces no sixth verdict status (ROADMAP's own constraint).
+    """
+    codes = {_verdict_code(r.verdict) for r in results}
+    for code in _EXIT_CODE_PRECEDENCE:
+        if code in codes:
+            return code
+    return 0
+
+
+def _dev_test_exit_code(results: list[StepResult], *, sdp_oracle_not_run: bool) -> int:
+    """`_overall_exit_code`'s D-15 extension (v1.30 Phase 134 plan 134-07,
+    LEG-12/LEG-13): an ALLOW-chip run whose SDP oracle (`write-inhibited`)
+    did NOT run gets an exit FLOOR of 2, so `firestarter dev test <chip>`
+    can no longer return 0 on a run that never exercised the oracle at all
+    (the P-04 shape: a not-run oracle filed as PASS by a community
+    reporter).
+
+    Composed the SAME WAY `_overall_exit_code` composes BAD-outranks-
+    marginal: the floor CONTRIBUTES a candidate code (`2`) into the set fed
+    to `_EXIT_CODE_PRECEDENCE`'s most-severe-first selection -- it is NEVER
+    the builtin numeric maximum applied between the observed code and the
+    floor value. That builtin, given `1` (BAD) and `2` (the floor), returns
+    `2` -- so a naive floor would re-launder a BAD run's exit 1 into exit 2,
+    recreating exactly the laundering D-14 removed. Composing it as a
+    precedence candidate instead keeps BAD's rank intact: a run that is
+    both BAD and NOT-RUN still exits 1, not 2.
+
+    Stated cost (D-15, recorded here because this is the one place a
+    future reader would look for it): `dev test`'s exit code stops being a
+    PURE function of step verdicts -- it gains exactly ONE non-verdict
+    term, this `sdp_oracle_not_run` flag.
+
+    Why the not-run oracle stays `SKIPPED` rather than becoming `marginal`
+    (D-15's own reasoning, restated at this call site): `_RAN_VERDICTS =
+    frozenset({OK, BAD, MARGINAL})` (`chip_test.py`) counts `marginal` as
+    *ran* -- recording a non-running oracle as `marginal` would hold
+    `N == M` in `count_applicable`'s ratio and defeat LEG-13 outright, the
+    exact laundering this milestone exists to stop.
+
+    The floor is ALLOW-only: callers gate `sdp_oracle_not_run` with
+    `sdp_oracle_applicable(plan)` at the call site, never here -- a REFUSE
+    chip's SDP steps read `NOT-RUN` legitimately (the oracle was never
+    applicable to begin with), and flooring that chip's exit code would
+    misrepresent a correct refusal as an inconclusive result.
+    """
+    codes = {_verdict_code(r.verdict) for r in results}
+    if sdp_oracle_not_run:
+        codes.add(2)
+    for code in _EXIT_CODE_PRECEDENCE:
+        if code in codes:
+            return code
+    return 0
 
 
 def _sanitize_chip_token(chip: str) -> str:
@@ -2035,21 +2249,118 @@ def _resolve_write_scope(
     return "partial"
 
 
+# D-09 (v1.30 Phase 134, plan 134-08): the notice's write-pass number,
+# single-sourced HERE so it exists in exactly one place (P-08 prevention
+# 2 -- derive it, never restate it). Measured at plan time: the shipped
+# `write` step's own `runs=2` default writes pattern A twice, and this
+# phase's SDP leg adds four more single-run write passes of its own
+# (write-baseline-b writes B, write-baseline-a writes A, write-inhibited
+# writes B, write-restored writes A) -- 2 + 4 = 6, against the pre-134
+# notice's stale claim of "written twice". `tests/test_dev_test_cmd.py`
+# adds a test DERIVING this same number from a live `derive_plan` result
+# and asserting it equals this constant; if that test ever measures a
+# different number, change THIS constant, never the test.
+_ALWAYS_WRITES_PASS_COUNT = 6
+
 # D-04: printed FIRST, unconditionally, before the SAFE-04 absent-chip
 # hard-fail and before anything that touches hardware -- an unknown chip
 # seeing this notice is harmless and honest, and printing first guarantees
-# it precedes anything that could energise the shield. States the doubled
-# run count truthfully (run_plan's runs>=2 default means every destructive
-# step executes twice) and never calls any path non-destructive or
-# read-only, because none is (D-04, RESEARCH Open Question 2).
+# it precedes anything that could energise the shield. D-04's ordering
+# guarantee is unchanged by this rewrite: still ONE static string, still
+# echoed by the single call below `dev_test`'s docstring (its own line
+# number stays below the `derive_plan(...)` call site's), still never
+# carrying a per-chip derived value (only the single-sourced
+# `_ALWAYS_WRITES_PASS_COUNT` above, which is the SAME number for every
+# ALLOW-shaped write-executing run, never derived per invocation).
+#
+# Rewritten for D-09/D-12 (v1.30 Phase 134): states the TRUE pass count
+# (was "written twice"; is six), names the SDP lock this phase's leg now
+# applies in prose (never the hyphenated op literal -- `_SDP_LEG_OPS`'s
+# four strings all auto-join `_MULTIWORD_OP_VALUES`, and this notice is a
+# declared non-registry measured by a live substring test,
+# `test_non_registry_still_has_no_ops`), and gives the aborted-run
+# recovery in the word "rewrite" -- protocol 0x0D has no bulk-clear
+# operation at all, so writing the part again is the only way back.
 _ALWAYS_WRITES_NOTICE = (
     "dev test ALWAYS WRITES to the chip -- run it only on a blank or "
-    "scratch part you are willing to sacrifice. Every write/verify/erase "
-    "step runs TWICE per invocation, so most chips receive the full device "
-    "written twice; a UV-erasable EPROM is asked first, and even a decline "
-    "still writes a small 256-byte top-anchored region -- there is no "
-    "read-only or non-destructive mode."
+    "scratch part you are willing to sacrifice. A full run makes "
+    f"{_ALWAYS_WRITES_PASS_COUNT} separate write passes over the write "
+    "region (the shipped write/verify/erase steps write twice per "
+    "invocation, and this phase's SDP leg adds its own baseline, "
+    "inhibited and restore writes on top); a UV-erasable EPROM is asked "
+    "first, and even a decline still writes a small 256-byte top-anchored "
+    "region -- there is no read-only or non-destructive mode. This run "
+    "also applies the chip's SDP lock: on a COMPLETED run the part is "
+    "left unlocked again. If the run is interrupted before it finishes, "
+    "the part may be left locked -- rewrite it to recover; this protocol "
+    "has no bulk-clear operation, so writing the part again is the only "
+    "way back."
 )
+
+
+# D-12 (v1.30 Phase 134, plan 134-08): the two SDP recovery forms, named
+# module-level string constants so plan 134-09's scoped pytest scans
+# EXACTLY these two values, never the whole report (D-13's own measured
+# trap: the report legitimately contains the word "erase" in at least
+# three other places -- derive_plan's protocol-0x0D NA reason
+# (chip_test.py, ~:670-673), the shipped single-word "erase" op string
+# itself in both the markdown table and the JSON, and this module's own
+# `_ALWAYS_WRITES_NOTICE` step enumeration above -- so a whole-report grep
+# would go RED on correct text and need exemptions on day one, the 133
+# D-14 `_sample` shape). Phase 137's CLOSE-03 tool-side scanner is handed
+# `SDP_RECOVERY_CONSTANT_NAMES` below so it EXTENDS this tuple rather than
+# re-deriving or duplicating plan 134-09's pytest -- do NOT author that
+# scanner here (D-13, out of this plan's scope).
+#
+# Both constants: named the SDP lock in prose (never a hyphenated op
+# literal -- `_SDP_LEG_OPS`/`_SDP_OPS` membership is asserted against both
+# by this module's own tests), and never contain the five-letter word for
+# bulk clearing (protocol 0x0D has no such operation at all, so that word
+# would be actively wrong advice on this family).
+_SDP_RECOVERY_LOUD = (
+    "SDP lock: this run applied the chip's SDP lock and did NOT confirm "
+    "the part accepts a write again before it ended -- do not assume it "
+    "unlocked itself. Rewrite the part: this protocol has no bulk-clear "
+    "operation, so writing it again is the only way to recover it, and a "
+    f"fresh dev test run will confirm the write path again. {sdp_honesty.unreadable_state_caveat()}"
+)
+_SDP_RECOVERY_NEUTRAL = (
+    "SDP lock: this run completed and left the part unlocked again -- no "
+    f"rewrite is needed. {sdp_honesty.unreadable_state_caveat()} This is "
+    "evidence, not a guarantee, on a family whose protection state cannot "
+    "be read back."
+)
+
+# LEG-14's scan target (plan 134-09): names EXACTLY the two constants
+# above. Phase 137's CLOSE-03 extends this tuple rather than duplicating
+# the pytest that scans it.
+SDP_RECOVERY_CONSTANT_NAMES: tuple[str, ...] = (
+    "_SDP_RECOVERY_LOUD",
+    "_SDP_RECOVERY_NEUTRAL",
+)
+
+
+def _sdp_recovery_line(*, hold_state: str, left_writable: bool) -> str:
+    """D-12's two-form recovery-line selector (STRICT island; headroom 2).
+
+    Returns `_SDP_RECOVERY_LOUD` when the lock was genuinely EMITTED
+    (`hold_state` is `SDP_HOLD_HELD` or `SDP_HOLD_NOT_HELD` -- i.e. NOT a
+    `SDP_HOLD_NOT_RUN` prefix) and `left_writable` is `False` (the run did
+    not itself confirm the part still accepts a write); returns
+    `_SDP_RECOVERY_NEUTRAL` for every other case, INCLUDING every
+    `NOT-RUN` hold state (nothing was ever locked, so there is nothing to
+    warn about) and the genuinely-restored-writable case.
+
+    A line prints on the happy path too (D-12): silence is not a
+    statement, and an unconditional warning would train dismissal,
+    spending the signal on the one case it exists for. The op-string
+    knowledge this decision depends on (which `StepResult` proves "left
+    writable") lives in `chip_test.sdp_left_writable`, not here (P-07).
+    """
+    lock_emitted = hold_state in (SDP_HOLD_HELD, SDP_HOLD_NOT_HELD)
+    if lock_emitted and not left_writable:
+        return _SDP_RECOVERY_LOUD
+    return _SDP_RECOVERY_NEUTRAL
 
 
 @dev.command(name="test")
@@ -2138,6 +2449,11 @@ def dev_test(app: "AppContext", chip: str) -> None:
     results = run_plan(plan, app.eprom_operator, app.db, sampler=sampler)
     report.results = results
     report.banner = count_applicable(plan, results)
+    # LEG-12: the derive-in-engine / assign-in-handler seam. `sdp_hold_state`
+    # is computed in chip_test.py (the engine); this line only ASSIGNS it,
+    # matching every other derived field above and below (never computed
+    # inline here).
+    report.sdp_hold_state = sdp_hold_state(plan, results)
 
     full = app.db.get_eprom(chip)
     if full:
@@ -2187,135 +2503,23 @@ def dev_test(app: "AppContext", chip: str) -> None:
 
     submit_mod.submit_report(report, chip, json_file, console=console)
 
+    # D-12: one of the two named recovery forms prints on EVERY completed
+    # run -- silence is not a statement, and a line here is the last thing
+    # printed before this handler decides its exit code. `click.echo`,
+    # matching `_ALWAYS_WRITES_NOTICE`'s own precedent, so it reaches
+    # console AND `CliRunner` capture regardless of log-level wiring.
+    hold_state = report.sdp_hold_state
+    left_writable = sdp_left_writable(results)
+    click.echo(_sdp_recovery_line(hold_state=hold_state, left_writable=left_writable))
+
     if not results:
         sys.exit(0)
-    code = max(_verdict_code(r.verdict) for r in results)
+    # D-15: the exit floor is ALLOW-only -- `sdp_oracle_applicable(plan)`
+    # gates it, so a REFUSE chip's legitimate `NOT-RUN` (the oracle was
+    # never applicable) is never floored.
+    code = _dev_test_exit_code(
+        results,
+        sdp_oracle_not_run=sdp_oracle_applicable(plan)
+        and report.sdp_hold_state.startswith(SDP_HOLD_NOT_RUN),
+    )
     sys.exit(code)
-
-
-@dev.command(name="sdp")
-@click.argument("eprom", shell_complete=_complete_eprom)
-@click.argument("mode", type=click.Choice(["enable", "disable"], case_sensitive=False))
-@click.option(
-    "-y",
-    "--yes",
-    "assume_yes",
-    is_flag=True,
-    default=False,
-    help=(
-        "Bypass the confirm prompt on a TTY. This is the single explicit "
-        "scripting escape hatch: off a TTY this flag is REQUIRED -- without "
-        "it the command refuses rather than proceeding unattended."
-    ),
-)
-@click.pass_obj
-@map_typed_errors
-def dev_sdp(app: AppContext, eprom: str, mode: str, assume_yes: bool) -> None:
-    """Enable or disable Software Data Protection (SDP) on an AT28C-family EEPROM.
-
-    ``enable`` turns software data protection ON, so the part refuses writes
-    until it is explicitly unlocked again. ``disable`` turns it OFF. On this
-    chip family the resulting protection state cannot be read back afterward
-    (Phase 117 D-05, Phase 119 D-12), so neither direction can be confirmed --
-    a successful run means only that the command sequence was **emitted**,
-    nothing more.
-
-    Refused on protocol-0x0D parts with no SDP command decoder at all (the
-    two FRAM parts and the pre-SDP ``2804``/``2816``/``2817`` generation), and
-    on every non-0x0D protocol.
-    """
-    mode = mode.lower()
-    chip_upper = eprom.upper()
-
-    # Gate 1 -- absent chip (SAFE-04, copied verbatim from dev_test's own
-    # hard-fail). Keyed strictly off `get_eprom` emptiness -- NEVER a
-    # `resolve_chip` support-status refusal -- so an in-DB-but-unsupported
-    # chip (e.g. adapter-required) still reaches the capability gate below,
-    # which must be the one to answer for it (D-08).
-    if not app.db.get_eprom(eprom):
-        raise ChipNotFoundError(f"{eprom}: not found in database")
-
-    # Gate 2 -- capability. This gate deliberately outranks Gate 3
-    # (support-status): an adapter-required 0x0D part with no SDP command
-    # decoder must hear "this part has no SDP" rather than "get an adapter",
-    # because no adapter would have helped here -- and all NINE
-    # adapter-required 0x0D parts are in the refused set (not a hypothetical
-    # subset), so this ordering is load-bearing on every one of them.
-    allowed, reason = sdp_capability(eprom, app.db)
-    if not allowed:
-        raise click.ClickException(reason)
-
-    # Gate 3 -- support status (adapter-required / vpp-exceeds-max / etc. for
-    # chips that pass Gate 2 but are still not `supported`).
-    eprom_data = resolve_chip(eprom, db=app.db)
-
-    # Gate 4 -- consent. D-05: the subcommand IS the mode -- no
-    # `--destructive`-style flag exists, because a flag mandatory on every
-    # invocation carries no information. D-07: one code path, two strings --
-    # both directions mutate chip state through the same unobservable
-    # mechanism and share this gate. D-06 deliberately INVERTS `dev test`'s
-    # off-TTY behaviour: there, `--destructive` itself is the consent, so
-    # off-TTY proceeds; here there is no such flag, so the mere absence of a
-    # TTY is strictly weaker than the gate it would stand in for, and MUST
-    # refuse instead of silently proceeding.
-    interactive = _is_interactive()
-    if interactive and not assume_yes:
-        if mode == "enable":
-            prompt = (
-                f"Enabling SDP on {chip_upper} will make it refuse writes "
-                "until explicitly unlocked again, and the resulting "
-                "protection state cannot be read back afterward. Continue?"
-            )
-        else:
-            prompt = (
-                f"Disabling SDP on {chip_upper} removes its write protection. Continue?"
-            )
-        proceed = Confirm.ask(prompt, default=False)
-        if not proceed:
-            click.echo(f"Aborted -- {chip_upper} left untouched.")
-            sys.exit(0)
-    elif not interactive and not assume_yes:
-        raise click.ClickException(
-            f"{chip_upper}: refusing to run off a TTY without -y/--yes -- "
-            "pass -y to proceed unattended."
-        )
-
-    # Serial call. D-14: an `EpromOperationError` whose `error_code` is
-    # `MSG_ERR_UNKNOWN_CMD` means the attached firmware predates
-    # CMD_SDP_LOCK/CMD_SDP_UNLOCK (Phase 119) and does not recognise this
-    # command at all. This exploits the one real asymmetry in the wire
-    # surface (HOST-06): an unknown COMMAND produces an error and is
-    # therefore detectable after the fact, whereas an unknown flag BIT
-    # produces silence. Keyed on the message **id**, never the message text.
-    try:
-        if mode == "enable":
-            ok = app.eprom_operator.sdp_lock(eprom, eprom_data)
-        else:
-            ok = app.eprom_operator.sdp_unlock(eprom, eprom_data)
-    except EpromOperationError as e:
-        if e.error_code == MSG_ERR_UNKNOWN_CMD:
-            raise FirmwareOutdatedError(
-                f"{chip_upper}: attached firmware does not implement SDP "
-                f"{mode} (unknown command) -- upgrade with "
-                "'firestarter fw --install'."
-            ) from e
-        raise
-
-    if ok:
-        # D-10 summary line -- honest and symmetric on both directions: the
-        # claim is that the sequence was EMITTED, never that the resulting
-        # state was verified. No duration figure appears here -- this is
-        # mechanically enforced, not merely a discipline: get_response()
-        # filters the entire INFO band out at serial_comm.py:424, so the
-        # operation layer literally cannot see the firmware's `0x5F`/`0x61`
-        # duration frame to plumb one through. No lock/unlock state boolean
-        # appears either -- HOST-05's honesty floor. click.echo (not
-        # logger.info) so this always reaches the user's console/CliRunner
-        # capture regardless of log-level/handler wiring.
-        click.echo(
-            f"SDP {mode} sequence for {chip_upper} was emitted. The "
-            "resulting protection state cannot be read back on this chip "
-            "family, so this is not a claim about the chip's actual state."
-        )
-
-    sys.exit(0 if ok else 1)

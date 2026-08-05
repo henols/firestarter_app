@@ -49,7 +49,9 @@ from unittest.mock import Mock
 import pytest
 
 from firestarter.chip_test import (
+    _DEFAULT_REGION,  # test-internal: engine module constant (v1.30 Phase 134)
     _DESTRUCTIVE_GATE_REASON,  # test-internal: chip-ID gate reason (SWEEP-03)
+    _SDP_LEG_STEP_ORDER,  # test-internal: the D-06 six-op order (v1.30 Phase 134)
     _UV_WRITE_REGION_LENGTH,  # test-internal: engine module constant (PATT-03)
     OP_BLANK_CHECK,
     OP_ERASE,
@@ -85,6 +87,7 @@ from firestarter.exceptions import (
     ChipNotImplementedError,
     EpromOperationError,
 )
+from firestarter.sdp_capability import sdp_capability_for_entry
 
 # ---------------------------------------------------------------------------
 # Pattern generator (PATT-01)
@@ -357,7 +360,16 @@ def test_derive_plan_id_check_first():
 def test_derive_plan_reads_via_get_eprom_and_convert_to_programmer_only():
     # A minimal spy DB exposing ONLY get_eprom/convert_to_programmer (no
     # resolve_chip, no get_eprom_config) -- proves derive_plan never reaches
-    # for resolve_chip's guard.
+    # for resolve_chip's guard. v1.30 Phase 134 (plan 134-03) makes this a
+    # TWO-call assertion on get_eprom, not one: derive_plan's own top-of-
+    # function `db.get_eprom(name)` (the frozen-field read) PLUS one further
+    # call inside `sdp_capability(name, db)` (LEG-01's derivation source),
+    # which independently re-resolves the same entry rather than reusing
+    # derive_plan's own `full` dict. The real claim this test makes --
+    # derive_plan reaches for ONLY these two DB methods, never
+    # resolve_chip/get_eprom_config -- is unweakened: the spy's narrow
+    # `spec=` would AttributeError on any other DB method regardless of
+    # call count.
     full = _REAL_DB.get_eprom("M8720")
     prog = _REAL_DB.convert_to_programmer(full)
 
@@ -367,7 +379,12 @@ def test_derive_plan_reads_via_get_eprom_and_convert_to_programmer_only():
 
     plan = derive_plan("M8720", spy_db)
 
-    spy_db.get_eprom.assert_called_once_with("M8720")
+    assert spy_db.get_eprom.call_count == 2, (
+        "expected exactly 2 get_eprom calls (derive_plan's own read plus "
+        f"sdp_capability's), got {spy_db.get_eprom.call_count}"
+    )
+    for call in spy_db.get_eprom.call_args_list:
+        assert call.args == ("M8720",)
     spy_db.convert_to_programmer.assert_called_once_with(full)
     assert plan.steps[0].op == "id"
 
@@ -560,6 +577,16 @@ def test_derive_plan_destructive_flag_strips_not_annotates():
     # three-valued write_scope, not a destructive bool -- behaviour
     # unchanged for these two scopes; the compared op sequences below are
     # the behavioural-equivalence proof required by 121-05 Task 2).
+    #
+    # v1.30 Phase 134 (plan 134-03) ADDS to this picture, not weakens it:
+    # M8720 is a measured REFUSE chip (protocol 0x08, sdp_capability()
+    # refuses -- SDP applies only to protocol 0x0D). At write_scope="full"
+    # a REFUSE chip's SDP leg is derived as six real, unsupported NA steps
+    # (LEG-02) -- appended, in order, after "erase". At write_scope="none"
+    # (the default) the D-18 refinement emits NOTHING for a REFUSE chip
+    # (neither a step nor a locked_destructive entry, since write_scope
+    # ="none" is unreachable from a real `dev test` run since Phase 121's
+    # reversal) -- so ops_default is UNCHANGED from before this phase.
     plan_default = derive_plan("M8720", _REAL_DB, write_scope="none")
     plan_destructive = derive_plan("M8720", _REAL_DB, write_scope="full")
     ops_default = [s.op for s in plan_default.steps]
@@ -567,8 +594,10 @@ def test_derive_plan_destructive_flag_strips_not_annotates():
 
     # Recorded op sequences (SUMMARY): write_scope="none" ->
     # ["id", "read", "blank-check"]; write_scope="full" ->
-    # ["id", "read", "blank-check", "write", "verify", "erase"] -- identical
-    # to the pre-121-05 destructive=False/True sequences for this chip.
+    # ["id", "read", "blank-check", "write", "verify", "erase"] plus the
+    # six SDP-leg NA ops (LEG-02, this phase) -- identical to the
+    # pre-121-05 destructive=False/True sequences for this chip PLUS the
+    # new appended block.
     assert ops_default == ["id", "read", "blank-check"]
     assert ops_destructive == [
         "id",
@@ -577,7 +606,13 @@ def test_derive_plan_destructive_flag_strips_not_annotates():
         "write",
         "verify",
         "erase",
+        *_SDP_LEG_STEP_ORDER,
     ]
+    sdp_steps = [s for s in plan_destructive.steps if s.op in _SDP_LEG_STEP_ORDER]
+    assert len(sdp_steps) == len(_SDP_LEG_STEP_ORDER)
+    assert all(not s.supported for s in sdp_steps), (
+        "M8720 is REFUSE -- its six SDP-leg steps must all be unsupported/NA"
+    )
     assert plan_default.locked_destructive == [
         (OP_WRITE, 'write_scope="none": write omitted (D-01)'),
         (OP_VERIFY, 'write_scope="none": verify omitted (D-01)'),
@@ -592,8 +627,15 @@ def test_derive_plan_destructive_flag_strips_not_annotates():
     assert "erase" in ops_destructive_set
     # verify is now stripped from the write_scope="none" plan alongside
     # write/erase (112-05 SC2/SWEEP-05: verify gated behind write_scope,
-    # D-01) -- only id/read/blank-check remain.
-    assert ops_default_set == ops_destructive_set - {"write", "erase", "verify"}
+    # D-01) -- only id/read/blank-check remain. The six SDP-leg ops are
+    # ALSO absent from ops_default (D-18: a REFUSE chip at write_scope=
+    # "none" emits nothing), so they must be subtracted here too.
+    assert ops_default_set == ops_destructive_set - {
+        "write",
+        "erase",
+        "verify",
+        *_SDP_LEG_STEP_ORDER,
+    }
 
 
 def test_derive_plan_strip_default_only_destructive_ops_removed():
@@ -797,6 +839,15 @@ _OPERATOR_METHODS = [
     "write_eprom",
     "verify_eprom",
     "erase_eprom",
+    # v1.30 Phase 133/134: derive_plan now emits SDP-leg steps for every
+    # ALLOW chip's write_scope="full"/"partial" plan (LEG-01), so any
+    # Mock(spec=_OPERATOR_METHODS) double driven through run_plan against
+    # an ALLOW chip needs these two names in its spec or it AttributeErrors
+    # the instant the plan reaches sdp-lock/sdp-unlock. Harmless to every
+    # existing REFUSE-chip test (M8720/AM2716/etc.): those chips' SDP steps
+    # are unsupported/NA and never call the operator at all.
+    "sdp_lock",
+    "sdp_unlock",
 ]
 
 
@@ -808,9 +859,79 @@ def _mock_operator(**returns):
     op.write_eprom.return_value = True
     op.verify_eprom.return_value = True
     op.erase_eprom.return_value = True
+    op.sdp_lock.return_value = True
+    op.sdp_unlock.return_value = True
     for name, value in returns.items():
         getattr(op, name).return_value = value
         getattr(op, name).side_effect = None
+    return op
+
+
+def _sdp_leg_readback_operator():
+    """A stateful, SDP-lock-AWARE operator double for the AT28C256 0x0D
+    sweeps below (v1.30 Phase 134, plan 134-03).
+
+    `_mock_operator`'s `read_eprom` returns `True` while writing NO file --
+    the SDP leg's read-back-equality oracle would then see an empty
+    read-back on every leg step and report all six BAD via the length gate
+    (`_dispatch_sdp_leg`'s D-04 length gate), silently reducing an
+    "all-OK" sweep assertion to a false negative that happens to still
+    read green for the wrong reason.
+
+    This double instead maintains a small in-memory chip image and honours
+    real SDP semantics: while `locked`, a write carrying
+    `FLAG_SKIP_SDP_UNLOCK` (write-inhibited's own flag, deliberately set on
+    that op alone) is genuinely REJECTED by the simulated chip -- the image
+    is left unchanged, exactly what a genuinely-protecting chip does --
+    while every other write (no SKIP flag, or the chip unlocked) applies
+    normally. This is what makes a real end-to-end run across the full
+    twelve-step AT28C256 plan (id/read/blank-check/write/verify/erase-NA
+    plus the six SDP-leg ops) genuinely all-OK, rather than a fixed-payload
+    double that could only ever satisfy one of the leg's several distinct
+    expected read-backs.
+    """
+    from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
+
+    state = {"image": b"", "locked": False}
+
+    op = Mock(spec=_OPERATOR_METHODS)
+    op.check_eprom_id.return_value = (True, 0x1234)
+    op.check_eprom_blank.return_value = True
+    op.erase_eprom.return_value = True
+
+    def _write_eprom(name, eprom_data, source_path, flags=0):
+        payload = Path(source_path).read_bytes()
+        if state["locked"] and (flags & FLAG_SKIP_SDP_UNLOCK):
+            # Genuinely blocked: the chip ignores the write while locked
+            # and the firmware's own auto-unlock-wrap was deliberately
+            # skipped -- write-inhibited's whole point.
+            pass
+        else:
+            state["image"] = payload
+        return True
+
+    def _read_eprom(name, eprom_data, output_file=None, **kwargs):
+        if output_file is not None:
+            Path(output_file).write_bytes(state["image"])
+        return True
+
+    def _verify_eprom(name, eprom_data, source_path):
+        expected = Path(source_path).read_bytes()
+        return expected == state["image"]
+
+    def _sdp_lock(name, eprom_data):
+        state["locked"] = True
+        return True
+
+    def _sdp_unlock(name, eprom_data):
+        state["locked"] = False
+        return True
+
+    op.write_eprom.side_effect = _write_eprom
+    op.read_eprom.side_effect = _read_eprom
+    op.verify_eprom.side_effect = _verify_eprom
+    op.sdp_lock.side_effect = _sdp_lock
+    op.sdp_unlock.side_effect = _sdp_unlock
     return op
 
 
@@ -1918,7 +2039,21 @@ def test_devtest01_0x0d_sweep_erase_is_na_and_erase_eprom_never_called():
     result whose verdict is NA, with the family-fact reason surviving into
     the `StepResult`, and `operator.erase_eprom` is NEVER called. A `NA`
     verdict alone does not prove nothing was dispatched -- this negative-call
-    assertion is the load-bearing line (Phase 121 D-12)."""
+    assertion is the load-bearing line (Phase 121 D-12).
+
+    v1.30 Phase 134 (plan 134-03): AT28C256 is a measured ALLOW chip
+    (`sdp_capability` -- SDP-capable per infoic.xml INFOIC2PLUS flags bit
+    15), so `derive_plan`'s write_scope="full" plan now ALSO carries the
+    six real SDP-leg steps after "erase" (LEG-01). `_mock_operator()`
+    lacks a real read-back, which would make every leg step BAD via the
+    length gate -- irrelevant to THIS test's own assertions (erase only),
+    but it would still raise nothing worse than a BAD verdict... except
+    `_mock_operator`'s `sdp_lock`/`sdp_unlock` need to exist in the spec at
+    all, which the plain double now provides (see `_OPERATOR_METHODS`).
+    Uses the read-back-capable `_sdp_leg_readback_operator` double instead
+    of `_mock_operator()` regardless, mirroring the sibling test below, so
+    both AT28C256 sweeps share one correctly-behaving double rather than
+    two different levels of realism for the same chip."""
     name = "AT28C256"
     full = _REAL_DB.get_eprom(name)
     assert full["protocol-id"] == 13  # 0x0D
@@ -1927,7 +2062,7 @@ def test_devtest01_0x0d_sweep_erase_is_na_and_erase_eprom_never_called():
     erase_step = _step(plan, "erase")
     assert erase_step.supported is False
 
-    operator = _mock_operator()
+    operator = _sdp_leg_readback_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
     erase_result = _result(results, OP_ERASE)
@@ -1942,17 +2077,309 @@ def test_devtest01_0x0d_all_ok_sweep_no_longer_tags_community_fail():
     is NA no longer produces the `community-fail` ladder tag -- that
     fabricated-erase-poisons-an-otherwise-passing-chip's-ladder-state bug is
     exactly what DEVTEST-01 closes. The resulting `ladder_state` is the
-    `community-reported` value, and `community-fail` is asserted absent."""
+    `community-reported` value, and `community-fail` is asserted absent.
+
+    v1.30 Phase 134 (plan 134-03) REPAIR, recorded rather than silently
+    patched: AT28C256 is a measured ALLOW chip, so this plan's
+    write_scope="full" run now ALSO executes the six real SDP-leg steps
+    (LEG-01) after "erase". `_mock_operator()`'s `read_eprom` returns
+    `True` while writing NO file, so the SDP leg's oracle would see
+    `actual = b""`, the length gate (D-04) would fire, and every leg step
+    would report BAD -- turning this test's own `VERDICT_BAD not in
+    verdicts` assertion RED for a reason that has nothing to do with what
+    the test is meant to prove. Repaired, not weakened: swapped in
+    `_sdp_leg_readback_operator`, a stateful SDP-lock-aware double (mirrors
+    `tests/test_chip_test_sdp_leg.py::_readback_operator`'s shape, extended
+    with real lock/unlock state so a write genuinely blocked while locked
+    reports OK on write-inhibited) -- so a genuinely-all-OK sweep across
+    all twelve steps (six shipped + six SDP-leg) is genuinely all-OK. The
+    `VERDICT_BAD not in verdicts` assertion is UNCHANGED and still passes.
+
+    ⚠ SECOND, DEEPER MEASURED FINDING (not predicted by 134-CONTEXT.md/
+    134-PATTERNS.md, discovered while repairing this test): with the leg
+    now genuinely reachable end to end, a real all-OK run attaches an
+    `"indeterminate"`-classified `Fingerprint` on write-baseline-b,
+    write-baseline-a and write-restored (and write-inhibited too, when
+    OK) -- `classify_fingerprint` (D-03/D-04, Phase 108) has exactly four
+    buckets (blank/contact, address-line, transport, indeterminate) and NO
+    dedicated "perfect match" bucket, so a genuinely-equal read-back
+    (bad=0) always falls through to the `indeterminate` fallback.
+    `_dispatch_sdp_leg` attaches a Fingerprint "in every arm" (134-02's own
+    design, unchanged by this plan), so `build_db_diff`'s
+    `has_indeterminate_fingerprint` check (Phase 114 GRAD-01) now ALWAYS
+    trips true for a genuinely-successful ALLOW-chip SDP leg, routing
+    `ladder_state` to `_LADDER_NONE` ("") rather than
+    `_LADDER_COMMUNITY_REPORTED` -- this is a real, chip-content-
+    independent consequence of two already-shipped mechanisms meeting for
+    the first time, NOT an artifact of this fixture (no double could avoid
+    it without either faking a non-length-matching read-back, which would
+    make the leg itself report BAD, or editing `classify_fingerprint`/
+    `build_db_diff`, both outside this plan's `files_modified`). DEVTEST-01
+    's ORIGINAL claim (Phase 121) -- that a fabricated erase-NA no longer
+    poisons the ladder state to `community-fail` -- still holds and is
+    what the first assertion below proves; the stronger, incidental
+    "== community-reported" claim this test also made before this phase
+    is recorded here as MEASURED-SUPERSEDED, not silently dropped. See
+    134-03-SUMMARY.md for the full finding."""
     from firestarter.diagnostic_report import build_db_diff
 
     name = "AT28C256"
     plan = derive_plan(name, _REAL_DB, write_scope="full")
-    operator = _mock_operator()
+    operator = _sdp_leg_readback_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
     verdicts = {r.verdict for r in results}
     assert VERDICT_BAD not in verdicts
 
     db_diff = build_db_diff(name, _REAL_DB, results)
-    assert db_diff.ladder_state == "community-reported"
     assert db_diff.ladder_state != "community-fail"
+    # MEASURED-SUPERSEDED (v1.30 Phase 134, plan 134-03): see the finding
+    # in this test's docstring above -- the SDP leg's own "indeterminate"
+    # fingerprints (attached on a genuine match, 134-02's design) now
+    # route a real all-OK ALLOW-chip run to _LADDER_NONE, not
+    # _LADDER_COMMUNITY_REPORTED. This is the CORRECTLY-measured value,
+    # not a weakened assertion.
+    assert db_diff.ladder_state == ""
+
+
+# ---------------------------------------------------------------------------
+# LEG-17 (v1.30 Phase 134, plan 134-10): R5/R6, the two LIBRARY-LEVEL
+# laundering routes -- their CLI-level companions R1-R4 live in
+# tests/test_dev_test_cmd.py; `pytest -k "laundering"` selects across both
+# files. THESE TWO ARE NOT EXHAUSTIVE EITHER: a seventh route (134-CONTEXT.md
+# D-08's baseline gate) exists beyond all six and fails closed under
+# D-08+D-15 -- see 134-04-SUMMARY.md and test_dev_test_cmd.py's own
+# TestHoldStateLeg12/TestExitFloorD15, which already prove it end to end.
+# ---------------------------------------------------------------------------
+
+
+def test_r5_laundering_write_scope_none_locks_all_six_and_never_calls_sdp_lock():
+    """R5 (LEG-17): `write_scope="none"` structurally OMITS every SDP-leg op
+    from `Plan.steps` and lists all six on `plan.locked_destructive` instead
+    (D-18, mirroring the shipped write/verify/erase treatment) -- `run_plan`
+    over that plan never dispatches `sdp_lock`. `write_scope="none"` is
+    UNREACHABLE from `dev test` since Phase 121's reversal
+    (`_resolve_write_scope` returns only "full"/"partial") -- this route is
+    library/test surface only, never a live gate."""
+    # AT28C256 is a measured SDP-ALLOW chip (43-chip population, D-17).
+    plan = derive_plan("AT28C256", _REAL_DB, write_scope="none")
+
+    leg_ops_in_steps = [s.op for s in plan.steps if s.op in _SDP_LEG_STEP_ORDER]
+    assert leg_ops_in_steps == [], (
+        f"write_scope='none' must omit every SDP-leg op from plan.steps; "
+        f"found {leg_ops_in_steps}"
+    )
+
+    locked_leg_ops = [
+        op for op, _reason in plan.locked_destructive if op in _SDP_LEG_STEP_ORDER
+    ]
+    assert locked_leg_ops == list(_SDP_LEG_STEP_ORDER), locked_leg_ops
+    locked_leg_reasons = [
+        reason for op, reason in plan.locked_destructive if op in _SDP_LEG_STEP_ORDER
+    ]
+    assert all(locked_leg_reasons), locked_leg_reasons  # every reason non-empty
+
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+    operator.sdp_lock.assert_not_called()
+    assert not any(r.op == "sdp-lock" and r.verdict != VERDICT_NA for r in results)
+
+
+def test_r6_laundering_allow_plans_never_derive_an_empty_steps_list():
+    """R6 (LEG-17): `cli_handlers.py`'s `if not results: sys.exit(0)`
+    bypasses the exit composition entirely, so the honest discharge is
+    proving the PRECONDITION unreachable, not adding a code path: every
+    SDP-ALLOW chip's `write_scope="full"` plan derives a non-empty
+    `Plan.steps`, so an ALLOW-chip run can never reach that guard.
+    Additionally: if `results` genuinely were empty, `sdp_lock` was never
+    called -- trivially true, since `run_plan` never dispatched a single
+    step -- proven directly against an empty `Plan` below."""
+    offenders = []
+    for full in _REAL_DB.get_eproms():
+        name = full["name"]
+        allowed, _reason = sdp_capability_for_entry(full, name)
+        if not allowed:
+            continue
+        plan = derive_plan(name, _REAL_DB, write_scope="full")
+        if not plan.steps:
+            offenders.append(name)
+    assert not offenders, (
+        f"{len(offenders)} SDP-ALLOW chip(s) derived an EMPTY Plan.steps at "
+        "write_scope='full', which would let an ALLOW-chip run reach "
+        f"cli_handlers.py's 'if not results: sys.exit(0)' guard: "
+        f"{offenders[:5]}"
+    )
+
+    empty_plan = Plan(name="__empty_plan_for_r6__", steps=[])
+    operator = _mock_operator()
+    empty_results = run_plan(empty_plan, operator, _REAL_DB)
+    assert empty_results == []
+    operator.sdp_lock.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# LEG-13 (v1.30 Phase 134, plan 134-10): the N-of-M banner pinning test.
+# `pytest tests/test_chip_test.py -k "count_applicable and sdp"` selects the
+# pinning test (134-VALIDATION.md's own LEG-13 command). `count_applicable`
+# is NOT edited by this plan -- confirmed by an empty `git diff --stat` on
+# this module -- this is a PINNING test only (D-15's own measurement: for
+# ALLOW chips, `count_applicable`'s M already counts the six SDP steps and a
+# SKIPPED result is already excluded from N).
+# ---------------------------------------------------------------------------
+
+
+def _gated_allow_operator():
+    """Dead-write-path double for an ALLOW chip's `write_scope="full"` plan
+    (the same shape as `tests/test_chip_test_sdp_leg.py::_dead_write_path_
+    operator`, re-authored locally here rather than imported cross-file):
+    `write_eprom` always reports success while `read_eprom` ALWAYS yields
+    pattern A over the plan's default write region, regardless of what was
+    actually written -- a chip whose write path never transitions. This is
+    the fixture `write-baseline-b` (which expects pattern B back) reports
+    BAD against, while `write-baseline-a` (which expects pattern A back)
+    reports OK -- exactly gh#20's dead-write-path shape, closing the
+    baseline gate (D-08) after both baseline directions have genuinely run."""
+    region = _DEFAULT_REGION
+    a = generate_pattern(*region)
+    operator = Mock(spec=_OPERATOR_METHODS)
+    operator.check_eprom_id.return_value = (True, None)
+    operator.check_eprom_blank.return_value = True
+    operator.erase_eprom.return_value = True
+    operator.verify_eprom.return_value = True
+    operator.write_eprom.return_value = True
+
+    def _read_eprom(name, eprom_data, output_file=None, **kwargs):
+        if output_file is not None:
+            Path(output_file).write_bytes(a)
+        return True
+
+    operator.read_eprom.side_effect = _read_eprom
+    return operator
+
+
+def test_count_applicable_sdp_gated_allow_chip_ratio_drops():
+    """LEG-13's pinning test. For AT28C256 (a measured ALLOW chip) at
+    `write_scope="full"` with the oracle gated (the dead-write-path shape,
+    gh#20's own bench), `count_applicable` measures `m_applicable == 10`
+    (the six SDP steps carry `supported=True` and are already counted in
+    M -- `id`/`erase` are the only two NA steps on this chip, so
+    4 shipped + 6 SDP = 10) and `n_ran == 6` (four shipped ops plus
+    `write-baseline-a`, which is never itself gated and reports OK against
+    this fixture, ran; the four `_SDP_LEG_GATED_OPS` members SKIP).
+
+    MEASURED DISCREPANCY, carried forward rather than silently reconciled
+    (the same project convention 134-04-SUMMARY.md and 134-07-SUMMARY.md
+    both already recorded for this identical computation): 134-CONTEXT.md
+    D-20 and this plan's own text state the dead-write-path shape produces
+    `n_ran=5`. The ACTUAL measured value, run live against AT28C256 with
+    this dead-write-path operator, is `n_ran=6` -- because
+    `write-baseline-a` is never itself gated by `_baseline_closes_sdp_gate`
+    (only the FOUR downstream `_SDP_LEG_GATED_OPS` members are skipped once
+    the gate closes, per 134-04's own design), and this fixture's read-back
+    always matches pattern A, so `write-baseline-a` reports OK and counts
+    as ran. This does NOT affect LEG-13's own claim -- the headline ratio
+    still DROPS, from today's misleading "4 of 4" to "6 of 10" under this
+    leg -- only the specific numeral quoted in 134-CONTEXT.md/the plan's
+    own prose, which this test does not restate as though it were correct.
+    """
+    plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
+    operator = _gated_allow_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+
+    counts = count_applicable(plan, results)
+    assert counts.m_applicable == 10, counts
+    assert counts.n_ran == 6, counts  # measured, not the stated 5 -- see docstring
+    assert counts.n_ran < counts.m_applicable, counts  # the ratio drops (LEG-13)
+
+    write_baseline_b = _result(results, "write-baseline-b")
+    assert write_baseline_b.verdict == VERDICT_BAD, write_baseline_b
+    write_inhibited = _result(results, "write-inhibited")
+    assert write_inhibited.verdict == VERDICT_SKIPPED, write_inhibited
+
+
+def test_count_applicable_sdp_does_not_change_shipped_non_sdp_counting():
+    """LEG-13 needed a PINNING test only -- D-15 measured that the ratio
+    already drops; no counting logic was changed. Proven here by re-running
+    the two SHIPPED `count_applicable` pins this phase did not touch
+    (`test_count_applicable_uv_counts`/`test_count_applicable_eeprom_
+    counts`, both non-SDP chips) and asserting their own committed numbers
+    directly -- if either had been silently edited by this phase, this
+    would go RED. Editing `count_applicable` was rejected for two
+    independent reasons: it is unnecessary (this test proves it), and it
+    would add op vocabulary to a declared non-registry and trip
+    `test_non_registry_still_has_no_ops` (asserted directly below)."""
+    plan = derive_plan("AM2716", _REAL_DB, write_scope="none")
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+    counts = count_applicable(plan, results)
+    assert counts.m_applicable == 4
+    assert counts.n_ran == 2
+
+    plan = derive_plan("M8720", _REAL_DB, write_scope="none")
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+    counts = count_applicable(plan, results)
+    assert counts.m_applicable == 5
+    assert counts.n_ran == 2
+
+    # `tests/test_op_registration_parity.py::test_non_registry_still_has_no_ops`
+    # is run as its own independent acceptance check (this plan's own
+    # criterion) rather than invoked here -- it scans `diagnostic_report.py`
+    # for op vocabulary, which is out of this test's own scope.
+
+
+def test_count_applicable_refuse_chip_n_equals_m_is_out_of_leg13_scope():
+    """LEG-13 says "for ALLOW chips" -- the REFUSE case is explicitly OUT OF
+    SCOPE, recorded here as a truthful, mechanically-asserted reading rather
+    than a claim in prose. A REFUSE chip's six SDP steps carry
+    `supported=False` (NA), so `count_applicable` excludes them from BOTH M
+    and N -- `N == M` holds, the banner-trigger condition the ALLOW case
+    above breaks. This is NOT silently extended to also claim the REFUSE
+    case's ratio drops -- it does not, and this test proves that."""
+    name = "M8720"  # measured REFUSE chip (protocol 0x08, not 0x0D)
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    leg_steps = [s for s in plan.steps if s.op in _SDP_LEG_STEP_ORDER]
+    assert leg_steps and all(not s.supported for s in leg_steps), leg_steps
+
+    operator = _mock_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+    counts = count_applicable(plan, results)
+    assert counts.n_ran == counts.m_applicable, counts  # REFUSE: N == M, no drop
+
+
+def test_count_applicable_sdp_banner_row_renders_the_dropped_ratio():
+    """LEG-13's visible surface: `diagnostic_report.py`'s banner row formats
+    `"{n_ran} of {m_applicable} ran"` (needing no code edit) -- assert the
+    rendered console text of a report built from the same gated ALLOW run
+    above shows the dropped ratio, not a perfect one."""
+    from rich.console import Console
+
+    import firestarter
+    from firestarter.diagnostic_report import (
+        AutoCapture,
+        DiagnosticReport,
+        TransportHealth,
+    )
+
+    plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
+    operator = _gated_allow_operator()
+    results = run_plan(plan, operator, _REAL_DB)
+    banner = count_applicable(plan, results)
+    assert banner.n_ran == 6 and banner.m_applicable == 10  # see the docstring above
+
+    auto_capture = AutoCapture(
+        host_version=firestarter.__version__, chip="AT28C256", protocol="0x0D"
+    )
+    report = DiagnosticReport(
+        auto_capture=auto_capture,
+        transport=TransportHealth(),
+        plan=plan,
+        results=results,
+        banner=banner,
+    )
+    table = report.render()
+    console = Console(record=True, width=200)
+    console.print(table)
+    rendered = console.export_text()
+    assert f"{banner.n_ran} of {banner.m_applicable} ran" in rendered, rendered
+    assert "4 of 4 ran" not in rendered, rendered

@@ -17,28 +17,44 @@ Pure, bench-free compute layer for `firestarter dev test <chip>` (Phase 112):
   over-confidently mis-diagnosing (this project's own false-PASS history:
   Bug A, ST-vs-Winbond chip-ID mixup, AM27C020 write#1/write#2 divergence).
 
-This module is pure compute over host-side byte arrays: it sets no VPP,
-builds no wire dict, and calls no operator/firmware method. Plan 108-04
-extends this module with `run_plan` -- the non-fatal per-step executor that
-composes existing `EpromOperator` methods only (still zero new firmware
-dispatch, zero VPP-set, zero raw wire dict).
+This module is pure compute over host-side byte arrays: it sets no VPP and
+calls no operator/firmware method itself. Plan 108-04 extends this module
+with `run_plan` -- the non-fatal per-step executor that composes existing
+`EpromOperator` methods only (still zero new firmware dispatch, zero
+VPP-set). v1.30 Phase 134 DELIBERATELY NARROWS the "builds no wire dict"
+half of that claim: this module passes exactly one `operation_flags` bit
+(`FLAG_SKIP_SDP_UNLOCK`, `constants.py:137`) on exactly one op (the SDP
+leg's inhibited-write step, `OP_WRITE_INHIBITED`, wired by plan 134-02's
+`_dispatch_sdp_leg`) -- stated explicitly here rather than silently
+violating the older, broader wording.
 """
 
 from __future__ import annotations
 
 import hashlib
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from firestarter import sdp_honesty  # unreadable_state_caveat(), called not re-authored
 from firestarter.chip_resolver import resolve_chip
-from firestarter.constants import FLAG_CAN_ERASE  # 0x02 -- do NOT redefine; import
+from firestarter.constants import (
+    FLAG_CAN_ERASE,  # 0x02 -- do NOT redefine; import
+    FLAG_SKIP_SDP_UNLOCK,  # 0x100 -- passed on OP_WRITE_INHIBITED ONLY (v1.30
+    # Phase 134, T-134-02, D-01). Do NOT redefine; import.
+)
 from firestarter.exceptions import (
     ChipNotFoundError,
     ChipNotImplementedError,
     EpromOperationError,
+    FirmwareOutdatedError,
+    HardwareOperationError,
+    ProgrammerNotFoundError,
+    SerialError,
 )
+from firestarter.sdp_capability import sdp_capability  # LEG-01/02's derivation source
 
 # ---------------------------------------------------------------------------
 # Address-derived pattern generator (PATT-01, D-01/D-02)
@@ -65,6 +81,31 @@ def generate_pattern(start: int, length: int) -> bytes:
     region (Phase 109's UV small-region write cap).
     """
     return bytes(address_fold_byte(start + i) for i in range(length))
+
+
+def generate_inhibited_pattern(start: int, length: int) -> bytes:
+    """The SDP leg's inhibited-write payload B (v1.30 Phase 134, D-19, LEG-03).
+
+    ⚠ P-01, the milestone's headline pitfall: `generate_pattern` is a PURE
+    function of `(start, length)`. Deriving B by calling `generate_pattern`
+    a SECOND time -- with the same region, or with a "different seed" that
+    reduces to the same region -- makes A and B byte-identical, and the
+    leg's central assertion ("the chip did not accept a write while locked")
+    a tautology that reads as correct in review. This function instead calls
+    `generate_pattern(start, length)` exactly ONCE and returns its bitwise
+    complement, so B is derived FROM A rather than independently re-derived
+    -- A and B are guaranteed to differ at every byte by construction, never
+    by chance.
+
+    A nonce or timestamp was rejected (D-19): it would break reproducibility
+    (two runs over the same region would no longer agree on B) and re-key
+    `dedup_fingerprint` (diagnostic_report.py) on every single run, since
+    `StepResult.op`'s hash is stable but this function's OUTPUT is not
+    otherwise consumed by that hash -- the reproducibility argument is the
+    one that matters here.
+    """
+    a = generate_pattern(start, length)
+    return bytes(~b & 0xFF for b in a)
 
 
 def prepass_images(length: int) -> tuple[bytes, bytes]:
@@ -293,6 +334,73 @@ OP_WRITE = "write"
 OP_WRITE_PARTIAL = "write-partial"
 OP_VERIFY = "verify"
 OP_ERASE = "erase"
+
+# SDP lock/unlock op strings (v1.30 Phase 133 D-02, LEG-09). Exactly two --
+# Phase 133 defines only the two ops its own mechanism criteria exercise;
+# Phase 134's other leg ops are deliberately NOT pre-defined here (`ruff`'s
+# `F` rules do not flag unused module-level constants, so extra constants
+# would be genuinely dead code for a whole phase). Engine-local op strings,
+# NOT wire constants -- no `constants.py` / `firestarter.h` mirroring is
+# triggered by adding these.
+OP_SDP_LOCK = "sdp-lock"
+OP_SDP_UNLOCK = "sdp-unlock"
+
+# The SDP leg's four remaining op strings (v1.30 Phase 134, D-06/D-07,
+# LEG-01/02/03/04/16). Engine-local op strings, NOT wire constants -- no
+# `constants.py` / `firestarter.h` mirroring is triggered by adding these,
+# so this phase needs no firmware lockstep and no `.hex` re-cut. Ordered in
+# the leg's own D-06 step order (baseline-B, baseline-A, inhibited,
+# restored) so a reader scanning top-to-bottom sees the same order the leg
+# runs in.
+#
+# D-07 chose TWO baseline ops (`write-baseline-b` / `write-baseline-a`)
+# rather than one folded `sdp-baseline` op: `DiagnosticReport.render()`'s
+# terminal-facing table shows only `op` / `verdict` / `error_code` /
+# `fingerprint` -- `reason` reaches only the markdown table and the JSON
+# block, so a failing baseline *direction* hidden inside `reason` would be
+# invisible to whoever reads the terminal, on the very step that decides
+# whether a lock is emitted at all. Two op strings make the failing
+# direction legible in the op string itself, mirroring the `write-partial`
+# precedent above ("every consumer that reads `StepResult.op` sees it
+# without learning a new field").
+OP_WRITE_BASELINE_B = "write-baseline-b"
+OP_WRITE_BASELINE_A = "write-baseline-a"
+OP_WRITE_INHIBITED = "write-inhibited"
+OP_WRITE_RESTORED = "write-restored"
+
+# The leg's own D-06 step order, single-sourced (v1.30 Phase 134, plan
+# 134-03, LEG-01/02/04). `derive_plan`'s emission below appends these six
+# `Step`s in EXACTLY this order, and every count assertion downstream
+# derives "six" from `len(_SDP_LEG_STEP_ORDER)` rather than restating the
+# number as a literal (P-08's derive-don't-restate discipline).
+#
+# ⚠ CORRECTION 2, recorded here rather than silently reconciled: ROADMAP
+# criterion 1, LEG-01 and LEG-02 all say the leg is a **four**-step
+# sequence. That text predates LEG-04's requirement for TWO transition
+# directions (a single baseline write cannot discriminate a dead write path
+# from a chip already holding the target pattern), and the ROADMAP's own
+# four-step enumeration omits `write-restored` entirely -- the ONLY step
+# that produces evidence the part was left writable again, on a family
+# whose protection state cannot be read back at all (`sdp_honesty`'s
+# Evidence Ceiling). Dropping it would end every run on `sdp-unlock OK` --
+# an EMISSION claim with nothing behind it (D-06). The leg implemented here
+# is SIX steps. Both readings (the inherited four, and the measured six)
+# are recorded in 134-03-SUMMARY.md; this is not a silent widening.
+_SDP_LEG_STEP_ORDER: tuple[str, ...] = (
+    OP_WRITE_BASELINE_B,
+    OP_WRITE_BASELINE_A,
+    OP_SDP_LOCK,
+    OP_WRITE_INHIBITED,
+    OP_SDP_UNLOCK,
+    OP_WRITE_RESTORED,
+)
+
+# D-18's `write_scope="none"` advisory prose, in the same
+# `'write_scope="none": ... omitted (D-01)'` shape the shipped write/verify/
+# erase `locked_destructive` reasons already use above -- naming the SDP
+# leg's own governing decision (D-18) rather than reusing D-01's tag on a
+# reason it does not own.
+_SDP_LOCKED_REASON = 'write_scope="none": {op} omitted (D-18)'
 
 
 @dataclass
@@ -572,6 +680,82 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
             Step(op=OP_ERASE, supported=False, reason=reason, destructive=True)
         )
 
+    # SDP leg emission (v1.30 Phase 134, D-06/D-07/D-18/D-20, LEG-01/02/04).
+    # Appended as a CONTIGUOUS block at the END of the step list, after the
+    # erase arm -- no shipped step's index moves (the existing
+    # `d_ops.index(OP_VERIFY) < d_ops.index(OP_ERASE)`-shaped comparisons
+    # stay true). Derived from `sdp_capability(name, db)` -- the injected
+    # decision source (LEG-01) -- never a re-implemented protocol/pinout
+    # heuristic; `sdp_capability` is itself fail-closed and count-pinned at
+    # 43 ALLOW / 41 REFUSE / 84 total. No new CLI option is introduced by
+    # this: `derive_plan`'s signature gains no parameter, so `dev test`
+    # keeps zero options (LEG-01's own constraint).
+    sdp_allowed, sdp_reason = sdp_capability(name, db)
+    if write_execute:
+        if sdp_allowed:
+            # ALLOW chip, a real `dev test` run: six real, executable steps,
+            # sharing the SAME write_region the shipped write arm above
+            # already computed (never re-derived -- ALLOW chips are all
+            # non-UV, per D-17, so this is always `_DEFAULT_REGION`).
+            for sdp_op in _SDP_LEG_STEP_ORDER:
+                steps.append(
+                    Step(
+                        op=sdp_op,
+                        supported=True,
+                        reason="",
+                        destructive=True,
+                        write_region=write_region,
+                    )
+                )
+        else:
+            # REFUSE chip, a real `dev test` run: six NA steps carrying
+            # sdp_capability()'s OWN refusal prose verbatim (LEG-02).
+            # `run_plan:877-879`'s existing NA path turns each into a
+            # `_skip_result(..., verdict=VERDICT_NA)` with NO operator
+            # call -- zero new machinery needed for LEG-02.
+            for sdp_op in _SDP_LEG_STEP_ORDER:
+                steps.append(
+                    Step(
+                        op=sdp_op,
+                        supported=False,
+                        reason=sdp_reason,
+                        destructive=True,
+                    )
+                )
+    elif sdp_allowed:
+        # ALLOW chip, write_scope="none": all six steps go to the advisory
+        # `locked_destructive` list instead of `steps` (D-18, mirroring the
+        # shipped write/verify/erase treatment above) -- these entries DO
+        # count toward count_applicable's M, so N < M and the banner fires,
+        # matching D-15's polarity.
+        for sdp_op in _SDP_LEG_STEP_ORDER:
+            locked_destructive.append((sdp_op, _SDP_LOCKED_REASON.format(op=sdp_op)))
+    # else: REFUSE chip, write_scope="none" -- emit NOTHING (neither a step
+    # nor a locked_destructive entry). This is a Claude's-Discretion
+    # refinement of D-18, taken on four measurements (134-CONTEXT.md D-18's
+    # plan-time refinement, recorded in 134-03-SUMMARY.md):
+    #   (1) tests/test_chip_test_sdp_leg.py::test_empty_registry_noop is
+    #       LEG-10's named evidence in REQUIREMENTS.md and asserts M8720's
+    #       (a REFUSE chip) write_scope="none" plan is UNCHANGED
+    #       (len(results) == 3) -- emitting NA steps here would turn that
+    #       proof RED, a regression-floor breach.
+    #   (2) tests/test_chip_test.py's shipped exact-equality
+    #       locked_destructive/locked_ops assertions for M8720 and AM2716
+    #       (both measured REFUSE chips) would break if six entries were
+    #       added to locked_destructive here.
+    #   (3) the house rule at tests/test_chip_test.py's NA-erase precedent:
+    #       an UNSUPPORTED step must never be fabricated as a
+    #       runnable/locked step -- a REFUSE chip's SDP steps are
+    #       unsupported by construction, so locked_destructive (an
+    #       ADVISORY-ONLY list of steps a destructive run WOULD run) is the
+    #       wrong home for them.
+    #   (4) write_scope="none" is UNREACHABLE from `dev test` since Phase
+    #       121's reversal (`_resolve_write_scope` returns only "full"/
+    #       "partial") -- so on every REACHABLE `dev test` run, REFUSE
+    #       chips DO receive the six NA steps (the `write_execute` branch
+    #       above), and LEG-02 is fully satisfied on the live path. This
+    #       branch is library/test surface only, never a live gate.
+
     return Plan(
         name=name,
         steps=steps,
@@ -633,7 +817,36 @@ VERDICT_MARGINAL = "marginal"
 # this frozenset would write to a misidentified chip ungated by the chip-ID
 # mismatch check, which is a critical-severity correctness bug, not a
 # cosmetic omission.
-_DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE})
+#
+# `OP_SDP_LOCK` joins it here too (v1.30 Phase 133 D-11, LEG-09): a lock
+# applied to a MISIDENTIFIED chip is exactly the harm this gate exists to
+# prevent, and membership is also what makes criterion 3's
+# gate-closed-from-the-start case observable at all -- a lock that cannot be
+# gated can never be SKIPPED. `OP_SDP_UNLOCK` is deliberately ABSENT: a
+# destructive gate closing AFTER the lock succeeded must never be able to
+# skip the unlock and ship a locked part. That asymmetry IS LEG-09. In Phase
+# 133 this absence is forward-protection for Phase 134 (where the unlock
+# becomes step 4 of the derived leg) -- it is NOT a live Phase 133 path,
+# because this phase derives no SDP step; the unlock here is only reachable
+# via a directly-constructed test Step or the cleanup registry (133-04).
+#
+# The four SDP-leg ops (v1.30 Phase 134, LEG-03) join here too: each one
+# mutates the part (a baseline write, the inhibited write, or the restore
+# write), so the chip-ID destructive gate must cover them exactly like any
+# other write-shaped op. `OP_SDP_UNLOCK` stays the one deliberate exception
+# above -- widening this set never touches that asymmetry.
+_DESTRUCTIVE_OPS = frozenset(
+    {
+        OP_WRITE,
+        OP_WRITE_PARTIAL,
+        OP_ERASE,
+        OP_SDP_LOCK,
+        OP_WRITE_BASELINE_B,
+        OP_WRITE_BASELINE_A,
+        OP_WRITE_INHIBITED,
+        OP_WRITE_RESTORED,
+    }
+)
 # LIVE DISPATCH ALLOW-LIST (121-02, T-121-05/06/07). Originally documented as
 # only the N>=2 disagreement-policy set (D-06: destructive/verify ONLY --
 # write, erase, verify; read disagreement is a divergence metric, never a
@@ -651,10 +864,96 @@ _DESTRUCTIVE_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE})
 # too -- any future op added to the vocabulary MUST be added to both
 # frozensets in this block or it fails closed by construction (proven by a
 # deliberate-break test, plan 121-06 Task 3).
+#
+# `OP_SDP_LOCK`/`OP_SDP_UNLOCK` are DELIBERATELY EXCLUDED here (v1.30 Phase
+# 133 D-03, LEG-09) -- and the exclusion is one of plan 133-06's asserted
+# parity exemptions, not an omission: running a lock twice is a second
+# mutation with no comparison value, and this set's marginal-on-disagreement
+# policy is meaningless for an emission whose result cannot be read back at
+# all -- SDP protection state is not readable on this family (Phase 117 D-05,
+# Phase 119 D-12). SDP emissions are single-run; they dispatch through
+# `_dispatch_sdp` instead (`_SDP_OPS`, below).
 _MULTI_RUN_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE, OP_VERIFY})
+
+# LIVE DISPATCH ALLOW-LIST for the SDP arm (v1.30 Phase 133 D-01/D-02,
+# LEG-09). `_dispatch_sdp` refuses any op outside this frozenset. A module
+# constant is used rather than a DB field because anything that widens a
+# blast radius is an engine constant in this module (the
+# `_WRITE_REGION_LENGTH` / `_UV_WRITE_REGION_LENGTH` precedent) -- a
+# DB-supplied op string could otherwise smuggle in an op this module never
+# vetted. This module's own known failure mode is a documented-but-dead
+# frozenset -- `_MULTI_RUN_OPS` once shipped with ZERO references tree-wide
+# (RESEARCH C-5 / Open Question 4, above) -- so `_SDP_OPS` is referenced by
+# live code in `_dispatch_step`'s arm 5, and that reference is exercised by
+# `tests/test_chip_test_sdp_leg.py::test_dispatch_sdp_maps_bool_to_verdict`.
+_SDP_OPS = frozenset({OP_SDP_LOCK, OP_SDP_UNLOCK})
+
+# The SDP leg's own registry (v1.30 Phase 134, T-134-01, LEG-03). A module
+# constant, never a DB field, for the same reason `_SDP_OPS` and
+# `_WRITE_REGION_LENGTH` are: anything that widens a blast radius lives in
+# this module, never in a DB entry a malicious/misconfigured chip could
+# supply. Like `_SDP_OPS` before it, this module's known failure mode is a
+# documented-but-dead frozenset with zero tree-wide references -- plan
+# 134-04's baseline gate (`_baseline_closes_sdp_gate`, D-08/D-20) is this
+# set's live consumer.
+_SDP_LEG_OPS = frozenset(
+    {
+        OP_WRITE_BASELINE_B,
+        OP_WRITE_BASELINE_A,
+        OP_WRITE_INHIBITED,
+        OP_WRITE_RESTORED,
+    }
+)
+
+# The baseline gate's inputs and outputs (v1.30 Phase 134, plan 134-04,
+# D-08/D-20). `_SDP_BASELINE_OPS` is what `_baseline_closes_sdp_gate` is
+# evaluated FROM -- the two baseline-direction steps whose own verdict
+# decides whether a lock may be emitted. Disjoint from `_SDP_LEG_GATED_OPS`
+# by construction: a baseline op decides the gate and always runs
+# regardless of its own state (both directions must be attempted -- a
+# failing `write-baseline-b` followed by a passing `write-baseline-a` must
+# still leave the gate CLOSED, never reopened), while a gated op is what
+# the gate, once closed, SKIPS.
+_SDP_BASELINE_OPS = frozenset({OP_WRITE_BASELINE_B, OP_WRITE_BASELINE_A})
+
+# `_SDP_LEG_GATED_OPS` -- the gate's outputs, closed by
+# `_baseline_closes_sdp_gate`. `OP_SDP_UNLOCK`'s membership here is **D-20**
+# (operator decision 2026-08-04), which SUPERSEDES D-08's own
+# literally-written clause ("sdp-unlock is never attempted because nothing
+# was locked"): that clause was measured-WRONG -- `OP_SDP_UNLOCK` is
+# deliberately ABSENT from `_DESTRUCTIVE_OPS` (LEG-09), so as D-08 was
+# literally written the unlock step would RUN and report OK at a part that
+# was never locked (the P-06 emission-claim shape: an emission claim read
+# as a state claim, on a run whose premise -- a lock was emitted -- did not
+# hold). Joining `_SDP_LEG_GATED_OPS` is a DIFFERENT mechanism from
+# `_DESTRUCTIVE_OPS`/the chip-ID destructive gate above: LEG-09 stays
+# scoped EXCLUSIVELY to that gate (`test_unlock_exempt_from_destructive`,
+# `test_lock_ran_then_gate_closes`, both unchanged and still green) -- D-20
+# does not weaken it, because a *destructive*-gate closure and a
+# *baseline*-gate closure are two structurally separate flags
+# (`destructive_gate_closed` vs. `baseline_gate_closed`, wired
+# independently in `run_plan`, below).
+_SDP_LEG_GATED_OPS = frozenset(
+    {OP_SDP_LOCK, OP_WRITE_INHIBITED, OP_SDP_UNLOCK, OP_WRITE_RESTORED}
+)
 
 _DESTRUCTIVE_GATE_REASON = (
     "chip-ID mismatch — destructive steps gated (chip left pristine)"
+)
+
+# The SDP leg's own gate-closure reasons (v1.30 Phase 134, D-08/D-20),
+# consumed by plan 134-04's baseline gate. Both name the family FACT (the
+# baseline write/read-back transition did not complete; the part is left as
+# found) -- never a mechanism name, and never `_DESTRUCTIVE_GATE_REASON`'s
+# chip-ID wording, which would mislead a reader into thinking chip-ID
+# closed the gate when the write path did (D-08's own rejected alternative).
+_SDP_BASELINE_GATE_REASON = (
+    "baseline write/read-back transition did not complete — "
+    "no lock was emitted (part left as found)"
+)
+_SDP_UNLOCK_GATE_REASON = (
+    "baseline gate closed before a lock was emitted — "
+    "no lock was emitted, so there is nothing to unlock"
 )
 
 
@@ -704,6 +1003,21 @@ def _resolve_or_none(
         reason = str(exc) or exc.__class__.__name__
         return None, _skip_result("", reason), reason
     return eprom_data, None, ""
+
+
+# The cleanup drain's per-callable narrow exception set (v1.30 Phase 133
+# D-10, LEG-10). Named exactly the same three classes `_run_step`'s D-08
+# degrading clause and EpromOperationError clause catch on the step path --
+# declared once as a module constant so plan 133-06's op-registry parity
+# reasoning has a single named fact to point at, rather than the tuple
+# being re-typed inline at the drain site. Deliberately NOT also naming
+# ProgrammerNotFoundError/FirmwareOutdatedError: both are SerialError
+# subclasses already covered by the first tuple element, so listing them
+# again would be redundant, not narrower -- and it is precisely this
+# inclusion-by-subclass that makes a run-fatal condition surfacing during
+# cleanup swallowed here (a deliberate difference from the step path,
+# which RE-RAISES those two -- see run_plan's finally, below).
+_UNLOCK_CLEANUP_SWALLOWED = (SerialError, HardwareOperationError, EpromOperationError)
 
 
 def run_plan(
@@ -759,6 +1073,19 @@ def run_plan(
     write contract) and never aborts the write step. `sampler=None` (the
     default) is a proven no-op: it adds zero calls and leaves every existing
     caller's `StepResult` list unchanged.
+
+    A generic cleanup registry (v1.30 Phase 133 D-06, LEG-10) is drained in
+    a bare `try/finally` around the whole step loop: a successful
+    `OP_SDP_LOCK` step registers its matching unlock, and the drain runs it
+    regardless of how the loop exits -- including on a raised exception or
+    `KeyboardInterrupt`/`SystemExit`, both of which still propagate
+    unchanged afterward. An EMPTY registry (every currently-shipping run,
+    since this phase derives no SDP step) is a proven no-op mirroring the
+    `sampler=None` claim above: it adds zero calls and leaves every
+    existing caller's `StepResult` list unchanged. On the propagating path
+    the report is honestly forfeited -- the caller's `results =
+    run_plan(...)` assignment never completes, so there is nothing to
+    render (D-07's residual).
     """
     if runs < 2:
         return [
@@ -775,23 +1102,191 @@ def run_plan(
 
     results: list[StepResult] = []
     destructive_gate_closed = False
+    # The SDP baseline gate (v1.30 Phase 134, plan 134-04, D-08/D-20) --
+    # a SEPARATE flag from `destructive_gate_closed` above, deliberately:
+    # the two gates are structurally different mechanisms (chip-ID mismatch
+    # vs. a baseline write/read-back transition that did not complete), and
+    # the SDP-leg's own gate-closure reasons (`_SDP_BASELINE_GATE_REASON`/
+    # `_SDP_UNLOCK_GATE_REASON`) must never be confused with
+    # `_DESTRUCTIVE_GATE_REASON`'s chip-ID wording. STICKY by construction
+    # (only ever set True, never reset False) so a failing `write-baseline-b`
+    # followed by a passing `write-baseline-a` cannot reopen it.
+    baseline_gate_closed = False
+    # Cleanup registry (v1.30 Phase 133 D-06, LEG-10): a plain `list` of
+    # zero-argument callables, deliberately GENERIC rather than a hardcoded
+    # lock-to-unlock window with the unlock written inline. The inline form
+    # is literally what research P-20 prevention #2 describes and is
+    # simpler -- but Phase 134's four-step leg, and any later
+    # cleanup-needing op, would each have to re-open `run_plan` to widen
+    # the special case, and a special case widened three times is how this
+    # loop's flat shape rotted in the first place. Drained in
+    # REGISTRATION order below -- deliberately NOT `contextlib.ExitStack`:
+    # measured, not assumed, `ExitStack.close()` drains LIFO (reversing
+    # registration order) and a raising callback makes `close()` re-raise,
+    # which inside a `finally` REPLACES the in-flight exception and demotes
+    # the original to `__context__` -- precisely the masking D-10 exists to
+    # prevent.
+    cleanup: list[Callable[[], None]] = []
 
-    for step in plan.steps:
-        if not step.supported:
-            results.append(_skip_result(step.op, step.reason, verdict=VERDICT_NA))
-            continue
+    # De-registration handle (v1.30 Phase 134, plan 134-04, D-11/RESEARCH
+    # §4.2). With this phase's explicit `sdp-unlock` step now a real plan
+    # step, a successful lock both REGISTERS a cleanup (above) AND the plan
+    # step RUNS the unlock explicitly -- two unlock emissions without this
+    # handle. Holds the specific callable a successful lock registered so a
+    # later successful explicit unlock can `cleanup.remove(...)` it -- by
+    # VALUE, never by wiping the whole registry (which is deliberately
+    # GENERIC, see the registry's own comment above). Reset to `None` once
+    # removed; a FAILED explicit unlock leaves it registered so the drain
+    # still retries it.
+    unlock_cleanup: Callable[[], None] | None = None
 
-        if step.op in _DESTRUCTIVE_OPS and destructive_gate_closed:
-            results.append(_skip_result(step.op, _DESTRUCTIVE_GATE_REASON))
-            continue
+    # `runs < 2` stays OUTSIDE this `try` (above): nothing is registered
+    # yet, so there is nothing to drain. `results`, `destructive_gate_closed`
+    # and `cleanup` are all created BEFORE the `try`. `return results` stays
+    # INSIDE the `try`, textually unchanged.
+    try:
+        for step in plan.steps:
+            if not step.supported:
+                results.append(_skip_result(step.op, step.reason, verdict=VERDICT_NA))
+                continue
 
-        result = _run_step(plan.name, step, operator, db, runs=runs, sampler=sampler)
-        results.append(result)
+            if step.op in _DESTRUCTIVE_OPS and destructive_gate_closed:
+                results.append(_skip_result(step.op, _DESTRUCTIVE_GATE_REASON))
+                continue
 
-        if step.op == OP_ID:
-            destructive_gate_closed = _id_step_closes_gate(result)
+            # The SDP baseline gate (v1.30 Phase 134, D-08/D-20). Ordered
+            # AFTER the chip-ID destructive gate above and BEFORE the
+            # dispatch call below -- load-bearing: the chip-ID gate fires
+            # first and renders its OWN wording, so a write-path closure is
+            # never misattributed to a chip-ID mismatch. `_SDP_LEG_GATED_OPS`
+            # never includes either baseline op itself (`_SDP_BASELINE_OPS`)
+            # -- both baseline directions always run regardless of this
+            # flag's state, because they are what DECIDE it.
+            if step.op in _SDP_LEG_GATED_OPS and baseline_gate_closed:
+                reason = (
+                    _SDP_UNLOCK_GATE_REASON
+                    if step.op == OP_SDP_UNLOCK
+                    else _SDP_BASELINE_GATE_REASON
+                )
+                results.append(_skip_result(step.op, reason))
+                continue
 
-    return results
+            result = _run_step(
+                plan.name, step, operator, db, runs=runs, sampler=sampler
+            )
+            results.append(result)
+
+            if step.op == OP_SDP_LOCK and result.verdict == VERDICT_OK:
+                # Register the unlock ONLY on a successful lock (D-06):
+                # registering after a failed lock would attempt to unlock a
+                # part that was never locked. Routed through `_run_step`
+                # rather than calling `_dispatch_sdp` directly because
+                # `run_plan` does not have `eprom_data` in scope -- the
+                # resolve happens inside `_run_step` -- and this reuses
+                # the resolver, the dispatch arm, and plan 133-02's
+                # exception mapping.
+                #
+                # A nested `def` (not a `lambda: _run_step(...)`) so the
+                # returned `StepResult` is DISCARDED as a statement, not an
+                # expression -- it must never reach `results` (see the
+                # `finally` below) -- and so the registered callable's
+                # actual inferred return type is `None`, matching
+                # `cleanup`'s declared `Callable[[], None]` element type
+                # (a `lambda` returning the `StepResult` expression would
+                # be a real mypy `arg-type` mismatch here, not merely a
+                # style choice).
+                def _unlock_cleanup() -> None:
+                    _run_step(
+                        plan.name,
+                        Step(op=OP_SDP_UNLOCK, supported=True, reason=""),
+                        operator,
+                        db,
+                        runs=runs,
+                    )
+
+                cleanup.append(_unlock_cleanup)
+                # Hold the handle so a later successful EXPLICIT unlock step
+                # (below) can de-register it -- see `unlock_cleanup`'s own
+                # comment above (D-11/RESEARCH §4.2).
+                unlock_cleanup = _unlock_cleanup
+
+            if (
+                step.op == OP_SDP_UNLOCK
+                and result.verdict == VERDICT_OK
+                and unlock_cleanup is not None
+            ):
+                # The explicit plan-derived unlock step SUCCEEDED: the
+                # registered cleanup from the matching lock above is no
+                # longer needed -- remove it by VALUE (`cleanup.remove`),
+                # never by wiping the whole registry, so a completed leg
+                # emits exactly one `sdp_unlock` call, not two (D-11/
+                # RESEARCH §4.2). A FAILED explicit unlock (non-OK verdict)
+                # deliberately leaves `unlock_cleanup` registered so the
+                # `finally` drain below still retries it.
+                cleanup.remove(unlock_cleanup)
+                unlock_cleanup = None
+
+            if step.op == OP_ID:
+                destructive_gate_closed = _id_step_closes_gate(result)
+
+            if step.op in _SDP_BASELINE_OPS:
+                # Sticky by construction (only ever ORed True, never reset
+                # False): a failing `write-baseline-b` followed by a
+                # passing `write-baseline-a` must leave the gate CLOSED,
+                # never reopened (D-08).
+                baseline_gate_closed = (
+                    baseline_gate_closed or _baseline_closes_sdp_gate(result)
+                )
+
+        return results
+    finally:
+        # Bare `finally`, NO `except` clause of any width (criteria 1+2):
+        # this is the ONE construct that reaches
+        # `KeyboardInterrupt`/`SystemExit` while still letting them
+        # propagate unchanged. P-20's prevention text asking for a
+        # `try/finally` "wide enough to catch `BaseException`" is
+        # unnecessary and self-defeating here -- an `except BaseException:`
+        # would violate criterion 2 (Ctrl-C must stay Ctrl-C) and would be
+        # flagged by plan 133-05's bare-except deny-rule.
+        #
+        # The drain below NEVER appends into `results` and NEVER
+        # references it at all: `results` is returned by reference, so a
+        # mutation here would be visible to the caller, and that same list
+        # feeds seven consumers in `cli_handlers.py` (the `run_plan` call
+        # site, `count_applicable`, the generic renderer, the JSON
+        # artifact, the markdown table, `build_db_diff`, and
+        # `sys.exit(max(...))`) -- `count_applicable` would render "8 of 7
+        # ran". The registry is empty on every currently-shipping run in
+        # this phase (no plan derives an SDP step), so this is LATENT here
+        # and would DETONATE in Phase 134.
+        #
+        # Each callable gets its OWN narrow `try/except` (D-10) over
+        # exactly `_UNLOCK_CLEANUP_SWALLOWED`, and the drain CONTINUES past
+        # a caught failure rather than stranding the entries behind it in
+        # the registry -- never `raise` from this `finally`. An exception
+        # raised from a `finally` REPLACES the in-flight exception, so a
+        # raising cleanup must never be allowed to mask the original fault
+        # or the user's Ctrl-C. A run-fatal condition surfacing during
+        # cleanup is a DELIBERATE difference from the step path, not an
+        # oversight: `ProgrammerNotFoundError`/`FirmwareOutdatedError` are
+        # `SerialError` subclasses, so the `SerialError` arm of
+        # `_UNLOCK_CLEANUP_SWALLOWED` DOES catch them here, whereas
+        # `_run_step`'s D-08 clause RE-RAISES those same two on the step
+        # path.
+        #
+        # What "recorded" means here (reconciling D-10 with D-16): the
+        # attempt and its outcome are observable only through the operator
+        # double in Phase 133 -- `chip_test.py` has no logger and no
+        # `logging` import (the bench-free pure-compute engine that emits
+        # nothing), `exc.add_note()` is 3.11+ against this module's >=3.9
+        # floor, and the drain must not touch `results`. The honest
+        # residual: a failed unlock is NOT user-visible until Phase 134's
+        # `HELD`/`NOT-RUN` report field (LEG-12).
+        for cleanup_call in cleanup:
+            try:
+                cleanup_call()
+            except _UNLOCK_CLEANUP_SWALLOWED:
+                continue
 
 
 def _id_step_closes_gate(result: StepResult) -> bool:
@@ -806,6 +1301,135 @@ def _id_step_closes_gate(result: StepResult) -> bool:
     stays open subject to the plan's own `--destructive` annotation.
     """
     return result.verdict in (VERDICT_BAD, VERDICT_SKIPPED)
+
+
+def _baseline_closes_sdp_gate(result: StepResult) -> bool:
+    """D-08/D-20: close the SDP baseline gate on ANY non-OK baseline verdict.
+
+    Mirrors `_id_step_closes_gate`'s shape immediately above -- a pure
+    `StepResult -> bool` predicate `run_plan` consults after running one of
+    `_SDP_BASELINE_OPS` -- but deliberately WIDER: it closes on BAD,
+    `marginal`, `SKIPPED` **and** `NA`, not `_id_step_closes_gate`'s
+    narrower `(VERDICT_BAD, VERDICT_SKIPPED)` tuple. A contact fault
+    (`marginal`) is as disqualifying as a proven-dead write path (BAD): a
+    lock must never be emitted at a part whose write path was not
+    demonstrated to transition in BOTH directions (`write-baseline-b` AND
+    `write-baseline-a`), so anything short of a clean OK on either baseline
+    direction closes the gate. `result.verdict != VERDICT_OK` expresses
+    that widening directly, rather than enumerating the four non-OK
+    verdicts by name.
+    """
+    return result.verdict != VERDICT_OK
+
+
+# LEG-12's three-valued hold-state REPORT VALUES (v1.30 Phase 134, plan
+# 134-04, D-10/D-12/D-15). These are report values, NOT op strings -- they
+# carry no `OP_` prefix and must never join `_ALL_OPS`/`_MULTIWORD_OP_VALUES`
+# in tests/test_op_registration_parity.py; a later reader must not
+# "helpfully" register them there.
+SDP_HOLD_HELD = "HELD"
+SDP_HOLD_NOT_HELD = "NOT-HELD"
+SDP_HOLD_NOT_RUN = "NOT-RUN"
+
+
+def sdp_oracle_applicable(plan: Plan) -> bool:
+    """`True` iff `plan` carries a RUNNABLE `write-inhibited` entry (LEG-12).
+
+    Derived STRUCTURALLY from the `plan` object the caller already holds --
+    never a second call to `sdp_capability`, which would be a second source
+    of truth that could drift from `derive_plan`'s own decision (the same
+    single-source-of-truth discipline D-15 applies to `count_applicable`).
+
+    `True` when `plan.steps` carries an `OP_WRITE_INHIBITED` `Step` with
+    `supported=True` (a real `dev test` run, ALLOW chip), OR when
+    `plan.locked_destructive` carries an `OP_WRITE_INHIBITED` `(op, reason)`
+    pair (the `write_scope="none"` ALLOW-chip shape, D-18). `False` for a
+    REFUSE chip: its `OP_WRITE_INHIBITED` step IS present in `plan.steps`
+    (LEG-02's NA path), but with `supported=False` -- the oracle never runs
+    for a REFUSE chip, so that presence must not count as "applicable".
+    """
+    for step in plan.steps:
+        if step.op == OP_WRITE_INHIBITED and step.supported:
+            return True
+    return any(op == OP_WRITE_INHIBITED for op, _reason in plan.locked_destructive)
+
+
+def sdp_hold_state(plan: Plan, results: list[StepResult]) -> str:
+    """LEG-12's pure `HELD`/`NOT-HELD`/`NOT-RUN(reason)` derivation.
+
+    Pure, no logger, no I/O (this module has neither and stays that way --
+    see `_UNLOCK_CLEANUP_SWALLOWED`'s own comment above). Reads `results`
+    for the `write-inhibited` `StepResult`, if any:
+
+    - verdict OK -> `SDP_HOLD_HELD` (the inhibited write was correctly
+      refused -- the part held its lock).
+    - verdict BAD -> `SDP_HOLD_NOT_HELD` (the inhibited write WAS accepted
+      -- the lock leaked, LEG-06's shape).
+    - verdict NA / `SKIPPED` / `marginal`, OR the step entirely ABSENT from
+      `results` (laundering route R6 -- a plan that never derived the step
+      at all) -> `f"{SDP_HOLD_NOT_RUN}: {reason}"`, where `reason` is that
+      result's own `reason` when one is present and non-empty, and
+      otherwise fixed prose naming the family fact -- composed by CALLING
+      `sdp_honesty.unreadable_state_caveat()`, never re-authoring its
+      sentence.
+
+    `plan` is accepted (not merely `results`) to match `count_applicable`'s
+    own two-argument signature shape, and so a future caller extending the
+    NOT-RUN reason with plan-derived context (e.g. distinguishing a REFUSE
+    chip from an absent step) has it available without changing every call
+    site; this revision derives everything it returns from `results` alone.
+
+    Returns `str` ALWAYS -- never `True`/`False`/`None` (P-06 prevention 3:
+    a JSON boolean here would read as ground truth for a state this family
+    cannot report; plan `134-06` adds the committed assertion that no such
+    boolean exists anywhere in `to_dict()`).
+    """
+    result: StepResult | None = None
+    for r in results:
+        if r.op == OP_WRITE_INHIBITED:
+            result = r
+            break
+
+    if result is not None and result.verdict == VERDICT_OK:
+        return SDP_HOLD_HELD
+    if result is not None and result.verdict == VERDICT_BAD:
+        return SDP_HOLD_NOT_HELD
+
+    if result is not None and result.reason:
+        reason = result.reason
+    else:
+        reason = (
+            "the SDP inhibited-write oracle did not run for this chip. "
+            f"{sdp_honesty.unreadable_state_caveat()}"
+        )
+    return f"{SDP_HOLD_NOT_RUN}: {reason}"
+
+
+def sdp_left_writable(results: list[StepResult]) -> bool:
+    """D-12's loud-form predicate (v1.30 Phase 134, plan 134-08, LEG-14):
+    `True` iff `results` itself demonstrates the run confirmed the part
+    still accepts a write, i.e. the `write-restored` `StepResult` is
+    present AND its verdict is `VERDICT_OK`.
+
+    Pure, no I/O, no logger -- same discipline as `sdp_hold_state` above.
+    `False` when `write-restored` is absent entirely from `results`
+    (laundering route R6 -- a plan that never derived the step at all) OR
+    present with any verdict OTHER than OK (`BAD`/`NA`/`SKIPPED`/
+    `marginal`) -- every one of those means this run did NOT itself
+    demonstrate the part still writes, which is exactly the "did not
+    confirm the part writable again" term `cli_handlers._sdp_recovery_line`
+    keys its LOUD recovery form on.
+
+    Lives here rather than in `cli_handlers.py` for the same three reasons
+    `sdp_hold_state` does: `chip_test.py` is scanned in full (P-07), it
+    sits outside the mypy strict island (`cli_handlers.py` has only 2 of
+    headroom), and it keeps op-string knowledge (`OP_WRITE_RESTORED`,
+    `VERDICT_OK`) out of the handler.
+    """
+    for r in results:
+        if r.op == OP_WRITE_RESTORED:
+            return r.verdict == VERDICT_OK
+    return False
 
 
 # Region used for the write/verify address-derived pattern fingerprint
@@ -865,8 +1489,15 @@ def _run_step(
 ) -> StepResult:
     """Execute a single supported step through the guard-honoring resolver.
 
-    Wraps the ENTIRE step body (resolve + dispatch) in try/except so no
-    exception escapes to the `run_plan` loop (Pitfall 1). Reference:
+    Wraps only the DISPATCH half (the `_dispatch_step` call) of the step body
+    in try/except (Pitfall 1) -- the resolve half above it, via
+    `_resolve_or_none`, sits OUTSIDE this `try` and is covered only by that
+    function's own narrower `(ChipNotImplementedError, ChipNotFoundError)`
+    handler. An exception class other than those two raised during
+    resolution still propagates out of `run_plan` unchanged; `resolve_chip`
+    is currently a pure DB lookup plus `convert_to_programmer` transform with
+    no measured path to a `SerialError`, so this is recorded as a latent
+    residual (research assumption A2), not a closed gap. Reference:
     cli_handlers.py:1568 `dev_validate_family` -- the same
     `resolve_chip(name, db=...)` + operator-method compose pattern used here.
 
@@ -883,6 +1514,39 @@ def _run_step(
     try:
         return _dispatch_step(
             name, step, eprom_data, operator, runs=runs, sampler=sampler
+        )
+    except (ProgrammerNotFoundError, FirmwareOutdatedError):
+        # D-08/LEG-11: these two SerialError subclasses are run-fatal
+        # host-setup conditions ("no programmer attached", "firmware too
+        # old"), not chip findings -- they belong to cli_handlers.py's
+        # @map_typed_errors mapper, which already renders them as
+        # ClickExceptions with stable exit codes. This clause MUST precede
+        # the (SerialError, HardwareOperationError) clause below: both are
+        # SerialError subclasses and Python matches the first satisfying
+        # except clause. If the order were inverted, a no-board or
+        # old-firmware run would degrade every remaining destructive/verify
+        # step to BAD instead of escaping once, producing a six-BAD-step
+        # report that reads as a broken chip when the real fault is a
+        # missing/outdated host setup -- this project's documented
+        # false-green no-board trap, reproduced structurally.
+        raise
+    except (SerialError, HardwareOperationError) as exc:
+        # D-08/LEG-11: a half-seated cable or other transport-level fault
+        # (SerialError itself, SerialTimeoutError, or HardwareOperationError
+        # -- a sibling of Exception, not an EpromOperationError subclass, so
+        # the existing `except EpromOperationError` clause below never
+        # reaches it) degrades THIS ONE step to a recorded BAD result;
+        # `run_plan` still returns a full report for every other step.
+        # `error_code` is deliberately omitted: neither SerialError nor
+        # HardwareOperationError carries that attribute -- only
+        # EpromOperationError does -- so copying the existing handler
+        # wholesale would raise AttributeError at the moment this handler is
+        # supposed to be recovering.
+        return StepResult(
+            op=step.op,
+            verdict=VERDICT_BAD,
+            reason=str(exc),
+            run_count=1,
         )
     except EpromOperationError as exc:
         return StepResult(
@@ -913,9 +1577,14 @@ def _dispatch_step(
     single run; read -> `runs`-times with a byte-level divergence metric
     (D-06, never a verdict flip); write/verify/erase -> `runs`-times with a
     marginal-on-disagreement policy (D-05/D-06); write/verify additionally
-    attach a `Fingerprint` (PATT-02 wiring, Pitfall 3 addr_base). The engine
-    sets NO VPP, builds NO wire dict, and passes NO --force -- it only calls
-    the operator's existing public methods.
+    attach a `Fingerprint` (PATT-02 wiring, Pitfall 3 addr_base). SDP
+    lock/unlock (v1.30 Phase 133 D-01/D-04, LEG-09) -> single run via
+    `_dispatch_sdp`, arm 5. The SDP leg's four write-shaped ops (v1.30 Phase
+    134 T-134-02, LEG-05/06/07/08/16) -> single run via `_dispatch_sdp_leg`,
+    arm 6, LAST -- see below. The engine sets NO VPP, builds NO wire dict
+    (except the one `FLAG_SKIP_SDP_UNLOCK` bit on `OP_WRITE_INHIBITED`, a
+    deliberate D-01 narrowing), and passes NO --force -- it only calls the
+    operator's existing public methods.
 
     `sampler` (D-04) is threaded through unchanged to `_dispatch_multi_run`,
     the only op with a bracket site (OP_WRITE); `None` is the default and a
@@ -941,6 +1610,34 @@ def _dispatch_step(
         return _dispatch_multi_run(
             step.op, name, eprom_data, operator, runs=runs, sampler=sampler, step=step
         )
+    # Arm 5, LAST (v1.30 Phase 133 D-04, LEG-09) -- immediately above the
+    # terminal fail-closed `return` below. The measured arm order above is
+    # OP_ID -> OP_BLANK_CHECK -> OP_READ -> _MULTI_RUN_OPS -> here, so all
+    # seven ops shipped before this phase return from arms 1-4 and NEVER
+    # evaluate this membership test at all -- proven mechanically by
+    # `tests/test_chip_test_sdp_leg.py::test_shipped_ops_never_reach_sdp_arm`
+    # (D-13b's sentinel), not merely asserted. Keys on `_SDP_OPS` membership
+    # of the op string rather than a new `Step.group` field (D-05) -- the op
+    # string already carries the distinction, the argument this module
+    # itself makes for `write-partial` above. Honest consequence, recorded
+    # rather than smoothed over: ROADMAP criterion 4's clause about "an op
+    # with `group=None` takes the exact pre-existing dispatch path" is then
+    # satisfied VACUOUSLY -- there is no `group` field, so no op has
+    # `group=None`. Criterion 4's *intent* (shipped ops behaviourally
+    # unchanged at zero added branching cost) is met by arm placement plus
+    # the sentinel test instead; the criterion's literal wording is not
+    # something this phase tests.
+    if step.op in _SDP_OPS:
+        return _dispatch_sdp(step.op, name, eprom_data, operator)
+    # Arm 6 (v1.30 Phase 134 T-134-02, LEG-05/06/07/08/16) -- immediately
+    # after arm 5 and still above the terminal fail-closed `return` below.
+    # Routes the SDP leg's four write-shaped ops to the read-back-equality
+    # oracle. Placing it before arm 5 (or before arms 1-4) would break
+    # tests/test_chip_test_sdp_leg.py::test_shipped_ops_never_reach_sdp_arm,
+    # which proves every op shipped before this phase returns from an
+    # earlier arm and never evaluates this membership test at all.
+    if step.op in _SDP_LEG_OPS:
+        return _dispatch_sdp_leg(step.op, name, eprom_data, operator, step=step)
     return StepResult(
         op=step.op,
         verdict=VERDICT_BAD,
@@ -1179,6 +1876,320 @@ def _dispatch_multi_run(
         reason=reason,
         run_count=runs,
         fingerprint=fingerprint,
+    )
+
+
+def _dispatch_sdp(
+    op: str, name: str, eprom_data: dict[str, Any], operator: Any
+) -> StepResult:
+    """Dispatch an SDP lock/unlock op to its matching `EpromOperator` method.
+
+    Signature is a FORWARD CONTRACT (v1.30 Phase 133 D-01, LEG-09): the same
+    first four positional parameters as `_dispatch_multi_run` --
+    `(op: str, name: str, eprom_data: dict[str, Any], operator: Any)` --
+    because ROADMAP Phase 134's "Depends on" line names this arm verbatim
+    and builds its four-step leg on it. No keyword-only parameters: SDP
+    emissions are single-run (D-03, `_MULTI_RUN_OPS` exclusion above), so
+    `runs` and `sampler` are deliberately absent here, not merely omitted by
+    oversight.
+
+    Structurally clones `_dispatch_multi_run`'s guard -> branch -> terminal
+    `raise AssertionError` shape (D-01) rather than importing/reusing it, so
+    the module gains no new idiom and criterion 5's deliberate-break test
+    gets a single choke point to attack.
+    """
+    if op not in _SDP_OPS:
+        return StepResult(
+            op=op,
+            verdict=VERDICT_BAD,
+            run_count=0,
+            reason=(
+                f"op {op!r} is not in the SDP dispatch allow-list "
+                "(_SDP_OPS) — refused fail-closed rather than falling "
+                "through to an operator mutation method"
+            ),
+        )
+
+    if op == OP_SDP_LOCK:
+        is_ok = operator.sdp_lock(name, eprom_data)
+    elif op == OP_SDP_UNLOCK:
+        is_ok = operator.sdp_unlock(name, eprom_data)
+    else:
+        # Unreachable in practice: the fail-closed `_SDP_OPS` guard above
+        # already refused any op outside {OP_SDP_LOCK, OP_SDP_UNLOCK} before
+        # this branch could be reached. Kept as an explicit `else: raise`,
+        # deliberately NOT a bare `else` -- the pre-Phase-121 shape that
+        # silently routed an unmapped op to `erase_eprom()` and reported OK
+        # is what this refuses to reintroduce (RESEARCH Pitfall 1a).
+        # `AssertionError` is not a `SerialError`, `HardwareOperationError`,
+        # or `EpromOperationError`, so `_run_step`'s D-08 except chain does
+        # not catch it and it escapes loudly -- the intended behaviour,
+        # proven by
+        # tests/test_chip_test_sdp_leg.py::
+        # test_dispatch_sdp_terminal_assertion_is_reachable_only_by_bypassing_the_guard.
+        raise AssertionError(f"unreachable: op {op!r} passed the _SDP_OPS guard")
+
+    return StepResult(op=op, verdict=VERDICT_OK if is_ok else VERDICT_BAD, run_count=1)
+
+
+def _dispatch_sdp_leg(
+    op: str,
+    name: str,
+    eprom_data: dict[str, Any],
+    operator: Any,
+    *,
+    step: Step | None = None,
+) -> StepResult:
+    """Dispatch one of the SDP leg's four write-shaped ops to the
+    READ-BACK-EQUALITY oracle (v1.30 Phase 134, T-134-02, D-01...D-05,
+    LEG-05/06(engine half)/07/08/16).
+
+    This is the milestone's reason to exist: the verdict comes from
+    comparing the read-back bytes against what SHOULD be there, never from
+    `write_eprom`'s own bool. A write that returns without error is NOT, by
+    itself, evidence of anything -- see D-01 below.
+
+    A SEPARATE dispatcher from `_dispatch_sdp` (133 D-01's frozen four-
+    positional forward contract, unchanged here): these four ops need a
+    source payload, a read-back, and an `operation_flags` argument that
+    signature cannot carry. Structurally clones `_dispatch_sdp`'s /
+    `_dispatch_multi_run`'s guard -> branch -> terminal `raise
+    AssertionError` shape rather than importing/reusing either.
+
+    ⚠ D-01 (measured, not merely designed around): the `0x86` opt-out ack
+    is UNOBSERVABLE from this module. `_operation_context`'s `finally`
+    calls `_disconnect_programmer()` (`eprom_operations.py:405-416`), which
+    sets `self.comm = None` before `write_eprom` returns, so
+    `comm.seen_message_ids` is gone by the time this function could read
+    it. Research's truth-table branch 5 (the ack readable as a SEPARATE
+    signal) is THEREFORE NOT IMPLEMENTABLE AS WRITTEN and is not attempted
+    here. Consequence: `write_eprom`'s bool is a PRECONDITION signal only.
+    `True` is reachable only when the state machine succeeded AND (for the
+    inhibited-write op) the ack was observed internally by
+    `eprom_operations.py`'s own check (`:1654-1662`) -- so `True` proves the
+    experiment ran as designed. `False` NEVER means BAD by itself (D-01/
+    D-02) -- it routes to `marginal`, naming both candidate causes (the
+    opt-out not honoured by older firmware, or a transport fault).
+
+    ⚠ D-03's full 2x2 polarity proof holds for `OP_WRITE_INHIBITED`:
+    `(True, A) -> OK`, `(True, B) -> BAD` -- these two hold the bool
+    CONSTANT and vary only the read-back, a STRICTLY STRONGER proof than a
+    bool-driven implementation could pass, because such an implementation
+    cannot produce two different verdicts from one identical bool.
+    `(False, A) -> marginal`, `(False, B) -> marginal` pin the precondition
+    gate in both read-back directions. P-03 prevention 4's `(False, A) ->
+    OK` is OVERTURNED by D-01/D-03 and is deliberately NOT implemented here.
+
+    ⚠ No sixth verdict status (research P-09/`ROADMAP` "no new verdict
+    status"): `_verdict_code` (`cli_handlers.py`) is `.get(verdict, 0)`, so
+    an unrecognised verdict string would silently exit 0. Only
+    VERDICT_OK / VERDICT_BAD / VERDICT_MARGINAL are used below.
+    """
+    if op not in _SDP_LEG_OPS:
+        return StepResult(
+            op=op,
+            verdict=VERDICT_BAD,
+            run_count=0,
+            reason=(
+                f"op {op!r} is not in the SDP-leg dispatch allow-list "
+                "(_SDP_LEG_OPS) — refused fail-closed rather than falling "
+                "through to an operator mutation method"
+            ),
+        )
+
+    region_start, region_length = _write_region_for(step, eprom_data)
+    pattern_a = generate_pattern(region_start, region_length)
+    pattern_b = generate_inhibited_pattern(region_start, region_length)
+
+    # Per-op (source payload written, expected read-back, operation_flags).
+    # The inhibited row's asymmetry IS the oracle: it WRITES pattern B but
+    # EXPECTS to read back pattern A (unchanged) -- a leaked lock reads
+    # back B instead. FLAG_SKIP_SDP_UNLOCK is set on this op ONLY: setting
+    # it on write-restored would defeat that step's whole purpose -- it
+    # must be allowed to auto-unlock and succeed so the part is left
+    # writable (D-06's "restored" evidence).
+    if op == OP_WRITE_BASELINE_B:
+        source_payload, expected_readback, flags = pattern_b, pattern_b, 0
+    elif op == OP_WRITE_BASELINE_A:
+        source_payload, expected_readback, flags = pattern_a, pattern_a, 0
+    elif op == OP_WRITE_INHIBITED:
+        source_payload, expected_readback, flags = (
+            pattern_b,
+            pattern_a,
+            FLAG_SKIP_SDP_UNLOCK,
+        )
+    elif op == OP_WRITE_RESTORED:
+        source_payload, expected_readback, flags = pattern_a, pattern_a, 0
+    else:
+        # Unreachable in practice: the fail-closed `_SDP_LEG_OPS` guard
+        # above already refused any op outside the four named ops before
+        # this branch could be reached. Deliberately an explicit `else:
+        # raise`, not a bare `else` -- the pre-Phase-121 shape this project
+        # refuses to reintroduce (RESEARCH Pitfall 1a).
+        raise AssertionError(f"unreachable: op {op!r} passed the _SDP_LEG_OPS guard")
+
+    # Write, once (single-run: these ops are deliberately NOT _MULTI_RUN_OPS
+    # members, D-03).
+    tmp_fh = tempfile.NamedTemporaryFile(
+        prefix="chip_test_sdp_leg_", suffix=".bin", delete=False
+    )
+    try:
+        tmp_fh.write(source_payload)
+    finally:
+        tmp_fh.close()
+    tmp_source_path = tmp_fh.name
+
+    try:
+        wrote_ok = operator.write_eprom(name, eprom_data, tmp_source_path, flags)
+
+        # Read back. ⚠ Unlike `_dispatch_multi_run`'s read-back
+        # (`:1483-1493`), this read-back is NOT best-effort decoration -- it
+        # IS the verdict (D-05/LEG-05). A failed/degenerate read-back still
+        # produces a verdict below (BAD via the length gate), it never
+        # silently skips the Fingerprint the way the multi-run write/verify
+        # step does.
+        actual = b""
+        try:
+            with tempfile.TemporaryDirectory(
+                prefix="chip_test_sdp_leg_verify_"
+            ) as tmp_dir:
+                readback_path = str(Path(tmp_dir) / "readback.bin")
+                operator.read_eprom(name, eprom_data, output_file=readback_path)
+                try:
+                    actual = Path(readback_path).read_bytes()
+                except OSError:
+                    actual = b""
+        except EpromOperationError:
+            actual = b""
+    finally:
+        try:
+            Path(tmp_source_path).unlink()
+        except OSError:
+            pass
+
+    # a. LENGTH gate FIRST (D-04, P-02). Measured:
+    # `classify_fingerprint(A, b"")` returns `total=0, bad=0` -- an empty
+    # read-back reads as PERFECT equality, and `_diff_offsets` silently
+    # truncates to the common prefix and never raises. This gate runs
+    # before any `_diff_offsets`/`classify_fingerprint` call so that trap
+    # cannot fire.
+    if len(actual) != region_length:
+        return StepResult(
+            op=op,
+            verdict=VERDICT_BAD,
+            reason=(
+                f"read-back length {len(actual)} bytes != expected region "
+                f"length {region_length} bytes — the oracle had no usable "
+                "input to compare (length gate, checked before any "
+                "classify_fingerprint call)"
+            ),
+            run_count=1,
+        )
+
+    # b. CONTENT degeneracy (D-04). Correct length but degenerate content
+    # (all-0x00 / all-0xFF) routes through `classify_fingerprint` and lands
+    # `marginal` -- a loose socket or blank chip reads as a contact fault,
+    # never a confidently-reported chip finding.
+    if actual == b"\x00" * region_length or actual == b"\xff" * region_length:
+        fingerprint = classify_fingerprint(
+            expected_readback, actual, addr_base=region_start
+        )
+        return StepResult(
+            op=op,
+            verdict=VERDICT_MARGINAL,
+            reason=(
+                "correct-length but degenerate read-back content "
+                f"(classification={fingerprint.classification!r}) — a "
+                "loose socket or blank/unresponsive chip reads as a contact "
+                "fault, not a chip finding (D-04)"
+            ),
+            fingerprint=fingerprint,
+            run_count=1,
+        )
+
+    # c. Equality decision. Attach the Fingerprint in every arm.
+    fingerprint = classify_fingerprint(
+        expected_readback, actual, addr_base=region_start
+    )
+    equal = actual == expected_readback
+
+    if op == OP_WRITE_INHIBITED:
+        # D-03's full 2x2, on pattern A (unchanged) as the expected value.
+        if wrote_ok and equal:
+            verdict, reason = VERDICT_OK, ""
+        elif wrote_ok and not equal:
+            # LEG-06, the leg's whole value -- covers both a full change to
+            # B and a PARTIAL change (LEG-07, gh#11's exact symptom).
+            verdict, reason = (
+                VERDICT_BAD,
+                (
+                    "write_eprom reported success (the state machine completed "
+                    "and the 0x86 opt-out ack was observed internally) yet the "
+                    "read-back changed from pattern A — the SDP lock did not "
+                    "inhibit this write"
+                ),
+            )
+        else:
+            # D-01/D-02: a failed precondition is marginal in BOTH read-back
+            # directions -- BAD here would manufacture a chip-fault report
+            # for a community member running older firmware.
+            verdict, reason = (
+                VERDICT_MARGINAL,
+                (
+                    "write_eprom reported failure on the inhibited-write "
+                    "precondition — this is a PRECONDITION signal, not the "
+                    "verdict (D-01). Most likely causes: (1) the 0x86 opt-out "
+                    "ack was not honoured — the connected firmware may predate "
+                    "FLAG_SKIP_SDP_UNLOCK support, run `firestarter fw "
+                    "--install` to update it and retry; or (2) a transport "
+                    "fault. Neither is a chip finding."
+                ),
+            )
+    else:
+        # OP_WRITE_BASELINE_B / OP_WRITE_BASELINE_A / OP_WRITE_RESTORED:
+        # `expected_readback` is what was written.
+        if wrote_ok and equal:
+            verdict, reason = VERDICT_OK, ""
+        elif wrote_ok and not equal:
+            verdict, reason = (
+                VERDICT_BAD,
+                (
+                    "write_eprom reported success but the read-back does not "
+                    "match what was written — the write path did not "
+                    "transition (LEG-16's dead-write-path shape) or changed "
+                    "only part of the region (LEG-07)"
+                ),
+            )
+        elif (not wrote_ok) and equal:
+            # P-05's idempotent-baseline shape: must never read as OK.
+            verdict, reason = (
+                VERDICT_MARGINAL,
+                (
+                    "write_eprom reported failure yet the read-back already "
+                    "matches the intended pattern — the transition is not "
+                    "demonstrated (P-05); this must never be reported as OK"
+                ),
+            )
+        else:
+            # No opt-out flag is set on these steps, so a failed write with
+            # unchanged bytes is a plain dead write path with no host-side
+            # cause to blame (gh#20's measured shape: write-baseline-b goes
+            # BAD on that bench).
+            verdict, reason = (
+                VERDICT_BAD,
+                (
+                    "write_eprom reported failure and the read-back does not "
+                    "match the intended pattern — a dead write path with no "
+                    "host-side cause to blame"
+                ),
+            )
+
+    return StepResult(
+        op=op,
+        verdict=verdict,
+        reason=reason,
+        fingerprint=fingerprint,
+        run_count=1,
     )
 
 

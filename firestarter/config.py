@@ -10,7 +10,7 @@ Configuration Management Module
 import json
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
 
 
 # Define the home path and configuration file path.
@@ -81,8 +81,12 @@ class ConfigManager:
     It's a singleton per configuration file name.
     """
 
-    _instances = {}  # Stores instances, keyed by config file path
-    _initialized_configs = {}  # Tracks initialization status, keyed by config file path
+    _instances: dict[
+        str, "ConfigManager"
+    ] = {}  # Stores instances, keyed by config file path
+    _initialized_configs: dict[
+        str, bool
+    ] = {}  # Tracks initialization status, keyed by config file path  # noqa: E501
 
     def __new__(cls, config_filename: Optional[str] = None, *args, **kwargs):
         actual_filename = config_filename or CONFIG_FILE_DEFAULT
@@ -99,7 +103,7 @@ class ConfigManager:
         if self.config_file_path in ConfigManager._initialized_configs:
             return
 
-        self._config = {}
+        self._config: dict[str, Any] = {}
         self._load_config()
         ConfigManager._initialized_configs[self.config_file_path] = True
         logger.debug(f"ConfigManager initialized for {self.config_file_path}.")

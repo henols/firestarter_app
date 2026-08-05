@@ -73,7 +73,15 @@ test = [
     "syrupy>=5.0",
     # Phase 37 additions:
     "ruff>=0.15.14",
-    "mypy>=2.1.0",
+    # Upper bound <3 (Phase 131 D-14): tools/check_mypy_watermark.py's
+    # classify_mypy_result() discriminates a complete run by regex over
+    # mypy's summary-line format (_FOUND_RE / _CLEAN_RE, GATE-02's
+    # "(checked N source files)" clause). A major version is exactly where
+    # that output format is licensed to change, and the failure mode would
+    # be exit 2 on every run -- a hard CI stop from a tool nobody upgraded
+    # deliberately. Raise the bound deliberately and re-verify both regexes
+    # against the new format in the same commit.
+    "mypy>=2.1.0,<3",
     "pytest-cov>=7.1.0",
     "types-pyserial>=3.5.0.20260519",
 ]
@@ -128,10 +136,41 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.mypy]
-python_version = "3.9"          # Must be in config file — mypy 2.1.0 rejects --python-version 3.9 via CLI flag
+# Phase 131 D-13/GATE-05: 3.10 is mypy's true
+# effective target here, measured, not a preference. The previous "3.9" was
+# rejected by mypy 2.0+ as below its minimum supported *target* -- emitted
+# as a non-fatal config note -- and silently discarded: it never took effect
+# once, in CI or locally, since the mypy>=2.1.0 pin landed 2026-05-27. mypy
+# clamps to its minimum supported target (3.10), NOT to the running
+# interpreter. requires-python stays >=3.9 (D-13): dropping it is a
+# published-metadata breaking change on a live PyPI package, an operator
+# decision, not this phase's to make. The honest cost: after this line
+# nothing type-checks against the advertised 3.9 floor -- ruff's
+# target-version = "py39" catches py3.10+ syntax but never a stdlib API used
+# on 3.9 (backlog 999.26 / FUT-MYPY-01). The treadmill: Python 3.10 EOLs
+# 2026-10-31, and a future mypy clamping its minimum target to >=3.11
+# re-fires this exact failure -- GATE-01's returncode-before-regex ordering
+# is what makes that arrive as a red gate instead of a silent green
+# (backlog 999.27).
+python_version = "3.10"
 ignore_missing_imports = true   # needed for tqdm, rich (no stubs)
 disallow_untyped_defs = false   # gradual adoption — global stays lenient (D-10)
 check_untyped_defs = false
+# Phase 137 plan 137-02 (CLOSE-03): tests/fixtures/ holds deliberately-
+# violating planted source for the source-scan gates -- fixture input,
+# never project source (mirrors ruff's own extend-exclude above, same
+# rationale, same directory). This plan is the first to add a genuinely
+# UNPARSABLE fixture (tests/fixtures/planted_unparsable.py, a real Python
+# SyntaxError, planted on purpose for check_diagnostic_report_claims.py's
+# fail-closed-on-unparsable-source test) -- without this exclude, mypy's
+# directory walk over `tests/` aborts with exit 2 ("errors prevented
+# further checking") on that single file, invalidating the ENTIRE watermark
+# run rather than reporting a normal per-file error. None of the 6 prior
+# tests/fixtures/*.py files (all syntactically valid) ever contributed an
+# error to the watermark count, so this exclude changes only the checked-
+# file count (still comfortably above MIN_CHECKED_SOURCE_FILES=120 in
+# tools/check_mypy_watermark.py), never the error count.
+exclude = ["^tests/fixtures/"]
 # mypy_error_watermark = 35   # Updated Phase 71-07: floor after 71-06 added test_validate_family_cmd.py (6 AppContext mock-type errors). Prior: 29 (Phase 69-03).
 
 [[tool.mypy.overrides]]
@@ -149,7 +188,10 @@ module = [
 check_untyped_defs = true
 
 [[tool.mypy.overrides]]
-# Phase 42 D-06: strict-island for the 8 modules touched in v1.8.
+# Phase 42 D-06: strict-island for the 8 modules touched in v1.8, plus a
+# ninth added by Phase 132 D-02 (RETIRE-03): the new sdp_honesty module
+# joins from birth, as a deliberate strengthening -- it is not an analog
+# of firestarter.sdp_capability, which is NOT in this list.
 # eprom_operations.py DELIBERATELY EXCLUDED per D-07 (GATE-1.8d read-path ring-fence; deferred to v1.9 post-RCA).
 module = [
     "firestarter.main",
@@ -160,6 +202,7 @@ module = [
     "firestarter.address_parser",
     "firestarter.exceptions",
     "firestarter.serial_comm",
+    "firestarter.sdp_honesty",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true

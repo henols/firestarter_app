@@ -78,7 +78,7 @@
   Commands:
     blank   Checks if an EPROM is blank.
     config  Handles CONFIGURATION values.
-    dev     Debug command for development purposes.
+    dev     Development and diagnostic commands for the RURP shield.
     erase   Erase an EPROM, if supported.
     fw      Firmware version.
     hw      Hardware revision.
@@ -125,7 +125,12 @@
   '''
   Usage: firestarter dev [OPTIONS] COMMAND [ARGS]...
   
-    Debug command for development purposes.
+    Development and diagnostic commands for the RURP shield.
+  
+    On a stable install, only `read` and `test` are available in this group --
+    both are fully supported for end users, despite living inside a group named
+    `dev`. The remaining subcommands are development and bench tooling,
+    available only on a pre-release install.
   
     USR button will break command and return.
   
@@ -138,7 +143,6 @@
     fault-inject       Demonstrate COBS resync: inject a corrupted frame...
     read               Reads the content from an EPROM and prints data to...
     reg                Direct access to registers: MSB, LSB and control...
-    sdp                Enable or disable Software Data Protection (SDP) on...
     test               Run the community chip-validation sweep for CHIP...
     validate-family    Run the per-family validation matrix Tier-3 runner...
     write-cycle        Erase → write source image → read-back N times;...

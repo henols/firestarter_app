@@ -52,7 +52,7 @@ from firestarter.chip_test import BannerCounts, Plan, StepResult
 # Module constants (D-02, D-03) -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.2"  # D-02: single-sourced, baked into to_dict() output
+SCHEMA_VERSION = "1.3"  # D-02: single-sourced, baked into to_dict() output
 # 1.1 (Phase 114, GRAD-01): additive db_diff.ladder_state key -- backward
 # compatible, existing consumers reading current_support_status/
 # proposed_disposition are unaffected.
@@ -65,6 +65,23 @@ SCHEMA_VERSION = "1.2"  # D-02: single-sourced, baked into to_dict() output
 # vocabulary (id/read/blank-check/write/verify/erase) and MUST keep parsing
 # and keep grouping -- pinned by a frozen literal fixture in
 # `tests/test_parse_devtest_issue.py`.
+# 1.3 (v1.30 Phase 134 plan 134-06, D-10/LEG-12): additive `sdp_hold_state`
+# key -- `chip_test.sdp_hold_state()`'s three-valued `HELD`/`NOT-HELD`/
+# `NOT-RUN: <reason>` string, carried verbatim (never derived here -- see
+# `to_dict`). MEASURED DISCREPANCY, recorded rather than silently
+# reconciled (same convention as 134-02/134-04's own measured findings):
+# this plan's own PLAN.md read `to_dict`'s prior key count as nine; the
+# live count on disk at plan time was already TEN (schema_version,
+# generated, auto_capture, transport_health, steps, banner, voltage,
+# is_submittable, dedup_fingerprint, db_diff), so `sdp_hold_state` is this
+# dict's ELEVENTH key, not its tenth. This does not change the bump's own
+# argument: the change is still purely additive, existing consumers reading
+# any of the ten prior keys are unaffected, and `tools/parse_devtest_issue.py`
+# accepts `schema_version` by PRESENCE ONLY, never an exact-value match, so
+# this bump is invisible to that parser. REJECTED: a field-plus-JSON change
+# with no version bump -- the artifact shape would change while its own
+# version claimed it had not, in the milestone whose close phase (Phase 137)
+# arms a claim gate over exactly that kind of statement.
 NOT_MEASURED = "not measured"  # D-03: honest fallback, never a false 0
 
 # Elevated-counter threshold for `transport_suspect` (dormant today -- no
@@ -183,6 +200,25 @@ def is_submittable(ac: AutoCapture) -> bool:
 # ---------------------------------------------------------------------------
 
 
+# D-11 (v1.30 Phase 134, plan 134-06): the SDP leg's ACCEPTED, RECORDED cost
+# to this function -- NOT a bug, and this function's body below is left
+# byte-unchanged by this plan. The SDP leg's six new steps (see
+# `chip_test._SDP_LEG_STEP_ORDER` for the ordered tuple by name -- not
+# spelled out literally here: this module is a declared non-registry,
+# re-measured every run by `test_non_registry_still_has_no_ops`'s AST
+# inversion guard for zero op vocabulary, including hyphenated op-value
+# string literals) necessarily re-key every one of the 43 measured ALLOW
+# chips through the hashed `op=verdict:cls` triples below -- b14/b15-era
+# reports stop grouping with v1.30-era ones and their accumulated N>=2
+# promotion counts reset. gh#20's orphaned id `00e121446ceb` is named
+# explicitly in plan 134-11's LEG-18 finding; the outward description of
+# this discontinuity is Phase 137's release notes (CLOSE-05), not this
+# phase's. REJECTED: excluding the SDP steps from this hash (preserves
+# continuity and the promotion ladder, but two reports differing ONLY in
+# their SDP outcome would then dedup identically -- a leaked lock grouping
+# with a held one, blinding the mechanism that decides which reports get
+# triaged); carrying a second legacy fingerprint (preserves continuity
+# without blinding dedup, but adds a field and a hash nothing else needs).
 def dedup_fingerprint(report: DiagnosticReport) -> str:
     """Deterministic 12-char lowercase hex short-hash for report dedup (D-02).
 
@@ -347,6 +383,18 @@ class DiagnosticReport:
     vpp_mv: int | None = None
     vpe_mv: int | None = None
     db_diff: DbDiff | None = None
+    # LEG-12 (v1.30 Phase 134, plan 134-06, D-10): the carriage half only --
+    # a plain `str`, NEVER a `bool` and NEVER a key named `locked` or
+    # `protection_enabled` (P-06 prevention 3: a JSON `true` on such a key
+    # is read as ground truth for a protection state this chip family
+    # cannot report at all). Defaults to `""` (unassigned); the VALUE is
+    # assigned by `cli_handlers.py` from `chip_test.sdp_hold_state(plan,
+    # results)` in plan 134-07, which closes LEG-12 -- this class only
+    # carries and serialises whatever string it is given, never derives one
+    # (this is a declared non-registry, re-measured every run by
+    # `test_non_registry_still_has_no_ops`'s AST inversion guard to carry
+    # zero op vocabulary).
+    sdp_hold_state: str = ""
 
     def _utc_now(self) -> str:
         return datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -451,6 +499,7 @@ class DiagnosticReport:
             "is_submittable": is_submittable(self.auto_capture),
             "dedup_fingerprint": dedup_fingerprint(self),
             "db_diff": self._db_diff_dict(),
+            "sdp_hold_state": self.sdp_hold_state,
         }
 
     def render(self, console: Any = None) -> Any:
@@ -493,6 +542,11 @@ class DiagnosticReport:
 
         banner = d["banner"]
         table.add_row("banner", f"{banner['n_ran']} of {banner['m_applicable']} ran")
+
+        # LEG-12 (D-07): its own console row, never folded into a step's
+        # `reason` -- the per-step row above shows only op/verdict/
+        # error_code/fingerprint, so `reason` never reaches this table.
+        table.add_row("sdp_hold_state", str(d["sdp_hold_state"]))
 
         v = d["voltage"]
         table.add_row(

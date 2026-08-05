@@ -66,9 +66,14 @@ COMMAND_DEV_REGISTERS = 8
 # Both SDP commands are unconditional in firmware (firestarter.h:61-62) — never
 # DEV_TOOLS-gated, because they are real user-facing operations in every build.
 # Their COMMAND_NAMES entries below are load-bearing, not cosmetic:
-# COMMAND_NAMES[cmd] is dereferenced at eprom_operations.py:301 and again at
-# :377 (_setup_operation / _operation_context) — a missing entry is a KeyError
-# at operation setup, not a cosmetic display gap.
+# COMMAND_NAMES[cmd] is dereferenced by _setup_operation (eprom_operations.py:329)
+# and again by _operation_context (eprom_operations.py:405) — a missing entry
+# is a KeyError at operation setup, not a cosmetic display gap. Corrected
+# 2026-08-03 (RETIRE-08, D-11): a prior milestone's insertion staled the
+# original 301/377 citation, which is why the corrected form names the
+# function first with the line number alongside, not the number alone. See
+# test_command_names_dereferences_both_sdp_commands in
+# tests/test_revision_constants_parity.py, which pins both dereferences.
 COMMAND_SDP_UNLOCK = 9
 COMMAND_SDP_LOCK = 10
 
@@ -118,6 +123,17 @@ FLAG_VERBOSE = 0x80
 # rurp_pinout.h), is documentary only (Python never writes the control
 # register), and has its own separate parity leg. The two 0x100s are
 # unrelated wire vs. control-register values and must not be conflated.
+# D-14 / RETIRE-07 tripwire (third location): this bit's default-OFF state on
+# every write is what makes the host's SDP auto-unlock effective by default
+# -- the argument RETIRE-01 (Phase 132) relies on to justify deleting the
+# standalone `firestarter dev sdp` subcommand. Changing this bit's semantics,
+# or the default either edit point that sets it defaults to
+# (`cli_handlers.py`'s `_build_op_flags` `skip_sdp_unlock` parameter, or the
+# `--skip-sdp-unlock` Click option on `write`), invalidates that argument.
+# See the decision-site comment at the D-04 auto-set condition in
+# `cli_handlers.py`'s `write()`, and the named test
+# `test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on` in
+# `tests/test_write_skip_sdp_unlock.py`.
 FLAG_SKIP_SDP_UNLOCK = 0x100
 
 # Dev sweep knobs — Firmware sync: json_parser.c (key_read_settling, key_read_strobe)
