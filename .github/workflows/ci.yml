@@ -7,8 +7,7 @@
 name: Host CI
 on:
   push:
-    branches:
-    - main
+    branches: ['**']
     paths-ignore:
     - '**.md'
     - '.gitignore'
