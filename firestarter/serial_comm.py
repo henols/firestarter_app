@@ -31,9 +31,12 @@ from firestarter.constants import (
     FLAG_SKIP_BLANK_CHECK,
     FLAG_SKIP_ERASE,
     FLAG_VPE_AS_VPP,
+    REVISION_2_2,
+    REVISION_2_3,
 )
 from firestarter.exceptions import (
     FirmwareOutdatedError,
+    HardwareRevisionUnsupportedError,
     ProgrammerNotFoundError,
     ProtocolNotImplementedError,
     SerialError,
@@ -98,6 +101,17 @@ class SerialCommunicator:
     across available serial ports.
     """
 
+    # CAP-02 identity fields, declared at CLASS level on purpose. __init__ also
+    # assigns them, but plenty of call sites never run __init__ — conftest's
+    # make_comm builds instances via __new__, and several suites patch __init__
+    # to a no-op lambda to avoid opening a real port. _probe_port reads
+    # firmware_identity unconditionally, so an instance-only attribute turns
+    # every one of those into an AttributeError swallowed by the broad
+    # `except Exception` in _probe_port, which degrades to "no programmer
+    # found". Class defaults of None keep the gates fail-closed instead.
+    firmware_identity: Optional[str] = None
+    hw_revision: Optional[int] = None
+
     def __init__(
         self,
         port: str,
@@ -124,6 +138,19 @@ class SerialCommunicator:
         # with a 2-byte param is decoded. _calculate_buffer_size returns 512 (safe
         # Uno floor) when None (Phase 54 D-05 reversed; no FirmwareOutdatedError).
         self.firmware_max_chunk: Optional[int] = None
+        # CAP-02: the MSG_OK_READY ack was extended past CAP-01's 2-byte
+        # buffer-size region to also carry the effective hardware revision and
+        # the firmware identity string, so a single command exchange now yields
+        # everything the connect-time gates need. Both stay None against
+        # firmware that predates CAP-02 (2-byte ack) — and None is a REJECT for
+        # the revision gate, never a pass. Populated by _decode_id_frame below.
+        #
+        # firmware_identity is the raw "<version>:<board>" string, matching what
+        # the retired CMD_FW_VERSION probe used to read off the wire; callers
+        # wanting the numeric part must strip the board suffix exactly as
+        # _probe_port does.
+        self.firmware_identity: Optional[str] = None
+        self.hw_revision: Optional[int] = None
         # D-15 (Phase 120 / v1.22 HOST-06): bounded record of every id frame
         # successfully decoded on this connection. Populated by the
         # _decode_id_frame override below. A set of integers only — nothing
@@ -321,14 +348,32 @@ class SerialCommunicator:
             self.seen_message_ids.add(msg_id)
             if msg_id == MSG_OK_READY:
                 params_bytes = body[1:-1]  # strip id byte and trailing CRC
-                if len(params_bytes) == 2:
-                    value = struct.unpack(">H", params_bytes)[0]
+                # CAP-01 buffer size occupies the first 2 bytes in BOTH the
+                # legacy 2-byte ack and the CAP-02 extended ack, so the length
+                # test is >= 2 rather than == 2. Against CAP-02 firmware the
+                # old == 2 form silently skipped this and fell back to the 512
+                # floor; widening it is what restores full-size chunking.
+                if len(params_bytes) >= 2:
+                    value = struct.unpack(">H", params_bytes[:2])[0]
                     # Plausibility clamp: reject values outside [1, 4096].
                     # No real board exceeds the 1024-byte Leonardo buffer; 4096
                     # is a generous ceiling. Values outside this range leave
                     # firmware_max_chunk unset so the 512 floor applies (T-55-06).
                     if 1 <= value <= 4096:
                         self.firmware_max_chunk = value
+                # CAP-02 tail: [hw_revision u8][ver_len u8][ver bytes]. Absent
+                # on pre-CAP-02 firmware, which leaves both attributes None —
+                # and None is a reject for the revision gate, never a pass.
+                # A truncated or malformed length prefix also leaves
+                # firmware_identity None rather than yielding a partial string,
+                # so a mangled ack degrades to "refuse", not to "probably fine".
+                if len(params_bytes) >= 4:
+                    self.hw_revision = params_bytes[2]
+                    ver_end = 4 + params_bytes[3]
+                    if ver_end <= len(params_bytes):
+                        self.firmware_identity = params_bytes[4:ver_end].decode(
+                            "ascii", errors="replace"
+                        )
         return result
 
     # =================================================================
@@ -645,6 +690,62 @@ class SerialCommunicator:
                 f"Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
             )
 
+    # Bus line 11 is where socket pin 21 lands on the 24-pin RURP wiring, and
+    # it is the VPP line for exactly two pinouts — DIP24_2716 and DIP24_2532.
+    # Those parts need the 3-position JP4 header introduced on shield Rev 2.2;
+    # driving them on an earlier board is a chip-damage path.
+    _VPP_LINE_REQUIRING_REV_2_2 = 11
+    # ALLOWLIST, deliberately not a `>=` comparison. The REVISION_* bytes are
+    # not a version-ordered scale: REVISION_UNKNOWN is 0xFE, numerically ABOVE
+    # REVISION_2_2 (0x04), so `detected >= REVISION_2_2` would admit precisely
+    # the boards whose revision could not be determined. Membership fails
+    # closed for 0xFE, for the 0xFF override-absent sentinel, for the
+    # REVISION_2_0 broad bucket, and for None (pre-CAP-02 firmware).
+    _REVISIONS_WITH_3_POSITION_JP4 = (REVISION_2_2, REVISION_2_3)
+
+    @staticmethod
+    def _validate_hardware_revision(
+        command_to_send: dict, detected: Optional[int]
+    ) -> None:
+        """Pure-policy shield-revision guard. Raises on reject, returns on pass.
+
+        Mirrors _validate_firmware_version's shape: no I/O, no environment
+        reads, no serial access — just the wire dict the host is about to act
+        on and the revision byte the firmware reported. That makes the policy
+        testable without a board and keeps _probe_port free of the reasoning.
+
+        Only chips whose bus-config routes VPP to bus line 11 are gated; every
+        other chip passes through untouched regardless of shield revision.
+
+        Note for operators hitting this: ADC detection collapses Rev 2.0, 2.1
+        and 2.2 into the single REVISION_2_0 bucket, so a genuine Rev 2.2 board
+        reports as 2.0-class until the EEPROM override is written. That is the
+        intended design — the operator has to look at the physical header and
+        assert it, and asserting it is the safety mechanism, not a workaround.
+        """
+        bus_config = command_to_send.get("bus-config") or {}
+        if bus_config.get("vpp-pin") != SerialCommunicator._VPP_LINE_REQUIRING_REV_2_2:
+            return
+        if detected in SerialCommunicator._REVISIONS_WITH_3_POSITION_JP4:
+            return
+
+        if detected is None:
+            reported = "nothing (firmware predates the revision-carrying ack)"
+        else:
+            reported = f"0x{detected:02X}"
+        raise HardwareRevisionUnsupportedError(
+            f"This chip routes VPP to socket pin 21, which needs the 3-position "
+            f"JP4 header introduced on RURP shield Rev 2.2. The programmer "
+            f"reported {reported}. Refusing to program — an earlier shield "
+            f"cannot route VPP there and attempting it can damage the EPROM.\n"
+            f"If this board really is a Rev 2.2 or 2.3, ADC detection cannot "
+            f"tell it apart from a Rev 2.0, so you must assert it once with "
+            f"'firestarter config --rev 4' (4 = Rev 2.2, 5 = Rev 2.3). Note "
+            f"that --rev takes the revision BYTE, not the silkscreen number: "
+            f"'--rev 2.2' truncates to 2 and selects the Rev 2.0 bucket.",
+            detected=detected,
+        )
+
     @staticmethod
     def _probe_port(
         port_name: str,
@@ -667,86 +768,75 @@ class SerialCommunicator:
                 communicator._fault_inject_outgoing = fault_inject_outgoing
             communicator.consume_remaining_input()
 
-            # FW-version handshake (independent of the user's command). Firmware
-            # emits the LFW-05 "OK: FW: <version>" text line on CMD_FW_VERSION;
-            # we use it to gate version compatibility before sending the actual
-            # user command. Prior firmware shipped MSG_OK_FW_HANDSHAKE with the
-            # version in every ack body, but that was dropped in Phase 9 — a
-            # dedicated probe is now the load-bearing version check.
-            exempt_cmds = [COMMAND_FW_VERSION]
-            command_code = command_to_send.get("state") or command_to_send.get("cmd")
-            if command_code not in exempt_cmds:
-                communicator.send_json_command({"state": COMMAND_FW_VERSION})
-                # CMD_FW_VERSION emits 2 acks: setup-complete "Ready" from
-                # init_programmer, then "OK: FW: <version>" from fw_get_version.
-                # Discard the first; parse the second for version validation.
-                pre_is_ok, _pre_msg = communicator.expect_ack()
-                if not pre_is_ok:
-                    logger.debug(
-                        f"Port {port_name}: FW-probe setup-ack not OK: {_pre_msg}"
-                    )
-                    communicator.disconnect()
-                    return None
-                fw_is_ok, fw_msg = communicator.expect_ack()
-                if not fw_is_ok:
-                    logger.debug(f"Port {port_name}: FW-probe payload not OK: {fw_msg}")
-                    communicator.disconnect()
-                    return None
-
-                try:
-                    if fw_msg and "FW:" in fw_msg:
-                        match = re.search(r"FW:\s*([\d.x]+)", fw_msg)
-                        if match:
-                            current_version = match.group(1).strip()
-
-                            # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
-                            # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
-                            # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
-                            allow_pre_v12 = (
-                                os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") == "1"
-                            )
-                            SerialCommunicator._validate_firmware_version(
-                                current_version, allow_pre_v12=allow_pre_v12
-                            )
-                            # CAP-01 (Phase 55): buffer-size advertisement moved from the
-                            # FW identity string to the MSG_OK_READY operation-setup ack.
-                            # The identity string is now "<ver>:<board>" only.
-                            # firmware_max_chunk is populated by _decode_id_frame override.
-                        else:
-                            raise FirmwareOutdatedError(
-                                "Could not parse firmware version from programmer response. "  # noqa: E501
-                                "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
-                            )
-                    else:
-                        raise FirmwareOutdatedError(
-                            "Firmware is outdated (pre-2.0.0). "
-                            "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
-                        )
-                except (IndexError, AttributeError):
-                    raise FirmwareOutdatedError(
-                        "Could not determine firmware version. "
-                        "Please upgrade the firmware using 'firestarter fw --install'."
-                    )
-
-                # FW probe succeeded; drain any trailing diagnostic frames the
-                # firmware emitted alongside the FW handshake before we send
-                # the user's actual command.
-                communicator.consume_remaining_input()
-
-            # Send the user's actual command (or CMD_FW_VERSION re-send when exempt).
+            # CAP-02: send the user's actual command straight away. The
+            # dedicated CMD_FW_VERSION pre-probe this replaces cost a full
+            # command exchange (2 acks) on every single connect; MSG_OK_READY
+            # now carries the firmware identity AND the effective hardware
+            # revision, so both gates run off the ack this command was going to
+            # produce anyway.
+            #
+            # Validating after the command is on the wire is safe by
+            # construction, not by luck. init_programmer_framed does run
+            # configure_memory before emitting MSG_OK_READY, but every
+            # configure_* handler is pure — it assigns function pointers and
+            # pulse defaults, nothing else. The VPP regulator is not engaged
+            # until firestarter_operation_init, which blocks on
+            # op_wait_for_ack(). Raising below means that ack is never sent, so
+            # the operation never starts and the rail stays down.
             communicator.send_json_command(command_to_send)
             is_ok, msg = communicator.expect_ack()
 
-            if is_ok:
-                communicator.programmer_info = msg
-                logger.debug(f"Programmer found on {port_name}: {msg}")
-                config_manager.set_value("port", port_name)  # Save successful port
-                return communicator
-            else:
+            if not is_ok:
                 logger.debug(f"Port {port_name} responded but not with OK: {msg}")
                 communicator.disconnect()
                 return None
 
+            # Version gate. The POLICY is untouched (D-01/D-03) — only its
+            # source moved, from the retired probe's "OK: FW: <ver>" text line
+            # to the identity field of the ack. Same [\d.x]+ extraction as the
+            # old regex performed, so _validate_firmware_version still receives
+            # "3.0.0" rather than the full "3.0.0:uno" identity (feeding it the
+            # board suffix would make int() choke and reject every board).
+            identity = communicator.firmware_identity
+            version_match = re.match(r"[\d.x]+", identity) if identity else None
+            if version_match is None:
+                raise FirmwareOutdatedError(
+                    "Programmer did not report a firmware version in its "
+                    "operation-setup ack. This host requires firmware that "
+                    "carries the version and hardware revision in that ack. "
+                    "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
+                )
+            # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
+            # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
+            # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
+            SerialCommunicator._validate_firmware_version(
+                version_match.group(0),
+                allow_pre_v12=os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") == "1",
+            )
+
+            # Shield-revision gate — ordered after the version check because
+            # firmware old enough to fail that check cannot be trusted to have
+            # reported a revision at all, and before the caller is handed a
+            # connection it would immediately start driving.
+            SerialCommunicator._validate_hardware_revision(
+                command_to_send, communicator.hw_revision
+            )
+
+            communicator.programmer_info = msg
+            logger.debug(f"Programmer found on {port_name}: {msg}")
+            config_manager.set_value("port", port_name)  # Save successful port
+            return communicator
+
+        except HardwareRevisionUnsupportedError:
+            # MUST precede the SerialError clause below (it is a subclass) and
+            # MUST re-raise. Falling through to `return None` would surface a
+            # deliberate safety refusal as "no programmer found" — the worst
+            # possible message for an operator looking at a board that is
+            # plainly attached, and one that invites them to go hunting for a
+            # cable fault instead of reading the actual reason.
+            if communicator:
+                communicator.disconnect()
+            raise
         except (SerialError, FirmwareOutdatedError) as e:
             logger.debug(f"Probe failed for {port_name}: {e}")
             if communicator:
@@ -811,11 +901,20 @@ class SerialCommunicator:
                         logger.info("Connecting... OK      ", extra={"status": "end"})
                     # The "Programmer found on..." message is logged by _probe_port on a new line.  # noqa: E501
                     return communicator
-            except (FirmwareOutdatedError, ProtocolNotImplementedError) as e:
+            except (
+                FirmwareOutdatedError,
+                HardwareRevisionUnsupportedError,
+                ProtocolNotImplementedError,
+            ) as e:
                 if status_update_active:
                     logger.info("Connecting... Failed  ", extra={"status": "end"})
-                # If firmware is outdated or protocol not implemented, stop probing  # noqa: E501
-                # and raise the specific error (both are stop-probing, surface-the-specific-error cases).  # noqa: E501
+                # If firmware is outdated, the shield revision cannot safely
+                # drive this chip, or the protocol is not implemented, stop
+                # probing and raise the specific error (all three are
+                # stop-probing, surface-the-specific-error cases). Listing the
+                # revision error here is about closing the "Connecting..."
+                # status line — it already escapes the loop by not matching any
+                # clause, but it would leave that line dangling on the way out.
                 raise e
 
         # If the loop completes without finding a programmer, it's a failure.

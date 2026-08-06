@@ -51,6 +51,7 @@ from firestarter.exceptions import (
     EpromOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
+    HardwareRevisionUnsupportedError,
     ProgrammerNotFoundError,
     SerialError,
 )
@@ -1515,10 +1516,15 @@ def _run_step(
         return _dispatch_step(
             name, step, eprom_data, operator, runs=runs, sampler=sampler
         )
-    except (ProgrammerNotFoundError, FirmwareOutdatedError):
-        # D-08/LEG-11: these two SerialError subclasses are run-fatal
+    except (
+        ProgrammerNotFoundError,
+        FirmwareOutdatedError,
+        HardwareRevisionUnsupportedError,
+    ):
+        # D-08/LEG-11: these SerialError subclasses are run-fatal
         # host-setup conditions ("no programmer attached", "firmware too
-        # old"), not chip findings -- they belong to cli_handlers.py's
+        # old", "shield revision cannot safely drive this chip"), not chip
+        # findings -- they belong to cli_handlers.py's
         # @map_typed_errors mapper, which already renders them as
         # ClickExceptions with stable exit codes. This clause MUST precede
         # the (SerialError, HardwareOperationError) clause below: both are
