@@ -4,11 +4,19 @@
 # Phase 127 (D-01/D-02): adds a manual dispatch trigger and a second, isolated
 # ci-py32 job that installs the [py32] extra and runs the real-pyusb API
 # surface tests. No automatic trigger changed.
+# CI runs on EVERY branch. The push trigger used to be main-only, so a push to
+# a milestone or fix branch ran no gate at all -- ruff, the mypy watermark and
+# the coverage floor were only enforced once a PR existed or once work reached
+# main. Nothing in this workflow publishes: it produces no release, no tag and
+# no PyPI upload, so there is no publish boundary to guard here. Artefact
+# publishing lives in release.yml (main), beta-release.yml (beta) and
+# publish.yml (release:published), and none of those triggers is touched.
 name: Host CI
 on:
   push:
-    branches:
-    - main
+    # '**' matches every BRANCH but no tags. A bare `push:` would also fire on
+    # tag pushes; milestone-close tag pushes must keep firing zero CI.
+    branches: ['**']
     paths-ignore:
     - '**.md'
     - '.gitignore'
@@ -23,6 +31,15 @@ on:
     - '.vscode/**'
     - '.editorconfig'
   workflow_dispatch:
+
+# A same-repo PR branch now matches both `push` and `pull_request`, so
+# supersede stale runs per ref instead of queueing both to completion.
+# main/beta are excluded from cancellation: their runs are what the
+# publishing workflows are judged against, and a cancelled gate reads as a
+# failed gate.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/beta' }}
 
 jobs:
   ci:
