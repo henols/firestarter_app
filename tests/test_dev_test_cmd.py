@@ -866,8 +866,18 @@ class TestAbsentChipHardFail:
         assert steps["id"]["verdict"] == "NA"
         assert steps["read"]["verdict"] == "SKIPPED"
         assert "adapter" in steps["read"]["reason"]
-        assert steps["blank-check"]["verdict"] == "SKIPPED"
-        assert "adapter" in steps["blank-check"]["reason"]
+        # Quick task 260807-kaq moved this assertion: AT28C16 is protocol
+        # 0x0D (28C family, measured), so derive_plan now emits blank-check
+        # as NA-by-family-fact (case 3, auto-erase-on-write) BEFORE run_plan
+        # ever reaches resolve_chip's adapter refusal -- blank-check no
+        # longer carries the adapter reason at all. "write" below remains
+        # this test's proof that the adapter-required guard still surfaces
+        # as SKIPPED, never a bare exit, on a step that DOES reach
+        # resolve_chip.
+        assert steps["blank-check"]["verdict"] == "NA"
+        assert "0x0d" in steps["blank-check"]["reason"].lower()
+        assert steps["write"]["verdict"] == "SKIPPED"
+        assert "adapter" in steps["write"]["reason"]
 
 
 # ---------------------------------------------------------------------------
