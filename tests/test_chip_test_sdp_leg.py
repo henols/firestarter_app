@@ -2260,21 +2260,31 @@ def test_baseline_gate_closes_dead_write_path_allow_chip_full_leg():
     ⚠ MEASURED DISCREPANCY, recorded rather than silently reconciled (same
     project convention as 134-02-SUMMARY.md's "exactly two" finding):
     134-CONTEXT.md D-20 and this plan's own <behavior>/<action> text state
-    `n_ran=5, m_applicable=10` for this exact scenario. The ACTUAL measured
-    value, run live against this commit's `_dead_write_path_operator()`
-    fixture, is `n_ran=6, m_applicable=10` -- because `write-baseline-a`
-    (unlike the four `_SDP_LEG_GATED_OPS` members) is NEVER itself gated by
-    `baseline_gate_closed`: both baseline directions always run regardless
-    of the gate's state, since they are what DECIDE it (D-08's own
-    stickiness requirement -- see `test_baseline_gate_sticky_...` below --
-    is unsatisfiable if baseline-a does not run at all once the gate is
-    closed). `write-baseline-a` against this fixture reports OK (its
-    expected read-back is pattern A, and the fixture's `read_eprom` always
-    returns pattern A), so it counts as "ran" alongside the four shipped
-    ops (read/blank-check/write/verify) and `write-baseline-b` itself: 4 +
-    2 = 6 ran, 4 skipped, out of 10 applicable. This is the CORRECT,
-    measured value; the "5"/" five SKIPPED" figures elsewhere in the phase
-    record are the ones in error, not this assertion.
+    `n_ran=5, m_applicable=10` for this exact scenario. Before quick task
+    260807-kaq, the ACTUAL measured value, run live against this commit's
+    `_dead_write_path_operator()` fixture, was `n_ran=6, m_applicable=10` --
+    because `write-baseline-a` (unlike the four `_SDP_LEG_GATED_OPS`
+    members) is NEVER itself gated by `baseline_gate_closed`: both baseline
+    directions always run regardless of the gate's state, since they are
+    what DECIDE it (D-08's own stickiness requirement -- see
+    `test_baseline_gate_sticky_...` below -- is unsatisfiable if baseline-a
+    does not run at all once the gate is closed). `write-baseline-a` against
+    this fixture reports OK (its expected read-back is pattern A, and the
+    fixture's `read_eprom` always returns pattern A), so it counted as "ran"
+    alongside the four shipped ops (read/blank-check/write/verify) and
+    `write-baseline-b` itself: 4 + 2 = 6 ran, 4 skipped, out of 10
+    applicable.
+
+    260807-kaq's fix flips blank-check to NA for AT28C256 (protocol 0x0D,
+    case 3: no step in this plan can ever leave the device blank, since
+    each page write auto-erases internally) -- REMOVING it from both the
+    "ran" set and the applicable set. `m_applicable` drops 10 -> 9 (3
+    shipped-supported [read/write/verify] + 6 SDP-leg-supported, since id,
+    erase AND NOW blank-check are all NA for this chip) and `n_ran` drops
+    6 -> 5 (write-baseline-b/write-baseline-a plus the 3 shipped-supported
+    ops that ran, minus blank-check). These ARE the current, live-measured
+    values -- not a restoration of the stale 134-CONTEXT.md prose, which
+    predates both this task's fix AND the "exactly two" discrepancy above.
     """
     name = "AT28C256"
     allowed, _reason = sdp_capability(name, _REAL_DB)
@@ -2309,15 +2319,19 @@ def test_baseline_gate_closes_dead_write_path_allow_chip_full_leg():
     operator.sdp_lock.assert_not_called()
 
     counts = count_applicable(plan, results)
-    assert counts.n_ran == 6, (
-        f"measured n_ran={counts.n_ran}, expected 6 -- see this test's "
-        "MEASURED DISCREPANCY docstring; do not change this to 5 to match "
-        "134-CONTEXT.md D-20's prose without re-deriving the arithmetic"
+    assert counts.n_ran == 5, (
+        f"measured n_ran={counts.n_ran}, expected 5 -- 260807-kaq dropped "
+        "this from 6 (blank-check is now NA for this protocol-0x0D chip, "
+        "so it no longer counts as 'ran'); see this test's MEASURED "
+        "DISCREPANCY docstring; do not change this to match "
+        "134-CONTEXT.md D-20's stale prose without re-deriving the "
+        "arithmetic"
     )
-    assert counts.m_applicable == 10, (
-        f"measured m_applicable={counts.m_applicable}, expected 10 "
-        "(4 shipped-supported + 6 SDP-leg-supported, since id and erase "
-        "are both NA for this chip)"
+    assert counts.m_applicable == 9, (
+        f"measured m_applicable={counts.m_applicable}, expected 9 "
+        "(3 shipped-supported [read/write/verify] + 6 SDP-leg-supported, "
+        "since id, erase AND NOW blank-check (260807-kaq) are all NA for "
+        "this chip)"
     )
 
 

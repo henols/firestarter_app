@@ -311,6 +311,24 @@ _PROTOCOL_FLASH4 = 0x05
 # bare literal.
 _PROTOCOL_EEPROM_28C = 0x0D
 
+# Quick task 260807-kaq: the two protocols whose FAMILY auto-erases per page
+# during the write itself, so no step in a "full"/"partial" plan can EVER
+# leave the device blank -- there is no erase op for blank-check to sit
+# behind, and a supported blank-check here would report chip state, not
+# tool health (the same defect this task exists to fix, wearing a different
+# hat). Measured against the live DB (746 chips, kaq_buckets.py): 111 chips
+# carry one of these two protocols (66 EEPROM + 18 Flash/EEPROM on 0x0D, 27
+# Flash/EEPROM on 0x05) -- all 111 have FLAG_CAN_ERASE clear by construction
+# (database.py:582-595 clears it for exactly these protocols), so this set
+# never overlaps the executable-erase case below. Deliberately narrow rather
+# than the broader "non-UV, no erase step" predicate: measured residual
+# outside this set (76 chips, all SRAM/FRAM) is already, and separately,
+# routed to NA by the SRAM/FRAM branch below BEFORE this predicate is ever
+# reached -- so the narrow and broad predicates coincide with zero measured
+# cost, and the narrow set is strictly safer against a future OTP/PROM-like
+# DB addition that would need its pre-write blank-check kept visible.
+_AUTO_ERASE_ON_WRITE_PROTOCOLS = frozenset({_PROTOCOL_FLASH4, _PROTOCOL_EEPROM_28C})
+
 # SRAM/FRAM electrical types and protocol ids: blank-check has no meaningful
 # concept for volatile/byte-rewritable memory. derive_plan owns this NA
 # decision up front (RESEARCH nuance recommendation (a)) rather than relying
@@ -586,23 +604,70 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     # read / verify: always supported -- every protocol reads.
     steps.append(Step(op=OP_READ, supported=True, reason=""))
 
-    # blank-check: NA for SRAM/FRAM (derive_plan owns this decision up
-    # front, mirroring check_eprom_blank's own short-circuit by BOTH
-    # electrical-type and protocol-id, since the programmer dict passed to
-    # the operator lacks those keys -- RESEARCH § nuance recommendation a).
+    # erase_is_executable (quick task 260807-kaq): the SINGLE boolean deciding
+    # whether the supported OP_ERASE Step below actually gets appended --
+    # consumed a second time, read-only, by the blank-check placement logic
+    # immediately below, so the two decisions can never drift apart. Mirrors
+    # the erase arm's own supported condition (can_erase and protocol !=
+    # _PROTOCOL_FLASH4) narrowed by write_execute, since an erase step that is
+    # merely advisory (locked_destructive, write_scope="none") never actually
+    # runs -- there is nothing for blank-check to sit behind.
+    erase_is_executable = can_erase and protocol != _PROTOCOL_FLASH4 and write_execute
+
+    # blank-check (quick task 260807-kaq): a blank-check verdict is only
+    # meaningful once SOMETHING in this plan can actually leave the device
+    # blank. Built into a local Step here and appended at ONE of two possible
+    # positions below -- never both -- so the SDP leg block (appended last,
+    # unconditionally) always stays a contiguous terminal block regardless of
+    # where blank-check itself lands:
+    #   1. SRAM/FRAM -- NA, unchanged position/reason (volatile/byte-
+    #      rewritable memory has no factory-blank state at all; mirrors
+    #      check_eprom_blank's own short-circuit by BOTH electrical-type and
+    #      protocol-id, since the programmer dict passed to the operator
+    #      lacks those keys -- RESEARCH § nuance recommendation a).
+    #   2. erase_is_executable -- supported=True, but appended AFTER the
+    #      erase step (below) instead of here: only once erase has actually
+    #      run does "not blank" become a real, actionable tool-health
+    #      finding rather than a report of the chip's pre-existing state.
+    #   3. write_execute and protocol in _AUTO_ERASE_ON_WRITE_PROTOCOLS --
+    #      NA at this original position: no step in this plan can EVER
+    #      leave the device blank (each page write auto-erases internally),
+    #      so a supported blank-check here would report chip state, not
+    #      tool health -- the same defect wearing a different hat.
+    #   4. Everything else (UV-EPROM at any scope, every write_scope="none"
+    #      plan, any non-UV/non-erasable part outside case 3) -- unchanged:
+    #      supported=True at this original position. UV-EPROM in particular
+    #      keeps its blank-check HERE deliberately: the write is
+    #      irrecoverable and only UV light erases, so "not blank" is a real,
+    #      operator-actionable pre-write finding, not a false failure.
     if etype in _SRAM_FRAM_ETYPES or protocol in _SRAM_PROTO_IDS:
-        steps.append(
-            Step(
-                op=OP_BLANK_CHECK,
-                supported=False,
-                reason=(
-                    f"blank-check not applicable to {etype or 'unknown'} "
-                    "(volatile/byte-rewritable, no factory-blank state)"
-                ),
-            )
+        blank_check_step = Step(
+            op=OP_BLANK_CHECK,
+            supported=False,
+            reason=(
+                f"blank-check not applicable to {etype or 'unknown'} "
+                "(volatile/byte-rewritable, no factory-blank state)"
+            ),
+        )
+    elif write_execute and protocol in _AUTO_ERASE_ON_WRITE_PROTOCOLS:
+        family = (
+            "0x0D (28C family)" if protocol == _PROTOCOL_EEPROM_28C else "0x05 (flash4)"
+        )
+        blank_check_step = Step(
+            op=OP_BLANK_CHECK,
+            supported=False,
+            reason=(
+                f"protocol {family} auto-erases per page during write; no "
+                "step in this plan can ever leave the device blank"
+            ),
         )
     else:
-        steps.append(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+        blank_check_step = Step(op=OP_BLANK_CHECK, supported=True, reason="")
+
+    if not erase_is_executable:
+        # Cases 1/3/4 above: no erase step will run, so blank-check keeps
+        # its historic position (right after read, before write).
+        steps.append(blank_check_step)
 
     # write: always supported, always flagged destructive. When
     # write_scope="none" the step is OMITTED from the executable `steps`
@@ -632,9 +697,12 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     # preceding write on a non-executing run, so a bare verify would compare
     # a freshly-generated pattern against unrelated chip contents).
     # Positioned after write and before erase so the destructive step order
-    # (write, verify, erase) is unchanged. Its write_region equals the write
-    # step's -- a verify's region is definitionally the preceding write's
-    # (D-07).
+    # (write, verify, erase) is UNCHANGED by this task -- but a blank-check
+    # may now follow the erase step (see erase_is_executable above): once
+    # something in the plan can leave the device blank, blank-check doubles
+    # as that step's own oracle instead of reporting pre-existing chip
+    # state. Its write_region equals the write step's -- a verify's region
+    # is definitionally the preceding write's (D-07).
     if write_execute:
         steps.append(
             Step(op=OP_VERIFY, supported=True, reason="", write_region=write_region)
@@ -648,9 +716,17 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     # (flash4 auto-erases per page; the flag is deliberately clear for it --
     # Pitfall 6). UV-EPROM never has the flag set (electrical-type is not in
     # {EEPROM, Flash/EEPROM}) so it is NA here for the same condition.
+    # `erase_is_executable` (computed once, above, and reused verbatim here)
+    # is exactly `can_erase and protocol != _PROTOCOL_FLASH4 and
+    # write_execute` -- never re-derived, so this arm and the blank-check
+    # placement decision can never drift apart.
     if can_erase and protocol != _PROTOCOL_FLASH4:
-        if write_execute:
+        if erase_is_executable:
             steps.append(Step(op=OP_ERASE, supported=True, reason="", destructive=True))
+            # Case 2 (above): blank-check now follows the erase step it
+            # doubles as an oracle for, and precedes the SDP leg block
+            # appended below -- the leg stays a contiguous terminal block.
+            steps.append(blank_check_step)
         else:
             locked_destructive.append(
                 (OP_ERASE, 'write_scope="none": erase omitted (D-01)')

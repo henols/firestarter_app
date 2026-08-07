@@ -866,8 +866,18 @@ class TestAbsentChipHardFail:
         assert steps["id"]["verdict"] == "NA"
         assert steps["read"]["verdict"] == "SKIPPED"
         assert "adapter" in steps["read"]["reason"]
-        assert steps["blank-check"]["verdict"] == "SKIPPED"
-        assert "adapter" in steps["blank-check"]["reason"]
+        # Quick task 260807-kaq moved this assertion: AT28C16 is protocol
+        # 0x0D (28C family, measured), so derive_plan now emits blank-check
+        # as NA-by-family-fact (case 3, auto-erase-on-write) BEFORE run_plan
+        # ever reaches resolve_chip's adapter refusal -- blank-check no
+        # longer carries the adapter reason at all. "write" below remains
+        # this test's proof that the adapter-required guard still surfaces
+        # as SKIPPED, never a bare exit, on a step that DOES reach
+        # resolve_chip.
+        assert steps["blank-check"]["verdict"] == "NA"
+        assert "0x0d" in steps["blank-check"]["reason"].lower()
+        assert steps["write"]["verdict"] == "SKIPPED"
+        assert "adapter" in steps["write"]["reason"]
 
 
 # ---------------------------------------------------------------------------
@@ -1715,3 +1725,75 @@ class TestLaunderingRoutesR3R4:
         assert hold_state == f"{SDP_HOLD_NOT_RUN}: {expected_reason}", hold_state
         normalized = _normalize_console_text(result.output)
         assert f"sdp_hold_state {hold_state}" in normalized, normalized
+
+
+# ---------------------------------------------------------------------------
+# Quick task 260807-kaq: blank-check must run AFTER erase, end to end.
+# `pytest -k "blank_check_after_erase"` selects this class.
+# ---------------------------------------------------------------------------
+
+
+class TestBlankCheckAfterEraseKaq:
+    """End-to-end proof that a `dev test` run no longer scores a false BAD
+    verdict for a chip that merely held data at the moment blank-check used
+    to run (before any write/erase touched it).
+
+    This class was written and observed RED against the unmodified
+    `chip_test.py` (blank-check ran BEFORE erase, so the honest-simulation
+    closure below returned False and the run exited 1) -- see
+    260807-kaq-SUMMARY.md for the captured failure output.
+    """
+
+    def test_erasable_chip_blank_only_after_erase_exits_0(
+        self, runner: CliRunner
+    ) -> None:
+        """M8720 (an executable-erase chip): an honest simulation of a used
+        device that only becomes blank once erase has actually run --
+        `check_eprom_blank`'s closure returns `operator.erase_eprom.called`.
+        With blank-check now positioned AFTER erase, the closure observes
+        True and the step verdicts OK; the whole run exits 0."""
+        operator = make_clean_operator()
+
+        def _blank_only_after_erase(name: str, eprom_data: dict) -> bool:
+            return bool(operator.erase_eprom.called)
+
+        operator.check_eprom_blank.side_effect = _blank_only_after_erase
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+        data = _load_report(_CHIP_NO_ID)
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["blank-check"]["verdict"] == "OK", steps["blank-check"]
+
+    def test_auto_erase_on_write_chip_never_calls_blank_check_and_exits_0(
+        self, runner: CliRunner
+    ) -> None:
+        """AT28C256 (protocol 0x0D, 28C family): no step in this plan can
+        ever leave the device blank (each page write auto-erases
+        internally), so blank-check is emitted NA -- `run_plan` skips an
+        unsupported step WITHOUT any operator call. A non-blank device
+        (`check_eprom_blank.return_value = False`) must not matter at all:
+        the run still exits 0 and the operator method is never dispatched.
+
+        AT28C256 is also one of the 43 SDP-ALLOW chips, so its plan carries
+        the six-step SDP leg -- `make_held_lock_operator()` (this suite's
+        established clean-success ALLOW-chip double, see
+        `TestHoldStateLeg12` above) is used instead of `make_clean_operator()`
+        so the leg's own baseline/lock/inhibited/unlock/restore steps
+        genuinely succeed and do not confound this test's own exit-0
+        assertion with an unrelated SDP-leg BAD/NOT-HELD."""
+        operator = make_held_lock_operator()
+        operator.check_eprom_blank.return_value = False
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        assert result.exit_code == 0, result.output
+        data = _load_report(_CHIP_ALLOW)
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["blank-check"]["verdict"] == "NA", steps["blank-check"]
+        operator.check_eprom_blank.assert_not_called()

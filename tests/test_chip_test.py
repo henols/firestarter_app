@@ -594,18 +594,24 @@ def test_derive_plan_destructive_flag_strips_not_annotates():
 
     # Recorded op sequences (SUMMARY): write_scope="none" ->
     # ["id", "read", "blank-check"]; write_scope="full" ->
-    # ["id", "read", "blank-check", "write", "verify", "erase"] plus the
-    # six SDP-leg NA ops (LEG-02, this phase) -- identical to the
-    # pre-121-05 destructive=False/True sequences for this chip PLUS the
-    # new appended block.
+    # ["id", "read", "write", "verify", "erase", "blank-check"] plus the
+    # six SDP-leg NA ops (LEG-02, this phase).
+    #
+    # Quick task 260807-kaq moved this assertion's write_scope="full" order:
+    # M8720 has an executable erase step (protocol 0x08, FLAG_CAN_ERASE set),
+    # so blank-check now runs AFTER erase instead of before write -- it
+    # doubles as erase's own oracle instead of reporting the chip's
+    # pre-existing (pre-erase) state as a false BAD. write_scope="none" is
+    # UNCHANGED: no erase step is ever executable there (case 2 requires
+    # write_execute), so blank-check keeps its historic position.
     assert ops_default == ["id", "read", "blank-check"]
     assert ops_destructive == [
         "id",
         "read",
-        "blank-check",
         "write",
         "verify",
         "erase",
+        "blank-check",
         *_SDP_LEG_STEP_ORDER,
     ]
     sdp_steps = [s for s in plan_destructive.steps if s.op in _SDP_LEG_STEP_ORDER]
@@ -2260,35 +2266,37 @@ def _gated_allow_operator():
 def test_count_applicable_sdp_gated_allow_chip_ratio_drops():
     """LEG-13's pinning test. For AT28C256 (a measured ALLOW chip) at
     `write_scope="full"` with the oracle gated (the dead-write-path shape,
-    gh#20's own bench), `count_applicable` measures `m_applicable == 10`
+    gh#20's own bench), `count_applicable` measures `m_applicable == 9`
     (the six SDP steps carry `supported=True` and are already counted in
-    M -- `id`/`erase` are the only two NA steps on this chip, so
-    4 shipped + 6 SDP = 10) and `n_ran == 6` (four shipped ops plus
-    `write-baseline-a`, which is never itself gated and reports OK against
-    this fixture, ran; the four `_SDP_LEG_GATED_OPS` members SKIP).
+    M -- `id`/`erase`/`blank-check` are the three NA steps on this chip, so
+    3 shipped + 6 SDP = 9) and `n_ran == 5` (three shipped ops [read, write,
+    verify] plus `write-baseline-b`/`write-baseline-a`, which reports BAD/OK
+    respectively and both count as ran; the four `_SDP_LEG_GATED_OPS`
+    members SKIP).
 
     MEASURED DISCREPANCY, carried forward rather than silently reconciled
     (the same project convention 134-04-SUMMARY.md and 134-07-SUMMARY.md
     both already recorded for this identical computation): 134-CONTEXT.md
     D-20 and this plan's own text state the dead-write-path shape produces
-    `n_ran=5`. The ACTUAL measured value, run live against AT28C256 with
-    this dead-write-path operator, is `n_ran=6` -- because
-    `write-baseline-a` is never itself gated by `_baseline_closes_sdp_gate`
-    (only the FOUR downstream `_SDP_LEG_GATED_OPS` members are skipped once
-    the gate closes, per 134-04's own design), and this fixture's read-back
-    always matches pattern A, so `write-baseline-a` reports OK and counts
-    as ran. This does NOT affect LEG-13's own claim -- the headline ratio
-    still DROPS, from today's misleading "4 of 4" to "6 of 10" under this
-    leg -- only the specific numeral quoted in 134-CONTEXT.md/the plan's
-    own prose, which this test does not restate as though it were correct.
+    `n_ran=5`, matching the CURRENT measured value below -- but this
+    coincidence is itself an M/N delta, not a restored agreement: before
+    quick task 260807-kaq's blank-check fix, this same fixture measured
+    `n_ran=6, m_applicable=10` (blank-check was a real supported step here,
+    since AT28C256 is protocol 0x0D and 260807-kaq had not yet flipped it to
+    NA-by-family-fact). 260807-kaq's fix removes blank-check from BOTH M and
+    N for this chip (case 3: protocol 0x0D auto-erases per page during
+    write, so no step in this plan can ever leave the device blank) --
+    `m_applicable` drops 10 -> 9, `n_ran` drops 6 -> 5. This does NOT affect
+    LEG-13's own claim -- the headline ratio still DROPS, now from today's
+    misleading "4 of 4" to "5 of 9" under this leg.
     """
     plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
     operator = _gated_allow_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
     counts = count_applicable(plan, results)
-    assert counts.m_applicable == 10, counts
-    assert counts.n_ran == 6, counts  # measured, not the stated 5 -- see docstring
+    assert counts.m_applicable == 9, counts  # 260807-kaq: M dropped 10 -> 9
+    assert counts.n_ran == 5, counts  # 260807-kaq: N dropped 6 -> 5
     assert counts.n_ran < counts.m_applicable, counts  # the ratio drops (LEG-13)
 
     write_baseline_b = _result(results, "write-baseline-b")
@@ -2365,7 +2373,11 @@ def test_count_applicable_sdp_banner_row_renders_the_dropped_ratio():
     operator = _gated_allow_operator()
     results = run_plan(plan, operator, _REAL_DB)
     banner = count_applicable(plan, results)
-    assert banner.n_ran == 6 and banner.m_applicable == 10  # see the docstring above
+    # 260807-kaq: n_ran/m_applicable dropped 6/10 -> 5/9 -- blank-check is
+    # now NA (not a real step) for this protocol-0x0D chip. See the
+    # docstring above on `test_count_applicable_sdp_gated_allow_chip_ratio_
+    # drops` for the full M/N delta accounting.
+    assert banner.n_ran == 5 and banner.m_applicable == 9  # see the docstring above
 
     auto_capture = AutoCapture(
         host_version=firestarter.__version__, chip="AT28C256", protocol="0x0D"
