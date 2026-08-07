@@ -35,6 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    # Exposed so the pypi job below can check out the exact tag this run
+    # created, rather than re-deriving it and risking a mismatch.
+    outputs:
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       - name: Checkout
@@ -106,3 +110,25 @@ jobs:
           make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+  # Upload the pre-release to PyPI.
+  #
+  # This exists because the release.published event does NOT reach publish.yml
+  # for betas: the Release step above creates the release with
+  # secrets.PERSONAL_ACCESS_TOKEN, and that PAT lacks `workflow` scope, so
+  # GitHub suppresses the downstream event. The failure was silent -- GitHub
+  # reached b17 while PyPI stopped at b15, and nothing reported an error.
+  #
+  # Calling publish.yml directly removes the dependency on event delivery and
+  # on any credential's scope. `needs: github` orders this after the tag
+  # exists, and the tag is taken from that job's output rather than re-derived,
+  # so the upload cannot drift from the release.
+  #
+  # secrets: inherit satisfies publish.yml's required PYPI_API_TOKEN without
+  # naming it here.
+  pypi:
+    needs: github
+    uses: ./.github/workflows/publish.yml
+    with:
+      tag: ${{ needs.github.outputs.version }}
+    secrets: inherit
