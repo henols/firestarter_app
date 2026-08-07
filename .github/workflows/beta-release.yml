@@ -1,17 +1,28 @@
 name: Create a new beta pre-release
 on:
+  # EVERY merge to beta cuts a pre-release. The paths-ignore list that used to
+  # sit here ('**.md', '**.sh', '.gitignore', 'docs/**', 'images/**',
+  # '.github/**', '.vscode/**', 'tools/**') meant a merge touching only those
+  # paths bumped no version and published nothing, so beta silently stopped
+  # tracking its own branch. PR #46 hit exactly that: a .github/** change
+  # merged to beta and produced no pre-release at all, while the firmware repo
+  # -- whose equivalent list has no '.github/**' entry -- did cut one from the
+  # same class of change. The two repos disagreed about what beta means.
+  #
+  # Constant version bumping on beta is explicitly fine (operator decision):
+  # beta is a moving pre-release channel, not a curated one, so a version that
+  # advances on every merge is the desired behaviour rather than noise. The
+  # cost of the old filter -- a published beta that does not correspond to any
+  # beta commit -- is far worse than an extra version number.
+  #
+  # No publish loop: the "Commit updated version" step below uses
+  # git-auto-commit-action with the default GITHUB_TOKEN, and pushes made with
+  # GITHUB_TOKEN do not trigger workflow runs. Confirmed empirically in the
+  # firmware repo, where the equivalent auto-commit landed on beta and started
+  # no second run.
   push:
     branches:
     - beta
-    paths-ignore:
-    - '**.md'
-    - '**.sh'
-    - '.gitignore'
-    - 'docs/**'
-    - 'images/**'
-    - '.github/**'
-    - '.vscode/**'
-    - 'tools/**'
   workflow_dispatch:
     inputs:
       beta_version:
