@@ -102,15 +102,19 @@ def _make_fake_comm(fake_ser: _FakeSerial) -> SerialCommunicator:
 
 
 def _feed_fw_handshake_then_0xbb(fake_ser: _FakeSerial) -> None:
-    """Pre-load the fake serial with the FW-version handshake acks followed by a 0xBB ERROR.
+    """Pre-load the fake serial with a 0xBB ERROR as the first response.
 
-    The probe sequence in _probe_port:
-      1. setup-complete ack: "OK: Ready"   (init_programmer OK ack)
-      2. FW version ack:    "OK: FW: 3.0.0, ..."
-      3. user-command ack:   0xBB ERROR id-frame  <- triggers ProtocolNotImplementedError
+    The probe sequence in _probe_port (CAP-02):
+      1. user-command ack: 0xBB ERROR id-frame  <- triggers ProtocolNotImplementedError
+
+    Before CAP-02 this helper also fed the two acks of a dedicated
+    CMD_FW_VERSION pre-probe ("OK: Ready" then "OK: FW: 3.0.0, ..."), because
+    _probe_port sent that probe ahead of the user's command. That probe is
+    retired — the firmware identity now rides in the MSG_OK_READY ack — so the
+    user's command is the FIRST thing on the wire and its ack is the first
+    response. Feeding the old handshake here would make expect_ack consume
+    "OK: Ready" as the user-command ack and never reach the 0xBB frame.
     """
-    fake_ser.feed(b"OK: Ready\n")
-    fake_ser.feed(f"OK: {FW_VERSION_MSG}\n".encode())
     fake_ser.feed(
         build_frame(MSG_ERR_PROTOCOL_NOT_IMPLEMENTED, bytes([PROTOCOL_VALUE]))
     )
@@ -267,11 +271,10 @@ def test_e_non_0xbb_error_at_probe_time_surfaces_as_generic_path() -> None:
     """
     from firestarter.exceptions import ProgrammerNotFoundError
 
-    # Feed: version handshake OK, then a generic (non-0xBB) ERROR
-    fake_ser = _FakeSerial()
-    fake_ser.feed(b"OK: Ready\n")
-    fake_ser.feed(f"OK: {FW_VERSION_MSG}\n".encode())
+    # CAP-02: the user's command is the first thing on the wire (the dedicated
+    # CMD_FW_VERSION pre-probe is retired), so its ack is the first response.
     # MSG_ERR_NOT_SUPPORTED (0xa5) — generic error, NOT 0xBB
+    fake_ser = _FakeSerial()
     fake_ser.feed(build_frame(MSG_ERR_NOT_SUPPORTED, bytes([0x00])))
 
     def mock_init(self, port=None, baud_rate=None, **kwargs):

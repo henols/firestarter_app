@@ -198,6 +198,7 @@ from firestarter.exceptions import (
     EpromOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
+    HardwareRevisionUnsupportedError,
     ProgrammerNotFoundError,
     SerialError,
     SerialTimeoutError,
@@ -610,31 +611,40 @@ def test_hardware_error_degrades_one_step():
     operator.check_eprom_blank.assert_called()
 
 
-@pytest.mark.parametrize("exc_cls", [ProgrammerNotFoundError, FirmwareOutdatedError])
+@pytest.mark.parametrize(
+    "exc_cls",
+    [ProgrammerNotFoundError, FirmwareOutdatedError, HardwareRevisionUnsupportedError],
+)
 def test_run_fatal_escapes(exc_cls):
-    """ProgrammerNotFoundError and FirmwareOutdatedError still ESCAPE
-    run_plan unchanged (D-08) -- these are run-fatal host-setup conditions
-    that belong to cli_handlers.py's @map_typed_errors mapper, not chip
-    findings. Escape is asserted by object IDENTITY, not just class, so a
-    re-wrap cannot pass.
+    """ProgrammerNotFoundError, FirmwareOutdatedError and
+    HardwareRevisionUnsupportedError still ESCAPE run_plan unchanged (D-08) --
+    these are run-fatal host-setup conditions that belong to cli_handlers.py's
+    @map_typed_errors mapper, not chip findings. Escape is asserted by object
+    IDENTITY, not just class, so a re-wrap cannot pass.
 
     Standing invariant: SerialError.__subclasses__() is pinned to the
-    measured three-class census. A fourth subclass added by a later phase
-    without updating _run_step's re-raise clause would silently bypass it
-    and become a false-green no-board report -- this assertion is what
-    would catch that."""
+    measured census. A subclass added by a later phase without updating
+    _run_step's re-raise clause would silently bypass it and become a
+    false-green no-board report -- this assertion is what would catch that.
+
+    CAP-02 grew the census from three to four. The gate fired exactly as
+    designed when HardwareRevisionUnsupportedError was introduced: without the
+    matching _run_step change, a shield-revision refusal would have degraded to
+    a BAD step per remaining operation, reporting a damaged-looking chip when
+    the real cause was a shield that cannot safely drive it."""
     assert set(SerialError.__subclasses__()) == {
         SerialTimeoutError,
         ProgrammerNotFoundError,
         FirmwareOutdatedError,
+        HardwareRevisionUnsupportedError,
     }, (
         "SerialError gained or lost a subclass since D-08 was measured -- "
-        "_run_step's (ProgrammerNotFoundError, FirmwareOutdatedError) "
-        "re-raise clause is only complete against the THREE-class census "
-        "D-08 names; a new subclass here would silently fall through to "
-        "the (SerialError, HardwareOperationError) degrade clause instead "
-        "of escaping, turning a no-board/old-firmware run into a false "
-        "BAD-step report (133-CONTEXT.md D-08)."
+        "_run_step's (ProgrammerNotFoundError, FirmwareOutdatedError, "
+        "HardwareRevisionUnsupportedError) re-raise clause is only complete "
+        "against the FOUR-class census named here; a new subclass would "
+        "silently fall through to the (SerialError, HardwareOperationError) "
+        "degrade clause instead of escaping, turning a no-board/old-firmware/"
+        "wrong-shield run into a false BAD-step report (133-CONTEXT.md D-08)."
     )
 
     operator = _mock_operator()
