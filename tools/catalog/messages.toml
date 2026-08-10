@@ -529,6 +529,14 @@ params      = []
 wire_format = "id_frame"
 
 [[messages]]
+id          = 0xAE
+name        = "MSG_ERR_PULSE_TOO_WIDE"
+severity    = "ERROR"
+format      = "Pulse width %lu us exceeds this protocol's per-byte program-energy budget"
+params      = [{ type = "u32", render = "dec" }]
+wire_format = "id_frame"
+
+[[messages]]
 id          = 0xAF
 name        = "MSG_ERR_VERIFY"
 severity    = "ERROR"
@@ -665,6 +673,28 @@ name        = "MSG_ERR_FL4_BOOT_BLOCK_LOCKED"
 severity    = "ERROR"
 format      = "boot block locked -- 0x%06lx not programmable (W29C040 section 6.6 irreversible lockout)"
 params      = [{ type = "u24", render = "hex_addr" }]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xBD
+name        = "MSG_ERR_MAX_PULSES"
+severity    = "ERROR"
+format      = "Byte at 0x%06x failed to program within %d pulses"
+params      = [
+    { type = "u24", render = "hex_addr" },
+    { type = "u8" },
+]
+wire_format = "id_frame"
+
+[[messages]]
+id          = 0xBE
+name        = "MSG_ERR_ENERGY_CAP"
+severity    = "ERROR"
+format      = "Byte at 0x%06x exhausted its per-byte program-energy budget after %d pulses"
+params      = [
+    { type = "u24", render = "hex_addr" },
+    { type = "u8" },
+]
 wire_format = "id_frame"
 
 # ---------------------------------------------------------------------------
