@@ -172,6 +172,21 @@ def _cap02_params(buffer_size: int, revision: int, identity: str) -> bytes:
     return struct.pack(">H", buffer_size) + bytes([revision, len(raw)]) + raw
 
 
+def _cap03_params(
+    buffer_size: int, revision: int, identity: str, budget_s: int
+) -> bytes:
+    """[buffer_size u16 BE][hw_revision u8][ver_len u8][ver bytes][write_budget_s u16 BE].
+
+    Built by COMPOSING `_cap02_params` rather than duplicating its body, so
+    the two fixtures cannot drift apart. Reproduces the firmware's documented
+    wire layout verbatim -- 143-RESEARCH.md's "Example 2" -- and is the
+    closest thing this repo has to a cross-repo wire-layout parity assertion;
+    nothing else in either repo compares the two sides (RESEARCH Open
+    Question 4 hands the standing gate to Phase 144 / TEST-07).
+    """
+    return _cap02_params(buffer_size, revision, identity) + struct.pack(">H", budget_s)
+
+
 def test_decode_extended_ack_populates_all_three_fields(make_comm):
     comm = make_comm()
     body = _ready_body(_cap02_params(1024, REVISION_2_2, "3.0.0:leonardo"))
@@ -217,6 +232,114 @@ def test_decode_implausible_buffer_size_is_clamped_away(make_comm):
 
     assert comm.firmware_max_chunk is None
     assert comm.hw_revision == REVISION_2_2
+
+
+# ---------------------------------------------------------------------------
+# 2b. CAP-03 -- the per-block write-time budget (HOST-01, host half only)
+# ---------------------------------------------------------------------------
+
+
+def test_decode_cap03_budget_at_short_identity_length(make_comm):
+    """106 s is the real advertised figure for 0x0B at its modal 500 us pulse
+    width on a 1024-byte block (143-RESEARCH.md's Budget Arithmetic table)."""
+    comm = make_comm()
+    body = _ready_body(_cap03_params(1024, REVISION_2_2, "3.0.0:uno", 106))
+    comm._decode_id_frame(len(body), body)
+
+    assert comm.firmware_max_chunk == 1024
+    assert comm.hw_revision == REVISION_2_2
+    assert comm.firmware_identity == "3.0.0:uno"
+    assert comm.write_block_budget_s == 106
+
+
+def test_decode_cap03_budget_at_long_identity_length_proves_ver_end_is_computed(
+    make_comm,
+):
+    """This identity is five bytes longer than the short-identity case's
+    ("3.0.0:leonardo" vs "3.0.0:uno"), so any FIXED-index decode of the
+    budget field passes exactly one of these two cases and fails the other
+    -- together they are D-08's named hazard, proved. 3358 s is the real
+    advertised figure for 0x07 at its worst reachable --pulse-us width
+    (65535 us) on a 1024-byte block."""
+    comm = make_comm()
+    body = _ready_body(_cap03_params(1024, REVISION_2_2, "3.0.0:leonardo", 3358))
+    comm._decode_id_frame(len(body), body)
+
+    assert comm.firmware_max_chunk == 1024
+    assert comm.hw_revision == REVISION_2_2
+    assert comm.firmware_identity == "3.0.0:leonardo"
+    assert comm.write_block_budget_s == 3358
+
+
+def test_decode_cap02_ack_without_a_budget_tail_leaves_the_budget_none(make_comm):
+    """The REALISTIC absent-advertisement case: a released `beta` firmware
+    has CAP-02 but not CAP-03 yet (a v1.31 build after CAP-02 is ported but
+    before CAP-03 lands is the other reachable case). None must mean "use
+    the safe default", never an error and never a refusal (D-10) -- exactly
+    the posture Phase 54's reversed FirmwareOutdatedError established."""
+    comm = make_comm()
+    body = _ready_body(_cap02_params(1024, REVISION_2_2, "3.0.0:leonardo"))
+    comm._decode_id_frame(len(body), body)
+
+    assert comm.firmware_max_chunk == 1024
+    assert comm.firmware_identity == "3.0.0:leonardo"
+    assert comm.write_block_budget_s is None
+
+
+def test_decode_legacy_two_byte_ack_leaves_both_identity_and_budget_none(make_comm):
+    """This is exactly the shape the CURRENT v1.31 firmware branch emits
+    (BF-1): a bare 2-byte MSG_OK_READY with no CAP-02 tail at all. That is
+    why `_probe_port` refuses such a board today
+    (`test_fwguard.py::test_absent_identity_refuses`), and CAP-03 is
+    structurally unreachable on it -- offsets 2 and 3 belong to CAP-02,
+    which never runs when there is no identity tail."""
+    comm = make_comm()
+    body = _ready_body(struct.pack(">H", 512))
+    comm._decode_id_frame(len(body), body)
+
+    assert comm.firmware_max_chunk == 512
+    assert comm.firmware_identity is None
+    assert comm.hw_revision is None
+    assert comm.write_block_budget_s is None
+
+
+def test_decode_implausible_cap03_budget_is_clamped_away(make_comm):
+    """Mirrors CAP-01's [1, 4096] clamp and its T-55-06 precedent: a corrupt
+    or hostile ack must not be able to install an unbounded host timeout.
+    The boundary must be INCLUSIVE at WRITE_BUDGET_MAX_S (14400) or the
+    clamp is off by one. A rejected OR truncated budget must not take the
+    identity down with it -- only the budget field itself may degrade."""
+    # Rejected: below the [1, N] floor.
+    comm = make_comm()
+    body = _ready_body(_cap03_params(1024, REVISION_2_2, "3.0.0:leonardo", 0))
+    comm._decode_id_frame(len(body), body)
+    assert comm.write_block_budget_s is None
+    assert comm.firmware_identity == "3.0.0:leonardo"
+
+    # Rejected: above WRITE_BUDGET_MAX_S (14400).
+    comm = make_comm()
+    body = _ready_body(_cap03_params(1024, REVISION_2_2, "3.0.0:leonardo", 65535))
+    comm._decode_id_frame(len(body), body)
+    assert comm.write_block_budget_s is None
+    assert comm.firmware_identity == "3.0.0:leonardo"
+
+    # Accepted: the ceiling itself is inclusive.
+    comm = make_comm()
+    body = _ready_body(_cap03_params(1024, REVISION_2_2, "3.0.0:leonardo", 14400))
+    comm._decode_id_frame(len(body), body)
+    assert comm.write_block_budget_s == 14400
+    assert comm.firmware_identity == "3.0.0:leonardo"
+
+    # Truncated: the params region ends ONE BYTE into the budget field. A
+    # partial value is never trusted -- the field stays None, while the
+    # identity (decoded earlier, from an unrelated span of params_bytes) is
+    # unaffected.
+    comm = make_comm()
+    params = _cap02_params(1024, REVISION_2_2, "3.0.0:leonardo") + b"\x00"
+    body = _ready_body(params)
+    comm._decode_id_frame(len(body), body)
+    assert comm.write_block_budget_s is None
+    assert comm.firmware_identity == "3.0.0:leonardo"
 
 
 # ---------------------------------------------------------------------------
