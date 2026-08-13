@@ -57,12 +57,16 @@ The recorder itself wraps ``SerialCommunicator.get_response`` with an
 method** rather than replacing it with a stub -- a stub would return no
 real ``Response`` object and the state machine would never advance past its
 first call. Empirically confirmed (`.venv/ci-replica`, this session):
-``autospec=True`` on a class-level method patch passes ``self`` as the
-wrapper's own first positional argument, so every recorded ``(args,
-kwargs)`` tuple has ``args[0] is <the SerialCommunicator instance>`` and
-``args[1:]`` / ``kwargs`` carry whatever the call site actually passed --
-nothing at all for a bare ``self.comm.get_response()`` (INIT/END, D-13), or
-the resolved ``timeout`` for a write-path MAIN-phase call.
+``autospec=True`` on a class-level method patch DOES pass the instance as
+the mock's own first recorded argument (visible on ``mock.call_args``), but
+a wrapper function declared as ``def _recorder(self, *args, **kwargs)``
+binds that instance to its own named ``self`` parameter through ordinary
+Python argument binding -- so ``args`` INSIDE the wrapper already excludes
+it. This module's recorder stores exactly that already-self-free
+``(args, kwargs)`` pair, so ``args[0]`` (when present) is whatever the call
+site actually passed as its first argument after ``self`` -- nothing at all
+for a bare ``self.comm.get_response()`` (INIT/END, D-13), or the resolved
+``timeout`` for a write-path MAIN-phase call.
 """
 
 from __future__ import annotations
@@ -110,8 +114,9 @@ def _recording_get_response_patch(calls: list):
 def _timeout_of(call) -> float | None:
     """Extract the ``timeout`` value from one recorded ``get_response`` call.
 
-    ``args[0]`` is always ``self`` (autospec includes it -- see the module
-    docstring). A bare ``self.comm.get_response()`` call (INIT/END, D-13)
+    ``self`` is already excluded from the recorded ``args`` (see the module
+    docstring), so ``args[0]`` -- when present -- IS the ``timeout``
+    positional. A bare ``self.comm.get_response()`` call (INIT/END, D-13)
     carries no further positional or keyword argument at all; this returns
     ``None`` for that case rather than ``DEFAULT_RESPONSE_TIMEOUT``, so
     callers can tell "argument-free" apart from "explicitly resolved to the
@@ -120,8 +125,8 @@ def _timeout_of(call) -> float | None:
     args, kwargs = call
     if "timeout" in kwargs:
         return kwargs["timeout"]
-    if len(args) >= 2:
-        return args[1]
+    if len(args) >= 1:
+        return args[0]
     return None
 
 

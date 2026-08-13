@@ -56,7 +56,11 @@ from firestarter.exceptions import (
 from firestarter.frame_parser import _crc8_ccitt, cobs_encode
 from firestarter.messages import MSG_WARN_SDP_UNLOCK_SKIPPED
 from firestarter.sdp_capability import SDP_PROTOCOL_ID
-from firestarter.serial_comm import SerialCommunicator
+from firestarter.serial_comm import (
+    DEFAULT_RESPONSE_TIMEOUT,
+    WRITE_BUDGET_MAX_S,
+    SerialCommunicator,
+)
 from firestarter.utils import extract_hex_to_decimal
 
 logger = logging.getLogger("EpromOperator")
@@ -101,6 +105,25 @@ _TIMEOUT_ADDR_RE = re.compile(r"at 0x([0-9a-fA-F]+)")
 # Flash4 protocol ID.  Boot-block lockout is specific to the AMD/JEDEC SDP
 # page-write flash family (protocol 0x05, FLASH_AMD_STD).
 _FLASH4_PROTOCOL_ID = 5
+
+# HOST-01 / D-09-D-10: fallback write-path response timeout for when the
+# firmware does not advertise a per-block write-time budget (CAP-03,
+# SerialCommunicator.write_block_budget_s). DERIVED, not picked: the worst
+# shipped-database block time under the new per-byte loop with no
+# advertisement is 0x0B at 50 ms/byte x 1024 B = 51.2 s (the energy cap
+# lands on exactly 50 ms for every shipped 0x0B width), and 0x07/0x08 at
+# 25 x 1000 us x 1024 B = 25.6 s -- so 120 s is more than 2x the worst
+# shipped case. Sharper still: 120 s covers EVERY REACHABLE 0x0B width,
+# because that protocol's per-byte bound can never exceed 99998 us and
+# 99998 x 1024 = 102.4 s. Residual non-claim: the gap is 0x07/0x08 only, at
+# 120 / (25 x 1024) = 4687 us on a Leonardo and 120 / (25 x 512) = 9375 us
+# on an Uno; and the reachable absent-advertisement cases are a released
+# beta firmware (has CAP-02, lacks CAP-03) or a v1.31 build after the CAP-02
+# port but before CAP-03 lands -- NOT a mid-milestone v1.31 build, which
+# cannot connect at all (BF-1). DEFAULT_RESPONSE_TIMEOUT's own value is
+# untouched by this constant (D-12) -- it is imported only to resolve
+# _main_phase_send_data's new response_timeout kwarg below.
+WRITE_BLOCK_TIMEOUT_FALLBACK_S = 120.0
 
 
 def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional[str]:
@@ -311,6 +334,41 @@ class EpromOperator:
             return max_chunk
         # CAP-01 safe Uno-floor default: absent advertisement -> 512.
         return 512
+
+    def _write_block_timeout(self) -> float:
+        """Return the per-response wait for a write's MAIN phase, in seconds.
+
+        HOST-01 / D-09: the firmware's advertised ``write_block_budget_s``
+        (CAP-03, decoded in ``serial_comm.py``) is used VERBATIM -- the
+        firmware already padded it (its own ``delay(500)`` VPE settle, the
+        final full-block verify pass and the per-pulse settle are all
+        folded in), so the host applies no multiplier of its own on top.
+
+        D-10: an absent, truncated or implausible advertisement returns the
+        derived ``WRITE_BLOCK_TIMEOUT_FALLBACK_S`` instead -- never an error
+        and never a refusal. Mirrors ``_calculate_buffer_size``'s precedent
+        directly above: Phase 54's ``FirmwareOutdatedError`` was reversed
+        into exactly this "safe default on absence" shape, which is the
+        standing argument against refusing the write here too.
+
+        The ``[1, WRITE_BUDGET_MAX_S]`` range test is a second line of
+        defence behind ``serial_comm``'s own decode-time plausibility
+        clamp: a value outside that range can only reach
+        ``write_block_budget_s`` if something bypassed the decoder, and
+        this method must not trust it even then -- both a too-small
+        (``0``) and an implausibly-large (``> WRITE_BUDGET_MAX_S``) value
+        fall back identically, so a corrupt or hostile ack can never
+        install either a too-tight or an unbounded host wait.
+
+        MUST be called from inside ``write_eprom``'s ``_operation_context``
+        ``with`` block: that block's ``finally`` sets ``self.comm`` to
+        ``None`` on exit, so a call after it exits would always take the
+        None-comm branch below.
+        """
+        budget = getattr(self.comm, "write_block_budget_s", None) if self.comm else None
+        if budget is not None and 1 <= budget <= WRITE_BUDGET_MAX_S:
+            return float(budget)
+        return WRITE_BLOCK_TIMEOUT_FALLBACK_S
 
     def _setup_operation(  # Remains largely the same, as it's a prerequisite for the context manager  # noqa: E501
         self,
@@ -541,6 +599,7 @@ class EpromOperator:
         input_file_path: str,
         buffer_size: int,
         eprom_data_dict: Optional[dict] = None,
+        response_timeout: Optional[float] = None,
     ) -> None:
         """Main phase handler for writing or verifying data.
 
@@ -549,19 +608,36 @@ class EpromOperator:
         to MSG_ERR_FL4_VERIFY_TIMEOUT errors when the failing address is in the
         first or last 16K of a flash4 (protocol 0x05) chip.  Passing None (the
         default) keeps behaviour identical to pre-FIX-01b for all other callers.
+
+        ``response_timeout`` (HOST-01 / D-12) is the write-only per-response
+        wait: ``write_eprom`` passes ``self._write_block_timeout()`` from
+        inside its ``_operation_context`` ``with`` block; ``verify_eprom``
+        does not pass it at all, so the default of ``None`` (which resolves
+        to ``DEFAULT_RESPONSE_TIMEOUT`` below) keeps ``verify_eprom`` byte
+        -identical to its pre-HOST-01 behaviour -- exactly the same
+        default-preserves-old-callers contract the ``eprom_data_dict``
+        paragraph above already uses. ``get_response(timeout)`` is an
+        already-supported call form (``expect_ack`` uses it); this is the
+        ONLY timeout change on the write path -- ``_read_and_parse_lines``
+        and its timeout-reset semantics are untouched (D-13, GATE-1.8d).
         """
         if not os.path.exists(input_file_path):
             raise EpromOperationError(f"Input file {input_file_path} not found.")
 
         protocol: int = (eprom_data_dict or {}).get("protocol-id", 0)
         mem_size: int = (eprom_data_dict or {}).get("memory-size", 0)
+        timeout = (
+            response_timeout
+            if response_timeout is not None
+            else DEFAULT_RESPONSE_TIMEOUT
+        )
 
         with open(input_file_path, "rb") as file_handle:
             file_size = os.path.getsize(input_file_path)
             progress.start(file_size)
 
             while True:
-                response = self.comm.get_response()
+                response = self.comm.get_response(timeout)
                 if response.type == "MAIN":
                     break  # Main phase is complete
                 if response.type == "ERROR":
@@ -1601,12 +1677,21 @@ class EpromOperator:
             logger.info(f"Writing {input_file_path} to {eprom_name.upper()}")
             start_time = time.time()
 
+            # HOST-01 / D-09-D-10: _write_block_timeout() MUST be read here,
+            # inside this `with` block -- _operation_context's `finally`
+            # disconnects and sets self.comm to None once it exits (same
+            # constraint the seen_message_ids check below already relies
+            # on). _run_state_machine forwards **handler_kwargs verbatim to
+            # main_phase_handler (confirmed by reading it), so no
+            # _run_state_machine signature change is needed for this to
+            # reach _main_phase_send_data's new response_timeout kwarg.
             is_ok, _ = self._run_state_machine(
                 op_name,
                 main_phase_handler=self._main_phase_send_data,
                 input_file_path=input_file_path,
                 buffer_size=buf_size,
                 eprom_data_dict=cmd_data,  # FIX-01b: boot-block hint context
+                response_timeout=self._write_block_timeout(),
             )
 
             # D-15 (Phase 120 / v1.22 HOST-06): when --skip-sdp-unlock was set,
