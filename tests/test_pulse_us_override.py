@@ -421,10 +421,17 @@ def test_override_always_reports(
 
     # S-6 / D-17: the line must be produced by click.echo, never
     # logger.info -- this invocation passed NO -v flag, and no log record
-    # captured at DEBUG level (the lowest possible threshold) mentions the
-    # override, so the line cannot have travelled through the logging
-    # module at all.
-    assert not any("pulse" in r.getMessage().lower() for r in caplog.records), (
+    # captured at DEBUG level (the lowest possible threshold) contains the
+    # D-17 line's own distinguishing phrase, so the line cannot have
+    # travelled through the logging module at all. NOTE: a substring as
+    # loose as "pulse" is NOT safe here -- the write pipeline's own
+    # pre-existing DEBUG logging (_setup_operation) logs the whole EPROM
+    # data dict, which legitimately contains the "pulse-delay" key; that is
+    # unrelated production logging, not the D-17 line, so the needle must
+    # be specific to the D-17 line's own wording.
+    assert not any(
+        "overrides the database" in r.getMessage().lower() for r in caplog.records
+    ), (
         "D-17: the report line must not be emitted via the logging module "
         f"at all; unexpected log records: {[r.getMessage() for r in caplog.records]}"
     )
