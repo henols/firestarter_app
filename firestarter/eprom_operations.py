@@ -593,6 +593,58 @@ class EpromOperator:
             self._handle_progress_response(response, progress, ack_data=True)
         return final_msg
 
+    def _apply_write_progress(
+        self, response, progress: ClassProgressHandler, start_addr: int
+    ) -> bool:
+        """Render an intra-block MSG_DATA_PROGRESS (0xE0) frame on the write
+        path. Returns True when a position was actually applied -- the
+        caller (``_main_phase_send_data``) uses this to latch the
+        chunk-handoff ``update()`` off once the firmware starts driving the
+        bar itself (HOST-02 / Pitfall 1). Returns False when the frame's
+        message was absent or unparsable, so the latch never engages on a
+        malformed frame.
+
+        D-04: applies the frame's ``current`` and IGNORES its ``total`` --
+        and performs ``set_progress``'s final three operations DIRECTLY
+        rather than calling it. ``set_progress(current, total)`` calls
+        ``self.start(total)`` whenever the frame's total differs from the
+        bar's, and ``start()`` CLOSES AND RE-CREATES the tqdm bar and zeroes
+        ``current_step``. The write bar is started with ``file_size`` while
+        ``0xE0`` carries ``handle->mem_size`` -- for a short input file or
+        an ``--address``-offset write these differ, so every single frame
+        would tear the bar down and rebuild it if routed through
+        ``set_progress``. This method never reaches that arm.
+
+        D-04's arithmetic: ``0xE0`` carries an ABSOLUTE chip address, but
+        the write bar's origin is the write's own start address, not 0.
+        Getting this wrong shows up as a bar that starts mid-way (or beyond
+        100%) on an ``--address`` write.
+
+        D-05: this method NEVER acks. Callers must not route a write-path
+        DATA frame through ``_handle_progress_response`` instead of this
+        method -- that helper's ``ack_data`` defaults to True and its DATA
+        arm calls ``set_progress`` directly, which is exactly the rebuild
+        path this method exists to avoid.
+
+        Scope: fixing ``set_progress``'s rebuild-on-differing-total at its
+        source is a deferred idea, out of scope here -- it is shared code on
+        the read and blank-check paths this plan does not own.
+        """
+        if not response.message or "/" not in response.message:
+            return False
+        try:
+            absolute, _total_ignored = map(int, response.message.split("/"))
+        except (ValueError, TypeError):
+            return False  # not a parsable progress update
+        position = max(0, absolute - start_addr)
+        progress.current_step = position
+        if progress.progress_callback:
+            progress.progress_callback(position, progress.total_steps)
+        if progress.pbar:
+            progress.pbar.n = position
+            progress.pbar.refresh()
+        return True
+
     def _main_phase_send_data(
         self,
         progress: ClassProgressHandler,
@@ -636,6 +688,18 @@ class EpromOperator:
             file_size = os.path.getsize(input_file_path)
             progress.start(file_size)
 
+            # HOST-02 / D-04: _setup_operation sets command_dict["address"]
+            # ONLY when an --address was supplied, so .get("address", 0) is
+            # exactly right for a full-chip write's start address (0) too --
+            # write_eprom already forwards eprom_data_dict=cmd_data.
+            start_addr = (eprom_data_dict or {}).get("address", 0)
+            # HOST-02 / Pitfall 1: latches True on the first successfully
+            # -applied mid-block progress frame (_apply_write_progress
+            # returning True), so the chunk-handoff update() below stops
+            # firing -- see its own comment for why it must not simply be
+            # deleted instead.
+            firmware_drives_bar = False
+
             while True:
                 response = self.comm.get_response(timeout)
                 if response.type == "MAIN":
@@ -646,6 +710,19 @@ class EpromOperator:
                     if hint:
                         msg = msg + " -- " + hint
                     _raise_for_error_response(response, msg)
+                if response.type == "DATA":
+                    # HOST-02 / D-05: a mid-block MSG_DATA_PROGRESS frame is
+                    # NEVER acked -- the firmware is mid-block waiting for
+                    # nothing, and on a Leonardo a stray buffered "OK" makes
+                    # op_get_message return OP_MSG_ACK, so
+                    # _process_incoming_data's `default: return false` aborts
+                    # the write with NO error frame at all
+                    # (#write-empty-input-regression, in a new place). Placing
+                    # this arm BEFORE the `!= "OK"` raise below is what keeps
+                    # a mid-block frame from becoming an EpromOperationError.
+                    if self._apply_write_progress(response, progress, start_addr):
+                        firmware_drives_bar = True
+                    continue
                 if response.type != "OK":
                     raise EpromOperationError(
                         f"Programmer did not request data chunk, got {response.type}: {response.message}"  # noqa: E501
@@ -664,7 +741,19 @@ class EpromOperator:
                     # Assembled as ONE bytes object and sent in a single send_bytes call
                     # (atomic-write mandate, ADR §4.1 / T-50-05 SAFE-01 timing guard).
                     self.comm.send_bytes(frame)
-                    progress.update(len(data_chunk))
+                    if not firmware_drives_bar:
+                        # HOST-02 / Pitfall 1: the two progress sources measure
+                        # different things -- bytes SENT (this handoff) versus
+                        # bytes PROGRAMMED (the firmware's own 0xE0 frames) --
+                        # and this one runs first. Without this latch, the bar
+                        # jumps ahead by a full chunk the instant it is sent,
+                        # then the firmware's frames pull it back down as bytes
+                        # are actually programmed -- a visible rewind (tqdm
+                        # permits pbar.n to move backward). Do NOT simply
+                        # delete this call: a board that never delivers a
+                        # mid-block frame (every uno/uno328pb write, BF-2)
+                        # would then be regressed to a bar that never moves.
+                        progress.update(len(data_chunk))
                 else:
                     self.comm.send_done()
 
