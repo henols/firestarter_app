@@ -1663,7 +1663,33 @@ class EpromOperator:
         input_file_path: str,
         operation_flags: int = 0,
         address_str: Optional[str] = None,
+        pulse_us: int = 0,  # per-run pulse-width override (us; 0=not supplied, use the database value)
     ) -> bool:
+        # HOST-04 / D-14: per-run pulse override, riding the existing
+        # "pulse-delay" DB-dict key rather than adding a new wire field or
+        # command. Four recorded points:
+        # (a) this is consistency_check_eprom's read_settling_us/
+        #     read_strobe_us shape verbatim -- that function's own comment
+        #     says the pattern is "consistent with how pulse-delay already
+        #     travels via the DB dict."
+        # (b) the key ALREADY EXISTS -- database.py's convert_to_programmer
+        #     emits "pulse-delay" unconditionally -- so this REPLACES a
+        #     value rather than adding a field, which is how "no new wire
+        #     field and no new command" (HOST-04) is satisfied structurally.
+        # (c) the shallow copy exists so a caller that reuses its programmer
+        #     dict for a second chip (e.g. a batch loop) is unaffected.
+        # (d) the 1..65535 bound is NOT enforced here -- it is Click's
+        #     IntRange at parse time (plan 143-07, D-15), and the firmware's
+        #     energy_cap_us-keyed pre-flight refusal (MSG_ERR_PULSE_TOO_WIDE)
+        #     is the independent second gate, firing before any high voltage
+        #     is enabled (D-16). No host-side check and no energy_cap_us
+        #     mirror belongs here.
+        if pulse_us:
+            eprom_data_dict = dict(
+                eprom_data_dict
+            )  # shallow copy -- never mutate caller's dict
+            eprom_data_dict["pulse-delay"] = pulse_us
+
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
