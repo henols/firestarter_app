@@ -125,6 +125,28 @@ _FLASH4_PROTOCOL_ID = 5
 # _main_phase_send_data's new response_timeout kwarg below.
 WRITE_BLOCK_TIMEOUT_FALLBACK_S = 120.0
 
+# HOST-03 / D-20: the three per-byte program-budget ids _budget_failure_hint_
+# message keys on -- MSG_ERR_MAX_PULSES (0xBD), MSG_ERR_ENERGY_CAP (0xBE),
+# MSG_ERR_PULSE_TOO_WIDE (0xAE). Defined as raw ints (not imported names)
+# because this tuple lives in this module-level constant block, while
+# firestarter.messages is imported LOCALLY inside functions elsewhere in
+# this module (see _boot_block_hint_message below) to avoid an import
+# cycle -- a module-level import here would break that established
+# discipline, so each id is named in this comment instead. Deliberately
+# excludes MSG_ERR_WRITE_FAILED (0xB1): F-141-06 confirms (a whole-tree grep
+# of the firmware repo's src/ for "MSG_ERR_WRITE_FAILED" returns zero
+# matches) that id is the OLD, now-retired per-block loop's failure id and
+# is emitted by nothing on the 27C write path any more -- a hint keyed on
+# it would never fire.
+_BUDGET_FAILURE_IDS = (0xBD, 0xBE, 0xAE)
+
+# Pattern to extract the refused pulse width from MSG_ERR_PULSE_TOO_WIDE
+# messages. Format: "Pulse width %lu us exceeds this protocol's per-byte
+# program-energy budget" -- mirrors _TIMEOUT_ADDR_RE's own extract-from-text
+# approach immediately above, for the same reason: the refused value is only
+# available as decoded prose, not as a separate structured field on Response.
+_PULSE_WIDTH_RE = re.compile(r"Pulse width (\d+) us")
+
 
 def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional[str]:
     """Return a boot-block-locked inference hint string, or None.
@@ -191,6 +213,90 @@ def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional
         "This is an inference from the address range, not a confirmed detection."
     )
     return hint
+
+
+def _budget_failure_hint_message(response) -> Optional[str]:
+    """Return a per-byte program-budget-failure disposition hint, or None.
+
+    HOST-03 / D-19: mirrors `_boot_block_hint_message`'s shape immediately
+    above -- a pure, module-level function keyed on `response.id` first,
+    with the message-id names imported LOCALLY to avoid the same import
+    cycle that function's docstring names. The firmware's own catalog
+    format already interpolates the failing address (`MSG_ERR_MAX_PULSES`
+    (0xBD) / `MSG_ERR_ENERGY_CAP` (0xBE), `firestarter/messages.py`) or the
+    refused pulse width (`MSG_ERR_PULSE_TOO_WIDE`, 0xAE), so this hint adds
+    *disposition*, not location or value -- it explains what the id MEANS
+    for the write in progress, not where it happened or how wide the pulse
+    was.
+
+    D-21 (`.planning/phases/141-per-byte-program-loop/141-LOOP-RECORD.md`
+    §4, traced against live firmware source this session, not this plan's
+    paraphrase of it): on a budget failure,
+    `eprom_internal_write_execute_body` (src/proms/eprom.cpp) returns
+    before `handle->address` is ever advanced; `_process_incoming_data`
+    (src/eprom_operations.cpp) sees that failure and returns `false`
+    immediately, never reaching its own `handle->address +=
+    handle->data_size` line; `command_done()` (src/firestarter.cpp) then
+    zeroes `CONTROL_REGISTER`, `LEAST_SIGNIFICANT_BYTE` and
+    `MOST_SIGNIFICANT_BYTE` and sets `handle->cmd = CMD_IDLE`. The write
+    stopping and the firmware refusing every later block for that write are
+    the SAME event, not two claims that happen to coincide -- so for
+    `MSG_ERR_MAX_PULSES` / `MSG_ERR_ENERGY_CAP` this hint gives no advice to
+    attempt the failed block again and implies no firmware-side
+    continuation: starting the write over is a fresh run of the whole file,
+    never a pick-up-where-it-stopped.
+
+    D-20: deliberately keyed on `_BUDGET_FAILURE_IDS` only -- in particular
+    never on error id 0xB1 (the OLD, now-retired per-block loop's own
+    failure id -- see `_BUDGET_FAILURE_IDS`'s own comment, above, for its
+    name), which F-141-06 confirms is emitted by nothing on the 27C write
+    path any more (the per-byte loop reports 0xBD/0xBE instead, with a
+    different, smaller payload shape). A hint keyed on 0xB1 here would
+    never fire.
+
+    D-16: `MSG_ERR_PULSE_TOO_WIDE` is the firmware's pre-flight refusal for
+    a host-legal (`click.IntRange(1, 65535)`, plan 143-07), firmware-
+    refused `--pulse-us` on protocol 0x0B -- plan 143-07 deliberately left
+    this window unmirrored host-side, to avoid duplicating
+    `energy_cap_us`'s single definition site. This hint is what makes that
+    refusal actionable instead of opaque: it fires before any high voltage
+    is enabled, so unlike the other two ids, no byte was touched and a
+    smaller `--pulse-us` is legitimate remediation -- unlike a byte that
+    will not converge no matter how many more times it is pulsed.
+
+    Returns None for any id not in `_BUDGET_FAILURE_IDS`, and also for a
+    `MSG_ERR_PULSE_TOO_WIDE` response whose message does not carry a
+    parsable width (mirrors `_boot_block_hint_message`'s own "no hint
+    without a parsable address" precedent immediately above).
+    """
+    if response.id not in _BUDGET_FAILURE_IDS:
+        return None
+
+    from firestarter.messages import MSG_ERR_PULSE_TOO_WIDE
+
+    if response.id == MSG_ERR_PULSE_TOO_WIDE:
+        m = _PULSE_WIDTH_RE.search(response.message or "")
+        if not m:
+            return None
+        width = m.group(1)
+        return (
+            f"the firmware refused this {width} us pulse before enabling any "
+            "high voltage -- no byte was programmed by this command and the "
+            "chip is unchanged by it. This protocol caps accumulated per-byte "
+            f"program energy; supply a smaller --pulse-us than {width}, or "
+            "omit --pulse-us entirely to use this chip's database value."
+        )
+
+    # MSG_ERR_MAX_PULSES / MSG_ERR_ENERGY_CAP: the abort disposition (D-21).
+    return (
+        "the write aborted at this address: bytes before this block were "
+        "already programmed, this block is only partially programmed, and "
+        "no later block was attempted. The firmware stops accepting blocks "
+        "for this write and its address counter does not advance, so "
+        "re-running the write repeats the whole file from the start. A byte "
+        "that will not converge like this usually means insufficient "
+        "program voltage or a worn or failing cell, not a timing problem."
+    )
 
 
 def build_flags(
@@ -706,9 +812,17 @@ class EpromOperator:
                     break  # Main phase is complete
                 if response.type == "ERROR":
                     hint = _boot_block_hint_message(response, protocol, mem_size)
+                    budget_hint = _budget_failure_hint_message(response)
                     msg = response.message
-                    if hint:
-                        msg = msg + " -- " + hint
+                    # HOST-03 / D-19: the boot-block hint (0xB3, flash4-only)
+                    # and the budget-failure hint (0xBD/0xBE/0xAE) are
+                    # disjoint by id today, but this composition does not
+                    # rely on that -- appending whichever are present still
+                    # produces one readable, " -- "-joined message, exactly
+                    # like the boot-block hint alone already composed.
+                    for extra_hint in (hint, budget_hint):
+                        if extra_hint:
+                            msg = msg + " -- " + extra_hint
                     _raise_for_error_response(response, msg)
                 if response.type == "DATA":
                     # HOST-02 / D-05: a mid-block MSG_DATA_PROGRESS frame is
