@@ -66,6 +66,8 @@ sides of the wire, of this plan's own gate specification.
 """
 
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -73,7 +75,7 @@ from typing import Any
 import pytest
 
 import firestarter.serial_comm
-from tests.fw_presence import fw_path, requires_fw
+from tests.fw_presence import FW_REPO_PRESENT, FW_ROOT, fw_path, requires_fw
 
 _HERE = Path(__file__).resolve().parent
 _APP_REPO_ROOT = _HERE.parent
@@ -661,4 +663,128 @@ def test_own_needles_do_not_appear_verbatim_in_this_module() -> None:
             f"the concatenation-built needle for {label} appears verbatim "
             "in this module's own source -- rebuild it from at least two "
             "literal pieces so this gate cannot match itself."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests -- D-18 planted violations. NO `requires_fw` on either: both read a
+# committed fixture under tests/fixtures/, always present regardless of
+# whether the sibling firmware checkout exists, so both stay live in an
+# absent-firmware run.
+# ---------------------------------------------------------------------------
+
+
+def _git_hash_object(path: Path) -> str:
+    """Resolve `git` fail-closed and hash-object `path` inside FW_ROOT.
+    Reimplemented here (not imported from tests/test_py32_flash_map_host.py
+    or any other gate module) -- see this module's own docstring.
+    """
+    git_bin = shutil.which("git")
+    assert git_bin is not None, (
+        "`git` binary not found on PATH. This must FAIL the suite, never "
+        "be silently skipped."
+    )
+    result = subprocess.run(
+        [git_bin, "-C", str(FW_ROOT), "hash-object", str(path)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def _git_porcelain(path: Path) -> str:
+    git_bin = shutil.which("git")
+    assert git_bin is not None, (
+        "`git` binary not found on PATH. This must FAIL the suite, never "
+        "be silently skipped."
+    )
+    result = subprocess.run(
+        [git_bin, "-C", str(path), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout
+
+
+def test_planted_literal_index_is_detected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-18's first plant: planted_cap03_literal_index.cpp writes the
+    CAP-03 budget at the literal indices 13/14 instead of the computed
+    offset `4 + _vlen` / `4 + _vlen + 1` -- BF-1's exact shape. Calls the
+    SAME `_check_budget_offset_is_computed` helper the live leg
+    (test_budget_is_written_and_read_at_the_computed_offset) calls, never a
+    parallel reimplementation.
+    """
+    assert _FIXTURE_LITERAL_INDEX.is_file(), (
+        f"committed fixture missing: {_FIXTURE_LITERAL_INDEX}"
+    )
+    # V12 ceremony: capture the REAL firmware source (never the fixture)
+    # BEFORE any monkeypatch, so the "after" comparison below proves this
+    # plant never touched it.
+    real_ack_source = FIRMWARE_ACK_SOURCE
+    before_sha = _git_hash_object(real_ack_source) if FW_REPO_PRESENT else None
+
+    monkeypatch.setattr(
+        sys.modules[__name__], "FIRMWARE_ACK_SOURCE", _FIXTURE_LITERAL_INDEX
+    )
+    with pytest.raises(AssertionError) as excinfo:
+        _check_budget_offset_is_computed()
+    message = str(excinfo.value)
+    assert "13" in message
+    assert "4 + _vlen" in message
+    # Leg isolation: the OTHER plant's distinguishing phrase must be absent.
+    assert "capability loss" not in message
+
+    if FW_REPO_PRESENT:
+        after_sha = _git_hash_object(real_ack_source)
+        assert before_sha == after_sha, (
+            "the real firmware ack source's git blob hash changed during "
+            "this planted-violation run -- the plant must never touch the "
+            "real file."
+        )
+        assert _git_porcelain(FW_ROOT) == "", (
+            "the sibling firmware repo is not clean after this "
+            "planted-violation run -- the plant must never write into the "
+            "real firmware checkout."
+        )
+
+
+def test_planted_truncated_emitted_length_is_detected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-18's second plant: planted_cap03_truncated_length.cpp packs the
+    CAP-03 budget bytes correctly but omits them from the emitted length --
+    a silent capability loss. Calls the SAME
+    `_check_emitted_length_includes_budget` helper the live leg
+    (test_emitted_length_includes_the_two_budget_bytes) calls.
+    """
+    assert _FIXTURE_TRUNCATED_LENGTH.is_file(), (
+        f"committed fixture missing: {_FIXTURE_TRUNCATED_LENGTH}"
+    )
+    real_ack_source = FIRMWARE_ACK_SOURCE
+    before_sha = _git_hash_object(real_ack_source) if FW_REPO_PRESENT else None
+
+    monkeypatch.setattr(
+        sys.modules[__name__], "FIRMWARE_ACK_SOURCE", _FIXTURE_TRUNCATED_LENGTH
+    )
+    with pytest.raises(AssertionError) as excinfo:
+        _check_emitted_length_includes_budget()
+    message = str(excinfo.value)
+    assert "(uint8_t)(4 + _vlen)" in message
+    assert "+ 2" in message
+    # Leg isolation: the OTHER plant's distinguishing phrase must be absent.
+    assert "BF-1" not in message
+
+    if FW_REPO_PRESENT:
+        after_sha = _git_hash_object(real_ack_source)
+        assert before_sha == after_sha, (
+            "the real firmware ack source's git blob hash changed during "
+            "this planted-violation run -- the plant must never touch the "
+            "real file."
+        )
+        assert _git_porcelain(FW_ROOT) == "", (
+            "the sibling firmware repo is not clean after this "
+            "planted-violation run -- the plant must never write into the "
+            "real firmware checkout."
         )
