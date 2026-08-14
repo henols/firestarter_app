@@ -122,6 +122,10 @@ CROSS_REPO_TEST_PATHS: tuple[ScanPathEntry, ...] = (
         "test/native/avr/_shared/validation_matrix.h",
         ("test_gen_validation_header.py",),
     ),
+    ScanPathEntry(
+        "src/firestarter.cpp",
+        ("test_cap03_ack_layout_parity.py",),
+    ),
 )
 
 # ---------------------------------------------------------------------------
