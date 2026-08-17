@@ -313,16 +313,26 @@ firestarter write <eprom> <input_file> [options]
 * `<eprom>`: The name of the EPROM.
 * `<input_file>`: Input file name.
 ##### Options
-* `-b, --ignore-blank-check`: Ignore blank check before write (and skip erase).
+* `-b, --no-blank-check`: Skip the blank check before write (erase still runs if the chip supports it).
+* `--skip-erase`: Also skip the pre-write erase (for already-blank or non-erasable/pre-erased parts). **Warning:** skipping erase on a non-blank electrically-erasable chip leaves un-erased bits that cannot be reprogrammed.
 * `-f, --force`: Force write, even if the VPP or chip ID don't match.
 * `-a, --address <address>`: Write start address in decimal or hexadecimal.
+* `--vpe-as-vpp`: Use VPE as the VPP voltage.
+* `--pulse-us <1-65535>`: Override the database program-pulse width for this run, in microseconds. This bound is parity with another programmer's own integer width (a uint16), **not** a wire-type or hardware limit. The override replaces the value the host already sends for this run only — it introduces no new wire field and does not edit the database (see [Override and adding to the database](#override-and-adding-to-the-database) for the persistent, per-chip way to change this value).
+* `--skip-sdp-unlock`: Decline the automatic software-data-protection unlock the firmware performs at the start of every protocol-0x0D write. Has no effect on any other protocol. **Warning:** on a chip whose software data protection is actually enabled, the write will then fail.
 ##### Description
 The write command writes the contents of a specified binary file to the EPROM. The process typically involves the following steps:
 
-1. **Blank Check:** By default, the command checks if the EPROM is blank before writing. This can be skipped using the `--ignore-blank-check` option.
-2. **Erase:** If the EPROM is not blank, it may need to be erased before writing. This step is also skipped if `--ignore-blank-check` is used.
+1. **Blank Check:** By default, the command checks if the EPROM is blank before writing. This can be skipped using the `--no-blank-check` option.
+2. **Erase:** If the EPROM is not blank, it may need to be erased before writing. This is a separate step from the blank check and is skipped only with the `--skip-erase` option.
 3. **Write:** The binary data from the input file is written to the EPROM starting at the specified address (if provided).
 4. **Verification:** The written data is verified to ensure it matches the input file.
+
+##### Program-VCC ceiling
+The raised program-VCC (around **6.25 V**) some vendor write algorithms assume for threshold margin is
+unreachable on this shield, which has no VCC-raise path. What this host and firmware can deliver is
+timing, pulse-count and verify fidelity — not silicon-margin fidelity. This is a hardware-bound
+limitation, recorded rather than attempted.
 
 #### Blank 
 Checks if an EPROM is blank.
@@ -568,6 +578,11 @@ To overide the `pulse-delay` copy the configuration into the `database.json` in 
     ]
 }
 ```
+
+The firmware applies this `pulse-delay` width per byte while writing. A value of `0x0000` means the
+protocol's own built-in fallback width is used instead. The `write` command's `--pulse-us` option
+(see [Write](#write) above) changes this width for one run only, without editing `database.json` — use
+the override for a one-off experiment and this file-based override for a persistent, per-chip change.
 
 ### Pin layout
 By adding a file named `pin-maps.json` in the **.firestarter** folder under the home directory, it is possible to overide a **pin map** or add new **pin map** that aren't existing.
