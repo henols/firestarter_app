@@ -920,7 +920,7 @@ params = []
 [[debug.messages]]
 id     = 0x15
 name   = "DBG_PULSE_DELAY_MISMATCH"
-format = "Mismatch, retrying with increased pulse delay from %d to %d"
+format = "Pulse delay mismatch: expected %d, got %d"
 params = [{ type = "u8" }, { type = "u8" }]
 
 [[debug.messages]]
