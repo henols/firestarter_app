@@ -76,6 +76,81 @@ def test_get_hardware_revision_failure_path(hw_config, make_comm, fake_serial) -
     assert ok is False
 
 
+def test_read_programmer_identity_happy_path_harvests_the_identity_verbatim(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """PROV-01: read_programmer_identity() returns a ProgrammerIdentity whose
+    fw_board_identity is exactly the string comm.firmware_identity carried
+    off the connect ack, and whose hw_revision is the CMD_HW_VERSION ack
+    message -- read by field name (D-03), never positional unpacking."""
+    fake_serial.feed(_ok_frame_bytes())  # the expect_ack() inside picks this up
+    fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))  # any trailing byte is fine
+    comm = make_comm()
+    # make_comm() sets firmware_identity = None by default (fail-closed) --
+    # a populated leg must set it explicitly.
+    comm.firmware_identity = "3.0.0b19:leonardo"
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        identity = hw.read_programmer_identity()
+
+    assert identity.fw_board_identity == "3.0.0b19:leonardo"
+    assert identity.hw_revision == "ready"
+
+
+def test_read_programmer_identity_opens_one_connection_and_disconnects_once(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """PROV-02: exactly one find_and_connect and one disconnect() per call --
+    asserted mechanically, not argued from reading the source. There is no
+    EpromOperator anywhere in this test's graph at all -- that absence IS
+    the SAFE-02 property this test pins: read_programmer_identity() writes
+    no attribute onto any operator, because none exists here to write onto."""
+    fake_serial.feed(_ok_frame_bytes())
+    fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))
+    comm = make_comm()
+    comm.firmware_identity = "3.0.0b19:leonardo"
+    # comm is a REAL SerialCommunicator built via __new__, so its disconnect
+    # is not itself a mock -- wrap it so the call can be asserted on.
+    comm.disconnect = Mock(wraps=comm.disconnect)
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ) as mock_find_and_connect:
+        hw.read_programmer_identity()
+
+    assert mock_find_and_connect.call_count == 1
+    comm.disconnect.assert_called_once()
+
+
+def test_read_programmer_identity_default_comm_yields_the_absent_case(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """With the default make_comm() (firmware_identity left at its
+    fail-closed None default) and an OK ack, the result carries the ack
+    message as hw_revision and None as fw_board_identity -- the shape a
+    board predating the CAP-02 identity tail would produce. The free leg
+    the fixture default gives (147-PATTERNS.md)."""
+    fake_serial.feed(_ok_frame_bytes())
+    fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))
+    comm = make_comm()
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        identity = hw.read_programmer_identity()
+
+    assert identity.hw_revision == "ready"
+    assert identity.fw_board_identity is None
+
+
 def test_read_vpp_voltage_finish_on_ok(hw_config, make_comm, fake_serial) -> None:
     """read_vpp_voltage returns True when the firmware emits the trailing OK
     (finish-of-stream signal) right after the ready handshake."""
