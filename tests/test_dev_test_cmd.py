@@ -77,7 +77,7 @@ from firestarter.exceptions import (
     ChipNotImplementedError,
     SerialError,
 )
-from firestarter.hardware import HardwareManager
+from firestarter.hardware import HardwareManager, ProgrammerIdentity
 from firestarter.sdp_capability import sdp_capability, sdp_capability_for_entry
 
 from .conftest import make_app_context
@@ -373,13 +373,18 @@ def make_hardware_manager(
     vpp_values: object = 12000,
     vpe_values: object = 5000,
     hw_revision: object = "Rev 2.0-class",
+    fw_board_identity: object = "3.0.0b19:leonardo",
 ) -> Mock:
     """A Mock(spec=HardwareManager) with canned sample_vpp_mv/sample_vpe_mv/
-    read_hardware_revision_value.
+    read_programmer_identity.
 
     D-10: this builder's `Mock` return type is deliberate too -- see
     `make_clean_operator` above and tests/conftest.py's `make_app_context`
-    docstring for the reasoning.
+    docstring for the reasoning. read_programmer_identity's return value is
+    itself a real ProgrammerIdentity (never a bare Mock/MagicMock): the
+    NamedTuple's field names are not spec-protected, so a mock return value
+    would leak a child-mock repr into the report instead of a string or
+    None.
 
     A plain int makes every call return the same value (return_value); a
     list makes each successive call return the next value (side_effect) --
@@ -397,8 +402,29 @@ def make_hardware_manager(
         hw.sample_vpe_mv.side_effect = vpe_values
     else:
         hw.sample_vpe_mv.return_value = vpe_values
-    hw.read_hardware_revision_value.return_value = hw_revision
+    hw.read_programmer_identity.return_value = ProgrammerIdentity(
+        hw_revision=hw_revision, fw_board_identity=fw_board_identity
+    )
     return hw
+
+
+def test_make_hardware_manager_returns_a_spec_bound_double() -> None:
+    """Pins the property the D-03 rename's safety rests on (P-2), so a
+    future "simplification" cannot quietly reopen the absent-chip
+    false-green trap: the double is spec-bound (an attribute the real
+    HardwareManager does not define raises AttributeError, so a missed
+    rename anywhere in the suite fails loudly instead of passing
+    vacuously), and its read_programmer_identity() return value is a real
+    ProgrammerIdentity carrying exactly the strings the factory was given."""
+    hw = make_hardware_manager(
+        hw_revision="Rev 2.0-class", fw_board_identity="3.0.0b19:leonardo"
+    )
+    with pytest.raises(AttributeError):
+        hw.this_attribute_does_not_exist_on_hardware_manager
+    identity = hw.read_programmer_identity()
+    assert isinstance(identity, ProgrammerIdentity)
+    assert identity.hw_revision == "Rev 2.0-class"
+    assert identity.fw_board_identity == "3.0.0b19:leonardo"
 
 
 @pytest.fixture()
@@ -728,7 +754,7 @@ class TestReportDestination:
         assert "hw_revision" in data["auto_capture"]
 
     def test_hw_revision_auto_captured_end_to_end(self, runner: CliRunner) -> None:
-        """The mocked hardware manager's read_hardware_revision_value() flows
+        """The mocked hardware manager's read_programmer_identity() flows
         through to the rendered report and the .json artifact (Phase 112
         Plan 04 auto-capture wiring, end-to-end)."""
         app = make_app_context(
@@ -828,7 +854,7 @@ class TestAbsentChipHardFail:
         `dev test` must exit 1 with the bare `Error: ... not found in
         database` message and short-circuit BEFORE any hardware read /
         operator call -- proven by
-        read_hardware_revision_value.assert_not_called() (the load-bearing
+        read_programmer_identity.assert_not_called() (the load-bearing
         assertion: the always-writes notice still prints first, per
         test_always_writes_notice_is_the_first_line_unconditionally, so a
         bare "no output before the error" check would no longer prove
@@ -842,7 +868,7 @@ class TestAbsentChipHardFail:
             result = runner.invoke(cli, ["dev", "test", chip], obj=app)
         assert result.exit_code == 1, result.output
         assert f"{chip}: not found in database" in result.output
-        app.hardware_manager.read_hardware_revision_value.assert_not_called()
+        app.hardware_manager.read_programmer_identity.assert_not_called()
         app.eprom_operator.read_eprom.assert_not_called()
 
     def test_dev_test_present_but_unsupported_still_sweeps(
@@ -860,7 +886,7 @@ class TestAbsentChipHardFail:
         with _off_tty():
             result = runner.invoke(cli, ["dev", "test", chip], obj=app)
         assert result.exit_code == 0, result.output
-        hw.read_hardware_revision_value.assert_called()
+        hw.read_programmer_identity.assert_called()
         data = _load_report(chip)
         steps = {s["op"]: s for s in data["steps"]}
         assert steps["id"]["verdict"] == "NA"
