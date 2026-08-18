@@ -71,6 +71,7 @@ from firestarter.cli_handlers import (
 from firestarter.config import get_config_dir
 from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
 from firestarter.database import EpromDatabase
+from firestarter.diagnostic_report import NOT_REPORTED
 from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import (
     ChipNotFoundError,
@@ -862,6 +863,52 @@ class TestReportDestination:
         assert first_recorded != second_recorded
         assert first_recorded.endswith("b11:leonardo")
         assert second_recorded.endswith("b19:leonardo")
+
+    def test_unknown_identity_renders_the_marker_and_saves_typed_null(
+        self, runner: CliRunner
+    ) -> None:
+        """D-13(b): this path is DEFENSIVE, not routine -- _probe_port
+        refuses firmware reporting no identity at all, so in the field a
+        successful `dev test` run essentially always has one. That is
+        exactly why this leg has to be built and seen to pass rather than
+        assumed, and why it is driven through the existing spec-bound mock
+        (make_hardware_manager) rather than through a contrived transport
+        failure: with read_programmer_identity() returning
+        ProgrammerIdentity(None, None), the rendered output carries the
+        explicit NOT_REPORTED marker (imported, never restated as a
+        literal) for both identity rows and never a bare rendering of
+        None on either -- while the saved report JSON keeps both
+        auto_capture.fw_board_identity and auto_capture.hw_revision typed
+        `null` (D-10), so machine consumers keep testing `is None` and
+        PROV-04's backward-compatibility story stays one case. Attribution
+        is explicitly refused here, not silently produced -- this proves
+        nothing about the AT28C256 0x0D write path itself, and no
+        support_status changes (Evidence Ceiling)."""
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(
+                hw_revision=None, fw_board_identity=None
+            ),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+
+        assert NOT_REPORTED in result.output
+        identity_lines = [
+            line
+            for line in result.output.splitlines()
+            if "fw_board_identity" in line or "hw_revision" in line
+        ]
+        assert identity_lines, "expected identity rows in the rendered table"
+        for line in identity_lines:
+            assert not re.search(r"\bNone\b", line), (
+                f"bare None rendered in an identity cell: {line!r}"
+            )
+
+        data = _load_report(_CHIP_NO_ID)
+        assert data["auto_capture"]["fw_board_identity"] is None
+        assert data["auto_capture"]["hw_revision"] is None
 
 
 # ---------------------------------------------------------------------------
