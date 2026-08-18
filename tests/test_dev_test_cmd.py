@@ -782,6 +782,87 @@ class TestReportDestination:
         assert "```json" in md_text
         assert "| Step | Verdict | Reason |" in md_text
 
+    def test_fw_board_identity_auto_captured_end_to_end(
+        self, runner: CliRunner
+    ) -> None:
+        """The mocked hardware manager's read_programmer_identity() flows
+        through to the rendered report and the .json artifact -- the finding
+        that opens milestone v1.32 (PROV-01): every `dev test` report ever
+        filed carried an unconditional `fw_board_identity: null`, so a
+        report can now be attributed to the firmware/board that produced it.
+        This proves attribution becomes possible; it proves nothing about
+        the AT28C256 0x0D write path itself (Evidence Ceiling)."""
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(
+                fw_board_identity="3.0.0b19:leonardo"
+            ),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+        assert "3.0.0b19:leonardo" in result.output
+        data = _load_report(_CHIP_NO_ID)
+        assert data["auto_capture"]["fw_board_identity"] == "3.0.0b19:leonardo"
+
+    @pytest.mark.parametrize("identity", ["3.0.0b11:leonardo", "3.0.0b19:leonardo"])
+    def test_prerelease_suffix_survives_into_the_report(
+        self, runner: CliRunner, identity: str
+    ) -> None:
+        """PROV-03: the recorded identity keeps its prerelease suffix
+        verbatim in the saved JSON -- no truncation to `3.0.0`, no
+        normalisation. Attribution requires the exact build, not just the
+        release line."""
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(fw_board_identity=identity),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+        data = _load_report(_CHIP_NO_ID)
+        assert data["auto_capture"]["fw_board_identity"] == identity
+
+    def test_two_identities_differing_only_in_suffix_land_as_different_values(
+        self, runner: CliRunner
+    ) -> None:
+        """PROV-03 / D-08: gh#21 and gh#32 both report host `3.0.0b15`
+        against an UNKNOWN firmware, and so cannot today be distinguished
+        from a board lacking the whole Phase-117-120 0x0D fix stack (FIX-01
+        /WE-inhibit routing, FIX-03 A16-A18 staleness, FIX-06 the
+        completion-vs-data-landed conflation). This test proves that
+        attribution becomes possible going forward -- two builds differing
+        only in prerelease suffix (b11 vs b19) land as two DIFFERENT
+        recorded values, never collapsed to the same one. It does not prove
+        the 0x0D write path itself is fixed on either build (Evidence
+        Ceiling): a single round-trip assertion would pass vacuously if a
+        later refactor normalised suffixes away, so the point of this test
+        is the INEQUALITY, not either value in isolation."""
+        first_identity = "3.0.0b11:leonardo"
+        second_identity = "3.0.0b19:leonardo"
+
+        app_first = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(fw_board_identity=first_identity),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app_first)
+        assert result.exit_code == 0, result.output
+        first_recorded = _load_report(_CHIP_NO_ID)["auto_capture"]["fw_board_identity"]
+
+        app_second = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(fw_board_identity=second_identity),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app_second)
+        assert result.exit_code == 0, result.output
+        second_recorded = _load_report(_CHIP_NO_ID)["auto_capture"]["fw_board_identity"]
+
+        assert first_recorded != second_recorded
+        assert first_recorded.endswith("b11:leonardo")
+        assert second_recorded.endswith("b19:leonardo")
+
 
 # ---------------------------------------------------------------------------
 # DEVTEST-05: every run reaches the filing ask, exactly once
