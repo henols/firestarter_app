@@ -1071,13 +1071,15 @@ def test_hold_state_is_str_never_bool():
     assert not isinstance(value, bool)
 
 
-def test_schema_version_1_3_single_sourced():
+def test_schema_version_1_4_single_sourced():
     """`to_dict()["schema_version"]` equals the IMPORTED `SCHEMA_VERSION`
     (never a literal restated here), and the production module bumps the
     constant to its new value in exactly ONE place (single-sourced, D-10) --
     this is the only line in this test file that restates the quoted
     literal, to keep this file's own count at the plan's required "at most
-    one"."""
+    one". Renamed from `test_schema_version_1_3_single_sourced` (v1.32 Phase
+    147 plan 03, D-09): the 1.3 -> 1.4 bump would otherwise leave this test's
+    own literal-count assertion asserting a now-absent quoted string."""
     import inspect
 
     from firestarter import diagnostic_report as dr_mod
@@ -1086,7 +1088,7 @@ def test_schema_version_1_3_single_sourced():
     assert report.to_dict()["schema_version"] == dr_mod.SCHEMA_VERSION
 
     source = inspect.getsource(dr_mod)
-    assert source.count('"1.3"') == 1
+    assert source.count('"1.4"') == 1
 
 
 def test_dedup_fingerprint_sensitive_to_sdp_step_verdict_change():

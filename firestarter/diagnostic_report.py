@@ -52,7 +52,7 @@ from firestarter.chip_test import BannerCounts, Plan, StepResult
 # Module constants (D-02, D-03) -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.3"  # D-02: single-sourced, baked into to_dict() output
+SCHEMA_VERSION = "1.4"  # D-02: single-sourced, baked into to_dict() output
 # 1.1 (Phase 114, GRAD-01): additive db_diff.ladder_state key -- backward
 # compatible, existing consumers reading current_support_status/
 # proposed_disposition are unaffected.
@@ -82,6 +82,23 @@ SCHEMA_VERSION = "1.3"  # D-02: single-sourced, baked into to_dict() output
 # with no version bump -- the artifact shape would change while its own
 # version claimed it had not, in the milestone whose close phase (Phase 137)
 # arms a claim gate over exactly that kind of statement.
+# 1.4 (v1.32 Phase 147, D-09): marks a value-population change, not a key
+# addition -- `auto_capture.fw_board_identity` already existed in
+# `to_dict()`'s output and was unconditionally `null`; from this version it
+# carries data whenever the connection captured one. No key is added and no
+# key is removed. The 1.3 note above explicitly REJECTED "a field-plus-JSON
+# change with no version bump" -- the artifact shape changing while its own
+# version claimed it had not. Populating a permanently-null key is that same
+# class of change, so it takes a bump too. Both `[dev test]` parsers accept
+# `schema_version` by PRESENCE ONLY, never an exact-value match (a live
+# fixture carries `schema_version: "9.9-future"`, `tests/test_parse_devtest_
+# issue.py:138`), so this bump is invisible to them and needs no parser
+# change -- and no ordering/comparison logic over this string is introduced
+# anywhere as part of this bump (D-17). Reports already in the wild carry
+# `fw_board_identity: null` PERMANENTLY -- the run that produced them is
+# gone and unrepeatable -- and are unfixable by design; they must keep
+# parsing. That is PROV-04, pinned by the frozen literal fixtures in
+# `tests/test_parse_devtest_issue.py`.
 NOT_MEASURED = "not measured"  # D-03: honest fallback, never a false 0
 
 # Elevated-counter threshold for `transport_suspect` (dormant today -- no
