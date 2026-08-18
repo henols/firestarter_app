@@ -2491,17 +2491,21 @@ def dev_test(app: "AppContext", chip: str) -> None:
     write_scope = _resolve_write_scope(app, chip, interactive=interactive)
     plan = derive_plan(chip, app.db, write_scope=write_scope)
 
-    # fw_board_identity stays None: EpromOperator.comm is a transient
-    # per-operation connection torn down after every operator call (see
-    # 112-02-SUMMARY.md) -- there is no live comm to read programmer_info
-    # off of after run_plan returns without opening a new, extraneous
-    # connection, which would violate the orchestrator-only contract
-    # (SAFE-02). hw_revision IS reachable via a dedicated, orchestrator-safe
-    # energize/query read (Part A, hardware.py) and is populated below.
+    # EpromOperator.comm is a transient per-operation connection torn down
+    # after every operator call (see 112-02-SUMMARY.md) -- there is no live
+    # comm to read programmer_info off of after run_plan returns without
+    # opening a new, extraneous connection, which would violate the
+    # orchestrator-only contract (SAFE-02). Both identity values instead
+    # come off the hardware-revision read's OWN connection (D-01): its
+    # find_and_connect triggers the CAP-02 setup ack, which sets
+    # comm.firmware_identity before the HARDWARE_REVISION dispatch even
+    # runs, so one orchestrator-safe energize/query read (Part A,
+    # hardware.py) yields both fields with zero extra connections.
+    identity = app.hardware_manager.read_programmer_identity()
     auto_capture = AutoCapture(
         host_version=version,
-        fw_board_identity=None,
-        hw_revision=app.hardware_manager.read_hardware_revision_value(),
+        fw_board_identity=identity.fw_board_identity,
+        hw_revision=identity.hw_revision,
         chip=chip,
         protocol=None,
     )
