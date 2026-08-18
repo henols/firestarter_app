@@ -572,6 +572,25 @@ def read(
 )
 @click.option("-a", "--address", default=None, help="Write start address in dec/hex")
 @click.option("--vpe-as-vpp", "vpe_as_vpp", is_flag=True, help="Use VPE as VPP voltage")
+@click.option(
+    "--pulse-us",
+    "pulse_us",
+    type=click.IntRange(1, 65535),
+    default=None,  # NOT 0 -- click.IntRange type-casts the default through
+    # type_cast_value and short-circuits ONLY on None. default=0 is out of
+    # range for IntRange(1, 65535), so Click would raise a UsageError BEFORE
+    # write()'s body ever runs -- making EVERY `firestarter write` invocation
+    # (even with no --pulse-us at all) exit 2 (RESEARCH Pitfall 3, measured
+    # on click 8.4.2 in .venv/ci-replica). The nearest in-tree precedent,
+    # --read-settling / --read-strobe (below, inside `dev consistency-check`,
+    # a dev-gated command), uses `type=int, default=0` with NO range --
+    # copying that shape here is the natural move and it is fatal.
+    # click.IntRange has ZERO other usages anywhere in this repository; this
+    # is a new form, not a followed one.
+    help="Override the database program-pulse width for this run (microseconds, "
+    "1-65535). This bound is minipro parity (-o pulse=N is a uint16), NOT a "
+    "wire-type or hardware limit -- see write()'s docstring.",
+)
 # D-14 / RETIRE-07 tripwire, edit point 2 of 2: this option's `default=False`
 # is the second place a developer would touch to disable the host's
 # auto-unlock. Before changing it, read the tripwire comment at the D-04
@@ -598,6 +617,7 @@ def write(
     force: bool,
     address: Optional[str],
     vpe_as_vpp: bool,
+    pulse_us: Optional[int],
     skip_sdp_unlock: bool,
 ) -> None:
     """Writes a binary file to an EPROM.
@@ -626,8 +646,53 @@ def write(
     (``firestarter.sdp_capability``) — see the D-04 auto-set block below,
     which always prints a mandatory, default-visible report line when it
     fires.
+
+    TRAP #7 / D-14..D-18 (v1.31 HOST-04/HOST-05): ``--pulse-us`` overrides
+    the database program-pulse width for this run only. D-14: it rides the
+    existing ``"pulse-delay"`` wire key (``write_eprom``'s own ``pulse_us``
+    parameter, plan 143-04's transport half) — no new command, no new wire
+    field. D-15: bounds are enforced by the option's own
+    ``click.IntRange(1, 65535)``, which refuses out of range at Click PARSE
+    TIME, exit 2. The guarantee this gives HOST-05 ("before any serial byte
+    is sent") is NOT "before ``AppContext`` builds" — ``cli()``'s group
+    callback runs first, before this command's own parameters are even
+    type-converted — the guarantee is that NOTHING in ``cli()`` or
+    ``AppContext`` construction opens a serial port, so a parse-time refusal
+    is still structurally before any serial byte. D-16: a value in
+    ``50001..65535`` is host-legal but firmware-refused on protocol ``0x0B``
+    only (``configure_eprom``'s ``energy_cap_us``-keyed pre-flight check,
+    ``MSG_ERR_PULSE_TOO_WIDE``) before any high voltage is enabled — the host
+    deliberately mirrors no table value to pre-empt it (that would require
+    duplicating ``energy_cap_us`` host-side). D-17: using the flag ALWAYS
+    prints a default-visible report line (see below) naming both the
+    database pulse replaced and the override — provenance, because a bench
+    artifact or log captured without the command line beside it cannot
+    otherwise tell you the pulse was not the database's. D-18: the flag
+    exists on ``write`` ONLY, mirroring the reasoning above for
+    ``--skip-sdp-unlock`` — ``read``/``verify``/``blank``/``erase`` emit no
+    program pulse, so there is nothing to override.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
+
+    # D-17 (v1.31 HOST-04/HOST-05): a SEPARATE, sibling `if` -- never an
+    # `elif` chained onto the D-04 or D-13 blocks below, so this can co-fire
+    # with either on the same chip (S-6). click.echo (never logger.info):
+    # this must be visible at DEFAULT verbosity, with no -v needed. Reason:
+    # a bench artifact or log captured without the command line beside it
+    # cannot otherwise tell you the pulse was not the database's -- and
+    # Phase 145's evidence will be read by strangers.
+    if pulse_us is not None:
+        db_pulse = eprom_data.get("pulse-delay", 0)
+        db_shown = (
+            f"{db_pulse} us"
+            if db_pulse
+            else "firmware default (database supplied none)"
+        )
+        click.echo(
+            f"{eprom.upper()}: --pulse-us {pulse_us} overrides the database "
+            f"program pulse for this run ({db_shown} -> {pulse_us} us). "
+            "This run's timing is NOT the database's."
+        )
 
     # D-04 auto-set (v1.22 HOST-04): decided here, in the handler, because
     # this is the last place with both the chip NAME and app.db — resolve_chip's
@@ -726,6 +791,10 @@ def write(
             skip_erase=skip_erase,
             skip_sdp_unlock=skip_sdp_unlock,
         ),
+        # D-14: translate Click's `None` ("--pulse-us not supplied") into
+        # write_eprom's own integer sentinel (0 means "use the database
+        # value" -- see that function's docstring, plan 143-04).
+        pulse_us=pulse_us or 0,
     )
     sys.exit(0 if ok else 1)
 

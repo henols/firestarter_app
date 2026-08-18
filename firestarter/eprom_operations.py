@@ -56,7 +56,11 @@ from firestarter.exceptions import (
 from firestarter.frame_parser import _crc8_ccitt, cobs_encode
 from firestarter.messages import MSG_WARN_SDP_UNLOCK_SKIPPED
 from firestarter.sdp_capability import SDP_PROTOCOL_ID
-from firestarter.serial_comm import SerialCommunicator
+from firestarter.serial_comm import (
+    DEFAULT_RESPONSE_TIMEOUT,
+    WRITE_BUDGET_MAX_S,
+    SerialCommunicator,
+)
 from firestarter.utils import extract_hex_to_decimal
 
 logger = logging.getLogger("EpromOperator")
@@ -101,6 +105,47 @@ _TIMEOUT_ADDR_RE = re.compile(r"at 0x([0-9a-fA-F]+)")
 # Flash4 protocol ID.  Boot-block lockout is specific to the AMD/JEDEC SDP
 # page-write flash family (protocol 0x05, FLASH_AMD_STD).
 _FLASH4_PROTOCOL_ID = 5
+
+# HOST-01 / D-09-D-10: fallback write-path response timeout for when the
+# firmware does not advertise a per-block write-time budget (CAP-03,
+# SerialCommunicator.write_block_budget_s). DERIVED, not picked: the worst
+# shipped-database block time under the new per-byte loop with no
+# advertisement is 0x0B at 50 ms/byte x 1024 B = 51.2 s (the energy cap
+# lands on exactly 50 ms for every shipped 0x0B width), and 0x07/0x08 at
+# 25 x 1000 us x 1024 B = 25.6 s -- so 120 s is more than 2x the worst
+# shipped case. Sharper still: 120 s covers EVERY REACHABLE 0x0B width,
+# because that protocol's per-byte bound can never exceed 99998 us and
+# 99998 x 1024 = 102.4 s. Residual non-claim: the gap is 0x07/0x08 only, at
+# 120 / (25 x 1024) = 4687 us on a Leonardo and 120 / (25 x 512) = 9375 us
+# on an Uno; and the reachable absent-advertisement cases are a released
+# beta firmware (has CAP-02, lacks CAP-03) or a v1.31 build after the CAP-02
+# port but before CAP-03 lands -- NOT a mid-milestone v1.31 build, which
+# cannot connect at all (BF-1). DEFAULT_RESPONSE_TIMEOUT's own value is
+# untouched by this constant (D-12) -- it is imported only to resolve
+# _main_phase_send_data's new response_timeout kwarg below.
+WRITE_BLOCK_TIMEOUT_FALLBACK_S = 120.0
+
+# HOST-03 / D-20: the three per-byte program-budget ids _budget_failure_hint_
+# message keys on -- MSG_ERR_MAX_PULSES (0xBD), MSG_ERR_ENERGY_CAP (0xBE),
+# MSG_ERR_PULSE_TOO_WIDE (0xAE). Defined as raw ints (not imported names)
+# because this tuple lives in this module-level constant block, while
+# firestarter.messages is imported LOCALLY inside functions elsewhere in
+# this module (see _boot_block_hint_message below) to avoid an import
+# cycle -- a module-level import here would break that established
+# discipline, so each id is named in this comment instead. Deliberately
+# excludes MSG_ERR_WRITE_FAILED (0xB1): F-141-06 confirms (a whole-tree grep
+# of the firmware repo's src/ for "MSG_ERR_WRITE_FAILED" returns zero
+# matches) that id is the OLD, now-retired per-block loop's failure id and
+# is emitted by nothing on the 27C write path any more -- a hint keyed on
+# it would never fire.
+_BUDGET_FAILURE_IDS = (0xBD, 0xBE, 0xAE)
+
+# Pattern to extract the refused pulse width from MSG_ERR_PULSE_TOO_WIDE
+# messages. Format: "Pulse width %lu us exceeds this protocol's per-byte
+# program-energy budget" -- mirrors _TIMEOUT_ADDR_RE's own extract-from-text
+# approach immediately above, for the same reason: the refused value is only
+# available as decoded prose, not as a separate structured field on Response.
+_PULSE_WIDTH_RE = re.compile(r"Pulse width (\d+) us")
 
 
 def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional[str]:
@@ -168,6 +213,90 @@ def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional
         "This is an inference from the address range, not a confirmed detection."
     )
     return hint
+
+
+def _budget_failure_hint_message(response) -> Optional[str]:
+    """Return a per-byte program-budget-failure disposition hint, or None.
+
+    HOST-03 / D-19: mirrors `_boot_block_hint_message`'s shape immediately
+    above -- a pure, module-level function keyed on `response.id` first,
+    with the message-id names imported LOCALLY to avoid the same import
+    cycle that function's docstring names. The firmware's own catalog
+    format already interpolates the failing address (`MSG_ERR_MAX_PULSES`
+    (0xBD) / `MSG_ERR_ENERGY_CAP` (0xBE), `firestarter/messages.py`) or the
+    refused pulse width (`MSG_ERR_PULSE_TOO_WIDE`, 0xAE), so this hint adds
+    *disposition*, not location or value -- it explains what the id MEANS
+    for the write in progress, not where it happened or how wide the pulse
+    was.
+
+    D-21 (`.planning/phases/141-per-byte-program-loop/141-LOOP-RECORD.md`
+    §4, traced against live firmware source this session, not this plan's
+    paraphrase of it): on a budget failure,
+    `eprom_internal_write_execute_body` (src/proms/eprom.cpp) returns
+    before `handle->address` is ever advanced; `_process_incoming_data`
+    (src/eprom_operations.cpp) sees that failure and returns `false`
+    immediately, never reaching its own `handle->address +=
+    handle->data_size` line; `command_done()` (src/firestarter.cpp) then
+    zeroes `CONTROL_REGISTER`, `LEAST_SIGNIFICANT_BYTE` and
+    `MOST_SIGNIFICANT_BYTE` and sets `handle->cmd = CMD_IDLE`. The write
+    stopping and the firmware refusing every later block for that write are
+    the SAME event, not two claims that happen to coincide -- so for
+    `MSG_ERR_MAX_PULSES` / `MSG_ERR_ENERGY_CAP` this hint gives no advice to
+    attempt the failed block again and implies no firmware-side
+    continuation: starting the write over is a fresh run of the whole file,
+    never a pick-up-where-it-stopped.
+
+    D-20: deliberately keyed on `_BUDGET_FAILURE_IDS` only -- in particular
+    never on error id 0xB1 (the OLD, now-retired per-block loop's own
+    failure id -- see `_BUDGET_FAILURE_IDS`'s own comment, above, for its
+    name), which F-141-06 confirms is emitted by nothing on the 27C write
+    path any more (the per-byte loop reports 0xBD/0xBE instead, with a
+    different, smaller payload shape). A hint keyed on 0xB1 here would
+    never fire.
+
+    D-16: `MSG_ERR_PULSE_TOO_WIDE` is the firmware's pre-flight refusal for
+    a host-legal (`click.IntRange(1, 65535)`, plan 143-07), firmware-
+    refused `--pulse-us` on protocol 0x0B -- plan 143-07 deliberately left
+    this window unmirrored host-side, to avoid duplicating
+    `energy_cap_us`'s single definition site. This hint is what makes that
+    refusal actionable instead of opaque: it fires before any high voltage
+    is enabled, so unlike the other two ids, no byte was touched and a
+    smaller `--pulse-us` is legitimate remediation -- unlike a byte that
+    will not converge no matter how many more times it is pulsed.
+
+    Returns None for any id not in `_BUDGET_FAILURE_IDS`, and also for a
+    `MSG_ERR_PULSE_TOO_WIDE` response whose message does not carry a
+    parsable width (mirrors `_boot_block_hint_message`'s own "no hint
+    without a parsable address" precedent immediately above).
+    """
+    if response.id not in _BUDGET_FAILURE_IDS:
+        return None
+
+    from firestarter.messages import MSG_ERR_PULSE_TOO_WIDE
+
+    if response.id == MSG_ERR_PULSE_TOO_WIDE:
+        m = _PULSE_WIDTH_RE.search(response.message or "")
+        if not m:
+            return None
+        width = m.group(1)
+        return (
+            f"the firmware refused this {width} us pulse before enabling any "
+            "high voltage -- no byte was programmed by this command and the "
+            "chip is unchanged by it. This protocol caps accumulated per-byte "
+            f"program energy; supply a smaller --pulse-us than {width}, or "
+            "omit --pulse-us entirely to use this chip's database value."
+        )
+
+    # MSG_ERR_MAX_PULSES / MSG_ERR_ENERGY_CAP: the abort disposition (D-21).
+    return (
+        "the write aborted at this address: bytes before this block were "
+        "already programmed, this block is only partially programmed, and "
+        "no later block was attempted. The firmware stops accepting blocks "
+        "for this write and its address counter does not advance, so "
+        "re-running the write repeats the whole file from the start. A byte "
+        "that will not converge like this usually means insufficient "
+        "program voltage or a worn or failing cell, not a timing problem."
+    )
 
 
 def build_flags(
@@ -311,6 +440,41 @@ class EpromOperator:
             return max_chunk
         # CAP-01 safe Uno-floor default: absent advertisement -> 512.
         return 512
+
+    def _write_block_timeout(self) -> float:
+        """Return the per-response wait for a write's MAIN phase, in seconds.
+
+        HOST-01 / D-09: the firmware's advertised ``write_block_budget_s``
+        (CAP-03, decoded in ``serial_comm.py``) is used VERBATIM -- the
+        firmware already padded it (its own ``delay(500)`` VPE settle, the
+        final full-block verify pass and the per-pulse settle are all
+        folded in), so the host applies no multiplier of its own on top.
+
+        D-10: an absent, truncated or implausible advertisement returns the
+        derived ``WRITE_BLOCK_TIMEOUT_FALLBACK_S`` instead -- never an error
+        and never a refusal. Mirrors ``_calculate_buffer_size``'s precedent
+        directly above: Phase 54's ``FirmwareOutdatedError`` was reversed
+        into exactly this "safe default on absence" shape, which is the
+        standing argument against refusing the write here too.
+
+        The ``[1, WRITE_BUDGET_MAX_S]`` range test is a second line of
+        defence behind ``serial_comm``'s own decode-time plausibility
+        clamp: a value outside that range can only reach
+        ``write_block_budget_s`` if something bypassed the decoder, and
+        this method must not trust it even then -- both a too-small
+        (``0``) and an implausibly-large (``> WRITE_BUDGET_MAX_S``) value
+        fall back identically, so a corrupt or hostile ack can never
+        install either a too-tight or an unbounded host wait.
+
+        MUST be called from inside ``write_eprom``'s ``_operation_context``
+        ``with`` block: that block's ``finally`` sets ``self.comm`` to
+        ``None`` on exit, so a call after it exits would always take the
+        None-comm branch below.
+        """
+        budget = getattr(self.comm, "write_block_budget_s", None) if self.comm else None
+        if budget is not None and 1 <= budget <= WRITE_BUDGET_MAX_S:
+            return float(budget)
+        return WRITE_BLOCK_TIMEOUT_FALLBACK_S
 
     def _setup_operation(  # Remains largely the same, as it's a prerequisite for the context manager  # noqa: E501
         self,
@@ -535,12 +699,65 @@ class EpromOperator:
             self._handle_progress_response(response, progress, ack_data=True)
         return final_msg
 
+    def _apply_write_progress(
+        self, response, progress: ClassProgressHandler, start_addr: int
+    ) -> bool:
+        """Render an intra-block MSG_DATA_PROGRESS (0xE0) frame on the write
+        path. Returns True when a position was actually applied -- the
+        caller (``_main_phase_send_data``) uses this to latch the
+        chunk-handoff ``update()`` off once the firmware starts driving the
+        bar itself (HOST-02 / Pitfall 1). Returns False when the frame's
+        message was absent or unparsable, so the latch never engages on a
+        malformed frame.
+
+        D-04: applies the frame's ``current`` and IGNORES its ``total`` --
+        and performs ``set_progress``'s final three operations DIRECTLY
+        rather than calling it. ``set_progress(current, total)`` calls
+        ``self.start(total)`` whenever the frame's total differs from the
+        bar's, and ``start()`` CLOSES AND RE-CREATES the tqdm bar and zeroes
+        ``current_step``. The write bar is started with ``file_size`` while
+        ``0xE0`` carries ``handle->mem_size`` -- for a short input file or
+        an ``--address``-offset write these differ, so every single frame
+        would tear the bar down and rebuild it if routed through
+        ``set_progress``. This method never reaches that arm.
+
+        D-04's arithmetic: ``0xE0`` carries an ABSOLUTE chip address, but
+        the write bar's origin is the write's own start address, not 0.
+        Getting this wrong shows up as a bar that starts mid-way (or beyond
+        100%) on an ``--address`` write.
+
+        D-05: this method NEVER acks. Callers must not route a write-path
+        DATA frame through ``_handle_progress_response`` instead of this
+        method -- that helper's ``ack_data`` defaults to True and its DATA
+        arm calls ``set_progress`` directly, which is exactly the rebuild
+        path this method exists to avoid.
+
+        Scope: fixing ``set_progress``'s rebuild-on-differing-total at its
+        source is a deferred idea, out of scope here -- it is shared code on
+        the read and blank-check paths this plan does not own.
+        """
+        if not response.message or "/" not in response.message:
+            return False
+        try:
+            absolute, _total_ignored = map(int, response.message.split("/"))
+        except (ValueError, TypeError):
+            return False  # not a parsable progress update
+        position = max(0, absolute - start_addr)
+        progress.current_step = position
+        if progress.progress_callback:
+            progress.progress_callback(position, progress.total_steps)
+        if progress.pbar:
+            progress.pbar.n = position
+            progress.pbar.refresh()
+        return True
+
     def _main_phase_send_data(
         self,
         progress: ClassProgressHandler,
         input_file_path: str,
         buffer_size: int,
         eprom_data_dict: Optional[dict] = None,
+        response_timeout: Optional[float] = None,
     ) -> None:
         """Main phase handler for writing or verifying data.
 
@@ -549,27 +766,77 @@ class EpromOperator:
         to MSG_ERR_FL4_VERIFY_TIMEOUT errors when the failing address is in the
         first or last 16K of a flash4 (protocol 0x05) chip.  Passing None (the
         default) keeps behaviour identical to pre-FIX-01b for all other callers.
+
+        ``response_timeout`` (HOST-01 / D-12) is the write-only per-response
+        wait: ``write_eprom`` passes ``self._write_block_timeout()`` from
+        inside its ``_operation_context`` ``with`` block; ``verify_eprom``
+        does not pass it at all, so the default of ``None`` (which resolves
+        to ``DEFAULT_RESPONSE_TIMEOUT`` below) keeps ``verify_eprom`` byte
+        -identical to its pre-HOST-01 behaviour -- exactly the same
+        default-preserves-old-callers contract the ``eprom_data_dict``
+        paragraph above already uses. ``get_response(timeout)`` is an
+        already-supported call form (``expect_ack`` uses it); this is the
+        ONLY timeout change on the write path -- ``_read_and_parse_lines``
+        and its timeout-reset semantics are untouched (D-13, GATE-1.8d).
         """
         if not os.path.exists(input_file_path):
             raise EpromOperationError(f"Input file {input_file_path} not found.")
 
         protocol: int = (eprom_data_dict or {}).get("protocol-id", 0)
         mem_size: int = (eprom_data_dict or {}).get("memory-size", 0)
+        timeout = (
+            response_timeout
+            if response_timeout is not None
+            else DEFAULT_RESPONSE_TIMEOUT
+        )
 
         with open(input_file_path, "rb") as file_handle:
             file_size = os.path.getsize(input_file_path)
             progress.start(file_size)
 
+            # HOST-02 / D-04: _setup_operation sets command_dict["address"]
+            # ONLY when an --address was supplied, so .get("address", 0) is
+            # exactly right for a full-chip write's start address (0) too --
+            # write_eprom already forwards eprom_data_dict=cmd_data.
+            start_addr = (eprom_data_dict or {}).get("address", 0)
+            # HOST-02 / Pitfall 1: latches True on the first successfully
+            # -applied mid-block progress frame (_apply_write_progress
+            # returning True), so the chunk-handoff update() below stops
+            # firing -- see its own comment for why it must not simply be
+            # deleted instead.
+            firmware_drives_bar = False
+
             while True:
-                response = self.comm.get_response()
+                response = self.comm.get_response(timeout)
                 if response.type == "MAIN":
                     break  # Main phase is complete
                 if response.type == "ERROR":
                     hint = _boot_block_hint_message(response, protocol, mem_size)
+                    budget_hint = _budget_failure_hint_message(response)
                     msg = response.message
-                    if hint:
-                        msg = msg + " -- " + hint
+                    # HOST-03 / D-19: the boot-block hint (0xB3, flash4-only)
+                    # and the budget-failure hint (0xBD/0xBE/0xAE) are
+                    # disjoint by id today, but this composition does not
+                    # rely on that -- appending whichever are present still
+                    # produces one readable, " -- "-joined message, exactly
+                    # like the boot-block hint alone already composed.
+                    for extra_hint in (hint, budget_hint):
+                        if extra_hint:
+                            msg = msg + " -- " + extra_hint
                     _raise_for_error_response(response, msg)
+                if response.type == "DATA":
+                    # HOST-02 / D-05: a mid-block MSG_DATA_PROGRESS frame is
+                    # NEVER acked -- the firmware is mid-block waiting for
+                    # nothing, and on a Leonardo a stray buffered "OK" makes
+                    # op_get_message return OP_MSG_ACK, so
+                    # _process_incoming_data's `default: return false` aborts
+                    # the write with NO error frame at all
+                    # (#write-empty-input-regression, in a new place). Placing
+                    # this arm BEFORE the `!= "OK"` raise below is what keeps
+                    # a mid-block frame from becoming an EpromOperationError.
+                    if self._apply_write_progress(response, progress, start_addr):
+                        firmware_drives_bar = True
+                    continue
                 if response.type != "OK":
                     raise EpromOperationError(
                         f"Programmer did not request data chunk, got {response.type}: {response.message}"  # noqa: E501
@@ -588,7 +855,19 @@ class EpromOperator:
                     # Assembled as ONE bytes object and sent in a single send_bytes call
                     # (atomic-write mandate, ADR §4.1 / T-50-05 SAFE-01 timing guard).
                     self.comm.send_bytes(frame)
-                    progress.update(len(data_chunk))
+                    if not firmware_drives_bar:
+                        # HOST-02 / Pitfall 1: the two progress sources measure
+                        # different things -- bytes SENT (this handoff) versus
+                        # bytes PROGRAMMED (the firmware's own 0xE0 frames) --
+                        # and this one runs first. Without this latch, the bar
+                        # jumps ahead by a full chunk the instant it is sent,
+                        # then the firmware's frames pull it back down as bytes
+                        # are actually programmed -- a visible rewind (tqdm
+                        # permits pbar.n to move backward). Do NOT simply
+                        # delete this call: a board that never delivers a
+                        # mid-block frame (every uno/uno328pb write, BF-2)
+                        # would then be regressed to a bar that never moves.
+                        progress.update(len(data_chunk))
                 else:
                     self.comm.send_done()
 
@@ -1587,7 +1866,33 @@ class EpromOperator:
         input_file_path: str,
         operation_flags: int = 0,
         address_str: Optional[str] = None,
+        pulse_us: int = 0,  # per-run pulse-width override (us; 0=not supplied, use the database value)
     ) -> bool:
+        # HOST-04 / D-14: per-run pulse override, riding the existing
+        # "pulse-delay" DB-dict key rather than adding a new wire field or
+        # command. Four recorded points:
+        # (a) this is consistency_check_eprom's read_settling_us/
+        #     read_strobe_us shape verbatim -- that function's own comment
+        #     says the pattern is "consistent with how pulse-delay already
+        #     travels via the DB dict."
+        # (b) the key ALREADY EXISTS -- database.py's convert_to_programmer
+        #     emits "pulse-delay" unconditionally -- so this REPLACES a
+        #     value rather than adding a field, which is how "no new wire
+        #     field and no new command" (HOST-04) is satisfied structurally.
+        # (c) the shallow copy exists so a caller that reuses its programmer
+        #     dict for a second chip (e.g. a batch loop) is unaffected.
+        # (d) the 1..65535 bound is NOT enforced here -- it is Click's
+        #     IntRange at parse time (plan 143-07, D-15), and the firmware's
+        #     energy_cap_us-keyed pre-flight refusal (MSG_ERR_PULSE_TOO_WIDE)
+        #     is the independent second gate, firing before any high voltage
+        #     is enabled (D-16). No host-side check and no energy_cap_us
+        #     mirror belongs here.
+        if pulse_us:
+            eprom_data_dict = dict(
+                eprom_data_dict
+            )  # shallow copy -- never mutate caller's dict
+            eprom_data_dict["pulse-delay"] = pulse_us
+
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
@@ -1601,12 +1906,21 @@ class EpromOperator:
             logger.info(f"Writing {input_file_path} to {eprom_name.upper()}")
             start_time = time.time()
 
+            # HOST-01 / D-09-D-10: _write_block_timeout() MUST be read here,
+            # inside this `with` block -- _operation_context's `finally`
+            # disconnects and sets self.comm to None once it exits (same
+            # constraint the seen_message_ids check below already relies
+            # on). _run_state_machine forwards **handler_kwargs verbatim to
+            # main_phase_handler (confirmed by reading it), so no
+            # _run_state_machine signature change is needed for this to
+            # reach _main_phase_send_data's new response_timeout kwarg.
             is_ok, _ = self._run_state_machine(
                 op_name,
                 main_phase_handler=self._main_phase_send_data,
                 input_file_path=input_file_path,
                 buffer_size=buf_size,
                 eprom_data_dict=cmd_data,  # FIX-01b: boot-block hint context
+                response_timeout=self._write_block_timeout(),
             )
 
             # D-15 (Phase 120 / v1.22 HOST-06): when --skip-sdp-unlock was set,

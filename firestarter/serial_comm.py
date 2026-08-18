@@ -64,6 +64,17 @@ rurp_logger = logging.getLogger("RURP")
 
 DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
+# CAP-03 (HOST-01): plausibility ceiling for the firmware-advertised per-block
+# write-time budget decoded by _decode_id_frame's CAP-03 arm below. DERIVED,
+# not chosen: the largest value a legitimate firmware could compute is
+# ceil(max_pulses 25 * 65535 us * buffer 4096 B / 1e6) * 2 + 2 = 13424 s,
+# evaluated at CAP-01's own [1, 4096] buffer-size plausibility ceiling --
+# rounded up to 14400 s (4 h). A value outside [1, WRITE_BUDGET_MAX_S] leaves
+# write_block_budget_s unset so the write-path fallback applies, mirroring
+# CAP-01's T-55-06 behaviour exactly. The clamp exists so a malfunctioning or
+# mismatched board cannot wedge the host -- it is not a defense against an
+# adversarial one.
+WRITE_BUDGET_MAX_S = 14400  # seconds; derived ceiling, see comment above
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
 
 # Phase 8 W-01: INIT/MAIN/END removed (now arrive as ID frames via the catalog
@@ -109,8 +120,12 @@ class SerialCommunicator:
     # every one of those into an AttributeError swallowed by the broad
     # `except Exception` in _probe_port, which degrades to "no programmer
     # found". Class defaults of None keep the gates fail-closed instead.
+    # CAP-03 extends this same ack with the firmware's advertised per-block
+    # write-time budget (write_block_budget_s below); the identical
+    # class-level-declaration reasoning applies to it.
     firmware_identity: Optional[str] = None
     hw_revision: Optional[int] = None
+    write_block_budget_s: Optional[int] = None
 
     def __init__(
         self,
@@ -151,6 +166,16 @@ class SerialCommunicator:
         # _probe_port does.
         self.firmware_identity: Optional[str] = None
         self.hw_revision: Optional[int] = None
+        # CAP-03 (HOST-01): the firmware's advertised worst-case seconds for
+        # one write block. The firmware ALREADY pads this figure -- only it
+        # knows its own delay(500) VPE settle, the final full-block verify
+        # pass and the per-pulse settle -- so the host applies no multiplier
+        # of its own on top (D-09). None means "not advertised", and
+        # downstream that means a safe default applies, never an error and
+        # never a refusal (D-10; mirrors CAP-01's Phase 54 reversal of
+        # FirmwareOutdatedError into a safe default). Populated by
+        # _decode_id_frame below. Consumed only on the write path.
+        self.write_block_budget_s: Optional[int] = None
         # D-15 (Phase 120 / v1.22 HOST-06): bounded record of every id frame
         # successfully decoded on this connection. Populated by the
         # _decode_id_frame override below. A set of integers only — nothing
@@ -337,6 +362,19 @@ class SerialCommunicator:
         construction: it stores only the decoded id integer (0-255), never
         anything sized from frame content (T-120-39).
 
+        CAP-03 (HOST-01): a third length-discriminated field, appended AFTER
+        CAP-02's variable-length identity tail, carrying the firmware's
+        advertised per-block write-time budget in seconds as a big-endian
+        u16. Read at the COMPUTED ver_end offset -- never a fixed index, the
+        same discipline CAP-02 itself uses for the identity string -- and
+        plausibility-clamped to [1, WRITE_BUDGET_MAX_S] exactly as CAP-01
+        clamps a buffer size to [1, 4096]. Absent, truncated or implausible
+        advertisements all leave write_block_budget_s None, which downstream
+        means "apply the safe default", never an error and never a refusal
+        (D-10). This plan does not fix BF-1: firmware that emits only the
+        bare 2-byte legacy ack is refused by _probe_port before this arm is
+        ever reached.
+
         The GATE-1.8d ring-fenced _read_and_parse_lines body is not touched —
         only this override seam is used (Pitfall 4 / Open Question 3).
         """
@@ -374,6 +412,33 @@ class SerialCommunicator:
                         self.firmware_identity = params_bytes[4:ver_end].decode(
                             "ascii", errors="replace"
                         )
+                        # CAP-03 (HOST-01): the per-block write-time budget,
+                        # appended AFTER CAP-02's variable-length identity
+                        # tail. The offset MUST be the COMPUTED ver_end, never
+                        # a fixed index: a fixed index works on every board
+                        # whose identity string happens to be one length and
+                        # silently misreads on the next -- offsets 2 and 3
+                        # are already claimed by CAP-02, so a budget written
+                        # there would be read as a hardware revision and a
+                        # version length. Nested here, past the ver_end
+                        # guard, because an ack with no identity tail cannot
+                        # carry CAP-03 -- the arm is unreachable there by
+                        # construction. A truncated tail leaves the field
+                        # None rather than yielding a partial value, the same
+                        # posture as
+                        # test_decode_truncated_version_prefix_leaves_identity_none.
+                        if len(params_bytes) >= ver_end + 2:
+                            value = struct.unpack(
+                                ">H", params_bytes[ver_end : ver_end + 2]
+                            )[0]
+                            # Plausibility clamp, mirroring CAP-01's [1, 4096]
+                            # in spirit (T-55-06): a hostile or corrupt ack
+                            # must not be able to install an unbounded host
+                            # timeout. Values outside this range leave
+                            # write_block_budget_s unset so the D-10 fallback
+                            # applies.
+                            if 1 <= value <= WRITE_BUDGET_MAX_S:
+                                self.write_block_budget_s = value
         return result
 
     # =================================================================

@@ -370,22 +370,53 @@
     (``firestarter.sdp_capability``) — see the D-04 auto-set block below, which
     always prints a mandatory, default-visible report line when it fires.
   
+    TRAP #7 / D-14..D-18 (v1.31 HOST-04/HOST-05): ``--pulse-us`` overrides the
+    database program-pulse width for this run only. D-14: it rides the existing
+    ``"pulse-delay"`` wire key (``write_eprom``'s own ``pulse_us`` parameter,
+    plan 143-04's transport half) — no new command, no new wire field. D-15:
+    bounds are enforced by the option's own ``click.IntRange(1, 65535)``, which
+    refuses out of range at Click PARSE TIME, exit 2. The guarantee this gives
+    HOST-05 ("before any serial byte is sent") is NOT "before ``AppContext``
+    builds" — ``cli()``'s group callback runs first, before this command's own
+    parameters are even type-converted — the guarantee is that NOTHING in
+    ``cli()`` or ``AppContext`` construction opens a serial port, so a parse-
+    time refusal is still structurally before any serial byte. D-16: a value in
+    ``50001..65535`` is host-legal but firmware-refused on protocol ``0x0B``
+    only (``configure_eprom``'s ``energy_cap_us``-keyed pre-flight check,
+    ``MSG_ERR_PULSE_TOO_WIDE``) before any high voltage is enabled — the host
+    deliberately mirrors no table value to pre-empt it (that would require
+    duplicating ``energy_cap_us`` host-side). D-17: using the flag ALWAYS prints
+    a default-visible report line (see below) naming both the database pulse
+    replaced and the override — provenance, because a bench artifact or log
+    captured without the command line beside it cannot otherwise tell you the
+    pulse was not the database's. D-18: the flag exists on ``write`` ONLY,
+    mirroring the reasoning above for ``--skip-sdp-unlock`` —
+    ``read``/``verify``/``blank``/``erase`` emit no program pulse, so there is
+    nothing to override.
+  
   Options:
-    -b, --no-blank-check  Skip the blank check before write (erase still runs if
-                          the chip supports it).
-    --skip-erase          Also skip the pre-write erase (for already-blank or
-                          non-erasable/pre-erased parts). WARNING: skipping
-                          erase on a non-blank electrically-erasable chip leaves
-                          un-erased bits that cannot be reprogrammed.
-    -f, --force           Force, even if the VPP or chip id doesn't match.
-    -a, --address TEXT    Write start address in dec/hex
-    --vpe-as-vpp          Use VPE as VPP voltage
-    --skip-sdp-unlock     Decline the automatic SDP unlock firmware performs at
-                          the start of every protocol-0x0D write. WARNING: on a
-                          chip whose software data protection is actually
-                          enabled, the write will then fail. Has NO EFFECT on
-                          any other protocol — the host warns and proceeds.
-    --help                Show this message and exit.
+    -b, --no-blank-check      Skip the blank check before write (erase still
+                              runs if the chip supports it).
+    --skip-erase              Also skip the pre-write erase (for already-blank
+                              or non-erasable/pre-erased parts). WARNING:
+                              skipping erase on a non-blank electrically-
+                              erasable chip leaves un-erased bits that cannot be
+                              reprogrammed.
+    -f, --force               Force, even if the VPP or chip id doesn't match.
+    -a, --address TEXT        Write start address in dec/hex
+    --vpe-as-vpp              Use VPE as VPP voltage
+    --pulse-us INTEGER RANGE  Override the database program-pulse width for this
+                              run (microseconds, 1-65535). This bound is minipro
+                              parity (-o pulse=N is a uint16), NOT a wire-type
+                              or hardware limit -- see write()'s docstring.
+                              [1<=x<=65535]
+    --skip-sdp-unlock         Decline the automatic SDP unlock firmware performs
+                              at the start of every protocol-0x0D write.
+                              WARNING: on a chip whose software data protection
+                              is actually enabled, the write will then fail. Has
+                              NO EFFECT on any other protocol — the host warns
+                              and proceeds.
+    --help                    Show this message and exit.
   
   '''
 # ---
@@ -1229,22 +1260,53 @@
     (``firestarter.sdp_capability``) — see the D-04 auto-set block below, which
     always prints a mandatory, default-visible report line when it fires.
   
+    TRAP #7 / D-14..D-18 (v1.31 HOST-04/HOST-05): ``--pulse-us`` overrides the
+    database program-pulse width for this run only. D-14: it rides the existing
+    ``"pulse-delay"`` wire key (``write_eprom``'s own ``pulse_us`` parameter,
+    plan 143-04's transport half) — no new command, no new wire field. D-15:
+    bounds are enforced by the option's own ``click.IntRange(1, 65535)``, which
+    refuses out of range at Click PARSE TIME, exit 2. The guarantee this gives
+    HOST-05 ("before any serial byte is sent") is NOT "before ``AppContext``
+    builds" — ``cli()``'s group callback runs first, before this command's own
+    parameters are even type-converted — the guarantee is that NOTHING in
+    ``cli()`` or ``AppContext`` construction opens a serial port, so a parse-
+    time refusal is still structurally before any serial byte. D-16: a value in
+    ``50001..65535`` is host-legal but firmware-refused on protocol ``0x0B``
+    only (``configure_eprom``'s ``energy_cap_us``-keyed pre-flight check,
+    ``MSG_ERR_PULSE_TOO_WIDE``) before any high voltage is enabled — the host
+    deliberately mirrors no table value to pre-empt it (that would require
+    duplicating ``energy_cap_us`` host-side). D-17: using the flag ALWAYS prints
+    a default-visible report line (see below) naming both the database pulse
+    replaced and the override — provenance, because a bench artifact or log
+    captured without the command line beside it cannot otherwise tell you the
+    pulse was not the database's. D-18: the flag exists on ``write`` ONLY,
+    mirroring the reasoning above for ``--skip-sdp-unlock`` —
+    ``read``/``verify``/``blank``/``erase`` emit no program pulse, so there is
+    nothing to override.
+  
   Options:
-    -b, --no-blank-check  Skip the blank check before write (erase still runs if
-                          the chip supports it).
-    --skip-erase          Also skip the pre-write erase (for already-blank or
-                          non-erasable/pre-erased parts). WARNING: skipping
-                          erase on a non-blank electrically-erasable chip leaves
-                          un-erased bits that cannot be reprogrammed.
-    -f, --force           Force, even if the VPP or chip id doesn't match.
-    -a, --address TEXT    Write start address in dec/hex
-    --vpe-as-vpp          Use VPE as VPP voltage
-    --skip-sdp-unlock     Decline the automatic SDP unlock firmware performs at
-                          the start of every protocol-0x0D write. WARNING: on a
-                          chip whose software data protection is actually
-                          enabled, the write will then fail. Has NO EFFECT on
-                          any other protocol — the host warns and proceeds.
-    --help                Show this message and exit.
+    -b, --no-blank-check      Skip the blank check before write (erase still
+                              runs if the chip supports it).
+    --skip-erase              Also skip the pre-write erase (for already-blank
+                              or non-erasable/pre-erased parts). WARNING:
+                              skipping erase on a non-blank electrically-
+                              erasable chip leaves un-erased bits that cannot be
+                              reprogrammed.
+    -f, --force               Force, even if the VPP or chip id doesn't match.
+    -a, --address TEXT        Write start address in dec/hex
+    --vpe-as-vpp              Use VPE as VPP voltage
+    --pulse-us INTEGER RANGE  Override the database program-pulse width for this
+                              run (microseconds, 1-65535). This bound is minipro
+                              parity (-o pulse=N is a uint16), NOT a wire-type
+                              or hardware limit -- see write()'s docstring.
+                              [1<=x<=65535]
+    --skip-sdp-unlock         Decline the automatic SDP unlock firmware performs
+                              at the start of every protocol-0x0D write.
+                              WARNING: on a chip whose software data protection
+                              is actually enabled, the write will then fail. Has
+                              NO EFFECT on any other protocol — the host warns
+                              and proceeds.
+    --help                    Show this message and exit.
   
   '''
 # ---

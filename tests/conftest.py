@@ -224,6 +224,11 @@ def make_comm(fake_serial):
         # shield-revision gate, so a fixture that forgets these fails closed.
         instance.firmware_identity = None
         instance.hw_revision = None
+        # CAP-03 (HOST-01): the firmware's advertised per-block write-time
+        # budget, carried in the same MSG_OK_READY ack. None until probed --
+        # and None means "not advertised", so the write-path safe default
+        # applies (D-10), never an error and never a refusal.
+        instance.write_block_budget_s = None
         # Phase-120 (D-15 / HOST-06): bounded per-connection observed-id record
         instance.seen_message_ids = set()
         return instance
