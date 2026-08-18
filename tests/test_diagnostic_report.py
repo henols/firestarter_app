@@ -1111,3 +1111,89 @@ def test_dedup_fingerprint_sensitive_to_sdp_step_verdict_change():
     )
 
     assert dedup_fingerprint(report_held) != dedup_fingerprint(report_leaked)
+
+
+# ---------------------------------------------------------------------------
+# Explicit unknown identity marker (PROV-05, D-10/D-12/D-13(a), v1.32 Phase
+# 147 plan 03) -- proves the marker present-when-absent and absent-when-
+# populated so `_identity_cell` can neither under- nor over-fire, and that
+# the fenced JSON keeps typed `null` throughout.
+# ---------------------------------------------------------------------------
+
+
+def test_absent_identity_renders_the_explicit_marker_in_both_rows():
+    """`_minimal_report()`'s `AutoCapture` never sets `fw_board_identity` or
+    `hw_revision`, so both default to `None` -- the render must show the
+    explicit `NOT_REPORTED` marker in BOTH rows, never a blank and never the
+    bare four-character rendering of a null value. Checked against the EXACT
+    `Value` cell for each named row (not a whole-table substring scan)
+    because the deliberately-untouched `chip_id (expected/actual)` row
+    legitimately renders `None / None` on this same minimal report (D-12) --
+    a blanket "no None anywhere" scan would false-positive on that row."""
+    from firestarter.diagnostic_report import NOT_REPORTED
+
+    report = _minimal_report()
+    table = report.render()
+    field_col, value_col = table.columns
+    rows = dict(zip(field_col.cells, value_col.cells))
+
+    assert rows["fw_board_identity"] == NOT_REPORTED
+    assert rows["hw_revision"] == NOT_REPORTED
+    assert rows["fw_board_identity"] != "None"
+    assert rows["hw_revision"] != "None"
+
+    # Non-vacuous count check over the WHOLE rendered text: the marker
+    # appears exactly twice -- once per identity row, and nowhere else.
+    rendered = _rendered_text(table)
+    assert rendered.count(NOT_REPORTED) == 2
+
+
+def test_absent_identity_stays_typed_null_in_to_dict():
+    """D-10: the fenced report JSON keeps typed `null` for an absent
+    identity -- `to_dict()` (and the JSON block built from it) must never
+    substitute the render-only marker, keeping PROV-04's backward-
+    compatibility story to ONE case (`is None`) instead of two."""
+    from firestarter.diagnostic_report import NOT_REPORTED
+
+    report = _minimal_report()
+    d = report.to_dict()
+
+    assert d["auto_capture"]["fw_board_identity"] is None
+    assert d["auto_capture"]["hw_revision"] is None
+
+    serialised = report.to_json_block()
+    assert NOT_REPORTED not in serialised
+
+
+def test_populated_identity_rows_render_the_value_verbatim():
+    """A report whose two identity fields are populated renders both values
+    VERBATIM and the marker ZERO times -- the leg that stops
+    `_identity_cell` from over-firing on a genuinely-present value."""
+    from firestarter.diagnostic_report import NOT_REPORTED
+
+    report = _minimal_report()
+    report.auto_capture.fw_board_identity = "3.0.0b19:leonardo"
+    report.auto_capture.hw_revision = "Rev 2.0-class"
+
+    table = report.render()
+    field_col, value_col = table.columns
+    rows = dict(zip(field_col.cells, value_col.cells))
+
+    assert rows["fw_board_identity"] == "3.0.0b19:leonardo"
+    assert rows["hw_revision"] == "Rev 2.0-class"
+    assert NOT_REPORTED not in _rendered_text(table)
+
+
+def test_schema_version_is_one_four():
+    """PROV-04: the imported constant equals `"1.4"`, and a freshly built
+    report's `to_dict()["schema_version"]` equals the IMPORTED constant --
+    never a restated literal in the second assertion. This is the only
+    place in the suite that pins WHICH version this phase shipped; every
+    other site (including `test_schema_version_1_4_single_sourced` above)
+    keeps importing the constant."""
+    from firestarter.diagnostic_report import SCHEMA_VERSION
+
+    assert SCHEMA_VERSION == "1.4"
+
+    report = _minimal_report()
+    assert report.to_dict()["schema_version"] == SCHEMA_VERSION
