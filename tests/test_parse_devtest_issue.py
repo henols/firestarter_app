@@ -49,28 +49,44 @@ from firestarter.diagnostic_report import (
 from firestarter.submit import build_body, build_title, sanitize_dict
 from tools.parse_devtest_issue import (
     _MAX_BODY_BYTES,
+    _NOT_ATTRIBUTABLE,
+    NOT_REPORTED,
     count_agreeing,
     extract_db_diff,
     parse_devtest_body,
+    render_diff,
 )
 
 _REAL_DB = EpromDatabase(skip_local_override=True)
 
 
 def _build_realistic_title_body(
-    chip: str = "M8720", *, protocol: str = "0x08"
+    chip: str = "M8720",
+    *,
+    protocol: str = "0x08",
+    fw_board_identity: str | None = None,
 ) -> tuple[str, str]:
     """Build a (title, body) pair via the REAL production builders
     (`submit.py:build_title`/`build_body`, `diagnostic_report.py`'s own
     `to_dict()`/`build_db_diff`) -- the exact shape a community tester's
-    issue actually carries, never a hand-approximated stand-in."""
+    issue actually carries, never a hand-approximated stand-in.
+
+    `fw_board_identity` defaults to `None` (the existing callers' shape,
+    unchanged); PROV-06's `render_diff` tests pass an explicit populated or
+    empty-string value to exercise the identity row without hand-building a
+    fixture (147-05, W-2)."""
     results = [
         StepResult(
             op="id", verdict=VERDICT_OK, reason="chip id matched", fingerprint=None
         ),
         StepResult(op="read", verdict=VERDICT_OK, reason="", fingerprint=None),
     ]
-    auto_capture = AutoCapture(host_version="3.0.0b10", chip=chip, protocol=protocol)
+    auto_capture = AutoCapture(
+        host_version="3.0.0b10",
+        chip=chip,
+        protocol=protocol,
+        fw_board_identity=fw_board_identity,
+    )
     report = DiagnosticReport(
         auto_capture=auto_capture,
         transport=TransportHealth(),
@@ -204,6 +220,86 @@ def test_db_diff_tolerates_schema_1_0_shape_without_ladder_state():
     assert diff["ladder_state"] == ""
     assert diff["current_support_status"] == "supported"
     assert diff["dedup_fingerprint"] == "aaaa11112222"
+
+
+# ---------------------------------------------------------------------------
+# RENDER (PROV-06, W-2) -- `render_diff` had ZERO tests anywhere in the repo
+# before this plan (147-05); these are the first-ever tests for it. Every
+# assertion is a direct substring check on the returned `str` -- `render_diff`
+# is a pure function of `(report_obj, diff, n_agreeing=...)`, so there is no
+# `_rendered_text` indirection to mirror and no CLI subprocess needed.
+#
+# Evidence Ceiling (binding): none of these tests may say or imply the
+# `0x0D` write path is proven, that a support status changes, or that
+# gh#21/#32/#11/#12 are closed. Framing is only that attribution becomes
+# possible, or is explicitly refused.
+# ---------------------------------------------------------------------------
+
+
+def test_render_diff_labels_a_populated_firmware_identity():
+    """A report whose auto_capture.fw_board_identity is populated renders a
+    labelled fw_board_identity line carrying that exact value, a labelled
+    host_version line, and NOT the not-attributable clause (PROV-06)."""
+    title, body = _build_realistic_title_body(fw_board_identity="3.0.0b19:leonardo")
+    obj = parse_devtest_body(title, body)
+    diff = extract_db_diff(obj)
+
+    rendered = render_diff(obj, diff)
+
+    identity_line = next(
+        line for line in rendered.splitlines() if "fw_board_identity" in line
+    )
+    assert identity_line.strip().endswith("3.0.0b19:leonardo")
+    assert any("host_version" in line for line in rendered.splitlines())
+    assert _NOT_ATTRIBUTABLE not in rendered
+
+
+def test_render_diff_marks_an_absent_identity_not_attributable():
+    """A `None` fw_board_identity AND an empty-string one (a community body
+    can genuinely carry `""`) both render the marker plus the
+    not-attributable clause -- never a blank (D-14/D-17/PROV-05)."""
+    title_none, body_none = _build_realistic_title_body(fw_board_identity=None)
+    obj_none = parse_devtest_body(title_none, body_none)
+    rendered_none = render_diff(obj_none, extract_db_diff(obj_none))
+
+    assert NOT_REPORTED in rendered_none
+    assert _NOT_ATTRIBUTABLE in rendered_none
+
+    title_empty, body_empty = _build_realistic_title_body(fw_board_identity="")
+    obj_empty = parse_devtest_body(title_empty, body_empty)
+    rendered_empty = render_diff(obj_empty, extract_db_diff(obj_empty))
+
+    assert NOT_REPORTED in rendered_empty
+    assert _NOT_ATTRIBUTABLE in rendered_empty
+
+
+def test_render_diff_omits_hw_revision():
+    """No `hw_revision` label appears in `render_diff`'s output -- a
+    deliberate omission (D-15), not an oversight: a write-path finding is
+    attributable only when host AND firmware are both known, and
+    `hw_revision` is a coarse silkscreen bucket that cannot discriminate
+    the operator's Rev 2.2 / Rev 2.0 / modified Rev 0 boards, so a line
+    naming it would look authoritative while answering nothing."""
+    title, body = _build_realistic_title_body(fw_board_identity="3.0.0b19:leonardo")
+    obj = parse_devtest_body(title, body)
+
+    rendered = render_diff(obj, extract_db_diff(obj))
+
+    assert "hw_revision" not in rendered
+
+
+def test_render_diff_still_labels_n_agreeing_as_a_maintainer_decision_input():
+    """Non-regression pin on `render_diff`'s pre-existing `n_agreeing`
+    clause -- this function had zero tests before this plan, so its
+    existing contract is pinned here in the same pass that adds to it."""
+    title, body = _build_realistic_title_body()
+    obj = parse_devtest_body(title, body)
+
+    rendered = render_diff(obj, extract_db_diff(obj), n_agreeing=3)
+
+    assert "3" in rendered
+    assert "maintainer decision input" in rendered
+    assert "NEVER an auto-promotion trigger" in rendered
 
 
 # ---------------------------------------------------------------------------
