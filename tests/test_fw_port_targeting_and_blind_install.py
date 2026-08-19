@@ -39,6 +39,7 @@ to a single invocation, silently retargeting every later command.
 
 import json
 import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -169,34 +170,53 @@ class TestNamedPortRestrictsTheSearch:
             "the port-specific message belongs to the restricted path only"
         )
 
-    def test_typed_port_is_not_promoted_into_the_saved_config(self, monkeypatch):
-        """A successful probe must not persist a port meant for one invocation."""
-        saved = []
-        cfg = MagicMock()
-        cfg.is_transient.return_value = True
-        cfg.set_value.side_effect = lambda k, v, persist=True: saved.append(
-            (k, v, persist)
-        )
+    def test_typed_port_is_not_promoted_into_the_saved_config(self, tmp_config_dir):
+        """A working port must not persist a port meant for one invocation."""
+        cm = ConfigManager(config_filename="t_remember_typed.json")
+        cm.set_value("port", "/dev/ttyACM1", persist=False)  # what cli() does
 
-        SerialCommunicator._remember_working_port(cfg, "/dev/ttyACM1")
+        cm.remember_port("/dev/ttyACM1")
 
-        assert saved == [("port", "/dev/ttyACM1", False)], (
+        cfg_path = os.path.join(tmp_config_dir, "t_remember_typed.json")
+        on_disk = {}
+        if os.path.exists(cfg_path):
+            with open(cfg_path) as f:
+                on_disk = json.load(f)
+        assert "port" not in on_disk, (
             "a typed --port was written to disk, which silently retargets and "
             "now also restricts every later invocation"
         )
+        assert cm.get_value("port") == "/dev/ttyACM1", "still applies to THIS run"
 
-    def test_discovered_port_is_still_remembered(self, monkeypatch):
+    def test_discovered_port_is_still_remembered(self, tmp_config_dir):
         """Non-regression: the remember-the-working-port convenience survives."""
-        saved = []
-        cfg = MagicMock()
-        cfg.is_transient.return_value = False
-        cfg.set_value.side_effect = lambda k, v, persist=True: saved.append(
-            (k, v, persist)
+        cm = ConfigManager(config_filename="t_remember_found.json")
+
+        cm.remember_port("/dev/ttyACM1")
+
+        with open(os.path.join(tmp_config_dir, "t_remember_found.json")) as f:
+            assert json.load(f)["port"] == "/dev/ttyACM1"
+
+    def test_remember_port_is_the_only_writer_of_the_saved_port(self):
+        """Source tripwire: the rule lived in two call sites and drifted.
+
+        `serial_comm` (successful probe) and `firmware` (successful flash) each
+        persisted the port independently. Fixing only the first left the leak
+        live — the flash path still promoted a typed `--port`. Any new direct
+        write of the key would reintroduce it, so pin `remember_port` as the sole
+        writer.
+        """
+        pkg = Path(__file__).resolve().parents[1] / "firestarter"
+        offenders = sorted(
+            p.name
+            for p in pkg.rglob("*.py")
+            if 'set_value("port"' in p.read_text() and p.name != "cli_handlers.py"
         )
-
-        SerialCommunicator._remember_working_port(cfg, "/dev/ttyACM1")
-
-        assert saved == [("port", "/dev/ttyACM1", True)]
+        assert offenders == ["config.py"], (
+            f"{offenders} write the saved port directly; route them through "
+            f"ConfigManager.remember_port so the typed-vs-remembered rule "
+            f"cannot drift between call sites again"
+        )
 
 
 # ---------------------------------------------------------------------------

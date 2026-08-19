@@ -586,9 +586,9 @@ class FirmwareManager:
                     logger.info(
                         f"Firmware successfully updated on {port_to_flash} ({time.time() - start_time:.2f}s)"  # noqa: E501
                     )
-                    self.config_manager.set_value(
-                        "port", port_to_flash
-                    )  # Save successful port
+                    # Save the successful port — via remember_port, so a typed
+                    # --port is not promoted into the saved config.
+                    self.config_manager.remember_port(port_to_flash)
                     if (
                         avrdude_path_override is None
                     ):  # Only save if not overridden by user for this run
