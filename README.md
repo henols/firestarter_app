@@ -58,6 +58,37 @@ Support and discussions forum at [Discord](https://discord.com/invite/kmhbxAjQc3
 - [Support me](#support-me)
 
 
+## Breaking Changes (v1.32)
+
+### Chip database now stores numeric values (breaking change)
+
+The chip database's voltage and timing fields are no longer unit-suffixed strings. `vcc`/`vdd`/`vpp`
+(e.g. `"5V"`) and `pulse_duration` (e.g. `"100 us"`) are replaced by `vcc_mv` / `vdd_mv` / `vpp_mv` /
+`pulse_duration_us` integers (e.g. `5000`, `100`). There is **no tolerant reader** for the old
+string schema — this is a clean break, by design.
+
+**If you have a `~/.firestarter/database.json` override written against the old schema, it will no
+longer load.** The failure is loud (a missing key raises rather than silently resolving to a
+valid-looking `0`), not a silent mis-resolve. **Upgrade:** rewrite your override using the new key
+names (`vcc_mv`, `vdd_mv`, `vpp_mv`, `pulse_duration_us`) with integer millivolt/microsecond values
+instead of unit-suffixed strings.
+
+### AT28C-family VCC now reports 5.0v (correction, not a write-path fix)
+
+`firestarter info` on an AT28C-family part (and 55 other EEPROMs sharing the same decode
+condition) previously reported `VCC: 4.0v`; it now reports `VCC: 5.0v`. This is a **data
+correction**, not new decoding: upstream's `vcc` field for these chips was the programmer's
+low-margin **verify** rail, not the chip's actual operating supply, and firestarter was surfacing
+that verify-rail value as if it were the chip's VCC. The corrected value is the chip's own
+already-decoded operating-supply field (`vdd`) — nothing was invented, and the underlying decode
+table itself is unchanged.
+
+**This does not fix, and does not claim to fix, any write-path failure.** `vcc` never crosses the
+serial wire to the firmware — it is a display-and-data correction only, with no effect on how a
+chip is programmed.
+
+This change is beta-only (v1.32). Nothing is promoted to stable without operator authorization.
+
 ## Breaking Changes (v1.20)
 
 ### Legacy `type` wire field removed — `algorithm` is the sole dispatch key (breaking change)
