@@ -103,13 +103,6 @@ def iter_all_rows(db_raw):
             yield mfg, chip
 
 
-def parse_pulse_us(s):
-    """'10000 us' -> 10000. Raise on shape mismatch (Pitfall 3 fail-fast)."""
-    if not isinstance(s, str) or not s.endswith(" us"):
-        raise ValueError(f"Unexpected pulse_duration shape: {s!r}")
-    return int(s[:-3])
-
-
 def pulse_bucket(us):
     """D-09 bucketing: microseconds-integer input → label string."""
     if us < 100:
@@ -304,7 +297,7 @@ def compute_summary(rows, db_raw):
     for _mfg, chip in rows:
         algo = chip["programming"]["algorithm"]
         pinout = chip.get("pinout", "")
-        pulse_us = parse_pulse_us(chip["programming"]["pulse_duration"])
+        pulse_us = chip["programming"]["pulse_duration_us"]
         size = chip.get("electrical", {}).get("size_bytes", 0)
         cid = bool(chip.get("programming", {}).get("chip_id_check", False))
 
@@ -534,7 +527,7 @@ def _enum_row(mfg, chip):
         _md_escape(chip["part_number"]),
         _md_escape(chip["electrical"]["pin_count"]),
         _md_escape(chip["electrical"]["size_bytes"]),
-        _md_escape(chip["programming"]["pulse_duration"]),
+        _md_escape(chip["programming"]["pulse_duration_us"]),
         "True" if cid_check else "False",
         _md_escape(cid_value),
         _md_escape(chip["pinout"]),
@@ -845,9 +838,7 @@ def detect_correctness(rows):
 
     findings = []
     for (algo, pinout, size), members in clusters.items():
-        pulses = [
-            parse_pulse_us(chip["programming"]["pulse_duration"]) for _, chip in members
-        ]
+        pulses = [chip["programming"]["pulse_duration_us"] for _, chip in members]
         if len(set(pulses)) < 2:
             continue
         median = statistics.median(pulses)
@@ -1162,7 +1153,7 @@ def _bench_pulse_bucket(rows, b):
     if match is None:
         return None
     _mfg, chip = match
-    us = parse_pulse_us(chip["programming"]["pulse_duration"])
+    us = chip["programming"]["pulse_duration_us"]
     return pulse_bucket(us)
 
 
@@ -1175,7 +1166,7 @@ def pulse_coverage(rows, findings, ledger, algo):
     algo_rows = [(m, c) for m, c in rows if c["programming"]["algorithm"] == algo]
     bucket_rows = defaultdict(list)
     for mfg, chip in algo_rows:
-        us = parse_pulse_us(chip["programming"]["pulse_duration"])
+        us = chip["programming"]["pulse_duration_us"]
         bucket_rows[pulse_bucket(us)].append((mfg, chip))
 
     # Map each BENCH chip on this algorithm to a bucket (or None if pending).
@@ -1193,7 +1184,7 @@ def pulse_coverage(rows, findings, ledger, algo):
             for mfg, chip in algo_rows:
                 pn_list = [p.strip() for p in chip["part_number"].split(",")]
                 if name in pn_list:
-                    us = parse_pulse_us(chip["programming"]["pulse_duration"])
+                    us = chip["programming"]["pulse_duration_us"]
                     out.append(pulse_bucket(us))
                     break
         return out
@@ -1559,7 +1550,7 @@ def generate_matrix(output, ledger_path, check=False):
 # Generates `.planning/v1.3-COVERAGE-MATRIX-ALL.md`: same audit treatment as
 # the in-scope matrix but extended over every algorithm present in the DB.
 # Reuses the algo-agnostic primitives (sort_key, _enum_row, md_table,
-# parse_pulse_us, pulse_bucket, size_label, finding_hash, detect_correctness,
+# pulse_bucket, size_label, finding_hash, detect_correctness,
 # detect_variance) verbatim. Bench-coverage proof (§5) is intentionally omitted
 # — only algos 0x07/0x08 have in-milestone bench chips; uncovered cells for
 # the other 9 algorithms would be the entire matrix.
@@ -1632,14 +1623,8 @@ def _emit_algo_summary(algo, members):
     size_counts = Counter(chip["electrical"]["size_bytes"] for _, chip in members)
     pulse_counts = Counter()
     for _, chip in members:
-        try:
-            us = parse_pulse_us(chip["programming"]["pulse_duration"])
-        except (ValueError, KeyError):
-            us = -1
-        if us < 0:
-            pulse_counts["(malformed)"] += 1
-        else:
-            pulse_counts[pulse_bucket(us)] += 1
+        us = chip["programming"]["pulse_duration_us"]
+        pulse_counts[pulse_bucket(us)] += 1
     etype_counts = Counter(
         chip["electrical"].get("type", "(missing)") for _, chip in members
     )
@@ -1715,23 +1700,20 @@ def _emit_algo_enumeration(algo, members):
 
 
 def _members_with_parseable_pulse(members):
-    """Subset of `members` whose `pulse_duration` is a 'N us' string.
+    """Subset of `members` whose `pulse_duration_us` is a non-zero integer.
 
-    Many non-0x07/0x08 algos use `pulse_duration: "Algorithm Controlled"`
-    (EEPROMs that self-time internally — 355 rows across 8 algos in the
-    current DB). `detect_correctness` compares pulse magnitudes and so
-    cannot meaningfully operate on those rows.
+    Many non-0x07/0x08 algos use `pulse_duration_us: 0` (EEPROMs that
+    self-time internally — 355 rows across 8 algos in the current DB), where
+    `0` means algorithm-controlled rather than unparseable — true by
+    construction because `interpret_timing` (build_db.py) makes a decode
+    fault fatal (D-08). `detect_correctness` compares pulse magnitudes and so
+    cannot meaningfully operate on those algorithm-controlled rows.
     """
-    out = []
-    for mfg, chip in members:
-        pd = chip.get("programming", {}).get("pulse_duration", "")
-        if isinstance(pd, str) and pd.endswith(" us"):
-            try:
-                parse_pulse_us(pd)
-            except ValueError:
-                continue
-            out.append((mfg, chip))
-    return out
+    return [
+        (mfg, chip)
+        for mfg, chip in members
+        if chip["programming"]["pulse_duration_us"] != 0
+    ]
 
 
 def _detect_correctness_safe(members):
