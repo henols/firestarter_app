@@ -125,22 +125,17 @@ pin_conversions = {
 logger = logging.getLogger("Database")
 
 
-def _parse_pulse_duration(pulse_str: str) -> int:
-    """Parse a pulse_duration string from chip_database.json into microseconds.
+def format_mv(mv: int) -> str:
+    """Render a millivolt integer as the project's one human-facing voltage string.
 
-    Accepts values like "100 us", "1000 us", "Algorithm Controlled", or "".
-    Returns the integer microsecond value, or 0 for unknown / algorithm-controlled.
+    This is the single definition of the millivolt-to-human render used by every
+    display call site (`ic_layout.py`'s `vcc_str`/`vpp_str` and `eprom_info.py`'s
+    `vpp_str`). The one-decimal lowercase-`v` format (`f"{mv / 1000:.1f}v"`) is
+    byte-identical to the pre-Phase-148 string-schema output (D-15) — it takes an
+    `int` because the numeric convention is enforced upstream in `_map_data` (D-10)
+    rather than tolerated here.
     """
-    if not pulse_str:
-        return 0
-    # Format: "<integer> us"
-    parts = pulse_str.split()
-    if len(parts) == 2 and parts[1] == "us":
-        try:
-            return int(parts[0])
-        except ValueError:
-            pass
-    return 0
+    return f"{mv / 1000:.1f}v"
 
 
 def _read_config_file(filename: str) -> dict:
@@ -376,22 +371,6 @@ class EpromDatabase:
         pin_count = electrical.get("pin_count")
         pinout_key = ic.get("pinout")
 
-        vpp = 0
-        vcc = 0
-        vpp_str = electrical.get("vpp", "0").replace("V", "")
-        vcc_str = electrical.get("vcc", "0").replace("V", "")
-        try:
-            vpp = float(vpp_str)
-        except (ValueError, TypeError):
-            None
-            # logger.warning(f"Invalid VPP value for {ic.get('part_number')}: {vpp_str}")  # noqa: E501
-        try:
-            vcc = float(vcc_str)
-        except (ValueError, TypeError):
-            None
-            # logger.warning(f"Invalid VCC value for {ic.get('part_number')}: {vcc_str}")  # noqa: E501
-        vpp_mv = electrical.get("vpp_mv", 0)
-
         # Read algorithm integer directly — set by build_db.py from upstream protocol_id
         protocol_id = programming.get("algorithm", 0)
 
@@ -406,15 +385,20 @@ class EpromDatabase:
         # list/search view (print_eprom_list_table) can reach the same ground-truth
         # field that the info view (build_specifications) uses, via the shared
         # resolve_type_label helper.  Key "electrical-type" consumed by eprom_info.py.
+        # D-10: direct indexing, never `.get(key, 0)` — a stale string-schema
+        # `~/.firestarter/database.json` override missing `vcc_mv`/`vpp_mv`/
+        # `pulse_duration_us` must raise `KeyError` loudly here rather than
+        # silently resolving to `0`. `pulse-delay: 0` now means
+        # "algorithm-controlled", so a silently-defaulted `0` would program a
+        # 0x07 chip with no pulse at all.
         data = {
             "name": ic.get("part_number"),
             "manufacturer": manufacturer,
             "memory-size": electrical.get("size_bytes", 0),
             "pin-count": pin_count,
-            "vpp_volts": vpp,
-            "vpp_mv": vpp_mv,
-            "vcc": vcc,
-            "pulse-delay": _parse_pulse_duration(programming.get("pulse_duration", "")),  # noqa: E501
+            "vpp_mv": electrical["vpp_mv"],
+            "vcc_mv": electrical["vcc_mv"],
+            "pulse-delay": programming["pulse_duration_us"],
             "verified": bool(ic.get("verified", False)),
             "info-flags": info_flags,
             "flags": 0,
@@ -541,10 +525,10 @@ class EpromDatabase:
         if not full_eprom_data:
             return {}
 
-        # Use vpp_mv directly when available (integer millivolts from build_db.py)
-        vpp_mv = full_eprom_data.get("vpp_mv") or int(
-            full_eprom_data.get("vpp_volts", 0) * 1000
-        )
+        # vpp_mv is the sole VPP source (integer millivolts from build_db.py) —
+        # the legacy string-schema volts-key fallback is gone (D-16); `_map_data`
+        # always sets `vpp_mv` via direct indexing (D-10).
+        vpp_mv = full_eprom_data["vpp_mv"]
 
         # Keys to keep from the full data
         programmer_data = {
