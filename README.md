@@ -87,7 +87,25 @@ table itself is unchanged.
 serial wire to the firmware — it is a display-and-data correction only, with no effect on how a
 chip is programmed.
 
-This change is beta-only (v1.32). Nothing is promoted to stable without operator authorization.
+### AT28C010-class parts now write with a 128-byte page (software-proven, unvalidated on silicon)
+
+The database now delivers a per-chip page size over the existing JSON command path for the 18
+chips whose upstream record is natively protocol `0x0D`; 15 of them move from the firmware's
+64-byte floor to their datasheet 128-byte page, and 3 are corroborated at 64 and therefore
+unchanged. Firmware that receives no page-size field keeps using the conservative 64-byte floor,
+so an older host against this firmware still issues legal write cycles.
+
+**This does alter write behaviour for those 15 parts** — unlike the VCC correction above, which
+did not — and it is stated as **software-proven and unvalidated on silicon**. No physical AT28C
+part was tested. **AT28C256 is unaffected**: its upstream record is not natively `0x0D` and its
+page size was already 64, so nothing about its behaviour changes and nothing here explains the
+failure reported against it. Protocol `0x0D` remains `UNVERIFIED` and no chip's support status
+changed.
+
+Writes to those 15 parts issue half as many page-write cycles, so they may complete faster;
+nothing else about the command surface changes.
+
+These changes are beta-only (v1.32). Nothing is promoted to stable without operator authorization.
 
 ## Breaking Changes (v1.20)
 
