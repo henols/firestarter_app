@@ -684,7 +684,15 @@ def test_local_override_0x0d_entry_is_refused_at_runtime(tmp_path) -> None:
                 "SYNTHETIC_LOCAL_MFR_120_05": [
                     {
                         "part_number": synthetic_part_number,
-                        "programming": {"algorithm": _ALGORITHM_0X0D},
+                        # 148-04 D-10: _map_data direct-indexes these numeric
+                        # keys and raises KeyError if absent -- this synthetic
+                        # fixture must carry them even though the predicate
+                        # under test (SDP capability) never reads them.
+                        "electrical": {"vcc_mv": 5000, "vpp_mv": 0},
+                        "programming": {
+                            "algorithm": _ALGORITHM_0X0D,
+                            "pulse_duration_us": 0,
+                        },
                     }
                 ]
             }
