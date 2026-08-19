@@ -121,8 +121,12 @@ RURP_VPP_CEILING_MV = 25000
 # PGSZ-01 / CR-01: datasheet-sourced per-chip page size map.
 # Keyed on the canonical part number (first alias in the comma-separated list).
 # Each entry carries a [CITED:] datasheet reference — DO NOT author [ASSUMED] values.
-# Chips absent from this map omit the page_size field → firmware falls back to
-# flash4_page_size(mem_size) heuristic (safe, proven-correct for these chips).
+# Chips absent from this map omit the page_size field entirely. For
+# algorithm 13 (0x0D, EEPROM_POLL) chips specifically, the firmware falls
+# back to its own named AT28C page-size floor constant
+# (`eeprom_28c.cpp`'s page-size fallback, Phase 149 D-10) when the field is
+# absent; this map is NOT extended to cover that fallback (REQUIREMENTS.md
+# §Out of Scope / DATA-04).
 # Only in-repo datasheet PDFs are authoritative sources.
 _PAGE_SIZE_BY_PART: dict[str, int] = {
     # [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C040.pdf §6.2
@@ -481,10 +485,13 @@ def main():
                 # off this SAME <ic> element. Deliberately NOT the same key as the
                 # existing datasheet-curated _PAGE_SIZE_BY_PART / programming.page_size
                 # mechanism a few dozen lines below -- same English word, two
-                # different sources, never to be confused. This raw value is needed
-                # downstream only as PROV-06's corroborating axis (b15 vs
-                # infoic_page_size_raw > 1); it is not consulted by any ALLOW/REFUSE
-                # decision anywhere in this codebase. Default-safe (0x0) mirroring
+                # different sources, never to be confused. This raw field remains
+                # the raw provenance axis (PROV-06's corroborating axis, b15 vs
+                # infoic_page_size_raw > 1) and is now ALSO, as of Phase 149
+                # (PGSZ-01), the value source for the programming.page_size emit
+                # arm below when this <ic>'s own protocol_id is 0x0D — the two
+                # remain deliberately distinct keys even where their values
+                # coincide. Default-safe (0x0) mirroring
                 # 120-derive-sdp-allowset.py:26's `pg = int(ic.get("page_size", "0x0"), 16)`
                 # pattern.
                 raw_page_size = int(ic.get("page_size", "0x0"), 16)
@@ -653,6 +660,14 @@ def main():
                 # resolve_pinout_key (variant LOW byte) is UNCHANGED. Per D-06 no
                 # residual post-classify override remains; check_dispatch.py
                 # 0-violations (D-08) is the structural safety backstop.
+                #
+                # PGSZ-01 (Phase 149): classify() below REASSIGNS `proto_id` to
+                # its resolved algorithm and discards provenance (e.g. a
+                # promoted 5V-EEPROM arrives as 0x07/0x0B and leaves as 0x0D).
+                # The page_size emit arm needs the chip's OWN upstream
+                # protocol_id, not the post-classification algorithm, so it is
+                # captured here, before the reassignment.
+                _upstream_proto_id = proto_id
                 _etype, proto_id, pinout_key = classify(
                     type_int, proto_id, pm_idx, flags, pinout_key, mem_size
                 )
@@ -704,6 +719,12 @@ def main():
                         proto_id = NON_DISPATCHABLE_ALGO
                     # else: leave _support_status as "supported" — M2732A (21V)
                     # is within the RURP ceiling.
+
+                # Canonical part-number key (first alias, @PACKAGE suffix
+                # stripped) — hoisted here because the page_size emit arm
+                # below (PGSZ-01, Phase 149) needs it in both its lookup and
+                # its guard condition; previously recomputed twice inline.
+                _canon = name.split(",")[0].split("@")[0].strip()
 
                 chip_entry = {
                     # Upstream `name` is a comma-separated alias list where each
@@ -779,19 +800,38 @@ def main():
                         "protect_off_before": True if (flags & 0x4000) else False,
                         "protect_on_after": True if (flags & 0x8000) else False,
                         "infoic_page_size_raw": raw_page_size,
-                        # PGSZ-01 / CR-01: datasheet-sourced per-chip page size.
-                        # Looked up by the FIRST alias of the comma-separated part
-                        # name (canonical key). Absent chips omit the field entirely
-                        # so they ride the firmware flash4_page_size() heuristic.
+                        # PGSZ-01 / CR-01 (Phase 149): provenance-keyed page-size
+                        # emit rule. The page_size attribute is meaningful for the
+                        # algorithm that consumes it, and a record filed upstream
+                        # under 0x07/0x0B is not evidence about a 28C page buffer —
+                        # so this is a claim about provenance, never about a part.
+                        # Two disjoint arms, curated checked first for a minimal
+                        # diff (both curated rows are upstream 0x05, so ordering
+                        # is a legibility choice, not a correctness one):
+                        #   (1) datasheet-curated _PAGE_SIZE_BY_PART lookup by
+                        #       canonical part number (unchanged, today's
+                        #       behaviour), else
+                        #   (2) if this upstream <ic>'s own protocol_id is 0x0D,
+                        #       emit its raw_page_size directly — 18 rows qualify,
+                        #       15 at 128 and 3 at 64 (149-RESEARCH.md §"D-01
+                        #       Verification").
+                        # The 66 rows classify() promotes into 0x0D from a
+                        # foreign protocol keep the firmware AT28C page-size
+                        # floor (D-04) — this arm never fires for them because
+                        # it reads _upstream_proto_id (captured before
+                        # classify() reassigns proto_id to the resolved
+                        # algorithm), not the post-classification value.
+                        # Absent chips (neither arm fires) omit the field
+                        # entirely. This change is software-proven and
+                        # unvalidated on silicon.
                         **(
-                            {
-                                "page_size": _PAGE_SIZE_BY_PART[
-                                    name.split(",")[0].split("@")[0].strip()
-                                ]
-                            }
-                            if name.split(",")[0].split("@")[0].strip()
-                            in _PAGE_SIZE_BY_PART
-                            else {}
+                            {"page_size": _PAGE_SIZE_BY_PART[_canon]}
+                            if _canon in _PAGE_SIZE_BY_PART
+                            else (
+                                {"page_size": raw_page_size}
+                                if _upstream_proto_id == 0x0D
+                                else {}
+                            )
                         ),
                     },
                     "pinout": pinout_key,
