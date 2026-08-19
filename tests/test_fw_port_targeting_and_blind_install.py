@@ -29,6 +29,21 @@ does need to know WHICH image to write, and with no identity `board_to_use`
 collapses to the `--board` default. A blind install is therefore allowed only
 when the operator names the board.
 
+Measured framing boundary (bench, 2026-08-19): stable `2.0.6` AND pre-release
+`3.0.0b4` both answer the handshake with `ERROR: Bad JSON`, so the probe returns
+None and no identity is obtainable. `3.0.0b11` does NOT — it acks, just without
+the CAP-02 identity tail, which is the *waiver* case in
+`test_fw_update_path_gate.py` rather than this one. The boundary is the COBS
+pivot at firmware b8, so the two defects are genuinely distinct populations:
+pre-b8 firmware needs the blind install below, b8..b18 needs the waiver.
+
+The blind path is proven on all three flash methods on real hardware: `arduino`
+(uno, 2.0.6 → b19), `avr109` (leonardo, 2.0.6 → b19 — this one also exercises
+Avrdude._trigger_reset's 1200-baud touch, which only runs for atmega32u4), and
+`urclock` (uno328pb, from b4 — release lookup rate-limited mid-test, so that
+board was restored with avrdude directly and the urclock blind leg is proven only
+as far as the download boundary).
+
 C — `set_value(..., persist=False)` was not honoured across a later persisted
 write of an UNRELATED key. `_save_config` dumped the whole in-memory dict, so
 `firmware.py` caching `avrdude-path` after a successful flash wrote the

@@ -1087,9 +1087,10 @@ class SerialCommunicator:
             # and not to the firmware.
             raise ProgrammerNotFoundError(
                 f"No compatible programmer answered on {preferred_port}. If a "
-                "board is attached there, its firmware may be too old to speak "
-                "the current protocol (2.x firmware replies 'Bad JSON'). Such a "
-                "board can still be reflashed directly: "
+                "board is attached there, its firmware may predate the current "
+                "command framing, which makes it answer 'Bad JSON' instead of an "
+                "ack — every 2.x release, and 3.0.0 pre-releases before b8. Such "
+                "a board can still be reflashed directly: "
                 f"firestarter --port {preferred_port} fw --board <board> --install"
             )
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
