@@ -9,7 +9,7 @@ IC Layout Generation Module
 import logging
 from typing import Dict, List, Optional  # noqa: UP035
 
-from firestarter.database import EpromDatabase  # Changed import
+from firestarter.database import EpromDatabase, format_mv  # Changed import
 
 logger = logging.getLogger("EpromSpecBuilder")
 
@@ -568,7 +568,7 @@ class EpromSpecBuilder:
             "pin_count": eprom_data.get("pin-count", "N/A"),
             "memory_size_hex": hex(eprom_data.get("memory-size", 0)),
             "type_str": chip_type_str,
-            "vcc_str": f"{eprom_data.get('vcc', 'N/A')}v",
+            "vcc_str": format_mv(eprom_data["vcc_mv"]),
             "dip_layout": None,  # Will store the structured DIP layout data
             "jumpers": {},
             "protocol_info": None,
@@ -594,7 +594,10 @@ class EpromSpecBuilder:
         except (TypeError, ValueError):
             _vpp_mv = 0
         if etype not in {"SRAM", "FRAM"} and _vpp_mv > 0:
-            output_data["vpp_str"] = f"{eprom_data.get('vpp_volts', 'N/A')}v"
+            # WR-02: parity with eprom_info.py's list view is now structural —
+            # both views call format_mv on the same already-coerced _vpp_mv, so
+            # they cannot diverge (no more hand-mirrored 'N/A' fallbacks).
+            output_data["vpp_str"] = format_mv(_vpp_mv)
 
         # Chip ID: always render a row, but show "-" when the chip has no
         # real/readable ID — i.e. the key is absent, or it is a 0x00000000
