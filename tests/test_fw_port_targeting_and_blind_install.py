@@ -313,6 +313,49 @@ class TestBlindInstallRequiresExplicitBoard:
         )
         assert installed["target_port"] == "/dev/ttyACM1"
 
+    def test_identity_and_target_always_come_from_the_same_port(self, monkeypatch):
+        """The composition at the heart of defect A must be unrepresentable.
+
+        Restricting the probe closed the TYPED-port path, but a port merely
+        REMEMBERED in config does not restrict, so the probe can still answer
+        from a different port than the override names. With
+        `port_to_use = port_override or connected_port` that produced board Y's
+        asset aimed at port X — and avrdude's part-signature check is the only
+        guard, which helps only while the two boards have different MCUs. Two
+        Unos are both `atmega328p -c arduino`, so the wrong image would land
+        silently. Whenever there IS an identity, it and the target must be the
+        same port by construction.
+        """
+        installed = {}
+        fm = FirmwareManager(config_manager=MagicMock())
+        # Probe answered on ttyUSB0 (a fall-through) while the override names ttyACM1.
+        monkeypatch.setattr(
+            fm,
+            "check_current_firmware",
+            lambda **_kw: ("/dev/ttyUSB0", "3.0.0b11", "uno328pb"),
+        )
+        monkeypatch.setattr(
+            fm,
+            "fetch_release_info",
+            lambda channel="stable", version=None, board="uno": (
+                "3.0.0b19",
+                f"https://example.invalid/{board}.hex",
+            ),
+        )
+        monkeypatch.setattr(fm, "_download_firmware_file", lambda url: "/tmp/fake.hex")
+        monkeypatch.setattr(
+            fm, "_install_firmware", lambda **kw: installed.update(kw) or True
+        )
+
+        fm.manage_firmware_update(install_flag=True, port_override="/dev/ttyACM1")
+
+        assert installed["target_port"] == "/dev/ttyUSB0", (
+            "the flash was aimed at the override port while the board identity "
+            "came from another port — board A's image written to board B, with "
+            "only avrdude's signature check in the way"
+        )
+        assert installed["board"] == "uno328pb"
+
     def test_bare_check_still_refuses_without_install_intent(self, monkeypatch):
         """Non-regression: no install intent + no version is still an error."""
         fm = _manager_that_cannot_identify(monkeypatch)
