@@ -78,17 +78,19 @@ class TestDiffDbPhase84Relabel:
     - The rule does NOT explain chips outside _PHASE84_RELABEL_PART_NUMBERS.
     """
 
+    # Post-Phase-148 numeric schema (vcc_mv/vdd_mv/pulse_duration_us). diff_db.py's
+    # _canonicalize_db accepts either schema, so these literals prove the new
+    # shape directly rather than exercising the compatibility path.
     def _make_chip(self, etype, part_number="FM1608"):
         return {
             "part_number": part_number,
             "electrical": {
                 "type": etype,
-                "vcc": "5V",
-                "vdd": "5V",
-                "vpp": "12V",
+                "vcc_mv": 5000,
+                "vdd_mv": 5000,
                 "vpp_mv": 12000,
             },
-            "programming": {"algorithm": 40, "pulse_duration": "Algorithm Controlled"},
+            "programming": {"algorithm": 40, "pulse_duration_us": 0},
             "support_status": "supported",
         }
 
@@ -115,12 +117,11 @@ class TestDiffDbPhase84Relabel:
             "part_number": "SST39SF040",
             "electrical": {
                 "type": "Flash/EEPROM",
-                "vcc": "5V",
-                "vdd": "5V",
-                "vpp": "12V",
+                "vcc_mv": 5000,
+                "vdd_mv": 5000,
                 "vpp_mv": 12000,
             },
-            "programming": {"algorithm": 6, "pulse_duration": "Algorithm Controlled"},
+            "programming": {"algorithm": 6, "pulse_duration_us": 0},
             "support_status": "supported",
         }
         cu_chip = dict(bl_chip)
