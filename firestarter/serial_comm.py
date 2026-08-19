@@ -674,23 +674,6 @@ class SerialCommunicator:
                     )
 
     @staticmethod
-    def _remember_working_port(config_manager: ConfigManager, port_name: str) -> None:
-        """Record the port that just answered, for next invocation's convenience.
-
-        A port the operator typed for THIS invocation is NEVER promoted into the
-        saved config. `--port` is documented as applying to one invocation, yet
-        persisting it here silently retargeted every later command at that port —
-        observed live, where `~/.firestarter/config.json` acquired a `port` key
-        from a one-off `--port`. Now that a typed port also RESTRICTS discovery,
-        promoting it would strand later invocations there as well.
-        """
-        config_manager.set_value(
-            "port",
-            port_name,
-            persist=not config_manager.is_transient("port"),
-        )
-
-    @staticmethod
     def _list_potential_ports(
         preferred_port: Optional[str] = None,
         restrict_to_preferred: bool = False,
@@ -966,7 +949,7 @@ class SerialCommunicator:
 
             communicator.programmer_info = msg
             logger.debug(f"Programmer found on {port_name}: {msg}")
-            SerialCommunicator._remember_working_port(config_manager, port_name)
+            config_manager.remember_port(port_name)  # never promotes a typed --port
             return communicator
 
         except HardwareRevisionUnsupportedError:

@@ -195,6 +195,23 @@ class ConfigManager:
         else:
             self._transient_keys.add(key)
 
+    def remember_port(self, port_name: str) -> None:
+        """Record a port that just worked, for the next invocation's convenience.
+
+        The single writer of the saved "port" key, so the rule cannot drift: a
+        port the operator typed for THIS invocation is NEVER promoted into the
+        saved config. `--port` is documented as applying to one invocation, yet
+        two separate call sites used to persist it — the successful probe in
+        `serial_comm` and the successful flash in `firmware` — so
+        `~/.firestarter/config.json` silently acquired a `port` key from a
+        one-off `--port` and retargeted every later command. Now that a typed
+        port also RESTRICTS discovery, promoting it would strand them there too.
+
+        `tests/test_fw_port_targeting_and_blind_install.py` carries a source-level
+        tripwire asserting no production module writes the key directly.
+        """
+        self.set_value("port", port_name, persist=not self.is_transient("port"))
+
     def is_transient(self, key) -> bool:
         """True if `key` was set for this invocation only (persist=False).
 
