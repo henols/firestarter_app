@@ -27,8 +27,11 @@ source of the module or tool that resolves it, not copied from a plan or a
 research note without verification.
 
 **Two populations, and they are asymmetric in size.**
-  - `CROSS_REPO_TEST_PATHS` -- 6 paths resolved from the 7 proxy-carrying
-    `tests/` modules rekeyed by this same plan (Task 1/2).
+  - `CROSS_REPO_TEST_PATHS` -- 8 paths (originally 6, resolved from the 7
+    proxy-carrying `tests/` modules rekeyed by this same plan (Task 1/2);
+    Phase 147 added `src/firestarter.cpp` making 7, Phase 149 Plan 05 added
+    `src/json_parser.c` making 8 -- both additions landed without this prose
+    figure being updated in lockstep until now).
   - `CROSS_REPO_TOOL_RESOLVERS` -- all 11 `tools/*.py` files RESEARCH found
     via `grep -ln 'firestarter"' tools/*.py`. Population B is where a
     rename actually bites hardest in absolute file count, but **verifying
@@ -125,6 +128,10 @@ CROSS_REPO_TEST_PATHS: tuple[ScanPathEntry, ...] = (
     ScanPathEntry(
         "src/firestarter.cpp",
         ("test_cap03_ack_layout_parity.py",),
+    ),
+    ScanPathEntry(
+        "src/json_parser.c",
+        ("test_json_key_parity.py",),
     ),
 )
 
@@ -255,10 +262,10 @@ assert len(CROSS_REPO_TOOL_RESOLVERS) == 11, (
 #
 # Every genuinely cross-repo tool path above coincides with a path already
 # listed in CROSS_REPO_TEST_PATHS (the tools generate or read the exact
-# files the paired tests scan), so this union is the same 6 paths as
+# files the paired tests scan), so this union is the same 8 paths as
 # population A -- a real, verified finding, not an oversight: population B's
 # CONTRIBUTION is coverage of an eleven-file surface where a rename or
-# deletion of the resolving TOOL itself is caught (test 4 below), not six
+# deletion of the resolving TOOL itself is caught (test 4 below), not eight
 # additional distinct paths.
 # ---------------------------------------------------------------------------
 
