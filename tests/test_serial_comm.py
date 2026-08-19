@@ -388,7 +388,7 @@ def test_find_and_connect_threads_fault_inject_outgoing(monkeypatch) -> None:
     monkeypatch.setattr(
         SerialCommunicator,
         "_list_potential_ports",
-        staticmethod(lambda p=None: ["/dev/fake0"]),
+        staticmethod(lambda p=None, **_kw: ["/dev/fake0"]),
     )
     monkeypatch.setattr(SerialCommunicator, "_probe_port", staticmethod(fake_probe))
 
@@ -419,7 +419,7 @@ def test_find_and_connect_default_no_fault_inject(monkeypatch) -> None:
     monkeypatch.setattr(
         SerialCommunicator,
         "_list_potential_ports",
-        staticmethod(lambda p=None: ["/dev/fake0"]),
+        staticmethod(lambda p=None, **_kw: ["/dev/fake0"]),
     )
     monkeypatch.setattr(SerialCommunicator, "_probe_port", staticmethod(fake_probe))
 

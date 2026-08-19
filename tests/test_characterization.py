@@ -455,7 +455,10 @@ def test_no_blank_check_polarity(snapshot):
 # ``SerialCommunicator._list_potential_ports``, NOT ``serial.tools.list_ports.comports``.
 # ``_list_potential_ports(preferred_port)`` prepends ``preferred_port`` (sourced
 # from ``config_manager.get_value("port")`` in ``find_and_connect``) BEFORE it
-# ever calls ``comports()``. A ``comports``-only patch is therefore defeated by
+# ever calls ``comports()`` — and when the port was named on THIS invocation it
+# returns ``[preferred_port]`` alone, skipping ``comports()`` entirely (the
+# ``restrict_to_preferred`` arm; hence the ``**_kw`` in the stubs below).
+# A ``comports``-only patch is therefore defeated by
 # a saved port in an operator's ``~/.firestarter/config.json`` (or, in CI, by a
 # `` FIRESTARTER_CONFIG_DIR``-scoped config with a "port" key) even though no
 # real board is attached — see
@@ -487,7 +490,7 @@ def test_no_programmer_found_read(monkeypatch):
     monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [])
     monkeypatch.setattr(
         "firestarter.serial_comm.SerialCommunicator._list_potential_ports",
-        lambda preferred_port=None: [],
+        lambda preferred_port=None, **_kw: [],
         raising=True,
     )
     mock_serial = MagicMock()
@@ -520,7 +523,7 @@ def test_no_programmer_found_erase(monkeypatch):
     monkeypatch.setattr("serial.tools.list_ports.comports", lambda: [])
     monkeypatch.setattr(
         "firestarter.serial_comm.SerialCommunicator._list_potential_ports",
-        lambda preferred_port=None: [],
+        lambda preferred_port=None, **_kw: [],
         raising=True,
     )
     mock_serial = MagicMock()

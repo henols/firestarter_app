@@ -172,6 +172,18 @@ class FirmwareManager:
         """
         Checks the currently installed firmware version on the programmer.
         Returns: (port_name, current_version, board_name) or (None, None, None) on failure.
+
+        ``allow_outdated_firmware=True`` is passed deliberately and is the
+        whole point of this method existing separately from every other
+        connect. Outdated firmware is this path's SUBJECT, not an error
+        condition: the version gate in ``_probe_port`` refuses firmware whose
+        ack predates the CAP-02 identity tail, and applying that refusal here
+        deadlocked the updater — `fw`, `fw --install` and `fw --force` all
+        aborted before the update decision, on firmware whose version was
+        sitting in the very next ack ("FW: <version>:<board>", parsed below).
+        The waiver is scoped to the version refusals only; the shield-revision
+        gate is untouched, and the chip-operation paths still refuse because
+        they never pass this argument.
         """  # noqa: E501
         logger.info("Reading current firmware version...")
         command_dict = {"state": COMMAND_FW_VERSION}
@@ -180,7 +192,10 @@ class FirmwareManager:
         comm = None
         try:
             comm = SerialCommunicator.find_and_connect(
-                command_dict, self.config_manager, preferred_port=preferred_port
+                command_dict,
+                self.config_manager,
+                preferred_port=preferred_port,
+                allow_outdated_firmware=True,
             )
             # find_and_connect gets the initial OK from the programmer.
             # The firmware then executes the fw_version command and sends a second OK with the payload.  # noqa: E501
@@ -571,9 +586,9 @@ class FirmwareManager:
                     logger.info(
                         f"Firmware successfully updated on {port_to_flash} ({time.time() - start_time:.2f}s)"  # noqa: E501
                     )
-                    self.config_manager.set_value(
-                        "port", port_to_flash
-                    )  # Save successful port
+                    # Save the successful port — via remember_port, so a typed
+                    # --port is not promoted into the saved config.
+                    self.config_manager.remember_port(port_to_flash)
                     if (
                         avrdude_path_override is None
                     ):  # Only save if not overridden by user for this run
@@ -778,8 +793,24 @@ class FirmwareManager:
             )
             return False
 
-        # Use the port where firmware was checked, or CLI override for flashing
-        port_to_use = port_override or connected_port
+        # Flash the port the identity CAME FROM; fall back to the override only
+        # when nothing was identified (the blind-install path below).
+        #
+        # The order matters and used to be reversed (`port_override or
+        # connected_port`), which let the board and the target come from
+        # DIFFERENT ports: a port named on this invocation now restricts the
+        # probe, but a port merely REMEMBERED in config does not, so the probe
+        # could answer from port Y while the override still pointed the flash at
+        # port X — board Y's release asset written to board X. avrdude's
+        # part-signature check was the only thing standing in the way, and it
+        # only helps while the two boards have different MCUs; two Unos would
+        # both be `atmega328p -c arduino` and the wrong image would land silently.
+        #
+        # `connected_port` first makes that composition unrepresentable rather
+        # than merely unlikely: whenever there is an identity, it and the target
+        # are the same port by construction. When there is no identity there is
+        # nothing to mismatch, and the operator's named port is used.
+        port_to_use = connected_port or port_override
         method = flash_method(board_to_use)
         if not port_to_use and method not in _PORTLESS_FLASH_METHODS:
             logger.error(
@@ -798,6 +829,38 @@ class FirmwareManager:
                 "Could not determine current firmware version. Use --install or --force to proceed with installation."  # noqa: E501
             )
             return False  # Failed to get current version and no intent to install
+
+        # Blind install. When the running firmware could not be identified, an
+        # install is still possible and is in fact the ONLY way off firmware too
+        # old to speak the current protocol: avrdude drives the BOOTLOADER, not
+        # the firmware, so the running image never has to be readable. What is
+        # NOT safe is guessing WHICH image to write — with no identity to go on,
+        # `board_to_use` collapses to the `--board` default, so an unspecified
+        # board would silently resolve the `uno` asset for whatever is attached.
+        # Require the operator to name the board instead of defaulting.
+        # A portless (DFU) board is exempt: it exposes no serial port at all, so
+        # having no identified firmware is its NORMAL state rather than an
+        # ambiguity, and the only way `board_to_use` can name such a board is
+        # for the caller to have named it. There is nothing to confuse it with.
+        identity_optional = method in _PORTLESS_FLASH_METHODS
+        if not current_version and (install_flag or force_install):
+            if not board_explicit and not identity_optional:
+                logger.error(
+                    "Could not identify the programmer, so the firmware image "
+                    "cannot be chosen automatically. Re-run naming the board "
+                    "explicitly to install without identification, e.g. "
+                    "'fw --board uno --install' (see 'fw --help' for the boards "
+                    f"this build supports). Guessing '{board_to_use}' could "
+                    "write the wrong image to the attached board."
+                )
+                return False
+            if not identity_optional:
+                logger.warning(
+                    f"Programmer not identified; installing the {board_to_use} "
+                    "image as explicitly requested. The board is not verified "
+                    "before flashing — avrdude's part-signature check is the "
+                    "only guard."
+                )
 
         is_up_to_date = False
         if current_version and latest_version:

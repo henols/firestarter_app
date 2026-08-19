@@ -674,9 +674,29 @@ class SerialCommunicator:
                     )
 
     @staticmethod
-    def _list_potential_ports(preferred_port: Optional[str] = None) -> List[str]:  # noqa: UP006
+    def _list_potential_ports(
+        preferred_port: Optional[str] = None,
+        restrict_to_preferred: bool = False,
+    ) -> List[str]:  # noqa: UP006
+        """Candidate ports to probe, most preferred first.
+
+        ``restrict_to_preferred`` makes ``preferred_port`` the ONLY candidate.
+        Set it when the operator named the port on this invocation; leave it
+        False for a port merely remembered from a previous successful run.
+
+        The distinction matters because plain ordering was actively dangerous.
+        When the named port failed to answer — firmware too old to parse the
+        current command framing, or a busy port — probing continued and the
+        caller was handed a DIFFERENT board's identity. `FirmwareManager` then
+        combined that identity with `port_to_use = port_override or
+        connected_port`, i.e. board A's release asset aimed at port B. Only
+        avrdude's part-signature check stood between that and a wrong-firmware
+        flash, and two boards sharing an MCU would not even get that.
+        """
         ports = []
         if preferred_port:
+            if restrict_to_preferred:
+                return [preferred_port]
             ports.append(preferred_port)
 
         system_ports = serial.tools.list_ports.comports()
@@ -818,10 +838,17 @@ class SerialCommunicator:
         command_to_send: dict,
         config_manager: ConfigManager,
         fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None,
+        allow_outdated_firmware: bool = False,
     ) -> Optional["SerialCommunicator"]:
         """
         Attempts to connect to and validate a programmer on a single port.
         This is a helper for find_and_connect.
+
+        ``allow_outdated_firmware`` waives the two firmware-*version* refusals
+        below — the missing-identity refusal and the version floor — and
+        NOTHING else. See the block comment at the version gate for why the
+        firmware-update read path needs it and why no chip operation can ever
+        obtain it.
         """
         communicator = None
         try:
@@ -864,20 +891,53 @@ class SerialCommunicator:
             # board suffix would make int() choke and reject every board).
             identity = communicator.firmware_identity
             version_match = re.match(r"[\d.x]+", identity) if identity else None
+            #
+            # allow_outdated_firmware — the firmware-update read path's waiver.
+            #
+            # The version gate exists so this host never DRIVES firmware whose
+            # wire contract it does not share. Reading the version of firmware
+            # in order to replace it is not driving it: the only caller that
+            # sets this flag is FirmwareManager.check_current_firmware, whose
+            # command is {"state": COMMAND_FW_VERSION} — it engages no bus
+            # line and no VPP/VPE rail, reads one text ack and disconnects.
+            #
+            # Without the waiver the gate is a deadlock: firmware that predates
+            # the CAP-02 identity tail (every stable release, and every beta up
+            # to 3.0.0b1x) sends a bare 2-byte MSG_OK_READY, so `fw`,
+            # `fw --install` and `fw --force` all abort here — the one command
+            # whose job is to replace that firmware is blocked by its
+            # outdatedness, and the refusal text points the operator at
+            # `fw --install`, which hits this same line. The version IS
+            # obtainable: it arrives in the very next ack as
+            # "FW: <version>:<board>", which check_current_firmware already
+            # parses.
+            #
+            # The waiver is an explicit caller opt-in, never inferred from the
+            # command dict, so a chip operation cannot acquire it by accident
+            # or by crafting a command. It does NOT touch the shield-revision
+            # gate below, which still refuses (None is a reject there).
             if version_match is None:
-                raise FirmwareOutdatedError(
-                    "Programmer did not report a firmware version in its "
-                    "operation-setup ack. This host requires firmware that "
-                    "carries the version and hardware revision in that ack. "
-                    "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
+                if not allow_outdated_firmware:
+                    raise FirmwareOutdatedError(
+                        "Programmer did not report a firmware version in its "
+                        "operation-setup ack. This host requires firmware that "
+                        "carries the version and hardware revision in that ack. "
+                        "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
+                    )
+                logger.debug(
+                    f"{port_name}: ack carries no firmware identity "
+                    f"(pre-CAP-02 firmware); proceeding because this is the "
+                    f"firmware-update read path."
                 )
-            # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
-            # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
-            # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
-            SerialCommunicator._validate_firmware_version(
-                version_match.group(0),
-                allow_pre_v12=os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") == "1",
-            )
+            elif not allow_outdated_firmware:
+                # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
+                # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
+                # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
+                SerialCommunicator._validate_firmware_version(
+                    version_match.group(0),
+                    allow_pre_v12=os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12")
+                    == "1",
+                )
 
             # Shield-revision gate — ordered after the version check because
             # firmware old enough to fail that check cannot be trusted to have
@@ -889,7 +949,7 @@ class SerialCommunicator:
 
             communicator.programmer_info = msg
             logger.debug(f"Programmer found on {port_name}: {msg}")
-            config_manager.set_value("port", port_name)  # Save successful port
+            config_manager.remember_port(port_name)  # never promotes a typed --port
             return communicator
 
         except HardwareRevisionUnsupportedError:
@@ -926,9 +986,29 @@ class SerialCommunicator:
         preferred_port: Optional[str] = None,
         baud_rate: int = int(BAUD_RATE),
         fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None,
+        allow_outdated_firmware: bool = False,
+        restrict_to_port: Optional[bool] = None,
     ) -> "SerialCommunicator":
         """
         Finds a compatible programmer by probing potential serial ports.
+
+        ``restrict_to_port`` decides whether the resolved port is the ONLY
+        candidate. None (the default) infers it from the config's transient
+        mark: `cli()` records a typed ``--port`` with persist=False, and every
+        command reads the port back out of the in-memory config, so that mark is
+        the only surviving evidence that the operator named a port on THIS run
+        rather than the app remembering one from a previous successful run. A
+        typed port is a command and is obeyed exactly; a remembered one yields
+        to discovery, or replugging a board would strand every later invocation.
+        The inference tests `is True` rather than truthiness so a config double
+        answering every call with a Mock falls to the permissive branch instead
+        of silently acquiring a restriction.
+
+        ``allow_outdated_firmware`` is forwarded verbatim to ``_probe_port``
+        and waives ONLY the firmware-version refusals there. It defaults to
+        False, so every caller that does not explicitly ask for it keeps the
+        strict gate; the single production caller that asks is
+        ``FirmwareManager.check_current_firmware``.
 
         ``fault_inject_outgoing`` (Phase 53-04 / XACT-02, dev-only) installs an
         outgoing-frame mutation hook on each probed communicator BEFORE the first
@@ -938,10 +1018,22 @@ class SerialCommunicator:
         sent here is the ONLY corruptible host→fw command frame, so the outgoing
         fault MUST be injected at connection time, not after setup.
         """
+        # Was the port named on THIS invocation, or merely remembered from a
+        # previous successful run? `cli()` records a typed --port with
+        # persist=False, and every command reads it back out of the in-memory
+        # config, so the transient mark is the only surviving evidence of which
+        # one it was. `is True` rather than a truthiness test on purpose: a
+        # config double that answers every call with a Mock must fall to the
+        # permissive branch, not silently acquire a restriction.
+        if restrict_to_port is None:
+            restrict_to_port = config_manager.is_transient("port") is True
+        port_named_this_run = restrict_to_port
         if not preferred_port:
             preferred_port = config_manager.get_value("port")
 
-        potential_ports = cls._list_potential_ports(preferred_port)
+        potential_ports = cls._list_potential_ports(
+            preferred_port, restrict_to_preferred=port_named_this_run
+        )
         if not potential_ports:
             raise ProgrammerNotFoundError("No potential serial ports found.")
 
@@ -960,6 +1052,7 @@ class SerialCommunicator:
                     command_to_send,
                     config_manager,
                     fault_inject_outgoing=fault_inject_outgoing,
+                    allow_outdated_firmware=allow_outdated_firmware,
                 )
                 if communicator:
                     if status_update_active:
@@ -985,6 +1078,21 @@ class SerialCommunicator:
         # If the loop completes without finding a programmer, it's a failure.
         if status_update_active:
             logger.info("Connecting... Failed  ", extra={"status": "end"})
+        if preferred_port and port_named_this_run:
+            # Port was named, so the search was restricted to it. Say which port
+            # failed and name the most likely cause: firmware old enough that it
+            # cannot parse the current command framing answers the handshake with
+            # "Bad JSON" rather than an ack, so it can never be identified — but
+            # it CAN still be reflashed, because avrdude talks to the bootloader
+            # and not to the firmware.
+            raise ProgrammerNotFoundError(
+                f"No compatible programmer answered on {preferred_port}. If a "
+                "board is attached there, its firmware may predate the current "
+                "command framing, which makes it answer 'Bad JSON' instead of an "
+                "ack — every 2.x release, and 3.0.0 pre-releases before b8. Such "
+                "a board can still be reflashed directly: "
+                f"firestarter --port {preferred_port} fw --board <board> --install"
+            )
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
 
 
