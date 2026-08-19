@@ -393,24 +393,31 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
 def interpret_timing(raw_hex, protocol_id):
     # [VERIFIED: minipro database.c#L866 @ a8efaedc]
     # Raw pulse_delay is microseconds for ALL protocols — no multiplier.
+    # Contract (D-08, Phase 148 Plan 03): returns an int, always microseconds.
+    # `0` means "algorithm-controlled" (protocols that do not consume
+    # pulse-delay) -- an unparseable pulse_delay on a protocol that DOES
+    # consume it (0x07/0x08/0x0B) is fatal, not a silent 0, so that sentinel
+    # keeps exactly one meaning.
     try:
         val = int(raw_hex, 16)
     except (TypeError, ValueError):
         # WR-05 (98-03): narrowed from bare `except Exception` so an unparseable
         # pulse_delay is visible (not silently masked as a valid 0 us timing) —
         # an upstream infoic.xml decode fault would otherwise ship wrong timing
-        # to the firmware unnoticed.
-        print(
-            f"WARN: chip with protocol {protocol_id:#04x} has unparseable "
-            f"pulse_delay {raw_hex!r} — defaulting to 0 us",
-            file=sys.stderr,
-        )
-        val = 0
+        # to the firmware unnoticed. Phase 148 D-08 finishes what WR-05 started:
+        # after the string/int collapse a returned `0` would otherwise mean
+        # either "algorithm-controlled" (417 chips) or "decode fault on a
+        # 0x07/0x08/0x0B chip", so this branch is now fatal instead of masked —
+        # main() aborts before the JSON write and no wrong database is emitted.
+        raise ValueError(
+            f"chip with protocol {protocol_id:#04x} has unparseable "
+            f"pulse_delay {raw_hex!r} — refusing to default to 0 us"
+        ) from None
 
     if protocol_id in (0x07, 0x08, 0x0B):
-        return f"{val} us"
+        return val
 
-    return "Algorithm Controlled"
+    return 0
 
 
 def main():
