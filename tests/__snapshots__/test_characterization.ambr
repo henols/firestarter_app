@@ -420,6 +420,58 @@
   
   '''
 # ---
+# name: test_info_at28c256
+  '''
+  Eprom Info          
+  Name:               AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L
+  Manufacturer:       ATMEL
+  Number of pins:     28
+  Memory size         0x8000
+  Type:               EEPROM
+  Can be erased:      yes (electrically erasable)
+  VCC:                5.0v
+  VPP:                12.0v
+  Chip ID:            -
+  
+         28-DIP package
+          -----v-----
+    A14 -|  1     28 |- VCC   
+    A12 -|  2     27 |- R/W(WE)
+    A7  -|  3     26 |- A13   
+    A6  -|  4     25 |- A8    
+    A5  -|  5     24 |- A9    
+    A4  -|  6     23 |- A11   
+    A3  -|  7     22 |- OE    
+    A2  -|  8     21 |- A10   
+    A1  -|  9     20 |- CE    
+    A0  -| 10     19 |- D7    
+    D0  -| 11     18 |- D6    
+    D1  -| 12     17 |- D5    
+    D2  -| 13     16 |- D4    
+    GND -| 14     15 |- D3    
+          -----------
+  
+  Jumper config (Rev 0.1 & 1.0):
+    JP1:  ●(● ●) (5V, A13 = A13)
+    JP2: (● ●)●  (5V, A17 = VCC)
+    JP3:  ● ● ●  (28pin, 32pin = NA)
+  
+  Jumper config (Rev 2.0 & 2.1):
+    JP4:  ● ●    (28pin, 32pin = Open)
+  
+  Protocol: EEPROM - 5V parallel, SDP + DQ7 poll (ID: 0x0D)
+    - Programming protocol for large EEPROMs
+    - Supports byte-wise programming
+    - May require specific write sequences
+  
+  Flags: 0x00000010
+    - Electrically erasable
+  
+  '''
+# ---
+# name: test_info_at28c256[test_info_at28c256_stderr]
+  ''
+# ---
 # name: test_info_known_chip
   '''
   Eprom Info          
