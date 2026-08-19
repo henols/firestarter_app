@@ -19,13 +19,22 @@ any later plan in this phase touches the schema the wire dict is derived
 from.
 
 Coverage:
-  1. test_live_capture_matches_golden -- the live 746-chip capture equals the
-     committed golden's `records` exactly; on mismatch the message names
-     added / removed / value-changed record keys separately, and for a
-     value-changed record names the differing wire keys.
+  1. test_live_capture_matches_golden_plus_the_149_deltas -- Phase 149
+     (D-17): the live 746-chip capture equals the committed golden's
+     `records` PLUS exactly the 18 named deltas in
+     `tests/golden/wire_dict_expected_deltas_149.json` -- the golden itself
+     (`wire_dict_baseline.json`) is preserved byte-unchanged and is NEVER
+     re-captured to make this or any future phase's change disappear. Four
+     assertions, in order: (a) anti-laundering -- the golden's own
+     page-size-carrying record set is exactly Phase 148's original two; (b)
+     non-vacuity -- every delta key exists in the golden and does not
+     already carry page-size; (c) exact count -- len(deltas) == 18, not "at
+     least"; (d) golden-plus-deltas equals live, reusing
+     `_describe_record_diff` unchanged in the failure message.
   2. test_wire_key_union_is_exactly_nine_keys -- the union of wire keys
      across the live capture is exactly the nine measured keys; the message
-     names anything added or removed.
+     names anything added or removed. Unchanged by Phase 149 -- `page-size`
+     was already in this set.
   3. test_vcc_and_vpp_volts_never_cross_the_wire -- D-06's load-bearing
      claim: neither `vcc` nor `vpp_volts` appears in any live wire dict, so a
      VCC decode change cannot alter `write` behaviour.
@@ -53,6 +62,19 @@ from firestarter.database import EpromDatabase
 # ---------------------------------------------------------------------------
 _HERE = Path(__file__).resolve().parent
 _GOLDEN = _HERE / "golden" / "wire_dict_baseline.json"
+# Phase 149 (D-17): the committed expected-delta list on top of the
+# preserved golden -- see this file's module docstring and
+# tests/golden/wire_dict_expected_deltas_149.json's own "meta" block.
+_DELTAS_149 = _HERE / "golden" / "wire_dict_expected_deltas_149.json"
+
+# The 2 record keys Phase 148's golden itself carries page-size for
+# (the pre-existing datasheet-curated _PAGE_SIZE_BY_PART rows). This is the
+# anti-laundering assertion: a future re-capture of the golden that quietly
+# grows this set defeats the whole point of a committed delta list.
+_GOLDEN_PAGE_SIZE_RECORD_KEYS = {
+    "WINBOND|W29C020,W29C020C,W29C022|7",
+    "WINBOND|W29C040,W29C042|8",
+}
 
 # ---------------------------------------------------------------------------
 # The nine wire keys measured in Task 1 (RESEARCH F-8). D-06/D-14 assumed
@@ -146,22 +168,69 @@ def test_golden_file_exists() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 1: byte/value-identity between the live capture and the golden.
+# Test 1 (Phase 149, D-17): golden PLUS exactly the 18 named deltas equals
+# the live capture. The golden itself stays the pre-149 capture, byte-
+# unchanged -- see tests/golden/wire_dict_expected_deltas_149.json.
 # ---------------------------------------------------------------------------
 
 
-def test_live_capture_matches_golden() -> None:
+def test_live_capture_matches_golden_plus_the_149_deltas() -> None:
     doc = json.loads(_GOLDEN.read_text(encoding="utf-8"))
     recorded = doc["records"]
+
+    deltas_doc = json.loads(_DELTAS_149.read_text(encoding="utf-8"))
+    deltas = deltas_doc["deltas"]
+
+    # (a) Anti-laundering: the golden's OWN page-size-carrying record set is
+    # exactly Phase 148's original two. A future phase that re-captures the
+    # golden to make a failure disappear breaks this assertion, keeping
+    # Phase 148's own central claim ("this migration changed nothing on the
+    # wire") legible in the same file forever.
+    golden_page_size_keys = {
+        key for key, wire in recorded.items() if "page-size" in wire
+    }
+    assert golden_page_size_keys == _GOLDEN_PAGE_SIZE_RECORD_KEYS, (
+        "the golden's own page-size-carrying record set drifted from "
+        f"Phase 148's original two -- symmetric difference: "
+        f"{golden_page_size_keys ^ _GOLDEN_PAGE_SIZE_RECORD_KEYS}. "
+        "A re-capture of wire_dict_baseline.json is exactly what D-17 "
+        "forbids; if a legitimate wire change adds a page-size carrier, "
+        "add it to wire_dict_expected_deltas_149.json instead."
+    )
+
+    # (b) Non-vacuity per delta: every delta key must exist in the golden,
+    # and the golden's own record for it must NOT already carry page-size --
+    # a delta naming a key that already holds the value would prove nothing.
+    missing_from_golden = sorted(k for k in deltas if k not in recorded)
+    already_present = sorted(
+        k for k in deltas if k in recorded and "page-size" in recorded[k]
+    )
+    assert not missing_from_golden, (
+        f"delta keys not found in the golden: {missing_from_golden}"
+    )
+    assert not already_present, (
+        "delta keys whose golden record already carries page-size (the "
+        f"delta would prove nothing): {already_present}"
+    )
+
+    # (c) Exact count: len(deltas) == 18, not "at least".
+    assert len(deltas) == 18, (
+        f"expected exactly 18 Phase 149 deltas, found {len(deltas)}: {sorted(deltas)}"
+    )
+
+    # (d) Golden plus exactly these deltas equals live.
+    expected = copy.deepcopy(recorded)
+    for key, delta_wire in deltas.items():
+        expected[key].update(delta_wire)
+
     live = _capture_wire_dicts(_REAL_DB)
-    assert recorded == live, (
-        "live 746-chip wire-dict capture drifted from "
-        "tests/golden/wire_dict_baseline.json; "
-        "if this is a legitimate wire-value change, Phase 148 is "
-        "specifically forbidden to make it (D-14) -- a legitimate future "
-        "wire change must re-capture the golden deliberately and say in the "
-        "commit message which chips and which keys moved. "
-        f"Diff: {_describe_record_diff(recorded, live)}"
+    assert expected == live, (
+        "live 746-chip wire-dict capture does not equal "
+        "tests/golden/wire_dict_baseline.json plus exactly the 18 named "
+        "Phase 149 deltas (tests/golden/wire_dict_expected_deltas_149.json); "
+        "if this is a legitimate NEW wire-value change, it must be added "
+        "to the delta list deliberately, naming which chips and which keys "
+        f"moved, in the commit message. Diff: {_describe_record_diff(expected, live)}"
     )
 
 
