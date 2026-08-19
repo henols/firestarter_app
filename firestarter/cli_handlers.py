@@ -264,7 +264,10 @@ def build_arg_flags(args: object) -> int:
 
 def _maybe_auto_route_to_pre(args: object) -> None:
     """D-22 / D-25 beta-app magic default: when installed app is a pre-release,
-    bare 'fw -i' (no --pre, no --firmware-version) auto-routes to --pre channel.
+    any 'fw' invocation that pins no channel (no --pre, no --firmware-version,
+    no --stable) auto-routes to the --pre channel. ``args.install`` is NOT part
+    of the condition — see the comment on the guard below for the two defects
+    that gating on it caused.
 
     Relocated verbatim from main.py:211-249 per Phase 41 D-16. Signature is
     ``(args) -> None`` — NO logger parameter (Phase 18 revision warning #6).
@@ -279,11 +282,22 @@ def _maybe_auto_route_to_pre(args: object) -> None:
     D-24: explicit --firmware-version OR --stable opts out of this magic.
     """
     helper_logger = logging.getLogger(__name__)
-    if not (
-        getattr(args, "install", False)
-        and not getattr(args, "pre", False)
-        and not getattr(args, "firmware_version", None)
-        and not getattr(args, "stable", False)
+    # The condition is "the operator pinned no channel", NOT "the operator
+    # typed --install". Requiring --install made every OTHER fw invocation on
+    # a pre-release app resolve the STABLE channel:
+    #   * bare `fw` compared the installed firmware against the newest STABLE
+    #     firmware (2.0.6), so a beta app on beta firmware printed "already up
+    #     to date" and the newer beta firmware was invisible;
+    #   * `fw --force` — the documented reinstall escape hatch — resolved the
+    #     stable asset and would have DOWNGRADED the board to firmware this
+    #     host cannot speak to, bricking the pairing it was invoked to repair.
+    # D-23 (a stable-installed app is unaffected) and D-24 (--stable or
+    # --firmware-version opts out) are both unchanged: they are the other two
+    # clauses below and the is_prerelease test.
+    if (
+        getattr(args, "pre", False)
+        or getattr(args, "firmware_version", None)
+        or getattr(args, "stable", False)
     ):
         return
     try:

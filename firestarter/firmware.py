@@ -172,6 +172,18 @@ class FirmwareManager:
         """
         Checks the currently installed firmware version on the programmer.
         Returns: (port_name, current_version, board_name) or (None, None, None) on failure.
+
+        ``allow_outdated_firmware=True`` is passed deliberately and is the
+        whole point of this method existing separately from every other
+        connect. Outdated firmware is this path's SUBJECT, not an error
+        condition: the version gate in ``_probe_port`` refuses firmware whose
+        ack predates the CAP-02 identity tail, and applying that refusal here
+        deadlocked the updater — `fw`, `fw --install` and `fw --force` all
+        aborted before the update decision, on firmware whose version was
+        sitting in the very next ack ("FW: <version>:<board>", parsed below).
+        The waiver is scoped to the version refusals only; the shield-revision
+        gate is untouched, and the chip-operation paths still refuse because
+        they never pass this argument.
         """  # noqa: E501
         logger.info("Reading current firmware version...")
         command_dict = {"state": COMMAND_FW_VERSION}
@@ -180,7 +192,10 @@ class FirmwareManager:
         comm = None
         try:
             comm = SerialCommunicator.find_and_connect(
-                command_dict, self.config_manager, preferred_port=preferred_port
+                command_dict,
+                self.config_manager,
+                preferred_port=preferred_port,
+                allow_outdated_firmware=True,
             )
             # find_and_connect gets the initial OK from the programmer.
             # The firmware then executes the fw_version command and sends a second OK with the payload.  # noqa: E501
