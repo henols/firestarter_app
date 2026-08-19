@@ -148,10 +148,10 @@ JSON_KEY_READ_STROBE_US = "read-strobe-us"
 # emit-when-present, mirrors the chip-id pattern. When absent, firmware
 # falls back to its own named AT28C page-size floor constant (algorithm 13
 # / 0x0D only; other algorithms' handlers do not consume this key at all).
-# Firmware sync: this key does not yet exist in firestarter/src/json_parser.c
-# as of this phase's DB-side plan (149-03) -- Phase 149 plan 04 adds it, and
-# tests/test_json_key_parity.py (plan 05) is the enforcing test that keeps
-# this string in lockstep with the firmware PROGMEM key.
+# Firmware sync: json_parser.c (key_page_size). Landed by Phase 149 plan 04
+# (firestarter commit 58c6a3c) -- the PROGMEM string exists and is dispatched
+# from key_parsers[]. tests/test_json_key_parity.py (plan 05) is the
+# enforcing test that keeps this string in lockstep with the firmware key.
 JSON_KEY_PAGE_SIZE = "page-size"
 
 # RURP Control Register Bits — mirror of firestarter/include/rurp_pinout.h
