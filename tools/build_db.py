@@ -180,6 +180,18 @@ VCC_VOLTAGES = {
     0x05: 6500,
 }
 
+# [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
+# Phase 148 DATA-01 (D-01/D-02/D-03): 4 V is a real number that is not a real
+# operating voltage — no part in this database has a 4.0 V nominal supply.
+# VCC_VOLTAGES index 0x02 is the TL866's low-margin VCC *verify* rail, not
+# the chip's operating supply. This is a statement about the decode table
+# itself, not a patch aimed at one family: any chip whose decoded vcc_mv
+# lands on this rail is being misreported, regardless of which family it
+# belongs to. Defined as a lookup into VCC_VOLTAGES (never a re-typed
+# literal) so the rail value is single-sourced from the decode table by
+# construction and cannot drift from it even if the table is ever corrected.
+_VCC_MARGIN_RAIL_MV = VCC_VOLTAGES[0x02]
+
 # D-02: DIP28_VARIANT_MAP, PIN_MAP_TO_PINOUT, and PIN_MAP_PROTO_TO_PINOUT
 # have been DELETED (Phase 58 Plan 02). The principled resolve_pinout_key
 # function below is the sole pinout-selection path. See RESEARCH.md
@@ -801,6 +813,34 @@ def main():
                 # vcc as the correct read voltage (vdd there is the elevated
                 # program rail, e.g. 6.5V — must NOT be surfaced as operating Vcc).
                 if _etype == "SRAM":
+                    chip_entry["electrical"]["vcc_mv"] = chip_entry["electrical"][
+                        "vdd_mv"
+                    ]
+
+                # VCC margin-rail substitution (Phase 148 DATA-01, D-01/D-02/D-03).
+                # (1) The semantic: minipro's `vcc` for these parts is the TL866's
+                # low-margin VCC *verify* rail (VCC_VOLTAGES index 0x02), not the
+                # chip's operating supply -- firestarter surfaces it as though it
+                # were the latter.
+                # (2) This is the SAME category error the SRAM block immediately
+                # above already corrects, generalized from a type key (`_etype ==
+                # "SRAM"`) to the decoded value alone (`vcc_mv ==
+                # _VCC_MARGIN_RAIL_MV`) -- no part number, no type, no algorithm.
+                # (3) Measured blast radius: exactly 56 chips, every one landing on
+                # 5000 mV (= their own already-decoded vdd_mv). The rule cannot
+                # lower a voltage by construction -- it only ever replaces the 4 V
+                # margin rail with the higher vdd_mv value already present on the
+                # same chip.
+                # (4) Why NOT type/algorithm/part-number keyed: those were measured
+                # and rejected. type-keyed (EEPROM/Flash-EEPROM) -> 85 movers;
+                # algorithm-keyed (0x0D) -> 84 movers; relation-keyed (vcc < vdd <=
+                # 5500) -> 225 movers (sweeping in UV-EPROMs whose vdd is the
+                # elevated 6.5V program rail). All three alternatives would also
+                # set sixteen genuinely-5V EEPROMs (Microchip 28C256/28C16A/2817,
+                # etc.) to 3.3V -- worse than the 4V defect being fixed here. If
+                # you are considering widening this condition, re-measure against
+                # that four-way split before touching it.
+                if chip_entry["electrical"]["vcc_mv"] == _VCC_MARGIN_RAIL_MV:
                     chip_entry["electrical"]["vcc_mv"] = chip_entry["electrical"][
                         "vdd_mv"
                     ]
