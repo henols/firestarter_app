@@ -156,7 +156,9 @@ class TestWaiverPlumbing:
             SerialCommunicator, "_probe_port", staticmethod(lambda *a, **k: spy(**k))
         )
         monkeypatch.setattr(
-            SerialCommunicator, "_list_potential_ports", staticmethod(lambda p: ["/x"])
+            SerialCommunicator,
+            "_list_potential_ports",
+            staticmethod(lambda p, **_kw: ["/x"]),
         )
         SerialCommunicator.find_and_connect({"state": 1}, MagicMock())
         assert seen["allow_outdated_firmware"] is False
@@ -172,7 +174,9 @@ class TestWaiverPlumbing:
             SerialCommunicator, "_probe_port", staticmethod(lambda *a, **k: spy(**k))
         )
         monkeypatch.setattr(
-            SerialCommunicator, "_list_potential_ports", staticmethod(lambda p: ["/x"])
+            SerialCommunicator,
+            "_list_potential_ports",
+            staticmethod(lambda p, **_kw: ["/x"]),
         )
         SerialCommunicator.find_and_connect(
             {"state": 1}, MagicMock(), allow_outdated_firmware=True
@@ -278,7 +282,7 @@ class TestUpdateDecisionReachedOnPreCap02Firmware:
         """
         monkeypatch.setattr(
             "firestarter.serial_comm.SerialCommunicator._list_potential_ports",
-            staticmethod(lambda p: ["/dev/null"]),
+            staticmethod(lambda p, **_kw: ["/dev/null"]),
         )
         fm = FirmwareManager(config_manager=MagicMock())
         monkeypatch.setattr(

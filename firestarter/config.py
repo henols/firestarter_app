@@ -104,6 +104,13 @@ class ConfigManager:
             return
 
         self._config: dict[str, Any] = {}
+        # Keys set with persist=False. They live in _config so get_value sees
+        # them for this invocation, but _save_config must exclude them: a later
+        # persist=True write of an UNRELATED key (e.g. firmware.py caching
+        # "avrdude-path" after a successful flash) dumps the whole dict, which
+        # would otherwise make a one-shot `--port` stick forever and silently
+        # retarget every later command at that port.
+        self._transient_keys: set[str] = set()
         self._load_config()
         ConfigManager._initialized_configs[self.config_file_path] = True
         logger.debug(f"ConfigManager initialized for {self.config_file_path}.")
@@ -139,9 +146,12 @@ class ConfigManager:
                     f"Error: Unable to create configuration directory {HOME_PATH}: {e}"
                 )
                 return
+        persistable = {
+            k: v for k, v in self._config.items() if k not in self._transient_keys
+        }
         try:
             with open(self.config_file_path, "w") as f:
-                json.dump(self._config, f, indent=4)
+                json.dump(persistable, f, indent=4)
         except IOError as e:  # noqa: UP024
             logger.error(
                 f"Error: Unable to save configuration to {self.config_file_path}: {e}"
@@ -173,10 +183,28 @@ class ConfigManager:
                 self.remove_key(key)
             else:
                 self._config.pop(key, None)
+                self._transient_keys.discard(key)
             return
         self._config[key] = value
         if persist:
+            # An explicit persisted write promotes the key out of transient
+            # status — otherwise `config port X` would be silently discarded
+            # after a `--port Y` earlier in the same process.
+            self._transient_keys.discard(key)
             self._save_config()
+        else:
+            self._transient_keys.add(key)
+
+    def is_transient(self, key) -> bool:
+        """True if `key` was set for this invocation only (persist=False).
+
+        The discriminator between "the operator typed --port this run" and "a
+        port remembered from a previous successful run". The first is a command
+        and must be obeyed exactly; the second is a hint that has to yield to
+        discovery, or replugging a board would strand every later invocation on
+        a port that no longer exists.
+        """
+        return key in self._transient_keys
 
     def remove_key(self, key):
         """
@@ -184,6 +212,7 @@ class ConfigManager:
         Args:
             key (str): The configuration key to remove.
         """
+        self._transient_keys.discard(key)
         if key in self._config:
             del self._config[key]
             self._save_config()

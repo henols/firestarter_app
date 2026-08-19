@@ -674,9 +674,46 @@ class SerialCommunicator:
                     )
 
     @staticmethod
-    def _list_potential_ports(preferred_port: Optional[str] = None) -> List[str]:  # noqa: UP006
+    def _remember_working_port(config_manager: ConfigManager, port_name: str) -> None:
+        """Record the port that just answered, for next invocation's convenience.
+
+        A port the operator typed for THIS invocation is NEVER promoted into the
+        saved config. `--port` is documented as applying to one invocation, yet
+        persisting it here silently retargeted every later command at that port —
+        observed live, where `~/.firestarter/config.json` acquired a `port` key
+        from a one-off `--port`. Now that a typed port also RESTRICTS discovery,
+        promoting it would strand later invocations there as well.
+        """
+        config_manager.set_value(
+            "port",
+            port_name,
+            persist=not config_manager.is_transient("port"),
+        )
+
+    @staticmethod
+    def _list_potential_ports(
+        preferred_port: Optional[str] = None,
+        restrict_to_preferred: bool = False,
+    ) -> List[str]:  # noqa: UP006
+        """Candidate ports to probe, most preferred first.
+
+        ``restrict_to_preferred`` makes ``preferred_port`` the ONLY candidate.
+        Set it when the operator named the port on this invocation; leave it
+        False for a port merely remembered from a previous successful run.
+
+        The distinction matters because plain ordering was actively dangerous.
+        When the named port failed to answer — firmware too old to parse the
+        current command framing, or a busy port — probing continued and the
+        caller was handed a DIFFERENT board's identity. `FirmwareManager` then
+        combined that identity with `port_to_use = port_override or
+        connected_port`, i.e. board A's release asset aimed at port B. Only
+        avrdude's part-signature check stood between that and a wrong-firmware
+        flash, and two boards sharing an MCU would not even get that.
+        """
         ports = []
         if preferred_port:
+            if restrict_to_preferred:
+                return [preferred_port]
             ports.append(preferred_port)
 
         system_ports = serial.tools.list_ports.comports()
@@ -929,7 +966,7 @@ class SerialCommunicator:
 
             communicator.programmer_info = msg
             logger.debug(f"Programmer found on {port_name}: {msg}")
-            config_manager.set_value("port", port_name)  # Save successful port
+            SerialCommunicator._remember_working_port(config_manager, port_name)
             return communicator
 
         except HardwareRevisionUnsupportedError:
@@ -967,9 +1004,22 @@ class SerialCommunicator:
         baud_rate: int = int(BAUD_RATE),
         fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None,
         allow_outdated_firmware: bool = False,
+        restrict_to_port: Optional[bool] = None,
     ) -> "SerialCommunicator":
         """
         Finds a compatible programmer by probing potential serial ports.
+
+        ``restrict_to_port`` decides whether the resolved port is the ONLY
+        candidate. None (the default) infers it from the config's transient
+        mark: `cli()` records a typed ``--port`` with persist=False, and every
+        command reads the port back out of the in-memory config, so that mark is
+        the only surviving evidence that the operator named a port on THIS run
+        rather than the app remembering one from a previous successful run. A
+        typed port is a command and is obeyed exactly; a remembered one yields
+        to discovery, or replugging a board would strand every later invocation.
+        The inference tests `is True` rather than truthiness so a config double
+        answering every call with a Mock falls to the permissive branch instead
+        of silently acquiring a restriction.
 
         ``allow_outdated_firmware`` is forwarded verbatim to ``_probe_port``
         and waives ONLY the firmware-version refusals there. It defaults to
@@ -985,10 +1035,22 @@ class SerialCommunicator:
         sent here is the ONLY corruptible host→fw command frame, so the outgoing
         fault MUST be injected at connection time, not after setup.
         """
+        # Was the port named on THIS invocation, or merely remembered from a
+        # previous successful run? `cli()` records a typed --port with
+        # persist=False, and every command reads it back out of the in-memory
+        # config, so the transient mark is the only surviving evidence of which
+        # one it was. `is True` rather than a truthiness test on purpose: a
+        # config double that answers every call with a Mock must fall to the
+        # permissive branch, not silently acquire a restriction.
+        if restrict_to_port is None:
+            restrict_to_port = config_manager.is_transient("port") is True
+        port_named_this_run = restrict_to_port
         if not preferred_port:
             preferred_port = config_manager.get_value("port")
 
-        potential_ports = cls._list_potential_ports(preferred_port)
+        potential_ports = cls._list_potential_ports(
+            preferred_port, restrict_to_preferred=port_named_this_run
+        )
         if not potential_ports:
             raise ProgrammerNotFoundError("No potential serial ports found.")
 
@@ -1033,6 +1095,20 @@ class SerialCommunicator:
         # If the loop completes without finding a programmer, it's a failure.
         if status_update_active:
             logger.info("Connecting... Failed  ", extra={"status": "end"})
+        if preferred_port and port_named_this_run:
+            # Port was named, so the search was restricted to it. Say which port
+            # failed and name the most likely cause: firmware old enough that it
+            # cannot parse the current command framing answers the handshake with
+            # "Bad JSON" rather than an ack, so it can never be identified — but
+            # it CAN still be reflashed, because avrdude talks to the bootloader
+            # and not to the firmware.
+            raise ProgrammerNotFoundError(
+                f"No compatible programmer answered on {preferred_port}. If a "
+                "board is attached there, its firmware may be too old to speak "
+                "the current protocol (2.x firmware replies 'Bad JSON'). Such a "
+                "board can still be reflashed directly: "
+                f"firestarter --port {preferred_port} fw --board <board> --install"
+            )
         raise ProgrammerNotFoundError("No compatible programmer found on any port.")
 
 

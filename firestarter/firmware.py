@@ -814,6 +814,38 @@ class FirmwareManager:
             )
             return False  # Failed to get current version and no intent to install
 
+        # Blind install. When the running firmware could not be identified, an
+        # install is still possible and is in fact the ONLY way off firmware too
+        # old to speak the current protocol: avrdude drives the BOOTLOADER, not
+        # the firmware, so the running image never has to be readable. What is
+        # NOT safe is guessing WHICH image to write — with no identity to go on,
+        # `board_to_use` collapses to the `--board` default, so an unspecified
+        # board would silently resolve the `uno` asset for whatever is attached.
+        # Require the operator to name the board instead of defaulting.
+        # A portless (DFU) board is exempt: it exposes no serial port at all, so
+        # having no identified firmware is its NORMAL state rather than an
+        # ambiguity, and the only way `board_to_use` can name such a board is
+        # for the caller to have named it. There is nothing to confuse it with.
+        identity_optional = method in _PORTLESS_FLASH_METHODS
+        if not current_version and (install_flag or force_install):
+            if not board_explicit and not identity_optional:
+                logger.error(
+                    "Could not identify the programmer, so the firmware image "
+                    "cannot be chosen automatically. Re-run naming the board "
+                    "explicitly to install without identification, e.g. "
+                    "'fw --board uno --install' (see 'fw --help' for the boards "
+                    f"this build supports). Guessing '{board_to_use}' could "
+                    "write the wrong image to the attached board."
+                )
+                return False
+            if not identity_optional:
+                logger.warning(
+                    f"Programmer not identified; installing the {board_to_use} "
+                    "image as explicitly requested. The board is not verified "
+                    "before flashing — avrdude's part-signature check is the "
+                    "only guard."
+                )
+
         is_up_to_date = False
         if current_version and latest_version:
             is_up_to_date = self._compare_versions(current_version, latest_version)
