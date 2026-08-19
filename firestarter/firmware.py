@@ -793,8 +793,24 @@ class FirmwareManager:
             )
             return False
 
-        # Use the port where firmware was checked, or CLI override for flashing
-        port_to_use = port_override or connected_port
+        # Flash the port the identity CAME FROM; fall back to the override only
+        # when nothing was identified (the blind-install path below).
+        #
+        # The order matters and used to be reversed (`port_override or
+        # connected_port`), which let the board and the target come from
+        # DIFFERENT ports: a port named on this invocation now restricts the
+        # probe, but a port merely REMEMBERED in config does not, so the probe
+        # could answer from port Y while the override still pointed the flash at
+        # port X — board Y's release asset written to board X. avrdude's
+        # part-signature check was the only thing standing in the way, and it
+        # only helps while the two boards have different MCUs; two Unos would
+        # both be `atmega328p -c arduino` and the wrong image would land silently.
+        #
+        # `connected_port` first makes that composition unrepresentable rather
+        # than merely unlikely: whenever there is an identity, it and the target
+        # are the same port by construction. When there is no identity there is
+        # nothing to mismatch, and the operator's named port is used.
+        port_to_use = connected_port or port_override
         method = flash_method(board_to_use)
         if not port_to_use and method not in _PORTLESS_FLASH_METHODS:
             logger.error(
