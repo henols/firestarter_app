@@ -87,25 +87,6 @@ PROTOCOL_MAP = {
 # Using the full byte (0xFF mask) causes a 0mV/Unknown result whenever bits 3-0 are
 # nonzero (e.g. SST27VF512 voltages=0x0001: 0x01 not in table → was 0mV, now 12V).
 # [VERIFIED: minipro/src/database.c + tl866a.c + tl866ii_vpp_voltages[] table]
-VPP_VOLTAGES = {
-    0x00: "12V",
-    0x10: "9V",
-    0x20: "9.5V",
-    0x30: "10V",
-    0x40: "11V",
-    0x50: "11.5V",
-    0x60: "12.5V",
-    0x70: "13V",
-    0x80: "13.5V",
-    0x90: "14V",
-    0xA0: "14.5V",
-    0xB0: "15.5V",
-    0xC0: "16V",
-    0xD0: "16.5V",
-    0xE0: "17V",
-    0xF0: "18V",
-}
-
 VPP_MV = {
     0x00: 12000,
     0x10: 9000,
@@ -191,12 +172,12 @@ KNOWN_PROTOCOLS = {
 
 # [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
 VCC_VOLTAGES = {
-    0x00: "5V",
-    0x01: "3.3V",
-    0x02: "4V",  # BUG-1 fix: was missing from v1.12
-    0x03: "4.5V",  # BUG-1 fix: was missing from v1.12
-    0x04: "5.5V",
-    0x05: "6.5V",
+    0x00: 5000,
+    0x01: 3300,
+    0x02: 4000,  # BUG-1 fix: was missing from v1.12
+    0x03: 4500,  # BUG-1 fix: was missing from v1.12
+    0x04: 5500,
+    0x05: 6500,
 }
 
 # D-02: DIP28_VARIANT_MAP, PIN_MAP_TO_PINOUT, and PIN_MAP_PROTO_TO_PINOUT
@@ -734,11 +715,6 @@ def main():
                         # flags bits set, e.g. SST27VF512 voltages=0x0001).
                         # NMOS correction (Site C): override vpp/vpp_mv when
                         # _nmos_vpp_mv is set (M2716/M2732/M2732A corrected voltage).
-                        "vpp": (
-                            f"{_nmos_vpp_mv // 1000}V"
-                            if _nmos_vpp_mv is not None
-                            else VPP_VOLTAGES.get(voltages & 0xF0, "Unknown")
-                        ),
                         "vpp_mv": (
                             _nmos_vpp_mv
                             if _nmos_vpp_mv is not None
@@ -747,16 +723,16 @@ def main():
                         # BUG-3 fix: vcc at bits 11-8, vdd at bits 15-12.
                         # v1.12 had them swapped (vdd at bits 11-8, vcc at bits 15-12).
                         # [VERIFIED: minipro database.c#L921-L923 @ a8efaedc]
-                        "vcc": VCC_VOLTAGES.get(
-                            (voltages >> 8) & 0x0F, "5V"
+                        "vcc_mv": VCC_VOLTAGES.get(
+                            (voltages >> 8) & 0x0F, 5000
                         ),  # bits 11-8
-                        "vdd": VCC_VOLTAGES.get(
-                            (voltages >> 12) & 0x0F, "5V"
+                        "vdd_mv": VCC_VOLTAGES.get(
+                            (voltages >> 12) & 0x0F, 5000
                         ),  # bits 15-12
                     },
                     "programming": {
                         "algorithm": proto_id,
-                        "pulse_duration": interpret_timing(
+                        "pulse_duration_us": interpret_timing(
                             ic.get("pulse_delay"), proto_id
                         ),
                         "chip_id_check": True if (flags & 0x20) else False,
@@ -818,7 +794,9 @@ def main():
                 # vcc as the correct read voltage (vdd there is the elevated
                 # program rail, e.g. 6.5V — must NOT be surfaced as operating Vcc).
                 if _etype == "SRAM":
-                    chip_entry["electrical"]["vcc"] = chip_entry["electrical"]["vdd"]
+                    chip_entry["electrical"]["vcc_mv"] = chip_entry["electrical"][
+                        "vdd_mv"
+                    ]
 
                 chips.append(chip_entry)
                 total_chips += 1
