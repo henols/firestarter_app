@@ -411,9 +411,18 @@ class EpromDatabase:
         if chip_id_val:
             data["chip-id"] = int(chip_id_val, 16)
 
-        # PGSZ-01 / CR-01: carry datasheet-sourced per-chip page_size when present.
-        # Set by build_db.py only for chips with a [CITED:] datasheet entry; absent
-        # for all other chips so they ride the firmware flash4_page_size() heuristic.
+        # PGSZ-01 / CR-01: carry per-chip page_size when present. Set by
+        # build_db.py either for a datasheet-curated [CITED:] chip or, as
+        # of Phase 149, for a chip whose OWN upstream protocol_id is 0x0D
+        # (algorithm 13 / EEPROM_POLL only). This guard is a TRUTHINESS
+        # test (`if page_size_val:`), not a presence test -- a page_size of
+        # 0 is therefore silently dropped and unreachable on the wire from
+        # this host. Chips absent from both sources omit the field and
+        # ride the firmware's own named AT28C page-size floor constant
+        # (algorithm 13 only; other algorithms' handlers never consume this
+        # key). The internal dict key is page_size (underscore); the WIRE
+        # key is page-size (hyphen, JSON_KEY_PAGE_SIZE in constants.py) --
+        # deliberately distinct spellings for the same English word.
         page_size_val = programming.get("page_size")
         if page_size_val:
             data["page_size"] = int(page_size_val)
@@ -547,8 +556,13 @@ class EpromDatabase:
             programmer_data["bus-config"] = full_eprom_data["bus-config"]
 
         # PGSZ-03 / CR-01: emit page-size wire field only when the DB supplies a
-        # datasheet-sourced per-chip page_size (emit-when-present, mirrors chip-id).
-        # Absent chips send nothing → firmware uses flash4_page_size(mem_size) heuristic.
+        # page_size (curated or, as of Phase 149, provenance-keyed for an
+        # upstream-native 0x0D row) -- emit-when-present, mirrors chip-id.
+        # This guard is also a TRUTHINESS test (`.get(...)` is truthy-checked,
+        # not `"page_size" in full_eprom_data`), so a page_size of 0 is
+        # silently dropped -- 0 is an unreachable wire value from this host.
+        # Absent chips send nothing; firmware (algorithm 13 / 0x0D only)
+        # falls back to its own named AT28C page-size floor constant.
         if full_eprom_data.get("page_size"):
             programmer_data["page-size"] = full_eprom_data["page_size"]
 

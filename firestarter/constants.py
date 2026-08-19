@@ -142,10 +142,16 @@ FLAG_SKIP_SDP_UNLOCK = 0x100
 # Used by consistency_check_eprom() to emit knob values in per-read JSON commands.
 JSON_KEY_READ_SETTLING_DELAY = "read-settling-delay"
 JSON_KEY_READ_STROBE_US = "read-strobe-us"
-# Per-chip page size wire field (PGSZ-03 / CR-01) — Firmware sync: json_parser.c (key_page_size)
-# Emitted by eprom_operations.py only when the DB supplies a datasheet-sourced page_size
-# (emit-when-present, mirrors read-strobe-us pattern). When absent, firmware falls back
-# to flash4_page_size(mem_size) heuristic. 0 = use firmware default.
+# Per-chip page size wire field (PGSZ-01/PGSZ-03). Emitted by database.py's
+# convert_to_programmer only when the DB supplies a page_size (curated or,
+# as of Phase 149, provenance-keyed for upstream-native 0x0D rows) --
+# emit-when-present, mirrors the chip-id pattern. When absent, firmware
+# falls back to its own named AT28C page-size floor constant (algorithm 13
+# / 0x0D only; other algorithms' handlers do not consume this key at all).
+# Firmware sync: this key does not yet exist in firestarter/src/json_parser.c
+# as of this phase's DB-side plan (149-03) -- Phase 149 plan 04 adds it, and
+# tests/test_json_key_parity.py (plan 05) is the enforcing test that keeps
+# this string in lockstep with the firmware PROGMEM key.
 JSON_KEY_PAGE_SIZE = "page-size"
 
 # RURP Control Register Bits — mirror of firestarter/include/rurp_pinout.h
