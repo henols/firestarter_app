@@ -466,9 +466,7 @@ def _classify_diff(bl_chip, cu_chip):
     bl_elec = bl_chip.get("electrical", {})
     cu_elec = cu_chip.get("electrical", {})
 
-    timing_diff = bl_prog.get("pulse_duration_us") != cu_prog.get(
-        "pulse_duration_us"
-    )
+    timing_diff = bl_prog.get("pulse_duration_us") != cu_prog.get("pulse_duration_us")
     algo_diff = bl_prog.get("algorithm") != cu_prog.get("algorithm")
     vcc_diff = bl_elec.get("vcc_mv") != cu_elec.get("vcc_mv")
     vdd_diff = bl_elec.get("vdd_mv") != cu_elec.get("vdd_mv")
@@ -710,9 +708,7 @@ def _canonicalize_db(db):
                 elec.pop("vpp", None)
             prog = chip.get("programming")
             if isinstance(prog, dict) and "pulse_duration" in prog:
-                prog["pulse_duration_us"] = _pulse_str_to_us(
-                    prog.pop("pulse_duration")
-                )
+                prog["pulse_duration_us"] = _pulse_str_to_us(prog.pop("pulse_duration"))
     return out
 
 
