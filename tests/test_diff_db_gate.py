@@ -150,3 +150,64 @@ class TestDiffDbPhase84Relabel:
         assert label != "RULE_PHASE84_RELABEL", (
             "Unrelated chip type change must NOT be classified RULE_PHASE84_RELABEL"
         )
+
+
+class TestDiffDbVccMarginRailBucketInvariance:
+    """Phase 148 DATA-01/DATA-05 — RULE_VCC_MARGIN_RAIL bucket-invariance gate.
+
+    Runs the real tools/diff_db.py (subprocess, same seam as
+    test_diff_db_identity_pass above) against the REAL chip_database.json and
+    baseline, and asserts the exact measured bucket distribution: the
+    margin-rail substitution moved exactly 56 chips into their own labelled
+    bucket, every pre-existing bucket count is unchanged except
+    PROV01_PROTECT_METADATA (which drops by exactly those 56 chips,
+    742 -> 686), the changed-chip total stays 744, and there are 0 NEW / 0
+    MISSING chips.
+
+    What a count change here means (never argue it, re-measure it): a
+    different changed-chip TOTAL means a chip entered or left the database.
+    A different RULE_VCC_MARGIN_RAIL count means the margin-rail condition in
+    build_db.py was widened or narrowed and must be re-measured against the
+    four-way split table in 148-CONTEXT.md D-03 (55/16/12/1) before this
+    assertion is ever changed.
+    """
+
+    def test_vcc_margin_rail_bucket_distribution(self):
+        firestarter_app_dir = Path(__file__).resolve().parent.parent
+
+        result = subprocess.run(
+            [sys.executable, "tools/diff_db.py"],
+            cwd=str(firestarter_app_dir),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, (
+            f"diff_db.py exit code {result.returncode} (expected 0); "
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+
+        stdout = result.stdout
+
+        assert "CHANGED chips (744 total)" in stdout, (
+            "changed-chip total must stay 744 -- a different total means a "
+            f"chip entered or left the database; got:\n{stdout}"
+        )
+        assert "[RULE_VCC_MARGIN_RAIL] (56 chips)" in stdout, (
+            "RULE_VCC_MARGIN_RAIL must explain exactly 56 chips -- a different "
+            "count means the margin-rail condition was widened or narrowed and "
+            "must be re-measured against the four-way split table (148-CONTEXT.md "
+            f"D-03: 55/16/12/1), never argued; got:\n{stdout}"
+        )
+        assert "[PROV01_PROTECT_METADATA] (686 chips)" in stdout, (
+            "PROV01_PROTECT_METADATA must drop by exactly the 56 movers "
+            f"(742 -> 686); got:\n{stdout}"
+        )
+        assert "[PGSZ_PAGE_SIZE] (2 chips)" in stdout, (
+            f"PGSZ_PAGE_SIZE must stay 2 chips (pre-existing, unaffected); got:\n{stdout}"
+        )
+        assert "NEW chips (0)" in stdout, f"Expected 0 NEW chips; got:\n{stdout}"
+        assert "MISSING chips (0)" in stdout, (
+            f"Expected 0 MISSING chips; got:\n{stdout}"
+        )

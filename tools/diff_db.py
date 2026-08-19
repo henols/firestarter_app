@@ -73,6 +73,22 @@ _RATIONALES = {
         "  [VERIFIED: minipro database.c#L866 @ a8efaedc —\n"
         "   https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c#L866]"
     ),
+    "RULE_VCC_MARGIN_RAIL": (
+        "Phase 148 DATA-01 (D-01/D-02/D-03) — VCC margin-rail substitution.\n"
+        "  infoic.xml's VCC nibble 2 (VCC_VOLTAGES[0x02] = 4000 mV) is decoded FAITHFULLY —\n"
+        "  this is not a decode repair. The defect is semantic: minipro's vcc is the TL866's\n"
+        "  low-margin VCC *verify* rail, and firestarter surfaced it as the chip's operating\n"
+        "  supply. The substitution targets the already-decoded vdd_mv (itself an\n"
+        "  infoic.xml-decoded value, so nothing is invented) whenever vcc_mv lands on this\n"
+        "  rail: build_db.py::_VCC_MARGIN_RAIL_MV, applied post-construction.\n"
+        "  No other delta: exactly 56 chips move, every one 4000 -> 5000 mV, and no chip's\n"
+        "  vcc_mv is ever lowered by this rule (Test 3's no-decrease guard,\n"
+        "  tests/test_vcc_margin_rail.py).\n"
+        "  [VERIFIED: minipro database.c#L130-L135 @ a8efaedc —\n"
+        "   tl866ii_vcc_voltages[] —\n"
+        "   https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c#L130]\n"
+        "  [CITED: .planning/phases/148-numeric-database-values-the-at28c-vcc-decode/148-DB-DIFF.md]"
+    ),
     "BUG3_VCC_VDD": (
         "BUG-3 vcc/vdd label swap only — inverted field labels corrected.\n"
         "  bits 11-8 = vcc (VCC supply voltage), bits 15-12 = vdd (VDD programming voltage).\n"
@@ -311,6 +327,11 @@ _RULE_FIELD_PATHS = {
         ("electrical", "vdd_mv"),
     },
     "BUG2_TIMING": {("programming", "pulse_duration_us")},
+    # Phase 148 DATA-01 RULE_VCC_MARGIN_RAIL: scope is exactly the one key the
+    # margin-rail substitution ever touches — electrical.vcc_mv — and nothing
+    # else. vdd_mv is read by the rule, never written; it is not part of this
+    # rule's explained field set.
+    "RULE_VCC_MARGIN_RAIL": {("electrical", "vcc_mv")},
     "BUG3_VCC_VDD": {("electrical", "vcc_mv"), ("electrical", "vdd_mv")},
     "SRAM_PINOUT": {
         ("pinout",),
@@ -419,20 +440,24 @@ def _classify_diff(bl_chip, cu_chip):
       1. RULE_ALGO     — algorithm changed (primary dispatch key)
       2. BUG2_AND_BUG3 — timing + voltage changed (combined fix, precedes singles)
       3. BUG2_TIMING   — timing changed only
-      4. BUG3_VCC_VDD  — voltage (vcc/vdd) changed only
-      5a. RC1_DIP32_27C020 — pinout changed to DIP32_27C020 (Phase 98 RC-1 fix; before SRAM_PINOUT)
-      5b. SRAM_PINOUT  — pinout changed only (other pinout re-routes)
-      6. RULE_PHASE84_RELABEL — only electrical.type changed, AND the chip is in
+      4. RULE_VCC_MARGIN_RAIL — Phase 148 DATA-01 margin-rail substitution: baseline
+                         vcc_mv was the 4000 mV verify rail, current vcc_mv now equals
+                         current vdd_mv (value-scoped, before BUG3_VCC_VDD — otherwise a
+                         mover would be misattributed to the vcc/vdd label-swap rationale)
+      5. BUG3_VCC_VDD  — voltage (vcc/vdd) changed only
+      6a. RC1_DIP32_27C020 — pinout changed to DIP32_27C020 (Phase 98 RC-1 fix; before SRAM_PINOUT)
+      6b. SRAM_PINOUT  — pinout changed only (other pinout re-routes)
+      7. RULE_PHASE84_RELABEL — only electrical.type changed, AND the chip is in
                          _PHASE84_RELABEL_PART_NUMBERS (cosmetic label-only correction;
                          scoped by part_number; MORE SPECIFIC than BUG_A_ETYPE so must
                          precede it — otherwise BUG_A_ETYPE would match first)
-      6b. VARIANT_DECODE — only electrical.type changed to 'EEPROM' AND proto in
+      7b. VARIANT_DECODE — only electrical.type changed to 'EEPROM' AND proto in
                          {0x0D, 0x34} (Phase 86 consolidation: 5V-EEPROM-pinout proto-0x0D
                          Flash/EEPROM->EEPROM + X88C64P proto-0x34 UV-EPROM->EEPROM;
                          scoped by new-type+proto so it does NOT shadow BUG_A_ETYPE)
-      7. BUG_A_ETYPE   — electrical.type changed (flags-based EEPROM reclassification)
-      8. BUG_B_VPP     — electrical.vpp/vpp_mv changed (0xF0-mask fix)
-      9. RULE_PHASE66  — only support_status/unsupported_reason/vpp/vpp_mv changed
+      8. BUG_A_ETYPE   — electrical.type changed (flags-based EEPROM reclassification)
+      9. BUG_B_VPP     — electrical.vpp/vpp_mv changed (0xF0-mask fix)
+      10. RULE_PHASE66 — only support_status/unsupported_reason/vpp/vpp_mv changed
                          (LAST — least specific; must not shadow BUG_A_ETYPE/BUG_B_VPP)
       -> None          — no rule matched (UNEXPLAINED = D-03 BLOCK)
     """
@@ -467,6 +492,30 @@ def _classify_diff(bl_chip, cu_chip):
         label = "BUG2_AND_BUG3"
     elif timing_diff and not voltage_diff and not pinout_diff:
         label = "BUG2_TIMING"
+    elif (
+        bl_elec.get("vcc_mv") == 4000
+        and cu_elec.get("vcc_mv") == cu_elec.get("vdd_mv")
+        and cu_elec.get("vcc_mv") != 4000
+        and not algo_diff
+        and not timing_diff
+        and not pinout_diff
+        and not type_diff
+    ):
+        # RULE_VCC_MARGIN_RAIL (before BUG3_VCC_VDD): Phase 148 DATA-01
+        # margin-rail substitution. Scoped on the DECODED VALUES themselves —
+        # baseline vcc_mv was the 4000 mV TL866 verify-margin rail (mirrors
+        # build_db.py's _VCC_MARGIN_RAIL_MV = VCC_VOLTAGES[0x02]); current
+        # vcc_mv now equals the chip's own current vdd_mv; current vcc_mv is
+        # no longer 4000 — rather than any part-number/type/algorithm key, so
+        # this branch's scope is ENFORCED here (not just asserted in prose): a
+        # compound change (algo/timing/pinout/type also differing) falls
+        # through to a more generic rule instead of being silently absorbed.
+        # Placed BEFORE BUG3_VCC_VDD: otherwise a mover whose only other delta
+        # is a secondary field would be misattributed to the Phase 57/58
+        # BUG-3 vcc/vdd label-swap rationale, which this substitution is not
+        # (D-01: the vcc/vdd labels are correct; only the margin-rail value
+        # is being substituted).
+        label = "RULE_VCC_MARGIN_RAIL"
     elif voltage_diff and not timing_diff and not algo_diff:
         label = "BUG3_VCC_VDD"
     elif (
