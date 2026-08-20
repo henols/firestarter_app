@@ -13,8 +13,9 @@
  * The conditional below is planted INSIDE the predicate's switch body (never
  * between two case labels' outer scope, never in the surrounding #define
  * block) so it isolates assertion (a) -- "no conditional in the body" -- from
- * assertion (b) -- "the body enumerates exactly the eight expected
- * commands". The eight CMD_* identifiers are ALL still textually present in
+ * assertion (b) -- "the body enumerates exactly the nine expected
+ * commands" (grown from eight by Phase 151 / LOCK-02's CMD_LOCK_STATUS).
+ * The nine CMD_* identifiers are ALL still textually present in
  * the body regardless of the #ifdef/#endif wrapping (this checker scans
  * source text, it does not run a C preprocessor), so this fixture trips (a)
  * only, never (b) -- a fixture that failed for two reasons at once could not
@@ -46,6 +47,7 @@
 
 #define CMD_SDP_UNLOCK 9
 #define CMD_SDP_LOCK 10
+#define CMD_LOCK_STATUS 16
 
 static inline bool is_memory_cmd(uint8_t cmd) {
     switch (cmd) {
@@ -59,6 +61,7 @@ static inline bool is_memory_cmd(uint8_t cmd) {
         case CMD_SDP_UNLOCK:
         case CMD_SDP_LOCK:
 #endif
+        case CMD_LOCK_STATUS:
             return true;
         default:
             return false;
