@@ -48,7 +48,12 @@ from pathlib import Path
 
 from firestarter.exceptions import EpromOperationError
 from firestarter.messages import MSG_ERR_TIMEOUT, MSG_ERR_UNKNOWN_CMD
-from firestarter.sdp_honesty import emission_summary, map_unknown_cmd_to_outdated
+from firestarter.sdp_honesty import (
+    emission_summary,
+    map_unknown_cmd_to_outdated,
+    map_unknown_cmd_to_outdated_for_operation,
+    unreadable_state_caveat,
+)
 
 # Allowed 0x0D chip (AT28C256) -- the survivors below use this one to
 # exercise the helper. Every other chip-name constant this module used to
@@ -147,6 +152,93 @@ def test_firmware_too_old_is_reported_when_unknown_cmd_comes_back() -> None:
 
     other_exc = EpromOperationError("Timed out", error_code=MSG_ERR_TIMEOUT)
     assert map_unknown_cmd_to_outdated(other_exc, "enable", _ALLOWED_CHIP) is None
+
+
+# ---------------------------------------------------------------------------
+# Phase 151 (LOCK-02/LOCK-03, D-04, C-4) -- the strictly-additive extension.
+# `unreadable_state_caveat()` and both `emission_summary()` directions are
+# pinned as literals here too, on top of the four surviving cases above and
+# `test_chip_test_sdp_leg.py`'s own four pinning legs, so an edit to either
+# function's wording goes red at this file as well -- C-4 measured that
+# `unreadable_state_caveat()` now has three landed production callers
+# (`cli_handlers.py:2408`, `:2412`, `chip_test.py:1480`) plus those four
+# pinning tests, so its text is load-bearing at seven sites total.
+# ---------------------------------------------------------------------------
+
+
+def test_unreadable_state_caveat_text_is_unchanged_by_the_additive_extension() -> None:
+    """Pinned literal, byte-identical to the pre-Phase-151 wording. If this
+    goes red, the extension in this plan was NOT strictly additive -- see
+    C-4."""
+    assert unreadable_state_caveat() == (
+        "The resulting protection state cannot be read back on this chip "
+        "family, so this is not a claim about the chip's actual state."
+    )
+
+
+def test_emission_summary_both_directions_are_unchanged_by_the_additive_extension() -> (
+    None
+):
+    """Pinned literal on both directions, same discipline as the leg
+    above."""
+    assert emission_summary("enable", _ALLOWED_CHIP) == (
+        "SDP enable sequence for AT28C256 was emitted. "
+        "The resulting protection state cannot be read back on this chip "
+        "family, so this is not a claim about the chip's actual state."
+    )
+    assert emission_summary("disable", _ALLOWED_CHIP) == (
+        "SDP disable sequence for AT28C256 was emitted. "
+        "The resulting protection state cannot be read back on this chip "
+        "family, so this is not a claim about the chip's actual state."
+    )
+
+
+def test_operation_sibling_maps_unknown_cmd_and_returns_rather_than_raises() -> None:
+    """`map_unknown_cmd_to_outdated_for_operation` mirrors its sibling's
+    keying exactly: `MSG_ERR_UNKNOWN_CMD` maps to a constructed (never
+    raised) `FirmwareOutdatedError`; a different `error_code` -- the
+    negative control -- maps to `None`. Calling it outside a
+    `pytest.raises` block is itself part of the proof that it returns
+    rather than raises: a raise here would abort the test with an
+    unhandled exception instead of reaching the assertions below."""
+    exc = EpromOperationError("Unknown command: 16", error_code=MSG_ERR_UNKNOWN_CMD)
+    outdated = map_unknown_cmd_to_outdated_for_operation(
+        exc, "lock-status query", _ALLOWED_CHIP
+    )
+    assert outdated is not None
+    assert "firestarter fw --install" in str(outdated), str(outdated)
+
+    other_exc = EpromOperationError("Timed out", error_code=MSG_ERR_TIMEOUT)
+    assert (
+        map_unknown_cmd_to_outdated_for_operation(
+            other_exc, "lock-status query", _ALLOWED_CHIP
+        )
+        is None
+    )
+
+    no_code_exc = EpromOperationError("x", error_code=None)
+    assert (
+        map_unknown_cmd_to_outdated_for_operation(
+            no_code_exc, "lock-status query", _ALLOWED_CHIP
+        )
+        is None
+    )
+
+
+def test_operation_sibling_generalises_the_label_away_from_the_literal_sdp() -> None:
+    """The leg that proves the generalisation actually happened: the
+    returned message names the given operation label and, for a non-SDP
+    label, does NOT contain the literal substring `SDP` -- unlike its
+    sibling `map_unknown_cmd_to_outdated`, which always says `SDP {mode}`.
+    """
+    exc = EpromOperationError("Unknown command: 16", error_code=MSG_ERR_UNKNOWN_CMD)
+    outdated = map_unknown_cmd_to_outdated_for_operation(
+        exc, "lock-status query", _ALLOWED_CHIP
+    )
+    assert outdated is not None
+    message = str(outdated)
+    assert "lock-status query" in message, message
+    assert "SDP" not in message, message
 
 
 # ---------------------------------------------------------------------------

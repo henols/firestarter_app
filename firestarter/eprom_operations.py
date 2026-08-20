@@ -30,6 +30,7 @@ from firestarter.constants import (
     COMMAND_DEV_REGISTERS,
     COMMAND_ERASE,
     COMMAND_FW_VERSION,
+    COMMAND_LOCK_STATUS,
     COMMAND_NAMES,
     COMMAND_READ,
     COMMAND_SDP_LOCK,
@@ -54,7 +55,7 @@ from firestarter.exceptions import (
     SerialTimeoutError,
 )
 from firestarter.frame_parser import _crc8_ccitt, cobs_encode
-from firestarter.messages import MSG_WARN_SDP_UNLOCK_SKIPPED
+from firestarter.messages import MSG_DATA_PROTECTION_STATUS, MSG_WARN_SDP_UNLOCK_SKIPPED
 from firestarter.sdp_capability import SDP_PROTOCOL_ID
 from firestarter.serial_comm import (
     DEFAULT_RESPONSE_TIMEOUT,
@@ -146,6 +147,15 @@ _BUDGET_FAILURE_IDS = (0xBD, 0xBE, 0xAE)
 # approach immediately above, for the same reason: the refused value is only
 # available as decoded prose, not as a separate structured field on Response.
 _PULSE_WIDTH_RE = re.compile(r"Pulse width (\d+) us")
+
+# Pattern to extract the raw silicon byte and the firmware decode code from
+# MSG_DATA_PROTECTION_STATUS (0xE1, plan 151-05/151-08/151-11) messages.
+# Format: "Lock status probe: raw=0x%02X decode=%u" -- same rationale as
+# _TIMEOUT_ADDR_RE/_PULSE_WIDTH_RE immediately above: Response.payload is
+# populated only for MSG_DATA_CHUNK (W-04); every other id-frame's decoded
+# param values reach the caller only as already-rendered prose, so this is
+# the established way to recover them.
+_LOCK_STATUS_RE = re.compile(r"raw=0x([0-9A-Fa-f]{2}) decode=(\d+)")
 
 
 def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional[str]:
@@ -2221,6 +2231,108 @@ class EpromOperator:
                         f"Failed to extract a valid chip ID from programmer response: {final_msg}"  # noqa: E501
                     )
             return is_ok, detected_chip_id_value
+
+    def _main_phase_capture_lock_status(
+        self, progress: ClassProgressHandler, captured: list
+    ) -> Optional[str]:
+        """Main-phase handler for `CMD_LOCK_STATUS` (plan 151-11).
+
+        Mirrors `_main_phase_simple` exactly (same MAIN/ERROR/OK handling,
+        same unconditional `_handle_progress_response(..., ack_data=True)`
+        so the DATA frame is still acked as MAIN-phase flow control
+        requires), but additionally recognises the one DATA id-frame this
+        operation cares about -- `MSG_DATA_PROTECTION_STATUS` (0xE1) -- and
+        extracts its two-byte payload from the already-rendered prose via
+        `_LOCK_STATUS_RE`, the same text-extraction idiom `_TIMEOUT_ADDR_RE`
+        and `_PULSE_WIDTH_RE` already use elsewhere in this module
+        (`Response.payload` is populated only for `MSG_DATA_CHUNK`).
+
+        `captured` is a caller-owned one-element mutable list, written into
+        rather than returned, because this handler's own return value is
+        wired by `_run_state_machine` to become `final_msg` (the MAIN
+        message), leaving no return slot free for the payload too.
+        """
+        comm = self.comm
+        if comm is None:
+            return None
+        final_msg = None
+        while True:
+            response = comm.get_response()
+            if response.type == "MAIN":
+                final_msg = response.message
+                break
+            if response.type == "ERROR":
+                _raise_for_error_response(response, response.message)
+            if response.type == "OK" and final_msg is None:
+                final_msg = response.message
+            if response.id == MSG_DATA_PROTECTION_STATUS and captured[0] is None:
+                match = _LOCK_STATUS_RE.search(response.message or "")
+                if match:
+                    captured[0] = bytes(
+                        [int(match.group(1), 16) & 0xFF, int(match.group(2)) & 0xFF]
+                    )
+            # MAIN phase: DATA frames are flow-control; ack them (unchanged).
+            self._handle_progress_response(response, progress, ack_data=True)
+        return final_msg
+
+    def read_protection_status(
+        self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
+    ) -> Tuple[bool, Optional[bytes]]:  # noqa: UP006
+        """Send `CMD_LOCK_STATUS` and return `(True, payload)` on an
+        accepted command, `(False, None)` otherwise.
+
+        A `True` return means only that the command was **accepted** and a
+        two-byte payload was returned -- exactly the same "sequence was
+        emitted / accepted" honesty floor `sdp_lock`'s docstring states for
+        its own operation, extended here to a query rather than a mutating
+        command. It is never a claim that the payload's decode is a
+        correct or even a *definite* state -- classification of the raw
+        byte and the decode byte into one of D-09's eight answer classes is
+        `firestarter.lock_status.classify_protection_response`'s job
+        entirely; this method makes no claim whatsoever about the chip's
+        protection state.
+
+        The payload is captured **inside** `_operation_context`'s `with`
+        block via `_main_phase_capture_lock_status` above: `EpromOperator.
+        comm` is torn down after every operator call (a measured property
+        of this class, not a style preference -- see `check_eprom_id`'s own
+        value-returning shape for the established precedent), so a value
+        not captured before the context exits is unreadable afterwards.
+
+        Deliberately does **not** set the 0x01 force-control flag bit in
+        `operation_flags`. Per `151-DESIGN.md` §6 / C-16, that firmware bit
+        means one specific thing -- downgrade a chip-ID mismatch from
+        error to warning -- and this command performs no chip-ID check at
+        all, so the bit would have no firmware-visible meaning here.
+        `--force` on `dev lock-status` is a host-side-only bypass of the
+        readability table's refusal (D-07); it never reaches the wire on
+        this command.
+        """
+        captured: list = [None]
+        with self._operation_context(
+            eprom_name,
+            eprom_data_dict,
+            COMMAND_LOCK_STATUS,
+            operation_flags,
+        ) as (cmd_data, _, op_name):
+            if not cmd_data:
+                return False, None
+
+            logger.info(f"Reading protection status for {eprom_name.upper()}")
+            is_ok, final_msg = self._run_state_machine(
+                op_name,
+                main_phase_handler=self._main_phase_capture_lock_status,
+                captured=captured,
+            )
+            if is_ok:
+                logger.info(
+                    f"Protection status read for {eprom_name.upper()}: {final_msg or ''}"  # noqa: E501
+                )
+            else:
+                logger.warning(
+                    f"Protection status read for {eprom_name.upper()} did not return OK. Programmer response: {final_msg}"  # noqa: E501
+                )
+            return is_ok, captured[0]
 
 
 # Example usage (for testing this module directly)
