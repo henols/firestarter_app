@@ -51,12 +51,19 @@ Coverage (task numbering matches `151-12-PLAN.md`):
 
 from __future__ import annotations
 
+import ast
 import json
+import os
+import re
+import subprocess
+import sys
 from pathlib import Path
 from typing import NamedTuple
 
 from firestarter.lock_status import SILICON_ONLY_TOKENS
 from firestarter.protection_readability import (
+    AMBIGUOUS_DOC_CITATIONS,
+    DOCUMENTED_READABLE_TOKENS,
     GATE_TOKEN_NO_MECHANISM,
     GATE_TOKEN_NOT_IMPLEMENTED,
     GATE_TOKEN_NOT_READABLE,
@@ -64,6 +71,7 @@ from firestarter.protection_readability import (
     GATE_TOKEN_UNDOCUMENTED_ALIAS,
     protection_gate_for_entry,
 )
+from firestarter.sdp_capability import split_part_number_tokens
 
 # Absolute paths, cwd-independent -- mirrors test_sdp_db_invariant.py:74-75
 # and test_protection_table_citations.py:27-29.
@@ -537,4 +545,334 @@ def test_no_row_resolves_to_a_silicon_only_token() -> None:
     assert not stray, (
         f"D-12 leg 3: the following silicon-only tokens were reachable from "
         f"the pure database walk: {sorted(stray)}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Leg 4: structural unreachability of the two silicon-only tokens, with a
+# planted fixture.
+# ---------------------------------------------------------------------------
+
+
+def test_silicon_only_tokens_never_appear_in_a_return_value_ast() -> None:
+    """D-12 leg 4(a): walk `protection_readability.py`'s AST (never grep) and
+    assert neither `SILICON_ONLY_TOKENS` literal appears as, or anywhere
+    inside, any `Return` node's value.
+
+    This half alone would pass trivially -- the real module was never
+    going to contain the literal. `test_planted_fixture_fails_the_gate_seam_
+    naming_class1` below is what makes it non-decorative: it proves this
+    same rule, applied by `tools/check_protection_readability_invariants.py`,
+    is actually capable of failing on a real return of a silicon-only
+    token."""
+    source = _MODULE_FILE.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(_MODULE_FILE))
+    offending: list[tuple[int, object]] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Return) and node.value is not None:
+            for sub in ast.walk(node.value):
+                if isinstance(sub, ast.Constant) and sub.value in SILICON_ONLY_TOKENS:
+                    offending.append((getattr(sub, "lineno", node.lineno), sub.value))
+    assert not offending, (
+        "D-12 leg 4(a): silicon-only token literal(s) found inside a Return "
+        f"value in protection_readability.py: {offending}"
+    )
+
+
+def _run_protection_readability_checker(
+    env_overrides: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess:
+    """Mirrors `tests/test_check_protection_readability.py`'s `_run_checker`
+    shape: always a real subprocess through the env-override seam, never an
+    in-process pytest env-patching fixture -- the seam binds at import
+    time."""
+    env = {**os.environ, **(env_overrides or {})}
+    return subprocess.run(
+        [sys.executable, "tools/check_protection_readability_invariants.py"],
+        cwd=str(_FA_DIR),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+
+def test_planted_fixture_fails_the_gate_seam_naming_class1() -> None:
+    """D-12 leg 4(b), first half: the real planted fixture plan `151-09`
+    committed --
+    `tests/fixtures/planted_protection_permit_by_default.py` -- genuinely
+    returns the silicon-only token `"unprotected"` from a pure-shaped
+    `protection_gate_for_entry`-lookalike function, with no membership test
+    dominating the return. Routed through
+    `FIRESTARTER_PROTECTION_READABILITY_SRC` into
+    `tools/check_protection_readability_invariants.py` as a subprocess, it
+    must exit non-zero naming Class 1 -- this is the fixture's proof that
+    leg 4(a)'s AST rule is a real checkable negative, not a rule that was
+    never going to fire."""
+    result = _run_protection_readability_checker(
+        {
+            "FIRESTARTER_PROTECTION_READABILITY_SRC": (
+                "tests/fixtures/planted_protection_permit_by_default.py"
+            )
+        }
+    )
+    assert result.returncode != 0, (
+        "D-12 leg 4(b): the planted permit-by-default fixture must fail the "
+        f"gate. stdout: {result.stdout!r} stderr: {result.stderr!r}"
+    )
+    assert "Class 1" in result.stdout, (
+        "D-12 leg 4(b): the gate's failure output must name Class 1. "
+        f"stdout: {result.stdout!r}"
+    )
+
+
+def test_real_module_passes_the_same_gate_seam() -> None:
+    """D-12 leg 4(b), second half -- the complement that isolates the
+    planted fixture's failure above as the actual cause: the REAL
+    `protection_readability.py`, routed through the identical seam, must
+    exit 0."""
+    result = _run_protection_readability_checker()
+    assert result.returncode == 0, (
+        "D-12 leg 4(b): the real protection_readability.py module must pass "
+        f"the gate. stdout: {result.stdout!r} stderr: {result.stderr!r}"
+    )
+    assert "PASS" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# Leg 5: citation presence, and that the citations resolve.
+# ---------------------------------------------------------------------------
+
+# A citation comment quotes its lockable-proms.md row-key fragment inside a
+# pair of double quotes -- mirrors
+# test_protection_table_citations.py:_QUOTED_FRAGMENT_RE exactly.
+_QUOTED_FRAGMENT_RE = re.compile(r'"([^"]{3,})"')
+# A bare quoted alias token inside a frozenset display line, e.g.
+# `"AM29F010",` -- mirrors
+# test_protection_table_citations.py:_TOKEN_ON_LINE_RE.
+_TOKEN_ON_LINE_RE = re.compile(r'"([A-Z0-9]+)"')
+
+_READABLE_BLOCK_START = "DOCUMENTED_READABLE_TOKENS: frozenset[str] = frozenset("
+
+
+def _read_module_text() -> str:
+    return _MODULE_FILE.read_text(encoding="utf-8")
+
+
+def _read_doc_text() -> str:
+    return _DOC_FILE.read_text(encoding="utf-8")
+
+
+def _extract_readable_citation_groups() -> list[tuple[str, list[str]]]:
+    """Mirrors `test_protection_table_citations.py`'s
+    `_extract_citation_groups` shape, scoped to `DOCUMENTED_READABLE_TOKENS`
+    only: splits the frozenset display block into `(comment_text, [tokens])`
+    groups -- a run of consecutive `#`-comment lines followed by the
+    token-literal lines it covers."""
+    lines = _read_module_text().splitlines()
+    start = next(i for i, line in enumerate(lines) if _READABLE_BLOCK_START in line)
+    end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == ")")
+    block = lines[start:end]
+
+    groups: list[tuple[str, list[str]]] = []
+    current_comment: list[str] = []
+    current_tokens: list[str] = []
+    for line in block:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            if current_tokens:
+                groups.append((" ".join(current_comment), current_tokens))
+                current_comment, current_tokens = [], []
+            current_comment.append(stripped.lstrip("#").strip())
+        else:
+            found = _TOKEN_ON_LINE_RE.findall(line)
+            if found:
+                current_tokens.extend(found)
+    if current_tokens:
+        groups.append((" ".join(current_comment), current_tokens))
+    return groups
+
+
+def test_every_readable_token_has_a_citation_that_resolves_in_the_doc() -> None:
+    """D-12 leg 5: every token in `DOCUMENTED_READABLE_TOKENS` carries a
+    citation comment in the module source, and the `lockable-proms.md`
+    row-key fragment quoted in that comment is present verbatim in
+    `doc/lockable-proms.md`.
+
+    Deliberately overlaps `tests/test_protection_table_citations.py`'s own
+    legs 1/2 by design: that file gates the CURATED TABLE'S AUTHORING
+    (every curated token, both frozensets); this leg gates the
+    PARTITION'S INPUTS specifically (the tokens D-12's own walk exercises
+    via `GATE_TOKEN_READ_PERMITTED`). `151-VALIDATION.md`'s "Required
+    Assertion Set" names citation presence as one of D-12's own six
+    required legs, independent of whether another file already checks it
+    -- the overlap is deliberate, not duplicated.
+    """
+    groups = _extract_readable_citation_groups()
+    cited_tokens = {t for _, toks in groups for t in toks}
+    uncited = DOCUMENTED_READABLE_TOKENS - cited_tokens
+    assert not uncited, (
+        f"D-12 leg 5: documented-readable tokens with no citation comment: "
+        f"{sorted(uncited)}"
+    )
+
+    doc_text = _read_doc_text()
+    for comment_text, tokens in groups:
+        for fragment in _QUOTED_FRAGMENT_RE.findall(comment_text):
+            assert fragment in doc_text, (
+                f"D-12 leg 5: citation fragment {fragment!r} (tokens "
+                f"{tokens}) is not present verbatim in lockable-proms.md"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Leg 6: robustness controls.
+# ---------------------------------------------------------------------------
+
+
+def test_ti_key_less_rows_resolve_to_no_mechanism_without_raising() -> None:
+    """D-12 leg 6(a): the two TEXAS INSTRUMENTS rows (`2516`, `2532`) carry
+    NEITHER `protect_on_after` nor `protect_off_before` at all -- the
+    744-of-746 exception. `protection_gate_for_entry` never reads either
+    field (per its own docstring), so this asserts both rows resolve
+    cleanly to `no_mechanism` (both are algorithm `0x0B`) rather than
+    raising a `KeyError` on the missing fields."""
+    for part_number in ("2516", "2532"):
+        token, _reason = protection_gate_for_entry(
+            {"name": part_number, "protocol-id": 0x0B}, part_number
+        )
+        assert token == GATE_TOKEN_NO_MECHANISM, (
+            f"D-12 leg 6(a): TEXAS INSTRUMENTS/{part_number} expected "
+            f"no_mechanism, measured {token!r}"
+        )
+
+
+def test_ten_non_supported_rows_all_resolve() -> None:
+    """D-12 leg 6(b): every row whose `support_status` is not `"supported"`
+    -- 10 such rows in the committed database -- still resolves through the
+    walk without raising."""
+    db = _load_db()
+    non_supported = []
+    for vendor, chips in db.items():
+        for chip in chips:
+            if chip.get("support_status") != "supported":
+                non_supported.append((vendor, chip["part_number"]))
+    assert len(non_supported) == 10, (
+        f"D-12 leg 6(b): expected exactly 10 non-'supported' rows, measured "
+        f"{len(non_supported)}: {non_supported}"
+    )
+    resolutions = _resolve_database_or_raise(db)
+    resolved_keys = {_key(r.vendor, r.part_number) for r in resolutions}
+    for vendor, part_number in non_supported:
+        assert _key(vendor, part_number) in resolved_keys, (
+            f"D-12 leg 6(b): non-supported row {_key(vendor, part_number)} "
+            "did not resolve"
+        )
+
+
+def test_synthetic_novel_algorithm_control_raises_naming_only_itself() -> None:
+    """D-12 leg 6(c), the plan's required synthetic-novel-algorithm control:
+    a synthetic two-row database, one control row carrying a real,
+    already-classed algorithm (`0x10` / `not_implemented`) and one row
+    carrying algorithm `999` -- an id genuinely absent from BOTH the
+    committed database and every classified protocol-id set (orchestrator
+    constraint 5: the control must be genuinely novel, proving the
+    partition fails closed on an id nobody has ever classified, not merely
+    on a hand-picked bad one).
+
+    Mirrors `test_sdp_db_invariant.py::
+    test_partition_flags_a_moved_chip_via_db_field_non_vacuous`'s shape:
+    assert the fixture setup first with a `"Fixture setup error: ..."`
+    message, then assert the exhaustiveness walk raises, naming the
+    synthetic row and not the control.
+    """
+    control_row = {"part_number": "AM28F010", "programming": {"algorithm": 0x10}}
+    control_only_db = {"SYNTHETIC_MFR": [control_row]}
+    control_resolutions, control_failures = _walk_database_for_class_tokens(
+        control_only_db
+    )
+    assert not control_failures, (
+        "Fixture setup error: the control row SYNTHETIC_MFR/AM28F010 must "
+        f"resolve cleanly on its own; measured failures {control_failures!r}"
+    )
+    assert control_resolutions[0].token == GATE_TOKEN_NOT_IMPLEMENTED, (
+        "Fixture setup error: the control row must resolve not_implemented, "
+        f"measured {control_resolutions[0].token!r}"
+    )
+
+    synthetic_row = {
+        "part_number": "SYNTHETIC_NOVEL_ALGORITHM_ROW",
+        "programming": {"algorithm": 999},
+    }
+    mutated_db = {"SYNTHETIC_MFR": [control_row, synthetic_row]}
+
+    try:
+        _resolve_database_or_raise(mutated_db)
+    except AssertionError as exc:
+        message = str(exc)
+        assert "SYNTHETIC_NOVEL_ALGORITHM_ROW" in message, (
+            "Non-vacuity failure: the raised message does not name the "
+            f"synthetic row. Message was: {message!r}"
+        )
+        assert "AM28F010" not in message, (
+            "Non-vacuity failure: the raised message names the untouched "
+            f"control row, which never moved. Message was: {message!r}"
+        )
+    else:
+        raise AssertionError(
+            "Non-vacuity failure: a synthetic row with algorithm 999 "
+            "(absent from every classified protocol-id set and from the "
+            "committed database) did not make the exhaustiveness walk raise."
+        )
+
+
+# ---------------------------------------------------------------------------
+# Leg 7: the AMBIGUOUS_DOC_CITATIONS record is live over the real corpus.
+# ---------------------------------------------------------------------------
+
+
+def test_ambiguous_doc_citation_reaches_a_real_refusal_reason() -> None:
+    """D-12 leg 7: the C-17 `AMBIGUOUS_DOC_CITATIONS` record is live over
+    the real corpus, not sitting inert in the module. For every database
+    entry containing a token that is a key of `AMBIGUOUS_DOC_CITATIONS`
+    (bare `"W29C020"`), the entry must resolve to a refusal token, and the
+    refusal's reason must contain a distinctive substring of the recorded
+    ambiguity note."""
+    assert AMBIGUOUS_DOC_CITATIONS, (
+        "D-12 leg 7: AMBIGUOUS_DOC_CITATIONS must be non-empty for this leg "
+        "to exercise anything real."
+    )
+    db = _load_db()
+    resolutions = _resolve_database_or_raise(db)
+
+    ambiguous_tokens = set(AMBIGUOUS_DOC_CITATIONS)
+    matched_any = False
+    distinctive_fragment = "more-restrictive reading wins"
+    for r in resolutions:
+        row_tokens = set(split_part_number_tokens(r.part_number))
+        offending = row_tokens & ambiguous_tokens
+        if not offending:
+            continue
+        matched_any = True
+        assert r.token != GATE_TOKEN_READ_PERMITTED, (
+            f"D-12 leg 7: {_key(r.vendor, r.part_number)} carries an "
+            f"AMBIGUOUS_DOC_CITATIONS token {sorted(offending)} but resolved "
+            f"to {GATE_TOKEN_READ_PERMITTED!r}, not a refusal."
+        )
+        for token in offending:
+            note = AMBIGUOUS_DOC_CITATIONS[token]
+            assert distinctive_fragment in note, (
+                "Fixture setup error: the recorded ambiguity note for "
+                f"{token!r} no longer contains the expected distinctive "
+                f"fragment {distinctive_fragment!r}: {note!r}"
+            )
+            assert distinctive_fragment in r.reason, (
+                f"D-12 leg 7: the refusal reason for "
+                f"{_key(r.vendor, r.part_number)} does not surface the "
+                f"recorded ambiguity note's distinctive fragment "
+                f"{distinctive_fragment!r}. Reason was: {r.reason!r}"
+            )
+
+    assert matched_any, (
+        "D-12 leg 7: no real database entry contains an "
+        "AMBIGUOUS_DOC_CITATIONS token -- this leg would be vacuous."
     )
