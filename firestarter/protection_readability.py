@@ -86,7 +86,14 @@ from __future__ import annotations
 # invariant literal; ruff's UP035 (prefer collections.abc) is suppressed below
 # since this file has no runtime dependency on the deprecated alias beyond a
 # lazily-evaluated annotation (`from __future__ import annotations`).
-from typing import Mapping  # noqa: UP035
+from typing import Any, Mapping  # noqa: UP035
+
+# The one import the declared purity invariant admits beyond {__future__,
+# typing} (plan 151-06): `split_part_number_tokens` is not re-implemented
+# here because its no-parenthetical-stripping rule
+# (`120-SDP-PARTITION.md` §5) is a measured correctness requirement, and a
+# second copy would be exactly the drift this codebase keeps removing.
+from firestarter.sdp_capability import split_part_number_tokens
 
 # D-06's three readability states, frozen. `undocumented` deliberately has no
 # backing collection anywhere in this module — it is the complement of the
@@ -119,6 +126,226 @@ REASON_READ_PERMITTED = "every alias documented-readable; silicon read permitted
 # 151-08+) is the only place D-09's eight class tokens are assembled and
 # emitted.
 GATE_TOKEN_READ_PERMITTED: str = "read_permitted"
+# Four of D-09's eight output classes are reachable from THIS module — never
+# `protected` and never `unprotected`, both of which require a real silicon
+# read and therefore live only in `lock_status.py` (plan 151-11), whose
+# signature accepts a device response and this module's does not (D-12 leg
+# 4). The literals below are the same class tokens D-09 names; this module
+# only ever hands one of these five (including GATE_TOKEN_READ_PERMITTED
+# above) back to a caller.
+GATE_TOKEN_NO_MECHANISM: str = "no_mechanism"
+GATE_TOKEN_NOT_IMPLEMENTED: str = "not_implemented"
+GATE_TOKEN_NOT_READABLE: str = "not_readable"
+GATE_TOKEN_UNDOCUMENTED_ALIAS: str = "undocumented_alias"
+
+# ---------------------------------------------------------------------------
+# Protocol-id classification (plan 151-06). Every `protocol-id` value the
+# chip database carries lands in exactly one of these four frozensets, or
+# `protection_gate_for_entry` raises naming the row — there is no default
+# branch. Counts measured directly against the shipped
+# `chip_database.json` (`programming.algorithm`, summed per protocol id);
+# 405 + 40 + 84 + 217 == 746, the full row count.
+NO_MECHANISM_PROTOCOL_IDS: frozenset[int] = frozenset({7, 8, 11, 14, 39, 40, 41})
+# 405 rows — D-09's seven named no-mechanism algorithms: UV-EPROM 0x07
+# (170) / 0x08 (127) / 0x0B (32); SRAM/NVRAM 0x0E (20) / 0x27 (2) / 0x28
+# (34) / 0x29 (20). 170+127+32+20+2+34+20 == 405.
+
+NOT_IMPLEMENTED_PROTOCOL_IDS: frozenset[int] = frozenset({16, 52})
+# 40 rows — OD-2 / 151-DESIGN.md §4's corrected census, superseding
+# VALIDATION.md's earlier figure of 39:
+#   0x10 (16, 39 rows: Intel/AMD/Catalyst/ST) — documented-readable per
+#   `lockable-proms.md`, but this release deliberately does not implement
+#   the read (D-02).
+#   0x34 (52, 1 row: XICOR/X88C64P,X88C64S) — D-09's seven no-mechanism
+#   algorithms sum to 405, not 406; this row is the 406th and lands in no
+#   class under D-09's prose as written. It carries
+#   `support_status: "protocol-not-implemented"` and
+#   `protect_off_before: true`, so classing it `no_mechanism` would assert
+#   an absence of mechanism upstream directly contradicts — the
+#   fabricated claim LOCK-03/LOCK-04 forbid. `not_implemented` is the
+#   honest reading for both members: neither has code in this project that
+#   reads its protection state, for two different reasons.
+
+NOT_READABLE_PROTOCOL_IDS: frozenset[int] = frozenset({13})
+# 84 rows — the 0x0D EEPROM_PARALLEL family LOCK-03 names. No curated
+# token table is consulted for this protocol id: every row is documented
+# as not having a readable protection state (`sdp_capability.py`'s SDP
+# lock/unlock capability is a different question — whether the *command*
+# is safe to send — not whether the *state* is readable back).
+
+CURATION_PROTOCOL_IDS: frozenset[int] = frozenset({5, 6})
+# 217 rows (0x05: 27, 0x06: 190) — the only two protocol ids for which
+# `readability_for_token` (and therefore `DOCUMENTED_READABLE_TOKENS` /
+# `DOCUMENTED_NOT_READABLE_TOKENS` / `AMBIGUOUS_DOC_CITATIONS`) is
+# consulted at all.
+
+
+def protection_gate_for_entry(
+    entry: Mapping[str, Any] | None, display_name: str
+) -> tuple[str, str]:
+    """Resolve one `db.get_eprom()`-shaped full entry dict to one gate token.
+
+    Returns a 2-tuple `(class_token, reason)`. `class_token` is always one
+    of `GATE_TOKEN_NO_MECHANISM`, `GATE_TOKEN_NOT_IMPLEMENTED`,
+    `GATE_TOKEN_NOT_READABLE`, `GATE_TOKEN_UNDOCUMENTED_ALIAS`, or
+    `GATE_TOKEN_READ_PERMITTED` — structurally never `protected` or
+    `unprotected`, neither of which appears anywhere in this module in any
+    quoting style. Those two class tokens require a real silicon read and
+    are assembled only in `lock_status.py` (plan 151-11), whose signature
+    accepts a device response; this function's signature has none, which
+    is the mechanism (not a convention) that makes them unreachable here
+    (D-12 leg 4).
+
+    Guard cascade, one early return per outcome, no single exit:
+
+    1. A falsy `entry` raises `KeyError`. This diverges from
+       `sdp_capability_for_entry`'s analogous guard *deliberately*: that
+       predicate returns a refusal for a not-found chip because a
+       capability question about an unknown chip has a sensible negative
+       answer, but none of D-09's eight classes means "chip unknown", and
+       inventing one would be exactly the fabricated value LOCK-03/LOCK-04
+       forbid. The CLI resolves the chip and raises `ChipNotFoundError`
+       there, before this function is ever called.
+    2. A missing `protocol-id` key raises `KeyError` naming the likely
+       caller mistake — never a silent `.get(..., default)`. See the
+       message body for the historical vacuity this repeats
+       (`check_eprom_blank`'s `_SRAM_PROTO_IDS` short-circuit).
+    3. `protocol-id` in `NO_MECHANISM_PROTOCOL_IDS` ->
+       `GATE_TOKEN_NO_MECHANISM`.
+    4. `protocol-id` in `NOT_IMPLEMENTED_PROTOCOL_IDS` ->
+       `GATE_TOKEN_NOT_IMPLEMENTED`, with a reason distinguishing 0x10 from
+       0x34 (see the frozenset's comment above). Never worded to read as
+       unprotected.
+    5. `protocol-id` in `NOT_READABLE_PROTOCOL_IDS` ->
+       `GATE_TOKEN_NOT_READABLE`.
+    6. `protocol-id` in `CURATION_PROTOCOL_IDS` -> token resolution via
+       `readability_for_token` over every alias in `entry["name"]` (D-06's
+       unanimity rule: one entry, one answer, never a per-token verdict).
+       Any `undocumented` offending token -> `GATE_TOKEN_UNDOCUMENTED_ALIAS`;
+       else any `documented-not-readable` offending token ->
+       `GATE_TOKEN_NOT_READABLE`; else -> `GATE_TOKEN_READ_PERMITTED`. The
+       refusal reason names every offending alias with its state, and
+       appends the recorded `AMBIGUOUS_DOC_CITATIONS` note for any token
+       that is a key of that mapping, so a C-17 disagreement surfaces in
+       the refusal rather than sitting inert in the module.
+    7. Any other `protocol-id` raises `ValueError` naming both the numeric
+       id and the display name. No default branch exists: a new DB row
+       with a novel algorithm must make this walk fail loudly, naming the
+       row, rather than silently landing in a class or a permission it was
+       never adjudicated for.
+
+    Note for future editors touching this function: no branch above reads
+    `entry["programming"]` fields (`protect_on_after` / `protect_off_before`)
+    — classification here is entirely by `protocol-id` membership or by
+    curated alias token, never by those two advisory fields. If a future
+    edit ever needs to read them, use `.get(...)` with a strict `is True`
+    comparison, never a direct subscript: two of the 746 rows (both
+    protocol 11 / `NO_MECHANISM_PROTOCOL_IDS`, resolved at step 3 without
+    touching either field) carry neither key at all.
+
+    Pure: no serial, no Click, no DB construction, no file I/O. Two calls
+    on the same input return equal tuples.
+    """
+    if not entry:
+        raise KeyError(
+            f"protection_gate_for_entry: no entry for {display_name.upper()!r}. "
+            "The caller must resolve the chip before asking about its "
+            "protection state -- a falsy/None entry means the caller did "
+            "not. None of D-09's eight output classes means 'chip "
+            "unknown', so this function never invents one; the CLI must "
+            "resolve the chip via db.get_eprom() and raise "
+            "ChipNotFoundError before ever reaching this predicate."
+        )
+
+    if "protocol-id" not in entry:
+        raise KeyError(
+            f"protection_gate_for_entry: entry for {display_name.upper()!r} "
+            "has no 'protocol-id' key. This is very likely the "
+            "*programmer* dict returned by resolve_chip()/"
+            "convert_to_programmer(), which carries neither 'protocol-id' "
+            "nor 'name' -- pass the full dict returned by db.get_eprom() "
+            "instead. A silent default here is exactly how "
+            "check_eprom_blank's _SRAM_PROTO_IDS short-circuit became "
+            "vacuous in production; this predicate hard-fails instead of "
+            "guessing."
+        )
+
+    protocol_id = entry["protocol-id"]
+
+    if protocol_id in NO_MECHANISM_PROTOCOL_IDS:
+        return GATE_TOKEN_NO_MECHANISM, (
+            f"{display_name.upper()}: {REASON_NO_MECHANISM}"
+        )
+
+    if protocol_id in NOT_IMPLEMENTED_PROTOCOL_IDS:
+        if protocol_id == 0x10:
+            detail = (
+                "documented readable per lockable-proms.md, but this "
+                "release implements no read for protocol 0x10 (D-02)"
+            )
+        else:
+            detail = (
+                "no protocol handler exists for this part at all "
+                "(support_status: protocol-not-implemented)"
+            )
+        return GATE_TOKEN_NOT_IMPLEMENTED, (
+            f"{display_name.upper()}: {REASON_NOT_IMPLEMENTED} ({detail})"
+        )
+
+    if protocol_id in NOT_READABLE_PROTOCOL_IDS:
+        return GATE_TOKEN_NOT_READABLE, (
+            f"{display_name.upper()}: {REASON_NOT_READABLE}"
+        )
+
+    if protocol_id in CURATION_PROTOCOL_IDS:
+        tokens = split_part_number_tokens(entry.get("name") or display_name)
+        offending = [
+            (token, readability_for_token(token))
+            for token in tokens
+            if readability_for_token(token) != READABILITY_STATES[0]
+        ]
+        described = []
+        for token, state in offending:
+            annotation = f"{token} ({state})"
+            ambiguity_note = AMBIGUOUS_DOC_CITATIONS.get(token)
+            if ambiguity_note:
+                annotation = f"{annotation} [{ambiguity_note}]"
+            described.append(annotation)
+
+        if any(state == READABILITY_STATES[2] for _token, state in offending):
+            return GATE_TOKEN_UNDOCUMENTED_ALIAS, (
+                f"{display_name.upper()}: {REASON_UNDOCUMENTED_ALIAS}: "
+                f"{'; '.join(described)}"
+            )
+        if any(state == READABILITY_STATES[1] for _token, state in offending):
+            return GATE_TOKEN_NOT_READABLE, (
+                f"{display_name.upper()}: {REASON_NOT_READABLE}: {'; '.join(described)}"
+            )
+        return GATE_TOKEN_READ_PERMITTED, (
+            f"{display_name.upper()}: {REASON_READ_PERMITTED}"
+        )
+
+    raise ValueError(
+        f"protection_gate_for_entry: protocol-id {protocol_id} for "
+        f"{display_name.upper()!r} is not classed by this module. Every "
+        "protocol id must land in NO_MECHANISM_PROTOCOL_IDS, "
+        "NOT_IMPLEMENTED_PROTOCOL_IDS, NOT_READABLE_PROTOCOL_IDS or "
+        "CURATION_PROTOCOL_IDS -- a synthetic or newly-added algorithm "
+        "must be classed there before this row can be answered. No "
+        "default branch exists; a silent fallback would make D-12 leg 6's "
+        "exhaustiveness walk unwritable."
+    )
+
+
+def protection_gate(chip_name: str, db: Any) -> tuple[str, str]:
+    """Name-keyed wrapper: `protection_gate_for_entry(db.get_eprom(chip_name), chip_name)`.
+
+    So a caller cannot accidentally reach the predicate with a programmer
+    dict from `resolve_chip()`/`convert_to_programmer()` — it always goes
+    through `db.get_eprom()` first, mirroring `sdp_capability()`'s wrapper.
+    """
+    return protection_gate_for_entry(db.get_eprom(chip_name), chip_name)
+
 
 # ---------------------------------------------------------------------------
 # The 273-token curated surface: algorithms 0x05 (Winbond/Atmel/SST 5V
