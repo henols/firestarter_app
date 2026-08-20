@@ -83,7 +83,16 @@ from firestarter.exceptions import (
 )
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.hardware import HardwareManager
+from firestarter.lock_status import (
+    classify_protection_response,
+    exit_code_for_class,
+    render_lock_status,
+)
 from firestarter.logging_utils import SingleLineStatusHandler
+from firestarter.protection_readability import (
+    GATE_TOKEN_READ_PERMITTED,
+    protection_gate_for_entry,
+)
 from firestarter.sdp_capability import SDP_PROTOCOL_ID, sdp_capability
 
 logger = logging.getLogger("Firestarter")
@@ -1723,6 +1732,93 @@ if _DEV_TOOLS_ENABLED:
             output_dir=output_dir,
         )
         sys.exit(0 if ok else 1)
+
+
+# ---------------------------------------------------------------------------
+# dev lock-status (Phase 151 / LOCK-02, LOCK-03, LOCK-04 -- D-01, D-04, D-06,
+# D-07, D-08, D-10). D-01 chose a real silicon read exposed only on a
+# pre-release install, deliberately overruling the host-only recommendation,
+# so this command lives inside the same `_DEV_TOOLS_ENABLED` gate every
+# other bench subcommand above does.
+# ---------------------------------------------------------------------------
+
+if _DEV_TOOLS_ENABLED:
+
+    @dev.command(name="lock-status")
+    @click.argument("eprom", shell_complete=_complete_eprom)
+    @click.option(
+        "-f",
+        "--force",
+        is_flag=True,
+        help=(
+            "Proceed past a table refusal anyway (D-07). The result is an "
+            "unadjudicated probe, never a state claim -- and this never sets "
+            "a wire-visible flag (C-16): the table refusal it bypasses is a "
+            "host-side decision only."
+        ),
+    )
+    @click.pass_obj
+    @map_typed_errors
+    def dev_lock_status(app: AppContext, eprom: str, force: bool) -> None:
+        """Diagnostic read of a chip's write-protection state -- not a guarantee (D-01)."""
+        # D-04: resolve through db.get_eprom(), never resolve_chip()'s
+        # programmer dict -- that dict carries neither 'protocol-id' nor
+        # 'name', the exact shape protection_gate_for_entry hard-fails on.
+        # This is the last place in this handler with both the chip NAME
+        # and app.db, mirroring write()'s own D-04 idiom above.
+        entry = app.db.get_eprom(eprom)
+        if not entry:
+            raise ChipNotFoundError(f"{eprom}: not found in database")
+
+        gate_token, gate_reason = protection_gate_for_entry(entry, eprom)
+
+        if gate_token != GATE_TOKEN_READ_PERMITTED and not force:
+            # The table already refused, from the database alone -- this
+            # needs no hardware. Rendered from the predicate's OWN
+            # gate_token/gate_reason directly (never through
+            # classify_protection_response, whose generic boilerplate for a
+            # passed-through refusal would discard the specific offending
+            # alias(es) protection_gate_for_entry already named). Open no
+            # serial port on this path: a refusal that still opened the
+            # port would make a refusal indistinguishable from a comms
+            # failure.
+            click.echo(render_lock_status(gate_token, gate_reason, None))
+            sys.exit(exit_code_for_class(gate_token))
+
+        # Either the table permits the read, or --force is bypassing its
+        # refusal (D-07). Both dicts are needed from here on: get_eprom()
+        # fed the predicate above; resolve_chip() is what the firmware
+        # operation itself needs.
+        eprom_data = resolve_chip(eprom, db=app.db)
+        try:
+            _accepted, payload = app.eprom_operator.read_protection_status(
+                eprom, eprom_data, operation_flags=_build_op_flags()
+            )
+        except EpromOperationError as exc:
+            # D-04, keyed on the message **id**, never on text -- a version
+            # probe cannot work here because _probe_port's [\d.x]+ truncates
+            # the pre-release suffix, so it cannot distinguish the beta that
+            # has this command from the beta that does not, and would have
+            # to refuse both. map_unknown_cmd_to_outdated_for_operation
+            # returns rather than raises, so this caller owns the chaining.
+            outdated = sdp_honesty.map_unknown_cmd_to_outdated_for_operation(
+                exc, "lock-status", eprom
+            )
+            if outdated is None:
+                raise
+            class_token = "firmware_outdated"
+            click.echo(render_lock_status(class_token, str(outdated), None))
+            raise SystemExit(exit_code_for_class(class_token)) from exc
+
+        # classify_protection_response's forced-past-refusal guard runs
+        # before the payload is ever consulted, so a forced read on a
+        # refused part can never become a state claim here either.
+        class_token, reason = classify_protection_response(
+            gate_token, payload, forced=force
+        )
+        raw_byte = payload[0] if payload else None
+        click.echo(render_lock_status(class_token, reason, raw_byte))
+        sys.exit(exit_code_for_class(class_token))
 
 
 # ---------------------------------------------------------------------------

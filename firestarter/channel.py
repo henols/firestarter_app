@@ -47,14 +47,18 @@ logger = logging.getLogger("Channel")
 # target is bench-validated.
 BETA_ONLY_BOARDS: tuple[str, ...] = ("py32f071",)
 
-# The six `dev` subcommands gated by channel on a stable build (136-CONTEXT.md
-# "Measured baseline": 8 total `dev` subcommands, minus `read`/`test` which
-# stable keeps). Consulted for the informative-refusal message ONLY, by
-# `_DevGroup.get_command` in `cli_handlers.py` (plan 136-02) — the actual gate
-# is non-registration of the six `@dev.command` blocks, not membership in this
-# tuple, so this list existing or not existing changes nothing about whether a
-# command runs; it only changes whether its refusal is informative or Click's
-# own generic "No such command".
+# The seven `dev` subcommands gated by channel on a stable build
+# (136-CONTEXT.md "Measured baseline": 8 total `dev` subcommands, minus
+# `read`/`test` which stable keeps, PLUS Phase 151 / D-01's `lock-status` —
+# a real silicon read D-01 deliberately overruled the host-only
+# recommendation to expose, only on a pre-release install — bringing the
+# total to 9 and the gated count to seven, up by one). Consulted for the
+# informative-refusal message ONLY, by `_DevGroup.get_command` in
+# `cli_handlers.py` (plan 136-02) — the actual gate is non-registration of
+# the seven `@dev.command` blocks, not membership in this tuple, so this
+# list existing or not existing changes nothing about whether a command
+# runs; it only changes whether its refusal is informative or Click's own
+# generic "No such command".
 BETA_ONLY_DEV_COMMANDS: tuple[str, ...] = (
     "reg",
     "addr",
@@ -62,6 +66,7 @@ BETA_ONLY_DEV_COMMANDS: tuple[str, ...] = (
     "write-cycle",
     "fault-inject",
     "validate-family",
+    "lock-status",
 )
 
 
@@ -152,7 +157,7 @@ def is_dev_tools_enabled() -> bool:
     This function itself is call-time and unmemoized, like
     `dev_tools_enabled_by_env()`. A caller that needs an IMPORT-TIME-FROZEN
     decision — e.g. Click command registration, which must decide once,
-    at import, which of the six gated `dev` subcommands to attach — must
+    at import, which of the seven gated `dev` subcommands to attach — must
     capture this into its own module global at import time, exactly as
     `_BOARD_CHOICES` / `_PY32_ENABLED` already do in `cli_handlers.py` for
     boards. Calling this function directly from inside a Click callback body
