@@ -137,6 +137,43 @@ The full 32-bit `flags` value is forwarded to TL866II+ firmware. Bits 3/6/7 may 
 
 ---
 
+<a id="protect-flags-bits-14-15"></a>
+
+### `protect_off_before` / `protect_on_after` (flags bits 14/15) — DECODE CONFIRMED; NO RUNTIME CONSUMER
+
+**Source:** [`database.c#L39`](https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c#L39)–[`L50`](https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c#L50) @ `a8efaedc`
+
+This is the single authoritative statement about these two `flags` bits' *emitted field* — what `protect_off_before` and `protect_on_after` mean, how often they are set, and (the point of this section) that nothing in this project consumes them yet. The `flags` **bit table** above, and the two other bit tables in `doc/package-details.md` and `doc/protocol-flags.md`, document minipro's *bit* semantics only — each carries a one-line pointer back to this section rather than repeating any of the measurement below (D-13). Covering both siblings here, in one place, is deliberate: documenting one and leaving the other silently unexplained would reproduce the exact condition this section exists to end.
+
+**What the bits are.** Bit 14 (`0x00004000`, `MP_OFF_PROTECT_BEFORE`) means the programmer can or must unprotect the part before a write — it gates minipro's `-u` flag. Bit 15 (`0x00008000`, `MP_PROTECT_AFTER`) means the programmer can re-protect the part after a write — it gates minipro's `-P` flag. **`MP_PROTECT_AFTER` is a capability, not a policy: it says the programmer *can* re-protect, never that anything should or does.**
+
+**The measurement, not a shrug.** Measured against the committed `chip_database.json` (746 rows, `programming.protect_off_before` / `programming.protect_on_after`):
+
+- `protect_on_after`: `true` on **70 of 746** rows, `false` on 674, key **absent** on 2. By algorithm: `5` → **27 of 27** (a constant there), `13` → 43. Zero on every other algorithm.
+- `protect_off_before`: `true` on **148 of 746**, `false` on 596, key absent on 2. By algorithm: `5` → 27 of 27, `6` → 77 of 190, `13` → 43 of 84, `52` → 1 of 1.
+- **744 of 746** rows carry both fields. The two that do not are `TEXAS INSTRUMENTS` `2516` and `2532` (both algorithm 11, UV-EPROM), whose `programming` dict holds only `{algorithm, chip_id_check, chip_id_value, pulse_duration_us}`. Code that indexes either field directly (`programming["protect_on_after"]`) raises `KeyError` on exactly those two rows — read with `.get(...)` and a strict `is True` comparison, never a bare subscript.
+
+**The promotion split, stated rather than the headline.** On `algorithm: 13`, 66 of the 84 rows are promoted into `0x0D` by `build_db.py`'s `classify()` from a foreign upstream protocol, and both bits are decoded from the **upstream** `flags` value before that reassignment happens. So the "43" decomposes as **18 of 18 upstream-native `0x0D` rows plus 25 of the 66 promoted rows** — 100% of the native rows and 38% of the promoted ones. It is not a property of the 28C family as a whole. `protect_off_before` splits identically: 18 of 18 native, 25 of 66 promoted.
+
+**Why no consumer exists, and that it is not honoured.** No runtime consumer exists in this release **because `write --sdp-relock` is deferred to Backlog 999.28** — the field is advisory upstream metadata with no runtime effect. The evidence, enumerated so the claim is checkable rather than asserted:
+
+- in the shipped package `firestarter_app/firestarter/`, the only occurrences of either name are **comments or docstring prose** — `sdp_capability.py:74` (a provenance comment) and `protection_readability.py:163` / `:238` (a comment and a docstring note, the latter stating explicitly that no branch in that module reads either field); no code anywhere in the shipped package reads either field;
+- in `firestarter_app/tools/`, `build_db.py:800-801` writes them, and `derive_sdp_partition.py` reads `protect_on_after` to cross-check — a standalone reproducibility script that is never imported by production code or by the pytest suite and is never wired into CI;
+- in `firestarter_app/tests/`, only `test_sdp_db_invariant.py` and `test_b15_page_size_corroboration.py`;
+- nothing in the firmware repository references either field, and neither reaches the wire: `convert_to_programmer`'s output keys are `memory-size`, `algorithm`, `pin-count`, `vpp_mv`, `pulse-delay`, and optionally `chip-id`, `bus-config` and `page_size`.
+
+**The one place the field is discriminating, with its existing proof cited.** The `0x0D` ALLOW/REFUSE split, which `sdp_capability.SDP_CAPABLE_TOKENS` already transcribes, and which `tests/test_sdp_db_invariant.py::test_sdp_partition_matches_infoic_derived_field_element_wise` already proves element-wise equal to the `protect_on_after` field.
+
+**One sentence on `protect_off_before`'s `algorithm: 6` correlation.** 77 of 190 rows on algorithm 6 (the AMD Autoselect family) carry `protect_off_before: true` — suggestive given that family's readable sector-protect status, but explicitly **non-derivable**: the negative-result note's verdict stands and is not relitigated here — bits 14/15 cannot derive protection *readability*, because `W29C020C`, a readable permanent boot block, is flag-identical (`0x0040c078`) to `W29EE011`, which is SDP-only and unreadable, and the whole AMD Autoselect readable group (e.g. `AM29F010,AM29F010B`, `SST39SF010,SST39SF010A`, `AT49F040,AT49F040A`) carries `0x00000078` with both bits clear.
+
+**What this section does not claim.** That either field is honoured by any runtime code; that either field derives protection readability; that `write --sdp-relock` ships or will ship; anything about AT28C or `0x0D` silicon validation.
+
+**Known-Bugs summary table.** No row is owed in the `## Summary: build_db.py Known Bugs vs Correct Semantics` table below: the decode of bits 14/15 is correct (`flags & 0x4000` / `flags & 0x8000`, matching the `MP_*` constants exactly), so this is not a `BUG-N` — it is a documentation gap that this section closes, not a decode defect.
+
+**build_db.py usage:** `protect_off_before = True if (flags & 0x4000) else False`; `protect_on_after = True if (flags & 0x8000) else False` (`tools/build_db.py:800-801`) — both correct, unconditional decodes of the upstream `flags` value, emitted on every row that carries a `flags` attribute.
+
+---
+
 ### `voltages` (uint32 hex) — CONFIRMED
 
 **Source:** [`database.c#L921`](https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c#L921)–[`L923`](https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c#L923) and [`database.c#L680`](https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c#L680)–[`L685`](https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c#L685) @ `a8efaedc`
@@ -244,7 +281,7 @@ Total addressable bytes. Example: 27C512 = `0x10000` = 65536 bytes. Used as firm
 
 Page-write size for EEPROM/Flash. Typically 64 or 128 bytes for 28C-family; `0` or `1` if not applicable to the device type.
 
-**build_db.py usage:** Not currently stored in `chip_database.json`. No decode bug; simply not used yet.
+**build_db.py usage:** **Correction, 2026-08-20:** measured against the committed `chip_database.json`, **20 rows carry `programming.page_size`** (the provenance-keyed emit arm added in Phase 149) and **744 rows carry `programming.infoic_page_size_raw`** (the raw upstream value, added in Phase 136.1) — this field is no longer universally unstored.
 
 ---
 
