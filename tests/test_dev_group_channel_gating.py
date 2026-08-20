@@ -57,9 +57,12 @@ _APP_DIR = Path(__file__).parent.parent
 _STABLE_VERSION = "3.0.0"
 _PRERELEASE_VERSION = "3.0.0b1"
 
-# The six gated dev subcommands + the two that stay on every channel --
+# The seven gated dev subcommands + the two that stay on every channel --
 # literals here, not imported from channel.py, so this test does not become
-# trivially self-confirming against the very module it is proving.
+# trivially self-confirming against the very module it is proving. Phase 151
+# / D-01 added "lock-status" as a seventh gated name, bringing the union with
+# _STABLE_NAMES from eight to nine -- _ALL_NINE_NAMES below is named for that
+# count, not the pre-151 one.
 _GATED_NAMES = frozenset(
     {
         "reg",
@@ -68,10 +71,11 @@ _GATED_NAMES = frozenset(
         "write-cycle",
         "fault-inject",
         "validate-family",
+        "lock-status",
     }
 )
 _STABLE_NAMES = frozenset({"read", "test"})
-_ALL_EIGHT_NAMES = _GATED_NAMES | _STABLE_NAMES
+_ALL_NINE_NAMES = _GATED_NAMES | _STABLE_NAMES
 
 # The child program, run via `python -c`. Order is load-bearing (see module
 # docstring): `firestarter` is imported bare first; the preamble then asserts
@@ -201,7 +205,7 @@ def _run_cli(
 
 def test_simulated_stable_help_lists_only_read_and_test() -> None:
     """CHAN-01: `dev --help` on a simulated-stable build lists only `read`
-    and `test`, never the six gated names."""
+    and `test`, never the seven gated names."""
     result = _run_cli(_STABLE_VERSION, ("dev", "--help"))
     assert "read" in result.output
     assert "test" in result.output
@@ -219,7 +223,7 @@ def test_simulated_stable_dev_tools_enabled_is_false() -> None:
 
 def test_simulated_stable_dev_commands_is_exactly_read_and_test() -> None:
     """CHAN-02, proven by direct registry introspection -- the stronger,
-    exact-set assertion, not just 'excludes the six'."""
+    exact-set assertion, not just 'excludes the seven'."""
     result = _run_cli(_STABLE_VERSION, ("dev", "--help"))
     assert set(result.dev_commands) == _STABLE_NAMES
 
@@ -253,9 +257,9 @@ def test_simulated_stable_genuine_typo_gets_clicks_generic_message() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_simulated_prerelease_help_lists_all_eight() -> None:
+def test_simulated_prerelease_help_lists_all_nine() -> None:
     result = _run_cli(_PRERELEASE_VERSION, ("dev", "--help"))
-    for name in _ALL_EIGHT_NAMES:
+    for name in _ALL_NINE_NAMES:
         assert name in result.output, (
             f"{name!r} missing from simulated-prerelease dev --help output"
         )
@@ -266,9 +270,9 @@ def test_simulated_prerelease_dev_tools_enabled_is_true() -> None:
     assert result.dev_tools_enabled is True
 
 
-def test_simulated_prerelease_dev_commands_is_all_eight() -> None:
+def test_simulated_prerelease_dev_commands_is_all_nine() -> None:
     result = _run_cli(_PRERELEASE_VERSION, ("dev", "--help"))
-    assert set(result.dev_commands) == _ALL_EIGHT_NAMES
+    assert set(result.dev_commands) == _ALL_NINE_NAMES
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +298,7 @@ def test_dev_help_differs_between_channels_and_is_pinned_each_way() -> None:
 
     assert stable.output != prerelease.output
     assert set(stable.dev_commands) == _STABLE_NAMES
-    assert set(prerelease.dev_commands) == _ALL_EIGHT_NAMES
+    assert set(prerelease.dev_commands) == _ALL_NINE_NAMES
 
     # Pin each channel's own output independently -- both directions.
     for gated in _GATED_NAMES:
@@ -310,9 +314,9 @@ def test_dev_help_differs_between_channels_and_is_pinned_each_way() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_simulated_stable_with_env_override_registers_all_six_gated_names() -> None:
+def test_simulated_stable_with_env_override_registers_all_seven_gated_names() -> None:
     """On simulated-stable WITH FIRESTARTER_DEV_TOOLS=1 set in the child's
-    environment before import, all six gated names ARE registered -- the
+    environment before import, all seven gated names ARE registered -- the
     bench override overrides the channel signal."""
     result = _run_cli(
         _STABLE_VERSION,
@@ -320,7 +324,7 @@ def test_simulated_stable_with_env_override_registers_all_six_gated_names() -> N
         env_overrides={"FIRESTARTER_DEV_TOOLS": "1"},
     )
     assert result.dev_tools_enabled is True
-    assert set(result.dev_commands) == _ALL_EIGHT_NAMES
+    assert set(result.dev_commands) == _ALL_NINE_NAMES
     for gated in _GATED_NAMES:
         assert gated in result.output
 

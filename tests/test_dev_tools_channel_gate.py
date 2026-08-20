@@ -147,6 +147,8 @@ def test_dev_command_gate_message_varies_by_name() -> None:
 
 
 def test_beta_only_dev_commands_matches_measured_baseline() -> None:
+    """Phase 151 / D-01 appended "lock-status" as the seventh gated name;
+    this pins the exact 7-tuple, never relaxed to a membership check."""
     assert channel.BETA_ONLY_DEV_COMMANDS == (
         "reg",
         "addr",
@@ -154,6 +156,7 @@ def test_beta_only_dev_commands_matches_measured_baseline() -> None:
         "write-cycle",
         "fault-inject",
         "validate-family",
+        "lock-status",
     )
 
 
