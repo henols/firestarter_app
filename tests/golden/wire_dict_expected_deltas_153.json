@@ -1,0 +1,265 @@
+{
+  "deltas": {
+    "AMD|AM28C16A|22": {
+      "flags": 2
+    },
+    "AMD|AM28C17A|23": {
+      "flags": 2
+    },
+    "AMD|AM28C64A,AM28C64AE,AM28C64B,AM28C64BE|24": {
+      "flags": 2
+    },
+    "ATMEL|AT28BV256,AT28LV256|21": {
+      "flags": 2
+    },
+    "ATMEL|AT28BV64,AT28LV64|19": {
+      "flags": 2
+    },
+    "ATMEL|AT28BV64B,AT28LV64B|20": {
+      "flags": 2
+    },
+    "ATMEL|AT28C010,AT28C010E|22": {
+      "flags": 2
+    },
+    "ATMEL|AT28C04,AT28HC04|23": {
+      "flags": 2
+    },
+    "ATMEL|AT28C040,AT28C040E|25": {
+      "flags": 2
+    },
+    "ATMEL|AT28C04E,AT28C04F|24": {
+      "flags": 2
+    },
+    "ATMEL|AT28C16,AT28HC16,AT28HC16L|26": {
+      "flags": 2
+    },
+    "ATMEL|AT28C16E,AT28C16F|27": {
+      "flags": 2
+    },
+    "ATMEL|AT28C17E,AT28C17F|29": {
+      "flags": 2
+    },
+    "ATMEL|AT28C17|28": {
+      "flags": 2
+    },
+    "ATMEL|AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L|30": {
+      "flags": 2
+    },
+    "ATMEL|AT28C64,AT28C64B(Non-Standard),AT28HC64,AT28HC64L|31": {
+      "flags": 2
+    },
+    "ATMEL|AT28C64B,AT28HC64B,AT28HC64BF|32": {
+      "flags": 2
+    },
+    "ATMEL|AT28C64E,AT28C64F|33": {
+      "flags": 2
+    },
+    "ATMEL|AT28LV010|34": {
+      "flags": 2
+    },
+    "ATMEL|AT28MC010|35": {
+      "flags": 2
+    },
+    "ATMEL|AT28MC020|36": {
+      "flags": 2
+    },
+    "ATMEL|AT28MC040|37": {
+      "flags": 2
+    },
+    "ATMEL|AT28PC64,AT28PC64E|38": {
+      "flags": 2
+    },
+    "CATALYST(CSI)|CAT28C010|13": {
+      "flags": 2
+    },
+    "CATALYST(CSI)|CAT28C020|14": {
+      "flags": 2
+    },
+    "CATALYST(CSI)|CAT28C040|15": {
+      "flags": 2
+    },
+    "CATALYST(CSI)|CAT28C16A,CAT28C16AI|7": {
+      "flags": 2
+    },
+    "CATALYST(CSI)|CAT28C17A|8": {
+      "flags": 2
+    },
+    "CATALYST(CSI)|CAT28C256,CAT28C257|9": {
+      "flags": 2
+    },
+    "CATALYST(CSI)|CAT28C512|12": {
+      "flags": 2
+    },
+    "CATALYST(CSI)|CAT28C64A,CAT28C65|10": {
+      "flags": 2
+    },
+    "CATALYST(CSI)|CAT28C64B|11": {
+      "flags": 2
+    },
+    "CATALYST(CSI)|CAT28LV256|17": {
+      "flags": 2
+    },
+    "CATALYST(CSI)|CAT28LV64,CAT28LV65|16": {
+      "flags": 2
+    },
+    "CYPRESS|FM28V020|8": {
+      "flags": 2
+    },
+    "EXEL|XL2804A|0": {
+      "flags": 2
+    },
+    "EXEL|XL2816A,XLE28C16A,XLS28C16A|1": {
+      "flags": 2
+    },
+    "EXEL|XLE2865A,XLS2865A|2": {
+      "flags": 2
+    },
+    "EXEL|XLE28C16B,XLS28C16B|3": {
+      "flags": 2
+    },
+    "EXEL|XLE28C256,XLS28C256|6": {
+      "flags": 2
+    },
+    "EXEL|XLE28C64A,XLS28C64A|4": {
+      "flags": 2
+    },
+    "EXEL|XLE28C64B,XLS28C64B|5": {
+      "flags": 2
+    },
+    "FUJITSU|MB85R256H|0": {
+      "flags": 2
+    },
+    "HITACHI|HN58C256AP|13": {
+      "flags": 2
+    },
+    "MAXWELL|28C010,28C010T,28C011,28C011T|0": {
+      "flags": 2
+    },
+    "MICROCHIP memory|2804|8": {
+      "flags": 2
+    },
+    "MICROCHIP memory|2816|9": {
+      "flags": 2
+    },
+    "MICROCHIP memory|2817|10": {
+      "flags": 2
+    },
+    "MICROCHIP memory|28C04AF|12": {
+      "flags": 2
+    },
+    "MICROCHIP memory|28C04A|11": {
+      "flags": 2
+    },
+    "MICROCHIP memory|28C16AF|14": {
+      "flags": 2
+    },
+    "MICROCHIP memory|28C16A|13": {
+      "flags": 2
+    },
+    "MICROCHIP memory|28C17AF|16": {
+      "flags": 2
+    },
+    "MICROCHIP memory|28C17A|15": {
+      "flags": 2
+    },
+    "MICROCHIP memory|28C256,28C256F|17": {
+      "flags": 2
+    },
+    "MICROCHIP memory|28C64AF|19": {
+      "flags": 2
+    },
+    "MICROCHIP memory|28C64A|18": {
+      "flags": 2
+    },
+    "MICROCHIP memory|28C64B|20": {
+      "flags": 2
+    },
+    "MICROCHIP memory|28LV64A|21": {
+      "flags": 2
+    },
+    "NEC|UPD28C04|11": {
+      "flags": 2
+    },
+    "NEC|UPD28C256|12": {
+      "flags": 2
+    },
+    "NEC|UPD28C64|13": {
+      "flags": 2
+    },
+    "SAMSUNG|KM28C64A,KM28C65A|1": {
+      "flags": 2
+    },
+    "SAMSUNG|KM28C64|0": {
+      "flags": 2
+    },
+    "SGS-THOMSON|M28010|18": {
+      "flags": 2
+    },
+    "SGS-THOMSON|M28C64,M28C64A|19": {
+      "flags": 2
+    },
+    "SGS-THOMSON|M28C64-xxW|20": {
+      "flags": 2
+    },
+    "ST|M28010|15": {
+      "flags": 2
+    },
+    "ST|M28256|16": {
+      "flags": 2
+    },
+    "ST|M28C64,M28C64A|17": {
+      "flags": 2
+    },
+    "ST|M28C64-xxW|18": {
+      "flags": 2
+    },
+    "ST|M28LV64|23": {
+      "flags": 2
+    },
+    "WED|WE128K8|0": {
+      "flags": 2
+    },
+    "WED|WE256K8|1": {
+      "flags": 2
+    },
+    "WED|WE512K8|2": {
+      "flags": 2
+    },
+    "WED|WME128K8|3": {
+      "flags": 2
+    },
+    "XICOR|X2804A,X2804AI|0": {
+      "flags": 2
+    },
+    "XICOR|X2816A|1": {
+      "flags": 2
+    },
+    "XICOR|X2816B,X2816C|2": {
+      "flags": 2
+    },
+    "XICOR|X28256,X28C256|3": {
+      "flags": 2
+    },
+    "XICOR|X2864AP|4": {
+      "flags": 2
+    },
+    "XICOR|X28C010|5": {
+      "flags": 2
+    },
+    "XICOR|X28C64(NonStandard),X28HC64(NonStandard)|7": {
+      "flags": 2
+    },
+    "XICOR|X28C64,X28HC64|6": {
+      "flags": 2
+    }
+  },
+  "meta": {
+    "decision": "D-153-05: Phase 148 golden (tests/golden/wire_dict_baseline.json) is preserved byte-unchanged. This file is the committed, reviewable expected-delta list Phase 153 (ERASE-03) FLAG_CAN_ERASE restoration produces on top of the golden plus the Phase 149 delta layer -- the golden itself is never re-captured or re-baselined to make this change disappear.",
+    "cause": "database.py convert_to_programmer no longer excludes algorithm 13 from the FLAG_CAN_ERASE exclusion tuple (was (5, 13), now (5,)); algorithm 5 stays excluded for its own unrelated hardware-hazard reason.",
+    "counts": "Exactly 84 changed records out of 746 total. One changed field: flags. Old value 0 (FLAG_CAN_ERASE clear), new value 2 (FLAG_CAN_ERASE set) in every one of them.",
+    "scope_proof": "Algorithm 5 rows and UV-EPROM rows are deliberately absent from this list -- their flags stay 0, confirming the change is scoped to exactly the 84 algorithm-13 rows and nothing else.",
+    "requirement": "ERASE-03",
+    "phase": "153-write-path-erase-policy",
+    "how_to_update": "A new delta must name the chips and the reason in the commit message. Generated programmatically from the live capture against the committed golden plus the 149 delta layer -- never transcribed by hand."
+  }
+}
