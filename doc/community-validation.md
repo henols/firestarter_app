@@ -44,10 +44,12 @@ The auto-tag derivation lives in `build_db_diff(name, db, results)`
 - no-change / empty-results fallback → `ladder_state = ""` (no tag)
 
 `ladder_state` is exposed once, on `DbDiff`, and flows through
-`DiagnosticReport.to_dict()['db_diff']['ladder_state']` into **both**
-`render()` (the `rich` table) and `to_json_block()` (the fenced JSON a
-`--submit` issue body embeds) — a single source, never a second
-hand-maintained field list.
+`DiagnosticReport.to_dict()['db_diff']['ladder_state']` into
+`to_json_block()` (the fenced JSON a `--submit` issue body embeds) — a
+single source, never a second hand-maintained field list. (Quick task
+260821-spg removed `db_diff`'s row from `render()`'s console table
+entirely — the table no longer carries `db_diff` at all — so
+`ladder_state` now reaches only the JSON surface, not the `rich` table.)
 
 **`community-confirmed` is never a string `build_db_diff` can produce.** It
 exists in this document (and as a named-but-unused constant in

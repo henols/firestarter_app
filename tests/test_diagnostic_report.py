@@ -832,6 +832,14 @@ def test_module_never_writes_support_status():
 
 
 def test_report_composes_db_diff_from_single_source():
+    """RPT-01 single-source: `render()` reads `self.to_dict()`, never a
+    parallel field list or a re-parse of the JSON string. Quick task
+    260821-spg removed `db_diff`'s console row entirely (it now reaches
+    only `to_json_block()`, doc'd in `doc/community-validation.md`), so
+    this test no longer asserts `db_diff` content appears in the RENDERED
+    table -- it asserts the payload (`to_dict()`) and the single-source
+    mechanism (`render()`'s own source calling `to_dict()`, never
+    `json.load(s)`), which is what the claim actually needs."""
     from firestarter.diagnostic_report import build_db_diff
 
     report = _build_report()
@@ -843,16 +851,13 @@ def test_report_composes_db_diff_from_single_source():
     assert d["db_diff"]["current_support_status"] == "adapter-required"
     assert d["db_diff"]["proposed_disposition"] == report.db_diff.proposed_disposition
 
-    table = report.render()
+    report.render()
     # render() must read the SAME to_dict() output -- never a parallel field
     # list, never a re-parse of the JSON string (RPT-01 single-source).
     src = inspect.getsource(type(report).render)
     assert "self.to_dict()" in src or "to_dict()" in src
     assert "json.loads" not in src
     assert "json.load(" not in src
-
-    rendered_fields = {str(cell) for column in table.columns for cell in column.cells}
-    assert any("adapter-required" in cell for cell in rendered_fields)
 
 
 def test_report_without_db_diff_is_null():
@@ -1197,3 +1202,202 @@ def test_schema_version_is_one_four():
 
     report = _minimal_report()
     assert report.to_dict()["schema_version"] == SCHEMA_VERSION
+
+
+# ---------------------------------------------------------------------------
+# Hex-render protocol / chip IDs, noise-row removal (quick task 260821-spg)
+#
+# `_hex_cell` does not exist yet when these tests are first run -- they are
+# added ahead of the implementation (RED) so the helper's contract is pinned
+# by a failing test before it exists, then implemented to GREEN. All render
+# assertions use the `dict(zip(field_col.cells, value_col.cells))` idiom
+# already used above (e.g. test_absent_identity_renders_the_explicit_marker_
+# in_both_rows) rather than a whole-table substring scan, so a row that
+# happens to contain a forbidden field NAME as a substring of its VALUE
+# cannot false-positive the noise-row checks.
+# ---------------------------------------------------------------------------
+
+
+def test_hex_cell_protocol_from_production_decimal_string():
+    """`protocol="13"` (production shape: `str(prog.get("algorithm"))`,
+    cli_handlers.py) renders `0x0D` -- the console reader sees the SAME base
+    firmware dispatch reads, not a decimal integer disconnected from the
+    protocol table."""
+    report = _minimal_report(protocol="13")
+
+    table = report.render()
+    field_col, value_col = table.columns
+    rows = dict(zip(field_col.cells, value_col.cells))
+
+    assert rows["protocol"] == "0x0D"
+
+
+def test_hex_cell_protocol_hex_shape_is_idempotent():
+    """`protocol="0x0D"` (test-fixture shape, already hex) renders
+    unchanged -- the formatter must not double-convert an already-hex
+    string."""
+    report = _minimal_report(protocol="0x0D")
+
+    table = report.render()
+    field_col, value_col = table.columns
+    rows = dict(zip(field_col.cells, value_col.cells))
+
+    assert rows["protocol"] == "0x0D"
+
+
+def test_hex_cell_protocol_none_renders_none_without_raising():
+    report = _minimal_report(protocol=None)
+
+    table = report.render()
+    field_col, value_col = table.columns
+    rows = dict(zip(field_col.cells, value_col.cells))
+
+    assert rows["protocol"] == "None"
+
+
+def test_hex_cell_protocol_non_numeric_renders_verbatim_without_raising():
+    report = _minimal_report(protocol="banana")
+
+    table = report.render()
+    field_col, value_col = table.columns
+    rows = dict(zip(field_col.cells, value_col.cells))
+
+    assert rows["protocol"] == "banana"
+
+
+def test_hex_cell_chip_id_partial_is_none_safe():
+    """One side present, the other `None` (a clean/NA/SKIPPED id step) --
+    the operator asked only that `None` not crash; it renders as `None`,
+    not `NOT_REPORTED` (D-12's chip-ID row legitimately renders `None`,
+    see test_absent_identity_renders_the_explicit_marker_in_both_rows)."""
+    report = _minimal_report()
+    report.auto_capture.chip_id_expected = 0x00A4
+    report.auto_capture.chip_id_actual = None
+
+    table = report.render()
+    field_col, value_col = table.columns
+    rows = dict(zip(field_col.cells, value_col.cells))
+
+    assert rows["chip_id (expected/actual)"] == "0x00A4 / None"
+
+
+def test_hex_cell_chip_id_both_populated_is_4_digit_upper_hex():
+    report = _minimal_report()
+    report.auto_capture.chip_id_expected = 0x1234
+    report.auto_capture.chip_id_actual = 0x1234
+
+    table = report.render()
+    field_col, value_col = table.columns
+    rows = dict(zip(field_col.cells, value_col.cells))
+
+    assert rows["chip_id (expected/actual)"] == "0x1234 / 0x1234"
+
+
+_NOISE_ROW_FIELDS = (
+    "transport_health",
+    "is_submittable",
+    "db_diff",
+    "db_diff: current_support_status",
+    "db_diff: proposed_disposition",
+    "db_diff: ladder_state",
+)
+
+
+def test_render_has_no_noise_rows_when_db_diff_is_populated():
+    """No `transport_health`, `is_submittable` or `db_diff*` row -- checked
+    against a report whose `db_diff` IS populated, so the populated-branch
+    code path (that used to emit three extra rows) is exercised too."""
+    from firestarter.diagnostic_report import build_db_diff
+
+    report = _minimal_report()
+    db = _mock_db(support_status="adapter-required")
+    report.db_diff = build_db_diff("SOME-CHIP", db, report.results)
+
+    table = report.render()
+    field_col, _ = table.columns
+    fields = set(field_col.cells)
+
+    for forbidden in _NOISE_ROW_FIELDS:
+        assert forbidden not in fields
+
+
+def test_render_has_no_noise_rows_when_db_diff_is_none():
+    """Same assertion against the OLD `not computed` fallback path -- a
+    report whose `db_diff` is `None` (the default) must not print that
+    fallback row either."""
+    report = _minimal_report()
+    assert report.db_diff is None
+
+    table = report.render()
+    field_col, _ = table.columns
+    fields = set(field_col.cells)
+
+    for forbidden in _NOISE_ROW_FIELDS:
+        assert forbidden not in fields
+
+
+def test_step_row_value_is_bare_verdict_no_error_code_or_fingerprint_suffix():
+    """A step carrying a non-`None` `error_code` and a `Fingerprint` still
+    renders a Value cell equal to the verdict string exactly -- the
+    `err=.../fingerprint=...` suffix is gone."""
+    report = _minimal_report(
+        step_specs=[("write", VERDICT_BAD, FP_ADDRESS_LINE, "some reason")]
+    )
+    report.results[0].error_code = 42
+
+    table = report.render()
+    field_col, value_col = table.columns
+    rows = dict(zip(field_col.cells, value_col.cells))
+
+    assert rows["step: write"] == VERDICT_BAD
+
+
+def test_render_keeps_the_surviving_rows():
+    """The rows that stay are still present, by Field name."""
+    report = _minimal_report()
+
+    table = report.render()
+    field_col, _ = table.columns
+    fields = set(field_col.cells)
+
+    for expected in (
+        "host_version",
+        "fw_board_identity",
+        "hw_revision",
+        "protocol",
+        "chip_id (expected/actual)",
+        "banner",
+        "sdp_hold_state",
+        "voltage",
+    ):
+        assert expected in fields
+    assert any(f.startswith("step: ") for f in fields)
+
+
+def test_to_dict_payload_unchanged_by_the_render_trim():
+    """The removed console rows' DATA is still in `to_dict()` -- this is
+    the non-vacuity proof that only the console changed. Every key that
+    fed a removed row is still present, and every step dict still carries
+    `error_code` and `fingerprint`."""
+    from firestarter.diagnostic_report import build_db_diff
+
+    report = _minimal_report(
+        step_specs=[("write", VERDICT_BAD, FP_ADDRESS_LINE, "some reason")]
+    )
+    report.results[0].error_code = 42
+    db = _mock_db(support_status="adapter-required")
+    report.db_diff = build_db_diff("SOME-CHIP", db, report.results)
+
+    d = report.to_dict()
+
+    assert "transport_health" in d
+    assert "is_submittable" in d
+    assert "db_diff" in d and d["db_diff"] is not None
+    assert "dedup_fingerprint" in d
+    assert "sdp_hold_state" in d
+    assert "voltage" in d
+    for step_row in d["steps"]:
+        assert "error_code" in step_row
+        assert "fingerprint" in step_row
+    assert d["steps"][0]["error_code"] == 42
+    assert d["steps"][0]["fingerprint"] == FP_ADDRESS_LINE

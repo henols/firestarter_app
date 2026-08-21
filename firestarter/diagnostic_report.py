@@ -395,6 +395,39 @@ def _identity_cell(value: object) -> str:
     return str(value)
 
 
+def _hex_cell(value: object, digits: int) -> str:
+    """Render-only hex formatter for `render()` -- never used by `to_dict()`,
+    which keeps the raw typed value (mirrors `_identity_cell`'s own
+    recorded reasoning: a render-boundary substitution must never leak into
+    the canonical serializable mapping).
+
+    Parses `value` with base 0 (`int(str(value), 0)`), so both a production
+    decimal-shaped string (`"13"`) and an already-hex test-fixture string
+    (`"0x0D"`) resolve to the same integer and the formatter is idempotent
+    on `0x`-prefixed input. Returns an upper-case `0x`-prefixed string
+    zero-padded to `digits` hex digits.
+
+    Returns `str(value)` UNCHANGED -- never `NOT_REPORTED` -- when `value`
+    is `None` or cannot be parsed as an integer (catches only `ValueError`/
+    `TypeError`, never a bare `Exception`). This deliberately does NOT
+    reuse `_identity_cell`'s absent-value marker: a live gate
+    (test_absent_identity_renders_the_explicit_marker_in_both_rows) asserts
+    `NOT_REPORTED` appears exactly twice in the whole table, and D-12
+    already records that the chip-ID row legitimately renders `None`/`None`
+    on a minimal report -- rendering `NOT_REPORTED` here would both break
+    that count and contradict that recorded rationale. The operator asked
+    only that an absent/non-numeric value not crash the render, not that
+    it print a specific marker.
+    """
+    if value is None:
+        return str(value)
+    try:
+        parsed = int(str(value), 0)
+    except (ValueError, TypeError):
+        return str(value)
+    return f"0x{parsed:0{digits}X}"
+
+
 # ---------------------------------------------------------------------------
 # DiagnosticReport (RPT-01, RPT-02, XPORT-01) -- single-source dual render
 # ---------------------------------------------------------------------------
@@ -555,7 +588,19 @@ class DiagnosticReport:
     def render(self, console: Any = None) -> Any:
         """Human `rich` table built from the SAME dict `to_dict()` produces
         (RPT-01, D-01) -- never a second hand-maintained field list, never a
-        re-parse of the JSON string produced by `to_json_block()`."""
+        re-parse of the JSON string produced by `to_json_block()`.
+
+        Quick task 260821-spg trimmed this table to what a tester actually
+        needs: `protocol` and both `chip_id` sides render as hex (via
+        `_hex_cell`, `None`-safe), each per-step row shows a bare verdict
+        with no per-step diagnostic-code suffix, and three noisier rows
+        (the raw transport counters, the submit-eligibility flag, and the
+        advisory database-diff block) are gone entirely from this table,
+        including the old "not computed" fallback for the last of those.
+        `to_dict()` is unchanged -- every one of those values is still in
+        the JSON/markdown artifact and the filed issue body; only this
+        console rendering got shorter.
+        """
         from rich.table import Table
 
         d = self.to_dict()
@@ -567,35 +612,23 @@ class DiagnosticReport:
         table.add_row("host_version", str(ac["host_version"]))
         table.add_row("fw_board_identity", _identity_cell(ac["fw_board_identity"]))
         table.add_row("hw_revision", _identity_cell(ac["hw_revision"]))
-        table.add_row("protocol", str(ac["protocol"]))
+        table.add_row("protocol", _hex_cell(ac["protocol"], 2))
         table.add_row(
             "chip_id (expected/actual)",
-            f"{ac['chip_id_expected']} / {ac['chip_id_actual']}",
+            f"{_hex_cell(ac['chip_id_expected'], 4)} / "
+            f"{_hex_cell(ac['chip_id_actual'], 4)}",
         )
 
         for step_row in d["steps"]:
-            table.add_row(
-                f"step: {step_row['op']}",
-                f"{step_row['verdict']} (err={step_row['error_code']}, "
-                f"fingerprint={step_row['fingerprint']})",
-            )
-
-        th = d["transport_health"]
-        table.add_row(
-            "transport_health",
-            (
-                f"cobs={th['cobs_errors']} crc={th['crc_failures']} "
-                f"retries={th['retries']} timeouts={th['timeouts']} "
-                f"suspect={th['transport_suspect']}"
-            ),
-        )
+            table.add_row(f"step: {step_row['op']}", str(step_row["verdict"]))
 
         banner = d["banner"]
         table.add_row("banner", f"{banner['n_ran']} of {banner['m_applicable']} ran")
 
         # LEG-12 (D-07): its own console row, never folded into a step's
-        # `reason` -- the per-step row above shows only op/verdict/
-        # error_code/fingerprint, so `reason` never reaches this table.
+        # `reason` -- the per-step row above shows only the bare verdict
+        # (260821-spg dropped its diagnostic-code suffix too), so `reason`
+        # never reaches this table.
         table.add_row("sdp_hold_state", str(d["sdp_hold_state"]))
 
         v = d["voltage"]
@@ -607,25 +640,6 @@ class DiagnosticReport:
                 f"vpp={v['vpp_mv']} vpe={v['vpe_mv']}"
             ),
         )
-
-        table.add_row("is_submittable", str(d["is_submittable"]))
-
-        db_diff = d["db_diff"]
-        if db_diff is not None:
-            table.add_row(
-                "db_diff: current_support_status",
-                str(db_diff["current_support_status"]),
-            )
-            table.add_row(
-                "db_diff: proposed_disposition",
-                str(db_diff["proposed_disposition"]),
-            )
-            table.add_row(
-                "db_diff: ladder_state",
-                str(db_diff["ladder_state"]) or "(none)",
-            )
-        else:
-            table.add_row("db_diff", "not computed")
 
         if console is not None:
             console.print(table)
