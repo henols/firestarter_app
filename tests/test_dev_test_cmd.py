@@ -358,9 +358,14 @@ def make_restore_failed_operator() -> Mock:
 def _normalize_console_text(output: str) -> str:
     """Strip Rich's box-drawing borders and collapse whitespace so a
     substring assertion survives BOTH column padding and Rich's own
-    word-wrapping of a long cell (e.g. `sdp_hold_state`'s `NOT-RUN` reason,
-    which wraps across three console lines at the default width) into one
-    logical line. Presence-only -- never used for a byte-exact assertion.
+    word-wrapping of a long cell into one logical line. Presence-only --
+    never used for a byte-exact assertion.
+
+    The original motivating case (`sdp_hold_state`'s `NOT-RUN` reason,
+    which wrapped across three console lines) no longer reaches the box as
+    of 2026-08-21, but the normalization still earns its keep against
+    column padding, and the `hold_state not in normalized` guards now rely
+    on it to prove the reason did NOT come back by way of a wrap.
     """
     stripped = re.sub(r"[│┃┏┓┗┛┡┩┳┻╇━┌┐└┘├┤┬┴┼─]", " ", output)
     return " ".join(stripped.split())
@@ -810,7 +815,8 @@ class TestReportDestination:
         assert result.exit_code == 0, result.output
         md_text = (_reports_dir() / f"dev-test-{_CHIP_NO_ID}.md").read_text()
         assert "```json" in md_text
-        assert "| Step | Verdict | Reason |" in md_text
+        # `Took` column added 2026-08-21 (schema 1.5 per-step durations).
+        assert "| Step | Verdict | Took | Reason |" in md_text
 
     def test_fw_board_identity_auto_captured_end_to_end(
         self, runner: CliRunner
@@ -1315,9 +1321,10 @@ class TestHoldStateLeg12:
         `read_eprom` never persists real bytes, so the baseline read-back
         length-gates BAD) closes D-08's baseline gate before `write-
         inhibited` is ever dispatched. `sdp_hold_state` reads
-        `NOT-RUN: <reason>` in BOTH surfaces, with the REASON itself
-        surviving into both -- LEG-12 says `NOT-RUN(reason)`, and a reason
-        reaching only the JSON is half the requirement. Also demonstrates
+        `NOT-RUN: <reason>` in the JSON, with the reason verbatim, while the
+        console box shows only the bare `NOT-RUN` token -- the operator
+        superseded D-07's console-visibility leg on 2026-08-21 (the reason
+        is a sentence Rich wrapped across three lines). Also demonstrates
         the phase's central safety property end to end
         (`operator.sdp_lock.assert_not_called()`) and the banner's dropped
         ratio (`n_ran < m_applicable`, LEG-13's own mechanism, D-15)."""
@@ -1333,7 +1340,10 @@ class TestHoldStateLeg12:
         reason = hold_state.split(":", 1)[1].strip()
         assert reason, hold_state  # non-empty reason, never a bare "NOT-RUN:"
         normalized = _normalize_console_text(result.output)
-        assert f"sdp_hold_state {hold_state}" in normalized, normalized
+        # Console shows the BARE state token; the `NOT-RUN` reason rides the
+        # JSON only (operator superseded D-07's console leg, 2026-08-21).
+        assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
+        assert hold_state not in normalized, normalized
         operator.sdp_lock.assert_not_called()
         banner = data["banner"]
         assert banner["n_ran"] < banner["m_applicable"], banner
@@ -1735,7 +1745,10 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
         reason = hold_state.split(":", 1)[1].strip()
         assert reason, hold_state  # non-empty reason, never a bare "NOT-RUN:"
         normalized = _normalize_console_text(result.output)
-        assert f"sdp_hold_state {hold_state}" in normalized, normalized
+        # Console shows the BARE state token; the `NOT-RUN` reason rides the
+        # JSON only (operator superseded D-07's console leg, 2026-08-21).
+        assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
+        assert hold_state not in normalized, normalized
 
     def test_r2_id_check_not_ok_closes_gate_and_renders_notrun(
         self, runner: CliRunner
@@ -1761,7 +1774,10 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
         reason = hold_state.split(":", 1)[1].strip()
         assert reason, hold_state
         normalized = _normalize_console_text(result.output)
-        assert f"sdp_hold_state {hold_state}" in normalized, normalized
+        # Console shows the BARE state token; the `NOT-RUN` reason rides the
+        # JSON only (operator superseded D-07's console leg, 2026-08-21).
+        assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
+        assert hold_state not in normalized, normalized
 
     def test_r2_transport_error_during_id_check_closes_gate_and_renders_notrun(
         self, runner: CliRunner
@@ -1789,7 +1805,10 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
         reason = hold_state.split(":", 1)[1].strip()
         assert reason, hold_state
         normalized = _normalize_console_text(result.output)
-        assert f"sdp_hold_state {hold_state}" in normalized, normalized
+        # Console shows the BARE state token; the `NOT-RUN` reason rides the
+        # JSON only (operator superseded D-07's console leg, 2026-08-21).
+        assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
+        assert hold_state not in normalized, normalized
 
 
 class TestLaunderingRoutesR3R4:
@@ -1841,7 +1860,10 @@ class TestLaunderingRoutesR3R4:
         reason = hold_state.split(":", 1)[1].strip()
         assert reason, hold_state
         normalized = _normalize_console_text(result.output)
-        assert f"sdp_hold_state {hold_state}" in normalized, normalized
+        # Console shows the BARE state token; the `NOT-RUN` reason rides the
+        # JSON only (operator superseded D-07's console leg, 2026-08-21).
+        assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
+        assert hold_state not in normalized, normalized
 
     def test_r4_refuse_chip_na_reason_matches_sdp_capability_identity(
         self, runner: CliRunner
@@ -1869,7 +1891,10 @@ class TestLaunderingRoutesR3R4:
         hold_state = data["sdp_hold_state"]
         assert hold_state == f"{SDP_HOLD_NOT_RUN}: {expected_reason}", hold_state
         normalized = _normalize_console_text(result.output)
-        assert f"sdp_hold_state {hold_state}" in normalized, normalized
+        # Console shows the BARE state token; the `NOT-RUN` reason rides the
+        # JSON only (operator superseded D-07's console leg, 2026-08-21).
+        assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
+        assert hold_state not in normalized, normalized
 
 
 # ---------------------------------------------------------------------------

@@ -201,17 +201,23 @@ def test_title_reflects_fail_verdict():
 def test_build_body_table_from_sanitized_steps():
     sanitized = {
         "steps": [
-            {"op": "id", "verdict": "OK", "reason": ""},
+            {"op": "id", "verdict": "OK", "reason": "", "duration_s": 0.03},
             {
                 "op": "write",
                 "verdict": "BAD",
                 "reason": "port /dev/tty<redacted> gone",
+                "duration_s": 41.875,
             },
+            # No `duration_s` key at all: a pre-1.5 report replayed through
+            # build_body must not KeyError, it must render `-`.
+            {"op": "erase", "verdict": "NA", "reason": ""},
         ]
     }
     body = submit.build_body(sanitized, [], include_json=False)
-    assert "| id | OK | - |" in body
-    assert "| write | BAD | port /dev/tty<redacted> gone |" in body
+    assert "| Step | Verdict | Took | Reason |" in body
+    assert "| id | OK | 0.03s | - |" in body
+    assert "| write | BAD | 41.9s | port /dev/tty<redacted> gone |" in body
+    assert "| erase | NA | - | - |" in body
     assert "```json" not in body
 
 

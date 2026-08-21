@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import hashlib
 import tempfile
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1081,6 +1082,13 @@ class StepResult:
     fingerprint: Fingerprint | None = None
     run_count: int = 0
     divergence: dict[str, Any] | None = None
+    # Wall-clock seconds for the whole step, stamped by `_run_step`'s timing
+    # wrapper (operator asked for timings captured/presented/filed,
+    # 2026-08-21). `None` for a step that never ran (NA/SKIPPED) -- a `0.0`
+    # there would read as "ran, took no time" rather than "did not run".
+    # Deliberately NOT part of `dedup_fingerprint`, which excludes every
+    # volatile field so two runs of the same chip still dedup.
+    duration_s: float | None = None
 
 
 def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> StepResult:
@@ -1587,6 +1595,29 @@ def _write_region_for(step: Step | None, eprom_data: dict[str, Any]) -> tuple[in
 
 
 def _run_step(
+    name: str, step: Step, operator: Any, db: Any, *, runs: int, sampler: Any = None
+) -> StepResult:
+    """Time `_run_step_untimed` and stamp `duration_s` on its result.
+
+    A wrapper rather than a stamp at each `return`: the timed function has
+    five return paths (the resolve skip-stub plus four exception arms) and
+    one `raise` arm, so stamping in one place is the only way every path
+    gets a duration and the run-fatal `raise` keeps propagating untouched.
+
+    Only a step whose verdict says it RAN gets a duration -- `_RAN_VERDICTS`
+    is the same frozenset `count_applicable` uses for the banner, so a
+    NA/SKIPPED step keeps `duration_s = None` instead of a `0.0` that would
+    read as real measured work. `time.monotonic` (never `time.time`) so a
+    wall-clock adjustment mid-read cannot produce a negative duration.
+    """
+    start = time.monotonic()
+    result = _run_step_untimed(name, step, operator, db, runs=runs, sampler=sampler)
+    if result.duration_s is None and result.verdict in _RAN_VERDICTS:
+        result.duration_s = round(time.monotonic() - start, 3)
+    return result
+
+
+def _run_step_untimed(
     name: str, step: Step, operator: Any, db: Any, *, runs: int, sampler: Any = None
 ) -> StepResult:
     """Execute a single supported step through the guard-honoring resolver.

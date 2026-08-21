@@ -176,6 +176,23 @@ def build_title(report: Any, chip: str) -> str:
     return f"[dev test] {chip} — {verdict} ({shorthash})"
 
 
+def _duration_text(seconds: Any) -> str:
+    """`duration_s` -> a markdown cell; `-` when the step did not run.
+
+    Kept local to the submit surface (rather than imported from
+    `diagnostic_report._duration_cell`) because the markdown table wants a
+    non-empty placeholder in a fixed-width column, where the console wants
+    an empty string it can omit -- two different absent-value contracts.
+    """
+    if seconds is None:
+        return "-"
+    try:
+        value = float(seconds)
+    except (ValueError, TypeError):
+        return "-"
+    return f"{value:.2f}s" if value < 10 else f"{value:.1f}s"
+
+
 def build_body(
     sanitized_dict: dict[str, Any], results: Any, *, include_json: bool = True
 ) -> str:
@@ -183,14 +200,25 @@ def build_body(
     JSON block -- both derived from the SAME sanitized dict (SUB-02).
 
     Mirrors the `dev-test-<chip>.md` table shape (`cli_handlers.py`:
-    `| Step | Verdict | Reason |`), but sources the reason cells from
+    `| Step | Verdict | Took | Reason |`), but sources the reason cells from
     `sanitized_dict["steps"]` so PII stays scrubbed even when `results`
     (the unsanitized `StepResult` objects) is also passed in for shaping.
+
+    The `Took` column (schema 1.5) carries each step's wall-clock seconds so
+    a filed report shows WHERE a slow run spent its time -- the operator
+    asked for timings to reach GitHub, not just the console. A step that did
+    not run has no duration and renders `-`.
     """
-    lines = ["| Step | Verdict | Reason |", "| ---- | ------- | ------ |"]
+    lines = [
+        "| Step | Verdict | Took | Reason |",
+        "| ---- | ------- | ---- | ------ |",
+    ]
     for step in sanitized_dict.get("steps", []):
         reason = step.get("reason") or "-"
-        lines.append(f"| {step.get('op')} | {step.get('verdict')} | {reason} |")
+        took = _duration_text(step.get("duration_s"))
+        lines.append(
+            f"| {step.get('op')} | {step.get('verdict')} | {took} | {reason} |"
+        )
     body = "\n".join(lines)
     if include_json:
         body += "\n\n```json\n" + json.dumps(sanitized_dict, indent=2) + "\n```"

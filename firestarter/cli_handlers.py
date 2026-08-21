@@ -2614,14 +2614,23 @@ def dev_test(app: "AppContext", chip: str) -> None:
     json_file = out_path / f"dev-test-{safe_chip}.json"
     json_file.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
 
+    # Local import, matching this handler's existing `submit as submit_mod`
+    # style further down -- `submit` imports `diagnostic_report`, so a
+    # module-level import here would tighten an already-layered graph for
+    # one formatter.
+    from firestarter.submit import _duration_text as submit_duration_text
+
     md_lines = [
         f"# dev test -- {chip}",
         "",
-        "| Step | Verdict | Reason |",
-        "| ---- | ------- | ------ |",
+        "| Step | Verdict | Took | Reason |",
+        "| ---- | ------- | ---- | ------ |",
     ]
     for r in results:
-        md_lines.append(f"| {r.op} | {r.verdict} | {r.reason or '-'} |")
+        # `Took` mirrors submit.build_body's own column (schema 1.5) so the
+        # saved artifact and the filed issue body carry the same timings.
+        took = submit_duration_text(r.duration_s)
+        md_lines.append(f"| {r.op} | {r.verdict} | {took} | {r.reason or '-'} |")
     md_lines.append("")
     md_lines.append(report.to_json_block())
     md_file = out_path / f"dev-test-{safe_chip}.md"

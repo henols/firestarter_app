@@ -220,6 +220,40 @@ _NOT_ATTRIBUTABLE = (
 )
 
 
+def _steps_total_cell(report_obj: dict) -> str:
+    """Summed per-step `duration_s` for triage -- spots an abnormally slow
+    part at a glance.
+
+    Schema 1.5 added `duration_s`; a pre-1.5 report has no such key on any
+    step and renders `(not reported)` rather than a misleading `0.00s`.
+    Non-numeric or negative values are ignored rather than raising -- this
+    tool parses UNTRUSTED issue bodies, so a hostile payload must not be
+    able to crash triage.
+    """
+    total = 0.0
+    seen = False
+    steps = report_obj.get("steps")
+    if not isinstance(steps, list):
+        return "(not reported)"
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        value = step.get("duration_s")
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            parsed = float(value)
+        except (ValueError, TypeError):
+            continue
+        if parsed < 0:
+            continue
+        total += parsed
+        seen = True
+    if not seen:
+        return "(not reported)"
+    return f"{total:.2f}s" if total < 10 else f"{total:.1f}s"
+
+
 def render_diff(
     report_obj: dict[str, Any],
     diff: dict[str, Any],
@@ -273,6 +307,7 @@ def render_diff(
         f"  current_support_status: {diff.get('current_support_status', '')}",
         f"  proposed_disposition:   {diff.get('proposed_disposition', '')}",
         f"  ladder_state:           {diff.get('ladder_state') or '(none)'}",
+        f"  steps total:            {_steps_total_cell(report_obj)}",
     ]
     if n_agreeing is not None:
         lines.append(
