@@ -2257,34 +2257,53 @@ def test_baseline_gate_closes_dead_write_path_allow_chip_full_leg():
     render SKIPPED, `operator.sdp_lock` is never called, and each SKIPPED
     reason carries the family fact (never the chip-ID gate's wording).
 
-    ⚠ MEASURED DISCREPANCY, recorded rather than silently reconciled (same
-    project convention as 134-02-SUMMARY.md's "exactly two" finding):
-    134-CONTEXT.md D-20 and this plan's own <behavior>/<action> text state
-    `n_ran=5, m_applicable=10` for this exact scenario. Before quick task
-    260807-kaq, the ACTUAL measured value, run live against this commit's
-    `_dead_write_path_operator()` fixture, was `n_ran=6, m_applicable=10` --
-    because `write-baseline-a` (unlike the four `_SDP_LEG_GATED_OPS`
-    members) is NEVER itself gated by `baseline_gate_closed`: both baseline
-    directions always run regardless of the gate's state, since they are
-    what DECIDE it (D-08's own stickiness requirement -- see
-    `test_baseline_gate_sticky_...` below -- is unsatisfiable if baseline-a
-    does not run at all once the gate is closed). `write-baseline-a` against
-    this fixture reports OK (its expected read-back is pattern A, and the
-    fixture's `read_eprom` always returns pattern A), so it counted as "ran"
-    alongside the four shipped ops (read/blank-check/write/verify) and
-    `write-baseline-b` itself: 4 + 2 = 6 ran, 4 skipped, out of 10
-    applicable.
+    THIRD-GENERATION accounting (Phase 153, ERASE-03/ERASE-04), both
+    earlier generations kept visible rather than overwritten:
 
-    260807-kaq's fix flips blank-check to NA for AT28C256 (protocol 0x0D,
-    case 3: no step in this plan can ever leave the device blank, since
-    each page write auto-erases internally) -- REMOVING it from both the
-    "ran" set and the applicable set. `m_applicable` drops 10 -> 9 (3
-    shipped-supported [read/write/verify] + 6 SDP-leg-supported, since id,
-    erase AND NOW blank-check are all NA for this chip) and `n_ran` drops
-    6 -> 5 (write-baseline-b/write-baseline-a plus the 3 shipped-supported
-    ops that ran, minus blank-check). These ARE the current, live-measured
-    values -- not a restoration of the stale 134-CONTEXT.md prose, which
-    predates both this task's fix AND the "exactly two" discrepancy above.
+      Generation 1 (pre-260807-kaq, matching 134-CONTEXT.md D-20's own
+      prose): blank-check was a real supported step here, counted in both
+      M and N -- measured `n_ran=6, m_applicable=10`. `write-baseline-a`
+      (unlike the four `_SDP_LEG_GATED_OPS` members) is NEVER itself gated
+      by `baseline_gate_closed`: both baseline directions always run
+      regardless of the gate's state, since they are what DECIDE it
+      (D-08's own stickiness requirement). Against this fixture,
+      `write-baseline-a` reports OK, so it counted as "ran" alongside the
+      four shipped ops (read/blank-check/write/verify) and
+      `write-baseline-b` itself: 4 + 2 = 6 ran, 4 skipped, out of 10
+      applicable.
+
+      Generation 2 (260807-kaq): blank-check flipped to NA for AT28C256
+      (protocol 0x0D, case 3: no step in this plan can ever leave the
+      device blank, since each page write auto-erases internally) --
+      REMOVED from both the "ran" set and the applicable set.
+      `m_applicable` dropped 10 -> 9 (3 shipped-supported
+      [read/write/verify] + 6 SDP-leg-supported, since id, erase AND NOW
+      blank-check were all NA) and `n_ran` dropped 6 -> 5
+      (write-baseline-b/write-baseline-a plus the 3 shipped-supported ops
+      that ran, minus blank-check).
+
+      Generation 3 (THIS plan, Phase 153 ERASE-03/ERASE-04): restoring
+      FLAG_CAN_ERASE on all 84 algorithm-13 rows makes erase a real
+      supported, destructive step (index 4) that ACTUALLY RUNS and
+      reports OK against `_dead_write_path_operator()` (whose
+      `erase_eprom` always succeeds) -- erase is not gated by the SDP
+      baseline gate at all (it precedes the SDP leg block entirely), so
+      it always joins both sets regardless of the gate's state, exactly
+      like `write-baseline-a` does. `m_applicable` rises 9 -> 10 (erase
+      joins the applicable set) and `n_ran` rises 5 -> 6 (erase runs).
+      `write-baseline-a`'s half of the accounting is UNCHANGED across all
+      three generations, for the reason Generation 1 gives above.
+
+      Recorded explicitly, not glossed: Generation 3's integers (10, 6)
+      numerically COINCIDE with Generation 1's, but this is a composition
+      coincidence, not a restoration -- blank-check is NA in both
+      Generation 2 and 3 (never returns to either set); it is erase
+      joining them, not blank-check, that produces the matching pair.
+      These are the current, live-measured values, re-derived in this
+      session against this commit's `chip_test.py` and
+      `_dead_write_path_operator()` fixture (unchanged by this plan) --
+      not a restoration of the stale 134-CONTEXT.md prose, which predates
+      every generation recorded above.
     """
     name = "AT28C256"
     allowed, _reason = sdp_capability(name, _REAL_DB)
@@ -2318,20 +2337,25 @@ def test_baseline_gate_closes_dead_write_path_allow_chip_full_leg():
         )
     operator.sdp_lock.assert_not_called()
 
-    counts = count_applicable(plan, results)
-    assert counts.n_ran == 5, (
-        f"measured n_ran={counts.n_ran}, expected 5 -- 260807-kaq dropped "
-        "this from 6 (blank-check is now NA for this protocol-0x0D chip, "
-        "so it no longer counts as 'ran'); see this test's MEASURED "
-        "DISCREPANCY docstring; do not change this to match "
-        "134-CONTEXT.md D-20's stale prose without re-deriving the "
-        "arithmetic"
+    erase_result = _result(results, OP_ERASE)
+    assert erase_result.verdict == VERDICT_OK, (
+        f"Phase 153: erase is now a real supported step that runs "
+        f"regardless of the SDP baseline gate, got {erase_result.verdict!r}"
     )
-    assert counts.m_applicable == 9, (
-        f"measured m_applicable={counts.m_applicable}, expected 9 "
-        "(3 shipped-supported [read/write/verify] + 6 SDP-leg-supported, "
-        "since id, erase AND NOW blank-check (260807-kaq) are all NA for "
-        "this chip)"
+
+    counts = count_applicable(plan, results)
+    assert counts.n_ran == 6, (
+        f"measured n_ran={counts.n_ran}, expected 6 -- Phase 153 raised "
+        "this from 5 (erase is now a real supported step that runs); see "
+        "this test's THIRD-GENERATION accounting docstring; do not change "
+        "this to match a stale generation's figure without re-deriving "
+        "the arithmetic"
+    )
+    assert counts.m_applicable == 10, (
+        f"measured m_applicable={counts.m_applicable}, expected 10 "
+        "(4 shipped-supported [read/write/verify/erase] + 6 "
+        "SDP-leg-supported, since id AND blank-check are the only NA "
+        "steps for this chip after Phase 153 restored FLAG_CAN_ERASE)"
     )
 
 

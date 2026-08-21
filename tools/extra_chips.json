@@ -12,14 +12,13 @@
         "type": "UV-EPROM",
         "size_bytes": 2048,
         "pin_count": 24,
-        "vpp": "25V",
         "vpp_mv": 25000,
-        "vcc": "5V",
-        "vdd": "6.5V"
+        "vcc_mv": 5000,
+        "vdd_mv": 6500
       },
       "programming": {
         "algorithm": 11,
-        "pulse_duration": "500 us",
+        "pulse_duration_us": 500,
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },
@@ -37,14 +36,13 @@
         "type": "UV-EPROM",
         "size_bytes": 4096,
         "pin_count": 24,
-        "vpp": "25V",
         "vpp_mv": 25000,
-        "vcc": "5V",
-        "vdd": "6.5V"
+        "vcc_mv": 5000,
+        "vdd_mv": 6500
       },
       "programming": {
         "algorithm": 11,
-        "pulse_duration": "500 us",
+        "pulse_duration_us": 500,
         "chip_id_check": false,
         "chip_id_value": "0x00000000"
       },

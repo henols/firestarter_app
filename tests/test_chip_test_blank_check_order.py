@@ -22,9 +22,13 @@ mocking of the database itself):
   3. AM27512 (UV-EPROM) -- untouched: a pre-write blank-check is genuinely
      actionable on an irrecoverable UV write, so case 4 applies regardless
      of write_scope.
-  4. AT28C256 (protocol 0x0D, 28C family) -- flips to an NA blank-check
-     with a family-fact reason (each page write auto-erases internally),
-     never the flag name.
+  4. AT28C256 (protocol 0x0D, 28C family) -- Phase 153 (ERASE-03/ERASE-04)
+     restored FLAG_CAN_ERASE for this family, so it now shares case 1's
+     placement (blank-check moves to AFTER the now-supported erase step
+     and BEFORE the SDP leg's six-op contiguous terminal block) while
+     KEEPING an NA verdict with a family-fact reason (each page write
+     auto-erases internally, so no step in the plan can ever leave the
+     device blank), never the flag name.
 
 This module was written and observed RED against the unmodified
 `chip_test.py` BEFORE the fix landed (Task 2, TDD RED gate) -- see
@@ -56,9 +60,15 @@ _CHIP_ERASABLE = "M8720"
 # only UV light erases.
 _CHIP_UV = "AM27512"
 # AT28C256: protocol 0x0D (EEPROM_POLL / 28C family) -- auto-erases per page
-# during write, so FLAG_CAN_ERASE is clear and no erase step is ever
-# executable for it. Also one of the v1.30 SDP-ALLOW chips (43/84), so its
-# write_scope="full" plan carries the six-step SDP leg too.
+# during write. Phase 153 (ERASE-03/ERASE-04) restored FLAG_CAN_ERASE for
+# this family (a real AN-0544B software chip erase now exists in
+# `configure_eeprom28c`), so erase IS a real, executable, supported step
+# for this chip -- but blank-check stays NA regardless: no step in the
+# plan can ever leave the device blank (each page write auto-erases
+# internally), which is a family fact about page-writes, not about
+# whether erase itself is executable. Also one of the v1.30 SDP-ALLOW
+# chips (43/84), so its write_scope="full" plan carries the six-step SDP
+# leg too, after erase and the (still-NA) blank-check.
 _CHIP_AUTO_ERASE_28C = "AT28C256"
 
 
@@ -117,14 +127,38 @@ def test_am27512_uv_blank_check_position_is_unchanged():
     assert blank_check_step.supported is True
 
 
-def test_at28c256_blank_check_is_na_with_family_fact_reason():
-    """Case 3: protocol 0x0D auto-erases per page during write -- no step
-    in this plan can ever leave the device blank, so blank-check flips to
-    NA at its original position (index 2) with a family-fact reason, never
-    the internal flag name FLAG_CAN_ERASE."""
+def test_at28c256_blank_check_moves_after_erase_but_stays_na():
+    """Case 3, Phase 153 revision: protocol 0x0D auto-erases per page
+    during write, so no step in this plan can ever leave the device
+    blank -- blank-check stays NA, and its reason is still the family
+    fact, never the internal flag name FLAG_CAN_ERASE. What changed
+    (Phase 153, ERASE-03/ERASE-04): restoring FLAG_CAN_ERASE gave this
+    family a real, supported, destructive erase step that now precedes
+    blank-check, so the step blank-check sits behind actually exists --
+    which is why blank-check MOVED from its old position (index 2) to
+    its new one (index 5), immediately after erase (index 4) and before
+    the SDP leg's six-op contiguous terminal block. AT28C256 now SHARES
+    case 1's placement (blank-check after erase, before the SDP leg)
+    while KEEPING case 3's verdict (unsupported/NA) -- this combination
+    is exactly why this case still earns its own function rather than
+    being folded into case 1."""
     plan = derive_plan(_CHIP_AUTO_ERASE_28C, _REAL_DB, write_scope="full")
     ops = [s.op for s in plan.steps]
-    assert ops.index(OP_BLANK_CHECK) == 2
+
+    assert OP_ERASE in ops, "fixture setup error: AT28C256 must have an erase step"
+    blank_check_index = ops.index(OP_BLANK_CHECK)
+    erase_index = ops.index(OP_ERASE)
+    assert blank_check_index == 5, (
+        f"blank-check must sit at the exact measured index 5 (moved from "
+        f"the old index 2), got {blank_check_index}"
+    )
+    assert erase_index == 4, (
+        f"erase must sit at the exact measured index 4, got {erase_index}"
+    )
+    assert blank_check_index > erase_index, (
+        f"blank-check (index {blank_check_index}) must run AFTER erase "
+        f"(index {erase_index})"
+    )
 
     blank_check_step = next(s for s in plan.steps if s.op == OP_BLANK_CHECK)
     assert blank_check_step.supported is False
@@ -132,6 +166,15 @@ def test_at28c256_blank_check_is_na_with_family_fact_reason():
     assert "0x0d" in blank_check_step.reason.lower() or "28c" in (
         blank_check_step.reason.lower()
     )
+
+    for sdp_op in _SDP_LEG_STEP_ORDER:
+        assert sdp_op in ops, f"fixture setup error: SDP leg op {sdp_op!r} missing"
+        sdp_index = ops.index(sdp_op)
+        assert sdp_index > blank_check_index, (
+            f"SDP leg op {sdp_op!r} (index {sdp_index}) must stay strictly "
+            f"after blank-check (index {blank_check_index}) -- the leg "
+            "must remain a contiguous terminal block"
+        )
 
 
 def test_m8720_full_plan_has_exactly_one_blank_check_and_one_erase_step():

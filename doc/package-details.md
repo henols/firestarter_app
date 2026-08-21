@@ -46,6 +46,8 @@ Each entry has a corresponding `MP_*` constant in `database.c` lines 39–50.
 | 19    | `0x00080000`   | `MP_CALIBRATION`                        | Has calibration data                                                                      | CONFIRMED |
 | 20-21 | `0x00300000`   | `MP_SUPPORTED_PROGRAMMING`              | Programming support level                                                                 | CONFIRMED |
 
+**Note on bits 14/15:** the row above documents minipro's *bit* semantics only; what the emitted `protect_off_before` / `protect_on_after` database fields mean at runtime, and their measured distributions, is [documented once in `infoic-field-dictionary.md`](infoic-field-dictionary.md#protect-flags-bits-14-15).
+
 ### Bits Without a Defined MP_* Constant (UNKNOWN)
 
 The following bits appear in observed `flags` values but have **no** `MP_*` constant in `database.c` lines 39–50. Their meaning cannot be confirmed from the open minipro source.

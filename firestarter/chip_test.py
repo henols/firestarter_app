@@ -303,12 +303,30 @@ def classify_fingerprint(
 # check rather than introduce a new cross-module constant.
 _PROTOCOL_FLASH4 = 0x05
 
-# Protocol 0x0D (EEPROM_POLL / "28C family", firmware's configure_eeprom28c)
-# has no erase operation at all -- Phase 121 D-12 clears FLAG_CAN_ERASE for
-# this protocol at the source (database.py:582-...) so derive_plan's
-# generic NA-erase else-branch fires for it "for free". This constant exists
-# so the family-fact NA reason arm below names the protocol by symbol, not a
-# bare literal.
+# Protocol 0x0D (EEPROM_POLL / "28C family", firmware's configure_eeprom28c).
+#
+# Phase 153 (ERASE-03/ERASE-04) implemented the AN-0544B software chip erase
+# in `configure_eeprom28c` and restored FLAG_CAN_ERASE at the source
+# (database.py:582-645, the fourth REVERSAL RECORD entry in that chain,
+# after 119 D-18 / 120 D-20 / 121 D-12). For every algorithm-13 row in the
+# shipped database (all 84 qualify -- electrical-type is EEPROM or
+# Flash/EEPROM for each), the erase arm below now takes the *supported*
+# branch (`can_erase and protocol != _PROTOCOL_FLASH4`), so this constant's
+# own reason arm, below, is no longer reached by any shipped row.
+#
+# Kept anyway, deliberately, as a defensive fallthrough rather than deleted:
+# the arm is still reachable for a `0x0D` row whose `electrical-type` falls
+# outside the qualifying set `{"EEPROM", "Flash/EEPROM"}` -- a user-override
+# database shape, since no shipped row is in this state. Routing such a row
+# into the generic flag-keyed fallback instead (`"FLAG_CAN_ERASE not set for
+# this chip"`) would name the internal wire flag in a diagnostic report a
+# community tester reads, which DEVTEST-01 forbids. See the reachability
+# leg `test_protocol_eeprom_28c_arm_reachable_for_non_qualifying_etype` in
+# `tests/test_chip_test.py`, which proves this arm is not untested dead
+# code. Checked, not assumed: ruff's `select` list (`pyproject.toml`,
+# `[tool.ruff.lint]` -- E/F/I/UP) does not flag an unused module-level
+# constant (F401 is unused-*import*-only), so keeping this constant costs
+# no lint debt even on the rows where it is never referenced.
 _PROTOCOL_EEPROM_28C = 0x0D
 
 # Quick task 260807-kaq: the two protocols whose FAMILY auto-erases per page
@@ -737,16 +755,23 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
         elif etype == "UV-EPROM":
             reason = "UV-EPROM has no electrical erase (UV light only)"
         elif protocol == _PROTOCOL_EEPROM_28C:
-            # Phase 121 D-12 deliberately routes protocol 0x0D through this
-            # generic else (no 0x0D-local supported/unsupported branch was
-            # added) -- but the generic fallback's flag-keyed wording below
-            # names an internal mechanism, not a fact a community tester can
-            # act on. DEVTEST-01 requires the FAMILY FACT: protocol 0x0D and
-            # the 28C family simply has no erase operation, ever -- never
-            # the flag name.
+            # DEFENSIVE FALLTHROUGH (Phase 153, ERASE-03/ERASE-04 -- see
+            # `_PROTOCOL_EEPROM_28C`'s own comment above for the full
+            # disposition). This arm is unreachable from the shipped
+            # database now that FLAG_CAN_ERASE is restored on all 84
+            # algorithm-13 rows; it fires only for a `0x0D` row whose
+            # `electrical-type` falls outside {"EEPROM", "Flash/EEPROM"} --
+            # a user-override shape. Delete-versus-keep was considered and
+            # keep won: routing that row into the generic flag-keyed
+            # fallback below would name the internal FLAG_CAN_ERASE
+            # mechanism, which DEVTEST-01 forbids. The reason must instead
+            # state only what is true of a row that actually reaches here --
+            # its recorded electrical type does not describe an
+            # electrically-erasable part, so no erase step is planned for
+            # it -- expressed as a family fact, never the flag name.
             reason = (
-                "protocol 0x0D (28C family) has no erase operation; "
-                "each page write auto-erases internally"
+                "electrical-type for this 0x0D (28C family) chip is not "
+                "electrically erasable; no erase step is planned for it"
             )
         else:
             reason = "FLAG_CAN_ERASE not set for this chip"

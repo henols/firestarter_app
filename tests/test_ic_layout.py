@@ -16,6 +16,7 @@ This file pins the fixed behaviour so the crash class cannot reappear:
 
 import pytest
 
+from firestarter.constants import FLAG_CAN_ERASE
 from firestarter.database import EpromDatabase
 from firestarter.ic_layout import EpromSpecBuilder
 
@@ -201,4 +202,111 @@ def test_protocol_display_name_coverage_reconciled(
     result_0x11 = spec_builder._get_protocol_info_structured(0x11)
     assert result_0x11 is None, (
         f"0x11 (FWH) must be dropped from protocol_info_data (D-04), got {result_0x11!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 153 Plan 12 (ERASE-06) — `info`'s can-be-erased row and the wire
+# FLAG_CAN_ERASE bit must AGREE, asserted in both directions.
+#
+# No `ic_layout.py` edit is owed here. Its can-be-erased block
+# (build_specifications, lines ~578-586) keys ONLY on `electrical.type` —
+# confirmed by reading that block before writing either test below — and
+# already rendered the affirmative string for every algorithm-13 chip even
+# before this phase; restoring FLAG_CAN_ERASE (database.py, plan 07) makes
+# the two INDEPENDENTLY-DERIVED axes agree as a by-product, not by design
+# of this file.
+#
+# Adopted reading of ERASE-06 (152-CONTEXT.md D-07's own decomposition,
+# which lists "info's can be erased row | ic_layout.py:582 | contradicts
+# the wire flag" — naming a CONTRADICTION, not a missing derivation): the
+# requirement is that the two axes must not contradict each other, not that
+# `info` must be computed FROM the wire bit. Under that reading, zero
+# `ic_layout.py` source change is owed, and the two axes' independence is
+# a FEATURE rather than a defect — they are derived from different DB
+# fields (`electrical.type` for the display row, `electrical.type` +
+# `programming.algorithm` for the wire bit via
+# `EpromDatabase.convert_to_programmer`), so their agreement is real
+# evidence rather than a tautological self-comparison. A leg that compared
+# `can_erase_str` to itself, or derived one axis from the other, would
+# prove nothing; asserting both independently-computed axes for the SAME
+# chip is what makes the leg meaningful.
+#
+# `_interpret_flags` (ic_layout.py ~line 222) reads a THIRD value — the
+# upstream database's synthetic `info-flags` bit (0x10, "Electrically
+# erasable", set by `_map_data` from the same `electrical.type` check but
+# routed through a different code path than `convert_to_programmer`'s
+# FLAG_CAN_ERASE). It is already consistent with the other two axes and is
+# out of scope for this leg; neither test below reads it.
+# ---------------------------------------------------------------------------
+
+
+def test_can_erase_row_and_wire_capability_bit_agree_for_algorithm_13(
+    spec_builder: EpromSpecBuilder,
+    db: EpromDatabase,
+) -> None:
+    """AT28C256 (algorithm 13 / 0x0D, electrical-type EEPROM): both axes must
+    be affirmative for the SAME chip in the SAME test — the display row via
+    ``build_specifications`` and the wire bit via
+    ``EpromDatabase.convert_to_programmer`` — because a leg that checks only
+    one axis cannot detect a contradiction between them. See the module
+    section docstring above for the adopted ERASE-06 reading (D-07:
+    "must not contradict", not "must derive from") and why the two axes'
+    independence makes agreement here evidence, not a tautology.
+    ``_interpret_flags``'s third, unrelated info-flags value is out of scope.
+    """
+    eprom = db.get_eprom("AT28C256")
+    assert eprom is not None, "AT28C256 not found in database"
+
+    display = spec_builder.build_specifications(
+        eprom, electrical_type=eprom.get("electrical-type")
+    )
+    assert display is not None
+    assert display.get("can_erase_str", "").startswith("yes"), (
+        f"AT28C256 can_erase_str must be affirmative, got "
+        f"{display.get('can_erase_str')!r}"
+    )
+
+    wire = db.convert_to_programmer(eprom)
+    assert wire["flags"] & FLAG_CAN_ERASE, (
+        "AT28C256 wire flags must carry FLAG_CAN_ERASE — the two axes must "
+        "agree with the affirmative info row above"
+    )
+
+
+def test_can_erase_row_and_wire_capability_bit_agree_for_uv_eprom(
+    spec_builder: EpromSpecBuilder,
+    db: EpromDatabase,
+) -> None:
+    """AM27512 (UV-EPROM): the negative control. Both axes must be negative
+    for the same chip — the display row states the UV-erase-only outcome and
+    the wire bit is clear. Same chip, opposite polarity from the algorithm-13
+    leg above — this is what proves that leg measures real agreement rather
+    than a constant that would pass for any chip.
+
+    Adopted reading of ERASE-06 (152-CONTEXT.md D-07's decomposition, which
+    names the pre-153 state as `info`'s row "contradicts" the wire flag, not
+    as `info` failing to derive from it): the requirement is that the two
+    axes must not contradict, not that `info` must be computed from the wire
+    bit. The two axes are derived from different data, so their continued
+    independence — and their agreement here, in both directions — is
+    evidence, not a tautology. ``_interpret_flags``'s third, unrelated
+    info-flags value is out of scope for this leg.
+    """
+    eprom = db.get_eprom("AM27512")
+    assert eprom is not None, "AM27512 not found in database"
+
+    display = spec_builder.build_specifications(
+        eprom, electrical_type=eprom.get("electrical-type")
+    )
+    assert display is not None
+    assert display.get("can_erase_str", "") == "no (UV erase only)", (
+        f"AM27512 can_erase_str must state UV-erase-only, got "
+        f"{display.get('can_erase_str')!r}"
+    )
+
+    wire = db.convert_to_programmer(eprom)
+    assert not (wire["flags"] & FLAG_CAN_ERASE), (
+        "AM27512 (UV-EPROM) wire flags must NOT carry FLAG_CAN_ERASE — the "
+        "two axes must agree with the negative info row above"
     )

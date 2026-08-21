@@ -53,6 +53,10 @@ MAX_27C020_SIZE = 262144
 
 # Wire-protocol command codes — Firmware sync: firestarter.h
 # cmd field values sent in JSON commands to the Arduino firmware.
+# Phase 151 (LOCK-02): the ladder now reaches 16 (COMMAND_LOCK_STATUS). Per
+# CLAUDE.md's constants-are-duplicated rule, this ladder and firmware's
+# CMD_* ladder in firestarter.h move together — every addition here must be
+# mirrored there in the same change, and vice versa.
 COMMAND_READ = 1
 COMMAND_WRITE = 2
 COMMAND_ERASE = 3
@@ -83,6 +87,14 @@ COMMAND_FW_VERSION = 13
 COMMAND_CONFIG = 14
 COMMAND_HW_VERSION = 15
 
+# Phase 151 (LOCK-02, OD-3): protection-status read. A memory command on the
+# firmware side (is_memory_cmd()'s ninth arm, firestarter.h) because the
+# read is issued through firestarter_get_data, set only by
+# configure_memory() — no exemption needed in
+# test_revision_constants_parity.py's four-entry map; it maps to
+# COMMAND_LOCK_STATUS by the default CMD_X -> COMMAND_X rule.
+COMMAND_LOCK_STATUS = 16
+
 COMMAND_NAMES = {
     COMMAND_READ: "READ",
     COMMAND_WRITE: "WRITE",
@@ -99,6 +111,7 @@ COMMAND_NAMES = {
     COMMAND_FW_VERSION: "FW_VERSION",
     COMMAND_CONFIG: "CONFIG",
     COMMAND_HW_VERSION: "HW_VERSION",
+    COMMAND_LOCK_STATUS: "LOCK_STATUS",
 }
 
 # Control Flags — Firmware sync: firestarter.h
@@ -142,10 +155,16 @@ FLAG_SKIP_SDP_UNLOCK = 0x100
 # Used by consistency_check_eprom() to emit knob values in per-read JSON commands.
 JSON_KEY_READ_SETTLING_DELAY = "read-settling-delay"
 JSON_KEY_READ_STROBE_US = "read-strobe-us"
-# Per-chip page size wire field (PGSZ-03 / CR-01) — Firmware sync: json_parser.c (key_page_size)
-# Emitted by eprom_operations.py only when the DB supplies a datasheet-sourced page_size
-# (emit-when-present, mirrors read-strobe-us pattern). When absent, firmware falls back
-# to flash4_page_size(mem_size) heuristic. 0 = use firmware default.
+# Per-chip page size wire field (PGSZ-01/PGSZ-03). Emitted by database.py's
+# convert_to_programmer only when the DB supplies a page_size (curated or,
+# as of Phase 149, provenance-keyed for upstream-native 0x0D rows) --
+# emit-when-present, mirrors the chip-id pattern. When absent, firmware
+# falls back to its own named AT28C page-size floor constant (algorithm 13
+# / 0x0D only; other algorithms' handlers do not consume this key at all).
+# Firmware sync: json_parser.c (key_page_size). Landed by Phase 149 plan 04
+# (firestarter commit 58c6a3c) -- the PROGMEM string exists and is dispatched
+# from key_parsers[]. tests/test_json_key_parity.py (plan 05) is the
+# enforcing test that keeps this string in lockstep with the firmware key.
 JSON_KEY_PAGE_SIZE = "page-size"
 
 # RURP Control Register Bits — mirror of firestarter/include/rurp_pinout.h

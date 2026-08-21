@@ -39,6 +39,7 @@ import json
 
 from firestarter.chip_test import VERDICT_OK, Plan, StepResult
 from firestarter.database import EpromDatabase
+from firestarter.diagnostic_report import NOT_REPORTED as _REPORT_NOT_REPORTED
 from firestarter.diagnostic_report import (
     SCHEMA_VERSION,
     AutoCapture,
@@ -49,28 +50,44 @@ from firestarter.diagnostic_report import (
 from firestarter.submit import build_body, build_title, sanitize_dict
 from tools.parse_devtest_issue import (
     _MAX_BODY_BYTES,
+    _NOT_ATTRIBUTABLE,
+    NOT_REPORTED,
     count_agreeing,
     extract_db_diff,
     parse_devtest_body,
+    render_diff,
 )
 
 _REAL_DB = EpromDatabase(skip_local_override=True)
 
 
 def _build_realistic_title_body(
-    chip: str = "M8720", *, protocol: str = "0x08"
+    chip: str = "M8720",
+    *,
+    protocol: str = "0x08",
+    fw_board_identity: str | None = None,
 ) -> tuple[str, str]:
     """Build a (title, body) pair via the REAL production builders
     (`submit.py:build_title`/`build_body`, `diagnostic_report.py`'s own
     `to_dict()`/`build_db_diff`) -- the exact shape a community tester's
-    issue actually carries, never a hand-approximated stand-in."""
+    issue actually carries, never a hand-approximated stand-in.
+
+    `fw_board_identity` defaults to `None` (the existing callers' shape,
+    unchanged); PROV-06's `render_diff` tests pass an explicit populated or
+    empty-string value to exercise the identity row without hand-building a
+    fixture (147-05, W-2)."""
     results = [
         StepResult(
             op="id", verdict=VERDICT_OK, reason="chip id matched", fingerprint=None
         ),
         StepResult(op="read", verdict=VERDICT_OK, reason="", fingerprint=None),
     ]
-    auto_capture = AutoCapture(host_version="3.0.0b10", chip=chip, protocol=protocol)
+    auto_capture = AutoCapture(
+        host_version="3.0.0b10",
+        chip=chip,
+        protocol=protocol,
+        fw_board_identity=fw_board_identity,
+    )
     report = DiagnosticReport(
         auto_capture=auto_capture,
         transport=TransportHealth(),
@@ -204,6 +221,86 @@ def test_db_diff_tolerates_schema_1_0_shape_without_ladder_state():
     assert diff["ladder_state"] == ""
     assert diff["current_support_status"] == "supported"
     assert diff["dedup_fingerprint"] == "aaaa11112222"
+
+
+# ---------------------------------------------------------------------------
+# RENDER (PROV-06, W-2) -- `render_diff` had ZERO tests anywhere in the repo
+# before this plan (147-05); these are the first-ever tests for it. Every
+# assertion is a direct substring check on the returned `str` -- `render_diff`
+# is a pure function of `(report_obj, diff, n_agreeing=...)`, so there is no
+# `_rendered_text` indirection to mirror and no CLI subprocess needed.
+#
+# Evidence Ceiling (binding): none of these tests may say or imply the
+# `0x0D` write path is proven, that a support status changes, or that
+# gh#21/#32/#11/#12 are closed. Framing is only that attribution becomes
+# possible, or is explicitly refused.
+# ---------------------------------------------------------------------------
+
+
+def test_render_diff_labels_a_populated_firmware_identity():
+    """A report whose auto_capture.fw_board_identity is populated renders a
+    labelled fw_board_identity line carrying that exact value, a labelled
+    host_version line, and NOT the not-attributable clause (PROV-06)."""
+    title, body = _build_realistic_title_body(fw_board_identity="3.0.0b19:leonardo")
+    obj = parse_devtest_body(title, body)
+    diff = extract_db_diff(obj)
+
+    rendered = render_diff(obj, diff)
+
+    identity_line = next(
+        line for line in rendered.splitlines() if "fw_board_identity" in line
+    )
+    assert identity_line.strip().endswith("3.0.0b19:leonardo")
+    assert any("host_version" in line for line in rendered.splitlines())
+    assert _NOT_ATTRIBUTABLE not in rendered
+
+
+def test_render_diff_marks_an_absent_identity_not_attributable():
+    """A `None` fw_board_identity AND an empty-string one (a community body
+    can genuinely carry `""`) both render the marker plus the
+    not-attributable clause -- never a blank (D-14/D-17/PROV-05)."""
+    title_none, body_none = _build_realistic_title_body(fw_board_identity=None)
+    obj_none = parse_devtest_body(title_none, body_none)
+    rendered_none = render_diff(obj_none, extract_db_diff(obj_none))
+
+    assert NOT_REPORTED in rendered_none
+    assert _NOT_ATTRIBUTABLE in rendered_none
+
+    title_empty, body_empty = _build_realistic_title_body(fw_board_identity="")
+    obj_empty = parse_devtest_body(title_empty, body_empty)
+    rendered_empty = render_diff(obj_empty, extract_db_diff(obj_empty))
+
+    assert NOT_REPORTED in rendered_empty
+    assert _NOT_ATTRIBUTABLE in rendered_empty
+
+
+def test_render_diff_omits_hw_revision():
+    """No `hw_revision` label appears in `render_diff`'s output -- a
+    deliberate omission (D-15), not an oversight: a write-path finding is
+    attributable only when host AND firmware are both known, and
+    `hw_revision` is a coarse silkscreen bucket that cannot discriminate
+    the operator's Rev 2.2 / Rev 2.0 / modified Rev 0 boards, so a line
+    naming it would look authoritative while answering nothing."""
+    title, body = _build_realistic_title_body(fw_board_identity="3.0.0b19:leonardo")
+    obj = parse_devtest_body(title, body)
+
+    rendered = render_diff(obj, extract_db_diff(obj))
+
+    assert "hw_revision" not in rendered
+
+
+def test_render_diff_still_labels_n_agreeing_as_a_maintainer_decision_input():
+    """Non-regression pin on `render_diff`'s pre-existing `n_agreeing`
+    clause -- this function had zero tests before this plan, so its
+    existing contract is pinned here in the same pass that adds to it."""
+    title, body = _build_realistic_title_body()
+    obj = parse_devtest_body(title, body)
+
+    rendered = render_diff(obj, extract_db_diff(obj), n_agreeing=3)
+
+    assert "3" in rendered
+    assert "maintainer decision input" in rendered
+    assert "NEVER an auto-promotion trigger" in rendered
 
 
 # ---------------------------------------------------------------------------
@@ -503,3 +600,149 @@ def test_mixed_schema_versions_group_independently():
     counts = count_agreeing([_B11_BODY, other_fingerprint_body])
 
     assert counts == {"b11deadbeef": 1, "aaaa11112222": 1}
+
+
+# ---------------------------------------------------------------------------
+# W-3 (PROV-04) -- a SECOND frozen fixture, this one carrying
+# `fw_board_identity: null`. The `_B11_BODY` fixture above carries a
+# *populated* identity ("3.0.0b11:leonardo"), which is why it cannot stand
+# in for PROV-04's real-world population: the reports that motivated this
+# milestone (gh#21/#32) are exactly the null-identity ones. Modeled on a
+# real report shape -- schema_version "1.2", host_version "3.0.0b15",
+# fw_board_identity null, a populated coarse hw_revision, chip at28c256,
+# protocol 0x0D (SKILL.md's own `#32 at28c256 -- FAIL` transcript). Must
+# NEVER be regenerated from live `to_dict()` output -- the whole point is
+# pinning a shape this codebase can no longer produce (this milestone
+# replaces the hardcoded `fw_board_identity=None` construction).
+# ---------------------------------------------------------------------------
+
+_NULL_IDENTITY_TITLE = "[dev test] at28c256 — FAIL (deadnu11id00)"
+
+# Frozen `3.0.0b15` artifact shape -- schema_version "1.2", null
+# fw_board_identity. Must never be regenerated from live `to_dict()`
+# output -- the whole point is pinning a shape this codebase can no
+# longer produce.
+_NULL_IDENTITY_BODY = (
+    "| Step | Verdict | Reason |\n"
+    "| ---- | ------- | ------ |\n"
+    "| id | OK | chip id matched |\n"
+    "| write | BAD | verify mismatch |\n"
+    "\n```json\n"
+    + json.dumps(
+        {
+            "schema_version": "1.2",
+            "generated": "2026-08-07T12:07:39Z",
+            "auto_capture": {
+                "host_version": "3.0.0b15",
+                "fw_board_identity": None,
+                "hw_revision": "Rev 2.0-class, Override HW: Rev 2.3",
+                "chip": "at28c256",
+                "protocol": "0x0D",
+                "chip_id_expected": 6531,
+                "chip_id_actual": 6531,
+                "chip_id_mismatch_reason": None,
+            },
+            "transport_health": {
+                "cobs_errors": "not measured",
+                "crc_failures": "not measured",
+                "retries": "not measured",
+                "timeouts": "not measured",
+                "transport_suspect": False,
+            },
+            "steps": [
+                {
+                    "op": "id",
+                    "verdict": "OK",
+                    "reason": "chip id matched",
+                    "error_code": None,
+                    "fingerprint": None,
+                },
+                {
+                    "op": "write",
+                    "verdict": "BAD",
+                    "reason": "verify mismatch",
+                    "error_code": None,
+                    "fingerprint": "byte0-mismatch",
+                },
+            ],
+            "banner": {"n_ran": 2, "m_applicable": 2, "locked_steps": []},
+            "voltage": {
+                "vpp_before_mv": "not measured",
+                "vpp_after_mv": "not measured",
+                "vpe_before_mv": "not measured",
+                "vpe_after_mv": "not measured",
+                "vpp_mv": "not measured",
+                "vpe_mv": "not measured",
+            },
+            "is_submittable": True,
+            "dedup_fingerprint": "deadnu11id00",
+            "db_diff": {
+                "current_support_status": "supported",
+                "proposed_disposition": "suggests: candidate for community-fail (advisory)",
+                "ladder_state": "community-fail",
+            },
+        },
+        indent=2,
+    )
+    + "\n```"
+)
+
+
+def test_legacy_null_identity_body_still_parses_and_groups():
+    """A frozen `fw_board_identity: null` body -- PROV-04's real-world
+    population, not the populated `_B11_BODY` shape -- still parses, its
+    `schema_version` is readable, its identity is `None`, its
+    `extract_db_diff` grouping is unchanged, and feeding it to `render_diff`
+    renders the marker plus the not-attributable clause (PROV-04 + PROV-06
+    proved together on one realistic artifact, W-3)."""
+    obj = parse_devtest_body(_NULL_IDENTITY_TITLE, _NULL_IDENTITY_BODY)
+
+    assert obj is not None
+    assert obj["schema_version"] == "1.2"
+    assert obj["auto_capture"]["fw_board_identity"] is None
+
+    diff = extract_db_diff(obj)
+    assert diff["ladder_state"] == "community-fail"
+
+    rendered = render_diff(obj, diff)
+    assert NOT_REPORTED in rendered
+    assert _NOT_ATTRIBUTABLE in rendered
+
+
+def test_unknown_marker_string_matches_the_report_model():
+    """D-11 asks for a single-sourced "not reported" constant; architecture
+    forbids it -- `tools/parse_devtest_issue.py` is stdlib-only by stated
+    contract and cannot import `firestarter.diagnostic_report`. This test
+    module is the ONLY place in the repo that legitimately imports both
+    worlds, which is exactly why a value-parity assert lives here: three
+    literals (this module's `NOT_REPORTED`, the parser's `NOT_REPORTED`,
+    and the devtest-triage skill script's own copy) plus this equality
+    assert is the resolution, not a compromise.
+
+    The THIRD literal -- the skill script's, in `.claude/skills/` (a
+    different repo, the meta repo) -- is NOT covered by this test: an
+    app-repo test reaching into `/workspaces/.claude/` would fail OPEN in
+    standalone CI. That parity is covered instead by plan 147-06's
+    human-verify checkpoint.
+    """
+    assert _REPORT_NOT_REPORTED == NOT_REPORTED
+
+
+def test_parser_marker_strings_trip_no_forbidden_claim_pattern():
+    """Neither `NOT_REPORTED` nor `_NOT_ATTRIBUTABLE` (this module's copies)
+    matches any of `check_diagnostic_report_claims.py`'s 14 forbidden-phrase
+    patterns -- closing a measured fail-open: that gate scans ONLY
+    `firestarter/diagnostic_report.py`, so a clause authored in
+    `tools/parse_devtest_issue.py` is covered by no gate at all. Asserts
+    non-vacuity too, so this cannot pass because the import silently
+    yielded nothing. Does NOT widen the gate's own target list (Phase
+    152's business, not this phase's)."""
+    from tools.check_diagnostic_report_claims import FORBIDDEN_PATTERNS
+
+    assert len(FORBIDDEN_PATTERNS) >= 14
+
+    for label, pattern in FORBIDDEN_PATTERNS:
+        assert not pattern.search(NOT_REPORTED), f"NOT_REPORTED trips [{label}]"
+        assert not pattern.search(_NOT_ATTRIBUTABLE), (
+            f"_NOT_ATTRIBUTABLE trips [{label}]"
+        )

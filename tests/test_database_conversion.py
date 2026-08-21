@@ -95,7 +95,7 @@ def test_convert_uv_eprom_no_flag_can_erase(db: EpromDatabase) -> None:
     assert out["flags"] & FLAG_CAN_ERASE == 0
 
 
-def test_convert_at28c256_flash_eeprom_flag_can_erase_cleared(
+def test_convert_at28c256_flash_eeprom_flag_can_erase_set(
     db: EpromDatabase,
 ) -> None:
     """REVERSAL RECORD (Phase 121 D-12): this test previously asserted AT28C256
@@ -108,13 +108,25 @@ def test_convert_at28c256_flash_eeprom_flag_can_erase_cleared(
     wrong. What changed is that an inert-but-false capability advertisement is
     still false, and DEVTEST-01's `dev test` sweep reads that advertisement and
     plans a real erase step that reports OK having done nothing. D-12 clears
-    the flag for protocol 0x0D at the source (`database.py`), so this test now
-    asserts the bit is CLEAR.
+    the flag for protocol 0x0D at the source (`database.py`), so this test
+    asserted the bit is CLEAR.
+
+    REVERSAL RECORD (Phase 153, ERASE-03/ERASE-07 -- the fourth reversal in
+    this chain, after 119 D-18, 120 D-20 and 121 D-12): D-12's *policy* was
+    correct given its premise -- an inert-but-false capability advertisement
+    is still false -- but this phase changed the premise, not the policy.
+    `configure_eeprom28c` now implements the AN-0544B software chip erase and
+    `CMD_ERASE` is wired to it, so the flag is no longer firmware-inert on
+    this protocol: it is read at `eprom_operations.cpp`'s `eprom_erase`
+    precondition as the standalone erase command's refusal gate. Record this
+    as mechanism-corrected and intent-satisfied, never as failed: the honest
+    resolution was to make the firmware do more, not to make the host claim
+    less. This test now asserts the bit is SET.
     """
     full = db.get_eprom("AT28C256")
     assert full is not None
     out = db.convert_to_programmer(full)
-    assert out["flags"] & FLAG_CAN_ERASE == 0
+    assert out["flags"] & FLAG_CAN_ERASE
 
 
 def test_convert_w29c040_no_flag_can_erase(db: EpromDatabase) -> None:

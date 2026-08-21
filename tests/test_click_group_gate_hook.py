@@ -32,7 +32,7 @@ returns `None`. So overriding `get_command` to raise a *different*
 `UsageError` for a known-but-unregistered name intercepts strictly before
 `resolve_command`'s own fallback ever executes -- `resolve_command` itself
 needs no override at all. This is exactly the mechanism plan 136-02's
-`_DevGroup` implements for the six gated `dev` subcommands.
+`_DevGroup` implements for the seven gated `dev` subcommands.
 
 **Use `click.Group`, never `click.MultiCommand`.** `click.MultiCommand` is
 still reachable as a deprecated alias (`click.core._MultiCommand`) but is
@@ -68,7 +68,7 @@ class _SpikeGatedGroup(click.Group):
     `_GATED` names a command that is deliberately never registered as a real
     `click.Command` on this group -- the point is to prove the refusal fires
     for a *gated-but-absent* name, exactly the shape `_DevGroup` (plan 136-02)
-    needs for the six gated `dev` subcommands: genuinely absent from
+    needs for the seven gated `dev` subcommands: genuinely absent from
     `self.commands` (satisfies non-registration), yet refused informatively
     rather than with Click's generic typo message (satisfies the informative
     refusal).

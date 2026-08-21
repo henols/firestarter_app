@@ -125,22 +125,17 @@ pin_conversions = {
 logger = logging.getLogger("Database")
 
 
-def _parse_pulse_duration(pulse_str: str) -> int:
-    """Parse a pulse_duration string from chip_database.json into microseconds.
+def format_mv(mv: int) -> str:
+    """Render a millivolt integer as the project's one human-facing voltage string.
 
-    Accepts values like "100 us", "1000 us", "Algorithm Controlled", or "".
-    Returns the integer microsecond value, or 0 for unknown / algorithm-controlled.
+    This is the single definition of the millivolt-to-human render used by every
+    display call site (`ic_layout.py`'s `vcc_str`/`vpp_str` and `eprom_info.py`'s
+    `vpp_str`). The one-decimal lowercase-`v` format (`f"{mv / 1000:.1f}v"`) is
+    byte-identical to the pre-Phase-148 string-schema output (D-15) — it takes an
+    `int` because the numeric convention is enforced upstream in `_map_data` (D-10)
+    rather than tolerated here.
     """
-    if not pulse_str:
-        return 0
-    # Format: "<integer> us"
-    parts = pulse_str.split()
-    if len(parts) == 2 and parts[1] == "us":
-        try:
-            return int(parts[0])
-        except ValueError:
-            pass
-    return 0
+    return f"{mv / 1000:.1f}v"
 
 
 def _read_config_file(filename: str) -> dict:
@@ -376,22 +371,6 @@ class EpromDatabase:
         pin_count = electrical.get("pin_count")
         pinout_key = ic.get("pinout")
 
-        vpp = 0
-        vcc = 0
-        vpp_str = electrical.get("vpp", "0").replace("V", "")
-        vcc_str = electrical.get("vcc", "0").replace("V", "")
-        try:
-            vpp = float(vpp_str)
-        except (ValueError, TypeError):
-            None
-            # logger.warning(f"Invalid VPP value for {ic.get('part_number')}: {vpp_str}")  # noqa: E501
-        try:
-            vcc = float(vcc_str)
-        except (ValueError, TypeError):
-            None
-            # logger.warning(f"Invalid VCC value for {ic.get('part_number')}: {vcc_str}")  # noqa: E501
-        vpp_mv = electrical.get("vpp_mv", 0)
-
         # Read algorithm integer directly — set by build_db.py from upstream protocol_id
         protocol_id = programming.get("algorithm", 0)
 
@@ -406,15 +385,20 @@ class EpromDatabase:
         # list/search view (print_eprom_list_table) can reach the same ground-truth
         # field that the info view (build_specifications) uses, via the shared
         # resolve_type_label helper.  Key "electrical-type" consumed by eprom_info.py.
+        # D-10: direct indexing, never `.get(key, 0)` — a stale string-schema
+        # `~/.firestarter/database.json` override missing `vcc_mv`/`vpp_mv`/
+        # `pulse_duration_us` must raise `KeyError` loudly here rather than
+        # silently resolving to `0`. `pulse-delay: 0` now means
+        # "algorithm-controlled", so a silently-defaulted `0` would program a
+        # 0x07 chip with no pulse at all.
         data = {
             "name": ic.get("part_number"),
             "manufacturer": manufacturer,
             "memory-size": electrical.get("size_bytes", 0),
             "pin-count": pin_count,
-            "vpp_volts": vpp,
-            "vpp_mv": vpp_mv,
-            "vcc": vcc,
-            "pulse-delay": _parse_pulse_duration(programming.get("pulse_duration", "")),  # noqa: E501
+            "vpp_mv": electrical["vpp_mv"],
+            "vcc_mv": electrical["vcc_mv"],
+            "pulse-delay": programming["pulse_duration_us"],
             "verified": bool(ic.get("verified", False)),
             "info-flags": info_flags,
             "flags": 0,
@@ -427,9 +411,18 @@ class EpromDatabase:
         if chip_id_val:
             data["chip-id"] = int(chip_id_val, 16)
 
-        # PGSZ-01 / CR-01: carry datasheet-sourced per-chip page_size when present.
-        # Set by build_db.py only for chips with a [CITED:] datasheet entry; absent
-        # for all other chips so they ride the firmware flash4_page_size() heuristic.
+        # PGSZ-01 / CR-01: carry per-chip page_size when present. Set by
+        # build_db.py either for a datasheet-curated [CITED:] chip or, as
+        # of Phase 149, for a chip whose OWN upstream protocol_id is 0x0D
+        # (algorithm 13 / EEPROM_POLL only). This guard is a TRUTHINESS
+        # test (`if page_size_val:`), not a presence test -- a page_size of
+        # 0 is therefore silently dropped and unreachable on the wire from
+        # this host. Chips absent from both sources omit the field and
+        # ride the firmware's own named AT28C page-size floor constant
+        # (algorithm 13 only; other algorithms' handlers never consume this
+        # key). The internal dict key is page_size (underscore); the WIRE
+        # key is page-size (hyphen, JSON_KEY_PAGE_SIZE in constants.py) --
+        # deliberately distinct spellings for the same English word.
         page_size_val = programming.get("page_size")
         if page_size_val:
             data["page_size"] = int(page_size_val)
@@ -541,10 +534,10 @@ class EpromDatabase:
         if not full_eprom_data:
             return {}
 
-        # Use vpp_mv directly when available (integer millivolts from build_db.py)
-        vpp_mv = full_eprom_data.get("vpp_mv") or int(
-            full_eprom_data.get("vpp_volts", 0) * 1000
-        )
+        # vpp_mv is the sole VPP source (integer millivolts from build_db.py) —
+        # the legacy string-schema volts-key fallback is gone (D-16); `_map_data`
+        # always sets `vpp_mv` via direct indexing (D-10).
+        vpp_mv = full_eprom_data["vpp_mv"]
 
         # Keys to keep from the full data
         programmer_data = {
@@ -563,8 +556,13 @@ class EpromDatabase:
             programmer_data["bus-config"] = full_eprom_data["bus-config"]
 
         # PGSZ-03 / CR-01: emit page-size wire field only when the DB supplies a
-        # datasheet-sourced per-chip page_size (emit-when-present, mirrors chip-id).
-        # Absent chips send nothing → firmware uses flash4_page_size(mem_size) heuristic.
+        # page_size (curated or, as of Phase 149, provenance-keyed for an
+        # upstream-native 0x0D row) -- emit-when-present, mirrors chip-id.
+        # This guard is also a TRUTHINESS test (`.get(...)` is truthy-checked,
+        # not `"page_size" in full_eprom_data`), so a page_size of 0 is
+        # silently dropped -- 0 is an unreachable wire value from this host.
+        # Absent chips send nothing; firmware (algorithm 13 / 0x0D only)
+        # falls back to its own named AT28C page-size floor constant.
         if full_eprom_data.get("page_size"):
             programmer_data["page-size"] = full_eprom_data["page_size"]
 
@@ -577,7 +575,10 @@ class EpromDatabase:
         # key degrades safely to flag-clear (A1), identical to the old path. RF-01:
         # zero behavioral delta for all chips (the synthetic path already matched).
         #
-        # Scope (Phase 121 D-12): algorithms 5 and 13 are excluded from the flag.
+        # Scope: algorithm 5 is excluded from the flag; see its rationale
+        # below. (Algorithm 13 was excluded here too, per Phase 121 D-12;
+        # Phase 153 reverses that -- see the REVERSAL RECORD below. The two
+        # exclusions were always for unrelated reasons.)
         #
         # Algorithm 5 (flash4) — FIX-01a / T-93-CANERASE: flash4 auto-erases per
         # page during the page-write; no separate 12V bulk erase is needed or
@@ -585,41 +586,56 @@ class EpromDatabase:
         # flash4_write_init → flash4_erase_execute which asserts
         # CTRL_VPP_REGULATOR_ENABLE on a 5V-only chip (12V on a 5V part —
         # hardware-damage hazard). Scope: algorithm==5 only; the 0x07 and
-        # 0x0D paths are unaffected by this particular exclusion.
+        # 0x0D paths are unaffected by this particular exclusion. This is a
+        # live hardware-hazard argument, not a retired one -- it is the
+        # reason the tuple still keeps 5 even after 13 is dropped below.
         #
         # Algorithm 13 / protocol 0x0D (AT28C / 28C-family SDP EEPROMs) —
-        # Phase 121 D-12: the firmware's configure_eeprom28c handler
-        # (firestarter/src/proms/eeprom_28c.cpp) has no erase operation at
-        # all, so advertising FLAG_CAN_ERASE for these 84 chips is a false
-        # capability statement. DEVTEST-01's `dev test` sweep reads that
-        # advertisement and plans a real erase step that reports OK having
-        # done nothing, auto-tagging otherwise-passing runs `community-fail`.
+        # REVERSAL RECORD (Phase 153, ERASE-03 / ERASE-07; fourth recorded
+        # reversal in this chain, after 119 D-18, 120 D-20 and 121 D-12):
+        # Phase 121 D-12 cleared this flag on the premise that the
+        # firmware's configure_eeprom28c handler
+        # (firestarter/src/proms/eeprom_28c.cpp) implemented no erase
+        # whatsoever, so advertising FLAG_CAN_ERASE for these 84 chips was a
+        # false capability statement. That premise no longer holds: Phase
+        # 153 (ERASE-03/ERASE-04) added a real CMD_ERASE dispatch arm to
+        # configure_eeprom28c, implementing the AN-0544B software six-byte
+        # chip erase, so the capability statement this flag makes is now
+        # TRUE. D-12's parenthetical that the 0x0D firmware path "genuinely
+        # never reads" this flag is also now false: `eprom_operations.cpp`'s
+        # eprom_erase() precondition -- the standalone `erase` command's own
+        # refusal gate -- does read FLAG_CAN_ERASE, so the bit is no longer
+        # firmware-inert on this protocol.
         #
-        # REVERSAL RECORD (Phase 121 D-12, third recorded reversal this
-        # phase after 119 D-18 / 120 D-20): this line previously carried a
-        # D-03 note stating that leaving the flag SET on 0x0D was
-        # firmware-inert and "must stay unchanged." D-12 REVERSES that
-        # POLICY, not the FACT: the 0x0D firmware path genuinely never reads
-        # FLAG_CAN_ERASE — that part of the old note remains true — but an
-        # inert-but-false capability advertisement is still false, and
-        # DEVTEST-01 needs the host to stop making it. Blast radius
-        # re-verified before landing this change: no `chip_database.json`
-        # entry carries a `flags` key, so `diff_db.py` identity cannot
-        # break; no firmware native test and no `validation_matrix_spec.json`
-        # family pins the incoming wire flags for `eeprom28c`; the only
-        # other host reader of this bit (`serial_comm.py`'s
-        # `_log_command_details`) is DEBUG-only logging; and exactly two
-        # host tests were pinned to the old value, both inverted in this
-        # same plan. One benign behavioural delta: `firestarter erase` on a
-        # 0x0D part is now refused one layer earlier, at
-        # `eprom_operations.cpp`'s own FLAG_CAN_ERASE precondition, rather
-        # than at Phase 119's op-layer NULL-main guard — both paths emit the
-        # same `MSG_ERR_NOT_SUPPORTED` wire id, so the observable behaviour
-        # over the wire is unchanged.
+        # D-12's *policy* was correct given its premise; only the premise
+        # changed. Record this as mechanism-corrected and intent-satisfied,
+        # never as failed: the honest resolution was to make the firmware
+        # do more, not to make the host claim less.
+        #
+        # Per D-153-05, restoring the flag deliberately does NOT make
+        # `write` erase implicitly: no FLAG_CAN_ERASE-gated erase block was
+        # added to eeprom28c_write_init, and `erase` was not added to
+        # `write`'s FLAG_SKIP_SDP_UNLOCK auto-set path. Erase stays a
+        # standalone step.
+        #
+        # Blast radius, carried forward in corrected form from D-12: no
+        # `chip_database.json` entry carries a `flags` key, so
+        # `diff_db.py` identity cannot break; the only other host reader of
+        # this bit (`serial_comm.py`'s `_log_command_details`) is DEBUG-only
+        # logging. One benign behavioural delta: `firestarter erase` on a
+        # 0x0D part now performs a real erase, rather than being refused
+        # one layer earlier at `eprom_operations.cpp`'s own FLAG_CAN_ERASE
+        # precondition.
+        #
+        # Plan-shape consequence, recorded so it is not rediscovered as a
+        # surprise: restoring the flag changes `chip_test.py`'s
+        # `derive_plan` output on all 84 algorithm-13 rows -- erase becomes
+        # a supported destructive step, and blank-check moves to sit after
+        # it, where it doubles as the erase's oracle.
         simple_flags = 0
         algo = programmer_data["algorithm"]  # already computed above from protocol-id
         if full_eprom_data.get("electrical-type", "") in ("EEPROM", "Flash/EEPROM"):
-            if algo not in (5, 13):
+            if algo not in (5,):
                 simple_flags |= FLAG_CAN_ERASE  # FLAG_CAN_ERASE is 0x02
         programmer_data["flags"] = simple_flags
 

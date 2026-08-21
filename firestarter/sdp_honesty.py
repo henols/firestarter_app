@@ -11,10 +11,19 @@ pieces of wording into a shared, standalone production helper authored in
 this phase, so the four honesty tests retarget onto a real SUT instead of a
 scanning gate.
 
-Forward contract (D-02, D-01): Phase 134's leg-report rows and Phase 135's
-`write --sdp-relock` path are the intended future callers of this module.
-Its API is named for what it carries -- the honesty wording -- not for the
-`dev sdp` subcommand being retired.
+Forward contract (D-02, D-01), updated by Phase 151 (C-4): Phase 134's
+leg-report rows and the `write --sdp-relock` path (Backlog 999.28) were
+both DEFERRED, not landed, when this module was authored. Phase 151's
+`dev lock-status` is the first forward caller to actually land. Since
+then, `unreadable_state_caveat()` has acquired three production callers of
+its own -- `cli_handlers.py`'s `_sdp_recovery_line` (two call sites) and
+`chip_test.py`'s `sdp_hold_state` -- plus four pinning tests in
+`tests/test_chip_test_sdp_leg.py`, so its **text** is now load-bearing at
+seven sites and must never be re-authored; new forward callers extend this
+module additively (see `map_unknown_cmd_to_outdated_for_operation` below)
+rather than editing what is already here. Its API is named for what it
+carries -- the honesty wording -- not for the `dev sdp` subcommand that
+was retired when this module was authored.
 """
 
 from __future__ import annotations
@@ -88,5 +97,38 @@ def map_unknown_cmd_to_outdated(
     return FirmwareOutdatedError(
         f"{chip_upper}: attached firmware does not implement SDP "
         f"{mode} (unknown command) -- upgrade with "
+        "'firestarter fw --install'."
+    )
+
+
+def map_unknown_cmd_to_outdated_for_operation(
+    exc: EpromOperationError, operation_label: str, chip_name: str
+) -> FirmwareOutdatedError | None:
+    """Generalised sibling of `map_unknown_cmd_to_outdated` (Phase 151,
+    D-04): same contract, but the message names whatever `operation_label`
+    it is given instead of the hard-coded literal `"SDP"`.
+
+    Added rather than folding into `map_unknown_cmd_to_outdated` itself,
+    because that function's returned message is byte-identical-pinned at
+    multiple call sites and this module's own extension discipline (C-4)
+    is strictly additive -- no existing function's signature or wording
+    changes here. `dev lock-status` (D-04) is this sibling's first caller;
+    it is not itself SDP, so wording the message around a caller-supplied
+    label rather than a fixed protocol name is the honest generalisation.
+
+    Same keying, same return-not-raise contract, same closing sentence as
+    the sibling this generalises: keyed on `exc.error_code !=
+    MSG_ERR_UNKNOWN_CMD` (the message **id**, never its text); returns a
+    constructed (not raised) `FirmwareOutdatedError` when the firmware
+    reported an unknown command, and `None` for any other `error_code`
+    (including `None`) -- returning rather than raising keeps the caller
+    in control of exception chaining (`raise ... from exc`).
+    """
+    if exc.error_code != MSG_ERR_UNKNOWN_CMD:
+        return None
+    chip_upper = chip_name.upper()
+    return FirmwareOutdatedError(
+        f"{chip_upper}: attached firmware does not implement "
+        f"{operation_label} (unknown command) -- upgrade with "
         "'firestarter fw --install'."
     )

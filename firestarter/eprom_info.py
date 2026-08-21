@@ -12,7 +12,7 @@ import logging
 import re
 from typing import Dict, Optional  # noqa: UP035
 
-from firestarter.database import EpromDatabase  # Changed import
+from firestarter.database import EpromDatabase, format_mv  # Changed import
 from firestarter.ic_layout import EpromSpecBuilder  # Import renamed class
 
 logger = logging.getLogger("EpromConsolePresenter")
@@ -394,11 +394,10 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
             _vpp_mv = 0
         _etype = ic.get("electrical-type", "")
         if _etype not in {"SRAM", "FRAM"} and _vpp_mv > 0:
-            # WR-02: mirror the info view's fallback ('N/A') so the two views
-            # produce identical output when vpp_mv > 0 but vpp_volts is absent
-            # (e.g. operator-override entries). Previously the list view fell
-            # back to '-' here, diverging from info's 'N/A' (D-03 parity).
-            vpp_str = f"{ic.get('vpp_volts', 'N/A')}v"
+            # WR-02: parity with the info view is now structural, not two
+            # hand-mirrored 'N/A' fallbacks — both views call format_mv on the
+            # same already-coerced _vpp_mv, so they cannot diverge (D-03).
+            vpp_str = format_mv(_vpp_mv)
         else:
             vpp_str = "-"
 

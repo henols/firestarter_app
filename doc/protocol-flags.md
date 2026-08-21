@@ -29,6 +29,8 @@ Each bit in this table has a corresponding `MP_*` constant in `database.c` lines
 
 **WARNING-5 note — bit 4 (`MP_ERASE_MASK = 0x10`):** `build_db.py` derives `_etype` from `flags & 0x10`. When `_etype == "Flash/EEPROM"` (bit 4 set), a chip is electrically erasable. The WARNING-5 override uses this discriminator to flip `DIP28_2764 + protocol_id 0x07 + electrically-erasable` chips to `algorithm 0x0D` (EEPROM_POLL), preventing 12V VPP assertion on pin 1 of 5V-only EEPROMs. Bit 4 means "can be electrically erased" — it does **not** mean "requires write-enable sequence." See `CLAUDE.md` WARNING-5 section and `check_dispatch.py`.
 
+**Note on bits 14/15:** the row above documents minipro's *bit* semantics only; what the emitted `protect_off_before` / `protect_on_after` database fields mean at runtime, and their measured distributions, is [documented once in `infoic-field-dictionary.md`](infoic-field-dictionary.md#protect-flags-bits-14-15).
+
 ---
 
 ## Bits Without a Defined MP_* Constant (UNKNOWN)

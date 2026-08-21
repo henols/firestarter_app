@@ -141,6 +141,7 @@
     addr               Direct access to address lines and control register.
     consistency-check  Read EPROM N consecutive times and report SHA-256...
     fault-inject       Demonstrate COBS resync: inject a corrupted frame...
+    lock-status        Diagnostic read of a chip's write-protection state...
     read               Reads the content from an EPROM and prints data to...
     reg                Direct access to registers: MSB, LSB and control...
     test               Run the community chip-validation sweep for CHIP...
@@ -158,6 +159,18 @@
     TRAP #3 / D-13.3: this command keeps the inverse ``--blank-check`` polarity
     (``is_flag=True default=False``) — opposite of ``write``'s ``--no-blank-
     check``. Both polarities coexist verbatim from argparse.
+  
+    D-153-04: unlike ``write``'s ``-b``, this command's ``-b``/``--blank-check``
+    requests a blank check performed **after** the erase, not skipped before it
+    — the inverse polarity above is a naming/default inversion, not just a
+    default flip. On protocol ``0x0D`` this post-erase check is not wired (no
+    ``operation_end`` arm was added to the software chip-erase handler), so
+    ``-b`` is a documented no-op there, not a discovered one.
+  
+    D-153-04 (RESEARCH A7): ``-s``/``--sector-address`` exists for the ``0x06``
+    sector-erase protocol. The ``0x0D`` software chip erase is device-global by
+    construction (the whole part is erased in one AN 0544B sequence) and ignores
+    any sector address given for it.
   
   Options:
     -f, --force                   Force, even if the VPP or chip id doesn't
@@ -357,6 +370,14 @@
     the erase (previously implied by ``-b``) for already-blank or non-erasable
     parts.
   
+    Phase 153 (ERASE-01/ERASE-02): since this phase, ``-b``/``--no-blank-check``
+    is **unread** on protocols ``0x0D`` and ``0x05`` — neither protocol's write
+    path performs a pre-write blank check any more, so the flag is a no-op on
+    both families and is not needed to write a non-blank part on either one. The
+    flag remains live, with its Phase 92 meaning above, on every other protocol.
+    This does not change the paragraph above: the erase/blank-check decoupling
+    it describes still governs whichever protocols still read the flag.
+  
     TRAP #6 / D-17/D-18 (v1.22 HOST-02): ``--skip-sdp-unlock`` is exposed on
     ``write`` ONLY — firmware auto-unlocks in ``eeprom28c_write_init`` and
     nowhere else, so ``read``/``verify``/``blank``/``erase`` have nothing to
@@ -419,6 +440,58 @@
     --help                    Show this message and exit.
   
   '''
+# ---
+# name: test_info_at28c256
+  '''
+  Eprom Info          
+  Name:               AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L
+  Manufacturer:       ATMEL
+  Number of pins:     28
+  Memory size         0x8000
+  Type:               EEPROM
+  Can be erased:      yes (electrically erasable)
+  VCC:                5.0v
+  VPP:                12.0v
+  Chip ID:            -
+  
+         28-DIP package
+          -----v-----
+    A14 -|  1     28 |- VCC   
+    A12 -|  2     27 |- R/W(WE)
+    A7  -|  3     26 |- A13   
+    A6  -|  4     25 |- A8    
+    A5  -|  5     24 |- A9    
+    A4  -|  6     23 |- A11   
+    A3  -|  7     22 |- OE    
+    A2  -|  8     21 |- A10   
+    A1  -|  9     20 |- CE    
+    A0  -| 10     19 |- D7    
+    D0  -| 11     18 |- D6    
+    D1  -| 12     17 |- D5    
+    D2  -| 13     16 |- D4    
+    GND -| 14     15 |- D3    
+          -----------
+  
+  Jumper config (Rev 0.1 & 1.0):
+    JP1:  ●(● ●) (5V, A13 = A13)
+    JP2: (● ●)●  (5V, A17 = VCC)
+    JP3:  ● ● ●  (28pin, 32pin = NA)
+  
+  Jumper config (Rev 2.0 & 2.1):
+    JP4:  ● ●    (28pin, 32pin = Open)
+  
+  Protocol: EEPROM - 5V parallel, SDP + DQ7 poll (ID: 0x0D)
+    - Programming protocol for large EEPROMs
+    - Supports byte-wise programming
+    - May require specific write sequences
+  
+  Flags: 0x00000010
+    - Electrically erasable
+  
+  '''
+# ---
+# name: test_info_at28c256[test_info_at28c256_stderr]
+  ''
 # ---
 # name: test_info_known_chip
   '''
@@ -1246,6 +1319,14 @@
     -b`` on a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip
     the erase (previously implied by ``-b``) for already-blank or non-erasable
     parts.
+  
+    Phase 153 (ERASE-01/ERASE-02): since this phase, ``-b``/``--no-blank-check``
+    is **unread** on protocols ``0x0D`` and ``0x05`` — neither protocol's write
+    path performs a pre-write blank check any more, so the flag is a no-op on
+    both families and is not needed to write a non-blank part on either one. The
+    flag remains live, with its Phase 92 meaning above, on every other protocol.
+    This does not change the paragraph above: the erase/blank-check decoupling
+    it describes still governs whichever protocols still read the flag.
   
     TRAP #6 / D-17/D-18 (v1.22 HOST-02): ``--skip-sdp-unlock`` is exposed on
     ``write`` ONLY — firmware auto-unlocks in ``eeprom28c_write_init`` and

@@ -188,6 +188,37 @@ def count_agreeing(bodies: list[str]) -> dict[str, int]:
 # Rendering (plain-text; no third-party dependency, D-04)
 # ---------------------------------------------------------------------------
 
+# Literal #2 of three (D-11, v1.32 Phase 147 plan 147-05). Identical in
+# VALUE to `firestarter/diagnostic_report.py`'s `NOT_REPORTED`, but defined
+# separately here rather than imported: this module is a stdlib-only CLI
+# (module docstring above, `:9-11`) whose module-level imports are exactly
+# `__future__`, `argparse`, `json`, `re`, `sys`, `pathlib`, `typing` -- a
+# module-level import naming that package would make the default
+# triage path depend on the app package, and `tools/` is outside both ruff
+# and mypy scope, so nothing else would catch that drift. The one existing
+# `firestarter` import in this file (`_read_live_support_status`, above) is
+# function-local and pre-existing -- it stays exactly as it is. The
+# substitute for an import-time guarantee is a value-parity assert in
+# `tests/test_parse_devtest_issue.py::test_unknown_marker_string_matches_the_report_model`
+# (RESEARCH Pattern 3 / P-4), the only module in this repo that legitimately
+# imports both worlds.
+NOT_REPORTED = "not reported"
+
+# D-14/D-17: one action-oriented clause, true under EITHER reading of a
+# `None` identity (an old report whose host build never captured it, or a
+# post-bump report where capture failed) -- so no schema-version ordering
+# logic is needed here or anywhere else (both parsers accept
+# `schema_version` by presence only, and a live fixture carries
+# `schema_version: "9.9-future"` that any ordering comparison would have to
+# survive). Pre-checked against `check_diagnostic_report_claims.py`'s
+# 14-entry `FORBIDDEN_PATTERNS` table and clean -- proven, not assumed, by
+# `test_parser_marker_strings_trip_no_forbidden_claim_pattern`. No claim
+# gate scans this file today (P-5); that test is the only enforcement.
+_NOT_ATTRIBUTABLE = (
+    "NOT attributable to a firmware version -- ask the reporter for a "
+    "fresh dev test run on a current host build"
+)
+
 
 def render_diff(
     report_obj: dict[str, Any],
@@ -197,12 +228,47 @@ def render_diff(
 ) -> str:
     """Plain-text current-vs-proposed DB-diff render (D-04, no third-party
     import). Explicitly labels any `n_agreeing` value a maintainer decision
-    input, never an auto-promotion trigger (D-01)."""
+    input, never an auto-promotion trigger (D-01).
+
+    Also carries the provenance identity a triager needs before any
+    firmware-version claim can rest on this report (PROV-06): a labelled
+    `host_version` row and a labelled `fw_board_identity` row that folds in
+    the `_NOT_ATTRIBUTABLE` clause when the identity is absent (D-14). No
+    `hw_revision` row (D-15) -- a write-path finding is attributable only
+    when host AND firmware are both known, and `hw_revision` is a coarse
+    silkscreen bucket that cannot discriminate the operator's Rev 2.2 /
+    Rev 2.0 / modified Rev 0 boards, so a line naming it would look
+    authoritative while answering nothing. No derived `attributable`
+    boolean either (D-14) -- dead data with no consumer.
+    """
     auto_capture = report_obj.get("auto_capture") or {}
     chip = auto_capture.get("chip", "?")
+
+    # Explicit two-clause condition, never a single `value or FALLBACK`
+    # coalescing expression -- such an expression also fires on other falsy
+    # values with no decision behind them, and a community-authored body can
+    # genuinely carry `""`, which must render the marker, never a blank
+    # (mirrors `diagnostic_report.py`'s `_identity_cell`, D-10/D-11/D-12).
+    host_version = auto_capture.get("host_version")
+    host_version_cell = (
+        NOT_REPORTED
+        if host_version is None or host_version == ""
+        else str(host_version)
+    )
+
+    fw_board_identity = auto_capture.get("fw_board_identity")
+    identity_absent = fw_board_identity is None or fw_board_identity == ""
+    fw_identity_cell = (
+        f"{NOT_REPORTED} -- {_NOT_ATTRIBUTABLE}"
+        if identity_absent
+        else str(fw_board_identity)
+    )
+
     lines = [
         f"dev test triage -- {chip}",
         f"  schema_version:          {report_obj.get('schema_version', '?')}",
+        f"  host_version:            {host_version_cell}",
+        f"  fw_board_identity:       {fw_identity_cell}",
         f"  dedup_fingerprint:       {diff.get('dedup_fingerprint', '')}",
         f"  current_support_status: {diff.get('current_support_status', '')}",
         f"  proposed_disposition:   {diff.get('proposed_disposition', '')}",

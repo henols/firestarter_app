@@ -83,7 +83,16 @@ from firestarter.exceptions import (
 )
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.hardware import HardwareManager
+from firestarter.lock_status import (
+    classify_protection_response,
+    exit_code_for_class,
+    render_lock_status,
+)
 from firestarter.logging_utils import SingleLineStatusHandler
+from firestarter.protection_readability import (
+    GATE_TOKEN_READ_PERMITTED,
+    protection_gate_for_entry,
+)
 from firestarter.sdp_capability import SDP_PROTOCOL_ID, sdp_capability
 
 logger = logging.getLogger("Firestarter")
@@ -647,6 +656,15 @@ def write(
     a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip the erase
     (previously implied by ``-b``) for already-blank or non-erasable parts.
 
+    Phase 153 (ERASE-01/ERASE-02): since this phase, ``-b``/``--no-blank-check``
+    is **unread** on protocols ``0x0D`` and ``0x05`` — neither protocol's write
+    path performs a pre-write blank check any more, so the flag is a no-op on
+    both families and is not needed to write a non-blank part on either one.
+    The flag remains live, with its Phase 92 meaning above, on every other
+    protocol. This does not change the paragraph above: the erase/blank-check
+    decoupling it describes still governs whichever protocols still read the
+    flag.
+
     TRAP #6 / D-17/D-18 (v1.22 HOST-02): ``--skip-sdp-unlock`` is exposed
     on ``write`` ONLY — firmware auto-unlocks in ``eeprom28c_write_init`` and
     nowhere else, so ``read``/``verify``/``blank``/``erase`` have nothing to
@@ -772,25 +790,48 @@ def write(
     # `skip_sdp_unlock`, so both blocks must be free to fire independently on
     # the same 0x0D chip (e.g. a capability-refused 0x0D part gets the D-04
     # auto-set line AND this line together). Do NOT refuse, do NOT abort, do
-    # NOT suppress the bit: nothing on the 0x0D path reads an erase-capability
-    # bit, and after Phase 121 D-12 (`convert_to_programmer`) the host no
-    # longer advertises one either, so the flag is inert here regardless of
-    # whether this message fires. The bit is still emitted (unconditionally,
-    # via `_build_op_flags` below) so a blanket-flag script across a mixed
-    # batch of chips still produces byte-identical wire frames whether or not
-    # this line printed. RESEARCH C-8: this arm deliberately does NOT extend
-    # to `-b`/`--no-blank-check` — since Phase 92 that flag skips only the
-    # blank check, not the erase, and it is genuinely useful on a non-blank
-    # 0x0D part precisely because there is no erase to make the part blank;
-    # a "nothing to skip" line on that flag would be a false statement. That
-    # distinction is recorded as a GATE-02 documentation obligation (plan
-    # 121-13), not a second runtime warning here.
+    # NOT suppress the bit: nothing on the 0x0D WRITE path reads an
+    # erase-capability bit, so the flag is inert here regardless of whether
+    # this message fires. The bit is still emitted (unconditionally, via
+    # `_build_op_flags` below) so a blanket-flag script across a mixed batch
+    # of chips still produces byte-identical wire frames whether or not this
+    # line printed. Scope unchanged from D-13: this arm still deliberately
+    # does NOT extend to `-b`/`--no-blank-check`.
+    #
+    # Phase 153 correction (RESEARCH C-8, now inverted): this arm's message
+    # used to justify itself by claiming the 28C family "has no erase
+    # operation at all". That clause is now FALSE — ERASE-03 restored
+    # `FLAG_CAN_ERASE` for algorithm 13 and the family gained a standalone
+    # `firestarter erase` (D-153-04, D-153-05). What is still true, and is
+    # now the message's only justification, is narrower: the WRITE path
+    # specifically performs no erase (D-153-05 deliberately keeps erase out
+    # of `eeprom28c_write_init`), so this flag still has nothing to skip
+    # there. The corrected message states only that, and names the
+    # standalone command so it is a useful redirect rather than a merely
+    # non-false statement.
+    #
+    # The original comment's OWN reasoning for not extending this arm to
+    # `-b`/`--no-blank-check` has ALSO inverted: it argued `-b` was
+    # "genuinely useful on a non-blank 0x0D part precisely because there is
+    # no erase to make the part blank" — but ERASE-01 removed the pre-write
+    # blank check on this protocol entirely, so `-b` is now itself a no-op
+    # on 0x0D, for an unrelated reason (there is no blank check left for it
+    # to skip). The CONCLUSION is nevertheless unchanged — still no second
+    # warning here — but for a different reason: per RESEARCH §Common
+    # Pitfalls Pitfall 5, warning that `-b` is vacuous would train users to
+    # think the write needs a flag, which is exactly the recommendation
+    # 152-CONTEXT.md D-08 exists to keep out of the public release notes.
+    # This paragraph records that the inversion was noticed and the
+    # conclusion re-derived, not merely carried over stale.
     if skip_erase and is_protocol_0x0d:
         click.echo(
             f"{eprom.upper()}: --skip-erase has nothing to skip on this "
-            "chip's protocol — the 28C family (protocol 0x0D) has no erase "
-            "operation at all; each page write auto-erases internally. "
-            "Proceeding with a normal write."
+            "chip's protocol — the 28C family's write path (protocol 0x0D) "
+            "performs no erase step, so there is nothing here for this "
+            "flag to skip; each page write applies directly. The family "
+            "does have a standalone erase, reachable as `firestarter "
+            "erase`, which this flag does not affect. Proceeding with a "
+            "normal write."
         )
 
     ok = app.eprom_operator.write_eprom(
@@ -901,6 +942,18 @@ def erase(
     TRAP #3 / D-13.3: this command keeps the inverse ``--blank-check`` polarity
     (``is_flag=True default=False``) — opposite of ``write``'s
     ``--no-blank-check``. Both polarities coexist verbatim from argparse.
+
+    D-153-04: unlike ``write``'s ``-b``, this command's ``-b``/``--blank-check``
+    requests a blank check performed **after** the erase, not skipped before it
+    — the inverse polarity above is a naming/default inversion, not just a
+    default flip. On protocol ``0x0D`` this post-erase check is not wired (no
+    ``operation_end`` arm was added to the software chip-erase handler), so
+    ``-b`` is a documented no-op there, not a discovered one.
+
+    D-153-04 (RESEARCH A7): ``-s``/``--sector-address`` exists for the
+    ``0x06`` sector-erase protocol. The ``0x0D`` software chip erase is
+    device-global by construction (the whole part is erased in one AN 0544B
+    sequence) and ignores any sector address given for it.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.erase_eprom(
@@ -1726,6 +1779,93 @@ if _DEV_TOOLS_ENABLED:
 
 
 # ---------------------------------------------------------------------------
+# dev lock-status (Phase 151 / LOCK-02, LOCK-03, LOCK-04 -- D-01, D-04, D-06,
+# D-07, D-08, D-10). D-01 chose a real silicon read exposed only on a
+# pre-release install, deliberately overruling the host-only recommendation,
+# so this command lives inside the same `_DEV_TOOLS_ENABLED` gate every
+# other bench subcommand above does.
+# ---------------------------------------------------------------------------
+
+if _DEV_TOOLS_ENABLED:
+
+    @dev.command(name="lock-status")
+    @click.argument("eprom", shell_complete=_complete_eprom)
+    @click.option(
+        "-f",
+        "--force",
+        is_flag=True,
+        help=(
+            "Proceed past a table refusal anyway (D-07). The result is an "
+            "unadjudicated probe, never a state claim -- and this never sets "
+            "a wire-visible flag (C-16): the table refusal it bypasses is a "
+            "host-side decision only."
+        ),
+    )
+    @click.pass_obj
+    @map_typed_errors
+    def dev_lock_status(app: AppContext, eprom: str, force: bool) -> None:
+        """Diagnostic read of a chip's write-protection state -- not a guarantee (D-01)."""
+        # D-04: resolve through db.get_eprom(), never resolve_chip()'s
+        # programmer dict -- that dict carries neither 'protocol-id' nor
+        # 'name', the exact shape protection_gate_for_entry hard-fails on.
+        # This is the last place in this handler with both the chip NAME
+        # and app.db, mirroring write()'s own D-04 idiom above.
+        entry = app.db.get_eprom(eprom)
+        if not entry:
+            raise ChipNotFoundError(f"{eprom}: not found in database")
+
+        gate_token, gate_reason = protection_gate_for_entry(entry, eprom)
+
+        if gate_token != GATE_TOKEN_READ_PERMITTED and not force:
+            # The table already refused, from the database alone -- this
+            # needs no hardware. Rendered from the predicate's OWN
+            # gate_token/gate_reason directly (never through
+            # classify_protection_response, whose generic boilerplate for a
+            # passed-through refusal would discard the specific offending
+            # alias(es) protection_gate_for_entry already named). Open no
+            # serial port on this path: a refusal that still opened the
+            # port would make a refusal indistinguishable from a comms
+            # failure.
+            click.echo(render_lock_status(gate_token, gate_reason, None))
+            sys.exit(exit_code_for_class(gate_token))
+
+        # Either the table permits the read, or --force is bypassing its
+        # refusal (D-07). Both dicts are needed from here on: get_eprom()
+        # fed the predicate above; resolve_chip() is what the firmware
+        # operation itself needs.
+        eprom_data = resolve_chip(eprom, db=app.db)
+        try:
+            _accepted, payload = app.eprom_operator.read_protection_status(
+                eprom, eprom_data, operation_flags=_build_op_flags()
+            )
+        except EpromOperationError as exc:
+            # D-04, keyed on the message **id**, never on text -- a version
+            # probe cannot work here because _probe_port's [\d.x]+ truncates
+            # the pre-release suffix, so it cannot distinguish the beta that
+            # has this command from the beta that does not, and would have
+            # to refuse both. map_unknown_cmd_to_outdated_for_operation
+            # returns rather than raises, so this caller owns the chaining.
+            outdated = sdp_honesty.map_unknown_cmd_to_outdated_for_operation(
+                exc, "lock-status", eprom
+            )
+            if outdated is None:
+                raise
+            class_token = "firmware_outdated"
+            click.echo(render_lock_status(class_token, str(outdated), None))
+            raise SystemExit(exit_code_for_class(class_token)) from exc
+
+        # classify_protection_response's forced-past-refusal guard runs
+        # before the payload is ever consulted, so a forced read on a
+        # refused part can never become a state claim here either.
+        class_token, reason = classify_protection_response(
+            gate_token, payload, forced=force
+        )
+        raw_byte = payload[0] if payload else None
+        click.echo(render_lock_status(class_token, reason, raw_byte))
+        sys.exit(exit_code_for_class(class_token))
+
+
+# ---------------------------------------------------------------------------
 # dev validate-family (71-06 / HARN-01 Tier-3 + HARN-02 + HARN-03)
 # ---------------------------------------------------------------------------
 
@@ -2505,17 +2645,21 @@ def dev_test(app: "AppContext", chip: str) -> None:
     write_scope = _resolve_write_scope(app, chip, interactive=interactive)
     plan = derive_plan(chip, app.db, write_scope=write_scope)
 
-    # fw_board_identity stays None: EpromOperator.comm is a transient
-    # per-operation connection torn down after every operator call (see
-    # 112-02-SUMMARY.md) -- there is no live comm to read programmer_info
-    # off of after run_plan returns without opening a new, extraneous
-    # connection, which would violate the orchestrator-only contract
-    # (SAFE-02). hw_revision IS reachable via a dedicated, orchestrator-safe
-    # energize/query read (Part A, hardware.py) and is populated below.
+    # EpromOperator.comm is a transient per-operation connection torn down
+    # after every operator call (see 112-02-SUMMARY.md) -- there is no live
+    # comm to read programmer_info off of after run_plan returns without
+    # opening a new, extraneous connection, which would violate the
+    # orchestrator-only contract (SAFE-02). Both identity values instead
+    # come off the hardware-revision read's OWN connection (D-01): its
+    # find_and_connect triggers the CAP-02 setup ack, which sets
+    # comm.firmware_identity before the HARDWARE_REVISION dispatch even
+    # runs, so one orchestrator-safe energize/query read (Part A,
+    # hardware.py) yields both fields with zero extra connections.
+    identity = app.hardware_manager.read_programmer_identity()
     auto_capture = AutoCapture(
         host_version=version,
-        fw_board_identity=None,
-        hw_revision=app.hardware_manager.read_hardware_revision_value(),
+        fw_board_identity=identity.fw_board_identity,
+        hw_revision=identity.hw_revision,
         chip=chip,
         protocol=None,
     )

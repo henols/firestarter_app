@@ -113,7 +113,7 @@ PARAM_BUDGET_BYTES = 24
 CPP_BANNER_TEMPLATE = (
     "/*\n"
     " * Project Name: Firestarter\n"
-    " * Copyright (c) 2024 Henrik Olsson\n"
+    " * Copyright (c) 2026 Henrik Olsson\n"
     " *\n"
     " * Permission is hereby granted under MIT license.\n"
     " *\n"
@@ -131,7 +131,7 @@ CPP_BANNER_TEMPLATE = (
 PY_BANNER_TEMPLATE = (
     '"""\n'
     "Project Name: Firestarter\n"
-    "Copyright (c) 2024 Henrik Olsson\n"
+    "Copyright (c) 2026 Henrik Olsson\n"
     "\n"
     "Permission is hereby granted under MIT license.\n"
     "\n"

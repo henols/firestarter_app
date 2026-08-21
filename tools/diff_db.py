@@ -19,6 +19,7 @@ Exit codes:
       consumer does not confuse a missing input with a real diff BLOCK (WR-04).
 """
 
+import copy
 import json
 import os
 import sys
@@ -71,6 +72,22 @@ _RATIONALES = {
         "  pulse_duration is microseconds for ALL protocols; no per-protocol multiplier.\n"
         "  [VERIFIED: minipro database.c#L866 @ a8efaedc —\n"
         "   https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c#L866]"
+    ),
+    "RULE_VCC_MARGIN_RAIL": (
+        "Phase 148 DATA-01 (D-01/D-02/D-03) — VCC margin-rail substitution.\n"
+        "  infoic.xml's VCC nibble 2 (VCC_VOLTAGES[0x02] = 4000 mV) is decoded FAITHFULLY —\n"
+        "  this is not a decode repair. The defect is semantic: minipro's vcc is the TL866's\n"
+        "  low-margin VCC *verify* rail, and firestarter surfaced it as the chip's operating\n"
+        "  supply. The substitution targets the already-decoded vdd_mv (itself an\n"
+        "  infoic.xml-decoded value, so nothing is invented) whenever vcc_mv lands on this\n"
+        "  rail: build_db.py::_VCC_MARGIN_RAIL_MV, applied post-construction.\n"
+        "  No other delta: exactly 56 chips move, every one 4000 -> 5000 mV, and no chip's\n"
+        "  vcc_mv is ever lowered by this rule (Test 3's no-decrease guard,\n"
+        "  tests/test_vcc_margin_rail.py).\n"
+        "  [VERIFIED: minipro database.c#L130-L135 @ a8efaedc —\n"
+        "   tl866ii_vcc_voltages[] —\n"
+        "   https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c#L130]\n"
+        "  [CITED: .planning/phases/148-numeric-database-values-the-at28c-vcc-decode/148-DB-DIFF.md]"
     ),
     "BUG3_VCC_VDD": (
         "BUG-3 vcc/vdd label swap only — inverted field labels corrected.\n"
@@ -305,12 +322,17 @@ _RULE_FIELD_PATHS = {
     },
     # BUG-2 timing + BUG-3 vcc/vdd label swap, applied to the same record.
     "BUG2_AND_BUG3": {
-        ("programming", "pulse_duration"),
-        ("electrical", "vcc"),
-        ("electrical", "vdd"),
+        ("programming", "pulse_duration_us"),
+        ("electrical", "vcc_mv"),
+        ("electrical", "vdd_mv"),
     },
-    "BUG2_TIMING": {("programming", "pulse_duration")},
-    "BUG3_VCC_VDD": {("electrical", "vcc"), ("electrical", "vdd")},
+    "BUG2_TIMING": {("programming", "pulse_duration_us")},
+    # Phase 148 DATA-01 RULE_VCC_MARGIN_RAIL: scope is exactly the one key the
+    # margin-rail substitution ever touches — electrical.vcc_mv — and nothing
+    # else. vdd_mv is read by the rule, never written; it is not part of this
+    # rule's explained field set.
+    "RULE_VCC_MARGIN_RAIL": {("electrical", "vcc_mv")},
+    "BUG3_VCC_VDD": {("electrical", "vcc_mv"), ("electrical", "vdd_mv")},
     "SRAM_PINOUT": {
         ("pinout",),
         ("electrical", "type"),  # SRAM re-route re-derives type (Pass-2)
@@ -320,7 +342,6 @@ _RULE_FIELD_PATHS = {
         ("electrical", "type"),  # flags-based EEPROM reclassification for 0x07 chips
     },
     "BUG_B_VPP": {
-        ("electrical", "vpp"),  # VPP voltage string (0xF0-mask fix)
         ("electrical", "vpp_mv"),  # VPP voltage in mV (0xF0-mask fix)
     },
     # Phase 66: support_status + unsupported_reason (new top-level keys) + NMOS vpp/vpp_mv corrections.
@@ -331,7 +352,6 @@ _RULE_FIELD_PATHS = {
     "RULE_PHASE66": {
         ("support_status",),
         ("unsupported_reason",),
-        ("electrical", "vpp"),
         ("electrical", "vpp_mv"),
     },
     # Phase 84 cosmetic relabel: FM1608 SRAM→FRAM. Scoped to the relabeled chips'
@@ -420,20 +440,24 @@ def _classify_diff(bl_chip, cu_chip):
       1. RULE_ALGO     — algorithm changed (primary dispatch key)
       2. BUG2_AND_BUG3 — timing + voltage changed (combined fix, precedes singles)
       3. BUG2_TIMING   — timing changed only
-      4. BUG3_VCC_VDD  — voltage (vcc/vdd) changed only
-      5a. RC1_DIP32_27C020 — pinout changed to DIP32_27C020 (Phase 98 RC-1 fix; before SRAM_PINOUT)
-      5b. SRAM_PINOUT  — pinout changed only (other pinout re-routes)
-      6. RULE_PHASE84_RELABEL — only electrical.type changed, AND the chip is in
+      4. RULE_VCC_MARGIN_RAIL — Phase 148 DATA-01 margin-rail substitution: baseline
+                         vcc_mv was the 4000 mV verify rail, current vcc_mv now equals
+                         current vdd_mv (value-scoped, before BUG3_VCC_VDD — otherwise a
+                         mover would be misattributed to the vcc/vdd label-swap rationale)
+      5. BUG3_VCC_VDD  — voltage (vcc/vdd) changed only
+      6a. RC1_DIP32_27C020 — pinout changed to DIP32_27C020 (Phase 98 RC-1 fix; before SRAM_PINOUT)
+      6b. SRAM_PINOUT  — pinout changed only (other pinout re-routes)
+      7. RULE_PHASE84_RELABEL — only electrical.type changed, AND the chip is in
                          _PHASE84_RELABEL_PART_NUMBERS (cosmetic label-only correction;
                          scoped by part_number; MORE SPECIFIC than BUG_A_ETYPE so must
                          precede it — otherwise BUG_A_ETYPE would match first)
-      6b. VARIANT_DECODE — only electrical.type changed to 'EEPROM' AND proto in
+      7b. VARIANT_DECODE — only electrical.type changed to 'EEPROM' AND proto in
                          {0x0D, 0x34} (Phase 86 consolidation: 5V-EEPROM-pinout proto-0x0D
                          Flash/EEPROM->EEPROM + X88C64P proto-0x34 UV-EPROM->EEPROM;
                          scoped by new-type+proto so it does NOT shadow BUG_A_ETYPE)
-      7. BUG_A_ETYPE   — electrical.type changed (flags-based EEPROM reclassification)
-      8. BUG_B_VPP     — electrical.vpp/vpp_mv changed (0xF0-mask fix)
-      9. RULE_PHASE66  — only support_status/unsupported_reason/vpp/vpp_mv changed
+      8. BUG_A_ETYPE   — electrical.type changed (flags-based EEPROM reclassification)
+      9. BUG_B_VPP     — electrical.vpp/vpp_mv changed (0xF0-mask fix)
+      10. RULE_PHASE66 — only support_status/unsupported_reason/vpp/vpp_mv changed
                          (LAST — least specific; must not shadow BUG_A_ETYPE/BUG_B_VPP)
       -> None          — no rule matched (UNEXPLAINED = D-03 BLOCK)
     """
@@ -442,20 +466,17 @@ def _classify_diff(bl_chip, cu_chip):
     bl_elec = bl_chip.get("electrical", {})
     cu_elec = cu_chip.get("electrical", {})
 
-    timing_diff = bl_prog.get("pulse_duration") != cu_prog.get("pulse_duration")
+    timing_diff = bl_prog.get("pulse_duration_us") != cu_prog.get("pulse_duration_us")
     algo_diff = bl_prog.get("algorithm") != cu_prog.get("algorithm")
-    vcc_diff = bl_elec.get("vcc") != cu_elec.get("vcc")
-    vdd_diff = bl_elec.get("vdd") != cu_elec.get("vdd")
+    vcc_diff = bl_elec.get("vcc_mv") != cu_elec.get("vcc_mv")
+    vdd_diff = bl_elec.get("vdd_mv") != cu_elec.get("vdd_mv")
     pinout_diff = bl_chip.get("pinout") != cu_chip.get("pinout")
     type_diff = bl_elec.get("type") != cu_elec.get("type")
-    vpp_diff = bl_elec.get("vpp") != cu_elec.get("vpp") or bl_elec.get(
-        "vpp_mv"
-    ) != cu_elec.get("vpp_mv")
-    # Phase 66: support_status and/or unsupported_reason added; vpp/vpp_mv corrected for NMOS.
+    vpp_diff = bl_elec.get("vpp_mv") != cu_elec.get("vpp_mv")
+    # Phase 66: support_status and/or unsupported_reason added; vpp_mv corrected for NMOS.
     phase66_diff = (
         bl_chip.get("support_status") != cu_chip.get("support_status")
         or bl_chip.get("unsupported_reason") != cu_chip.get("unsupported_reason")
-        or bl_elec.get("vpp") != cu_elec.get("vpp")
         or bl_elec.get("vpp_mv") != cu_elec.get("vpp_mv")
     )
 
@@ -469,6 +490,30 @@ def _classify_diff(bl_chip, cu_chip):
         label = "BUG2_AND_BUG3"
     elif timing_diff and not voltage_diff and not pinout_diff:
         label = "BUG2_TIMING"
+    elif (
+        bl_elec.get("vcc_mv") == 4000
+        and cu_elec.get("vcc_mv") == cu_elec.get("vdd_mv")
+        and cu_elec.get("vcc_mv") != 4000
+        and not algo_diff
+        and not timing_diff
+        and not pinout_diff
+        and not type_diff
+    ):
+        # RULE_VCC_MARGIN_RAIL (before BUG3_VCC_VDD): Phase 148 DATA-01
+        # margin-rail substitution. Scoped on the DECODED VALUES themselves —
+        # baseline vcc_mv was the 4000 mV TL866 verify-margin rail (mirrors
+        # build_db.py's _VCC_MARGIN_RAIL_MV = VCC_VOLTAGES[0x02]); current
+        # vcc_mv now equals the chip's own current vdd_mv; current vcc_mv is
+        # no longer 4000 — rather than any part-number/type/algorithm key, so
+        # this branch's scope is ENFORCED here (not just asserted in prose): a
+        # compound change (algo/timing/pinout/type also differing) falls
+        # through to a more generic rule instead of being silently absorbed.
+        # Placed BEFORE BUG3_VCC_VDD: otherwise a mover whose only other delta
+        # is a secondary field would be misattributed to the Phase 57/58
+        # BUG-3 vcc/vdd label-swap rationale, which this substitution is not
+        # (D-01: the vcc/vdd labels are correct; only the margin-rail value
+        # is being substituted).
+        label = "RULE_VCC_MARGIN_RAIL"
     elif voltage_diff and not timing_diff and not algo_diff:
         label = "BUG3_VCC_VDD"
     elif (
@@ -598,6 +643,76 @@ def _classify_diff(bl_chip, cu_chip):
 
 
 # ---------------------------------------------------------------------------
+# Schema-normalizing comparator (Phase 148 D-11)
+# ---------------------------------------------------------------------------
+def _voltage_str_to_mv(value):
+    """Parse a voltage string like "4V" or "3.3V" -> integer millivolts.
+
+    Narrow except (TypeError, ValueError) only (T-148-05) — an unparseable
+    value maps to the documented 0 sentinel rather than crashing the gate.
+    """
+    try:
+        return int(round(float(str(value).rstrip("V")) * 1000))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _pulse_str_to_us(value):
+    """Parse a pulse-duration string like "100 us" -> integer microseconds.
+
+    "Algorithm Controlled" and any other unparseable value map to the
+    documented 0 sentinel (T-148-05), mirroring build_db.py's generator.
+    """
+    try:
+        return int(round(float(str(value).split()[0])))
+    except (TypeError, ValueError, IndexError):
+        return 0
+
+
+def _canonicalize_db(db):
+    """Return a normalized copy of a chip database on the numeric schema.
+
+    A pure-representation migration (string voltage/timing fields ->
+    numeric mv/us fields) must produce zero additional GATE-02 diff rows.
+    This function normalizes both the pre-migration string schema and the
+    post-migration numeric schema to the same shape before comparison, so
+    `_classify_diff`/`_diff_field_paths` always see one schema regardless of
+    which side of the migration either input database is on (D-11: the
+    pinned baseline is never re-pinned).
+
+    Per-chip normalization rules (electrical.* / programming.* blocks):
+      - electrical.vcc (str, e.g. "4V") -> electrical.vcc_mv (int); vcc removed.
+      - electrical.vdd (str) -> electrical.vdd_mv (int); vdd removed.
+      - electrical.vpp is dropped entirely — the migration deletes this key
+        outright; vpp_mv already carries the value and its name/type do not
+        change.
+      - programming.pulse_duration (str, e.g. "100 us" / "Algorithm
+        Controlled") -> programming.pulse_duration_us (int); "Algorithm
+        Controlled" and any other unparseable value map to 0.
+      - A chip already carrying vcc_mv / vdd_mv / pulse_duration_us (i.e. no
+        old-schema key present) is passed through unchanged for that field —
+        this is what makes the function idempotent and correct on both
+        schemas.
+    """
+    out = copy.deepcopy(db)
+    for chips in out.values():
+        if not isinstance(chips, list):
+            continue
+        for chip in chips:
+            elec = chip.get("electrical")
+            if isinstance(elec, dict):
+                if "vcc" in elec:
+                    elec["vcc_mv"] = _voltage_str_to_mv(elec.pop("vcc"))
+                if "vdd" in elec:
+                    elec["vdd_mv"] = _voltage_str_to_mv(elec.pop("vdd"))
+                elec.pop("vpp", None)
+            prog = chip.get("programming")
+            if isinstance(prog, dict) and "pulse_duration" in prog:
+                prog["pulse_duration_us"] = _pulse_str_to_us(prog.pop("pulse_duration"))
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 def _load_db(path, label):
@@ -619,6 +734,12 @@ def main():
     """Load both JSONs, diff, classify, report, exit with contract codes."""
     bl_db = _load_db(BASELINE_FILE, "baseline")
     cu_db = _load_db(DB_FILE, "current DB")
+
+    # D-11: canonicalize both databases to the numeric schema before any
+    # comparison, so GATE-02 classifies identically whether either side is on
+    # the old string schema or the new numeric schema (Phase 148).
+    bl_db = _canonicalize_db(bl_db)
+    cu_db = _canonicalize_db(cu_db)
 
     bl_idx = _make_index(bl_db)
     cu_idx = _make_index(cu_db)

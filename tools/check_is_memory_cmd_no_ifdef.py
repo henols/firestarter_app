@@ -1,8 +1,9 @@
 """
 LOCK-03 textual oracle: structural scan proving firmware's `is_memory_cmd()`
 admission predicate carries no build-configuration conditional in its body
-and enumerates exactly the eight expected `CMD_*` memory commands (Phase 119
-Plan 03, D-04's second half).
+and enumerates exactly the expected `CMD_*` memory commands (Phase 119
+Plan 03, D-04's second half; grown from eight to nine names by Phase 151 /
+LOCK-02, which added `CMD_LOCK_STATUS`).
 
 **Why a second oracle is needed at all.** Plan 119-02 already proved
 `is_memory_cmd()` *behaves* identically in two build configurations (an
@@ -24,7 +25,7 @@ is_memory_cmd(uint8_t cmd)` definition and asserts BOTH:
       check would be evadable by conditioning on a different macro, which
       would defeat D-02's purpose just as completely.
   (b) The body's `CMD_*` identifiers, as a SET, equal exactly the frozen
-      eight-name expected set (`_EXPECTED_CMD_NAMES` below). Missing and
+      nine-name expected set (`_EXPECTED_CMD_NAMES` below). Missing and
       unexpected names are reported separately, by name. `CMD_DEV_ADDRESS`
       and `CMD_DEV_REGISTER` must never appear -- they are conditionally
       defined in the firmware header and are exactly what the predicate
@@ -96,14 +97,18 @@ FIRESTARTER_CMD_ADMISSION_SRC = os.environ.get(
 # The predicate this gate reads.
 _PREDICATE_FUNC_NAME = "is_memory_cmd"
 
-# The frozen expected command set (D-02/D-04). Adding a ninth memory command
-# is a DELIBERATE act that must edit this line -- it is not auto-derived from
-# the header, because the whole point of this gate is to catch an
+# The frozen expected command set (D-02/D-04). Adding a memory command is a
+# DELIBERATE act that must edit this line -- it is not auto-derived from the
+# header, because the whole point of this gate is to catch an
 # accidental/unreviewed enumeration drift, not just mirror it.
 # CMD_DEV_ADDRESS and CMD_DEV_REGISTER must NEVER appear here: they are
 # conditionally defined (#ifdef DEV_TOOLS) in the firmware header, and naming
 # them in this predicate would recreate exactly the divergence is_memory_cmd()
 # exists to remove.
+#
+# Phase 151 / LOCK-02 (OD-3) grew this set from eight names to nine, adding
+# CMD_LOCK_STATUS -- the protection-status read, a memory command because it
+# is issued through firestarter_get_data, set only by configure_memory().
 _EXPECTED_CMD_NAMES = frozenset(
     {
         "CMD_READ",
@@ -114,6 +119,7 @@ _EXPECTED_CMD_NAMES = frozenset(
         "CMD_VERIFY",
         "CMD_SDP_UNLOCK",
         "CMD_SDP_LOCK",
+        "CMD_LOCK_STATUS",
     }
 )
 
@@ -325,7 +331,8 @@ def main() -> int:
 
     print(
         f"PASS: {_PREDICATE_FUNC_NAME}() has no preprocessor conditional and "
-        f"enumerates exactly the eight expected commands ({path}, {range_desc})"
+        f"enumerates exactly the {len(_EXPECTED_CMD_NAMES)} expected commands "
+        f"({path}, {range_desc})"
     )
     return 0
 

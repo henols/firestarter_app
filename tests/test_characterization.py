@@ -357,6 +357,21 @@ def test_info_known_chip(snapshot):
     assert stderr == snapshot(name="test_info_known_chip_stderr")
 
 
+def test_info_at28c256(snapshot):
+    """Pin info output for AT28C256 (Phase 148 DATA-01 criterion 1).
+
+    This is the ONLY coverage criterion 1 (firestarter info on an AT28C-family
+    chip reports 5.0v instead of 4.0v) has: no AT28C VCC line exists in any
+    pre-existing snapshot (test_info_known_chip runs W27C512, whose vcc_mv is
+    5000 mV and is NOT one of the 56 margin-rail movers). This test's own
+    snapshot is what proves the corrected VCC: 5.0v line.
+    """
+    stdout, stderr, rc = run_firestarter("info", "AT28C256")
+    assert rc == 0
+    assert stdout == snapshot
+    assert stderr == snapshot(name="test_info_at28c256_stderr")
+
+
 def test_search_w27(snapshot):
     """Pin search results for 'W27' substring."""
     stdout, stderr, rc = run_firestarter("search", "W27")

@@ -14,7 +14,8 @@ test) fails on a real violation.
 Coverage:
   1. Clean control: the checker exits 0 against the real, unmodified
      firestarter.h -- is_memory_cmd()'s body carries no preprocessor
-     conditional and enumerates exactly the eight expected commands.
+     conditional and enumerates exactly the nine expected commands (grown
+     from eight by Phase 151 / LOCK-02's CMD_LOCK_STATUS).
   2. Committed planted violation -- the load-bearing anti-hollow proof: the
      checker, pointed at the committed
      tests/fixtures/planted_ifdef_in_predicate.h via
@@ -48,6 +49,7 @@ import sys
 from pathlib import Path
 
 from tests.fw_presence import fw_path, requires_fw
+from tools.check_is_memory_cmd_no_ifdef import _EXPECTED_CMD_NAMES
 
 # Absolute path to the firestarter_app directory (cwd-independent), mirrors
 # tests/test_check_no_log_in_sdp_window.py:59.
@@ -98,8 +100,8 @@ def _line_number_of_marker(text: str, marker: str) -> int:
 def test_checker_exits_zero_on_clean_source() -> None:
     """python tools/check_is_memory_cmd_no_ifdef.py must exit 0 against the
     real, unmodified firestarter.h -- is_memory_cmd()'s body on today's tree
-    carries no preprocessor conditional and enumerates exactly the eight
-    expected commands."""
+    carries no preprocessor conditional and enumerates exactly the nine
+    expected commands (Phase 151 / LOCK-02 grew this from eight)."""
     result = _run_checker()
     assert result.returncode == 0, (
         f"checker exited {result.returncode} on the real, clean source.\n"
@@ -176,6 +178,7 @@ def test_checker_exits_zero_when_conditional_is_outside_predicate_body(
         "\n"
         "#define CMD_SDP_UNLOCK 9\n"
         "#define CMD_SDP_LOCK 10\n"
+        "#define CMD_LOCK_STATUS 16\n"
         "\n"
         "static inline bool is_memory_cmd(uint8_t cmd) {\n"
         "    switch (cmd) {\n"
@@ -187,6 +190,7 @@ def test_checker_exits_zero_when_conditional_is_outside_predicate_body(
         "        case CMD_VERIFY:\n"
         "        case CMD_SDP_UNLOCK:\n"
         "        case CMD_SDP_LOCK:\n"
+        "        case CMD_LOCK_STATUS:\n"
         "            return true;\n"
         "        default:\n"
         "            return false;\n"
@@ -228,6 +232,7 @@ def test_checker_exits_zero_when_conditional_is_only_named_in_a_comment(
         "#define CMD_VERIFY 6\n"
         "#define CMD_SDP_UNLOCK 9\n"
         "#define CMD_SDP_LOCK 10\n"
+        "#define CMD_LOCK_STATUS 16\n"
         "\n"
         "static inline bool is_memory_cmd(uint8_t cmd) {\n"
         "    // Replaces the old #ifdef DEV_TOOLS-conditional ordinal guard --\n"
@@ -242,6 +247,7 @@ def test_checker_exits_zero_when_conditional_is_only_named_in_a_comment(
         "        case CMD_VERIFY:\n"
         "        case CMD_SDP_UNLOCK:\n"
         "        case CMD_SDP_LOCK:\n"
+        "        case CMD_LOCK_STATUS:\n"
         "            return true;\n"
         "        default:\n"
         "            return false;\n"
@@ -336,3 +342,21 @@ def test_checker_fails_closed_on_unresolvable_inputs(tmp_path: Path) -> None:
     )
     assert "ERROR:" in result_absent.stderr
     assert "rather than deleting this gate" in result_absent.stderr
+
+
+# ---------------------------------------------------------------------------
+# Test 7: the expected-set count itself (Phase 151 / LOCK-02)
+# ---------------------------------------------------------------------------
+
+
+def test_expected_cmd_names_has_exactly_nine_entries() -> None:
+    """`_EXPECTED_CMD_NAMES` must carry exactly nine names, imported directly
+    from the tool rather than re-declared here, so a future silent widening
+    (or narrowing) of the constant is caught by a count assertion, not only
+    by the name-list docstrings above -- which a careless edit could update
+    without touching the actual set, or vice versa."""
+    assert len(_EXPECTED_CMD_NAMES) == 9, (
+        f"_EXPECTED_CMD_NAMES has {len(_EXPECTED_CMD_NAMES)} entries, expected "
+        f"exactly 9 (Phase 151 / LOCK-02 grew this from eight): {sorted(_EXPECTED_CMD_NAMES)}"
+    )
+    assert "CMD_LOCK_STATUS" in _EXPECTED_CMD_NAMES

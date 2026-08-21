@@ -712,6 +712,24 @@ params      = [
 ]
 wire_format = "id_frame"
 
+# Phase 151 / LOCK-02: CMD_LOCK_STATUS (16) response. Byte 0 is the raw byte
+# read from silicon, unmodified. Byte 1 is a firmware decode code: 0x00
+# reads-as-unprotected, 0x01 reads-as-protected, 0xFF indeterminate/not-
+# obtainable (reuses hw_get_version's established 0xFF sentinel convention).
+# The raw byte rides the wire so D-03's probe legs can record the observation
+# independently of the decode -- a wrong decode must not destroy it. This is
+# an observation, not a state claim; the class token is produced on the host.
+[[messages]]
+id          = 0xE1
+name        = "MSG_DATA_PROTECTION_STATUS"
+severity    = "DATA"
+format      = "Lock status probe: raw=0x%02X decode=%u"
+params      = [
+    { type = "u8", render = "hex_byte" },
+    { type = "u8" },
+]
+wire_format = "id_frame"
+
 [[messages]]
 id          = 0xE2
 name        = "MSG_DATA_SENDING"

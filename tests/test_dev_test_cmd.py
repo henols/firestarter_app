@@ -71,13 +71,14 @@ from firestarter.cli_handlers import (
 from firestarter.config import get_config_dir
 from firestarter.constants import FLAG_SKIP_SDP_UNLOCK
 from firestarter.database import EpromDatabase
+from firestarter.diagnostic_report import NOT_REPORTED
 from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import (
     ChipNotFoundError,
     ChipNotImplementedError,
     SerialError,
 )
-from firestarter.hardware import HardwareManager
+from firestarter.hardware import HardwareManager, ProgrammerIdentity
 from firestarter.sdp_capability import sdp_capability, sdp_capability_for_entry
 
 from .conftest import make_app_context
@@ -373,13 +374,18 @@ def make_hardware_manager(
     vpp_values: object = 12000,
     vpe_values: object = 5000,
     hw_revision: object = "Rev 2.0-class",
+    fw_board_identity: object = "3.0.0b19:leonardo",
 ) -> Mock:
     """A Mock(spec=HardwareManager) with canned sample_vpp_mv/sample_vpe_mv/
-    read_hardware_revision_value.
+    read_programmer_identity.
 
     D-10: this builder's `Mock` return type is deliberate too -- see
     `make_clean_operator` above and tests/conftest.py's `make_app_context`
-    docstring for the reasoning.
+    docstring for the reasoning. read_programmer_identity's return value is
+    itself a real ProgrammerIdentity (never a bare Mock/MagicMock): the
+    NamedTuple's field names are not spec-protected, so a mock return value
+    would leak a child-mock repr into the report instead of a string or
+    None.
 
     A plain int makes every call return the same value (return_value); a
     list makes each successive call return the next value (side_effect) --
@@ -397,8 +403,29 @@ def make_hardware_manager(
         hw.sample_vpe_mv.side_effect = vpe_values
     else:
         hw.sample_vpe_mv.return_value = vpe_values
-    hw.read_hardware_revision_value.return_value = hw_revision
+    hw.read_programmer_identity.return_value = ProgrammerIdentity(
+        hw_revision=hw_revision, fw_board_identity=fw_board_identity
+    )
     return hw
+
+
+def test_make_hardware_manager_returns_a_spec_bound_double() -> None:
+    """Pins the property the D-03 rename's safety rests on (P-2), so a
+    future "simplification" cannot quietly reopen the absent-chip
+    false-green trap: the double is spec-bound (an attribute the real
+    HardwareManager does not define raises AttributeError, so a missed
+    rename anywhere in the suite fails loudly instead of passing
+    vacuously), and its read_programmer_identity() return value is a real
+    ProgrammerIdentity carrying exactly the strings the factory was given."""
+    hw = make_hardware_manager(
+        hw_revision="Rev 2.0-class", fw_board_identity="3.0.0b19:leonardo"
+    )
+    with pytest.raises(AttributeError):
+        hw.this_attribute_does_not_exist_on_hardware_manager
+    identity = hw.read_programmer_identity()
+    assert isinstance(identity, ProgrammerIdentity)
+    assert identity.hw_revision == "Rev 2.0-class"
+    assert identity.fw_board_identity == "3.0.0b19:leonardo"
 
 
 @pytest.fixture()
@@ -728,7 +755,7 @@ class TestReportDestination:
         assert "hw_revision" in data["auto_capture"]
 
     def test_hw_revision_auto_captured_end_to_end(self, runner: CliRunner) -> None:
-        """The mocked hardware manager's read_hardware_revision_value() flows
+        """The mocked hardware manager's read_programmer_identity() flows
         through to the rendered report and the .json artifact (Phase 112
         Plan 04 auto-capture wiring, end-to-end)."""
         app = make_app_context(
@@ -755,6 +782,133 @@ class TestReportDestination:
         md_text = (_reports_dir() / f"dev-test-{_CHIP_NO_ID}.md").read_text()
         assert "```json" in md_text
         assert "| Step | Verdict | Reason |" in md_text
+
+    def test_fw_board_identity_auto_captured_end_to_end(
+        self, runner: CliRunner
+    ) -> None:
+        """The mocked hardware manager's read_programmer_identity() flows
+        through to the rendered report and the .json artifact -- the finding
+        that opens milestone v1.32 (PROV-01): every `dev test` report ever
+        filed carried an unconditional `fw_board_identity: null`, so a
+        report can now be attributed to the firmware/board that produced it.
+        This proves attribution becomes possible; it proves nothing about
+        the AT28C256 0x0D write path itself (Evidence Ceiling)."""
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(
+                fw_board_identity="3.0.0b19:leonardo"
+            ),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+        assert "3.0.0b19:leonardo" in result.output
+        data = _load_report(_CHIP_NO_ID)
+        assert data["auto_capture"]["fw_board_identity"] == "3.0.0b19:leonardo"
+
+    @pytest.mark.parametrize("identity", ["3.0.0b11:leonardo", "3.0.0b19:leonardo"])
+    def test_prerelease_suffix_survives_into_the_report(
+        self, runner: CliRunner, identity: str
+    ) -> None:
+        """PROV-03: the recorded identity keeps its prerelease suffix
+        verbatim in the saved JSON -- no truncation to `3.0.0`, no
+        normalisation. Attribution requires the exact build, not just the
+        release line."""
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(fw_board_identity=identity),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+        data = _load_report(_CHIP_NO_ID)
+        assert data["auto_capture"]["fw_board_identity"] == identity
+
+    def test_two_identities_differing_only_in_suffix_land_as_different_values(
+        self, runner: CliRunner
+    ) -> None:
+        """PROV-03 / D-08: gh#21 and gh#32 both report host `3.0.0b15`
+        against an UNKNOWN firmware, and so cannot today be distinguished
+        from a board lacking the whole Phase-117-120 0x0D fix stack (FIX-01
+        /WE-inhibit routing, FIX-03 A16-A18 staleness, FIX-06 the
+        completion-vs-data-landed conflation). This test proves that
+        attribution becomes possible going forward -- two builds differing
+        only in prerelease suffix (b11 vs b19) land as two DIFFERENT
+        recorded values, never collapsed to the same one. It does not prove
+        the 0x0D write path itself is fixed on either build (Evidence
+        Ceiling): a single round-trip assertion would pass vacuously if a
+        later refactor normalised suffixes away, so the point of this test
+        is the INEQUALITY, not either value in isolation."""
+        first_identity = "3.0.0b11:leonardo"
+        second_identity = "3.0.0b19:leonardo"
+
+        app_first = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(fw_board_identity=first_identity),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app_first)
+        assert result.exit_code == 0, result.output
+        first_recorded = _load_report(_CHIP_NO_ID)["auto_capture"]["fw_board_identity"]
+
+        app_second = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(fw_board_identity=second_identity),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app_second)
+        assert result.exit_code == 0, result.output
+        second_recorded = _load_report(_CHIP_NO_ID)["auto_capture"]["fw_board_identity"]
+
+        assert first_recorded != second_recorded
+        assert first_recorded.endswith("b11:leonardo")
+        assert second_recorded.endswith("b19:leonardo")
+
+    def test_unknown_identity_renders_the_marker_and_saves_typed_null(
+        self, runner: CliRunner
+    ) -> None:
+        """D-13(b): this path is DEFENSIVE, not routine -- _probe_port
+        refuses firmware reporting no identity at all, so in the field a
+        successful `dev test` run essentially always has one. That is
+        exactly why this leg has to be built and seen to pass rather than
+        assumed, and why it is driven through the existing spec-bound mock
+        (make_hardware_manager) rather than through a contrived transport
+        failure: with read_programmer_identity() returning
+        ProgrammerIdentity(None, None), the rendered output carries the
+        explicit NOT_REPORTED marker (imported, never restated as a
+        literal) for both identity rows and never a bare rendering of
+        None on either -- while the saved report JSON keeps both
+        auto_capture.fw_board_identity and auto_capture.hw_revision typed
+        `null` (D-10), so machine consumers keep testing `is None` and
+        PROV-04's backward-compatibility story stays one case. Attribution
+        is explicitly refused here, not silently produced -- this proves
+        nothing about the AT28C256 0x0D write path itself, and no
+        support_status changes (Evidence Ceiling)."""
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(
+                hw_revision=None, fw_board_identity=None
+            ),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+
+        assert NOT_REPORTED in result.output
+        identity_lines = [
+            line
+            for line in result.output.splitlines()
+            if "fw_board_identity" in line or "hw_revision" in line
+        ]
+        assert identity_lines, "expected identity rows in the rendered table"
+        for line in identity_lines:
+            assert not re.search(r"\bNone\b", line), (
+                f"bare None rendered in an identity cell: {line!r}"
+            )
+
+        data = _load_report(_CHIP_NO_ID)
+        assert data["auto_capture"]["fw_board_identity"] is None
+        assert data["auto_capture"]["hw_revision"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -828,7 +982,7 @@ class TestAbsentChipHardFail:
         `dev test` must exit 1 with the bare `Error: ... not found in
         database` message and short-circuit BEFORE any hardware read /
         operator call -- proven by
-        read_hardware_revision_value.assert_not_called() (the load-bearing
+        read_programmer_identity.assert_not_called() (the load-bearing
         assertion: the always-writes notice still prints first, per
         test_always_writes_notice_is_the_first_line_unconditionally, so a
         bare "no output before the error" check would no longer prove
@@ -842,7 +996,7 @@ class TestAbsentChipHardFail:
             result = runner.invoke(cli, ["dev", "test", chip], obj=app)
         assert result.exit_code == 1, result.output
         assert f"{chip}: not found in database" in result.output
-        app.hardware_manager.read_hardware_revision_value.assert_not_called()
+        app.hardware_manager.read_programmer_identity.assert_not_called()
         app.eprom_operator.read_eprom.assert_not_called()
 
     def test_dev_test_present_but_unsupported_still_sweeps(
@@ -860,7 +1014,7 @@ class TestAbsentChipHardFail:
         with _off_tty():
             result = runner.invoke(cli, ["dev", "test", chip], obj=app)
         assert result.exit_code == 0, result.output
-        hw.read_hardware_revision_value.assert_called()
+        hw.read_programmer_identity.assert_called()
         data = _load_report(chip)
         steps = {s["op"]: s for s in data["steps"]}
         assert steps["id"]["verdict"] == "NA"

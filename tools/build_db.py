@@ -87,25 +87,6 @@ PROTOCOL_MAP = {
 # Using the full byte (0xFF mask) causes a 0mV/Unknown result whenever bits 3-0 are
 # nonzero (e.g. SST27VF512 voltages=0x0001: 0x01 not in table → was 0mV, now 12V).
 # [VERIFIED: minipro/src/database.c + tl866a.c + tl866ii_vpp_voltages[] table]
-VPP_VOLTAGES = {
-    0x00: "12V",
-    0x10: "9V",
-    0x20: "9.5V",
-    0x30: "10V",
-    0x40: "11V",
-    0x50: "11.5V",
-    0x60: "12.5V",
-    0x70: "13V",
-    0x80: "13.5V",
-    0x90: "14V",
-    0xA0: "14.5V",
-    0xB0: "15.5V",
-    0xC0: "16V",
-    0xD0: "16.5V",
-    0xE0: "17V",
-    0xF0: "18V",
-}
-
 VPP_MV = {
     0x00: 12000,
     0x10: 9000,
@@ -140,8 +121,12 @@ RURP_VPP_CEILING_MV = 25000
 # PGSZ-01 / CR-01: datasheet-sourced per-chip page size map.
 # Keyed on the canonical part number (first alias in the comma-separated list).
 # Each entry carries a [CITED:] datasheet reference — DO NOT author [ASSUMED] values.
-# Chips absent from this map omit the page_size field → firmware falls back to
-# flash4_page_size(mem_size) heuristic (safe, proven-correct for these chips).
+# Chips absent from this map omit the page_size field entirely. For
+# algorithm 13 (0x0D, EEPROM_POLL) chips specifically, the firmware falls
+# back to its own named AT28C page-size floor constant
+# (`eeprom_28c.cpp`'s page-size fallback, Phase 149 D-10) when the field is
+# absent; this map is NOT extended to cover that fallback (REQUIREMENTS.md
+# §Out of Scope / DATA-04).
 # Only in-repo datasheet PDFs are authoritative sources.
 _PAGE_SIZE_BY_PART: dict[str, int] = {
     # [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C040.pdf §6.2
@@ -191,13 +176,25 @@ KNOWN_PROTOCOLS = {
 
 # [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
 VCC_VOLTAGES = {
-    0x00: "5V",
-    0x01: "3.3V",
-    0x02: "4V",  # BUG-1 fix: was missing from v1.12
-    0x03: "4.5V",  # BUG-1 fix: was missing from v1.12
-    0x04: "5.5V",
-    0x05: "6.5V",
+    0x00: 5000,
+    0x01: 3300,
+    0x02: 4000,  # BUG-1 fix: was missing from v1.12
+    0x03: 4500,  # BUG-1 fix: was missing from v1.12
+    0x04: 5500,
+    0x05: 6500,
 }
+
+# [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
+# Phase 148 DATA-01 (D-01/D-02/D-03): 4 V is a real number that is not a real
+# operating voltage — no part in this database has a 4.0 V nominal supply.
+# VCC_VOLTAGES index 0x02 is the TL866's low-margin VCC *verify* rail, not
+# the chip's operating supply. This is a statement about the decode table
+# itself, not a patch aimed at one family: any chip whose decoded vcc_mv
+# lands on this rail is being misreported, regardless of which family it
+# belongs to. Defined as a lookup into VCC_VOLTAGES (never a re-typed
+# literal) so the rail value is single-sourced from the decode table by
+# construction and cannot drift from it even if the table is ever corrected.
+_VCC_MARGIN_RAIL_MV = VCC_VOLTAGES[0x02]
 
 # D-02: DIP28_VARIANT_MAP, PIN_MAP_TO_PINOUT, and PIN_MAP_PROTO_TO_PINOUT
 # have been DELETED (Phase 58 Plan 02). The principled resolve_pinout_key
@@ -412,24 +409,31 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
 def interpret_timing(raw_hex, protocol_id):
     # [VERIFIED: minipro database.c#L866 @ a8efaedc]
     # Raw pulse_delay is microseconds for ALL protocols — no multiplier.
+    # Contract (D-08, Phase 148 Plan 03): returns an int, always microseconds.
+    # `0` means "algorithm-controlled" (protocols that do not consume
+    # pulse-delay) -- an unparseable pulse_delay on a protocol that DOES
+    # consume it (0x07/0x08/0x0B) is fatal, not a silent 0, so that sentinel
+    # keeps exactly one meaning.
     try:
         val = int(raw_hex, 16)
     except (TypeError, ValueError):
         # WR-05 (98-03): narrowed from bare `except Exception` so an unparseable
         # pulse_delay is visible (not silently masked as a valid 0 us timing) —
         # an upstream infoic.xml decode fault would otherwise ship wrong timing
-        # to the firmware unnoticed.
-        print(
-            f"WARN: chip with protocol {protocol_id:#04x} has unparseable "
-            f"pulse_delay {raw_hex!r} — defaulting to 0 us",
-            file=sys.stderr,
-        )
-        val = 0
+        # to the firmware unnoticed. Phase 148 D-08 finishes what WR-05 started:
+        # after the string/int collapse a returned `0` would otherwise mean
+        # either "algorithm-controlled" (417 chips) or "decode fault on a
+        # 0x07/0x08/0x0B chip", so this branch is now fatal instead of masked —
+        # main() aborts before the JSON write and no wrong database is emitted.
+        raise ValueError(
+            f"chip with protocol {protocol_id:#04x} has unparseable "
+            f"pulse_delay {raw_hex!r} — refusing to default to 0 us"
+        ) from None
 
     if protocol_id in (0x07, 0x08, 0x0B):
-        return f"{val} us"
+        return val
 
-    return "Algorithm Controlled"
+    return 0
 
 
 def main():
@@ -481,10 +485,13 @@ def main():
                 # off this SAME <ic> element. Deliberately NOT the same key as the
                 # existing datasheet-curated _PAGE_SIZE_BY_PART / programming.page_size
                 # mechanism a few dozen lines below -- same English word, two
-                # different sources, never to be confused. This raw value is needed
-                # downstream only as PROV-06's corroborating axis (b15 vs
-                # infoic_page_size_raw > 1); it is not consulted by any ALLOW/REFUSE
-                # decision anywhere in this codebase. Default-safe (0x0) mirroring
+                # different sources, never to be confused. This raw field remains
+                # the raw provenance axis (PROV-06's corroborating axis, b15 vs
+                # infoic_page_size_raw > 1) and is now ALSO, as of Phase 149
+                # (PGSZ-01), the value source for the programming.page_size emit
+                # arm below when this <ic>'s own protocol_id is 0x0D — the two
+                # remain deliberately distinct keys even where their values
+                # coincide. Default-safe (0x0) mirroring
                 # 120-derive-sdp-allowset.py:26's `pg = int(ic.get("page_size", "0x0"), 16)`
                 # pattern.
                 raw_page_size = int(ic.get("page_size", "0x0"), 16)
@@ -653,6 +660,14 @@ def main():
                 # resolve_pinout_key (variant LOW byte) is UNCHANGED. Per D-06 no
                 # residual post-classify override remains; check_dispatch.py
                 # 0-violations (D-08) is the structural safety backstop.
+                #
+                # PGSZ-01 (Phase 149): classify() below REASSIGNS `proto_id` to
+                # its resolved algorithm and discards provenance (e.g. a
+                # promoted 5V-EEPROM arrives as 0x07/0x0B and leaves as 0x0D).
+                # The page_size emit arm needs the chip's OWN upstream
+                # protocol_id, not the post-classification algorithm, so it is
+                # captured here, before the reassignment.
+                _upstream_proto_id = proto_id
                 _etype, proto_id, pinout_key = classify(
                     type_int, proto_id, pm_idx, flags, pinout_key, mem_size
                 )
@@ -705,6 +720,12 @@ def main():
                     # else: leave _support_status as "supported" — M2732A (21V)
                     # is within the RURP ceiling.
 
+                # Canonical part-number key (first alias, @PACKAGE suffix
+                # stripped) — hoisted here because the page_size emit arm
+                # below (PGSZ-01, Phase 149) needs it in both its lookup and
+                # its guard condition; previously recomputed twice inline.
+                _canon = name.split(",")[0].split("@")[0].strip()
+
                 chip_entry = {
                     # Upstream `name` is a comma-separated alias list where each
                     # alias may carry an @PACKAGE suffix (e.g.,
@@ -734,11 +755,6 @@ def main():
                         # flags bits set, e.g. SST27VF512 voltages=0x0001).
                         # NMOS correction (Site C): override vpp/vpp_mv when
                         # _nmos_vpp_mv is set (M2716/M2732/M2732A corrected voltage).
-                        "vpp": (
-                            f"{_nmos_vpp_mv // 1000}V"
-                            if _nmos_vpp_mv is not None
-                            else VPP_VOLTAGES.get(voltages & 0xF0, "Unknown")
-                        ),
                         "vpp_mv": (
                             _nmos_vpp_mv
                             if _nmos_vpp_mv is not None
@@ -747,16 +763,16 @@ def main():
                         # BUG-3 fix: vcc at bits 11-8, vdd at bits 15-12.
                         # v1.12 had them swapped (vdd at bits 11-8, vcc at bits 15-12).
                         # [VERIFIED: minipro database.c#L921-L923 @ a8efaedc]
-                        "vcc": VCC_VOLTAGES.get(
-                            (voltages >> 8) & 0x0F, "5V"
+                        "vcc_mv": VCC_VOLTAGES.get(
+                            (voltages >> 8) & 0x0F, 5000
                         ),  # bits 11-8
-                        "vdd": VCC_VOLTAGES.get(
-                            (voltages >> 12) & 0x0F, "5V"
+                        "vdd_mv": VCC_VOLTAGES.get(
+                            (voltages >> 12) & 0x0F, 5000
                         ),  # bits 15-12
                     },
                     "programming": {
                         "algorithm": proto_id,
-                        "pulse_duration": interpret_timing(
+                        "pulse_duration_us": interpret_timing(
                             ic.get("pulse_delay"), proto_id
                         ),
                         "chip_id_check": True if (flags & 0x20) else False,
@@ -784,19 +800,38 @@ def main():
                         "protect_off_before": True if (flags & 0x4000) else False,
                         "protect_on_after": True if (flags & 0x8000) else False,
                         "infoic_page_size_raw": raw_page_size,
-                        # PGSZ-01 / CR-01: datasheet-sourced per-chip page size.
-                        # Looked up by the FIRST alias of the comma-separated part
-                        # name (canonical key). Absent chips omit the field entirely
-                        # so they ride the firmware flash4_page_size() heuristic.
+                        # PGSZ-01 / CR-01 (Phase 149): provenance-keyed page-size
+                        # emit rule. The page_size attribute is meaningful for the
+                        # algorithm that consumes it, and a record filed upstream
+                        # under 0x07/0x0B is not evidence about a 28C page buffer —
+                        # so this is a claim about provenance, never about a part.
+                        # Two disjoint arms, curated checked first for a minimal
+                        # diff (both curated rows are upstream 0x05, so ordering
+                        # is a legibility choice, not a correctness one):
+                        #   (1) datasheet-curated _PAGE_SIZE_BY_PART lookup by
+                        #       canonical part number (unchanged, today's
+                        #       behaviour), else
+                        #   (2) if this upstream <ic>'s own protocol_id is 0x0D,
+                        #       emit its raw_page_size directly — 18 rows qualify,
+                        #       15 at 128 and 3 at 64 (149-RESEARCH.md §"D-01
+                        #       Verification").
+                        # The 66 rows classify() promotes into 0x0D from a
+                        # foreign protocol keep the firmware AT28C page-size
+                        # floor (D-04) — this arm never fires for them because
+                        # it reads _upstream_proto_id (captured before
+                        # classify() reassigns proto_id to the resolved
+                        # algorithm), not the post-classification value.
+                        # Absent chips (neither arm fires) omit the field
+                        # entirely. This change is software-proven and
+                        # unvalidated on silicon.
                         **(
-                            {
-                                "page_size": _PAGE_SIZE_BY_PART[
-                                    name.split(",")[0].split("@")[0].strip()
-                                ]
-                            }
-                            if name.split(",")[0].split("@")[0].strip()
-                            in _PAGE_SIZE_BY_PART
-                            else {}
+                            {"page_size": _PAGE_SIZE_BY_PART[_canon]}
+                            if _canon in _PAGE_SIZE_BY_PART
+                            else (
+                                {"page_size": raw_page_size}
+                                if _upstream_proto_id == 0x0D
+                                else {}
+                            )
                         ),
                     },
                     "pinout": pinout_key,
@@ -818,7 +853,37 @@ def main():
                 # vcc as the correct read voltage (vdd there is the elevated
                 # program rail, e.g. 6.5V — must NOT be surfaced as operating Vcc).
                 if _etype == "SRAM":
-                    chip_entry["electrical"]["vcc"] = chip_entry["electrical"]["vdd"]
+                    chip_entry["electrical"]["vcc_mv"] = chip_entry["electrical"][
+                        "vdd_mv"
+                    ]
+
+                # VCC margin-rail substitution (Phase 148 DATA-01, D-01/D-02/D-03).
+                # (1) The semantic: minipro's `vcc` for these parts is the TL866's
+                # low-margin VCC *verify* rail (VCC_VOLTAGES index 0x02), not the
+                # chip's operating supply -- firestarter surfaces it as though it
+                # were the latter.
+                # (2) This is the SAME category error the SRAM block immediately
+                # above already corrects, generalized from a type key (`_etype ==
+                # "SRAM"`) to the decoded value alone (`vcc_mv ==
+                # _VCC_MARGIN_RAIL_MV`) -- no part number, no type, no algorithm.
+                # (3) Measured blast radius: exactly 56 chips, every one landing on
+                # 5000 mV (= their own already-decoded vdd_mv). The rule cannot
+                # lower a voltage by construction -- it only ever replaces the 4 V
+                # margin rail with the higher vdd_mv value already present on the
+                # same chip.
+                # (4) Why NOT type/algorithm/part-number keyed: those were measured
+                # and rejected. type-keyed (EEPROM/Flash-EEPROM) -> 85 movers;
+                # algorithm-keyed (0x0D) -> 84 movers; relation-keyed (vcc < vdd <=
+                # 5500) -> 225 movers (sweeping in UV-EPROMs whose vdd is the
+                # elevated 6.5V program rail). All three alternatives would also
+                # set sixteen genuinely-5V EEPROMs (Microchip 28C256/28C16A/2817,
+                # etc.) to 3.3V -- worse than the 4V defect being fixed here. If
+                # you are considering widening this condition, re-measure against
+                # that four-way split before touching it.
+                if chip_entry["electrical"]["vcc_mv"] == _VCC_MARGIN_RAIL_MV:
+                    chip_entry["electrical"]["vcc_mv"] = chip_entry["electrical"][
+                        "vdd_mv"
+                    ]
 
                 chips.append(chip_entry)
                 total_chips += 1

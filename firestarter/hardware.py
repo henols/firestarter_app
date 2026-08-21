@@ -10,7 +10,7 @@ import logging
 import re
 import statistics
 import time
-from typing import Optional, Tuple  # noqa: UP035
+from typing import NamedTuple, Optional, Tuple  # noqa: UP035
 
 from firestarter.config import ConfigManager
 from firestarter.constants import (
@@ -33,6 +33,42 @@ logger = logging.getLogger("Hardware")
 # (e.g. "VPP: 20.9V, Internal VCC: 5.0V") -- guards against catalog format
 # wording drift (Pitfall 3 / T-111-DRIFT).
 _VOLTAGE_RE = re.compile(r"(\d+)\.(\d+)\s*V")
+
+
+class ProgrammerIdentity(NamedTuple):
+    """The two identity values the CAP-02 `MSG_OK_READY` ack carries: the
+    human hardware-revision bucket string (ACK #2, `CMD_HW_VERSION`) and the
+    raw `"<version>:<board>"` firmware/board tail (ACK #1, set on
+    `comm.firmware_identity` during the setup-ack decode). Fields are named
+    so callers read them by name (D-03) -- two `Optional[str]` positionals
+    type-check clean when swapped, and a name makes that impossible."""
+
+    hw_revision: Optional[str]
+    fw_board_identity: Optional[str]
+
+
+def _scrub_identity(raw: Optional[str]) -> Optional[str]:
+    """Scrub a raw firmware/board identity string for safe recording and
+    rendering (T-147-01 / T-147-03).
+
+    Keeps only printable ASCII (0x20-0x7E inclusive, so ':', '.', digits and
+    letters all survive) and replaces every other character -- U+FFFD from
+    serial_comm.py's errors="replace" decode, '\\n', '\\r', any control byte
+    -- with a single "?". A partially mangled identity survives with "?" in
+    place of the bad bytes and therefore stays visibly faulty (D-07): a
+    mangled identity is evidence of a transport fault, never silently
+    converted to unknown. Truncates to a defensive maximum of 64 characters
+    (the firmware caps its tail at 32 in firestarter.cpp, so this is slack,
+    not a functional limit). An identity with no printable content at all
+    collapses to None because there is no evidence to preserve and PROV-05
+    forbids a blank rendering (RESEARCH Open Question 3, resolved in favour
+    of collapsing).
+    """
+    if raw is None or raw == "":
+        return None
+    scrubbed = "".join(c if "\x20" <= c <= "\x7e" else "?" for c in raw)
+    scrubbed = scrubbed[:64]
+    return scrubbed if scrubbed else None
 
 
 class HardwareManager:
@@ -112,36 +148,54 @@ class HardwareManager:
             if comm:
                 comm.disconnect()
 
-    def read_hardware_revision_value(self, flags: int = 0) -> Optional[str]:
-        """Value-returning sibling of get_hardware_revision: returns the
-        coarse revision-bucket string (or None on any transport error / a
-        non-ready ack) instead of only logging it.
+    def read_programmer_identity(self, flags: int = 0) -> ProgrammerIdentity:
+        """Value-returning sibling of get_hardware_revision: returns both
+        identity values the CAP-02 setup ack carries -- the coarse
+        revision-bucket string (or None on any transport error / a
+        non-ready ack) and the raw firmware/board identity tail -- instead
+        of only logging the former.
 
         Mirrors get_hardware_revision's exact find_and_connect -> expect_ack
         -> disconnect handshake but returns data rather than printing (same
         relationship sample_vpp_mv/_sample_one_voltage bears to
-        read_vpp_voltage). This is the auto-capture source for
-        AutoCapture.hw_revision (Phase 112 Plan 04) -- a coarse bucket or an
-        honest None is an accepted outcome, never a fabricated value. Opens
-        ONE serial read (energize/query only) -- no VPP-set, no wire-dict,
-        no --force (SAFE-02 clean). Does NOT change get_hardware_revision's
-        existing bool contract -- the `dev hw` CLI command depends on that.
+        read_vpp_voltage). This is the auto-capture source for both
+        AutoCapture.hw_revision and AutoCapture.fw_board_identity (D-01,
+        D-02) -- a coarse bucket or an honest None is an accepted outcome
+        for either field, never a fabricated value. Opens ONE serial read
+        (energize/query only) -- no VPP-set, no wire-dict, no --force
+        (SAFE-02 clean). Does NOT change get_hardware_revision's existing
+        bool contract -- the `dev hw` CLI command depends on that.
+
+        `comm.firmware_identity` is read before `comm.expect_ack()` (D-04):
+        it is populated by the setup ack that already happened inside
+        find_and_connect, and reading it early means the ack-failure branch
+        can still return it -- the two values fail independently. A board
+        built without HARDWARE_REVISION answers MSG_ERR_UNKNOWN_CMD here and
+        is exactly the board a triager most needs to identify (F-16).
         """
         command = {"state": COMMAND_HW_VERSION}
         if flags:
             command["flags"] = flags
 
         comm = None
+        fw_board_identity = None
         try:
             comm = SerialCommunicator.find_and_connect(command, self.config)
+            fw_board_identity = _scrub_identity(comm.firmware_identity)
             is_ok, msg = comm.expect_ack()
             if is_ok:
-                return msg
+                return ProgrammerIdentity(
+                    hw_revision=msg, fw_board_identity=fw_board_identity
+                )
             logger.error(f"Failed to read hardware revision: {msg}")
-            return None
+            return ProgrammerIdentity(
+                hw_revision=None, fw_board_identity=fw_board_identity
+            )
         except (ProgrammerNotFoundError, SerialError, SerialTimeoutError) as e:
             logger.error(f"Failed to read hardware revision: {e}")
-            return None
+            return ProgrammerIdentity(
+                hw_revision=None, fw_board_identity=fw_board_identity
+            )
         finally:
             if comm:
                 comm.disconnect()

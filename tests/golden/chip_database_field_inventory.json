@@ -2,15 +2,16 @@
   "meta": {
     "source": "firestarter/data/chip_database.json",
     "generator": "tools/build_db.py",
-    "recorded_by": "Phase 140 Plan 03",
-    "requirement": "TABLE-05",
-    "decision": "D-12",
-    "recorded_at_head": "4d18b645ab18a2d2465f0f623062e9249eb24132",
+    "recorded_by": "Phase 148 Plan 07",
+    "requirement": "DATA-02",
+    "decision": "D-13",
+    "recorded_at_head": "14b62d8dfefff9e26693766c58085075fb5362fc",
     "why_counts_not_names": "A field added to a subset of chips slips past a names-only assertion -- page_size (2 of 746) and five sparse top-level keys (datasheet, provenance, source, verification_note, verification_status, each 2 of 746) already demonstrate this: every one of those names already exists in the frozen inventory, so a names-only check is already satisfied today, and a SIXTH chip gaining any of them would be completely invisible to it. Pinning the per-key occurrence COUNT catches that class of change; pinning only the name set cannot.",
     "why_not_diff_db": "tools/diff_db.py's GATE-02 (_diff_field_paths) already unions both key sets and would see a new field, but it compares the live database against tools/baseline/chip_database.baseline.json, and regenerating that baseline silences the comparison -- anyone who lets a new field in simply re-runs the baseline generator and the diff goes quiet. This inventory is the non-silenceable half of TABLE-05's DB-side gate and is deliberately NOT derived from, or compared against, that baseline.",
     "how_to_update": "Re-derive every number in this file with an independent traversal of the live chip_database.json (two levels deep: {manufacturer: [chip, ...]}) -- never hand-edit a count to make a surprise disappear. State in the commit message which key changed, on which level, and why. If tools/build_db.py's chip_entry construction or tools/extra_chips.json changed, also re-derive generator_emitted_chip_entry_keys the same way (an ast walk over chip_entry plus a key scan of extra_chips.json) rather than editing the list by hand.",
     "db_is_generated": "firestarter/data/chip_database.json is produced by tools/build_db.py from the upstream tools/infoic.xml (plus the hand-curated tools/extra_chips.json supplement) and is never hand-edited, which is why this gate also reads the generator.",
-    "generator_scan_scope": "generator_emitted_chip_entry_keys is NOT purely an ast walk of build_db.py's `chip_entry` construction -- five of the eleven top-level keys (datasheet, provenance, source, verification_note, verification_status) are never assigned through a variable named chip_entry at all. They enter chip_database.json via the VAR-05/D-10 post-decode merge (`complete_db.setdefault(mfg, []).extend(extra_chips)`) that reads tools/extra_chips.json wholesale and appends its two hand-curated chip records verbatim. Confirmed in-session: an ast walk scoped to `chip_entry` alone finds exactly 21 names, 5 short of this file's 26 -- the missing 5 are precisely the sparse-subset keys `why_counts_not_names` warns about. The gate's live derivation is therefore the UNION of an ast walk over build_db.py's `chip_entry` construction and a key scan of tools/extra_chips.json; both paths are covered, so a new field entering through either one is caught."
+    "generator_scan_scope": "generator_emitted_chip_entry_keys is NOT purely an ast walk of build_db.py's `chip_entry` construction -- five of the eleven top-level keys (datasheet, provenance, source, verification_note, verification_status) are never assigned through a variable named chip_entry at all. They enter chip_database.json via the VAR-05/D-10 post-decode merge (`complete_db.setdefault(mfg, []).extend(extra_chips)`) that reads tools/extra_chips.json wholesale and appends its two hand-curated chip records verbatim. Confirmed in-session: an ast walk scoped to `chip_entry` alone finds exactly 21 names, 5 short of this file's 26 -- the missing 5 are precisely the sparse-subset keys `why_counts_not_names` warns about. The gate's live derivation is therefore the UNION of an ast walk over build_db.py's `chip_entry` construction and a key scan of tools/extra_chips.json; both paths are covered, so a new field entering through either one is caught.",
+    "phase_149_update": "Phase 149 Plan 03 (PGSZ-01) re-derived programming.page_size from 2 to 20 via the same independent traversal this file's own how_to_update instructs -- never hand-edited. build_db.py's provenance-keyed emit arm now also emits page_size for the 18 upstream-native protocol_id == 0x0D rows (15 at 128, 3 at 64), on top of the 2 pre-existing datasheet-curated _PAGE_SIZE_BY_PART rows this field's original count-of-2 recorded. Every other number in this file is unchanged; confirmed by an independent re-derivation of every level, not just this one key."
   },
   "totals": {
     "manufacturers": 59,
@@ -34,19 +35,18 @@
       "algorithm": 746,
       "chip_id_check": 746,
       "chip_id_value": 746,
-      "pulse_duration": 746,
+      "pulse_duration_us": 746,
       "infoic_page_size_raw": 744,
       "protect_off_before": 744,
       "protect_on_after": 744,
-      "page_size": 2
+      "page_size": 20
     },
     "electrical": {
       "pin_count": 746,
       "size_bytes": 746,
       "type": 746,
-      "vcc": 746,
-      "vdd": 746,
-      "vpp": 746,
+      "vcc_mv": 746,
+      "vdd_mv": 746,
       "vpp_mv": 746
     }
   },
@@ -70,17 +70,16 @@
     "protect_off_before",
     "protect_on_after",
     "provenance",
-    "pulse_duration",
+    "pulse_duration_us",
     "size_bytes",
     "source",
     "support_status",
     "type",
     "unsupported_reason",
-    "vcc",
-    "vdd",
+    "vcc_mv",
+    "vdd_mv",
     "verification_note",
     "verification_status",
-    "vpp",
     "vpp_mv"
   ]
 }

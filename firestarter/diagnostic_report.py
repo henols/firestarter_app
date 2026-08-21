@@ -52,7 +52,7 @@ from firestarter.chip_test import BannerCounts, Plan, StepResult
 # Module constants (D-02, D-03) -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.3"  # D-02: single-sourced, baked into to_dict() output
+SCHEMA_VERSION = "1.4"  # D-02: single-sourced, baked into to_dict() output
 # 1.1 (Phase 114, GRAD-01): additive db_diff.ladder_state key -- backward
 # compatible, existing consumers reading current_support_status/
 # proposed_disposition are unaffected.
@@ -82,7 +82,29 @@ SCHEMA_VERSION = "1.3"  # D-02: single-sourced, baked into to_dict() output
 # with no version bump -- the artifact shape would change while its own
 # version claimed it had not, in the milestone whose close phase (Phase 137)
 # arms a claim gate over exactly that kind of statement.
+# 1.4 (v1.32 Phase 147, D-09): marks a value-population change, not a key
+# addition -- `auto_capture.fw_board_identity` already existed in
+# `to_dict()`'s output and was unconditionally `null`; from this version it
+# carries data whenever the connection captured one. No key is added and no
+# key is removed. The 1.3 note above explicitly REJECTED "a field-plus-JSON
+# change with no version bump" -- the artifact shape changing while its own
+# version claimed it had not. Populating a permanently-null key is that same
+# class of change, so it takes a bump too. Both `[dev test]` parsers accept
+# `schema_version` by PRESENCE ONLY, never an exact-value match (a live
+# fixture carries `schema_version: "9.9-future"`, `tests/test_parse_devtest_
+# issue.py:138`), so this bump is invisible to them and needs no parser
+# change -- and no ordering/comparison logic over this string is introduced
+# anywhere as part of this bump (D-17). Reports already in the wild carry
+# `fw_board_identity: null` PERMANENTLY -- the run that produced them is
+# gone and unrepeatable -- and are unfixable by design; they must keep
+# parsing. That is PROV-04, pinned by the frozen literal fixtures in
+# `tests/test_parse_devtest_issue.py`.
 NOT_MEASURED = "not measured"  # D-03: honest fallback, never a false 0
+NOT_REPORTED = "not reported"  # D-11 (v1.32 Phase 147): honest fallback for
+# an identity field that was never ASKED, not merely measured-and-empty --
+# reusing NOT_MEASURED here would conflate "asked and got nothing" with
+# "never asked", the exact ambiguity PROV-05 exists to remove. Pre-checked
+# clean against check_diagnostic_report_claims.py's 14 forbidden patterns.
 
 # Elevated-counter threshold for `transport_suspect` (dormant today -- no
 # transport counter is reachable per RESEARCH §Transport Counter Survey; a
@@ -346,6 +368,34 @@ def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
 
 
 # ---------------------------------------------------------------------------
+# Render-boundary identity helper (PROV-05, D-10/D-11/D-12) -- render() ONLY
+# ---------------------------------------------------------------------------
+
+
+def _identity_cell(value: object) -> str:
+    """Render-only substitution for an absent identity value (D-10, D-11,
+    D-12). Used ONLY inside `render()` -- never in `to_dict()`, which is
+    where the `NOT_MEASURED` precedent substitutes and where D-10 requires
+    the fenced report JSON to keep typed `null` (machine consumers keep
+    testing `is None`, so PROV-04's backward-compatibility story stays ONE
+    case instead of two).
+
+    Returns `NOT_REPORTED` when `value` is `None` OR the empty string, and
+    `str(value)` otherwise -- an explicit two-clause condition, never an
+    `or`-coalescing expression, whose real sin is swallowing arbitrary
+    falsy values (e.g. `0`) with no decision behind it. An identity with no
+    printable content carries no evidence to preserve, and an empty cell is
+    precisely the blank rendering PROV-05 forbids. A PARTIALLY mangled
+    identity is different: `hardware.py`'s `_scrub_identity` (147-02, D-07)
+    leaves it non-empty with `?` substituted for bad bytes, so it still
+    renders here and stays visibly faulty.
+    """
+    if value is None or value == "":
+        return NOT_REPORTED
+    return str(value)
+
+
+# ---------------------------------------------------------------------------
 # DiagnosticReport (RPT-01, RPT-02, XPORT-01) -- single-source dual render
 # ---------------------------------------------------------------------------
 
@@ -515,8 +565,8 @@ class DiagnosticReport:
         table.add_column("Value")
 
         table.add_row("host_version", str(ac["host_version"]))
-        table.add_row("fw_board_identity", str(ac["fw_board_identity"]))
-        table.add_row("hw_revision", str(ac["hw_revision"]))
+        table.add_row("fw_board_identity", _identity_cell(ac["fw_board_identity"]))
+        table.add_row("hw_revision", _identity_cell(ac["hw_revision"]))
         table.add_row("protocol", str(ac["protocol"]))
         table.add_row(
             "chip_id (expected/actual)",

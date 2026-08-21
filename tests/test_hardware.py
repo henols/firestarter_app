@@ -76,6 +76,230 @@ def test_get_hardware_revision_failure_path(hw_config, make_comm, fake_serial) -
     assert ok is False
 
 
+def test_read_programmer_identity_happy_path_harvests_the_identity_verbatim(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """PROV-01: read_programmer_identity() returns a ProgrammerIdentity whose
+    fw_board_identity is exactly the string comm.firmware_identity carried
+    off the connect ack, and whose hw_revision is the CMD_HW_VERSION ack
+    message -- read by field name (D-03), never positional unpacking."""
+    fake_serial.feed(_ok_frame_bytes())  # the expect_ack() inside picks this up
+    fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))  # any trailing byte is fine
+    comm = make_comm()
+    # make_comm() sets firmware_identity = None by default (fail-closed) --
+    # a populated leg must set it explicitly.
+    comm.firmware_identity = "3.0.0b19:leonardo"
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        identity = hw.read_programmer_identity()
+
+    assert identity.fw_board_identity == "3.0.0b19:leonardo"
+    assert identity.hw_revision == "ready"
+
+
+def test_read_programmer_identity_opens_one_connection_and_disconnects_once(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """PROV-02: exactly one find_and_connect and one disconnect() per call --
+    asserted mechanically, not argued from reading the source. There is no
+    EpromOperator anywhere in this test's graph at all -- that absence IS
+    the SAFE-02 property this test pins: read_programmer_identity() writes
+    no attribute onto any operator, because none exists here to write onto."""
+    fake_serial.feed(_ok_frame_bytes())
+    fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))
+    comm = make_comm()
+    comm.firmware_identity = "3.0.0b19:leonardo"
+    # comm is a REAL SerialCommunicator built via __new__, so its disconnect
+    # is not itself a mock -- wrap it so the call can be asserted on.
+    comm.disconnect = Mock(wraps=comm.disconnect)
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ) as mock_find_and_connect:
+        hw.read_programmer_identity()
+
+    assert mock_find_and_connect.call_count == 1
+    comm.disconnect.assert_called_once()
+
+
+def test_read_programmer_identity_default_comm_yields_the_absent_case(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """With the default make_comm() (firmware_identity left at its
+    fail-closed None default) and an OK ack, the result carries the ack
+    message as hw_revision and None as fw_board_identity -- the shape a
+    board predating the CAP-02 identity tail would produce. The free leg
+    the fixture default gives (147-PATTERNS.md)."""
+    fake_serial.feed(_ok_frame_bytes())
+    fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))
+    comm = make_comm()
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        identity = hw.read_programmer_identity()
+
+    assert identity.hw_revision == "ready"
+    assert identity.fw_board_identity is None
+
+
+def test_read_programmer_identity_revision_fails_but_identity_survives(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """D-04 leg 1: an ERROR revision ack still returns the identity that was
+    harvested off the connect ack before the revision command was even
+    dispatched. Not a hypothetical: a board built without HARDWARE_REVISION
+    answers MSG_ERR_UNKNOWN_CMD to CMD_HW_VERSION while its setup ack
+    already carried a good identity (confirmed in firmware source, RESEARCH
+    F-16) -- and those non-standard boards are exactly the ones a triager
+    most needs to identify."""
+    fake_serial.feed(_error_frame_bytes())  # revision ack fails
+    comm = make_comm()
+    comm.firmware_identity = "3.0.0b19:leonardo"
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        identity = hw.read_programmer_identity()
+
+    assert identity.hw_revision is None
+    assert identity.fw_board_identity == "3.0.0b19:leonardo"
+
+
+@pytest.mark.parametrize("exc_name", ["ProgrammerNotFoundError", "SerialTimeoutError"])
+def test_read_programmer_identity_transport_error_returns_both_absent(
+    hw_config, exc_name: str
+) -> None:
+    """D-04 leg 2 / F-17: when find_and_connect itself raises -- either a
+    ProgrammerNotFoundError or a SerialTimeoutError, both caught by the same
+    three-exception clause read_programmer_identity shares with
+    get_hardware_revision -- the call returns a ProgrammerIdentity with BOTH
+    fields None. Asserted as `is not None` on the returned object itself:
+    the pre-existing contract returned a bare None here, and every
+    Mock(spec=HardwareManager) double would silently accept that swap."""
+    import firestarter.exceptions as exceptions_mod
+
+    exc_cls = getattr(exceptions_mod, exc_name)
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=exc_cls("transport failure"),
+    ):
+        identity = hw.read_programmer_identity()
+
+    assert identity is not None
+    assert identity.hw_revision is None
+    assert identity.fw_board_identity is None
+
+
+def test_read_programmer_identity_transport_error_after_harvest_keeps_the_identity(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """Distinguishes 'failed before the harvest' from 'failed after it': the
+    identity is read off comm.firmware_identity BEFORE comm.expect_ack() is
+    called, so a SerialTimeoutError raised by the ack call itself still
+    returns the already-harvested identity string -- proving the
+    harvest-before-teardown ordering is load-bearing, not incidental. The
+    finally-block disconnect() still runs; the exception path does not skip
+    teardown."""
+    from firestarter.exceptions import SerialTimeoutError
+
+    comm = make_comm()
+    comm.firmware_identity = "3.0.0b19:leonardo"
+    comm.expect_ack = Mock(side_effect=SerialTimeoutError("ack timed out"))
+    comm.disconnect = Mock(wraps=comm.disconnect)
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        identity = hw.read_programmer_identity()
+
+    assert identity.hw_revision is None
+    assert identity.fw_board_identity == "3.0.0b19:leonardo"
+    comm.disconnect.assert_called_once()
+
+
+def test_read_programmer_identity_scrub_keeps_a_mangled_identity_visibly_faulty(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """D-07: serial_comm.py's errors="replace" decode can yield U+FFFD on a
+    corrupt ack, and that value reaches a public GitHub issue body via
+    submit.py. A mangled identity must stay visible as evidence of a
+    transport fault -- never silently converted to the unknown marker."""
+    from firestarter.diagnostic_report import NOT_REPORTED
+
+    fake_serial.feed(_ok_frame_bytes())
+    fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))
+    comm = make_comm()
+    comm.firmware_identity = "3.0.0b19:leonar�o"  # one byte mangled
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        identity = hw.read_programmer_identity()
+
+    assert identity.fw_board_identity is not None
+    assert identity.fw_board_identity != NOT_REPORTED
+    assert all("\x20" <= c <= "\x7e" for c in identity.fw_board_identity)
+    assert identity.fw_board_identity.startswith("3.0.0b19")
+
+
+def test_read_programmer_identity_scrub_collapses_an_empty_identity_to_absent(
+    hw_config, make_comm, fake_serial
+) -> None:
+    """D-07 / P-8: an empty identity is the value a zero-length CAP-02 tail
+    decodes to. This is a locked planner decision (RESEARCH Open Question 3,
+    resolved in favour of collapsing): an identity with no printable content
+    carries no evidence to preserve, and an empty value must not be allowed
+    to reach a render, where a blank cell is precisely what PROV-05
+    forbids -- so it collapses to None. A companion case in the same test
+    pins the OTHER direction: an all-non-printable identity does NOT
+    collapse -- it becomes a non-empty substituted string -- so the two
+    cases stay distinguishable and the collapse cannot creep wider."""
+    fake_serial.feed(_ok_frame_bytes())
+    fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))
+    comm = make_comm()
+    comm.firmware_identity = ""  # zero-length CAP-02 tail
+
+    hw = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm,
+    ):
+        identity = hw.read_programmer_identity()
+    assert identity.fw_board_identity is None
+
+    # Companion case: all-non-printable does NOT collapse to None.
+    fake_serial.feed(_ok_frame_bytes())
+    fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))
+    comm2 = make_comm()
+    comm2.firmware_identity = "\x01\x02\x03"  # non-printable, but not empty
+
+    hw2 = HardwareManager(hw_config)
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        return_value=comm2,
+    ):
+        identity2 = hw2.read_programmer_identity()
+    assert identity2.fw_board_identity is not None
+    assert identity2.fw_board_identity != ""
+
+
 def test_read_vpp_voltage_finish_on_ok(hw_config, make_comm, fake_serial) -> None:
     """read_vpp_voltage returns True when the firmware emits the trailing OK
     (finish-of-stream signal) right after the ready handshake."""

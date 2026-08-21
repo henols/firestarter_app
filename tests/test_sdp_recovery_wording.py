@@ -7,9 +7,14 @@ fixtures, no network, no hardware.
 Why this cannot be a whole-report grep for the forbidden bulk-clear word
 (measured, D-13): the report legitimately contains it in at least three
 places --
-  1. `derive_plan`'s protocol-0x0D NA reason (`chip_test.py:670-673`):
-     "protocol 0x0D (28C family) has no erase operation; each page write
-     auto-erases internally";
+  1. `derive_plan`'s protocol-0x0D blank-check NA reason
+     (`chip_test.py:678`): "protocol 0x0D auto-erases per page during
+     write; no step in this plan can ever leave the device blank".
+     (Reworded in v1.32 Phase 153, plan 153-10: the old text claimed the
+     28C family "has no erase operation", which stopped being true when
+     153-03 landed the standalone `CMD_ERASE` arm. The reason this leg
+     cannot be a whole-report grep is unchanged -- only the quoted text
+     moved.);
   2. the shipped single-word op string itself (`OP_ERASE = "erase"`,
      `chip_test.py:336`), reaching both the markdown table and the JSON
      block;
