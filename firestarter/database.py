@@ -575,7 +575,10 @@ class EpromDatabase:
         # key degrades safely to flag-clear (A1), identical to the old path. RF-01:
         # zero behavioral delta for all chips (the synthetic path already matched).
         #
-        # Scope (Phase 121 D-12): algorithms 5 and 13 are excluded from the flag.
+        # Scope: algorithm 5 is excluded from the flag; see its rationale
+        # below. (Algorithm 13 was excluded here too, per Phase 121 D-12;
+        # Phase 153 reverses that -- see the REVERSAL RECORD below. The two
+        # exclusions were always for unrelated reasons.)
         #
         # Algorithm 5 (flash4) — FIX-01a / T-93-CANERASE: flash4 auto-erases per
         # page during the page-write; no separate 12V bulk erase is needed or
@@ -583,37 +586,52 @@ class EpromDatabase:
         # flash4_write_init → flash4_erase_execute which asserts
         # CTRL_VPP_REGULATOR_ENABLE on a 5V-only chip (12V on a 5V part —
         # hardware-damage hazard). Scope: algorithm==5 only; the 0x07 and
-        # 0x0D paths are unaffected by this particular exclusion.
+        # 0x0D paths are unaffected by this particular exclusion. This is a
+        # live hardware-hazard argument, not a retired one -- it is the
+        # reason the tuple still keeps 5 even after 13 is dropped below.
         #
         # Algorithm 13 / protocol 0x0D (AT28C / 28C-family SDP EEPROMs) —
-        # Phase 121 D-12: the firmware's configure_eeprom28c handler
-        # (firestarter/src/proms/eeprom_28c.cpp) has no erase operation at
-        # all, so advertising FLAG_CAN_ERASE for these 84 chips is a false
-        # capability statement. DEVTEST-01's `dev test` sweep reads that
-        # advertisement and plans a real erase step that reports OK having
-        # done nothing, auto-tagging otherwise-passing runs `community-fail`.
+        # REVERSAL RECORD (Phase 153, ERASE-03 / ERASE-07; fourth recorded
+        # reversal in this chain, after 119 D-18, 120 D-20 and 121 D-12):
+        # Phase 121 D-12 cleared this flag on the premise that the
+        # firmware's configure_eeprom28c handler
+        # (firestarter/src/proms/eeprom_28c.cpp) implemented no erase
+        # whatsoever, so advertising FLAG_CAN_ERASE for these 84 chips was a
+        # false capability statement. That premise no longer holds: Phase
+        # 153 (ERASE-03/ERASE-04) added a real CMD_ERASE dispatch arm to
+        # configure_eeprom28c, implementing the AN-0544B software six-byte
+        # chip erase, so the capability statement this flag makes is now
+        # TRUE. D-12's parenthetical that the 0x0D firmware path "genuinely
+        # never reads" this flag is also now false: `eprom_operations.cpp`'s
+        # eprom_erase() precondition -- the standalone `erase` command's own
+        # refusal gate -- does read FLAG_CAN_ERASE, so the bit is no longer
+        # firmware-inert on this protocol.
         #
-        # REVERSAL RECORD (Phase 121 D-12, third recorded reversal this
-        # phase after 119 D-18 / 120 D-20): this line previously carried a
-        # D-03 note stating that leaving the flag SET on 0x0D was
-        # firmware-inert and "must stay unchanged." D-12 REVERSES that
-        # POLICY, not the FACT: the 0x0D firmware path genuinely never reads
-        # FLAG_CAN_ERASE — that part of the old note remains true — but an
-        # inert-but-false capability advertisement is still false, and
-        # DEVTEST-01 needs the host to stop making it. Blast radius
-        # re-verified before landing this change: no `chip_database.json`
-        # entry carries a `flags` key, so `diff_db.py` identity cannot
-        # break; no firmware native test and no `validation_matrix_spec.json`
-        # family pins the incoming wire flags for `eeprom28c`; the only
-        # other host reader of this bit (`serial_comm.py`'s
-        # `_log_command_details`) is DEBUG-only logging; and exactly two
-        # host tests were pinned to the old value, both inverted in this
-        # same plan. One benign behavioural delta: `firestarter erase` on a
-        # 0x0D part is now refused one layer earlier, at
-        # `eprom_operations.cpp`'s own FLAG_CAN_ERASE precondition, rather
-        # than at Phase 119's op-layer NULL-main guard — both paths emit the
-        # same `MSG_ERR_NOT_SUPPORTED` wire id, so the observable behaviour
-        # over the wire is unchanged.
+        # D-12's *policy* was correct given its premise; only the premise
+        # changed. Record this as mechanism-corrected and intent-satisfied,
+        # never as failed: the honest resolution was to make the firmware
+        # do more, not to make the host claim less.
+        #
+        # Per D-153-05, restoring the flag deliberately does NOT make
+        # `write` erase implicitly: no FLAG_CAN_ERASE-gated erase block was
+        # added to eeprom28c_write_init, and `erase` was not added to
+        # `write`'s FLAG_SKIP_SDP_UNLOCK auto-set path. Erase stays a
+        # standalone step.
+        #
+        # Blast radius, carried forward in corrected form from D-12: no
+        # `chip_database.json` entry carries a `flags` key, so
+        # `diff_db.py` identity cannot break; the only other host reader of
+        # this bit (`serial_comm.py`'s `_log_command_details`) is DEBUG-only
+        # logging. One benign behavioural delta: `firestarter erase` on a
+        # 0x0D part now performs a real erase, rather than being refused
+        # one layer earlier at `eprom_operations.cpp`'s own FLAG_CAN_ERASE
+        # precondition.
+        #
+        # Plan-shape consequence, recorded so it is not rediscovered as a
+        # surprise: restoring the flag changes `chip_test.py`'s
+        # `derive_plan` output on all 84 algorithm-13 rows -- erase becomes
+        # a supported destructive step, and blank-check moves to sit after
+        # it, where it doubles as the erase's oracle.
         simple_flags = 0
         algo = programmer_data["algorithm"]  # already computed above from protocol-id
         if full_eprom_data.get("electrical-type", "") in ("EEPROM", "Flash/EEPROM"):
