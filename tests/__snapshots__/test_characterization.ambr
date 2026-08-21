@@ -160,6 +160,18 @@
     (``is_flag=True default=False``) — opposite of ``write``'s ``--no-blank-
     check``. Both polarities coexist verbatim from argparse.
   
+    D-153-04: unlike ``write``'s ``-b``, this command's ``-b``/``--blank-check``
+    requests a blank check performed **after** the erase, not skipped before it
+    — the inverse polarity above is a naming/default inversion, not just a
+    default flip. On protocol ``0x0D`` this post-erase check is not wired (no
+    ``operation_end`` arm was added to the software chip-erase handler), so
+    ``-b`` is a documented no-op there, not a discovered one.
+  
+    D-153-04 (RESEARCH A7): ``-s``/``--sector-address`` exists for the ``0x06``
+    sector-erase protocol. The ``0x0D`` software chip erase is device-global by
+    construction (the whole part is erased in one AN 0544B sequence) and ignores
+    any sector address given for it.
+  
   Options:
     -f, --force                   Force, even if the VPP or chip id doesn't
                                   match.
@@ -357,6 +369,14 @@
     -b`` on a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip
     the erase (previously implied by ``-b``) for already-blank or non-erasable
     parts.
+  
+    Phase 153 (ERASE-01/ERASE-02): since this phase, ``-b``/``--no-blank-check``
+    is **unread** on protocols ``0x0D`` and ``0x05`` — neither protocol's write
+    path performs a pre-write blank check any more, so the flag is a no-op on
+    both families and is not needed to write a non-blank part on either one. The
+    flag remains live, with its Phase 92 meaning above, on every other protocol.
+    This does not change the paragraph above: the erase/blank-check decoupling
+    it describes still governs whichever protocols still read the flag.
   
     TRAP #6 / D-17/D-18 (v1.22 HOST-02): ``--skip-sdp-unlock`` is exposed on
     ``write`` ONLY — firmware auto-unlocks in ``eeprom28c_write_init`` and
@@ -1299,6 +1319,14 @@
     -b`` on a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip
     the erase (previously implied by ``-b``) for already-blank or non-erasable
     parts.
+  
+    Phase 153 (ERASE-01/ERASE-02): since this phase, ``-b``/``--no-blank-check``
+    is **unread** on protocols ``0x0D`` and ``0x05`` — neither protocol's write
+    path performs a pre-write blank check any more, so the flag is a no-op on
+    both families and is not needed to write a non-blank part on either one. The
+    flag remains live, with its Phase 92 meaning above, on every other protocol.
+    This does not change the paragraph above: the erase/blank-check decoupling
+    it describes still governs whichever protocols still read the flag.
   
     TRAP #6 / D-17/D-18 (v1.22 HOST-02): ``--skip-sdp-unlock`` is exposed on
     ``write`` ONLY — firmware auto-unlocks in ``eeprom28c_write_init`` and
