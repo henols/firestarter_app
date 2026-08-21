@@ -2039,43 +2039,67 @@ def test_safe02_only_known_operator_methods_no_attribute_error():
 # ---------------------------------------------------------------------------
 
 
-def test_devtest01_0x0d_sweep_erase_is_na_and_erase_eprom_never_called():
-    """DEVTEST-01 end-to-end sweep leg: for a protocol-0x0D chip (AT28C256),
-    `run_plan` over a plan derived at `write_scope="full"` produces an erase
-    result whose verdict is NA, with the family-fact reason surviving into
-    the `StepResult`, and `operator.erase_eprom` is NEVER called. A `NA`
-    verdict alone does not prove nothing was dispatched -- this negative-call
-    assertion is the load-bearing line (Phase 121 D-12).
+def test_devtest01_0x0d_sweep_erase_is_supported_and_erase_eprom_is_called():
+    """DEVTEST-01 end-to-end sweep leg -- REVERSAL RECORD (Phase 153,
+    ERASE-03/ERASE-04). For a protocol-0x0D chip (AT28C256), `run_plan`
+    over a plan derived at `write_scope="full"` now produces a REAL,
+    supported, destructive erase step, and `operator.erase_eprom` IS
+    called (exactly once).
 
-    v1.30 Phase 134 (plan 134-03): AT28C256 is a measured ALLOW chip
-    (`sdp_capability` -- SDP-capable per infoic.xml INFOIC2PLUS flags bit
-    15), so `derive_plan`'s write_scope="full" plan now ALSO carries the
-    six real SDP-leg steps after "erase" (LEG-01). `_mock_operator()`
-    lacks a real read-back, which would make every leg step BAD via the
-    length gate -- irrelevant to THIS test's own assertions (erase only),
-    but it would still raise nothing worse than a BAD verdict... except
-    `_mock_operator`'s `sdp_lock`/`sdp_unlock` need to exist in the spec at
-    all, which the plain double now provides (see `_OPERATOR_METHODS`).
-    Uses the read-back-capable `_sdp_leg_readback_operator` double instead
-    of `_mock_operator()` regardless, mirroring the sibling test below, so
-    both AT28C256 sweeps share one correctly-behaving double rather than
-    two different levels of realism for the same chip."""
+    History: Phase 121 D-12's negative-call assertion (`erase_eprom`
+    never called) was the load-bearing line precisely because an NA
+    verdict alone did not prove nothing was dispatched -- a fabricated
+    erase could still have run behind an NA-reported result. Phase 153
+    restored FLAG_CAN_ERASE on all 84 algorithm-13 rows (`database.py`'s
+    REVERSAL RECORD) after `configure_eeprom28c` gained a real CMD_ERASE
+    dispatch arm (AN-0544B software chip erase) -- so `derive_plan`'s
+    erase arm (`can_erase and protocol != _PROTOCOL_FLASH4`) now takes the
+    supported branch for this chip. The same reasoning that made the
+    negative assertion load-bearing now makes the POSITIVE assertion
+    load-bearing: a supported verdict alone does not prove anything WAS
+    dispatched either.
+
+    MEASURED DISCREPANCY, recorded rather than silently reconciled (the
+    project's own carried-forward convention): this plan's own text calls
+    for `erase_eprom.assert_called_once()`. Live-measured against
+    `run_plan`'s actual dispatch, that is false -- `OP_ERASE` is a member
+    of `_MULTI_RUN_OPS` (the write/erase/verify N>=2 disagreement-policy
+    set, D-06), and `run_plan`'s default `runs=2` means `_dispatch_multi_
+    run` calls `operator.erase_eprom()` twice, not once, exactly like the
+    write and verify steps already do. Asserting `assert_called_once()`
+    here would be false on this codebase and was rejected rather than
+    forced to pass. `erase_eprom.assert_called()` plus the exact
+    `call_count == 2` below is the honest positive-call assertion; both
+    calls' return values feed the same two-run disagreement check
+    write/verify already use, which is why the verdict resolves to OK
+    rather than marginal.
+
+    v1.30 Phase 134 (plan 134-03) SDP-leg notes, unchanged by this
+    reversal: AT28C256 is a measured ALLOW chip (`sdp_capability` --
+    SDP-capable per infoic.xml INFOIC2PLUS flags bit 15), so `derive_plan`'s
+    write_scope="full" plan carries the six real SDP-leg steps after
+    "erase" (LEG-01). Uses the read-back-capable
+    `_sdp_leg_readback_operator` double (not `_mock_operator()`) so the
+    leg's read-back-equality oracle sees a real image rather than an
+    empty one, mirroring the sibling test below -- both AT28C256 sweeps
+    share one correctly-behaving double rather than two different levels
+    of realism for the same chip."""
     name = "AT28C256"
     full = _REAL_DB.get_eprom(name)
     assert full["protocol-id"] == 13  # 0x0D
 
     plan = derive_plan(name, _REAL_DB, write_scope="full")
     erase_step = _step(plan, "erase")
-    assert erase_step.supported is False
+    assert erase_step.supported is True
+    assert erase_step.destructive is True
 
     operator = _sdp_leg_readback_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
     erase_result = _result(results, OP_ERASE)
-    assert erase_result.verdict == VERDICT_NA
-    assert "0x0D" in erase_result.reason
-    assert "FLAG_CAN_ERASE" not in erase_result.reason
-    operator.erase_eprom.assert_not_called()
+    assert erase_result.verdict == VERDICT_OK
+    operator.erase_eprom.assert_called()
+    assert operator.erase_eprom.call_count == 2  # see MEASURED DISCREPANCY above
 
 
 def test_devtest01_0x0d_all_ok_sweep_no_longer_tags_community_fail():
@@ -2224,6 +2248,72 @@ def test_r6_laundering_allow_plans_never_derive_an_empty_steps_list():
 
 
 # ---------------------------------------------------------------------------
+# Reachability leg for the `_PROTOCOL_EEPROM_28C` defensive fallthrough arm
+# (Phase 153, ERASE-03/ERASE-04). Restoring FLAG_CAN_ERASE on all 84 shipped
+# algorithm-13 rows made the arm unreachable from the real database -- kept
+# anyway (see `chip_test.py`'s own comments on the constant and its arm) as
+# a defensive fallthrough for a user-override `0x0D` row whose
+# electrical-type falls outside {"EEPROM", "Flash/EEPROM"}. This test is
+# what keeps that kept arm from becoming untested dead code.
+# ---------------------------------------------------------------------------
+
+
+class _NonQualifyingEtype28CDatabase(EpromDatabase):
+    """Overrides AT28C256's `electrical-type` to a value outside the
+    qualifying set, for exactly one chip name -- mirrors
+    `tests/fixtures/synthetic_nonzero_chip_id.py`'s
+    `SyntheticNonzeroChipIdDatabase` shape (subclass `EpromDatabase`,
+    override `get_eprom` for one name, copy every other field verbatim).
+
+    `database.py`'s `convert_to_programmer` sets `FLAG_CAN_ERASE` only when
+    `electrical-type in ("EEPROM", "Flash/EEPROM")`; every shipped
+    algorithm-13 row satisfies that, which is exactly why the
+    `_PROTOCOL_EEPROM_28C` reason arm is unreachable in production today.
+    "OTP" is a synthetic, clearly-non-real value chosen only because it is
+    outside the qualifying set, is not "UV-EPROM" (which would route to the
+    UV arm first), and is not in `_SRAM_FRAM_ETYPES` (which would route to
+    the blank-check SRAM/FRAM branch, irrelevant here but kept clean)."""
+
+    def get_eprom(self, chip_name: str) -> dict | None:
+        full = super().get_eprom(chip_name)
+        if full is not None and chip_name == "AT28C256":
+            full = dict(full)
+            full["electrical-type"] = "OTP"
+        return full
+
+
+def test_protocol_eeprom_28c_arm_reachable_for_non_qualifying_etype():
+    """The `_PROTOCOL_EEPROM_28C` defensive fallthrough arm still fires for
+    a `0x0D` row whose `electrical-type` is outside the qualifying set --
+    every SHIPPED row qualifies (all 84 algorithm-13 rows carry
+    `electrical-type` in {"EEPROM", "Flash/EEPROM"}), so this arm is
+    reachable only through a user override like this fixture. Without this
+    leg, restoring FLAG_CAN_ERASE on all shipped rows would leave the kept
+    arm untested dead code."""
+    db = _NonQualifyingEtype28CDatabase(skip_local_override=True)
+    full = db.get_eprom("AT28C256")
+    assert full["protocol-id"] == 13  # 0x0D
+    assert full["electrical-type"] == "OTP"
+
+    prog = db.convert_to_programmer(full)
+    assert prog.get("flags", 0) == 0  # FLAG_CAN_ERASE did NOT get set
+
+    plan = derive_plan("AT28C256", db, write_scope="full")
+    erase_step = _step(plan, "erase")
+    assert erase_step.supported is False
+    assert (
+        erase_step.reason == "electrical-type for this 0x0D (28C family) chip is not "
+        "electrically erasable; no erase step is planned for it"
+    )
+    # This is NOT the generic flag-keyed fallback wording -- that is the
+    # outcome deleting the arm (routing this row to the generic `else`
+    # below it) would have produced, and it names the internal flag,
+    # which DEVTEST-01 forbids.
+    assert "FLAG_CAN_ERASE not set for this chip" not in erase_step.reason
+    assert "FLAG_CAN_ERASE" not in erase_step.reason
+
+
+# ---------------------------------------------------------------------------
 # LEG-13 (v1.30 Phase 134, plan 134-10): the N-of-M banner pinning test.
 # `pytest tests/test_chip_test.py -k "count_applicable and sdp"` selects the
 # pinning test (134-VALIDATION.md's own LEG-13 command). `count_applicable`
@@ -2266,39 +2356,64 @@ def _gated_allow_operator():
 def test_count_applicable_sdp_gated_allow_chip_ratio_drops():
     """LEG-13's pinning test. For AT28C256 (a measured ALLOW chip) at
     `write_scope="full"` with the oracle gated (the dead-write-path shape,
-    gh#20's own bench), `count_applicable` measures `m_applicable == 9`
-    (the six SDP steps carry `supported=True` and are already counted in
-    M -- `id`/`erase`/`blank-check` are the three NA steps on this chip, so
-    3 shipped + 6 SDP = 9) and `n_ran == 5` (three shipped ops [read, write,
-    verify] plus `write-baseline-b`/`write-baseline-a`, which reports BAD/OK
-    respectively and both count as ran; the four `_SDP_LEG_GATED_OPS`
-    members SKIP).
+    gh#20's own bench), `count_applicable` measures `m_applicable == 10`
+    and `n_ran == 6` (Phase 153 THIRD-GENERATION figures; see below).
 
-    MEASURED DISCREPANCY, carried forward rather than silently reconciled
-    (the same project convention 134-04-SUMMARY.md and 134-07-SUMMARY.md
-    both already recorded for this identical computation): 134-CONTEXT.md
-    D-20 and this plan's own text state the dead-write-path shape produces
-    `n_ran=5`, matching the CURRENT measured value below -- but this
-    coincidence is itself an M/N delta, not a restored agreement: before
-    quick task 260807-kaq's blank-check fix, this same fixture measured
-    `n_ran=6, m_applicable=10` (blank-check was a real supported step here,
-    since AT28C256 is protocol 0x0D and 260807-kaq had not yet flipped it to
-    NA-by-family-fact). 260807-kaq's fix removes blank-check from BOTH M and
-    N for this chip (case 3: protocol 0x0D auto-erases per page during
-    write, so no step in this plan can ever leave the device blank) --
-    `m_applicable` drops 10 -> 9, `n_ran` drops 6 -> 5. This does NOT affect
-    LEG-13's own claim -- the headline ratio still DROPS, now from today's
-    misleading "4 of 4" to "5 of 9" under this leg.
+    THIRD-GENERATION accounting (Phase 153, ERASE-03/ERASE-04), both
+    earlier generations kept visible rather than overwritten:
+
+      Generation 1 (pre-260807-kaq): blank-check was a real supported
+      step at its historic position (index 2, before write) -- measured
+      `n_ran=6, m_applicable=10`.
+
+      Generation 2 (260807-kaq): blank-check flipped to NA-by-family-fact
+      for protocol 0x0D (case 3: every page write auto-erases internally,
+      so no step could ever leave the device blank) -- REMOVED from both M
+      and N. `m_applicable` dropped 10 -> 9 (3 shipped-supported
+      [read/write/verify] + 6 SDP-leg-supported, since id, erase AND
+      blank-check were all NA); `n_ran` dropped 6 -> 5.
+
+      Generation 3 (THIS plan, Phase 153 ERASE-03/ERASE-04): restoring
+      FLAG_CAN_ERASE on all 84 algorithm-13 rows flips AT28C256's plan to
+      a live-measured TWELVE steps -- id (NA), read, write, verify, erase
+      (now SUPPORTED and destructive, index 4), blank-check (still NA,
+      moved from index 2 to index 5, now sitting behind the erase it
+      doubles as an oracle for), then the six SDP-leg ops. TEN of the
+      twelve are supported: everything except id and blank-check. Erase
+      JOINS the applicable set (it did not exist as a real step in
+      Generation 2's accounting), so `m_applicable` rises 9 -> 10. Erase
+      also runs and reports (against `_gated_allow_operator`'s always-
+      succeeding `erase_eprom`), so `n_ran` rises 5 -> 6 (the read/write/
+      verify shipped trio plus erase, plus write-baseline-b/write-
+      baseline-a, which report BAD/OK respectively and both count as ran;
+      the four `_SDP_LEG_GATED_OPS` members still SKIP once the baseline
+      gate closes).
+
+      Recorded explicitly, not glossed: Generation 3's integers (10, 6)
+      numerically COINCIDE with Generation 1's pre-260807-kaq figures, but
+      this is a coincidence of composition, NOT a restoration -- blank-
+      check is NA in both Generation 2 and 3 (unlike Generation 1, where
+      it was a real supported step); it is erase joining the applicable/
+      ran sets, not blank-check returning to them, that produces the same
+      pair of integers. LEG-13's own claim is unaffected either way -- the
+      headline ratio still DROPS, now from a misleading "4 of 4" to a
+      real "6 of 10" under this leg.
+
+    Figures re-derived live in this session against this commit's
+    `chip_test.py` and `_gated_allow_operator` fixture (unchanged by this
+    plan), not transcribed from plan text.
     """
     plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
     operator = _gated_allow_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
     counts = count_applicable(plan, results)
-    assert counts.m_applicable == 9, counts  # 260807-kaq: M dropped 10 -> 9
-    assert counts.n_ran == 5, counts  # 260807-kaq: N dropped 6 -> 5
+    assert counts.m_applicable == 10, counts  # Phase 153: erase joined M (9 -> 10)
+    assert counts.n_ran == 6, counts  # Phase 153: erase joined N (5 -> 6)
     assert counts.n_ran < counts.m_applicable, counts  # the ratio drops (LEG-13)
 
+    erase_result = _result(results, OP_ERASE)
+    assert erase_result.verdict == VERDICT_OK, erase_result
     write_baseline_b = _result(results, "write-baseline-b")
     assert write_baseline_b.verdict == VERDICT_BAD, write_baseline_b
     write_inhibited = _result(results, "write-inhibited")
@@ -2359,7 +2474,17 @@ def test_count_applicable_sdp_banner_row_renders_the_dropped_ratio():
     """LEG-13's visible surface: `diagnostic_report.py`'s banner row formats
     `"{n_ran} of {m_applicable} ran"` (needing no code edit) -- assert the
     rendered console text of a report built from the same gated ALLOW run
-    above shows the dropped ratio, not a perfect one."""
+    above shows the dropped ratio, not a perfect one.
+
+    THIRD-GENERATION accounting -- see `test_count_applicable_sdp_gated_
+    allow_chip_ratio_drops`'s docstring above for the full three-
+    generation M/N history (10/6 pre-260807-kaq, 9/5 post-260807-kaq,
+    10/6 again after this plan restores FLAG_CAN_ERASE -- a composition
+    coincidence, not a restoration, per that docstring). The rendered-
+    text assertion below is driven off `banner`'s own fields so it needs
+    no second hardcoded literal. The `"4 of 4 ran"` negative assertion is
+    NOT made vacuous by the new figures (6 of 10 is still neither "4 of
+    4" nor any other perfect ratio), so it is kept unchanged."""
     from rich.console import Console
 
     import firestarter
@@ -2373,11 +2498,12 @@ def test_count_applicable_sdp_banner_row_renders_the_dropped_ratio():
     operator = _gated_allow_operator()
     results = run_plan(plan, operator, _REAL_DB)
     banner = count_applicable(plan, results)
-    # 260807-kaq: n_ran/m_applicable dropped 6/10 -> 5/9 -- blank-check is
-    # now NA (not a real step) for this protocol-0x0D chip. See the
-    # docstring above on `test_count_applicable_sdp_gated_allow_chip_ratio_
-    # drops` for the full M/N delta accounting.
-    assert banner.n_ran == 5 and banner.m_applicable == 9  # see the docstring above
+    # Phase 153 (third generation): n_ran/m_applicable rose 5/9 -> 6/10 --
+    # erase is now a real supported step that runs for this
+    # protocol-0x0D chip. See the docstring above on
+    # `test_count_applicable_sdp_gated_allow_chip_ratio_drops` for the
+    # full M/N delta accounting across all three generations.
+    assert banner.n_ran == 6 and banner.m_applicable == 10  # see the docstring above
 
     auto_capture = AutoCapture(
         host_version=firestarter.__version__, chip="AT28C256", protocol="0x0D"
