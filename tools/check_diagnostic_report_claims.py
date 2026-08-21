@@ -35,17 +35,15 @@ constant set matches the donor byte-for-byte; it is intentionally unused by
 `main()`'s control flow.
 
 **Scope note (also load-bearing):** this checker scans EXACTLY
-`diagnostic_report.py`, matching REQUIREMENTS.md's own CLOSE-03 wording. It
-deliberately does NOT scan `firestarter/cli_handlers.py`'s two named SDP
-recovery-string constants (`_SDP_RECOVERY_LOUD` / `_SDP_RECOVERY_NEUTRAL`,
-resolvable via `cli_handlers.SDP_RECOVERY_CONSTANT_NAMES`) -- those already
-have their own committed, scoped gate (`tests/test_sdp_recovery_wording.py`,
-v1.30 Phase 134 plan 134-09, LEG-14), which that plan's own D-13 record names
-Phase 137's CLOSE-03 as an available EXTENSION point for, not a mandate that
-CLOSE-03 must re-scan the identical surface with a second, differently-scoped
-checker. Duplicating that already-gated surface here would be exactly the
-out-of-scope re-derivation 134-09's own docstring warns against; it is not a
-coverage gap this checker exists to close.
+`diagnostic_report.py`, matching REQUIREMENTS.md's own CLOSE-03 wording.
+`firestarter/cli_handlers.py` used to carry two named SDP recovery-string
+constants (`_SDP_RECOVERY_LOUD` / `_SDP_RECOVERY_NEUTRAL`) with their own
+committed, scoped wording gate (`tests/test_sdp_recovery_wording.py`, v1.30
+Phase 134 plan 134-09, LEG-14) -- quick task 260821-spg deleted the console
+echo those constants fed, the constants themselves, and that gate along with
+them, so there is no longer a second scanned surface for this checker to
+defer to. The scan target here remains exactly `diagnostic_report.py`; this
+checker's scope was never widened to cover `cli_handlers.py` and still isn't.
 
 **Explicit non-claim (load-bearing):** this checker catches literal forbidden
 phrases baked into `diagnostic_report.py`'s source AS WRITTEN, today. It

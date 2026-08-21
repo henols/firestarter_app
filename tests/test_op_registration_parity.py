@@ -70,7 +70,7 @@ phase's own four SDP-leg ops), and a seventh policed registry
     AST-derived); `_dispatch_multi_run` (its inner run-loop branches,
     AST-derived -- a genuine op-keyed site P-23's original table omitted
     entirely).
-  - **6 declared non-registries** (carry NO op vocabulary, or are keyed on
+  - **5 declared non-registries** (carry NO op vocabulary, or are keyed on
     a materially different axis -- re-measured, re-asserted every run by
     the inversion guard, never merely assumed): `_RAN_VERDICTS` /
     `count_applicable` (verdict-keyed, not op-keyed); `dedup_fingerprint`
@@ -80,14 +80,15 @@ phase's own four SDP-leg ops), and a seventh policed registry
     op-string constants at all -- P-23's row 8 counted it as a fail-open
     registry, which this session's measurement (133-CONTEXT.md correction
     2) found to be wrong: there is no allow-list to omit a new op from);
-    `_ALWAYS_WRITES_NOTICE` (a fixed prose string, zero op vocabulary); and
-    `check_devtest_orchestrator.py`'s `_HANDLER_FUNCTION_NAMES` (a
+    and `check_devtest_orchestrator.py`'s `_HANDLER_FUNCTION_NAMES` (a
     DIFFERENT axis -- it holds CLI-handler FUNCTION names, never op
-    strings).
+    strings). (Was 6: `_ALWAYS_WRITES_NOTICE` -- a fixed prose string with
+    zero op vocabulary -- was deleted along with the console echo it fed
+    by quick task 260821-spg, so it is no longer declared here.)
 
   Net: of P-23's original ten-row table, 6 rows are real policed
   registries (one more than P-23 counted, since `_dispatch_multi_run`'s
-  inner branches were missing from it), 3 rows carry no op vocabulary
+  inner branches were missing from it), 2 rows carry no op vocabulary
   whatsoever, and 1 row (`_HANDLER_FUNCTION_NAMES`) is keyed on a different
   axis entirely. ROADMAP criterion 5's "eight previously fail-open
   registries" is therefore measurably wrong on both ends: it undercounts
@@ -108,7 +109,6 @@ from typing import Any
 import pytest
 
 import firestarter.chip_test as chip_test_mod
-import firestarter.cli_handlers as cli_handlers_mod
 import firestarter.diagnostic_report as diagnostic_report_mod
 import tools.check_devtest_orchestrator as check_devtest_orchestrator_mod
 import tools.parse_devtest_issue as parse_devtest_issue_mod
@@ -355,12 +355,11 @@ _DECLARED_NON_REGISTRIES: dict[str, tuple[_NonRegistryLocator, str]] = {
         "issue may not parse'); that listing is measured-wrong -- there is "
         "no allow-list here for a new op to be omitted from.",
     ),
-    "_ALWAYS_WRITES_NOTICE": (
-        _NonRegistryLocator(cli_handlers_mod, "constant", "_ALWAYS_WRITES_NOTICE"),
-        "not an op-keyed registry -- a fixed prose notice string with zero "
-        "op vocabulary; any future write-count correction the notice's "
-        "wording needs is Phase 134's (P-08), not this parity gate's.",
-    ),
+    # "_ALWAYS_WRITES_NOTICE" was declared here (a fixed prose notice string
+    # with zero op vocabulary). Quick task 260821-spg deleted the constant
+    # itself along with the console echo it fed -- there is no longer a
+    # unit here to declare non-registry, so this entry is removed rather
+    # than left pointing at a name that no longer exists. Count moves 6 -> 5.
     "_HANDLER_FUNCTION_NAMES": (
         _NonRegistryLocator(
             check_devtest_orchestrator_mod, "constant", "_HANDLER_FUNCTION_NAMES"
@@ -374,7 +373,7 @@ _DECLARED_NON_REGISTRIES: dict[str, tuple[_NonRegistryLocator, str]] = {
     ),
 }
 
-_DECLARED_NON_REGISTRY_COUNT = 6
+_DECLARED_NON_REGISTRY_COUNT = 5
 
 
 # ---------------------------------------------------------------------------
