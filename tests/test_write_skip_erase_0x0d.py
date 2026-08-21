@@ -32,6 +32,30 @@ Coverage (each leg names the decision id it pins):
      chips, while D-13's warning is scoped to 0x0D chips, so those two
      specific warnings can never co-occur on a single chip -- the D-04
      auto-set line is the "other applicable line" this leg pairs with D-13's.
+  7. test_no_blank_check_vacuity_warning_is_printed_on_0x0d -- Phase 153 /
+     D-153-05 / RESEARCH Pitfall 5: the absence of a second, symmetric
+     warning about `-b`/`--no-blank-check` being vacuous on 0x0D is a
+     DELIBERATE decision, not an omission, and this leg fails loudly if that
+     decision is ever reversed by accident.
+
+Phase 153 narrative correction (D-153-04, D-153-05, RESEARCH Pitfall 5): every
+assertion below was true when authored and remains true, but the REASON the
+`--skip-erase` warning (leg 1) exists has changed. It used to fire because the
+28C family (protocol 0x0D) had no erase capability at all. Since ERASE-03
+restored `FLAG_CAN_ERASE` for algorithm 13, the family has gained a standalone
+erase, reachable as `firestarter erase` -- so the warning now fires because
+the WRITE PATH specifically performs no erase (D-153-05 deliberately keeps
+erase out of `eeprom28c_write_init`), not because the family lacks one. Leg 4
+inverts for a related reason: it was written when `-b`/`--no-blank-check` was
+"genuinely useful on a non-blank 0x0D part precisely because there is no
+erase to make it blank" -- ERASE-01 has since removed the pre-write blank
+check on this protocol entirely, so `-b` is itself now a no-op on 0x0D, for an
+unrelated reason (there is no blank check left for it to skip). Leg 4's
+assertion (no erase-warning text on `-b`) is unaffected by either fact and
+needed no change. What DOES need recording is why no new leg asserts a
+`-b`-is-vacuous warning: per Pitfall 5, warning about it would train users to
+think the write needs a flag, exactly what 152-CONTEXT.md D-08 exists to keep
+out of the public release notes. Leg 7 is that decision's guard.
 """
 
 import pytest
@@ -52,6 +76,14 @@ _NON_0X0D_CHIP = "W27C512"
 
 _SKIP_ERASE_WARNING = "has nothing to skip on this chip's protocol"
 _AUTO_SET_LINE = "auto-setting --skip-sdp-unlock on your behalf"
+
+# Phase 153 / D-153-05 / RESEARCH Pitfall 5 guard literal (leg 7 below): a
+# short, distinctive fragment of the hypothetical warning this project
+# deliberately chose NOT to add -- a "the blank-check flag is vacuous on
+# 0x0D" line. Asserted against as a module-level literal (not an inline
+# string) so a future addition of such a warning, however it is worded
+# around this fragment, fails leg 7 loudly rather than passing silently.
+_BLANK_CHECK_VACUITY_FRAGMENT = "no-blank-check has nothing to skip"
 
 
 @pytest.fixture()
@@ -132,10 +164,21 @@ def test_blank_check_flag_on_0x0d_does_not_produce_an_erase_warning(
     runner: CliRunner, tmp_path
 ) -> None:
     """RESEARCH C-8: `-b`/`--no-blank-check` on a 0x0D chip must NEVER
-    produce an erase-related "nothing to skip" line -- since Phase 92 that
-    flag skips only the blank check, and it is genuinely required on a
-    non-blank AT28C precisely because there is no erase to make it blank.
-    A "nothing to skip" line there would be a false statement."""
+    produce an erase-related "nothing to skip" line.
+
+    Phase 153 note (D-153-05 / RESEARCH Pitfall 5): the reason this
+    assertion holds has inverted since it was written. It used to hold
+    because `-b` skips only the blank check (Phase 92), and was genuinely
+    useful on a non-blank AT28C precisely because there was no erase to
+    make it blank. ERASE-01 has since removed the pre-write blank check
+    on protocol 0x0D entirely, so `-b` is now itself a no-op on 0x0D --
+    for the unrelated reason that there is no blank check left for it to
+    skip. Either way, an erase-related "nothing to skip" line on `-b`
+    would be a false statement about a flag whose vacuity has a different
+    cause, so this leg's assertion is unchanged and still required. See
+    `test_no_blank_check_vacuity_warning_is_printed_on_0x0d` for the
+    companion guard against a *blank-check*-vacuity warning ever being
+    added instead."""
     result, app = _drive_write(
         runner, _ALLOWED_0X0D_CHIP, tmp_path, extra_args=["--no-blank-check"]
     )
@@ -205,3 +248,32 @@ def test_both_vacuous_flag_warnings_can_appear_together(
     assert _AUTO_SET_LINE in result.output
     assert _SKIP_ERASE_WARNING in result.output
     app.eprom_operator.write_eprom.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Leg 7: no blank-check-vacuity warning is printed on 0x0D (Phase 153 /
+# D-153-05 / RESEARCH Pitfall 5) -- guards a deliberate non-addition
+# ---------------------------------------------------------------------------
+
+
+def test_no_blank_check_vacuity_warning_is_printed_on_0x0d(
+    runner: CliRunner, tmp_path
+) -> None:
+    """Phase 153 / D-153-05 / RESEARCH Pitfall 5: since ERASE-01 removed the
+    pre-write blank check on protocol 0x0D, `-b`/`--no-blank-check` is now
+    itself a no-op on this protocol -- symmetric with the pre-existing
+    `--skip-erase` vacuity this module already covers. This project
+    DELIBERATELY did not add a second, symmetric warning about it: doing so
+    would train users to think the write needs a flag, which is exactly the
+    recommendation 152-CONTEXT.md D-08 exists to keep out of the public
+    release notes. This leg asserts that absence against a module-level
+    literal (`_BLANK_CHECK_VACUITY_FRAGMENT`), so a future addition of such a
+    warning fails this leg loudly rather than passing silently. The leg was
+    observed failing against a temporary echo carrying that literal before
+    this commit -- see this plan's SUMMARY.md for the transcribed failure."""
+    result, app = _drive_write(
+        runner, _ALLOWED_0X0D_CHIP, tmp_path, extra_args=["--no-blank-check"]
+    )
+    assert result.exit_code == 0, result.output
+    app.eprom_operator.write_eprom.assert_called_once()
+    assert _BLANK_CHECK_VACUITY_FRAGMENT not in result.output
