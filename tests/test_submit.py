@@ -820,7 +820,15 @@ def test_refuse_missing_chip_names_chip():
     assert any("chip" in m for m in printed)
 
 
-def test_offtty_prints_body_and_url_never_sends():
+def test_offtty_prints_url_not_body_and_never_sends():
+    """Retargeted by quick task 260821-spg: `submit_report` used to echo
+    the sanitized body to the console off-TTY; that echo is gone. This
+    test now asserts the INVERSE -- the markdown table line the body
+    carries never reaches anything printed -- which is meaningful rather
+    than vacuous because `build_body` is still called and `body` still
+    reaches `build_issue_url` below (proven by the URL assertion staying):
+    the test proves the ECHO went, not that the body stopped being built.
+    """
     # find_prior_report_fn IS still invoked off-TTY (D-09: the dedup check
     # runs before any ask, on every path) -- injected as a Mock here so
     # run_fn/which_fn stay provably untouched by the FILING seams, which is
@@ -850,13 +858,51 @@ def test_offtty_prints_body_and_url_never_sends():
         find_prior_report_fn=find_prior_report_fn,
     )
 
-    assert any("| id | OK |" in m for m in printed)
+    assert not any("| id | OK |" in m for m in printed)
     assert any(f"github.com/{submit.SUBMIT_REPO}/issues/new" in m for m in printed)
     find_prior_report_fn.assert_called_once()
     browser_open.assert_not_called()
     run_fn.assert_not_called()
     confirm_fn.assert_not_called()
     which_fn.assert_not_called()
+
+
+def test_tty_prints_no_body_before_the_confirm_prompt():
+    """The second removed echo (quick task 260821-spg): on the interactive
+    path, `submit_report` used to print the sanitized body before reaching
+    the filing confirm prompt. No existing test covered that echo's
+    absence -- this one does: the confirm prompt is still reached (and
+    declined, so nothing is filed), but the body's markdown table line is
+    never printed."""
+    report = _make_report()
+    which_fn = Mock()
+    run_fn = Mock()
+    browser_open = Mock()
+    confirm_fn = Mock(return_value=False)
+    isatty_fn = Mock(return_value=True)
+    find_prior_report_fn = Mock(return_value=(None, True))
+    printed: list[str] = []
+    console = Mock()
+    console.print.side_effect = lambda msg: printed.append(msg)
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=which_fn,
+        run_fn=run_fn,
+        browser_open=browser_open,
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+        console=console,
+        find_prior_report_fn=find_prior_report_fn,
+    )
+
+    assert not any("| id | OK |" in m for m in printed)
+    confirm_fn.assert_called_once()
+    browser_open.assert_not_called()
+    run_fn.assert_not_called()
 
 
 def test_tty_decline_aborts_without_sending():

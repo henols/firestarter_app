@@ -550,13 +550,17 @@ def submit_report(
     "the check runs first" (DEVTEST-05) holds universally, not merely on
     an interactive run.
 
-    Step 4 (D-04/D-10 off-TTY): prints the sanitized body and the issue
-    URL and returns WITHOUT ever calling `confirm_fn`, `submit_via_gh`, or
-    `comment_via_gh_fn` -- filing nothing (v1.21 SUB-01's ban on silent
-    off-TTY submission survives D-05's removal of the explicit flag). The
-    Step 3 dedup outcome is included in this output: the existing issue is
-    named when one was found, or an explicit line states the check could
-    not run when it was not.
+    Step 4 (D-04/D-10 off-TTY): prints the issue URL and returns WITHOUT
+    ever calling `confirm_fn`, `submit_via_gh`, or `comment_via_gh_fn` --
+    filing nothing (v1.21 SUB-01's ban on silent off-TTY submission
+    survives D-05's removal of the explicit flag). The Step 3 dedup
+    outcome is included in this output: the existing issue is named when
+    one was found, or an explicit line states the check could not run
+    when it was not. Quick task 260821-spg stopped echoing the sanitized
+    body itself here: the full report is already persisted under the
+    config dir's `reports` directory (that path is printed by the
+    caller), so nothing is lost, and `body` still reaches every
+    downstream seam sanitized (`build_issue_url`, `gh`, the browser tier).
 
     Step 5 (the ask -- EVERY interactive run, DEVTEST-05): when Step 3
     found a duplicate, names it and asks whether to add this run's
@@ -608,7 +612,6 @@ def submit_report(
 
     if not isatty_fn():
         url = build_issue_url(title, body)
-        _print(body, console=console)
         _print(url, console=console)
         if prior_url:
             _print(
@@ -622,8 +625,6 @@ def submit_report(
                 console=console,
             )
         return
-
-    _print(body, console=console)
 
     if prior_url:
         if not confirm_fn(
