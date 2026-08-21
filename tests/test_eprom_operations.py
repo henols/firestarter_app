@@ -1125,7 +1125,7 @@ class TestSdpOperationsWireShape:
             ok = operator.sdp_lock("at28c256", _at28c256_programmer_dict())
         assert ok is False
 
-    def test_sdp_command_flags_do_not_carry_the_db_can_erase_bit(
+    def test_sdp_command_flags_carry_the_db_can_erase_bit(
         self, make_comm, fake_serial
     ) -> None:
         """REVERSAL RECORD (Phase 121 D-12): this test previously asserted the
@@ -1136,16 +1136,29 @@ class TestSdpOperationsWireShape:
         including all 84 protocol-0x0D chips, and that this was safe because
         configure_eeprom28c never reads the bit (firmware-inert).
 
-        D-12 reverses that POLICY, not the fact: configure_eeprom28c still
+        D-12 reversed that POLICY, not the fact: configure_eeprom28c still
         never reads FLAG_CAN_ERASE -- the firmware-inertness claim was never
-        wrong. What changed is that an inert-but-false capability
-        advertisement is still false: DEVTEST-01's `dev test` sweep reads it
-        and plans a real erase step that reports OK having done nothing.
-        `database.py` now excludes algorithm 13 (0x0D) as well as 5, so the
-        wire flags for at28c256 are 0, not 2. This leg now exists to catch a
-        regression the other way -- a future reader must not reintroduce the
-        bit for 0x0D.
+        wrong. What changed at the time was that an inert-but-false
+        capability advertisement is still false: DEVTEST-01's `dev test`
+        sweep reads it and plans a real erase step that reports OK having
+        done nothing. `database.py` excluded algorithm 13 (0x0D) as well as
+        5, so the wire flags for at28c256 were 0, not 2.
+
+        REVERSAL RECORD (Phase 153, ERASE-03): Phase 153 restores the bit at
+        the source because `configure_eeprom28c` now implements the
+        AN-0544B software chip erase and `CMD_ERASE` is wired to it, so the
+        wire flags for a 0x0D part carry FLAG_CAN_ERASE again. This leg now
+        exists to catch a future reader clearing the bit a second time.
+
+        Per D-153-05: carrying the bit on an SDP command frame does NOT mean
+        an SDP command erases anything. The bit is a capability
+        advertisement read only by the firmware's standalone-erase
+        precondition (`eprom_erase`'s refusal gate in `eprom_operations.cpp`);
+        no erase-on-write block was added to the 0x0D write path, and
+        sdp_unlock itself performs no erase.
         """
+        from firestarter.constants import FLAG_CAN_ERASE
+
         captured: dict = {}
 
         def _fake_find_and_connect(command_dict, config, **kwargs):
@@ -1163,7 +1176,7 @@ class TestSdpOperationsWireShape:
         ):
             operator.sdp_unlock("at28c256", _at28c256_programmer_dict())
 
-        assert captured["command_dict"]["flags"] == 0
+        assert captured["command_dict"]["flags"] & FLAG_CAN_ERASE
 
     def test_skip_sdp_unlock_bit_reaches_the_wire(self, make_comm, fake_serial) -> None:
         """v1.22 HOST-02: build_flags(skip_sdp_unlock=True) passed as
