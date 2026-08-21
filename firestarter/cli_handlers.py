@@ -42,8 +42,6 @@ from firestarter.channel import (
 from firestarter.chip_resolver import resolve_chip
 from firestarter.chip_test import (
     OP_ID,
-    SDP_HOLD_HELD,
-    SDP_HOLD_NOT_HELD,
     SDP_HOLD_NOT_RUN,
     VERDICT_BAD,
     VERDICT_MARGINAL,
@@ -56,7 +54,6 @@ from firestarter.chip_test import (
     is_uv_eprom,
     run_plan,
     sdp_hold_state,
-    sdp_left_writable,
     sdp_oracle_applicable,
 )
 from firestarter.config import ConfigManager, get_config_dir
@@ -2472,164 +2469,73 @@ def _resolve_write_scope(
     return "partial"
 
 
-# D-09 (v1.30 Phase 134, plan 134-08): the notice's write-pass number,
-# single-sourced HERE so it exists in exactly one place (P-08 prevention
-# 2 -- derive it, never restate it). Measured at plan time: the shipped
-# `write` step's own `runs=2` default writes pattern A twice, and this
-# phase's SDP leg adds four more single-run write passes of its own
-# (write-baseline-b writes B, write-baseline-a writes A, write-inhibited
-# writes B, write-restored writes A) -- 2 + 4 = 6, against the pre-134
-# notice's stale claim of "written twice". `tests/test_dev_test_cmd.py`
-# adds a test DERIVING this same number from a live `derive_plan` result
-# and asserting it equals this constant; if that test ever measures a
-# different number, change THIS constant, never the test.
+# D-09 (v1.30 Phase 134): the write-pass number backing a real sweep
+# invariant -- a full ALLOW-shaped run makes 6 write passes over the write
+# region (the shipped write/verify/erase steps write twice, plus this
+# phase's SDP leg's baseline/inhibited/restore writes).
+# `tests/test_dev_test_cmd.py` derives this same number from a live
+# `derive_plan` result and asserts it equals this constant; if that test
+# ever measures a different number, change THIS constant, never the test.
+# (Quick task 260821-spg removed the console notice this constant used to
+# feed; the invariant itself, and this constant, stay.)
 _ALWAYS_WRITES_PASS_COUNT = 6
 
-# D-04: printed FIRST, unconditionally, before the SAFE-04 absent-chip
-# hard-fail and before anything that touches hardware -- an unknown chip
-# seeing this notice is harmless and honest, and printing first guarantees
-# it precedes anything that could energise the shield. D-04's ordering
-# guarantee is unchanged by this rewrite: still ONE static string, still
-# echoed by the single call below `dev_test`'s docstring (its own line
-# number stays below the `derive_plan(...)` call site's), still never
-# carrying a per-chip derived value (only the single-sourced
-# `_ALWAYS_WRITES_PASS_COUNT` above, which is the SAME number for every
-# ALLOW-shaped write-executing run, never derived per invocation).
+
+# Design history for `dev_test`, moved here from its docstring by quick
+# task 260821-spg: this prose used to BE the docstring, which Click
+# renders verbatim as `--help` output -- load-bearing project history that
+# had no business being printed to every tester who typed `--help`. Moved
+# verbatim (as comments), not deleted; `--help` now carries only
+# user-facing usage text. Quick task 260821-spg also deleted the two
+# `click.echo(...)` calls this function used to make (the always-writes
+# notice and the SDP-recovery line) -- both were prose-only; the
+# behaviour they described (six write passes, SDP lock applied/released)
+# is unchanged and is still computed and still in the JSON/console table.
 #
-# Rewritten for D-09/D-12 (v1.30 Phase 134): states the TRUE pass count
-# (was "written twice"; is six), names the SDP lock this phase's leg now
-# applies in prose (never the hyphenated op literal -- `_SDP_LEG_OPS`'s
-# four strings all auto-join `_MULTIWORD_OP_VALUES`, and this notice is a
-# declared non-registry measured by a live substring test,
-# `test_non_registry_still_has_no_ops`), and gives the aborted-run
-# recovery in the word "rewrite" -- protocol 0x0D has no bulk-clear
-# operation at all, so writing the part again is the only way back.
-_ALWAYS_WRITES_NOTICE = (
-    "dev test ALWAYS WRITES to the chip -- run it only on a blank or "
-    "scratch part you are willing to sacrifice. A full run makes "
-    f"{_ALWAYS_WRITES_PASS_COUNT} separate write passes over the write "
-    "region (the shipped write/verify/erase steps write twice per "
-    "invocation, and this phase's SDP leg adds its own baseline, "
-    "inhibited and restore writes on top); a UV-erasable EPROM is asked "
-    "first, and even a decline still writes a small 256-byte top-anchored "
-    "region -- there is no read-only or non-destructive mode. This run "
-    "also applies the chip's SDP lock: on a COMPLETED run the part is "
-    "left unlocked again. If the run is interrupted before it finishes, "
-    "the part may be left locked -- rewrite it to recover; this protocol "
-    "has no bulk-clear operation, so writing the part again is the only "
-    "way back."
-)
-
-
-# D-12 (v1.30 Phase 134, plan 134-08): the two SDP recovery forms, named
-# module-level string constants so plan 134-09's scoped pytest scans
-# EXACTLY these two values, never the whole report (D-13's own measured
-# trap: the report legitimately contains the word "erase" in at least
-# three other places -- derive_plan's protocol-0x0D NA reason
-# (chip_test.py, ~:670-673), the shipped single-word "erase" op string
-# itself in both the markdown table and the JSON, and this module's own
-# `_ALWAYS_WRITES_NOTICE` step enumeration above -- so a whole-report grep
-# would go RED on correct text and need exemptions on day one, the 133
-# D-14 `_sample` shape). Phase 137's CLOSE-03 tool-side scanner is handed
-# `SDP_RECOVERY_CONSTANT_NAMES` below so it EXTENDS this tuple rather than
-# re-deriving or duplicating plan 134-09's pytest -- do NOT author that
-# scanner here (D-13, out of this plan's scope).
+# Takes ZERO options -- CHIP is the only argument (D-05, Phase 121). The
+# four flags this command carried through v1.21 (`--destructive`,
+# `--output-dir`, `-y`/`--yes`, `--submit`) are gone; each now errors as
+# an unknown option.
 #
-# Both constants: named the SDP lock in prose (never a hyphenated op
-# literal -- `_SDP_LEG_OPS`/`_SDP_OPS` membership is asserted against both
-# by this module's own tests), and never contain the five-letter word for
-# bulk clearing (protocol 0x0D has no such operation at all, so that word
-# would be actively wrong advice on this family).
-_SDP_RECOVERY_LOUD = (
-    "SDP lock: this run applied the chip's SDP lock and did NOT confirm "
-    "the part accepts a write again before it ended -- do not assume it "
-    "unlocked itself. Rewrite the part: this protocol has no bulk-clear "
-    "operation, so writing it again is the only way to recover it, and a "
-    f"fresh dev test run will confirm the write path again. {sdp_honesty.unreadable_state_caveat()}"
-)
-_SDP_RECOVERY_NEUTRAL = (
-    "SDP lock: this run completed and left the part unlocked again -- no "
-    f"rewrite is needed. {sdp_honesty.unreadable_state_caveat()} This is "
-    "evidence, not a guarantee, on a family whose protection state cannot "
-    "be read back."
-)
-
-# LEG-14's scan target (plan 134-09): names EXACTLY the two constants
-# above. Phase 137's CLOSE-03 extends this tuple rather than duplicating
-# the pytest that scans it.
-SDP_RECOVERY_CONSTANT_NAMES: tuple[str, ...] = (
-    "_SDP_RECOVERY_LOUD",
-    "_SDP_RECOVERY_NEUTRAL",
-)
-
-
-def _sdp_recovery_line(*, hold_state: str, left_writable: bool) -> str:
-    """D-12's two-form recovery-line selector (STRICT island; headroom 2).
-
-    Returns `_SDP_RECOVERY_LOUD` when the lock was genuinely EMITTED
-    (`hold_state` is `SDP_HOLD_HELD` or `SDP_HOLD_NOT_HELD` -- i.e. NOT a
-    `SDP_HOLD_NOT_RUN` prefix) and `left_writable` is `False` (the run did
-    not itself confirm the part still accepts a write); returns
-    `_SDP_RECOVERY_NEUTRAL` for every other case, INCLUDING every
-    `NOT-RUN` hold state (nothing was ever locked, so there is nothing to
-    warn about) and the genuinely-restored-writable case.
-
-    A line prints on the happy path too (D-12): silence is not a
-    statement, and an unconditional warning would train dismissal,
-    spending the signal on the one case it exists for. The op-string
-    knowledge this decision depends on (which `StepResult` proves "left
-    writable") lives in `chip_test.sdp_left_writable`, not here (P-07).
-    """
-    lock_emitted = hold_state in (SDP_HOLD_HELD, SDP_HOLD_NOT_HELD)
-    if lock_emitted and not left_writable:
-        return _SDP_RECOVERY_LOUD
-    return _SDP_RECOVERY_NEUTRAL
-
-
+# ALWAYS WRITES (D-04): every run writes to the chip, unconditionally. A
+# UV-erasable EPROM is asked first (D-01): yes writes the whole device,
+# no writes only a small 256-byte top-anchored region (still a write,
+# never read-only or non-destructive); off a TTY the ask is treated as a
+# DECLINED prompt, not absent consent, so the 256-byte window is written
+# anyway (D-03). Every OTHER family -- explicitly including this
+# milestone's own AT28C family, an electrically-erasable EEPROM -- is
+# written in full with NO prompt at all, because that write is
+# recoverable via erase (unlike an irrecoverable UV write). The report is
+# unconditionally persisted to `<config dir>/reports` (honors
+# `FIRESTARTER_CONFIG_DIR`) and is always handed to `submit_report`
+# (DEVTEST-05/06; Plan 121-11 owns that function's internals).
+#
+# REVERSAL (Phase 121 D-01/D-03/D-04/D-05, operator-specified
+# 2026-07-29): this supersedes v1.21's non-destructive-by-default premise
+# entirely, SAFE-01's CLI-only `--destructive` flag (removed, not merely
+# disabled), and SAFE-03's statement that the destructive confirm was
+# "the ONLY interactive input left in this handler" (superseded by the
+# UV-only ask above). Phase 112 Plan 04's deliberate removal of every
+# interactive prompt about tester-supplied identity is PARTIALLY reversed
+# in spirit by that same UV ask -- it is a new interactive prompt, just
+# not an identity-collection one; shield revision, chip origin and
+# pot-adjustment stay un-asked.
+#
+# Exit code (D-01): 0 if every step is OK/NA/SKIPPED, 2 if any step is
+# marginal (and none BAD), 1 if any step is BAD (including a chip-ID
+# mismatch) -- computed as max over per-step exit codes.
 @dev.command(name="test")
 @click.argument("chip", shell_complete=_complete_eprom)
 @click.pass_obj
 @map_typed_errors
 def dev_test(app: "AppContext", chip: str) -> None:
-    """Run the community chip-validation sweep for CHIP (SWEEP-01..05, RPT-01..05).
+    """Run the community chip-validation sweep for CHIP.
 
-    Takes ZERO options -- CHIP is the only argument (D-05, Phase 121). The
-    four flags this command carried through v1.21 (`--destructive`,
-    `--output-dir`, `-y`/`--yes`, `--submit`) are gone; each now errors as
-    an unknown option.
-
-    ALWAYS WRITES (D-04): every run writes to the chip, unconditionally, and
-    prints a notice saying so as its first line of output -- before the
-    absent-chip hard-fail and before anything touches hardware. A
-    UV-erasable EPROM is asked first (D-01): yes writes the whole device,
-    no writes only a small 256-byte top-anchored region (still a write,
-    never read-only or non-destructive); off a TTY the ask is treated as a
-    DECLINED prompt, not absent consent, so the 256-byte window is written
-    anyway (D-03). Every OTHER family -- explicitly including this
-    milestone's own AT28C family, an electrically-erasable EEPROM -- is
-    written in full with NO prompt at all, because that write is
-    recoverable via erase (unlike an irrecoverable UV write). The report is
-    unconditionally persisted to `<config dir>/reports` (honors
-    `FIRESTARTER_CONFIG_DIR`) and is always handed to `submit_report`
-    (DEVTEST-05/06; Plan 121-11 owns that function's internals).
-
-    REVERSAL (Phase 121 D-01/D-03/D-04/D-05, operator-specified
-    2026-07-29): this supersedes v1.21's non-destructive-by-default premise
-    entirely, SAFE-01's CLI-only `--destructive` flag (removed, not merely
-    disabled), and SAFE-03's statement that the destructive confirm was
-    "the ONLY interactive input left in this handler" (superseded by the
-    UV-only ask above). Phase 112 Plan 04's deliberate removal of every
-    interactive prompt about tester-supplied identity is PARTIALLY
-    reversed in spirit by that same UV ask -- it is a new interactive
-    prompt, just not an identity-collection one; shield revision, chip
-    origin and pot-adjustment stay un-asked.
-
-    Exit code (D-01): 0 if every step is OK/NA/SKIPPED, 2 if any step is
-    marginal (and none BAD), 1 if any step is BAD (including a chip-ID
-    mismatch) -- computed as max over per-step exit codes.
+    Writes to the chip every run (no read-only mode); saves a diagnostic
+    report under the config dir's reports directory and offers to file it
+    as a GitHub issue. Exit code: 0 clear, 2 marginal, 1 bad (including a
+    chip-ID mismatch).
     """
-    click.echo(_ALWAYS_WRITES_NOTICE)
-
     # SAFE-04: hard-fail BEFORE any hardware is energized when the chip name
     # is absent from the DB entirely (case A). Keyed strictly off
     # `get_eprom` emptiness -- NEVER a `resolve_chip` support-status refusal
@@ -2729,15 +2635,6 @@ def dev_test(app: "AppContext", chip: str) -> None:
     from firestarter import submit as submit_mod
 
     submit_mod.submit_report(report, chip, json_file, console=console)
-
-    # D-12: one of the two named recovery forms prints on EVERY completed
-    # run -- silence is not a statement, and a line here is the last thing
-    # printed before this handler decides its exit code. `click.echo`,
-    # matching `_ALWAYS_WRITES_NOTICE`'s own precedent, so it reaches
-    # console AND `CliRunner` capture regardless of log-level wiring.
-    hold_state = report.sdp_hold_state
-    left_writable = sdp_left_writable(results)
-    click.echo(_sdp_recovery_line(hold_state=hold_state, left_writable=left_writable))
 
     if not results:
         sys.exit(0)

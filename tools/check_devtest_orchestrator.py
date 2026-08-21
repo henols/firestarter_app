@@ -162,9 +162,6 @@ _HANDLER_FUNCTION_NAMES = frozenset(
         "_chip_id_fields",
         "_is_interactive",
         "_make_sampler",
-        # v1.30 Phase 134 plan 134-08 (D-12): the recovery-line selector,
-        # called directly from `dev_test`'s own body.
-        "_sdp_recovery_line",
     }
 )
 
