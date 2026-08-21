@@ -1004,12 +1004,21 @@ def test_hold_state_not_held_reaches_both_surfaces():
     assert SDP_HOLD_NOT_HELD in _rendered_text(table)
 
 
-def test_hold_state_not_run_reason_reaches_both_surfaces():
-    """The `NOT-RUN: <reason>` shape carries its REASON through to both
-    surfaces -- LEG-12 says `NOT-RUN(reason)`, and a reason that reaches
-    only the JSON is half the requirement (D-07's whole basis: `reason`
-    never reaches render()'s per-step row, so it must ride inside this
-    field's own string to be console-visible at all)."""
+def test_hold_state_not_run_reason_rides_the_json_but_not_the_console():
+    """The `NOT-RUN: <reason>` REASON survives verbatim in
+    `to_dict()["sdp_hold_state"]` -- so the saved JSON/markdown artifact and
+    the filed issue body all still carry it -- while `render()` shows only
+    the bare `NOT-RUN` token.
+
+    This RETARGETS the former
+    `test_hold_state_not_run_reason_reaches_both_surfaces`, which required
+    the reason to be console-visible too (D-07/LEG-12). The operator
+    superseded that console leg on 2026-08-21: on a non-0x0D part the
+    reason is a full sentence that Rich wraps across three lines of the
+    result box, and it was judged noise there. LEG-12's carriage
+    requirement is untouched -- the assertions below still pin the reason
+    as un-fabricated and verbatim on the JSON surface, which is what makes
+    a filed report actionable."""
     reason_text = "the SDP inhibited-write oracle did not run for this chip"
     hold_value = f"{SDP_HOLD_NOT_RUN}: {reason_text}"
 
@@ -1020,10 +1029,10 @@ def test_hold_state_not_run_reason_reaches_both_surfaces():
     assert d["sdp_hold_state"] == hold_value
     assert reason_text in d["sdp_hold_state"]
 
-    table = report.render()
-    rendered = _rendered_text(table)
+    rendered = _rendered_text(report.render())
     assert SDP_HOLD_NOT_RUN in rendered
-    assert reason_text in rendered
+    assert reason_text not in rendered
+    assert ":" not in rendered.split(SDP_HOLD_NOT_RUN, 1)[1][:2]
 
 
 def test_hold_state_no_boolean_under_lock_or_protect_key_anywhere_in_to_dict():
@@ -1076,7 +1085,7 @@ def test_hold_state_is_str_never_bool():
     assert not isinstance(value, bool)
 
 
-def test_schema_version_1_4_single_sourced():
+def test_schema_version_1_5_single_sourced():
     """`to_dict()["schema_version"]` equals the IMPORTED `SCHEMA_VERSION`
     (never a literal restated here), and the production module bumps the
     constant to its new value in exactly ONE place (single-sourced, D-10) --
@@ -1084,7 +1093,9 @@ def test_schema_version_1_4_single_sourced():
     literal, to keep this file's own count at the plan's required "at most
     one". Renamed from `test_schema_version_1_3_single_sourced` (v1.32 Phase
     147 plan 03, D-09): the 1.3 -> 1.4 bump would otherwise leave this test's
-    own literal-count assertion asserting a now-absent quoted string."""
+    own literal-count assertion asserting a now-absent quoted string. Renamed
+    again for the 1.4 -> 1.5 bump (2026-08-21), which added the additive
+    per-step `duration_s` key."""
     import inspect
 
     from firestarter import diagnostic_report as dr_mod
@@ -1093,7 +1104,7 @@ def test_schema_version_1_4_single_sourced():
     assert report.to_dict()["schema_version"] == dr_mod.SCHEMA_VERSION
 
     source = inspect.getsource(dr_mod)
-    assert source.count('"1.4"') == 1
+    assert source.count('"1.5"') == 1
 
 
 def test_dedup_fingerprint_sensitive_to_sdp_step_verdict_change():
@@ -1189,16 +1200,17 @@ def test_populated_identity_rows_render_the_value_verbatim():
     assert NOT_REPORTED not in _rendered_text(table)
 
 
-def test_schema_version_is_one_four():
-    """PROV-04: the imported constant equals `"1.4"`, and a freshly built
+def test_schema_version_is_one_five():
+    """PROV-04: the imported constant equals `"1.5"`, and a freshly built
     report's `to_dict()["schema_version"]` equals the IMPORTED constant --
     never a restated literal in the second assertion. This is the only
     place in the suite that pins WHICH version this phase shipped; every
-    other site (including `test_schema_version_1_4_single_sourced` above)
-    keeps importing the constant."""
+    other site (including `test_schema_version_1_5_single_sourced` above)
+    keeps importing the constant. 1.5 (2026-08-21) added the additive
+    per-step `duration_s` key -- pre-1.5 consumers ignore it."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == "1.4"
+    assert SCHEMA_VERSION == "1.5"
 
     report = _minimal_report()
     assert report.to_dict()["schema_version"] == SCHEMA_VERSION
@@ -1265,11 +1277,20 @@ def test_hex_cell_protocol_non_numeric_renders_verbatim_without_raising():
     assert rows["protocol"] == "banana"
 
 
-def test_hex_cell_chip_id_partial_is_none_safe():
-    """One side present, the other `None` (a clean/NA/SKIPPED id step) --
-    the operator asked only that `None` not crash; it renders as `None`,
-    not `NOT_REPORTED` (D-12's chip-ID row legitimately renders `None`,
-    see test_absent_identity_renders_the_explicit_marker_in_both_rows)."""
+def test_chip_id_one_sided_row_when_no_mismatch_was_recorded():
+    """`chip_id_actual is None` (a clean/NA/SKIPPED id step) collapses to a
+    ONE-sided `chip_id` row -- no `/ None` tail.
+
+    RETARGETED 2026-08-21 (was `test_hex_cell_chip_id_partial_is_none_safe`,
+    which pinned `"0x00A4 / None"`). `chip_id_actual` is populated ONLY on a
+    mismatch: on a passing id check the firmware's OK reply carries no id,
+    so `check_eprom_id` returns the host's own expected value echoed back
+    and `_chip_id_fields` discards it rather than present a never-measured
+    number as a measurement. Printing the resulting `None` beside a real
+    expected id read as a FAILED read, which is what the operator queried.
+    The `None`-safety the original test guarded still holds -- `_hex_cell`
+    is unchanged and its own None/unparseable cases are covered by
+    test_hex_cell_returns_str_value_unchanged_for_none_and_unparseable."""
     report = _minimal_report()
     report.auto_capture.chip_id_expected = 0x00A4
     report.auto_capture.chip_id_actual = None
@@ -1278,7 +1299,24 @@ def test_hex_cell_chip_id_partial_is_none_safe():
     field_col, value_col = table.columns
     rows = dict(zip(field_col.cells, value_col.cells))
 
-    assert rows["chip_id (expected/actual)"] == "0x00A4 / None"
+    assert rows["chip_id"] == "0x00A4"
+    assert "chip_id (expected/actual)" not in rows
+
+
+def test_chip_id_two_sided_row_only_when_a_mismatch_was_recorded():
+    """The expected/actual pair appears ONLY when there is a real
+    disagreement to show -- the mismatch is the whole reason the row is
+    two-sided, so it must survive (2026-08-21)."""
+    report = _minimal_report()
+    report.auto_capture.chip_id_expected = 0x00A4
+    report.auto_capture.chip_id_actual = 0x1234
+
+    table = report.render()
+    field_col, value_col = table.columns
+    rows = dict(zip(field_col.cells, value_col.cells))
+
+    assert rows["chip_id (expected/actual)"] == "0x00A4 / 0x1234"
+    assert "chip_id" not in rows
 
 
 def test_hex_cell_chip_id_both_populated_is_4_digit_upper_hex():
@@ -1365,12 +1403,21 @@ def test_render_keeps_the_surviving_rows():
         "fw_board_identity",
         "hw_revision",
         "protocol",
-        "chip_id (expected/actual)",
+        # One-sided on a minimal report: `chip_id_actual` is only set on a
+        # mismatch (2026-08-21). The two-sided label is pinned by
+        # test_chip_id_two_sided_row_only_when_a_mismatch_was_recorded.
+        "chip_id",
         "banner",
         "sdp_hold_state",
-        "voltage",
+        # One row per rail since 2026-08-21 -- the single six-value
+        # `voltage` row repeated the `vpp_mv`/`vpe_mv` standalone slots
+        # that no code path assigns, so it always carried two dead
+        # `not measured` fields beside the real bracket numbers.
+        "vpp (before/after)",
+        "vpe (before/after)",
     ):
         assert expected in fields
+    assert "voltage" not in fields
     assert any(f.startswith("step: ") for f in fields)
 
 
@@ -1401,3 +1448,90 @@ def test_to_dict_payload_unchanged_by_the_render_trim():
         assert "fingerprint" in step_row
     assert d["steps"][0]["error_code"] == 42
     assert d["steps"][0]["fingerprint"] == FP_ADDRESS_LINE
+
+
+# ---------------------------------------------------------------------------
+# Per-step timings (schema 1.5, 2026-08-21): the operator asked for timings
+# captured, presented in the box, and carried to GitHub. These pin the
+# report-side half; `tests/test_chip_test_timing.py` pins the capture half.
+# ---------------------------------------------------------------------------
+
+
+def test_step_duration_reaches_json_and_console():
+    """`duration_s` is in `to_dict()["steps"]` AND appended to the step's
+    console cell -- both surfaces, because a timing only in the JSON does
+    not answer "where did this run spend 3 minutes" at the terminal."""
+    report = _minimal_report(step_specs=[("read", VERDICT_OK, None, "")])
+    report.results[0].duration_s = 41.875
+
+    d = report.to_dict()
+    assert d["steps"][0]["duration_s"] == 41.875
+
+    rows = dict(zip(*[c.cells for c in report.render().columns]))
+    assert rows["step: read"] == "OK  41.9s"
+
+
+def test_step_with_no_duration_renders_bare_verdict():
+    """A step carrying no duration renders exactly as before -- no trailing
+    separator, no `None`. Guards the NA/SKIPPED shape and any pre-1.5
+    `StepResult` replayed through `render()`."""
+    report = _minimal_report(step_specs=[("write", VERDICT_BAD, None, "")])
+    assert report.results[0].duration_s is None
+
+    rows = dict(zip(*[c.cells for c in report.render().columns]))
+    assert rows["step: write"] == VERDICT_BAD
+
+
+def test_steps_total_row_sums_only_steps_that_ran():
+    """The `steps total` row sums the per-step durations present, skipping
+    `None`. It is a RENDER-only derivation: `to_dict()` gains no total key,
+    since a consumer can re-add the per-step values itself."""
+    report = _minimal_report(
+        step_specs=[
+            ("read", VERDICT_OK, None, ""),
+            ("write", VERDICT_OK, None, ""),
+            ("erase", "NA", None, ""),
+        ]
+    )
+    report.results[0].duration_s = 41.875
+    report.results[1].duration_s = 0.09
+
+    rows = dict(zip(*[c.cells for c in report.render().columns]))
+    # 41.875 + 0.09 = 41.965 -> "42.0s"; the NA step contributes nothing.
+    assert rows["steps total"] == "42.0s"
+    assert "steps_total" not in report.to_dict()
+    assert "total" not in report.to_dict()
+
+
+def test_durations_do_not_perturb_dedup_fingerprint():
+    """Two reports identical except for their step durations MUST produce
+    the SAME `dedup_fingerprint`.
+
+    This is the load-bearing property: the fingerprint deliberately excludes
+    every volatile field so a second run of the same chip still groups with
+    the first. Wall-clock timings are the most volatile field yet added, so
+    a fingerprint that read them would make every single run unique and
+    silently destroy duplicate detection."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    fast = _minimal_report(step_specs=[("read", VERDICT_OK, None, "")])
+    fast.results[0].duration_s = 0.5
+
+    slow = _minimal_report(step_specs=[("read", VERDICT_OK, None, "")])
+    slow.results[0].duration_s = 987.654
+
+    assert dedup_fingerprint(fast) == dedup_fingerprint(slow)
+
+
+def test_duration_cell_formatting_boundaries():
+    """Two decimals under 10 s so a 0.03 s id check is not rounded away to
+    `0.0s`; one decimal at and above 10 s. `None` and unparseable render
+    `""` so the caller can omit the suffix entirely."""
+    from firestarter.diagnostic_report import _duration_cell
+
+    assert _duration_cell(0.03) == "0.03s"
+    assert _duration_cell(9.994) == "9.99s"
+    assert _duration_cell(10) == "10.0s"
+    assert _duration_cell(41.875) == "41.9s"
+    assert _duration_cell(None) == ""
+    assert _duration_cell("not-a-number") == ""

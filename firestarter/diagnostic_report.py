@@ -46,13 +46,13 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from firestarter.chip_test import BannerCounts, Plan, StepResult
+from firestarter.chip_test import _RAN_VERDICTS, BannerCounts, Plan, StepResult
 
 # ---------------------------------------------------------------------------
 # Module constants (D-02, D-03) -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.4"  # D-02: single-sourced, baked into to_dict() output
+SCHEMA_VERSION = "1.5"  # D-02: single-sourced, baked into to_dict() output
 # 1.1 (Phase 114, GRAD-01): additive db_diff.ladder_state key -- backward
 # compatible, existing consumers reading current_support_status/
 # proposed_disposition are unaffected.
@@ -428,6 +428,66 @@ def _hex_cell(value: object, digits: int) -> str:
     return f"0x{parsed:0{digits}X}"
 
 
+def _state_cell(value: object) -> str:
+    """Render-only truncation of `sdp_hold_state` to its bare state token --
+    never used by `to_dict()`, which keeps the full `NOT-RUN: <reason>`
+    string (mirrors `_hex_cell`/`_identity_cell`: a render-boundary
+    substitution must not leak into the canonical mapping).
+
+    `chip_test.sdp_hold_state()` returns `HELD`, `NOT-HELD`, or
+    `f"{SDP_HOLD_NOT_RUN}: {reason}"`. Only the third form carries prose,
+    and on a non-0x0D part that prose is a full sentence naming the family
+    fact, which Rich then word-wraps across three console lines. Returns
+    everything before the first `":"`, stripped; `HELD`/`NOT-HELD` contain
+    no colon and pass through unchanged.
+
+    **This deliberately supersedes D-07/LEG-12's console leg** (operator,
+    2026-08-21): that decision required the NOT-RUN reason to be
+    console-visible because `reason` never reaches render()'s per-step row.
+    The operator judged the sentence to be noise in the result box and
+    asked for it gone. The reason is NOT lost -- it stays verbatim in
+    `to_dict()["sdp_hold_state"]`, so the saved JSON/markdown artifact and
+    the filed issue body all still carry it; only this table got shorter.
+    """
+    text = str(value)
+    return text.split(":", 1)[0].strip()
+
+
+def _rail_cell(before: object, after: object) -> str:
+    """Render-only formatter for one rail's before/after bracket -- returns
+    `"<before> / <after> mV"`, or a single `NOT_MEASURED` when NEITHER end
+    was sampled (rather than repeating the sentinel twice).
+
+    Renders only the bracketed pair. The `vpp_mv`/`vpe_mv` standalone
+    slots are deliberately NOT shown: they exist for a non-destructive
+    reading, and since D-04 made every run destructive (the sampler is
+    always built) NOTHING in the code path assigns them, so they printed
+    `not measured` on every single run beside real bracket numbers. They
+    stay in `to_dict()` -- this only stops the box repeating two dead
+    fields (operator, 2026-08-21).
+    """
+    b, a = str(before), str(after)
+    if b == NOT_MEASURED and a == NOT_MEASURED:
+        return NOT_MEASURED
+    return f"{b} / {a} mV"
+
+
+def _duration_cell(seconds: object) -> str:
+    """Format a step's `duration_s` for display -- `""` when absent.
+
+    Two decimals under 10 s (a 0.03 s id check must not round to `0.0s`),
+    one decimal above (a 41.88 s full read reads fine as `41.9s`). Returns
+    `""` for `None` so a caller can append it without a separator dance.
+    """
+    if seconds is None:
+        return ""
+    try:
+        value = float(seconds)  # type: ignore[arg-type]
+    except (ValueError, TypeError):
+        return ""
+    return f"{value:.2f}s" if value < 10 else f"{value:.1f}s"
+
+
 # ---------------------------------------------------------------------------
 # DiagnosticReport (RPT-01, RPT-02, XPORT-01) -- single-source dual render
 # ---------------------------------------------------------------------------
@@ -543,6 +603,9 @@ class DiagnosticReport:
             "fingerprint": (
                 result.fingerprint.classification if result.fingerprint else None
             ),
+            # Schema 1.5: wall-clock seconds for the step, or `None` when it
+            # did not run. Additive -- every pre-1.5 consumer ignores it.
+            "duration_s": result.duration_s,
         }
 
     def _banner_dict(self) -> dict[str, Any]:
@@ -597,9 +660,17 @@ class DiagnosticReport:
         (the raw transport counters, the submit-eligibility flag, and the
         advisory database-diff block) are gone entirely from this table,
         including the old "not computed" fallback for the last of those.
-        `to_dict()` is unchanged -- every one of those values is still in
-        the JSON/markdown artifact and the filed issue body; only this
-        console rendering got shorter.
+
+        A follow-up on the same operator pass took two more bites:
+        `sdp_hold_state` renders as its BARE state token via `_state_cell`
+        (the `NOT-RUN: <reason>` sentence wrapped across three lines), and
+        the single six-value `voltage` row became one `_rail_cell` row per
+        rail, dropping the `vpp_mv`/`vpe_mv` standalone slots that no code
+        path assigns.
+
+        `to_dict()` is unchanged throughout -- every one of those values is
+        still in the JSON/markdown artifact and the filed issue body; only
+        this console rendering got shorter.
         """
         from rich.table import Table
 
@@ -613,32 +684,76 @@ class DiagnosticReport:
         table.add_row("fw_board_identity", _identity_cell(ac["fw_board_identity"]))
         table.add_row("hw_revision", _identity_cell(ac["hw_revision"]))
         table.add_row("protocol", _hex_cell(ac["protocol"], 2))
-        table.add_row(
-            "chip_id (expected/actual)",
-            f"{_hex_cell(ac['chip_id_expected'], 4)} / "
-            f"{_hex_cell(ac['chip_id_actual'], 4)}",
-        )
+        # `chip_id_actual` is populated ONLY on a mismatch: on a passing id
+        # check the firmware's OK reply carries no id back, so
+        # `check_eprom_id` returns the host's OWN expected value echoed from
+        # `cmd_data["chip-id"]` and `_chip_id_fields` correctly discards it
+        # rather than present a never-measured number as a measurement.
+        # Rendering the resulting `None` beside a real expected id read like
+        # a failed read, so the two-sided row now appears only when there IS
+        # a disagreement to show (operator asked, 2026-08-21).
+        if ac["chip_id_actual"] is None:
+            table.add_row("chip_id", _hex_cell(ac["chip_id_expected"], 4))
+        else:
+            table.add_row(
+                "chip_id (expected/actual)",
+                f"{_hex_cell(ac['chip_id_expected'], 4)} / "
+                f"{_hex_cell(ac['chip_id_actual'], 4)}",
+            )
 
+        # Only steps that actually RAN get a row (operator, 2026-08-21).
+        # Gated on the engine's OWN `_RAN_VERDICTS` ({OK, BAD, marginal}) --
+        # the same frozenset `count_applicable` uses for the banner's
+        # `n_ran` -- so the number of step rows here is exactly the banner's
+        # N by construction, never a second hand-maintained notion of "ran".
+        #
+        # Safe to hide: `NA` and `SKIPPED` both map to exit code 0
+        # (`cli_handlers._VERDICT_EXIT_CODES`), so no nonzero-exit cause can
+        # hide here. The one non-verdict exit term, D-15's not-run SDP
+        # oracle floor, stays legible in the `sdp_hold_state` row above.
+        # Every step keeps its full entry in `to_dict()["steps"]`, so the
+        # JSON, the markdown table and the filed issue body are unchanged.
         for step_row in d["steps"]:
-            table.add_row(f"step: {step_row['op']}", str(step_row["verdict"]))
+            if step_row["verdict"] not in _RAN_VERDICTS:
+                continue
+            took = _duration_cell(step_row.get("duration_s"))
+            verdict = str(step_row["verdict"])
+            table.add_row(
+                f"step: {step_row['op']}",
+                f"{verdict}  {took}".rstrip() if took else verdict,
+            )
 
         banner = d["banner"]
         table.add_row("banner", f"{banner['n_ran']} of {banner['m_applicable']} ran")
 
-        # LEG-12 (D-07): its own console row, never folded into a step's
-        # `reason` -- the per-step row above shows only the bare verdict
-        # (260821-spg dropped its diagnostic-code suffix too), so `reason`
-        # never reaches this table.
-        table.add_row("sdp_hold_state", str(d["sdp_hold_state"]))
+        # Sum of the steps that ran (operator asked for timings, 2026-08-21).
+        # Deliberately labelled "steps total", not "elapsed": it excludes the
+        # identity read, plan derivation, report write and the submit prompt,
+        # so calling it wall-clock for the whole command would overclaim. It
+        # is NOT added to `to_dict()` -- a derived sum belongs to the render,
+        # and the per-step `duration_s` values it comes from are all in the
+        # JSON for any consumer that wants to re-add them.
+        total = sum(
+            float(sr["duration_s"])
+            for sr in d["steps"]
+            if sr.get("duration_s") is not None
+        )
+        if total:
+            table.add_row("steps total", _duration_cell(total))
+
+        # LEG-12: its own console row, never folded into a step's `reason`.
+        # Rendered as the BARE state token via `_state_cell` -- the operator
+        # superseded D-07's console leg on 2026-08-21 (the NOT-RUN reason is
+        # a wrapped full sentence in the box); the reason still rides the
+        # `to_dict()` string into the JSON, markdown and issue body.
+        table.add_row("sdp_hold_state", _state_cell(d["sdp_hold_state"]))
 
         v = d["voltage"]
         table.add_row(
-            "voltage",
-            (
-                f"vpp before/after={v['vpp_before_mv']}/{v['vpp_after_mv']} "
-                f"vpe before/after={v['vpe_before_mv']}/{v['vpe_after_mv']} "
-                f"vpp={v['vpp_mv']} vpe={v['vpe_mv']}"
-            ),
+            "vpp (before/after)", _rail_cell(v["vpp_before_mv"], v["vpp_after_mv"])
+        )
+        table.add_row(
+            "vpe (before/after)", _rail_cell(v["vpe_before_mv"], v["vpe_after_mv"])
         )
 
         if console is not None:
