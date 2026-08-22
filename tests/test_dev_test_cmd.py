@@ -730,6 +730,27 @@ class TestUVOnlyStopAndAsk:
         assert "write" not in steps
         operator.write_eprom.assert_called()
 
+    def test_uv_prompt_names_both_outcomes(self, runner: CliRunner) -> None:
+        """The prompt text must name BOTH outcomes -- the blank-device
+        full-write ceiling (D-C) and the single-slot floor -- so a future
+        edit cannot silently make it inert again (D-01's original defect:
+        both answers used to resolve to the same 256-byte window)."""
+        operator = make_clean_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with (
+            patch("firestarter.cli_handlers._is_interactive", return_value=True),
+            patch("firestarter.cli_handlers.Confirm") as mock_confirm,
+        ):
+            mock_confirm.ask.return_value = False
+            runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
+        mock_confirm.ask.assert_called_once()
+        prompt = mock_confirm.ask.call_args[0][0]
+        assert "whole device" in prompt
+        assert "blank" in prompt
+        assert "256-byte slot" in prompt
+
     def test_off_tty_partial_write_actually_happens(self, runner: CliRunner) -> None:
         """Off-TTY on a UV part, the confirm callable is never invoked AND
         write_eprom IS called with the 256-byte top-anchored region -- D-03
@@ -2064,6 +2085,7 @@ class TestBlankCheckAfterEraseKaq:
         steps = {s["op"]: s for s in data["steps"]}
         assert steps["blank-check"]["verdict"] == "NA", steps["blank-check"]
         operator.check_eprom_blank.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # Write-coverage provenance end to end (quick task 260821-wna, Task 5): a
