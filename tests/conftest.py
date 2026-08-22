@@ -62,6 +62,8 @@ if TYPE_CHECKING:
     from firestarter.firmware import FirmwareManager
     from firestarter.hardware import HardwareManager
 
+    from .fake_chip import FakeChip
+
 
 # ---------------------------------------------------------------------------
 # Phase 127 / Plan 127-06 (HOST-04 / D-02) — optional-dependency collection
@@ -240,7 +242,7 @@ def make_app_context(
     *,
     db: EpromDatabase | Mock | None = None,
     config_manager: ConfigManager | Mock | None = None,
-    eprom_operator: EpromOperator | Mock | None = None,
+    eprom_operator: EpromOperator | Mock | FakeChip | None = None,
     hardware_manager: HardwareManager | Mock | None = None,
     firmware_manager: FirmwareManager | Mock | None = None,
     eprom_presenter: EpromConsolePresenter | Mock | None = None,
@@ -318,7 +320,10 @@ def make_app_context(
         eprom_presenter = Mock(spec=EpromConsolePresenter)
 
     # The seam: each value here is either the real class or a deliberately
-    # admitted test double (Mock(spec=...)); the cast declares that
+    # admitted test double -- Mock(spec=...) throughout, plus `FakeChip` for
+    # `eprom_operator` (a hand-written stateful double modelling the real
+    # absolute-offset read/write semantics a Mock cannot); the cast
+    # declares that
     # substitution to mypy rather than suppressing a real defect. See the
     # docstring above for what this does and does not guarantee.
     return AppContext(
