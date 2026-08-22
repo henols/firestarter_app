@@ -2151,51 +2151,53 @@ def test_hold_state_not_held_when_write_inhibited_is_bad():
 
 @pytest.mark.parametrize("verdict", [VERDICT_NA, VERDICT_SKIPPED, VERDICT_MARGINAL])
 def test_hold_state_not_run_for_na_skipped_marginal(verdict):
-    """Anything short of a clean OK/BAD on `write-inhibited` renders
-    NOT-RUN, carrying that result's own (non-empty) reason -- never HELD,
-    never NOT-HELD, never a bare boolean."""
+    """Anything short of a clean OK/BAD on `write-inhibited` renders the
+    BARE `SDP_HOLD_NOT_RUN` token -- never HELD, never NOT-HELD, never a
+    bare boolean, and (quick task 260822-hs, operator: "strip") never the
+    result's own `reason` either, even though that `reason` stays intact
+    on the in-memory `StepResult` and is non-empty here on purpose -- this
+    pins that `sdp_hold_state()` does not read it at all on this route,
+    not merely that it happens to be absent from the fixture."""
     reason = f"synthetic {verdict!r} reason for the hold-state test"
     results = [StepResult(op=OP_WRITE_INHIBITED, verdict=verdict, reason=reason)]
     value = sdp_hold_state(Plan(name="AT28C256", steps=[]), results)
     assert isinstance(value, str)
-    assert value.startswith(SDP_HOLD_NOT_RUN), (
-        f"verdict {verdict!r} produced {value!r}, expected a string "
-        f"starting with {SDP_HOLD_NOT_RUN!r}"
-    )
-    assert reason in value, (
-        f"the result's own reason {reason!r} must appear in the NOT-RUN "
-        f"value, got {value!r}"
+    assert value == SDP_HOLD_NOT_RUN, (
+        f"verdict {verdict!r} produced {value!r}, expected the bare "
+        f"{SDP_HOLD_NOT_RUN!r} token with no reason appended"
     )
 
 
 def test_hold_state_not_run_when_step_absent_from_results():
     """Laundering route R6: the `write-inhibited` step is entirely ABSENT
     from `results` (the plan never derived it, or `run_plan` never reached
-    it) -- the absence itself must still render NOT-RUN with a non-empty
-    reason, never raise, and never silently default to HELD."""
+    it) -- the absence itself must still render the bare `SDP_HOLD_NOT_RUN`
+    token, never raise, and never silently default to HELD. Quick task
+    260822-hs stripped the reason this route used to carry (the
+    fixed-prose `unreadable_state_caveat()` fallback); this exercises the
+    step-absent input shape specifically, distinct from
+    `test_hold_state_not_run_for_na_skipped_marginal`'s step-present
+    inputs, even though both now collapse to the same bare return value."""
     value = sdp_hold_state(Plan(name="AT28C256", steps=[]), [])
     assert isinstance(value, str)
-    assert value.startswith(SDP_HOLD_NOT_RUN)
-    assert value != SDP_HOLD_NOT_RUN, (
-        "the step-absent case must still carry a non-empty reason after "
-        "the SDP_HOLD_NOT_RUN prefix, not just the bare constant"
-    )
-    assert unreadable_state_caveat() in value, (
-        "the fixed-prose fallback must COMPOSE sdp_honesty."
-        "unreadable_state_caveat() rather than re-authoring its sentence"
-    )
+    assert value == SDP_HOLD_NOT_RUN
 
 
-def test_hold_state_empty_reason_falls_back_to_honesty_caveat():
+def test_hold_state_empty_reason_no_longer_falls_back_to_honesty_caveat():
     """When the `write-inhibited` result's own `reason` is empty (rather
-    than the step being entirely absent), the SAME fixed-prose fallback
-    applies -- `reason` must never be allowed to render as an empty
-    string after the `SDP_HOLD_NOT_RUN:` prefix."""
+    than the step being entirely absent), the return is still the bare
+    `SDP_HOLD_NOT_RUN` token -- renamed from
+    `test_hold_state_empty_reason_falls_back_to_honesty_caveat`: the
+    fixed-prose fallback this test used to pin (composing
+    `sdp_honesty.unreadable_state_caveat()`) was deleted along with the
+    reason suffix by quick task 260822-hs (operator: "strip"). Kept as a
+    distinct regression test from the R6/absent-step case above and the
+    NA/SKIPPED/MARGINAL case with a non-empty reason: this is the
+    step-present-but-empty-reason input shape, and it must not somehow
+    resurrect the old fallback prose just because `reason` is falsy."""
     results = [StepResult(op=OP_WRITE_INHIBITED, verdict=VERDICT_SKIPPED, reason="")]
     value = sdp_hold_state(Plan(name="AT28C256", steps=[]), results)
-    assert value.startswith(SDP_HOLD_NOT_RUN)
-    assert unreadable_state_caveat() in value
-    assert value != f"{SDP_HOLD_NOT_RUN}: "
+    assert value == SDP_HOLD_NOT_RUN
 
 
 def test_hold_state_always_returns_str_never_bool_or_none():

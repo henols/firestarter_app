@@ -716,3 +716,41 @@ def test_local_override_0x0d_entry_is_refused_at_runtime(tmp_path) -> None:
         f"refused, got allowed={allowed} reason={reason!r}."
     )
     assert sdp.REASON_NOT_CAPABLE in reason
+
+
+# ---------------------------------------------------------------------------
+# Leg 13: the M8720 wrong-protocol reason, pinned directly against the live
+# `sdp_capability()` name-keyed wrapper (quick task 260822-hs). Re-homed
+# here from `tests/test_dev_test_cmd.py`'s
+# `TestLaunderingRoutesR3R4::test_r4_refuse_chip_na_reason_suppressed_
+# sdp_hold_state_bare` (formerly `..._keeps_identity`), which used to prove
+# this same identity by asserting it against `chip_test.sdp_hold_state()`'s
+# NOT-RUN suffix -- the one field-not-step carrier that suffix survived on
+# after quick task 260822-gxx. Follow-on quick task 260822-gxx's sibling,
+# 260822-hs, stripped that suffix too (operator: "strip"), so there is no
+# report-level carrier left to assert this identity against. A claim about
+# `sdp_capability()`'s own output belongs in a focused unit test on
+# `sdp_capability()` itself, not smuggled in through a report field -- this
+# is that test.
+# ---------------------------------------------------------------------------
+
+
+def test_m8720_wrong_protocol_reason_is_stable_and_pinned() -> None:
+    """M8720 (protocol 0x08, not 0x0D) is the fixture chip
+    `tests/test_dev_test_cmd.py` names `_CHIP_NO_ID` and relies on
+    throughout its REFUSE-chip / SDP-leg NA-path coverage. This pins
+    `sdp_capability("M8720", db)`'s own live return value directly: REFUSE,
+    with a reason that names both the chip and `REASON_WRONG_PROTOCOL` and
+    states the observed (non-0x0D) protocol -- so a future wording edit to
+    `sdp_capability_for_entry`'s wrong-protocol branch is caught here, at
+    its actual source, rather than only inferred from a report field three
+    layers downstream."""
+    real_db = EpromDatabase(skip_local_override=True)
+    allowed, reason = sdp.sdp_capability("M8720", real_db)
+
+    assert allowed is False, f"fixture setup error: M8720 is not REFUSE: {reason!r}"
+    assert reason == (
+        "M8720: SDP lock/unlock applies only to protocol 0x0D parallel "
+        "EEPROMs (observed protocol 0x08)"
+    ), reason
+    assert sdp.REASON_WRONG_PROTOCOL in reason

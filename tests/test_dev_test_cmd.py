@@ -440,10 +440,13 @@ def _normalize_console_text(output: str) -> str:
     never used for a byte-exact assertion.
 
     The original motivating case (`sdp_hold_state`'s `NOT-RUN` reason,
-    which wrapped across three console lines) no longer reaches the box as
-    of 2026-08-21, but the normalization still earns its keep against
-    column padding, and the `hold_state not in normalized` guards now rely
-    on it to prove the reason did NOT come back by way of a wrap.
+    which wrapped across three console lines) no longer reaches the box at
+    all as of quick task 260822-hs (the reason is stripped at its source,
+    `chip_test.sdp_hold_state()`, not merely hidden from render()) -- so
+    every `sdp_hold_state`-related normalized-text assertion below is now
+    a plain `"sdp_hold_state {TOKEN}" in normalized` presence check against
+    column padding, never a check that a reason failed to reappear via a
+    wrap; there is no reason left to reappear.
     """
     stripped = re.sub(r"[│┃┏┓┗┛┡┩┳┻╇━┌┐└┘├┤┬┴┼─]", " ", output)
     return " ".join(stripped.split())
@@ -937,11 +940,12 @@ class TestReportDestination:
         is now the opposite and this test was renamed to say so, so nobody
         "fixes" the suppression back thinking it's a regression.
 
-        `sdp_hold_state` (a top-level field, not a step) is the one
-        remaining carrier of this exact prose -- deliberately exempt, and
-        asserted separately below rather than folded into the JSON-half
-        check, so this test does not accidentally start passing for the
-        wrong reason if `sdp_hold_state` ever moved into `steps[]`."""
+        `sdp_hold_state` (a top-level field, not a step) used to be the one
+        remaining carrier of this exact prose, deliberately exempted from
+        the check below -- follow-on quick task 260822-hs closed that
+        exemption too (operator: "strip"), so `sdp_hold_state` is now
+        asserted to be the bare `SDP_HOLD_NOT_RUN` token, same as every
+        other surface. Do not re-add an exemption here: there is none left."""
         app = make_app_context(
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(),
@@ -968,29 +972,32 @@ class TestReportDestination:
         assert not any(
             expected_reason in (s.get("reason") or "") for s in data["steps"]
         ), "the reason prose must not appear in any steps[] entry's reason"
-        assert data["sdp_hold_state"] == f"{SDP_HOLD_NOT_RUN}: {expected_reason}", (
-            "sdp_hold_state is the deliberate, field-not-step exemption and "
-            f"is the one place this prose still appears: {data['sdp_hold_state']}"
+        assert data["sdp_hold_state"] == SDP_HOLD_NOT_RUN, (
+            "260822-hs delta: sdp_hold_state must be the bare token too, "
+            f"no exemption remains: {data['sdp_hold_state']}"
         )
 
-    def test_reason_wrong_protocol_absent_from_report_except_sdp_hold_state(
+    def test_reason_wrong_protocol_absent_from_entire_saved_report(
         self, runner: CliRunner
     ) -> None:
-        """New non-vacuous end-to-end guard for the 260822-gxx delta: a
-        REFUSE chip's live `sdp_capability()` reason text
-        (`REASON_WRONG_PROTOCOL`) is absent from the saved `.md` artifact's
-        table half AND every `steps[]` entry of its fenced JSON half -- the
-        string left the artifact's step-reporting surface entirely without
-        the source of truth (`sdp_capability`) changing at all.
+        """Non-vacuous end-to-end guard, RENAMED from
+        `test_reason_wrong_protocol_absent_from_report_except_sdp_hold_
+        state`: a REFUSE chip's live `sdp_capability()` reason text
+        (`REASON_WRONG_PROTOCOL`) is absent from the saved `.md` artifact
+        in FULL -- table half, fenced JSON half (both the top-level
+        `sdp_hold_state` key and every `steps[]` entry), and the saved
+        `.json` file too -- while `sdp_capability()` itself still returns
+        that exact string live for the same chip, proving the string left
+        every report surface without the source of truth changing at all.
 
-        `sdp_hold_state` is the one deliberate, documented exception (a
-        top-level field, not a step -- the operator's suppression ruling was
-        scoped to steps) and is asserted here to be the SOLE remaining
-        carrier, not folded into a blanket "absent from the whole file"
-        claim that would be false: `M8720`'s six SDP-leg steps (LEG-02) all
-        carry the IDENTICAL `sdp_capability()` reason, so `sdp_hold_state`
-        -- derived from the in-memory `write-inhibited` `StepResult.reason`,
-        untouched by this delta -- necessarily still carries it too."""
+        Quick task 260822-gxx (the original delta this test guards) left
+        exactly one carrier standing: `sdp_hold_state`, a top-level field
+        rather than a step, so the step-scoped suppression never reached
+        it. This test used to carve out that field as a documented
+        exception. Follow-on quick task 260822-hs closed it (operator:
+        "strip") -- `sdp_hold_state` now renders the bare `SDP_HOLD_NOT_RUN`
+        token with no reason at all, so the carve-out is gone and this is
+        now a true whole-file absence check, no exceptions."""
         from firestarter.sdp_capability import REASON_WRONG_PROTOCOL
 
         app = make_app_context(
@@ -1008,6 +1015,12 @@ class TestReportDestination:
         )
 
         md_text = (_reports_dir() / f"dev-test-{_CHIP_NO_ID}.md").read_text()
+        assert REASON_WRONG_PROTOCOL not in md_text, (
+            "the ENTIRE saved .md artifact -- table half and fenced JSON "
+            "half alike -- must be free of this string; no surface is "
+            "exempt any more"
+        )
+
         table_half, json_half = md_text.split("```json", 1)
         assert REASON_WRONG_PROTOCOL not in table_half, (
             "the table half must never carry this string"
@@ -1018,9 +1031,15 @@ class TestReportDestination:
             assert REASON_WRONG_PROTOCOL not in (step.get("reason") or ""), (
                 f"no steps[] entry may carry this string: {step}"
             )
-        assert REASON_WRONG_PROTOCOL in data["sdp_hold_state"], (
-            "sdp_hold_state is the deliberate, documented sole remaining "
+        assert REASON_WRONG_PROTOCOL not in data["sdp_hold_state"], (
+            "260822-hs delta: sdp_hold_state is no longer an exempt "
             f"carrier: {data['sdp_hold_state']}"
+        )
+        assert data["sdp_hold_state"] == SDP_HOLD_NOT_RUN, data["sdp_hold_state"]
+
+        json_file = _reports_dir() / f"dev-test-{_CHIP_NO_ID}.json"
+        assert REASON_WRONG_PROTOCOL not in json_file.read_text(), (
+            "the saved .json artifact must also be free of this string"
         )
 
     def test_fw_board_identity_auto_captured_end_to_end(
@@ -1467,8 +1486,9 @@ class TestExitPrecedenceLeg06:
 
 
 # ---------------------------------------------------------------------------
-# LEG-12 (v1.30 Phase 134 plan 134-07): the HELD/NOT-HELD/NOT-RUN(reason)
-# hold state, both surfaces, end to end through the real CLI. Evidence
+# LEG-12 (v1.30 Phase 134 plan 134-07): the HELD/NOT-HELD/NOT-RUN hold
+# state (bare, since quick task 260822-hs), both surfaces, end to end
+# through the real CLI. Evidence
 # Ceiling (`.planning/REQUIREMENTS.md`): every fixture below pins the host's
 # RESPONSE to a scripted read-back -- a locked die is unrepresentable in
 # either repo's stubs, so the causal claim "the lock inhibited the write" is
@@ -1524,17 +1544,16 @@ class TestHoldStateLeg12:
         normalized = _normalize_console_text(result.output)
         assert "sdp_hold_state NOT-HELD" in normalized, normalized
 
-    def test_hold_state_not_run_reason_reaches_both_surfaces(
-        self, runner: CliRunner
-    ) -> None:
+    def test_hold_state_not_run_reaches_both_surfaces(self, runner: CliRunner) -> None:
         """NOT-RUN: the dead-write-path operator (`make_clean_operator`'s
         `read_eprom` never persists real bytes, so the baseline read-back
         length-gates BAD) closes D-08's baseline gate before `write-
-        inhibited` is ever dispatched. `sdp_hold_state` reads
-        `NOT-RUN: <reason>` in the JSON, with the reason verbatim, while the
-        console box shows only the bare `NOT-RUN` token -- the operator
-        superseded D-07's console-visibility leg on 2026-08-21 (the reason
-        is a sentence Rich wrapped across three lines). Also demonstrates
+        inhibited` is ever dispatched. `sdp_hold_state` reads the bare
+        `NOT-RUN` token in BOTH surfaces -- renamed from
+        `test_hold_state_not_run_reason_reaches_both_surfaces`: quick task
+        260822-hs (operator: "strip") removed the `: <reason>` suffix this
+        test used to pin as JSON-only, so JSON and console now carry the
+        identical bare value, exact equality on both. Also demonstrates
         the phase's central safety property end to end
         (`operator.sdp_lock.assert_not_called()`) and the banner's dropped
         ratio (`n_ran < m_applicable`, LEG-13's own mechanism, D-15)."""
@@ -1546,14 +1565,9 @@ class TestHoldStateLeg12:
             result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         data = _load_report(_CHIP_ALLOW)
         hold_state = data["sdp_hold_state"]
-        assert hold_state.startswith(f"{SDP_HOLD_NOT_RUN}:"), hold_state
-        reason = hold_state.split(":", 1)[1].strip()
-        assert reason, hold_state  # non-empty reason, never a bare "NOT-RUN:"
+        assert hold_state == SDP_HOLD_NOT_RUN, hold_state
         normalized = _normalize_console_text(result.output)
-        # Console shows the BARE state token; the `NOT-RUN` reason rides the
-        # JSON only (operator superseded D-07's console leg, 2026-08-21).
         assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
-        assert hold_state not in normalized, normalized
         operator.sdp_lock.assert_not_called()
         banner = data["banner"]
         assert banner["n_ran"] < banner["m_applicable"], banner
@@ -1588,7 +1602,7 @@ class TestExitFloorD15:
         verdicts = {s["verdict"] for s in data["steps"]}
         assert "BAD" not in verdicts, verdicts
         assert "marginal" not in verdicts, verdicts
-        assert data["sdp_hold_state"].startswith(f"{SDP_HOLD_NOT_RUN}:")
+        assert data["sdp_hold_state"] == SDP_HOLD_NOT_RUN
         assert result.exit_code == 2, result.output
 
     def test_bad_and_notrun_exits_1_not_2(self, runner: CliRunner) -> None:
@@ -1625,7 +1639,7 @@ class TestExitFloorD15:
         data = _load_report(_CHIP_ALLOW)
         verdicts = {s["verdict"] for s in data["steps"]}
         assert "BAD" in verdicts, verdicts
-        assert data["sdp_hold_state"].startswith(f"{SDP_HOLD_NOT_RUN}:")
+        assert data["sdp_hold_state"] == SDP_HOLD_NOT_RUN
         assert result.exit_code == 1, result.output
 
     def test_marginal_and_notrun_exits_2(self, runner: CliRunner) -> None:
@@ -1657,7 +1671,7 @@ class TestExitFloorD15:
         verdicts = {s["verdict"] for s in data["steps"]}
         assert "BAD" not in verdicts, verdicts
         assert "marginal" in verdicts, verdicts
-        assert data["sdp_hold_state"].startswith(f"{SDP_HOLD_NOT_RUN}:")
+        assert data["sdp_hold_state"] == SDP_HOLD_NOT_RUN
         assert result.exit_code == 2, result.output
 
     def test_refuse_chip_notrun_exits_0(self, runner: CliRunner) -> None:
@@ -1676,7 +1690,7 @@ class TestExitFloorD15:
         verdicts = {s["verdict"] for s in data["steps"]}
         assert "BAD" not in verdicts, verdicts
         assert "marginal" not in verdicts, verdicts
-        assert data["sdp_hold_state"].startswith(f"{SDP_HOLD_NOT_RUN}:")
+        assert data["sdp_hold_state"] == SDP_HOLD_NOT_RUN
         assert result.exit_code == 0, result.output
 
     def test_identical_verdict_multiset_differing_exit_code(self) -> None:
@@ -1803,9 +1817,7 @@ class TestSdpRecoveryOutcomesD12:
         data = _load_report(_CHIP_ALLOW)
         steps = {s["op"]: s for s in data["steps"]}
         assert steps["write-restored"]["verdict"] != "OK", steps["write-restored"]
-        assert not data["sdp_hold_state"].startswith(f"{SDP_HOLD_NOT_RUN}:"), data[
-            "sdp_hold_state"
-        ]
+        assert data["sdp_hold_state"] != SDP_HOLD_NOT_RUN, data["sdp_hold_state"]
 
     def test_gated_run_never_locked(self, runner: CliRunner) -> None:
         """Gated run: the baseline gate closes before a lock is ever
@@ -1818,7 +1830,7 @@ class TestSdpRecoveryOutcomesD12:
         with _off_tty():
             runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         data = _load_report(_CHIP_ALLOW)
-        assert data["sdp_hold_state"].startswith(f"{SDP_HOLD_NOT_RUN}:")
+        assert data["sdp_hold_state"] == SDP_HOLD_NOT_RUN
         operator.sdp_lock.assert_not_called()
 
 
@@ -1879,15 +1891,16 @@ class TestCtrlCResidualNotClosedD12:
 # (`tests/test_dev_test_cmd.py`'s own `test_chip_id_mismatch_exits_1`
 # precedent, and Phase 114.1's lesson that an exit-code/verdict-only
 # assertion lies): `operator.sdp_lock.assert_not_called()` AND a rendered
-# `NOT-RUN` reason, in both the console and the JSON artifact.
+# bare `NOT-RUN` token, in both the console and the JSON artifact (quick
+# task 260822-hs stripped the reason this comment used to describe here).
 #
 # THESE SIX ARE NOT EXHAUSTIVE. A SEVENTH route to a non-running oracle
 # exists -- 134-CONTEXT.md D-08's baseline write/read-back gate, named the
 # "seventh route" in `134-04-SUMMARY.md` -- and it fails CLOSED under
 # D-08+D-15 (it is not a laundering route). It is not re-proven in this
 # class because it is already proven end to end, in the same
-# negative-call-plus-NOT-RUN-reason shape, by `TestHoldStateLeg12::
-# test_hold_state_not_run_reason_reaches_both_surfaces` and by
+# negative-call-plus-NOT-RUN-token shape, by `TestHoldStateLeg12::
+# test_hold_state_not_run_reaches_both_surfaces` and by
 # `TestExitFloorD15::test_clean_notrun_floors_to_2` / `test_bad_and_notrun_
 # exits_1_not_2` above (all driven through `make_clean_operator()`'s dead
 # write-path shape). A later reader must not mistake "six routes covered
@@ -1953,8 +1966,8 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
     ) -> None:
         """R1: a detected id differing from the synthetic entry's nonzero
         `chip-id` closes the destructive gate before any SDP-leg step
-        dispatches -- `sdp_lock` is never called, and the report renders a
-        non-empty `NOT-RUN` reason in both surfaces."""
+        dispatches -- `sdp_lock` is never called, and the report renders
+        the bare `NOT-RUN` token in both surfaces."""
         operator = make_clean_operator()
         operator.check_eprom_id.return_value = (True, 0xDEAD)
         app = make_app_context(
@@ -1970,14 +1983,9 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
         assert "mismatch" in steps["id"]["reason"], steps["id"]
         operator.sdp_lock.assert_not_called()
         hold_state = data["sdp_hold_state"]
-        assert hold_state.startswith(f"{SDP_HOLD_NOT_RUN}:"), hold_state
-        reason = hold_state.split(":", 1)[1].strip()
-        assert reason, hold_state  # non-empty reason, never a bare "NOT-RUN:"
+        assert hold_state == SDP_HOLD_NOT_RUN, hold_state
         normalized = _normalize_console_text(result.output)
-        # Console shows the BARE state token; the `NOT-RUN` reason rides the
-        # JSON only (operator superseded D-07's console leg, 2026-08-21).
         assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
-        assert hold_state not in normalized, normalized
 
     def test_r2_id_check_not_ok_closes_gate_and_renders_notrun(
         self, runner: CliRunner
@@ -1999,14 +2007,9 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
         assert steps["id"]["verdict"] == "BAD", steps["id"]
         operator.sdp_lock.assert_not_called()
         hold_state = data["sdp_hold_state"]
-        assert hold_state.startswith(f"{SDP_HOLD_NOT_RUN}:"), hold_state
-        reason = hold_state.split(":", 1)[1].strip()
-        assert reason, hold_state
+        assert hold_state == SDP_HOLD_NOT_RUN, hold_state
         normalized = _normalize_console_text(result.output)
-        # Console shows the BARE state token; the `NOT-RUN` reason rides the
-        # JSON only (operator superseded D-07's console leg, 2026-08-21).
         assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
-        assert hold_state not in normalized, normalized
 
     def test_r2_transport_error_during_id_check_closes_gate_and_renders_notrun(
         self, runner: CliRunner
@@ -2030,14 +2033,9 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
         assert steps["id"]["verdict"] == "BAD", steps["id"]
         operator.sdp_lock.assert_not_called()
         hold_state = data["sdp_hold_state"]
-        assert hold_state.startswith(f"{SDP_HOLD_NOT_RUN}:"), hold_state
-        reason = hold_state.split(":", 1)[1].strip()
-        assert reason, hold_state
+        assert hold_state == SDP_HOLD_NOT_RUN, hold_state
         normalized = _normalize_console_text(result.output)
-        # Console shows the BARE state token; the `NOT-RUN` reason rides the
-        # JSON only (operator superseded D-07's console leg, 2026-08-21).
         assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
-        assert hold_state not in normalized, normalized
 
 
 class TestLaunderingRoutesR3R4:
@@ -2085,16 +2083,11 @@ class TestLaunderingRoutesR3R4:
         ]
         operator.sdp_lock.assert_not_called()
         hold_state = data["sdp_hold_state"]
-        assert hold_state.startswith(f"{SDP_HOLD_NOT_RUN}:"), hold_state
-        reason = hold_state.split(":", 1)[1].strip()
-        assert reason, hold_state
+        assert hold_state == SDP_HOLD_NOT_RUN, hold_state
         normalized = _normalize_console_text(result.output)
-        # Console shows the BARE state token; the `NOT-RUN` reason rides the
-        # JSON only (operator superseded D-07's console leg, 2026-08-21).
         assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
-        assert hold_state not in normalized, normalized
 
-    def test_r4_refuse_chip_na_reason_suppressed_sdp_hold_state_keeps_identity(
+    def test_r4_refuse_chip_na_reason_suppressed_sdp_hold_state_bare(
         self, runner: CliRunner
     ) -> None:
         """R4, reversed by the operator mid-run (quick task 260822-gxx delta,
@@ -2106,19 +2099,26 @@ class TestLaunderingRoutesR3R4:
         step's `reason` as a regression fix -- that assertion is deliberately
         gone).
 
-        The identity proof against the live `sdp_capability(name, db)[1]`
-        function survives, just re-homed onto `sdp_hold_state`: that
-        top-level field is NOT a step (the operator's ruling was scoped to
-        steps) and is the one remaining carrier of this prose, sourced from
-        the SAME live function by identity, never a generic or re-worded
-        string."""
+        RENAMED again (was `..._keeps_identity`) by follow-on quick task
+        260822-hs: `sdp_hold_state` was the ONE remaining carrier of the
+        `sdp_capability(name, db)[1]` prose after 260822-gxx (a top-level
+        field, not a step, so the step-scoped suppression never reached
+        it) -- reported to the operator, whose instruction back was one
+        word: "strip". `sdp_hold_state` no longer carries ANY prose, so
+        there is no identity left to prove here; this test's own
+        assertion collapses to exact equality against the bare token. The
+        identity proof against the live `sdp_capability()` function was
+        re-homed properly this time onto a focused unit test in
+        `tests/test_sdp_capability.py`
+        (`test_m8720_wrong_protocol_reason_is_stable_and_pinned`), which
+        is where a claim about `sdp_capability`'s own output belongs."""
         operator = make_clean_operator()
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
         with _off_tty():
             result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
-        allowed, expected_reason = sdp_capability(_CHIP_NO_ID, _REAL_DB)
+        allowed, _expected_reason = sdp_capability(_CHIP_NO_ID, _REAL_DB)
         assert allowed is False, "fixture setup error: _CHIP_NO_ID must be REFUSE"
         data = _load_report(_CHIP_NO_ID)
         steps = {s["op"]: s for s in data["steps"]}
@@ -2129,15 +2129,12 @@ class TestLaunderingRoutesR3R4:
         )
         operator.sdp_lock.assert_not_called()
         hold_state = data["sdp_hold_state"]
-        assert hold_state == f"{SDP_HOLD_NOT_RUN}: {expected_reason}", (
-            "sdp_hold_state is the one remaining carrier of this prose "
-            f"(deliberate, field-not-step exemption): {hold_state}"
+        assert hold_state == SDP_HOLD_NOT_RUN, (
+            "260822-hs delta: sdp_hold_state carries no reason at all any "
+            f"more, not even this REFUSE chip's own: {hold_state}"
         )
         normalized = _normalize_console_text(result.output)
-        # Console shows the BARE state token; the `NOT-RUN` reason rides the
-        # JSON only (operator superseded D-07's console leg, 2026-08-21).
         assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
-        assert hold_state not in normalized, normalized
 
 
 # ---------------------------------------------------------------------------
