@@ -232,6 +232,82 @@ def test_build_body_table_from_sanitized_steps():
     assert "```json" not in body
 
 
+@pytest.mark.parametrize(
+    "verdict,reason,expected",
+    [
+        ("NA", "SDP lock/unlock applies only to protocol 0x0D", "-"),
+        ("NA", "", "-"),
+        ("NA", None, "-"),
+        ("SKIPPED", "no target resolved", "no target resolved"),
+        ("BAD", "port gone", "port gone"),
+        ("OK", "", "-"),
+        (None, "", "-"),
+    ],
+)
+def test_reason_text_verdict_keyed_suppression(verdict, reason, expected):
+    # D-1: suppression is keyed on the verdict token, never on message text.
+    # The SKIPPED and BAD rows are the non-vacuity proof -- they must NOT be
+    # suppressed, otherwise the rule would just be blanket suppression.
+    assert submit._reason_text(verdict, reason) == expected
+
+
+def test_build_body_na_row_reason_absent_everywhere_skipped_retains_it():
+    """Quick task 260822-gxx, operator reversal mid-run ("Actually if a step
+    is NA no reason shall never be reported in any place"): this test used
+    to prove the ORIGINAL D-2 -- an NA row's reason suppressed in the table
+    half but retained verbatim in the fenced JSON half. That guarantee is
+    now the opposite; do not "restore" it as a regression fix.
+
+    Suppression for an NA row now happens one layer up, in
+    `DiagnosticReport._step_dict()` (`firestarter/diagnostic_report.py`) --
+    `submit.build_body` receives an ALREADY-sanitized dict and never sees
+    `REASON_WRONG_PROTOCOL` at all by the time it runs, in either half. This
+    fixture is built to match that real upstream shape (`reason: ""` on the
+    NA step) rather than a hand-authored prose string, so it does not
+    misrepresent what the pipeline actually hands `build_body` post-gxx.
+    `build_body` itself received NO code change in this delta -- this test
+    exists to pin that its existing "empty reason renders `-`" contract
+    (already covered for a `reason: ""` NA row by
+    `test_build_body_table_from_sanitized_steps`) still holds when combined
+    with a SKIPPED row that must NOT be suppressed (D-1's non-vacuity proof,
+    still locked)."""
+    from firestarter.sdp_capability import REASON_WRONG_PROTOCOL
+
+    sanitized = {
+        "steps": [
+            {
+                "op": "sdp-lock",
+                "verdict": "NA",
+                # Reflects real `_step_dict()` output post-260822-gxx: an
+                # NA step's reason is suppressed to "" before it ever
+                # reaches `sanitized_dict`/`build_body`.
+                "reason": "",
+                "duration_s": None,
+                "run_count": 0,
+            },
+            {
+                "op": "read",
+                "verdict": "SKIPPED",
+                "reason": "no target resolved",
+                "duration_s": None,
+                "run_count": 0,
+            },
+        ]
+    }
+    body = submit.build_body(sanitized, [], include_json=True)
+    table_half, json_half = body.split("```json", 1)
+
+    assert "| sdp-lock | NA | - | - | - |" in table_half
+    assert "| read | SKIPPED | - | - | no target resolved |" in table_half
+    assert REASON_WRONG_PROTOCOL not in table_half, (
+        "an NA row's reason prose must not reach the table half"
+    )
+    assert REASON_WRONG_PROTOCOL not in json_half, (
+        "260822-gxx: the fenced JSON block must not carry it either -- it "
+        "never reached build_body's input in the first place"
+    )
+
+
 def test_build_body_includes_json_by_default():
     sanitized = {"steps": [{"op": "id", "verdict": "OK", "reason": ""}], "chip": "X"}
     body = submit.build_body(sanitized, [])

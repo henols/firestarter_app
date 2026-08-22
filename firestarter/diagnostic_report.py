@@ -49,6 +49,7 @@ from typing import Any
 from firestarter.chip_test import (
     _RAN_VERDICTS,
     REGION_POLICY_FULL_DEVICE,
+    VERDICT_NA,
     BannerCounts,
     Plan,
     Step,
@@ -793,7 +794,18 @@ class DiagnosticReport:
             # disclosure surface, and a `--fast` run's `1` is what makes the
             # weaker policy legible instead of silent.
             "run_count": result.run_count,
-            "reason": result.reason,
+            # Quick task 260822-gxx (operator reversal of this plan's D-2):
+            # an NA-verdict step reports NO reason anywhere, including this
+            # export dict -- and therefore in both the saved
+            # `dev-test-<chip>.json` and the fenced JSON block inside the
+            # saved/filed `.md`, since both derive from this same dict. The
+            # in-memory model (`StepResult.reason`) is untouched; only the
+            # exported value is suppressed here. `dedup_fingerprint` (above)
+            # already excludes `reason` from its hash, so this changes
+            # nothing about report identity/grouping. `sdp_hold_state` is a
+            # separate top-level field, not a step, and deliberately keeps
+            # carrying its `NOT-RUN: <reason>` prose -- out of scope here.
+            "reason": "" if result.verdict == VERDICT_NA else result.reason,
             "error_code": result.error_code,
             "fingerprint": (
                 result.fingerprint.classification if result.fingerprint else None

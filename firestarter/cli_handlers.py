@@ -2643,6 +2643,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # module-level import here would tighten an already-layered graph for
     # one formatter.
     from firestarter.submit import _duration_text as submit_duration_text
+    from firestarter.submit import _reason_text as submit_reason_text
     from firestarter.submit import _runs_text as submit_runs_text
 
     md_lines = [
@@ -2655,14 +2656,17 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
         # `Took` mirrors submit.build_body's own column (schema 1.5) so the
         # saved artifact and the filed issue body carry the same timings.
         # `Runs` does the same for `run_count` (schema 1.7, quick task
-        # 260822-aq6) -- both formatters are imported from `submit` rather
-        # than re-implemented, so the two tables can never disagree on how
-        # an absent value renders.
+        # 260822-aq6). `Reason` suppresses NA-verdict rows to `-` (quick
+        # task 260822-gxx) -- all three formatters are imported from
+        # `submit` rather than re-implemented, so the two tables can never
+        # disagree on how an absent value renders or an NA row suppresses.
+        # The console needs no equivalent: `DiagnosticReport.render()`
+        # already drops every non-`_RAN_VERDICTS` row (including NA)
+        # entirely before it ever reaches a Reason cell (D-3).
         took = submit_duration_text(r.duration_s)
         runs = submit_runs_text(r.run_count)
-        md_lines.append(
-            f"| {r.op} | {r.verdict} | {runs} | {took} | {r.reason or '-'} |"
-        )
+        reason = submit_reason_text(r.verdict, r.reason)
+        md_lines.append(f"| {r.op} | {r.verdict} | {runs} | {took} | {reason} |")
     md_lines.append("")
     md_lines.append(report.to_json_block())
     md_file = out_path / f"dev-test-{safe_chip}.md"

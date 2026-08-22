@@ -926,6 +926,103 @@ class TestReportDestination:
         # `run_count`) so the saved artifact states the repeat policy.
         assert "| Step | Verdict | Runs | Took | Reason |" in md_text
 
+    def test_md_artifact_na_row_suppresses_reason_everywhere(
+        self, runner: CliRunner
+    ) -> None:
+        """Quick task 260822-gxx, operator reversal mid-run ("Actually if a
+        step is NA no reason shall never be reported in any place"): the
+        saved `.md` artifact's table half AND its fenced JSON block both
+        suppress an NA-verdict step's reason to nothing -- this test used to
+        prove the JSON half RETAINED the prose (the original D-2); that half
+        is now the opposite and this test was renamed to say so, so nobody
+        "fixes" the suppression back thinking it's a regression.
+
+        `sdp_hold_state` (a top-level field, not a step) is the one
+        remaining carrier of this exact prose -- deliberately exempt, and
+        asserted separately below rather than folded into the JSON-half
+        check, so this test does not accidentally start passing for the
+        wrong reason if `sdp_hold_state` ever moved into `steps[]`."""
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+        allowed, expected_reason = sdp_capability(_CHIP_NO_ID, _REAL_DB)
+        assert allowed is False, "fixture setup error: _CHIP_NO_ID must be REFUSE"
+
+        md_text = (_reports_dir() / f"dev-test-{_CHIP_NO_ID}.md").read_text()
+        table_half, json_half = md_text.split("```json", 1)
+
+        assert "| write-inhibited | NA | - | - | - |" in table_half
+        assert expected_reason not in table_half, (
+            "an NA row's reason prose must not reach the table half"
+        )
+        data = json.loads(json_half.split("```", 1)[0])
+        steps = {s["op"]: s for s in data["steps"]}
+        assert steps["write-inhibited"]["reason"] == "", (
+            "260822-gxx delta: an NA step's reason must be suppressed in the "
+            f"JSON half too, not just the table: {steps['write-inhibited']}"
+        )
+        assert not any(
+            expected_reason in (s.get("reason") or "") for s in data["steps"]
+        ), "the reason prose must not appear in any steps[] entry's reason"
+        assert data["sdp_hold_state"] == f"{SDP_HOLD_NOT_RUN}: {expected_reason}", (
+            "sdp_hold_state is the deliberate, field-not-step exemption and "
+            f"is the one place this prose still appears: {data['sdp_hold_state']}"
+        )
+
+    def test_reason_wrong_protocol_absent_from_report_except_sdp_hold_state(
+        self, runner: CliRunner
+    ) -> None:
+        """New non-vacuous end-to-end guard for the 260822-gxx delta: a
+        REFUSE chip's live `sdp_capability()` reason text
+        (`REASON_WRONG_PROTOCOL`) is absent from the saved `.md` artifact's
+        table half AND every `steps[]` entry of its fenced JSON half -- the
+        string left the artifact's step-reporting surface entirely without
+        the source of truth (`sdp_capability`) changing at all.
+
+        `sdp_hold_state` is the one deliberate, documented exception (a
+        top-level field, not a step -- the operator's suppression ruling was
+        scoped to steps) and is asserted here to be the SOLE remaining
+        carrier, not folded into a blanket "absent from the whole file"
+        claim that would be false: `M8720`'s six SDP-leg steps (LEG-02) all
+        carry the IDENTICAL `sdp_capability()` reason, so `sdp_hold_state`
+        -- derived from the in-memory `write-inhibited` `StepResult.reason`,
+        untouched by this delta -- necessarily still carries it too."""
+        from firestarter.sdp_capability import REASON_WRONG_PROTOCOL
+
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+        allowed, expected_reason = sdp_capability(_CHIP_NO_ID, _REAL_DB)
+        assert allowed is False, "fixture setup error: _CHIP_NO_ID must be REFUSE"
+        assert REASON_WRONG_PROTOCOL in expected_reason, (
+            "fixture setup error: _CHIP_NO_ID's live reason must be the "
+            "wrong-protocol one for this guard to be non-vacuous"
+        )
+
+        md_text = (_reports_dir() / f"dev-test-{_CHIP_NO_ID}.md").read_text()
+        table_half, json_half = md_text.split("```json", 1)
+        assert REASON_WRONG_PROTOCOL not in table_half, (
+            "the table half must never carry this string"
+        )
+
+        data = json.loads(json_half.split("```", 1)[0])
+        for step in data["steps"]:
+            assert REASON_WRONG_PROTOCOL not in (step.get("reason") or ""), (
+                f"no steps[] entry may carry this string: {step}"
+            )
+        assert REASON_WRONG_PROTOCOL in data["sdp_hold_state"], (
+            "sdp_hold_state is the deliberate, documented sole remaining "
+            f"carrier: {data['sdp_hold_state']}"
+        )
+
     def test_fw_board_identity_auto_captured_end_to_end(
         self, runner: CliRunner
     ) -> None:
@@ -1171,8 +1268,13 @@ class TestAbsentChipHardFail:
         # this test's proof that the adapter-required guard still surfaces
         # as SKIPPED, never a bare exit, on a step that DOES reach
         # resolve_chip.
+        #
+        # Quick task 260822-gxx delta (operator reversal, mid-run): every
+        # NA-verdict step's exported reason is now suppressed to "" -- this
+        # used to assert the 0x0D family-fact prose was PRESENT; that
+        # assertion is deliberately inverted below, not a regression.
         assert steps["blank-check"]["verdict"] == "NA"
-        assert "0x0d" in steps["blank-check"]["reason"].lower()
+        assert steps["blank-check"]["reason"] == "", steps["blank-check"]
         assert steps["write"]["verdict"] == "SKIPPED"
         assert "adapter" in steps["write"]["reason"]
 
@@ -1992,14 +2094,24 @@ class TestLaunderingRoutesR3R4:
         assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
         assert hold_state not in normalized, normalized
 
-    def test_r4_refuse_chip_na_reason_matches_sdp_capability_identity(
+    def test_r4_refuse_chip_na_reason_suppressed_sdp_hold_state_keeps_identity(
         self, runner: CliRunner
     ) -> None:
-        """R4: `step.supported is False` (a REFUSE chip, `_CHIP_NO_ID`) --
-        `write-inhibited` is NA, carrying `sdp_capability(name, db)[1]`
-        ITSELF as its reason, compared by identity against the live
-        function (never a generic or re-worded string): a REFUSED chip
-        gets an NA step CARRYING `reason`, never a silent omission."""
+        """R4, reversed by the operator mid-run (quick task 260822-gxx delta,
+        "Actually if a step is NA no reason shall never be reported in any
+        place"): `step.supported is False` (a REFUSE chip, `_CHIP_NO_ID`) --
+        `write-inhibited` is NA and its exported `reason` is now `""`
+        EVERYWHERE (this was the D-2 guard for the ORIGINAL plan, which this
+        test superseded; do not "restore" the old identity assertion on the
+        step's `reason` as a regression fix -- that assertion is deliberately
+        gone).
+
+        The identity proof against the live `sdp_capability(name, db)[1]`
+        function survives, just re-homed onto `sdp_hold_state`: that
+        top-level field is NOT a step (the operator's ruling was scoped to
+        steps) and is the one remaining carrier of this prose, sourced from
+        the SAME live function by identity, never a generic or re-worded
+        string."""
         operator = make_clean_operator()
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
@@ -2011,12 +2123,16 @@ class TestLaunderingRoutesR3R4:
         data = _load_report(_CHIP_NO_ID)
         steps = {s["op"]: s for s in data["steps"]}
         assert steps["write-inhibited"]["verdict"] == "NA", steps["write-inhibited"]
-        assert steps["write-inhibited"]["reason"] == expected_reason, steps[
-            "write-inhibited"
-        ]
+        assert steps["write-inhibited"]["reason"] == "", (
+            "260822-gxx delta: an NA step's exported reason is suppressed "
+            f"everywhere, not just in the render layer: {steps['write-inhibited']}"
+        )
         operator.sdp_lock.assert_not_called()
         hold_state = data["sdp_hold_state"]
-        assert hold_state == f"{SDP_HOLD_NOT_RUN}: {expected_reason}", hold_state
+        assert hold_state == f"{SDP_HOLD_NOT_RUN}: {expected_reason}", (
+            "sdp_hold_state is the one remaining carrier of this prose "
+            f"(deliberate, field-not-step exemption): {hold_state}"
+        )
         normalized = _normalize_console_text(result.output)
         # Console shows the BARE state token; the `NOT-RUN` reason rides the
         # JSON only (operator superseded D-07's console leg, 2026-08-21).

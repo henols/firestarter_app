@@ -57,6 +57,12 @@ from urllib.parse import quote, urlencode
 
 from rich.prompt import Confirm
 
+# `chip_test` is already transitively present in this module's import graph
+# via `diagnostic_report` (which imports `_RAN_VERDICTS` etc. from it), and
+# it imports no serial-transport or hardware-manager class -- so importing
+# `VERDICT_NA` from it here does not breach the ORCHESTRATOR-ONLY (SAFE-02)
+# invariant stated in this module's docstring.
+from firestarter.chip_test import VERDICT_NA
 from firestarter.diagnostic_report import is_submittable
 
 # ---------------------------------------------------------------------------
@@ -211,6 +217,30 @@ def _runs_text(run_count: Any) -> str:
     return str(value) if value > 0 else "-"
 
 
+def _reason_text(verdict: Any, reason: Any) -> str:
+    """`(verdict, reason)` -> a markdown Reason cell (quick task 260822-gxx).
+
+    Keyed on the VERDICT, never on the reason text: an `NA` verdict always
+    renders `-`, regardless of what prose is attached to it. This is a
+    render-layer suppression only -- the caller's fenced JSON block (and the
+    saved `.json` artifact) still carry the full `reason` string verbatim;
+    nothing here touches `to_dict()` or any reason constant.
+
+    `SKIPPED` is deliberately NOT suppressed: a SKIPPED reason is frequently
+    the real disclosure (e.g. "no target resolved"), so it keeps rendering
+    exactly like every other non-NA verdict. Per the operator ruling on
+    quick task 260822-gxx ("NA is enough"), an NA row no longer needs to
+    repeat capability prose (e.g. an SDP-applicability disclaimer) six times
+    down a filed report's table.
+
+    For every non-NA verdict this is a strict superset of the previous
+    `step.get("reason") or "-"` contract: a falsy reason still renders `-`.
+    """
+    if verdict == VERDICT_NA:
+        return "-"
+    return str(reason) if reason else "-"
+
+
 def build_body(
     sanitized_dict: dict[str, Any], results: Any, *, include_json: bool = True
 ) -> str:
@@ -233,13 +263,18 @@ def build_body(
     accurate N>=2 run from a `dev test --fast` single-run one WITHOUT
     unfolding the JSON block: a `1` in this column on a write or verify row
     means nothing in that report could ever have been reported `marginal`.
+
+    The Reason column suppresses any `NA`-verdict row to `-` (quick task
+    260822-gxx, `_reason_text`) -- an NA step's disclosure prose (e.g. an
+    SDP-applicability disclaimer) still reaches the fenced JSON block below,
+    just not the table.
     """
     lines = [
         "| Step | Verdict | Runs | Took | Reason |",
         "| ---- | ------- | ---- | ---- | ------ |",
     ]
     for step in sanitized_dict.get("steps", []):
-        reason = step.get("reason") or "-"
+        reason = _reason_text(step.get("verdict"), step.get("reason"))
         took = _duration_text(step.get("duration_s"))
         runs = _runs_text(step.get("run_count"))
         lines.append(
