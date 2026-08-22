@@ -48,8 +48,6 @@ from typing import Any
 
 from firestarter.chip_test import (
     _RAN_VERDICTS,
-    OP_WRITE,
-    OP_WRITE_PARTIAL,
     REGION_POLICY_FULL_DEVICE,
     BannerCounts,
     Plan,
@@ -825,17 +823,32 @@ class DiagnosticReport:
         # nothing was written. No row at all for a plain, unexcluded
         # full-device write. Adds no console call and no new helper to
         # `dev_test`'s body -- this lives entirely inside this module.
-        write_step_row = next(
-            (r for r in d["steps"] if r["op"] in (OP_WRITE, OP_WRITE_PARTIAL)),
+        #
+        # The write step is located STRUCTURALLY, never by comparing
+        # against a specific `OP_*` constant: this class is a declared
+        # op-vocabulary non-registry (LEG-15,
+        # `tests/test_op_registration_parity.py`) -- `to_dict()`/`render()`/
+        # `_step_dict()` read `StepResult.op` generically for display and
+        # must never special-case a specific op string. `plan.steps` and
+        # `self.results` are the SAME length in the SAME order (`run_plan`
+        # appends exactly one result per step); the shipped write/
+        # write-partial step is always the FIRST step carrying BOTH
+        # `destructive=True` AND a non-`None` `write_region` -- `verify`
+        # never sets `destructive`, `erase` never carries `write_region`,
+        # and the SDP leg's six steps (indistinguishable from a
+        # fixed-policy write by these two fields alone) always come LAST.
+        write_step_index = next(
+            (
+                i
+                for i, s in enumerate(self.plan.steps)
+                if s.destructive and s.write_region is not None
+            ),
             None,
         )
-        if write_step_row is not None:
-            write_step = next(
-                (s for s in self.plan.steps if s.op == write_step_row["op"]),
-                None,
-            )
-            policy = write_step.region_policy if write_step is not None else None
-            coverage = _write_coverage_line(write_step_row, policy)
+        if write_step_index is not None and write_step_index < len(d["steps"]):
+            write_step = self.plan.steps[write_step_index]
+            write_step_row = d["steps"][write_step_index]
+            coverage = _write_coverage_line(write_step_row, write_step.region_policy)
             if coverage:
                 table.add_row("write coverage", coverage)
 
