@@ -182,11 +182,14 @@ firestarter dev test <chip>
 
 **`dev test` writes to the chip — run it only on a blank or scratch part you
 are willing to sacrifice.** If the chip is a UV-erasable EPROM, the command
-stops and asks first: answering yes writes the full device, and answering no
-(or running with no terminal attached at all) still writes a small 256-byte
-region — there is no read-only answer. Every other family — including this
-project's own AT28C — is written in full, twice, with no prompt at all. Once
-the sweep finishes it produces a diagnostic report you can review and, if
+never writes more than one small 256-byte slot — there is no prompt and no
+read-only answer. Because programming a UV part can only clear bits, that
+slot is masked by whatever the chip already holds, and each run advances
+automatically to the next slot, so a used UV part stays testable without a
+UV eraser. Every other family — including this project's own AT28C — is
+written in full, twice, with no prompt at all, and a flash4-family part
+excludes its permanently locked 16 KiB boot blocks (named in the report).
+Once the sweep finishes it produces a diagnostic report you can review and, if
 you'd like, file as a GitHub issue to help the project learn whether that
 chip actually works. For the full picture of what `dev test` does, how its
 results are classified, and what it means (and doesn't mean) for a chip's

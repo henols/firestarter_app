@@ -73,6 +73,7 @@ from firestarter.chip_test import (
     BannerCounts,
     Plan,
     Step,
+    WriteTarget,
     _diff_offsets,  # test-internal: the shared divergence primitive (D-04)
     _dispatch_multi_run,  # test-internal: fail-closed dispatch proof (121-02)
     _dispatch_step,  # test-internal: fail-closed dispatch proof (121-02)
@@ -1673,6 +1674,66 @@ def test_repeat_policy_tag_ignores_steps_that_never_ran():
         )
         == ""
     )
+
+
+# ---------------------------------------------------------------------------
+# coverage_tag (quick-devtest-coverage-dedup, follow-up to 260821-wna)
+# ---------------------------------------------------------------------------
+
+
+def _write_target_result(region_policy, *, region=(0xFF00, 256)):
+    """A directly-constructed write-shaped `StepResult` carrying a real
+    `WriteTarget` under `region_policy` -- `coverage_tag`'s only input
+    besides the op vocabulary it deliberately never reads."""
+    import firestarter.chip_test as chip_test_mod
+
+    target = WriteTarget(
+        region=region,
+        pattern=generate_pattern(*region),
+        masked=False,
+        bits_cleared=0,
+        bits_retained=0,
+        current_source="test fixture",
+        region_policy=region_policy,
+    )
+    return chip_test_mod.StepResult(
+        op=OP_WRITE, verdict=VERDICT_OK, write_target=target
+    )
+
+
+def test_coverage_tag_marks_a_full_device_write():
+    from firestarter.chip_test import COVERAGE_TAG_FULL_DEVICE, coverage_tag
+
+    results = [_write_target_result(REGION_POLICY_FULL_DEVICE)]
+
+    assert coverage_tag(results) == COVERAGE_TAG_FULL_DEVICE
+
+
+def test_coverage_tag_empty_for_a_slot_or_fixed_write():
+    """Load-bearing for `dedup_fingerprint`'s no-re-key property: BOTH
+    non-full-device policies -- `uv-slot` and `fixed` -- must return `""`,
+    not merely "something other than the full-device tag"."""
+    from firestarter.chip_test import coverage_tag
+
+    assert coverage_tag([_write_target_result(REGION_POLICY_UV_SLOT)]) == ""
+    assert coverage_tag([_write_target_result(REGION_POLICY_FIXED)]) == ""
+
+
+def test_coverage_tag_empty_for_a_run_with_no_write_step():
+    """Graceful degradation, mirroring `repeat_policy_tag`'s own contract:
+    a non-destructive run (id/read/blank-check only, no write step at all)
+    reports nothing about coverage rather than raising or guessing."""
+    import firestarter.chip_test as chip_test_mod
+    from firestarter.chip_test import coverage_tag
+
+    step_result = chip_test_mod.StepResult
+    results = [
+        step_result(op=OP_ID, verdict=VERDICT_OK),
+        step_result(op=OP_READ, verdict=VERDICT_OK),
+    ]
+
+    assert coverage_tag(results) == ""
+    assert coverage_tag([]) == ""
 
 
 def test_marginal_on_disagreeing_write_runs():

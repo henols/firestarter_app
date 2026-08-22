@@ -162,17 +162,46 @@ is still just **one** data point toward the cross-report N≥2 that gates
 "N agreeing" count is presented as triage input for a human to weigh; no
 code counts, gates, or acts on it automatically.
 
-**Why a partial-region write can never poison the N≥2 count.** A UV part's
-declined (or off-TTY) sweep writes only a 256-byte region and uses the
-`write-partial` op string instead of `write`; `dedup_fingerprint` hashes each
-step's `op=verdict:fingerprint_classification` tuple, so a partial run's
-fingerprint is **structurally different** from a full round-trip's fingerprint
-on the same chip. `count_agreeing` groups strictly by that fingerprint, so a
-partial run and a full run of the same chip can never land in the same
-agreement bucket — a partial run can contribute at most toward N≥2 agreement
-with *other partial runs*, never toward promoting a full-round-trip claim.
-Phase 114's GRAD-01 no-auto-graduate lock therefore holds end to end through
-the fingerprint, not through the `community-reported` tag itself.
+**Why a partial-region write can never poison the N≥2 count.** This relies on
+**two** discriminators baked into `dedup_fingerprint`, not one — the op string
+and, since a follow-up to 260821-wna, a coverage tag.
+
+The op string is the first and older mechanism. Today, `dev test` resolves a
+UV-erasable part's write step to the `write-partial` op string and a non-UV
+part's write step to `write` (`cli_handlers.py::_resolve_write_scope` --
+unconditional per family, no prompt on either path); `dedup_fingerprint`
+hashes each step's `op=verdict:fingerprint_classification` tuple, so a UV
+part's small-region run is **structurally different** from a non-UV part's
+full-device run purely because the op strings differ.
+
+The op string alone, however, does not track coverage for every run shape
+this engine can produce, on either side of that split. For a brief window
+around 260821-wna, a UV part's write step could ALSO report op `write`: a
+short-lived consent flow permitted a full-device write when the chip read
+blank, before that same day's D-4/260822-aq6 reversal retired it — and while
+that flow was live, a consent=yes run covering only one 256-byte slot (chip
+already used) shared the exact op string a genuine full-device write reports.
+And on the non-UV side, still true today: `write` covers the resolved
+full-device region only when `full_device_region` succeeds; when it refuses
+(a hostile or absent `memory-size`, `chip_test.py::full_device_region`), the
+SAME op string falls back to the small default region instead. Two reports of
+the same chip can therefore share `op="write"` while covering wildly
+different fractions of the device. `coverage_tag` (`chip_test.py`) exists to
+close exactly this gap: it inspects the located write step's resolved
+`WriteTarget.region_policy` and appends `cov=full-device` to the fingerprint
+whenever that policy is `full-device`, leaving every smaller-coverage run
+(slot or fixed-region) untagged.
+
+`count_agreeing` groups strictly by the resulting fingerprint, so a
+smaller-coverage run and a full-coverage run of the same chip can never land
+in the same agreement bucket — the smaller run can contribute at most toward
+N≥2 agreement with *other* runs of the same shape, never toward promoting a
+full-round-trip claim. Phase 114's GRAD-01 no-auto-graduate lock therefore
+holds end to end through the fingerprint, not through the
+`community-reported` tag itself. The coverage tag is appended only for the
+full-device case, so every fingerprint produced by a slot/fixed run is
+unchanged from before this mechanism existed — no already-filed report's
+grouping was reset by it.
 
 **Why a `--fast` run cannot poison it either.** The same mechanism, applied to
 the repeat policy rather than the write region. A `--fast` sweep runs a single

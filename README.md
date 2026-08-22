@@ -180,8 +180,12 @@ so you always know both components are from the same beta cut.
 > to your specific board, run a smoke check, then hand off into `firestarter dev test <chip>`.
 >
 > **`dev test` writes to the chip** — run it only on a blank or scratch part.
-> A UV-erasable EPROM is asked first (yes = full device write, no/no-TTY =
-> a small 256-byte region); every other family is written in full, unprompted.
+> A UV-erasable EPROM always writes one 256-byte slot, never the whole
+> device: programming a UV part can only clear bits, so each slot is masked
+> by what's already on the chip, and successive runs advance to the next
+> slot automatically — a used UV part stays testable without a UV eraser.
+> Every other family is written in full, unprompted, with flash4 parts
+> excluding their permanently locked 16 KiB boot blocks (named in the report).
 
 #### Installing the beta app
 

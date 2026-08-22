@@ -67,6 +67,9 @@ from firestarter.chip_test import (
     FP_ADDRESS_LINE,
     FP_BLANK_CONTACT,
     FP_INDETERMINATE,
+    REGION_POLICY_FIXED,  # test-internal: coverage-tag dedup wiring
+    REGION_POLICY_FULL_DEVICE,  # test-internal: coverage-tag dedup wiring
+    REGION_POLICY_UV_SLOT,  # test-internal: coverage-tag dedup wiring
     SDP_HOLD_HELD,
     SDP_HOLD_NOT_HELD,
     SDP_HOLD_NOT_RUN,
@@ -77,6 +80,7 @@ from firestarter.chip_test import (
     Fingerprint,
     Plan,
     StepResult,
+    WriteTarget,
     derive_plan,
     run_plan,
 )
@@ -1296,6 +1300,85 @@ def test_dedup_fingerprint_unchanged_for_any_non_degraded_run_count():
         for n in (0, 2, 3, 5)
     }
     assert len(hashes) == 1
+
+
+# ---------------------------------------------------------------------------
+# Coverage-tag dedup discriminator (quick-devtest-coverage-dedup, follow-up
+# to 260821-wna) -- `coverage_tag`'s wiring into `dedup_fingerprint`
+# ---------------------------------------------------------------------------
+
+
+def _coverage_report(region_policy: str):
+    """A `_minimal_report` whose single write step carries a real
+    `WriteTarget` resolved under `region_policy`.
+
+    Direct construction, not `derive_plan`/`run_plan`: today's engine has
+    no live path that resolves BOTH `full-device` and `uv-slot`/`fixed`
+    for the SAME chip under the SAME op string (a UV part's
+    `write_scope="full"` run always resolves `uv-slot`, D-4/260822-aq6) --
+    which is exactly the historical-report scenario `coverage_tag` exists
+    to guard against (see `dedup_fingerprint`'s docstring). Stamping
+    `write_target` after construction, the same seam `_run_count_report`
+    above uses for `run_count`, isolates `coverage_tag`'s effect from
+    every other field `dedup_fingerprint` reads.
+    """
+    region = (0xFF00, 256)
+    target = WriteTarget(
+        region=region,
+        pattern=b"\xa5" * 256,
+        masked=False,
+        bits_cleared=0,
+        bits_retained=0,
+        current_source="test fixture",
+        region_policy=region_policy,
+    )
+    report = _minimal_report(
+        step_specs=[("write", VERDICT_OK, "clean", "")],
+    )
+    report.results[0].write_target = target
+    return report
+
+
+def test_dedup_fingerprint_separates_full_device_coverage_from_slot_coverage():
+    """`coverage_tag`'s whole reason to exist: a full-device write step and
+    a slot write step of the SAME chip can report the identical
+    op/verdict/classification -- since 260821-wna a UV part's `write_
+    scope="full"` run and a non-UV part's genuine full-device run can both
+    report `op="write"` -- while covering wildly different amounts of the
+    device. The pre-existing op-string discriminator (Phase 121 D-06/D-08)
+    cannot resolve this because both steps share the same op string; only
+    the coverage tag can."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    full_device = _coverage_report(REGION_POLICY_FULL_DEVICE)
+    slot = _coverage_report(REGION_POLICY_UV_SLOT)
+
+    assert dedup_fingerprint(full_device) != dedup_fingerprint(slot)
+
+
+def test_dedup_fingerprint_slot_run_hash_is_unchanged_by_coverage_tag():
+    """THE most important test in this group -- a GATE, not a claim.
+
+    `coverage_tag` returns `""` for a slot/fixed run and `dedup_fingerprint`
+    appends it only when non-empty (mirroring `repeat_policy_tag`'s
+    already-proven no-re-key discipline, see
+    `test_dedup_fingerprint_unchanged_for_any_non_degraded_run_count`
+    above). Pinning the literal hash -- rather than merely asserting
+    `uv-slot` and `fixed` agree with each other -- means a future change
+    that starts tagging the default (untagged) case fails loudly HERE,
+    instead of silently re-keying every historical `count_agreeing` group
+    a maintainer has already promoted a chip through.
+    """
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    slot_report = _coverage_report(REGION_POLICY_UV_SLOT)
+    fixed_report = _coverage_report(REGION_POLICY_FIXED)
+
+    assert dedup_fingerprint(slot_report) == "a0a50436ae3d"
+    # `fixed` is the OTHER untagged policy -- both must land on the SAME
+    # historical hash, not merely on hashes that happen to differ from
+    # `full-device`'s.
+    assert dedup_fingerprint(fixed_report) == "a0a50436ae3d"
 
 
 def test_schema_version_is_one_seven():
