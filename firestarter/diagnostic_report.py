@@ -464,25 +464,30 @@ def _hex_cell(value: object, digits: int) -> str:
 
 
 def _state_cell(value: object) -> str:
-    """Render-only truncation of `sdp_hold_state` to its bare state token --
-    never used by `to_dict()`, which keeps the full `NOT-RUN: <reason>`
-    string (mirrors `_hex_cell`/`_identity_cell`: a render-boundary
-    substitution must not leak into the canonical mapping).
+    """Render-only truncation of `sdp_hold_state` to its bare state token
+    (mirrors `_hex_cell`/`_identity_cell`: a render-boundary substitution
+    must not leak into the canonical mapping).
 
-    `chip_test.sdp_hold_state()` returns `HELD`, `NOT-HELD`, or
-    `f"{SDP_HOLD_NOT_RUN}: {reason}"`. Only the third form carries prose,
-    and on a non-0x0D part that prose is a full sentence naming the family
-    fact, which Rich then word-wraps across three console lines. Returns
-    everything before the first `":"`, stripped; `HELD`/`NOT-HELD` contain
-    no colon and pass through unchanged.
-
-    **This deliberately supersedes D-07/LEG-12's console leg** (operator,
-    2026-08-21): that decision required the NOT-RUN reason to be
-    console-visible because `reason` never reaches render()'s per-step row.
-    The operator judged the sentence to be noise in the result box and
-    asked for it gone. The reason is NOT lost -- it stays verbatim in
-    `to_dict()["sdp_hold_state"]`, so the saved JSON/markdown artifact and
-    the filed issue body all still carry it; only this table got shorter.
+    HISTORICAL, KEPT DEFENSIVE (quick task 260822-hs supersedes the note
+    this docstring used to carry): `chip_test.sdp_hold_state()` used to
+    return `HELD`, `NOT-HELD`, or `f"{SDP_HOLD_NOT_RUN}: {reason}"` for a
+    non-0x0D part -- a full sentence Rich then word-wrapped across three
+    console lines, which is why this truncation existed in the first
+    place (D-07/LEG-12's console leg, superseded by the operator on
+    2026-08-21). Quick task 260822-hs went further and STRIPPED the
+    reason at the source: `sdp_hold_state()` now returns the bare
+    `SDP_HOLD_NOT_RUN` token with nothing to truncate, so for every
+    CURRENT input this function is a no-op passthrough. It still splits on
+    the first `":"` and is KEPT rather than deleted -- it costs nothing,
+    it stays correct if some other/older caller ever assigns a
+    colon-bearing `sdp_hold_state` value again (e.g. a foreign or
+    historical report dict fed through `render()`), and deleting it would
+    be exactly the kind of "restore what looks unused" mistake that
+    re-opens a closed carrier. `to_dict()` no longer carries any prose
+    under this key either -- the canonical value and the rendered value
+    are identical bare tokens, so there is nothing left for the saved
+    JSON/markdown artifact or the filed issue body to carry beyond the
+    three-valued token itself.
     """
     text = str(value)
     return text.split(":", 1)[0].strip()
@@ -987,10 +992,10 @@ class DiagnosticReport:
             table.add_row("steps total", _duration_cell(total))
 
         # LEG-12: its own console row, never folded into a step's `reason`.
-        # Rendered as the BARE state token via `_state_cell` -- the operator
-        # superseded D-07's console leg on 2026-08-21 (the NOT-RUN reason is
-        # a wrapped full sentence in the box); the reason still rides the
-        # `to_dict()` string into the JSON, markdown and issue body.
+        # Rendered via `_state_cell` -- a no-op passthrough today, since
+        # quick task 260822-hs stripped the NOT-RUN reason at its source
+        # (`chip_test.sdp_hold_state()`); see `_state_cell`'s own docstring
+        # for why the truncation stays rather than being deleted.
         table.add_row("sdp_hold_state", _state_cell(d["sdp_hold_state"]))
 
         # D-F (quick task 260821-wna): one extra row, only when the write

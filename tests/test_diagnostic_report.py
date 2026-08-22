@@ -1006,21 +1006,25 @@ def test_hold_state_not_held_reaches_both_surfaces():
     assert SDP_HOLD_NOT_HELD in _rendered_text(table)
 
 
-def test_hold_state_not_run_reason_rides_the_json_but_not_the_console():
-    """The `NOT-RUN: <reason>` REASON survives verbatim in
-    `to_dict()["sdp_hold_state"]` -- so the saved JSON/markdown artifact and
-    the filed issue body all still carry it -- while `render()` shows only
-    the bare `NOT-RUN` token.
+def test_state_cell_truncates_a_legacy_colon_bearing_hold_value_defensively():
+    """`_state_cell`'s colon-truncation is KEPT DEFENSIVE, not deleted, by
+    quick task 260822-hs -- see that function's own docstring. Production
+    `chip_test.sdp_hold_state()` no longer emits a colon-bearing
+    `f"{SDP_HOLD_NOT_RUN}: {reason}"` shape at all (the operator's "strip"
+    instruction removed the reason at its source), so this test manually
+    constructs that legacy shape directly on the report object -- never
+    through `chip_test.sdp_hold_state()` -- to prove the render layer
+    still degrades it safely if some other/older caller ever assigns one.
 
-    This RETARGETS the former
-    `test_hold_state_not_run_reason_reaches_both_surfaces`, which required
-    the reason to be console-visible too (D-07/LEG-12). The operator
-    superseded that console leg on 2026-08-21: on a non-0x0D part the
-    reason is a full sentence that Rich wraps across three lines of the
-    result box, and it was judged noise there. LEG-12's carriage
-    requirement is untouched -- the assertions below still pin the reason
-    as un-fabricated and verbatim on the JSON surface, which is what makes
-    a filed report actionable."""
+    RENAMED from `test_hold_state_not_run_reason_rides_the_json_but_not_
+    the_console`, which this test superseded, along with the '260822-gxx
+    delta' claim it used to pin -- that the JSON/markdown artifact and the
+    filed issue body "still carry" the reason. That claim is now FALSE for
+    every current production input: `to_dict()["sdp_hold_state"]` carries
+    no prose at all any more, current or legacy. `to_dict()` still passes
+    whatever is assigned to `report.sdp_hold_state` through UNCHANGED
+    (never mutates it) -- that passthrough behaviour, not a claim about
+    what production assigns, is what this test pins on the JSON side."""
     reason_text = "the SDP inhibited-write oracle did not run for this chip"
     hold_value = f"{SDP_HOLD_NOT_RUN}: {reason_text}"
 

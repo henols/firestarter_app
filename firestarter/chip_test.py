@@ -39,7 +39,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from firestarter import sdp_honesty  # unreadable_state_caveat(), called not re-authored
 from firestarter.chip_resolver import resolve_chip
 from firestarter.constants import (
     FLAG_CAN_ERASE,  # 0x02 -- do NOT redefine; import
@@ -2221,7 +2220,7 @@ def sdp_oracle_applicable(plan: Plan) -> bool:
 
 
 def sdp_hold_state(plan: Plan, results: list[StepResult]) -> str:
-    """LEG-12's pure `HELD`/`NOT-HELD`/`NOT-RUN(reason)` derivation.
+    """LEG-12's pure `HELD`/`NOT-HELD`/`NOT-RUN` derivation.
 
     Pure, no logger, no I/O (this module has neither and stays that way --
     see `_UNLOCK_CLEANUP_SWALLOWED`'s own comment above). Reads `results`
@@ -2233,15 +2232,24 @@ def sdp_hold_state(plan: Plan, results: list[StepResult]) -> str:
       -- the lock leaked, LEG-06's shape).
     - verdict NA / `SKIPPED` / `marginal`, OR the step entirely ABSENT from
       `results` (laundering route R6 -- a plan that never derived the step
-      at all) -> `f"{SDP_HOLD_NOT_RUN}: {reason}"`, where `reason` is that
-      result's own `reason` when one is present and non-empty, and
-      otherwise fixed prose naming the family fact -- composed by CALLING
-      `sdp_honesty.unreadable_state_caveat()`, never re-authoring its
-      sentence.
+      at all) -> the bare `SDP_HOLD_NOT_RUN` token, no reason appended.
+
+    STRIPPED TO BARE (operator, quick task 260822-hs, following on quick
+    task 260822-gxx which suppressed the NA-step `reason` export
+    everywhere else): this function used to append `": {reason}"` to the
+    NOT-RUN token -- the result's own `reason` when present and non-empty,
+    else fixed prose composed by calling `sdp_honesty.
+    unreadable_state_caveat()`. `sdp_hold_state` was the ONE surviving
+    carrier of that prose after 260822-gxx (a top-level field, not a step,
+    so the step-scoped suppression never touched it) -- reported up, and
+    the operator's instruction back was one word: "strip". Do NOT restore
+    the reason suffix as a "fix": that would recreate the exact carrier
+    260822-gxx and this task both closed, on the one field neither pass
+    touched the first time.
 
     `plan` is accepted (not merely `results`) to match `count_applicable`'s
-    own two-argument signature shape, and so a future caller extending the
-    NOT-RUN reason with plan-derived context (e.g. distinguishing a REFUSE
+    own two-argument signature shape, and so a future caller extending a
+    NOT-RUN return with plan-derived context (e.g. distinguishing a REFUSE
     chip from an absent step) has it available without changing every call
     site; this revision derives everything it returns from `results` alone.
 
@@ -2261,14 +2269,7 @@ def sdp_hold_state(plan: Plan, results: list[StepResult]) -> str:
     if result is not None and result.verdict == VERDICT_BAD:
         return SDP_HOLD_NOT_HELD
 
-    if result is not None and result.reason:
-        reason = result.reason
-    else:
-        reason = (
-            "the SDP inhibited-write oracle did not run for this chip. "
-            f"{sdp_honesty.unreadable_state_caveat()}"
-        )
-    return f"{SDP_HOLD_NOT_RUN}: {reason}"
+    return SDP_HOLD_NOT_RUN
 
 
 def sdp_left_writable(results: list[StepResult]) -> bool:
