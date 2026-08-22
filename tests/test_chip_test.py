@@ -51,6 +51,8 @@ import pytest
 from firestarter.chip_test import (
     _DEFAULT_REGION,  # test-internal: engine module constant (v1.30 Phase 134)
     _DESTRUCTIVE_GATE_REASON,  # test-internal: chip-ID gate reason (SWEEP-03)
+    _MAX_FULL_DEVICE_LENGTH,  # test-internal: 260821-wna D-E sanity ceiling
+    _PROTOCOL_FLASH4,  # test-internal: reused protocol id constant
     _SDP_LEG_STEP_ORDER,  # test-internal: the D-06 six-op order (v1.30 Phase 134)
     _UV_WRITE_REGION_LENGTH,  # test-internal: engine module constant (PATT-03)
     OP_BLANK_CHECK,
@@ -60,6 +62,9 @@ from firestarter.chip_test import (
     OP_VERIFY,
     OP_WRITE,
     OP_WRITE_PARTIAL,  # 121-06 D-06: the seventh op string
+    REGION_POLICY_FIXED,  # test-internal: 260821-wna region-policy vocab
+    REGION_POLICY_FULL_DEVICE,  # test-internal: 260821-wna region-policy vocab
+    REGION_POLICY_UV_SLOT,  # test-internal: 260821-wna region-policy vocab
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
@@ -791,6 +796,148 @@ def test_derive_plan_partial_write_region_missing_memory_size_falls_back():
     plan = derive_plan("SYNTHETIC", spy_db, write_scope="partial")
     write_step = _step(plan, "write-partial")
     assert write_step.write_region == (0, 256)
+
+
+# ---------------------------------------------------------------------------
+# region_policy (quick task 260821-wna, D-A..D-F): derive_plan decides the
+# region POLICY, purely from the DB. No chip access anywhere in this block.
+# ---------------------------------------------------------------------------
+
+
+def test_derive_plan_full_device_region_non_uv_eeprom():
+    # AT28C256 (EEPROM, 32768 B, protocol 0x0D -- not flash4): full-device
+    # policy, whole-device region.
+    plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
+    write_step = _step(plan, "write")
+    verify_step = _step(plan, "verify")
+    assert write_step.region_policy == REGION_POLICY_FULL_DEVICE
+    assert write_step.write_region == (0, 32768)
+    assert verify_step.region_policy == REGION_POLICY_FULL_DEVICE
+    assert verify_step.write_region == (0, 32768)
+    assert write_step.full_device_permitted is True
+
+
+def test_derive_plan_full_device_region_flash4_carves_boot_blocks():
+    # W29C040 (Flash/EEPROM, protocol 5, 524288 B): full-device region minus
+    # the two 16 KiB boot blocks, and a reason naming the exclusion even
+    # though this is a SUCCESSFUL carve-out (D-D: the exclusion is stated
+    # and visible, not merely a refusal-path artifact).
+    plan = derive_plan("W29C040", _REAL_DB, write_scope="full")
+    write_step = _step(plan, "write")
+    assert write_step.region_policy == REGION_POLICY_FULL_DEVICE
+    assert write_step.write_region == (16384, 491520)
+    assert "boot block" in write_step.reason.lower()
+
+
+def test_derive_plan_full_device_region_flash4_whole_device_boot_block_falls_back():
+    # A synthetic protocol-5, 32768 B row: the two boot blocks cover the
+    # entire device, so a full write is structurally impossible -- falls
+    # back to the fixed small region with a stated reason, never a FAIL.
+    full = {
+        "electrical-type": "Flash/EEPROM",
+        "memory-size": 32768,
+        "protocol-id": _PROTOCOL_FLASH4,
+    }
+    prog = {"algorithm": _PROTOCOL_FLASH4, "flags": 0, "chip-id": 0}
+    spy_db = Mock(spec=["get_eprom", "convert_to_programmer"])
+    spy_db.get_eprom.return_value = full
+    spy_db.convert_to_programmer.return_value = prog
+
+    plan = derive_plan("SYNTHETIC_FLASH4", spy_db, write_scope="full")
+    write_step = _step(plan, "write")
+    assert write_step.region_policy == REGION_POLICY_FIXED
+    assert write_step.write_region == _DEFAULT_REGION
+    assert "boot block" in write_step.reason.lower()
+
+
+def test_derive_plan_uv_full_scope_uses_uv_slot_policy_and_permits_full_device():
+    # M27C512 (UV, 65536 B): region_policy uv-slot, write_region is the
+    # FIRST slot candidate (top-anchored, unchanged from pre-task
+    # behaviour), and full_device_permitted is True at "full" (D-C).
+    plan = derive_plan("M27C512", _REAL_DB, write_scope="full")
+    write_step = _step(plan, "write")
+    verify_step = _step(plan, "verify")
+    assert write_step.region_policy == REGION_POLICY_UV_SLOT
+    assert write_step.write_region == (65280, 256)
+    assert verify_step.region_policy == REGION_POLICY_UV_SLOT
+    assert write_step.full_device_permitted is True
+
+
+def test_derive_plan_uv_partial_scope_forbids_full_device_outcome():
+    # Same first slot candidate as "full", but full_device_permitted is
+    # False -- the scope literal forbids the D-C full-device-if-blank
+    # outcome regardless of chip state.
+    plan = derive_plan("M27C512", _REAL_DB, write_scope="partial")
+    write_step = _step(plan, "write-partial")
+    assert write_step.region_policy == REGION_POLICY_UV_SLOT
+    assert write_step.write_region == (65280, 256)
+    assert write_step.full_device_permitted is False
+
+
+def test_derive_plan_sdp_leg_keeps_fixed_region_at_full_scope():
+    # The six SDP-leg steps keep the region they get today at the same
+    # scope -- (0, 256) at full for AT28C256 -- and carry region_policy
+    # fixed. They are never widened to the full device even though the
+    # chip's OWN write step now is.
+    plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
+    write_step = _step(plan, "write")
+    assert write_step.write_region == (0, 32768)  # the chip's own write IS widened
+    for sdp_op in _SDP_LEG_STEP_ORDER:
+        leg_step = _step(plan, sdp_op)
+        assert leg_step.region_policy == REGION_POLICY_FIXED
+        assert leg_step.write_region == _DEFAULT_REGION
+
+
+def test_derive_plan_write_scope_none_unchanged_by_region_policy():
+    plan = derive_plan("AT28C256", _REAL_DB, write_scope="none")
+    assert [s.write_region for s in plan.steps if s.op in ("write", "verify")] == []
+    # write_scope="none" structurally omits write/verify from `steps`.
+    assert all(s.op not in ("write", "verify") for s in plan.steps)
+
+
+@pytest.mark.parametrize("hostile_mem_size", [1 << 40, 300, None, 0])
+def test_derive_plan_hostile_memory_size_never_widens_the_window(hostile_mem_size):
+    # A hostile DB dict never widens the window: the write step falls back
+    # to region_policy fixed with the pre-existing small region and a
+    # stated reason (T-wna-01).
+    full = {
+        "electrical-type": "EEPROM",
+        "memory-size": hostile_mem_size,
+        "protocol-id": 13,
+    }
+    prog = {"algorithm": 13, "flags": 0, "chip-id": 0}
+    spy_db = Mock(spec=["get_eprom", "convert_to_programmer"])
+    spy_db.get_eprom.return_value = full
+    spy_db.convert_to_programmer.return_value = prog
+
+    plan = derive_plan("SYNTHETIC_HOSTILE", spy_db, write_scope="full")
+    write_step = _step(plan, "write")
+    assert write_step.region_policy == REGION_POLICY_FIXED
+    assert write_step.write_region == _DEFAULT_REGION
+    assert write_step.reason
+
+
+def test_derive_plan_full_device_region_at_sanity_ceiling_is_honoured():
+    full = {
+        "electrical-type": "EEPROM",
+        "memory-size": _MAX_FULL_DEVICE_LENGTH,
+        "protocol-id": 13,
+    }
+    prog = {"algorithm": 13, "flags": 0, "chip-id": 0}
+    spy_db = Mock(spec=["get_eprom", "convert_to_programmer"])
+    spy_db.get_eprom.return_value = full
+    spy_db.convert_to_programmer.return_value = prog
+
+    plan = derive_plan("SYNTHETIC_CEILING", spy_db, write_scope="full")
+    write_step = _step(plan, "write")
+    assert write_step.region_policy == REGION_POLICY_FULL_DEVICE
+    assert write_step.write_region == (0, _MAX_FULL_DEVICE_LENGTH)
+
+
+# The no-chip-access invariant with region_policy in play is already pinned
+# by `test_derive_plan_reads_via_get_eprom_and_convert_to_programmer_only`
+# above (unmodified by this task) -- it exercises the same derive_plan code
+# path this task changed and stays green, so no separate leg is added here.
 
 
 # ---------------------------------------------------------------------------

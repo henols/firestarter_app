@@ -466,13 +466,30 @@ class Step:
     `write_region` (D-02, this plan) is the CONSEQUENCE of `Plan.is_uv`: set
     once by `derive_plan` as `(start, length)` on both the write step and the
     verify step (a verify's region is definitionally the preceding write's --
-    D-07). `None` means "use the engine default region". The WIDTH always
+    D-07). `None` means "use the engine default region". The WIDTH
     originates from a module constant (`_WRITE_REGION_LENGTH` or
-    `_UV_WRITE_REGION_LENGTH`) and NEVER from a DB field (SC4 -- a malicious
-    or misconfigured DB entry must not be able to widen the write window);
-    `memory-size` only bounds WHERE the window is placed. `derive_plan` sets
-    this field and only this field; every downstream reader (`run_plan`, the
-    execution layer) may only READ it, never re-derive it.
+    `_UV_WRITE_REGION_LENGTH`) for the `fixed`/`uv-slot` policies (SC4 -- a
+    malicious or misconfigured DB entry must not be able to widen the UV
+    write window); `memory-size` only bounds WHERE the window is placed on
+    those two policies. Quick task 260821-wna (D-D/D-E) deliberately
+    REVERSES that rule for the `full-device` policy ONLY: there the WIDTH
+    itself comes from `memory-size`, after `full_device_region`'s sanity
+    check (see that function's own docstring for the bound). `derive_plan`
+    sets this field and only this field; every downstream reader (`run_plan`,
+    the execution layer) may only READ it, never re-derive it.
+
+    `region_policy` (quick task 260821-wna, D-A..D-F) is set once by
+    `derive_plan` alongside `write_region`, one of `REGION_POLICY_FIXED`,
+    `REGION_POLICY_FULL_DEVICE`, `REGION_POLICY_UV_SLOT`. Downstream code may
+    only READ it. The MASK it enables (D-A) is execution-time only and is
+    never computed by `derive_plan` -- see `_resolve_write_target`.
+
+    `full_device_permitted` (quick task 260821-wna, D-C) is set once by
+    `derive_plan`: whether this step's `write_scope` permits the
+    full-device-if-blank outcome for a UV part (`True` only for
+    `write_scope="full"`). Read-only downstream; it lets
+    `_resolve_write_target` make the D-C decision without a new parameter,
+    since the scope literal is otherwise not carried past `derive_plan`.
     """
 
     op: str
@@ -480,6 +497,8 @@ class Step:
     reason: str
     destructive: bool = False
     write_region: tuple[int, int] | None = None
+    region_policy: str = REGION_POLICY_FIXED
+    full_device_permitted: bool = False
 
 
 @dataclass
@@ -565,11 +584,19 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
       the advisory `Plan.locked_destructive` field (D-01) -- `run_plan` has
       no code path to iterate them.
     - `"full"` -- write, verify and erase are real supported steps in that
-      order; `locked_destructive` is empty.
-    - `"partial"` -- same step list as `"full"`, but the write/verify steps'
-      `Step.write_region` is the top-anchored UV window instead of the
-      engine default. Plan `121-06` will swap this scope's emitted write op
-      to `OP_WRITE_PARTIAL`; here it is still `OP_WRITE`.
+      order; `locked_destructive` is empty. Quick task 260821-wna: on a
+      non-UV chip this now carries `Step.region_policy ==
+      REGION_POLICY_FULL_DEVICE` and a `write_region` spanning the whole
+      device (minus flash4's boot blocks) whenever `full_device_region`
+      accepts `memory-size`; a UV chip gets `REGION_POLICY_UV_SLOT` and the
+      top slot candidate, and the consent ceiling this scope grants (D-C) is
+      carried on `Step.full_device_permitted`.
+    - `"partial"` -- same step list as `"full"`, but `Step.write_region` is
+      always the top-anchored small window (`REGION_POLICY_UV_SLOT` for a UV
+      part, `REGION_POLICY_FIXED` otherwise) -- `full_device_permitted` is
+      `False`, so the D-C full-device-if-blank outcome is unreachable on
+      this scope regardless of chip state. Plan `121-06` swapped this
+      scope's emitted write op to `OP_WRITE_PARTIAL`.
 
     An unrecognised `write_scope` raises `ValueError` naming the offending
     value and the three accepted literals -- this function never silently
@@ -577,12 +604,26 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
 
     `Plan.is_uv` is decided HERE and ONLY HERE, from `is_uv_eprom(full)` --
     the only axis that is both complete and exact (301/301). `Step.
-    write_region` is likewise set HERE and ONLY HERE, on both the write step
-    and the verify step (a verify's region is definitionally the preceding
-    write's -- D-07); downstream code may only READ these two fields, never
-    re-derive them. The write-region WIDTH always comes from a module
-    constant (`_UV_WRITE_REGION_LENGTH` / `_WRITE_REGION_LENGTH`), NEVER from
-    any DB field (SC4) -- `memory-size` only bounds WHERE the window sits.
+    write_region` and `Step.region_policy` are likewise set HERE and ONLY
+    HERE, on both the write step and the verify step (a verify's region is
+    definitionally the preceding write's -- D-07); downstream code may only
+    READ these fields, never re-derive them.
+
+    ⚠ D-E reversal, disclosed here rather than only at the point of use: the
+    write-region WIDTH comes from a module constant
+    (`_UV_WRITE_REGION_LENGTH` / `_WRITE_REGION_LENGTH`), NEVER from any DB
+    field (SC4), for the `fixed` and `uv-slot` policies -- `memory-size`
+    only bounds WHERE the window sits on those two paths. Quick task
+    260821-wna's `full-device` policy is the ONE deliberate exception: there
+    the width IS `memory-size`-derived, via `full_device_region`, and only
+    after that function's own sanity check (positive, a multiple of the slot
+    width, at or below `_MAX_FULL_DEVICE_LENGTH`) passes. A failing sanity
+    check falls back to `REGION_POLICY_FIXED` with the pre-existing small
+    region, never to a widened window.
+
+    The SDP leg's six steps (below) get their OWN `leg_region`, computed by
+    the pre-existing formula regardless of the policy decided above -- they
+    are never widened to the full device (D-D).
 
     Unknown chips (no DB entry) return an empty `Plan` with `reason` set --
     there is nothing to derive.
@@ -606,20 +647,82 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     write_execute = write_scope in (_WRITE_SCOPE_FULL, _WRITE_SCOPE_PARTIAL)
 
     # Region computation lives HERE, in derive_plan, computed from Plan.is_uv
-    # and full["memory-size"] -- never from any DB WIDTH field (SC4). The
-    # WIDTH always comes from _UV_WRITE_REGION_LENGTH / _WRITE_REGION_LENGTH.
+    # and full["memory-size"]. Quick task 260821-wna widens this from a bare
+    # region tuple to a (region, policy, reason) decision -- the POLICY
+    # travels on `Step.region_policy` so execution time knows what kind of
+    # region it is, never just where it sits.
     #
-    # "full" reproduces today's execution-time _write_region_for exactly:
-    # is_uv picks the top-anchored window (with its defensive fallback),
-    # non-UV gets the engine default region. "partial" always applies the
-    # top-anchored-window-or-fallback formula regardless of is_uv -- its
-    # whole purpose is the small-region write, so it is not is_uv-gated here.
-    if write_scope == _WRITE_SCOPE_FULL:
-        write_region = _top_anchored_or_default(full) if is_uv else _DEFAULT_REGION
-    elif write_scope == _WRITE_SCOPE_PARTIAL:
-        write_region = _top_anchored_or_default(full)
-    else:
+    # write_scope="none" -> region None, policy fixed (unchanged).
+    #
+    # UV part (either scope) -> uv-slot policy, region = the FIRST slot
+    # candidate from `uv_slot_starts` -- for every shipped UV size this is
+    # exactly today's top-anchored window, so the derived tuple is unchanged
+    # (e.g. M27C512 -> (65280, 256)). Falls back to `_top_anchored_or_default`
+    # with policy fixed when the device cannot hold even one slot. The scope
+    # literal still matters and reaches the executor via
+    # `full_device_permitted` below (D-C): `partial` forbids the full-device
+    # outcome, `full` permits it.
+    #
+    # Non-UV at "full" -> ask `full_device_region(mem_size, protocol)`
+    # (D-D/D-E). A tuple gives policy full-device with that region. A
+    # refusal gives policy fixed with `_DEFAULT_REGION`, and the refusal
+    # reason is recorded on the write/verify steps' `reason` field below so
+    # it reaches the report (D-D's "stated, visible reason rather than a
+    # FAIL").
+    #
+    # Non-UV at "partial" -> unchanged: `_top_anchored_or_default(full)`,
+    # policy fixed.
+    region_reason = ""
+    full_device_permitted = write_scope == _WRITE_SCOPE_FULL
+    mem_size = int(full.get("memory-size", 0) or 0)
+    if write_scope == _WRITE_SCOPE_NONE:
         write_region = None
+        region_policy = REGION_POLICY_FIXED
+    elif is_uv:
+        slot_starts = uv_slot_starts(mem_size, _UV_WRITE_REGION_LENGTH)
+        if slot_starts:
+            write_region = (slot_starts[0], _UV_WRITE_REGION_LENGTH)
+            region_policy = REGION_POLICY_UV_SLOT
+        else:
+            write_region = _top_anchored_or_default(full)
+            region_policy = REGION_POLICY_FIXED
+    elif write_scope == _WRITE_SCOPE_FULL:
+        full_result = full_device_region(mem_size, protocol)
+        if isinstance(full_result, str):
+            write_region = _DEFAULT_REGION
+            region_policy = REGION_POLICY_FIXED
+            region_reason = full_result
+        else:
+            write_region = full_result
+            region_policy = REGION_POLICY_FULL_DEVICE
+            if protocol == _PROTOCOL_FLASH4:
+                # D-D: the excluded region is named in the report even on
+                # a SUCCESSFUL carve-out, not only on refusal -- a stated,
+                # visible reason rather than a silent narrowing.
+                region_reason = (
+                    f"full-device write excludes the first and last "
+                    f"{_FLASH4_BOOT_BLOCK_LENGTH} bytes (flash4/protocol "
+                    "0x05 boot blocks, W29C040 datasheet section 6.6 -- "
+                    "permanently locked, no unlock command exists)"
+                )
+    else:
+        write_region = _top_anchored_or_default(full)
+        region_policy = REGION_POLICY_FIXED
+
+    # The SDP leg's own region (D-D): computed by EXACTLY today's formula
+    # (`_DEFAULT_REGION` at full, `_top_anchored_or_default(full)` at
+    # partial/none) regardless of the policy decision above. D-D keeps the
+    # leg small deliberately: it proves the lock mechanism, not coverage,
+    # and AT28C256's plan alone carries six region-sized write-shaped SDP
+    # ops that would otherwise become six full-device transfers per run.
+    # The leg's live path is always the full scope (SDP-ALLOW chips are all
+    # non-UV, D-17), so `leg_region` is `(0, 256)` on every reachable run
+    # and the leg's wire behaviour is unchanged by this task.
+    leg_region = (
+        _DEFAULT_REGION
+        if write_scope == _WRITE_SCOPE_FULL
+        else _top_anchored_or_default(full)
+    )
 
     steps: list[Step] = []
     locked_destructive: list[tuple[str, str]] = []
@@ -713,9 +816,11 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
             Step(
                 op=write_op,
                 supported=True,
-                reason="",
+                reason=region_reason,
                 destructive=True,
                 write_region=write_region,
+                region_policy=region_policy,
+                full_device_permitted=full_device_permitted,
             )
         )
     else:
@@ -736,7 +841,14 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     # is definitionally the preceding write's (D-07).
     if write_execute:
         steps.append(
-            Step(op=OP_VERIFY, supported=True, reason="", write_region=write_region)
+            Step(
+                op=OP_VERIFY,
+                supported=True,
+                reason="",
+                write_region=write_region,
+                region_policy=region_policy,
+                full_device_permitted=full_device_permitted,
+            )
         )
     else:
         locked_destructive.append(
@@ -809,9 +921,12 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     if write_execute:
         if sdp_allowed:
             # ALLOW chip, a real `dev test` run: six real, executable steps,
-            # sharing the SAME write_region the shipped write arm above
-            # already computed (never re-derived -- ALLOW chips are all
-            # non-UV, per D-17, so this is always `_DEFAULT_REGION`).
+            # using `leg_region` -- computed by the SAME formula the shipped
+            # write arm used before this task (never the new full-device/
+            # uv-slot policy; D-D keeps the leg small deliberately). ALLOW
+            # chips are all non-UV (D-17), so `leg_region` is always
+            # `_DEFAULT_REGION` on every reachable run. Policy is always
+            # `fixed` here -- the leg is never widened to the full device.
             for sdp_op in _SDP_LEG_STEP_ORDER:
                 steps.append(
                     Step(
@@ -819,7 +934,8 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
                         supported=True,
                         reason="",
                         destructive=True,
-                        write_region=write_region,
+                        write_region=leg_region,
+                        region_policy=REGION_POLICY_FIXED,
                     )
                 )
         else:
