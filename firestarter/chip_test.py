@@ -1106,6 +1106,35 @@ _DESTRUCTIVE_OPS = frozenset(
 # `_dispatch_sdp` instead (`_SDP_OPS`, below).
 _MULTI_RUN_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE, OP_VERIFY})
 
+# ⚠ WHAT THE WRITE REPEAT ACTUALLY MEASURES (recorded 2026-08-22, read before
+# reasoning about `marginal`). Every run in this loop sends the SAME payload to
+# the SAME address -- deliberately, since two runs' outcomes are only
+# comparable with the input held constant. The consequence is protocol-
+# dependent and is NOT what D-05/D-06's prose implies:
+#
+#   * Protocols 0x07 / 0x08 / 0x0B (329 of 746 DB rows -- every UV-EPROM plus
+#     the 27-series EEPROMs) route to the firmware's `eprom_write_execute`,
+#     whose LOOP-06 skips a byte BEFORE any pulse when `expected == 0xFF` or
+#     the byte already reads back as expected. After a successful write #1
+#     every byte qualifies, so write #2 emits ZERO programming pulses and is a
+#     pure read pass. `marginal` on such a write is reachable ONLY as "attempt
+#     1 failed, attempt 2 recovered" -- it structurally CANNOT catch a path
+#     that works once and then degrades, because attempt 2 never tries.
+#   * Protocols 0x0D and the flash family write unconditionally, so there the
+#     second write is a real second write.
+#
+# The AM27C020 write#1/write#2 divergence this policy is usually credited with
+# (v1.18 Phase 99) predates the LOOP-06 rewrite (firmware Phase 141,
+# 2026-08-10), so it was measured against a different loop -- do not cite it as
+# evidence that today's repeat detects a degrading write path.
+#
+# Read the repeat as a RIG-HEALTH check (rail droop, marginal timing, socket
+# contact), not as coverage of the firmware's programming algorithm, which is
+# deterministic and cannot disagree with itself. Making each cycle do real work
+# requires a per-family cycle recipe (erase-first, complement payload, or a
+# monotonic UV tranche); that is scoped in
+# `.planning/todos/pending/devtest-cycle-loop-per-family-write-recipes.md`.
+
 # LIVE DISPATCH ALLOW-LIST for the SDP arm (v1.30 Phase 133 D-01/D-02,
 # LEG-09). `_dispatch_sdp` refuses any op outside this frozenset. A module
 # constant is used rather than a DB field because anything that widens a

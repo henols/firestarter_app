@@ -12,8 +12,22 @@ this project's own AT28C, is written in full — twice — with no prompt at all
 It then offers to file the resulting diagnostic report as a GitHub issue.
 
 Every read, write, verify and erase runs **twice** by default and the two runs
-are compared; that comparison is what produces a `marginal` verdict on a chip
-whose write path is intermittent, and what surfaces a nondeterministic read.
+are compared; that comparison is what produces a `marginal` verdict and what
+surfaces a nondeterministic read.
+
+**What the repeat can and cannot see, stated exactly.** On protocols `0x07`,
+`0x08` and `0x0B` — 329 of 746 database rows, every UV-EPROM plus the 27-series
+EEPROMs — the firmware skips a byte before issuing any programming pulse when
+that byte already reads back as expected (`src/proms/eprom.cpp`, LOOP-06). After
+a successful first write every byte qualifies, so **the second write emits no
+programming pulses at all**: it is a read pass. On those protocols `marginal` on
+a write is therefore reachable only as "the first attempt failed and the second
+recovered" — it cannot catch a write path that works once and then degrades. On
+`0x0D` and the flash protocols, which write unconditionally, the second write is
+a real second write. Either way the repeat is best understood as a **rig-health
+check** (rail droop, marginal timing, socket contact) rather than as extra
+coverage of the firmware's programming algorithm, which is deterministic.
+
 `dev test --fast` runs each step once instead. It is a deliberately weaker
 test — with nothing to compare, nothing can be `marginal` and read
 nondeterminism is not measured at all — and its reports are kept out of the
