@@ -2528,10 +2528,11 @@ _ALWAYS_WRITES_PASS_COUNT = 6
     is_flag=True,
     default=False,
     help=(
-        "Run each step once, not twice. WEAKER TEST: with nothing to "
-        "compare, an intermittent write cannot be reported marginal and "
-        "read nondeterminism goes unmeasured; such reports never count "
-        "toward community agreement. Omit it for the accurate test."
+        "Run one write/verify cycle instead of two. WEAKER TEST: with "
+        "nothing to compare, an intermittent write cannot be reported "
+        "marginal and read nondeterminism goes unmeasured; such reports "
+        "never count toward community agreement. Omit it for the accurate "
+        "test."
     ),
 )
 @click.pass_obj
@@ -2542,8 +2543,8 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     Writes to the chip every run (no read-only mode); saves a diagnostic
     report under the config dir's reports directory and offers to file it
     as a GitHub issue. Exit code: 0 clear, 2 marginal, 1 bad (including a
-    chip-ID mismatch). Every read, write, verify and erase runs TWICE and
-    the runs are compared -- that is what detects an intermittent write.
+    chip-ID mismatch). The write/verify block runs as a CYCLE, twice, and the
+    cycles are compared -- a rig-health check for rail droop or bad contact.
     """
     # SAFE-04: hard-fail BEFORE any hardware is energized when the chip name
     # is absent from the DB entirely (case A). Keyed strictly off

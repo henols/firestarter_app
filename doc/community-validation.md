@@ -5,35 +5,62 @@
 ## Community Chip-Validation Graduation Ladder
 
 `firestarter dev test <chip>` **writes to the chip** — every run runs a
-capability sweep that expects a blank or scratch part. A UV-erasable EPROM is
-stopped and asked first (yes = the full device is written; no, or no TTY at
-all, still writes a small 256-byte region); every other family, including
-this project's own AT28C, is written in full — twice — with no prompt at all.
-It then offers to file the resulting diagnostic report as a GitHub issue.
+capability sweep that expects a blank or scratch part. There is no prompt on
+any path and no read-only mode. A UV-erasable EPROM receives one 256-byte
+slot, taken from the top of the device downwards, because a UV write cannot be
+undone without a lamp and the part is worth more as a reusable regression rig
+than as a single thorough measurement; every other family, including this
+project's own AT28C, is written in full. It then offers to file the resulting
+diagnostic report as a GitHub issue.
 
-Every read, write, verify and erase runs **twice** by default and the two runs
-are compared; that comparison is what produces a `marginal` verdict and what
-surfaces a nondeterministic read.
+### How the repeat works, and what it is for
 
-**What the repeat can and cannot see, stated exactly.** On protocols `0x07`,
-`0x08` and `0x0B` — 329 of 746 database rows, every UV-EPROM plus the 27-series
-EEPROMs — the firmware skips a byte before issuing any programming pulse when
-that byte already reads back as expected (`src/proms/eprom.cpp`, LOOP-06). After
-a successful first write every byte qualifies, so **the second write emits no
-programming pulses at all**: it is a read pass. On those protocols `marginal` on
-a write is therefore reachable only as "the first attempt failed and the second
-recovered" — it cannot catch a write path that works once and then degrades. On
-`0x0D` and the flash protocols, which write unconditionally, the second write is
-a real second write. Either way the repeat is best understood as a **rig-health
-check** (rail droop, marginal timing, socket contact) rather than as extra
-coverage of the firmware's programming algorithm, which is deterministic.
+The write-shaped part of the sweep runs as a **cycle**: `write → verify` (plus
+`erase → blank-check` where the family has them), repeated twice by default —
+not two writes followed by two verifies. Each cycle is paired so that its
+verify has a write of its own to speak for.
 
-`dev test --fast` runs each step once instead. It is a deliberately weaker
+**Each cycle is given something real to do.** A verify only proves the write
+worked if the write had to *change* something; a second identical write onto
+the state the first one produced does not, and on protocols `0x07`/`0x08`/`0x0B`
+the firmware makes that explicit by skipping already-correct bytes before it
+issues any programming pulse. So the payload per cycle depends on the family:
+
+| Family | Rows | How each cycle gets real work |
+| --- | --- | --- |
+| Page-write auto-erases (`0x0D`, `0x05`) | 111 | identical bytes — the page erase is internal to every write |
+| Electrically erasable | 258 | identical bytes — the erase inside the cycle blanks the part for the next write |
+| SRAM / FRAM | 76 | pattern, then its complement — free on a part that rewrites both ways, and it exercises every data line in both directions |
+| UV-EPROM | 301 | staged images out of one slot (below) |
+
+**UV-EPROM staging costs no extra bits.** A UV cell only goes one way, so a
+UV part is a finite regression rig and every bit spent is a run lost. The
+cycle therefore splits the bits the write would have cleared *anyway* into
+disjoint interleaved tranches, one per cycle: the final image is byte-for-byte
+what a single unstaged write would have produced, so the part ends in exactly
+the same state and lasts exactly as long. One run consumes one 256-byte slot,
+top-down from the highest address — so a 64 KiB part is good for roughly 256
+runs, and every run exercises the full address range from the first one.
+Each report says how many slots the part has left.
+
+**The repeat is a rig-health check, not extra firmware coverage.** Firmware is
+deterministic: it cannot disagree with itself. What two cycles catch is
+something *analog* moving between them — rail droop, marginal timing, a poor
+socket contact. That is worth having, because a flaky rig manufactures false
+verdicts about firmware, but it is not a second opinion on the programming
+algorithm.
+
+`dev test --fast` runs a single cycle instead. It is a deliberately weaker
 test — with nothing to compare, nothing can be `marginal` and read
 nondeterminism is not measured at all — and its reports are kept out of the
-cross-report agreement count described below. Every report states the count
-per step, in the `Runs` column of the results table and as `run_count` in the
-JSON (`schema_version` 1.7 and later).
+cross-report agreement count described below. On a UV part it also halves the
+bits consumed, which makes it a reasonable habit while iterating on firmware
+against a rig you already trust; use the default when the result is meant to
+stand as evidence.
+
+Every report states the cycle count per step, in the `Runs` column of the
+results table and as `run_count` in the JSON (`schema_version` 1.7 and later).
+
 This document defines the **graduation ladder** —
 the vocabulary that describes how much trust a report has earned — and, just
 as importantly, what the ladder is **not**: it is never an automatic path to
@@ -148,8 +175,8 @@ Phase 114's GRAD-01 no-auto-graduate lock therefore holds end to end through
 the fingerprint, not through the `community-reported` tag itself.
 
 **Why a `--fast` run cannot poison it either.** The same mechanism, applied to
-the repeat policy rather than the write region. A `--fast` sweep runs each step
-once, so no step in it can ever report `marginal` — it is a strictly weaker
+the repeat policy rather than the write region. A `--fast` sweep runs a single
+cycle, so no step in it can ever report `marginal` — it is a strictly weaker
 test in exactly the way a partial-region write is. `dedup_fingerprint` appends
 a repeat-policy marker whenever any step's `run_count` is 1, so a `--fast`
 report lands in its own agreement bucket and can only ever agree with other

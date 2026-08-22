@@ -1689,6 +1689,14 @@ def _uv_cycle_targets(target: WriteTarget, cycles: int) -> list[WriteTarget]:
                     bits_retained=sum(byte.bit_count() for byte in image),
                     current_source=f"{target.current_source} (tranche {cycle}/{cycles})",
                     current=target.current,
+                    # Carried through from the probe target, NOT dropped: the
+                    # staged copies describe the SAME slot, and these are the
+                    # only targets that ever reach the report -- leaving them
+                    # None made D-9's rig-life line invisible on exactly the
+                    # family it exists for (caught by running it, not by the
+                    # suite).
+                    slots_remaining=target.slots_remaining,
+                    slots_total=target.slots_total,
                 )
             )
         except ValueError:
@@ -2578,10 +2586,10 @@ class WriteTarget:
     # provenance, and a full-device image has no business in a filed issue.
     current: bytes = b""
     # D-9 rig life: how many UV slots on this part can still support a run,
-    # and how many it has in total. `None` on every non-UV target and on the
-    # staged tranche copies (which inherit the slot the probe already chose,
-    # so re-stating the count on each would invite it drifting). Derived from
-    # the chosen slot's INDEX in the top-down candidate list -- no extra read.
+    # and how many it has in total. `None` on every non-UV target. Derived
+    # from the chosen slot's INDEX in the top-down candidate list -- no extra
+    # read -- and carried through onto the staged tranche copies, which are
+    # the only targets that reach the report.
     slots_remaining: int | None = None
     slots_total: int | None = None
 

@@ -320,3 +320,77 @@ def test_uv_write_target_reports_the_per_cycle_tranche_not_the_slot_total() -> N
     )
     assert target.bits_cleared == slot_total // 2
     assert "tranche 2/2" in target.current_source
+
+
+# ---------------------------------------------------------------------------
+# D-4 (no full-device UV write) and D-9 (rig life)
+# ---------------------------------------------------------------------------
+
+
+def test_uv_write_is_always_one_slot_never_the_whole_device() -> None:
+    """D-4. A UV part receives one 256-byte slot at both scopes, blank or not.
+    `uv_slot_starts` is top-down, so that slot is the HIGHEST address on the
+    device and every address line is exercised from run 1 -- which is the
+    coverage the retired full-device branch was thought to provide."""
+    _writes, write_result = _run(_UV)
+    target = write_result.write_target
+    assert target is not None
+
+    memory_size = int(resolve_chip(_UV, db=_REAL_DB)["memory-size"])
+    start, length = target.region
+    assert length == 256, "a UV write widened beyond one slot"
+    assert start == memory_size - length, "the UV slot was not the top one"
+
+
+def test_uv_target_carries_rig_life_all_the_way_to_the_report() -> None:
+    """D-9, and the bug that shipped it: the counts were originally dropped on
+    the staged tranche copies, which are the ONLY targets that reach the
+    report -- so the rig-life line was invisible on exactly the family it
+    exists for. Caught by running the command, not by the suite, hence this
+    test."""
+    _writes, write_result = _run(_UV)
+    target = write_result.write_target
+    assert target is not None
+
+    memory_size = int(resolve_chip(_UV, db=_REAL_DB)["memory-size"])
+    assert target.slots_total == memory_size // 256
+    assert target.slots_remaining == target.slots_total, "a virgin part is untouched"
+
+
+def test_rig_life_is_rendered_in_the_write_coverage_line() -> None:
+    """One run consumes one slot, so slots-left IS runs-left. An operator
+    planning a firmware regression pass needs that number without deriving it
+    from a slot address."""
+    from firestarter.diagnostic_report import _write_coverage_line
+
+    plan = ct.derive_plan(_UV, _REAL_DB, write_scope="full")
+    write_step = next(
+        s for s in plan.steps if s.op in (ct.OP_WRITE, ct.OP_WRITE_PARTIAL)
+    )
+    _writes, write_result = _run(_UV)
+
+    line = _write_coverage_line(write_result, write_step)
+    assert line is not None
+    assert "slot 0x" in line
+    assert "bits cleared this cycle" in line
+    assert "slots left on this part" in line
+
+
+def test_non_uv_target_reports_no_rig_life() -> None:
+    """The counts are UV-only: an erasable part has no finite slot budget, so
+    a number there would be meaningless rather than merely absent."""
+    _writes, write_result = _run(_ERASABLE)
+    target = write_result.write_target
+    assert target is not None
+    assert target.slots_remaining is None
+    assert target.slots_total is None
+
+
+def test_help_describes_the_repeat_as_a_cycle_and_a_rig_check() -> None:
+    """D-10: firmware is deterministic and cannot disagree with itself, so the
+    user-facing wording must not sell the repeat as extra firmware coverage."""
+    import firestarter.cli_handlers as cli_handlers_mod
+
+    doc = (cli_handlers_mod.dev_test.__doc__ or "").lower()
+    assert "cycle" in doc
+    assert "rig-health" in doc or "rig health" in doc
