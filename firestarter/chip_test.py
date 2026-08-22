@@ -1346,6 +1346,58 @@ def repeat_policy_tag(results: list[StepResult]) -> str:
     return ""
 
 
+# The write-coverage discriminator (quick-devtest-coverage-dedup, follow-up
+# to 260821-wna). Spelled as the `WriteTarget.region_policy` value it
+# describes, not a bare "full-device" string repeated at call sites.
+COVERAGE_TAG_FULL_DEVICE = "cov=full-device"
+
+
+def coverage_tag(results: list[StepResult]) -> str:
+    """`"cov=full-device"` when the run's primary write step resolved a
+    full-device `WriteTarget`; `""` on a fixed/uv-slot target, or on a run
+    with no write step at all (graceful degradation, mirroring
+    `repeat_policy_tag` immediately above).
+
+    Locates the write step STRUCTURALLY, the same declared-non-registry
+    discipline `DiagnosticReport._write_step_index` already applies to
+    `Plan.steps` (LEG-15, `tests/test_op_registration_parity.py::
+    test_non_registry_still_has_no_ops`) -- adapted to what `StepResult`
+    actually carries. `_write_step_index` keys on `Step.destructive and
+    Step.write_region is not None`; `StepResult` has no `destructive`
+    field, but `write_target` is set ONLY on the write step's own result
+    (`StepResult.write_target`'s docstring: `None` on every step that
+    isn't a write, and the verify step never sets this field on its OWN
+    result -- it inherits the value from `WriteContext` at execution time
+    instead) -- so `result.write_target is not None` is the equivalent
+    structural marker here, and this function never compares `result.op`
+    against `OP_WRITE`/`OP_WRITE_PARTIAL` or any other op-name constant.
+
+    Why this exists -- see `dedup_fingerprint`'s docstring
+    (`diagnostic_report.py`) for the full story: a UV part's write step and
+    a non-UV part's genuine full-device write step can both report
+    `op="write"` while covering wildly different amounts of the device --
+    one 256-byte slot, the whole chip. The op string alone stopped
+    tracking coverage the moment `region_policy` diverged from a 1:1
+    mapping with the op vocabulary; this tag restores the missing
+    discriminator without touching the op strings themselves.
+
+    Returning `""` for the fixed/uv-slot case is load-bearing, the same
+    property `repeat_policy_tag` documents above: `dedup_fingerprint`
+    appends this tag only when non-empty, so every SLOT/FIXED run's
+    fingerprint stays byte-identical to the ones already filed -- no
+    historical `count_agreeing` group is re-keyed or reset. Only the
+    newer, strictly-stronger full-device shape gets tagged. This is the
+    same discipline 260822-aq6 applied to `repeat_policy_tag`, and the
+    deliberate difference from v1.30 D-11, which accepted a full re-key.
+    """
+    for result in results:
+        if result.write_target is not None:
+            if result.write_target.region_policy == REGION_POLICY_FULL_DEVICE:
+                return COVERAGE_TAG_FULL_DEVICE
+            return ""
+    return ""
+
+
 @dataclass
 class WriteContext:
     """Execution-time state threaded through `run_plan`'s step loop (quick
@@ -1649,6 +1701,11 @@ def _alternating_cycle_targets(target: WriteTarget, cycles: int) -> list[WriteTa
         bits_cleared=0,
         bits_retained=0,
         current_source="address-derived pattern, bit-inverted (cycle complement)",
+        # Carried through from the target being complemented, not
+        # re-derived -- the complement describes the SAME region under
+        # the SAME owning `Step.region_policy` (this recipe is SRAM/FRAM
+        # only, never UV, so this is always `fixed` or `full-device`).
+        region_policy=target.region_policy,
     )
     return [target if cycle % 2 == 0 else complement for cycle in range(cycles)]
 
@@ -1696,6 +1753,12 @@ def _uv_cycle_targets(target: WriteTarget, cycles: int) -> list[WriteTarget]:
                     # suite).
                     slots_remaining=target.slots_remaining,
                     slots_total=target.slots_total,
+                    # Carried through, same reasoning as `slots_remaining`/
+                    # `slots_total` immediately above: every staged tranche
+                    # describes the SAME slot the probe already resolved,
+                    # under the SAME owning `Step.region_policy` (always
+                    # `uv-slot` on this path).
+                    region_policy=target.region_policy,
                 )
             )
         except ValueError:
@@ -2593,6 +2656,27 @@ class WriteTarget:
     # the only targets that reach the report.
     slots_remaining: int | None = None
     slots_total: int | None = None
+    # The region policy this target was resolved under (quick-devtest-
+    # coverage-dedup, follow-up to 260821-wna): one of `REGION_POLICY_
+    # FIXED` / `REGION_POLICY_FULL_DEVICE` / `REGION_POLICY_UV_SLOT`,
+    # copied from the owning `Step.region_policy` at the point
+    # `_resolve_write_target` resolves the target, and carried through
+    # UNCHANGED by every site that derives a further `WriteTarget` from an
+    # already-resolved one (`_alternating_cycle_targets`'s complement,
+    # `_uv_cycle_targets`'s staged tranches) -- the same carry-through
+    # discipline `current_source`/`slots_remaining`/`slots_total` already
+    # follow, not a re-derivation. Additive: defaults to `REGION_POLICY_
+    # FIXED`, the pre-existing engine-default policy, so every direct
+    # `WriteTarget(...)` construction already in the test suite keeps
+    # working unchanged. Read by `coverage_tag` (below) to tell a
+    # full-device write step apart from a slot/fixed one -- see
+    # `dedup_fingerprint`'s docstring (`diagnostic_report.py`) for why
+    # that distinction is now load-bearing for report dedup: the op
+    # string alone (`write` vs `write-partial`) stopped tracking coverage
+    # once a UV part's `write_scope="full"` run and a non-UV part's
+    # genuine full-device run could both report `op="write"` while
+    # covering wildly different amounts of the device.
+    region_policy: str = REGION_POLICY_FIXED
 
     def __post_init__(self) -> None:
         _start, length = self.region
@@ -3098,6 +3182,11 @@ def _resolve_write_target(
                 bits_cleared=0,
                 bits_retained=0,
                 current_source="address-derived pattern (unmasked)",
+                # From the owning `Step.region_policy`, already resolved
+                # into the local `region_policy` above -- `fixed` for a
+                # non-UV `partial`-scope (or `step is None`) run,
+                # `full-device` for a non-UV `full`-scope run.
+                region_policy=region_policy,
             )
         except ValueError as exc:
             return None, str(exc)
@@ -3174,6 +3263,10 @@ def _resolve_write_target(
                     # "runs left on this part" are the same number.
                     slots_remaining=slots_total - slot_index,
                     slots_total=slots_total,
+                    # From the owning `Step.region_policy` -- always
+                    # `uv-slot` on this branch (the `if` above already
+                    # filtered out `fixed`/`full-device`).
+                    region_policy=region_policy,
                 )
             except ValueError:
                 # Defensive only: cleared/retained already satisfied both

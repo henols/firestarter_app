@@ -21,6 +21,7 @@ from firestarter.chip_test import (
     _UV_MIN_CLEARED_BITS,  # test-internal
     _UV_MIN_RETAINED_BITS,  # test-internal
     _UV_WRITE_REGION_LENGTH,  # test-internal: the UV slot width
+    REGION_POLICY_FIXED,  # test-internal: coverage-tag dedup wiring
     WriteTarget,
     bits_cleared_by,
     bits_retained_by,
@@ -190,6 +191,15 @@ def _valid_target(
 def test_write_target_valid_construction_succeeds():
     target = _valid_target()
     assert target.pattern == generate_pattern(0x1000, 32)
+
+
+def test_write_target_region_policy_defaults_to_fixed():
+    """Additive field (quick-devtest-coverage-dedup, follow-up to
+    260821-wna): every direct `WriteTarget(...)` construction that predates
+    `region_policy` -- like every other helper in this file -- keeps
+    working unchanged, landing on the pre-existing engine-default policy."""
+    target = _valid_target()
+    assert target.region_policy == REGION_POLICY_FIXED
 
 
 def test_write_target_refuses_pattern_length_mismatch():

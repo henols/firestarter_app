@@ -54,6 +54,7 @@ from firestarter.chip_test import (
     Plan,
     Step,
     StepResult,
+    coverage_tag,
     repeat_policy_tag,
 )
 
@@ -293,6 +294,24 @@ def dedup_fingerprint(report: DiagnosticReport) -> str:
     FINGERPRINT -- not through the `ladder_state` tag, which is identical
     for both run shapes (`build_db_diff` below has no op-name branch at
     all).
+
+    AMENDMENT (quick-devtest-coverage-dedup, follow-up to 260821-wna): the
+    op string ALONE no longer carries property (1) for every reachable run
+    shape. Since 260821-wna, a UV part's write step and a non-UV part's
+    genuine full-device write step can BOTH report `op="write"` -- a UV
+    part's `write_scope="full"` run resolves a small top-anchored slot
+    (`region_policy="uv-slot"`), while a non-UV part's `write_scope="full"`
+    run resolves the whole device (`region_policy="full-device"`); both
+    are the SAME op string with wildly different coverage. `coverage_tag`
+    (`chip_test.py`) is the second mechanism this amendment adds: it reads
+    `StepResult.write_target.region_policy` off the located write step and
+    appends `"cov=full-device"` to `parts` ONLY when that policy is
+    `full-device`, exactly mirroring how `repeat_policy_tag` is wired
+    below. A slot/fixed run is therefore still discriminated from a
+    full-device run of the same chip even where the op string alone can no
+    longer tell them apart -- and, symmetrically to `repeat_policy_tag`,
+    the untagged (slot/fixed) case keeps every ALREADY-FILED fingerprint
+    byte-identical, so no historical `count_agreeing` group is re-keyed.
     """
     ac = report.auto_capture
     parts = [ac.chip or "", str(ac.protocol or "")]
@@ -315,6 +334,22 @@ def dedup_fingerprint(report: DiagnosticReport) -> str:
     policy = repeat_policy_tag(report.results)
     if policy:
         parts.append(policy)
+    # Coverage discriminator (quick-devtest-coverage-dedup, follow-up to
+    # 260821-wna) -- wired exactly as `repeat_policy_tag` immediately
+    # above: computed, and appended to `parts` ONLY when non-empty.
+    #
+    # The empty-default direction is the whole point and is deliberate.
+    # Slot/fixed runs stay untagged, so every ALREADY-FILED report's
+    # fingerprint remains byte-identical and no historical `count_agreeing`
+    # group is re-keyed or reset. Only the newer, strictly-stronger
+    # full-device shape gets a tag. This is the same discipline quick task
+    # 260822-aq6 applied to `repeat_policy_tag` above ("returns `""` for
+    # the default policy and the append is skipped entirely... no
+    # historical group is re-keyed"), and the deliberate difference from
+    # v1.30 D-11, which accepted a full re-key.
+    coverage = coverage_tag(report.results)
+    if coverage:
+        parts.append(coverage)
     canonical = "|".join(parts)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
