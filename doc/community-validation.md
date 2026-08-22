@@ -10,6 +10,16 @@ stopped and asked first (yes = the full device is written; no, or no TTY at
 all, still writes a small 256-byte region); every other family, including
 this project's own AT28C, is written in full — twice — with no prompt at all.
 It then offers to file the resulting diagnostic report as a GitHub issue.
+
+Every read, write, verify and erase runs **twice** by default and the two runs
+are compared; that comparison is what produces a `marginal` verdict on a chip
+whose write path is intermittent, and what surfaces a nondeterministic read.
+`dev test --fast` runs each step once instead. It is a deliberately weaker
+test — with nothing to compare, nothing can be `marginal` and read
+nondeterminism is not measured at all — and its reports are kept out of the
+cross-report agreement count described below. Every report states the count
+per step, in the `Runs` column of the results table and as `run_count` in the
+JSON (`schema_version` 1.7 and later).
 This document defines the **graduation ladder** —
 the vocabulary that describes how much trust a report has earned — and, just
 as importantly, what the ladder is **not**: it is never an automatic path to
@@ -122,6 +132,17 @@ agreement bucket — a partial run can contribute at most toward N≥2 agreement
 with *other partial runs*, never toward promoting a full-round-trip claim.
 Phase 114's GRAD-01 no-auto-graduate lock therefore holds end to end through
 the fingerprint, not through the `community-reported` tag itself.
+
+**Why a `--fast` run cannot poison it either.** The same mechanism, applied to
+the repeat policy rather than the write region. A `--fast` sweep runs each step
+once, so no step in it can ever report `marginal` — it is a strictly weaker
+test in exactly the way a partial-region write is. `dedup_fingerprint` appends
+a repeat-policy marker whenever any step's `run_count` is 1, so a `--fast`
+report lands in its own agreement bucket and can only ever agree with other
+`--fast` reports. Two fast runs can never promote a chip that no accurate run
+has passed. The marker is appended **only** for the degraded policy, so every
+fingerprint produced by a default N≥2 run is unchanged from before this
+mechanism existed — no already-filed report's grouping was reset by it.
 
 ---
 

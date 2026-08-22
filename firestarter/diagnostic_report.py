@@ -53,6 +53,7 @@ from firestarter.chip_test import (
     Plan,
     Step,
     StepResult,
+    repeat_policy_tag,
 )
 
 # ---------------------------------------------------------------------------
@@ -262,7 +263,10 @@ def dedup_fingerprint(report: DiagnosticReport) -> str:
     per step in `report.results` order, `StepResult.op`/`.verdict` plus
     `StepResult.fingerprint.classification` when present (empty string
     otherwise -- the graceful-degradation case for a non-destructive run with
-    no write/verify fingerprint attached). The hash deliberately EXCLUDES
+    no write/verify fingerprint attached), and `repeat_policy_tag(results)`
+    when and only when it is non-empty (quick task 260822-aq6 -- see the
+    call site below for why the empty default must not be appended).
+    The hash deliberately EXCLUDES
     every volatile field -- `generated`, `host_version`, measured
     `vpp_*`/`vpe_*` millivolt readings, `error_code`, and the free-text
     `reason` string -- so a clean re-test of the same chip with the same
@@ -294,6 +298,22 @@ def dedup_fingerprint(report: DiagnosticReport) -> str:
     for result in report.results:
         cls = result.fingerprint.classification if result.fingerprint else ""
         parts.append(f"{result.op}={result.verdict}:{cls}")
+    # Repeat-policy discriminator (quick task 260822-aq6) -- the same
+    # mechanism property (2) above describes for `write-partial` vs `write`,
+    # applied to the repeat policy. A `--fast` (single-run) report is a
+    # strictly weaker test: nothing can be `marginal` and no read divergence
+    # is computed. Appending the tag keeps such a report out of the group
+    # `count_agreeing` builds, so two fast runs can never promote a chip that
+    # no accurate run ever passed.
+    #
+    # `repeat_policy_tag` returns `""` for the default N>=2 policy and the
+    # append is skipped entirely, so EVERY accurate run's fingerprint is
+    # byte-identical to the ones already filed -- no historical group is
+    # re-keyed and no promotion count resets. That is the deliberate
+    # difference from v1.30 D-11, which accepted a full re-key.
+    policy = repeat_policy_tag(report.results)
+    if policy:
+        parts.append(policy)
     canonical = "|".join(parts)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 

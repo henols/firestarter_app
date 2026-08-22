@@ -1260,6 +1260,40 @@ def test_runs_cell_absent_value_contract():
     assert _runs_cell("nonsense") == ""
 
 
+def test_dedup_fingerprint_separates_a_fast_run_from_an_accurate_one():
+    """The promotion-ladder guard (quick task 260822-aq6).
+
+    `tools/parse_devtest_issue.py::count_agreeing` groups filed reports by
+    this fingerprint and promotes a chip on N>=2 agreement. A `--fast`
+    report is a strictly weaker test -- nothing in it can be `marginal` --
+    so it must never land in an accurate run's group. Same chip, same ops,
+    same verdicts; ONLY the repeat policy differs.
+    """
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    accurate = _run_count_report(("read", 2), ("write", 2))
+    fast = _run_count_report(("read", 1), ("write", 1))
+
+    assert dedup_fingerprint(accurate) != dedup_fingerprint(fast)
+
+
+def test_dedup_fingerprint_unchanged_for_any_non_degraded_run_count():
+    """The deliberate difference from v1.30 D-11, which accepted a full
+    re-key: `repeat_policy_tag` returns `""` for the default policy and the
+    append is skipped ENTIRELY, so every accurate run's fingerprint is
+    byte-identical to the ones already filed. Proven by varying `run_count`
+    across every non-degraded value and getting one hash -- including the
+    `0` that `_minimal_report` leaves on a directly-built report, which is
+    what every pre-existing dedup test in this file relies on."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    hashes = {
+        dedup_fingerprint(_run_count_report(("read", n), ("write", n)))
+        for n in (0, 2, 3, 5)
+    }
+    assert len(hashes) == 1
+
+
 def test_schema_version_is_one_seven():
     """PROV-04: the imported constant equals `"1.7"`, and a freshly built
     report's `to_dict()["schema_version"]` equals the IMPORTED constant --

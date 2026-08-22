@@ -1231,6 +1231,48 @@ def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> Ste
     return StepResult(op=op, verdict=verdict, reason=reason, run_count=0)
 
 
+# The ops whose `StepResult.run_count` is EXACTLY `run_plan`'s `runs` kwarg
+# (quick task 260822-aq6) -- the multi-run destructive/verify set plus the
+# read step, which `_dispatch_read` also loops `runs` times. Deliberately
+# NOT every op: `_dispatch_id`, the blank-check arm and all six SDP-leg ops
+# hard-set `run_count=1` BY DESIGN and would otherwise read as a degraded
+# repeat policy on a perfectly normal run.
+_REPEAT_POLICY_OPS = _MULTI_RUN_OPS | {OP_READ}
+
+# The degraded-policy marker (quick task 260822-aq6). Spelled as the kwarg
+# value it describes rather than the CLI flag that produces it: `run_plan`
+# owns the policy, `--fast` is merely one caller that asks for it.
+REPEAT_POLICY_DEGRADED_TAG = "runs=1"
+
+
+def repeat_policy_tag(results: list[StepResult]) -> str:
+    """`""` for the default N>=2 repeat policy; the degraded marker otherwise.
+
+    A single-run plan is a strictly WEAKER test: with one run there is
+    nothing to compare, so `_dispatch_multi_run` can never return
+    `marginal` and `_dispatch_read` computes no divergence (its own guard
+    needs `len(run_bytes) >= 2`). This tag is what lets
+    `dedup_fingerprint` keep such a run out of the N>=2 promotion groups
+    that `tools/parse_devtest_issue.py::count_agreeing` builds -- the same
+    principle Phase 121 D-06/D-08 established for `write-partial` vs
+    `write`, applied to the repeat policy instead of the write region.
+
+    Keyed on `run_count == 1` over `_REPEAT_POLICY_OPS` only. A SKIPPED or
+    NA step carries `run_count == 0` and is ignored (it reports nothing
+    about the policy), and every op outside that set is ignored because its
+    `run_count` is a design constant, not the `runs` kwarg.
+
+    Returning `""` for the default is load-bearing: `dedup_fingerprint`
+    appends this tag only when non-empty, so every fingerprint produced by
+    an accurate run is byte-identical to the ones already filed. No
+    historical grouping resets, and no promotion count is lost.
+    """
+    for result in results:
+        if result.op in _REPEAT_POLICY_OPS and result.run_count == 1:
+            return REPEAT_POLICY_DEGRADED_TAG
+    return ""
+
+
 @dataclass
 class WriteContext:
     """Execution-time state threaded through `run_plan`'s step loop (quick
@@ -1300,6 +1342,7 @@ def run_plan(
     db: Any,
     *,
     runs: int = 2,
+    allow_single_run: bool = False,
     sampler: Any = None,
 ) -> list[StepResult]:
     """Execute `plan.steps` as independent, non-fatal steps (SWEEP-02).
@@ -1329,7 +1372,12 @@ def run_plan(
     `marginal` -- never coerced to a confident OK/BAD (D-06, the AM27C020
     write#1 60/64 vs write#2 0/64 case made structural). `runs < 2` is
     rejected BEFORE any resolve/operator call (D-05 guard, mirrors
-    `consistency_check_eprom`). Read-step disagreement across `runs` is
+    `consistency_check_eprom`) UNLESS the caller passes
+    `allow_single_run=True` (quick task 260822-aq6, `dev test --fast`) --
+    a deliberately weaker plan that forfeits the marginal detector and the
+    read-divergence metric entirely, and is tagged as such by
+    `repeat_policy_tag` so it cannot join an accurate run's dedup group.
+    Read-step disagreement across `runs` is
     reported as a byte-level divergence metric only -- NOT a verdict flip,
     NOT `marginal` (D-06). The write/verify step attaches a `Fingerprint`
     (Task 3, PATT-02 wiring) built from `generate_pattern` vs the read-back,
@@ -1361,14 +1409,22 @@ def run_plan(
     run_plan(...)` assignment never completes, so there is nothing to
     render (D-07's residual).
     """
-    if runs < 2:
+    # Fail-closed repeat-policy guard. `runs < 2` still fails the WHOLE plan
+    # for every caller that did not explicitly opt in -- an accidentally
+    # mis-wired `runs=1` must never silently cost the marginal detector
+    # (D-05). `allow_single_run=True` (quick task 260822-aq6) is the ONLY way
+    # past it, and `runs < 1` fails regardless: there is no such thing as a
+    # zero-run step.
+    if runs < 1 or (runs < 2 and not allow_single_run):
         return [
             StepResult(
                 op="__plan__",
                 verdict=VERDICT_BAD,
                 reason=(
                     f"runs must be >= 2 (got {runs}); a destructive/verify "
-                    "step requires at least 2 runs to compare (D-05)"
+                    "step requires at least 2 runs to compare (D-05) -- "
+                    "pass allow_single_run=True to run a deliberately "
+                    "weaker single-run plan"
                 ),
                 run_count=0,
             )

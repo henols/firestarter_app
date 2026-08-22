@@ -554,7 +554,13 @@ def test_dev_test_output_trim_console_shrunk_payload_intact(
 
     help_result = runner.invoke(cli, ["dev", "test", "--help"])
     assert help_result.exit_code == 0, help_result.output
-    assert len(help_result.output.strip().splitlines()) <= 14
+    # Ceiling raised 14 -> 16 (quick task 260822-aq6). The whole increase
+    # is the Options block `--fast` brings with it: two docstring lines
+    # naming the N>=2 default plus the flag's own four wrapped help
+    # lines. Kept a TIGHT pin at the real number rather than a loose one,
+    # so the next accidental growth still trips it -- that is what this
+    # assertion is for.
+    assert len(help_result.output.strip().splitlines()) <= 16
 
     app = make_app_context(
         eprom_operator=make_clean_operator(),
@@ -591,9 +597,20 @@ def test_dev_test_output_trim_console_shrunk_payload_intact(
 
 
 class TestZeroOptionSurface:
-    """`dev test` takes CHIP and nothing else; each removed flag errors."""
+    """`dev test` takes CHIP plus exactly one option; each removed flag errors.
 
-    def test_dev_test_accepts_no_options(self) -> None:
+    REVERSAL, stated rather than smuggled (quick task 260822-aq6): Phase 121
+    D-05 gave this command a deliberate ZERO-option surface, and this class
+    is the gate that held it. `--fast` reverses that decision for exactly
+    one option -- the operator asked for an opt-out from the N>=2 repeat
+    policy while keeping the accurate N>=2 run as the default. The gate is
+    NARROWED to the new surface, not deleted: the option set is still
+    pinned exactly (so a second option cannot slip in unnoticed), and every
+    sibling test below -- the three removed flags and the removed
+    confirm-bypass short flag -- is untouched.
+    """
+
+    def test_dev_test_has_exactly_the_fast_option(self) -> None:
         import click
 
         test_cmd = cli.commands["dev"].commands["test"]
@@ -602,7 +619,33 @@ class TestZeroOptionSurface:
         arguments = [p for p in params if isinstance(p, click.Argument)]
         assert len(arguments) == 1
         assert arguments[0].name == "chip"
-        assert options == []
+        assert [o.name for o in options] == ["fast"]
+        assert options[0].is_flag
+        assert options[0].default is False
+
+    def test_fast_option_help_states_it_is_the_weaker_test(self) -> None:
+        """The flag's help must name the COST, not just the speed. The
+        operator's standing direction is that the accurate test is the
+        goal and time is not a constraint, so a reader deciding whether to
+        pass `--fast` has to see what it gives up before they do."""
+        import click
+
+        import firestarter.cli_handlers as cli_handlers_mod
+
+        # Reached via the module attribute, not `cli.commands["dev"]
+        # .commands["test"]`: Click types `Group.commands` on `Group`, not
+        # `Command`, so the subscript path costs an `attr-defined` mypy
+        # error against the watermark gate. The sibling test above already
+        # spends one on that path; this one does not add a second.
+        fast = next(
+            p
+            for p in cli_handlers_mod.dev_test.params
+            if isinstance(p, click.Option) and p.name == "fast"
+        )
+        help_text = (fast.help or "").lower()
+        assert "weaker" in help_text
+        assert "marginal" in help_text
+        assert "accurate" in help_text
 
     # Removed long-option NAMEs only (no leading dashes) -- the leading
     # "--" is joined on at call time below so this source file never

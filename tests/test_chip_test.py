@@ -1376,6 +1376,145 @@ def test_runs_boundary_rejects_below_2_before_any_operator_call():
     assert "runs" in results[0].reason.lower()
 
 
+def test_allow_single_run_admits_runs_1_and_reports_run_count_1():
+    """The ONLY way past the fail-closed guard (quick task 260822-aq6).
+
+    The sibling test above proves `runs=1` alone still fails the whole plan
+    -- an accidentally mis-wired caller cannot silently forfeit the marginal
+    detector. This one proves the deliberate opt-in works and that the
+    forfeit is RECORDED: `run_count == 1` is what every disclosure surface
+    and `repeat_policy_tag` read to say so.
+    """
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_READ, supported=True, reason=""),
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=1, allow_single_run=True)
+
+    assert _result(results, OP_READ).run_count == 1
+    assert _result(results, OP_WRITE).run_count == 1
+    assert operator.write_eprom.call_count == 1
+    # TWO read_eprom calls, not one: `_dispatch_read` made the single
+    # policy-governed read, and `_dispatch_multi_run` made its own
+    # region-scoped read-back for the write step's `Fingerprint`. The
+    # read-back has never been part of the repeat policy and `--fast` does
+    # not remove it -- pinned here so a future change to either cannot be
+    # mistaken for the other.
+    assert operator.read_eprom.call_count == 2
+
+
+def test_allow_single_run_still_rejects_runs_below_1():
+    """`allow_single_run=True` unlocks ONE run, not zero. A zero-run step
+    would report a verdict for an operator call that never happened -- the
+    vacuous pass this codebase refuses everywhere else."""
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=0, allow_single_run=True)
+
+    operator.write_eprom.assert_not_called()
+    assert len(results) == 1
+    assert results[0].verdict == VERDICT_BAD
+
+
+def test_single_run_write_cannot_report_marginal():
+    """The cost of `--fast`, proven rather than asserted in prose.
+
+    Identical operator to `test_marginal_on_disagreeing_write_runs` below
+    (write#1 True, write#2 False -- the AM27C020 case). At `runs=2` that is
+    `marginal`. At `runs=1` the second outcome is never sampled, so the step
+    reports a confident OK and the divergence is INVISIBLE. This is exactly
+    what the `--fast` help text warns about.
+    """
+    operator = _mock_operator()
+    operator.write_eprom.side_effect = [True, False]
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=1, allow_single_run=True)
+
+    write_result = _result(results, OP_WRITE)
+    assert write_result.verdict == VERDICT_OK
+    assert write_result.verdict != VERDICT_MARGINAL
+    assert write_result.run_count == 1
+
+
+def test_repeat_policy_tag_empty_for_the_default_policy():
+    from firestarter.chip_test import repeat_policy_tag
+
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_READ, supported=True, reason=""),
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    assert repeat_policy_tag(results) == ""
+
+
+def test_repeat_policy_tag_marks_a_single_run_plan():
+    from firestarter.chip_test import (
+        REPEAT_POLICY_DEGRADED_TAG,
+        repeat_policy_tag,
+    )
+
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=1, allow_single_run=True)
+
+    assert repeat_policy_tag(results) == REPEAT_POLICY_DEGRADED_TAG
+
+
+def test_repeat_policy_tag_ignores_ops_that_are_single_run_by_design():
+    """`run_count == 1` is NORMAL for the id check, the blank check and all
+    six SDP-leg ops -- those dispatch arms hard-set it. Reading them as a
+    degraded repeat policy would tag every AT28C256 sweep as `--fast` and
+    split its dedup group for no reason."""
+    import firestarter.chip_test as chip_test_mod
+    from firestarter.chip_test import (
+        OP_BLANK_CHECK,
+        OP_ID,
+        OP_SDP_LOCK,
+        OP_WRITE_INHIBITED,
+        repeat_policy_tag,
+    )
+
+    step_result = chip_test_mod.StepResult
+    by_design = [
+        step_result(op=op, verdict=VERDICT_OK, run_count=1)
+        for op in (OP_ID, OP_BLANK_CHECK, OP_SDP_LOCK, OP_WRITE_INHIBITED)
+    ]
+    # A real N>=2 write/read alongside them, so the list is a plausible sweep.
+    by_design += [
+        step_result(op=OP_READ, verdict=VERDICT_OK, run_count=2),
+        step_result(op=OP_WRITE, verdict=VERDICT_OK, run_count=2),
+    ]
+
+    assert repeat_policy_tag(by_design) == ""
+
+
+def test_repeat_policy_tag_ignores_steps_that_never_ran():
+    """A SKIPPED/NA step carries `run_count == 0` and says nothing about the
+    policy -- it must not be read as either value."""
+    import firestarter.chip_test as chip_test_mod
+    from firestarter.chip_test import repeat_policy_tag
+
+    step_result = chip_test_mod.StepResult
+    assert (
+        repeat_policy_tag(
+            [
+                step_result(op=OP_WRITE, verdict=VERDICT_SKIPPED, run_count=0),
+                step_result(op=OP_VERIFY, verdict=VERDICT_SKIPPED, run_count=0),
+            ]
+        )
+        == ""
+    )
+
+
 def test_marginal_on_disagreeing_write_runs():
     operator = _mock_operator()
     # write#1 True, write#2 False -- the AM27C020 write#1/write#2 case.
