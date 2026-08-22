@@ -440,6 +440,18 @@ _SDP_LEG_STEP_ORDER: tuple[str, ...] = (
 # reason it does not own.
 _SDP_LOCKED_REASON = 'write_scope="none": {op} omitted (D-18)'
 
+# Region-policy vocabulary (quick task 260821-wna, D-A..D-F). Plain
+# module-level strings mirroring how this module already carries its op
+# vocabulary (OP_* above) -- `Step.region_policy` is set exactly once by
+# `derive_plan` and read-only downstream (`_resolve_write_target`,
+# execution time). `fixed` is today's pre-existing small-region behaviour
+# (both non-UV-at-partial and the SDP leg); `full-device` is a non-UV write
+# whose width comes from `memory-size` after `full_device_region`'s sanity
+# check; `uv-slot` is a UV part's execution-time-masked slot write.
+REGION_POLICY_FIXED = "fixed"
+REGION_POLICY_FULL_DEVICE = "full-device"
+REGION_POLICY_UV_SLOT = "uv-slot"
+
 
 @dataclass
 class Step:
@@ -1554,6 +1566,14 @@ _WRITE_REGION_LENGTH = 256
 # CONSTANT, never sourced from any DB field -- a malicious/misconfigured DB
 # entry must not be able to widen the write window. `memory-size` is only a
 # top-anchor PLACEMENT bound (where the window sits), never a WIDTH input.
+#
+# AMENDED (quick task 260821-wna, D-B/D-E): this is now specifically the UV
+# SLOT width -- the granularity `uv_slot_starts`/`WriteTarget` operate at --
+# and it is the BOUND D-E requires on the reversal below: `full_device_region`
+# derives a write WIDTH from `memory-size` for the non-UV full-device policy,
+# which deliberately reverses SC4/D-01's "width never comes from the DB" rule
+# on that one path -- but only after a sanity check, and never for this slot
+# width, which stays a module constant on every path.
 _UV_WRITE_REGION_LENGTH = 256
 
 # The engine default region as a concrete tuple (D-02) -- consumed by
@@ -1561,6 +1581,221 @@ _UV_WRITE_REGION_LENGTH = 256
 # defined earlier in this module; referenced here at call time only, after
 # module import completes).
 _DEFAULT_REGION = (_WRITE_REGION_START, _WRITE_REGION_LENGTH)
+
+
+# ---------------------------------------------------------------------------
+# UV bit-masking, slot arithmetic, and the full-device region (quick task
+# 260821-wna, D-A/D-B/D-D/D-E). Pure, bench-free compute over host-side byte
+# arrays and DB-derived integers -- no chip access, no operator calls, no
+# imports beyond the stdlib already present in this module. This is the
+# execution-time HALF of the D-A/D-B mechanism; `derive_plan` (above) decides
+# only the REGION and the POLICY, never the mask.
+# ---------------------------------------------------------------------------
+
+# Both per-SLOT (not per-byte) thresholds, each 64 of the 2048 bits in a
+# 256-byte slot (D-B, Claude's discretion). The verdict is per-slot, so a
+# per-byte rule would reject slots that are serviceable in aggregate. A
+# virgin slot offers 1024 clearable and 1024 retained bits (measured: the
+# address-derived pattern's popcount over a 256-byte slot is exactly 1024,
+# since `address_fold_byte` is an XOR-fold and averages to half its bits
+# set). 64 accepts a slot with only ~6% of its virgin headroom left while
+# staying far above anything a single-bit anomaly or a transport glitch
+# could account for; the retained floor is what makes an all-0x00 read-back
+# (or any near-degenerate image) structurally unable to satisfy `WriteTarget`.
+_UV_MIN_CLEARED_BITS = 64
+_UV_MIN_RETAINED_BITS = 64
+
+# How many bytes one probe read covers when walking candidate UV slots
+# top-down (16 slots per read at the 256-byte slot width) -- probe cost is
+# proportional to blocks read, not slots evaluated.
+_UV_PROBE_BLOCK_LENGTH = 4096
+
+# A MIRROR of `eprom_operations._BOOT_BLOCK_SIZE` (16 KiB, W29C040 datasheet
+# section 6.6's two irreversible boot blocks, first and last). Mirrored
+# rather than imported: `chip_test.py` deliberately keeps no dependency on
+# `eprom_operations.py` (the same reasoning `_diff_offsets`'s own comment,
+# above, already records for the divergence primitive). `_PROTOCOL_FLASH4`
+# (defined earlier in this module) is reused as the protocol id rather than
+# adding a second constant for it.
+_FLASH4_BOOT_BLOCK_LENGTH = 0x4000
+
+# The sanity ceiling D-E demands before any DB-derived WIDTH (the
+# full-device policy's region length) is honoured. The largest shipped
+# device measured at plan time is 1 MiB across 8 rows; 16 MiB leaves room
+# for a future part while refusing an absurd override value outright.
+_MAX_FULL_DEVICE_LENGTH = 1 << 24
+
+
+def mask_write_pattern(current: bytes, desired: bytes) -> bytes:
+    """The D-A arithmetic: `P = C & D`, per byte.
+
+    On a UV EPROM, programming only clears bits (1 -> 0); writing `desired`
+    into a cell currently holding `current` physically yields `current &
+    desired`. Raises `ValueError` on a length disagreement rather than
+    silently truncating to the shorter array -- a silent truncation here is
+    the empty-read-back trap (this project's absent-chip false-green
+    history) in a new costume.
+    """
+    if len(current) != len(desired):
+        raise ValueError(
+            f"mask_write_pattern: length disagreement (current={len(current)} "
+            f"bytes, desired={len(desired)} bytes) -- refusing rather than "
+            "silently truncating"
+        )
+    return bytes(c & d for c, d in zip(current, desired))
+
+
+def bits_cleared_by(current: bytes, desired: bytes) -> int:
+    """Count bits set in `current` and clear in `desired` (D-B).
+
+    This is how many bits the masked write `mask_write_pattern(current,
+    desired)` will actually CLEAR relative to `current` -- the slot-
+    saturation signal. A fully saturated slot (`current` all `0x00`) has no
+    set bits to clear, so this returns 0 regardless of `desired`.
+    """
+    if len(current) != len(desired):
+        raise ValueError(
+            f"bits_cleared_by: length disagreement (current={len(current)} "
+            f"bytes, desired={len(desired)} bytes)"
+        )
+    return sum((c & (~d & 0xFF)).bit_count() for c, d in zip(current, desired))
+
+
+def bits_retained_by(current: bytes, desired: bytes) -> int:
+    """Count bits set in BOTH `current` and `desired` (D-B).
+
+    Equals `popcount(mask_write_pattern(current, desired))` -- the number of
+    `1` bits the masked write leaves behind, which is what makes a
+    degenerate (near-all-`0x00`) read-back structurally distinguishable from
+    a genuinely serviceable slot.
+    """
+    if len(current) != len(desired):
+        raise ValueError(
+            f"bits_retained_by: length disagreement (current={len(current)} "
+            f"bytes, desired={len(desired)} bytes)"
+        )
+    return sum((c & d).bit_count() for c, d in zip(current, desired))
+
+
+def uv_slot_starts(mem_size: int, slot_length: int) -> list[int]:
+    """Top-down ordered candidate UV slot starts (D-B).
+
+    Top-down is deliberate: it preserves the existing top-anchored
+    convention (`_top_anchored_or_default`) and leaves the low address space
+    -- where a used EPROM's real payload usually lives -- untouched longest.
+    Empty when the device cannot hold even one slot.
+    """
+    if slot_length <= 0 or mem_size < slot_length:
+        return []
+    slot_count = mem_size // slot_length
+    return [mem_size - (i + 1) * slot_length for i in range(slot_count)]
+
+
+def full_device_region(mem_size: int, protocol: int) -> tuple[int, int] | str:
+    """The non-UV full-device write region, or a refusal reason (D-D/D-E).
+
+    Returns either a `(start, length)` tuple or a refusal reason string,
+    never both. Checks are ordered deliberately: `mem_size` is sanity-
+    checked FIRST (positive, a multiple of `_UV_WRITE_REGION_LENGTH`, at or
+    below `_MAX_FULL_DEVICE_LENGTH`) before the flash4 carve-out is even
+    considered, so a hostile/malformed `memory-size` never reaches the carve-
+    out arithmetic at all.
+
+    ⚠ D-E disclosure: this is the ONE place in this module a write WIDTH is
+    derived from a DB field (`memory-size`). SC4 and D-01 exist specifically
+    so a malicious/misconfigured DB entry cannot widen the UV write window --
+    this function deliberately reverses that rule for the NON-UV full-device
+    policy only. The bound: the UV slot width (`_UV_WRITE_REGION_LENGTH`)
+    stays a module constant on every path, and this function's own width is
+    honoured only after the sanity check above passes.
+
+    On protocol 0x05 (flash4), the first and last `_FLASH4_BOOT_BLOCK_LENGTH`
+    bytes are permanently locked (W29C040 datasheet section 6.6) and are
+    carved out of the returned region. When the two boot blocks cover the
+    entire device (measured: the three 32 KiB flash4 rows), a full write is
+    structurally impossible and this returns a refusal naming the boot
+    blocks rather than an empty or negative-length region.
+    """
+    if not mem_size or mem_size <= 0:
+        return "full-device write refused: memory-size is absent, zero, or negative"
+    if mem_size % _UV_WRITE_REGION_LENGTH != 0:
+        return (
+            f"full-device write refused: memory-size {mem_size} is not a "
+            f"multiple of {_UV_WRITE_REGION_LENGTH}"
+        )
+    if mem_size > _MAX_FULL_DEVICE_LENGTH:
+        return (
+            f"full-device write refused: memory-size {mem_size} exceeds the "
+            f"sanity ceiling {_MAX_FULL_DEVICE_LENGTH} (D-E)"
+        )
+    if protocol == _PROTOCOL_FLASH4:
+        carve = _FLASH4_BOOT_BLOCK_LENGTH
+        if mem_size <= 2 * carve:
+            return (
+                f"full-device write refused: flash4 (protocol 0x05) boot "
+                f"blocks ({carve} bytes each, first and last) cover the "
+                f"entire {mem_size}-byte device -- falling back to the "
+                "small fixed region"
+            )
+        return carve, mem_size - 2 * carve
+    return 0, mem_size
+
+
+@dataclass(frozen=True)
+class WriteTarget:
+    """The execution-time-resolved write target -- THE vacuous-pass guard.
+
+    `__post_init__` structurally REFUSES to construct a degenerate target:
+    every OK verdict downstream must be reachable only through an instance
+    of this class, so a saturated slot or a dead read-back can never be
+    reported as a write pass. This is the same failure family as this
+    project's absent-chip false-green trap (a `Mock` that answers `True`
+    with no chip attached) -- here it is a masked write that would trivially
+    "pass" because there was nothing left to clear.
+
+    `region` is `(start, length)`; `pattern` is the actual bytes to be
+    written (masked or not); `masked` records whether `pattern` is a D-A
+    masked image (UV) or a plain address-derived pattern (non-UV, or a blank
+    UV chip under D-C); `bits_cleared`/`bits_retained` are the D-B counts
+    (meaningless, and not checked, when `masked` is False); `current_source`
+    names where the "current chip content" came from for a masked target
+    (a probe read, or the blank-check for D-C) -- provenance for the report,
+    Task 5.
+    """
+
+    region: tuple[int, int]
+    pattern: bytes
+    masked: bool
+    bits_cleared: int
+    bits_retained: int
+    current_source: str
+
+    def __post_init__(self) -> None:
+        _start, length = self.region
+        if len(self.pattern) != length:
+            raise ValueError(
+                f"WriteTarget: pattern length {len(self.pattern)} disagrees "
+                f"with region length {length}"
+            )
+        if self.pattern == b"\x00" * length or self.pattern == b"\xff" * length:
+            raise ValueError(
+                "WriteTarget: refusing a degenerate all-0x00/all-0xFF "
+                "pattern -- the vacuous-pass guard, the absent-chip "
+                "false-green family wearing a new costume"
+            )
+        if self.masked and self.bits_cleared < _UV_MIN_CLEARED_BITS:
+            raise ValueError(
+                f"WriteTarget: masked target clears only {self.bits_cleared} "
+                f"bits, below _UV_MIN_CLEARED_BITS ({_UV_MIN_CLEARED_BITS}) "
+                "-- this slot is saturated under this pattern"
+            )
+        if self.masked and self.bits_retained < _UV_MIN_RETAINED_BITS:
+            raise ValueError(
+                f"WriteTarget: masked target retains only "
+                f"{self.bits_retained} bits, below _UV_MIN_RETAINED_BITS "
+                f"({_UV_MIN_RETAINED_BITS}) -- a read-back this degenerate "
+                "could never be told apart from an absent chip"
+            )
 
 
 def _write_region_for(step: Step | None, eprom_data: dict[str, Any]) -> tuple[int, int]:
