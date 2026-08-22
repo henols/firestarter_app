@@ -2833,8 +2833,19 @@ def _dispatch_step(
         return _dispatch_id(name, eprom_data, operator)
     if step.op == OP_BLANK_CHECK:
         is_ok = operator.check_eprom_blank(name, eprom_data)
+        # Debug session w27c512-devtest-all-bad: a failing blank-check now
+        # carries the firmware's own id and text. This is the step where it
+        # matters most -- mem_util_blank_check emits MSG_ERR_NOT_BLANK with
+        # the offending 3-byte ADDRESS and the byte VALUE it read, which is
+        # the single most useful datum in a `dev test` failure and was being
+        # dropped on the floor.
+        code, message = (None, "") if is_ok else _firmware_error(operator)
         return StepResult(
-            op=step.op, verdict=VERDICT_OK if is_ok else VERDICT_BAD, run_count=1
+            op=step.op,
+            verdict=VERDICT_OK if is_ok else VERDICT_BAD,
+            reason=message,
+            error_code=code,
+            run_count=1,
         )
     if step.op == OP_READ:
         return _dispatch_read(name, eprom_data, operator, runs=runs)
@@ -3179,6 +3190,33 @@ def _resolve_write_target(
     )
 
 
+def _firmware_error(operator: Any) -> tuple[int | None, str]:
+    """The firmware's own id + text for the operation that just failed.
+
+    Debug session w27c512-devtest-all-bad. `write_eprom`/`verify_eprom`/
+    `erase_eprom`/`check_eprom_blank` all return a bare bool, and
+    `eprom_operations._run_state_machine` catches the `EpromOperationError`
+    that carried the firmware's `response.id` -- so `_run_step`'s
+    `except EpromOperationError` handler can never fire for those four ops
+    and every BAD step in a report came out with `error_code: null` and
+    `reason: ""`. `EpromOperator` now records the pair on itself (see its
+    `__init__`); this reads it back.
+
+    `getattr` with defaults, not attribute access: every test double in this
+    suite is a hand-rolled stand-in for `EpromOperator`, none of them carry
+    these attributes, and a missing attribute must degrade to "no firmware
+    error recorded" rather than raise inside a failure path. Returns
+    `(None, "")` in that case, which is exactly the pre-existing behaviour.
+
+    `_run_state_machine` clears both on entry, so a value read here always
+    belongs to the call that just returned -- never a stale one from an
+    earlier step.
+    """
+    code = getattr(operator, "last_firmware_error_code", None)
+    message = getattr(operator, "last_firmware_error_message", None) or ""
+    return code, message
+
+
 def _dispatch_multi_run(
     op: str,
     name: str,
@@ -3386,17 +3424,30 @@ def _dispatch_multi_run(
                 pass
 
     diverged = len(set(outcomes)) != 1 if outcomes else False
+    # Debug session w27c512-devtest-all-bad: the firmware's own id + text for
+    # this op, read back off the operator (see `_firmware_error`). Captured
+    # BEFORE the verdict branches below so both the BAD and the `marginal`
+    # arm can use it -- a `marginal` step has at least one failed run and its
+    # error code is just as diagnostic as a BAD one's.
+    error_code, error_message = _firmware_error(operator)
     if diverged:
         verdict = VERDICT_MARGINAL
         reason = f"{runs} runs disagreed on outcome (D-06 marginal policy)"
     else:
         verdict = VERDICT_OK if outcomes and outcomes[0] else VERDICT_BAD
-        reason = ""
+        # The firmware's text becomes the step's reason ONLY on a non-OK
+        # verdict, and only when the D-06 marginal wording has not already
+        # claimed the field -- that wording states a policy decision this
+        # function made, which must not be overwritten by a per-run detail.
+        # The CODE is attached in both cases: it is a separate field and
+        # never competes with the reason text.
+        reason = "" if verdict == VERDICT_OK else error_message
 
     return StepResult(
         op=op,
         verdict=verdict,
         reason=reason,
+        error_code=None if verdict == VERDICT_OK else error_code,
         run_count=runs,
         fingerprint=fingerprint,
         write_target=resolved_target if op in (OP_WRITE, OP_WRITE_PARTIAL) else None,
