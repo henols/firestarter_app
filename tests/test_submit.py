@@ -232,6 +232,59 @@ def test_build_body_table_from_sanitized_steps():
     assert "```json" not in body
 
 
+@pytest.mark.parametrize(
+    "verdict,reason,expected",
+    [
+        ("NA", "SDP lock/unlock applies only to protocol 0x0D", "-"),
+        ("NA", "", "-"),
+        ("NA", None, "-"),
+        ("SKIPPED", "no target resolved", "no target resolved"),
+        ("BAD", "port gone", "port gone"),
+        ("OK", "", "-"),
+        (None, "", "-"),
+    ],
+)
+def test_reason_text_verdict_keyed_suppression(verdict, reason, expected):
+    # D-1: suppression is keyed on the verdict token, never on message text.
+    # The SKIPPED and BAD rows are the non-vacuity proof -- they must NOT be
+    # suppressed, otherwise the rule would just be blanket suppression.
+    assert submit._reason_text(verdict, reason) == expected
+
+
+def test_build_body_na_row_suppresses_reason_json_retains_it():
+    from firestarter.sdp_capability import REASON_WRONG_PROTOCOL
+
+    sanitized = {
+        "steps": [
+            {
+                "op": "sdp-lock",
+                "verdict": "NA",
+                "reason": REASON_WRONG_PROTOCOL,
+                "duration_s": None,
+                "run_count": 0,
+            },
+            {
+                "op": "read",
+                "verdict": "SKIPPED",
+                "reason": "no target resolved",
+                "duration_s": None,
+                "run_count": 0,
+            },
+        ]
+    }
+    body = submit.build_body(sanitized, [], include_json=True)
+    table_half, json_half = body.split("```json", 1)
+
+    assert "| sdp-lock | NA | - | - | - |" in table_half
+    assert "| read | SKIPPED | - | - | no target resolved |" in table_half
+    assert REASON_WRONG_PROTOCOL not in table_half, (
+        "D-1: an NA row's reason prose must not reach the table half"
+    )
+    assert REASON_WRONG_PROTOCOL in json_half, (
+        "D-2: the fenced JSON block must still carry the full reason verbatim"
+    )
+
+
 def test_build_body_includes_json_by_default():
     sanitized = {"steps": [{"op": "id", "verdict": "OK", "reason": ""}], "chip": "X"}
     body = submit.build_body(sanitized, [])
