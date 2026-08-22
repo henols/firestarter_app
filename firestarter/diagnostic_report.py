@@ -590,11 +590,29 @@ def _write_coverage_line(result: StepResult, step: Step | None) -> str | None:
         return plan_reason or None
 
     if target.masked:
-        # A genuine D-A/D-B masked UV write (a real slot, or D-C's
-        # blank-chip full-device write, which is also `masked=True`).
-        return (
-            f"slot 0x{start:X} ({length} bytes), {target.bits_cleared} bits clearable"
+        # A genuine masked UV write over one slot. (The blank-chip
+        # full-device branch that also produced `masked=True` was retired in
+        # quick task 260822-aq6 -- a UV write is always a slot now.)
+        #
+        # `bits_cleared` is the PER-CYCLE tranche size, so the wording says
+        # "this cycle" rather than implying a slot total.
+        line = (
+            f"slot 0x{start:X} ({length} bytes), "
+            f"{target.bits_cleared} bits cleared this cycle"
         )
+        # D-9 rig life. A UV part is a finite regression rig -- one run
+        # saturates one slot -- so "slots left" IS "runs left", and an
+        # operator planning a firmware regression pass needs the number
+        # without having to work it out from the slot address. Appended only
+        # when the resolver actually measured it (the probe path); absent on a
+        # staged tranche copy, which inherits its slot rather than re-deriving
+        # the count.
+        if target.slots_remaining is not None and target.slots_total:
+            line += (
+                f"; {target.slots_remaining} of {target.slots_total} slots "
+                "left on this part"
+            )
+        return line
 
     # `fixed` policy, unmasked: a non-UV region write with no D-A mask
     # (partial-scope non-UV, or a hostile/malformed-`memory-size`

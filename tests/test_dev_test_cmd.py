@@ -702,135 +702,99 @@ class TestZeroOptionSurface:
 # ---------------------------------------------------------------------------
 
 
-class TestUVOnlyStopAndAsk:
-    """Destructiveness applies ONLY to UV-erasable EPROMs (D-01): every
-    other family writes in full, unprompted, TTY or not. A UV part on a
-    TTY is asked; off a TTY the ask is a declined prompt, not absent
-    consent (D-03) -- the 256-byte window is still written."""
+class TestUVWriteHasNoPrompt:
+    """RETIRED PROMPT, recorded not deleted (quick task 260822-aq6, D-4).
 
-    def test_non_uv_part_is_written_in_full_without_a_prompt(
+    This class replaces `TestUVOnlyStopAndAsk`, whose five tests pinned a
+    stop-and-ask on UV parts: on a TTY the operator was asked, and a yes
+    permitted a full-device write when the chip read blank (260821-wna's D-C
+    consent ceiling), while a no or an absent TTY wrote one 256-byte slot.
+
+    D-C is reversed. `dev test` validates the firmware, host and database for
+    a chip TYPE -- it is not a chip-qualification tool -- so writing half of a
+    virgin UV part buys no coverage the top slot does not already give
+    (`uv_slot_starts` is top-down, so slot 0xFF00 exercises every address line
+    from run 1) while costing the part's entire remaining life as a regression
+    rig.
+
+    With no full-device ceiling left, both answers resolved to the same masked
+    slot write. That is precisely the inert-prompt defect D-01 found and
+    260821-wna fixed by giving the answers different consequences; re-shipping
+    a prompt whose answer cannot change the outcome would reintroduce it. So
+    the prompt is gone, and these tests pin its ABSENCE on every path -- which
+    is the property a future re-introduction would have to break.
+
+    Disclosure did not go with it: the report states the slot actually written
+    and, as of D-9, how many slots the part has left.
+    """
+
+    def test_no_prompt_on_a_uv_part_even_on_a_tty(self, runner: CliRunner) -> None:
+        """The load-bearing assertion of the whole class. `Confirm` is no
+        longer imported by `cli_handlers` at all, so its absence is asserted
+        structurally rather than by patching a name that would silently
+        create itself."""
+        import firestarter.cli_handlers as cli_handlers_mod
+
+        assert not hasattr(cli_handlers_mod, "Confirm"), (
+            "cli_handlers re-imported rich's Confirm -- if that is for a new "
+            "prompt, it must not be the UV write ask this class retired"
+        )
+        assert not hasattr(cli_handlers_mod, "_default_uv_write_confirm")
+
+    def test_uv_part_writes_one_slot_on_a_tty(self, runner: CliRunner) -> None:
+        """On a TTY, where the ask used to happen, a UV part gets exactly the
+        partial (slot) write and the run completes without blocking."""
+        operator = make_clean_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with patch("firestarter.cli_handlers._is_interactive", return_value=True):
+            result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
+        assert result.exit_code in (0, 1, 2), result.output
+        data = _load_report(_CHIP_UV)
+        assert "write-partial" in {s["op"] for s in data["steps"]}
+
+    def test_uv_part_writes_one_slot_off_a_tty_too(self, runner: CliRunner) -> None:
+        """Off a TTY the outcome is IDENTICAL -- there is no longer any path
+        on which TTY presence changes what a UV part receives."""
+        operator = make_clean_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
+        assert result.exit_code in (0, 1, 2), result.output
+        data = _load_report(_CHIP_UV)
+        assert "write-partial" in {s["op"] for s in data["steps"]}
+
+    def test_non_uv_part_is_still_written_in_full_without_a_prompt(
         self, runner: CliRunner
     ) -> None:
-        """A non-UV part (EEPROM/Flash) is written in full with NO prompt,
-        TTY or not -- the load-bearing assertion is that the confirm
-        callable is never invoked at all."""
+        """Unchanged from the retired class: every non-UV family is written in
+        full, unprompted, TTY or not."""
         operator = make_clean_operator()
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with (
-            patch("firestarter.cli_handlers._is_interactive", return_value=True),
-            patch("firestarter.cli_handlers.Confirm") as mock_confirm,
-        ):
+        with patch("firestarter.cli_handlers._is_interactive", return_value=True):
             result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
-        mock_confirm.ask.assert_not_called()
         data = _load_report(_CHIP_NO_ID)
-        steps = {s["op"] for s in data["steps"]}
-        assert "write" in steps
-        assert "write-partial" not in steps
-        operator.write_eprom.assert_called()
+        ops = {s["op"] for s in data["steps"]}
+        assert "write" in ops
+        assert "write-partial" not in ops
 
-    def test_uv_ask_yes_writes_the_full_device(self, runner: CliRunner) -> None:
-        """On a TTY, answering yes to the UV ask yields the full-write
-        scope (op "write", not "write-partial")."""
-        operator = make_clean_operator()
-        app = make_app_context(
-            eprom_operator=operator, hardware_manager=make_hardware_manager()
-        )
-        with (
-            patch("firestarter.cli_handlers._is_interactive", return_value=True),
-            patch("firestarter.cli_handlers.Confirm") as mock_confirm,
-        ):
-            mock_confirm.ask.return_value = True
-            result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
-        assert result.exit_code == 0, result.output
-        mock_confirm.ask.assert_called_once()
-        data = _load_report(_CHIP_UV)
-        steps = {s["op"] for s in data["steps"]}
-        assert "write" in steps
-        assert "write-partial" not in steps
+    def test_write_scope_resolver_needs_no_confirm_callable(self) -> None:
+        """`_resolve_write_scope`'s signature no longer carries a `confirm_fn`
+        seam, because there is nothing left to confirm. Pinned so the seam
+        cannot quietly return."""
+        import inspect
 
-    def test_uv_ask_no_writes_the_partial_region(self, runner: CliRunner) -> None:
-        """On a TTY, answering no to the UV ask yields the partial scope
-        (op "write-partial") -- and write_eprom IS still called (it writes,
-        it is never described as read-only)."""
-        operator = make_clean_operator()
-        app = make_app_context(
-            eprom_operator=operator, hardware_manager=make_hardware_manager()
-        )
-        with (
-            patch("firestarter.cli_handlers._is_interactive", return_value=True),
-            patch("firestarter.cli_handlers.Confirm") as mock_confirm,
-        ):
-            mock_confirm.ask.return_value = False
-            result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
-        assert result.exit_code == 0, result.output
-        mock_confirm.ask.assert_called_once()
-        data = _load_report(_CHIP_UV)
-        steps = {s["op"] for s in data["steps"]}
-        assert "write-partial" in steps
-        assert "write" not in steps
-        operator.write_eprom.assert_called()
+        from firestarter.cli_handlers import _resolve_write_scope
 
-    def test_uv_prompt_names_both_outcomes(self, runner: CliRunner) -> None:
-        """The prompt text must name BOTH outcomes -- the blank-device
-        full-write ceiling (D-C) and the single-slot floor -- so a future
-        edit cannot silently make it inert again (D-01's original defect:
-        both answers used to resolve to the same 256-byte window)."""
-        operator = make_clean_operator()
-        app = make_app_context(
-            eprom_operator=operator, hardware_manager=make_hardware_manager()
-        )
-        with (
-            patch("firestarter.cli_handlers._is_interactive", return_value=True),
-            patch("firestarter.cli_handlers.Confirm") as mock_confirm,
-        ):
-            mock_confirm.ask.return_value = False
-            runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
-        mock_confirm.ask.assert_called_once()
-        prompt = mock_confirm.ask.call_args[0][0]
-        assert "whole device" in prompt
-        assert "blank" in prompt
-        assert "256-byte slot" in prompt
-
-    def test_off_tty_partial_write_actually_happens(self, runner: CliRunner) -> None:
-        """Off-TTY on a UV part, the confirm callable is never invoked AND
-        write_eprom IS called with the 256-byte top-anchored region -- D-03
-        writes to silicon without a prompt, and this proves the write
-        happened rather than merely that nothing was asked.
-
-        The engine unlinks its temp source file in a `finally` block right
-        after each `write_eprom` call (`_dispatch_multi_run`), so the region
-        byte length must be captured DURING the call via a side_effect --
-        reading the path back after `invoke()` returns would race the
-        cleanup and flake."""
-        operator = make_clean_operator()
-        captured_region_lengths: list[int] = []
-
-        def _capture_region_and_write_ok(
-            name: str, eprom_data: dict, tmp_source_path: str, *_args, **_kwargs
-        ) -> bool:
-            captured_region_lengths.append(len(Path(tmp_source_path).read_bytes()))
-            return True
-
-        operator.write_eprom.side_effect = _capture_region_and_write_ok
-        app = make_app_context(
-            eprom_operator=operator, hardware_manager=make_hardware_manager()
-        )
-        with (
-            _off_tty(),
-            patch("firestarter.cli_handlers.Confirm") as mock_confirm,
-        ):
-            result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
-        assert result.exit_code == 0, result.output
-        mock_confirm.ask.assert_not_called()
-        operator.write_eprom.assert_called()
-        assert captured_region_lengths, "write_eprom was never called"
-        assert all(length == 256 for length in captured_region_lengths)
-        data = _load_report(_CHIP_UV)
-        steps = {s["op"] for s in data["steps"]}
-        assert "write-partial" in steps
+        params = inspect.signature(_resolve_write_scope).parameters
+        assert "confirm_fn" not in params
+        assert set(params) == {"app", "chip", "interactive"}
 
 
 # ---------------------------------------------------------------------------
@@ -1282,9 +1246,8 @@ class TestExitCodeMapping:
         self, runner: CliRunner, outcome_kwargs: dict, expected_exit: int
     ) -> None:
         """OK/NA/SKIPPED -> 0, marginal -> 2, BAD -> 1 -- proven again on a
-        PARTIAL-WRITE run (UV chip, on-TTY, ask declined) to show the
-        partial-write third mode introduces no new verdict and needs no
-        exit-code map edit."""
+        PARTIAL-WRITE run (UV chip) to show the partial-write third mode
+        introduces no new verdict and needs no exit-code map edit."""
         operator = make_clean_operator()
         for dotted_attr, value in outcome_kwargs.items():
             target = operator
@@ -1295,11 +1258,12 @@ class TestExitCodeMapping:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with (
-            patch("firestarter.cli_handlers._is_interactive", return_value=True),
-            patch("firestarter.cli_handlers.Confirm") as mock_confirm,
-        ):
-            mock_confirm.ask.return_value = False
+        # No `Confirm` patch any more: the UV write prompt was retired
+        # (quick task 260822-aq6, D-4), so a UV part resolves to the partial
+        # (slot) write on every path and the claim under test -- that the
+        # partial-write mode introduces no new verdict and needs no
+        # exit-code map edit -- is reached without simulating an answer.
+        with _off_tty():
             result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
         assert result.exit_code == expected_exit, result.output
         data = _load_report(_CHIP_UV)

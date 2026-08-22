@@ -29,7 +29,6 @@ from typing import Any, Callable, Dict, List, Literal, Optional  # noqa: UP035
 import click
 import click.shell_completion
 from rich.console import Console
-from rich.prompt import Confirm
 
 from firestarter import __version__ as version
 from firestarter import sdp_honesty  # unreadable_state_caveat(), called not re-authored
@@ -2419,66 +2418,43 @@ def _is_uv_eprom(app: "AppContext", chip: str) -> bool:
     return is_uv_eprom(full)
 
 
-def _default_uv_write_confirm(prompt: str) -> bool:
-    """Module confirm helper `_resolve_write_scope` defaults to (D-01)."""
-    return bool(Confirm.ask(prompt, default=False))
-
-
 def _resolve_write_scope(
     app: "AppContext",
     chip: str,
     *,
     interactive: bool,
-    confirm_fn: Callable[[str], bool] = _default_uv_write_confirm,
 ) -> str:
-    """Decide this run's `derive_plan(..., write_scope=...)` literal (D-01/D-03).
+    """Decide this run's `derive_plan(..., write_scope=...)` literal.
 
-    Quick task 260821-wna (D-C) changes what the scope literal MEANS on a UV
-    part: it used to pick "how wide is the write window" (both answers
-    resolved to the same 256-byte window, D-01's original inert-prompt
-    finding); it now picks the CONSENT CEILING the execution-time resolver
-    is permitted to reach -- `full` permits a full-device write when the
-    chip reads blank (D-C), `partial` never does, regardless of chip state.
-    On a chip that is NOT blank, `full` and `partial` still both resolve to
-    a single masked 256-byte slot (D-A/D-B) -- the ceiling only matters when
-    the blank-check actually reports blank.
+    UV parts get `"partial"`, everything else gets `"full"`. That is the whole
+    rule now, and there is no prompt on any path.
 
-    1. Not UV (`_is_uv_eprom` False) -> the full-write scope, **no prompt at
-       all**. A UV write is irrecoverable without a lamp; EEPROM and Flash
-       writes are recoverable via erase and SRAM/FRAM writes are essentially
-       free, so every other family -- explicitly including this milestone's
-       own AT28C family -- runs the full write/verify/erase round-trip
-       unprompted (and, since this task, covers the FULL DEVICE rather than
-       a small region, D-D).
-    2. UV and not interactive -> the partial scope, no prompt. Per D-03 an
-       absent TTY is a DECLINED prompt, not absent consent -- a single
-       256-byte slot is written (never the whole device, regardless of
-       chip state) so a piped or CI run still yields write evidence.
-    3. UV and interactive -> ask, defaulting to decline. A yes returns the
-       full scope: the whole device MAY be written, but only if the chip
-       reads blank (D-C) -- a used chip still receives just one masked
-       256-byte slot even under this answer. A no returns the partial
-       scope: one 256-byte slot only, unconditionally. Neither answer is
-       ever described as non-destructive or read-only.
+    **REVERSAL of quick task 260821-wna's D-C, operator-agreed 2026-08-22.**
+    D-C made a UV part's scope a CONSENT CEILING: `full` permitted a
+    full-device write when the chip read blank. That is retired. `dev test`
+    validates the firmware, host and database for a chip TYPE -- it is not a
+    chip-qualification tool -- so writing half of a virgin UV part buys no
+    firmware coverage a single top slot does not already give, and costs the
+    part's entire remaining life as a regression rig. `_resolve_write_target`
+    no longer has a full-device-if-blank branch at all.
 
-    `interactive` is taken as a parameter rather than calling
-    `_is_interactive()` internally, and `confirm_fn` is an injected
-    keyword-only callable -- both so tests can drive every branch without
-    patching module internals.
+    **And the prompt goes with it, for the reason 260821-wna itself
+    established.** With no full-device ceiling left, both answers resolved to
+    the same masked slot write -- which is exactly the inert-prompt defect
+    D-01 found and 260821-wna fixed by giving the answers different
+    consequences. Rather than re-ship a prompt whose answer changes nothing,
+    the prompt is removed: this command already writes unconditionally on
+    every other family, the operator deliberately removed the always-writes
+    preamble in quick task 260821-spg, and the report now states both the
+    slot actually written and how many slots the part has left (D-9), which
+    is better disclosure than a yes/no that cannot alter the outcome.
+
+    `interactive` is retained as a parameter, unused by the branch logic, so
+    the two call sites and the orchestrator gate keep their shape; it is what
+    a future scope decision would key on if one is ever needed again.
     """
+    del interactive  # no branch keys on it any more -- see the docstring
     if not _is_uv_eprom(app, chip):
-        return "full"
-    if not interactive:
-        return "partial"
-    chip_upper = chip.upper()
-    prompt = (
-        f"{chip_upper} is a UV-erasable EPROM -- its write cannot be undone "
-        "without a UV eraser. Yes permits the whole device to be written if "
-        "it reads blank, and otherwise writes one 256-byte slot; no writes "
-        "one 256-byte slot only -- neither answer is read-only or "
-        "non-destructive."
-    )
-    if confirm_fn(prompt):
         return "full"
     return "partial"
 

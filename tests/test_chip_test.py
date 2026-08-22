@@ -2154,29 +2154,30 @@ def test_write_region_via_run_plan_uses_the_plan_carried_window():
     assert write_result.write_target.region == (65280, 256)
 
 
-def test_write_region_via_run_plan_uv_part_full_scope_uses_full_window():
-    # RETARGETED by quick task 260821-wna (D-C): `derive_plan` still sets
-    # `Step.write_region` to the top-anchored slot candidate at "full"
-    # scope (unchanged, asserted below) -- but `Step.full_device_permitted`
-    # is now True at "full" scope, and `_mock_operator()`'s
-    # `check_eprom_blank.return_value = True` means this chip reports
-    # blank. D-C's execution-time resolver takes that combination straight
-    # to the full-device-if-blank branch: the ACTUAL bytes handed to
-    # `write_eprom` are now the address-derived pattern over the WHOLE
-    # DEVICE (0, 65536), not merely the top slot -- the behaviour this test
-    # originally pinned ("full" == "partial"'s window for a UV part) is
-    # deliberately GONE for a chip the blank-check reports blank. The
-    # pre-D-C assertion is preserved as a comment for the historical
-    # record: `assert captured["bytes"] == generate_pattern(65280, 256)`.
+def test_write_region_via_run_plan_uv_part_full_scope_uses_the_top_slot():
+    # RETARGETED AGAIN by quick task 260822-aq6 (D-4), and this reverses the
+    # 260821-wna retarget the previous version of this test recorded. D-C's
+    # full-device-if-blank branch is GONE: `dev test` validates the firmware
+    # for a chip TYPE, so writing half of a virgin UV part buys no coverage
+    # the top slot does not already give -- `uv_slot_starts` is TOP-DOWN, so
+    # slot 0xFF00 already exercises every address line -- while costing the
+    # part's whole remaining life as a regression rig.
+    #
+    # So a UV part now receives the top slot at BOTH scopes, blank or not,
+    # which is what this test's ORIGINAL pre-D-C form asserted. The two
+    # superseded expectations, kept for the record:
+    #   pre-D-C   : captured["bytes"] == generate_pattern(65280, 256)   <- back
+    #   D-C era   : captured["bytes"] == generate_pattern(0, 65536)     <- gone
     name = "M27C512"
     expected_id = _real_expected_chip_id(name)
     plan = derive_plan(name, _REAL_DB, write_scope="full")
     write_step = _step(plan, OP_WRITE)
     assert write_step.write_region == (65280, 256)
-    assert write_step.full_device_permitted is True
 
     operator = _mock_operator()
     operator.check_eprom_id.return_value = (True, expected_id)
+    # Blank -- the state that used to trigger the full-device branch. It no
+    # longer changes the region at all, which is the point of this test.
     operator.check_eprom_blank.return_value = True
     captured: dict = {}
     operator.write_eprom.side_effect = _capturing_write(captured)
@@ -2187,14 +2188,16 @@ def test_write_region_via_run_plan_uv_part_full_scope_uses_full_window():
     operator.write_eprom.assert_called()
     write_result = _result(results, OP_WRITE)
     assert write_result.verdict == VERDICT_OK
-    assert captured["bytes"] == generate_pattern(0, 65536)
     assert write_result.write_target is not None
-    assert write_result.write_target.region == (0, 65536)
+    assert write_result.write_target.region == (65280, 256)
     assert write_result.write_target.masked is True
-    assert write_result.write_target.current_source.startswith("blank-check")
-    # `Step.write_region` (derive_plan's own decision) is UNCHANGED --
-    # still the top-anchored slot candidate; only the EXECUTION-time
-    # resolved target widens to the full device under D-C.
+    assert write_result.write_target.current_source.startswith("probe read")
+    # The LAST cycle's bytes are the fully-staged image, which on a virgin
+    # slot is exactly the unstaged masked pattern the pre-D-C form expected.
+    assert captured["bytes"] == mask_write_pattern(
+        b"\xff" * 256, generate_pattern(65280, 256)
+    )
+    # `Step.write_region` (derive_plan's own decision) is unchanged.
     assert write_step.write_region == (65280, 256)
 
 
@@ -3087,11 +3090,19 @@ def test_full_device_write_flash4_carves_out_boot_blocks():
     assert write_calls and all(c[1]["address_str"] == "0x4000" for c in write_calls)
 
 
-def test_uv_virgin_full_scope_gets_full_device_masked_write():
-    # M27C512 (UV, 65536 B), write_scope="full", virgin chip: blank-check
-    # OK + full_device_permitted -> D-C's full-device-if-blank branch. The
-    # written file equals the plain address-derived pattern over the WHOLE
-    # device (mask_write_pattern(0xFF, D) == D), and the step is OK.
+def test_uv_virgin_full_scope_gets_the_top_slot_not_the_whole_device():
+    # REVERSAL of D-C, operator-agreed 2026-08-22 (D-4). This test used to
+    # assert the opposite -- that a virgin UV part at "full" scope received a
+    # full-device masked write -- and its superseded expectations are kept
+    # here for the record:
+    #     assert target.region == (0, 65536)
+    #     assert target.pattern == generate_pattern(0, 65536)
+    #     assert target.current_source.startswith("blank-check")
+    #
+    # A virgin part is now treated exactly like a used one: one top slot. The
+    # blank-check still RUNS and is still reported (a UV part that is not
+    # blank is an operator-actionable finding) -- it simply no longer decides
+    # how much of the part gets consumed.
     name = "M27C512"
     plan = derive_plan(name, _REAL_DB, write_scope="full")
     chip = FakeChip.virgin_uv(65536)
@@ -3101,10 +3112,31 @@ def test_uv_virgin_full_scope_gets_full_device_masked_write():
     assert write_result.verdict == VERDICT_OK, write_result
     target = write_result.write_target
     assert target is not None
-    assert target.region == (0, 65536)
-    assert target.pattern == generate_pattern(0, 65536)
+    assert target.region == (65280, 256)
     assert target.masked is True
-    assert target.current_source.startswith("blank-check")
+    assert target.current_source.startswith("probe read")
+    # On a virgin slot the masked image IS the plain address-derived pattern
+    # (mask_write_pattern(0xFF, D) == D), fully staged by the final cycle.
+    assert target.pattern == generate_pattern(65280, 256)
+
+
+def test_uv_full_and_partial_scope_now_resolve_to_the_same_slot():
+    """The consequence that retired the UV prompt: with D-C gone, both scope
+    literals produce an identical write on a UV part, so a yes/no ask could
+    not change the outcome -- which is the inert-prompt defect quick task
+    260821-wna existed to fix. Asserted here so a future re-introduction of a
+    scope-keyed UV branch has to break this test to land."""
+    name = "M27C512"
+    targets = []
+    for scope, op in (("full", "write"), ("partial", "write-partial")):
+        plan = derive_plan(name, _REAL_DB, write_scope=scope)
+        result = _result(run_plan(plan, FakeChip.virgin_uv(65536), _REAL_DB), op)
+        assert result.verdict == VERDICT_OK, result
+        assert result.write_target is not None
+        targets.append(result.write_target)
+
+    assert targets[0].region == targets[1].region
+    assert targets[0].pattern == targets[1].pattern
 
 
 def test_uv_virgin_partial_scope_writes_single_top_slot_not_whole_device():

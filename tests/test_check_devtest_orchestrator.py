@@ -573,10 +573,11 @@ def test_every_helper_referenced_by_dev_test_is_listed() -> None:
     proves every *referenced* helper is *listed*; test 9 proves every
     *listed* name is *real*. Together they are bidirectional; neither alone
     is. The assertion here is a SUBSET, never an equality, because
-    `_default_uv_write_confirm` and `_is_uv_eprom` are legitimately listed
-    but not referenced from `dev_test`'s body (they are called from other
-    handler-side helpers) -- an equality assertion would be red for the
-    opposite reason on day one.
+    `_is_uv_eprom` is legitimately listed but not referenced from
+    `dev_test`'s body (it is called from `_resolve_write_scope`) -- an
+    equality assertion would be red for the opposite reason on day one.
+    `_default_uv_write_confirm` used to be the other such entry; it went
+    when the UV write prompt was retired (quick task 260822-aq6).
     """
     check_devtest_orchestrator = importlib.import_module(
         "tools.check_devtest_orchestrator"

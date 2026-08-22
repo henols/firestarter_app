@@ -2577,6 +2577,13 @@ class WriteTarget:
     # from `diagnostic_report._step_dict` -- it is working state, not
     # provenance, and a full-device image has no business in a filed issue.
     current: bytes = b""
+    # D-9 rig life: how many UV slots on this part can still support a run,
+    # and how many it has in total. `None` on every non-UV target and on the
+    # staged tranche copies (which inherit the slot the probe already chose,
+    # so re-stating the count on each would invite it drifting). Derived from
+    # the chosen slot's INDEX in the top-down candidate list -- no extra read.
+    slots_remaining: int | None = None
+    slots_total: int | None = None
 
     def __post_init__(self) -> None:
         _start, length = self.region
@@ -3060,7 +3067,6 @@ def _resolve_write_target(
     """
     start, length = _write_region_for(step, eprom_data)
     region_policy = step.region_policy if step is not None else REGION_POLICY_FIXED
-    full_device_permitted = step.full_device_permitted if step is not None else False
 
     if region_policy != REGION_POLICY_UV_SLOT:
         pattern = generate_pattern(start, length)
@@ -3078,29 +3084,24 @@ def _resolve_write_target(
         return target, ""
 
     mem_size = int(eprom_data.get("memory-size", 0) or 0)
-    protocol = eprom_data.get("algorithm", eprom_data.get("protocol-id", 0))
 
-    if chip_is_blank and full_device_permitted:
-        full_result = full_device_region(mem_size, protocol)
-        if isinstance(full_result, str):
-            return None, full_result
-        full_start, full_length = full_result
-        desired = generate_pattern(full_start, full_length)
-        current = b"\xff" * full_length
-        masked = mask_write_pattern(current, desired)
-        try:
-            target = WriteTarget(
-                region=(full_start, full_length),
-                pattern=masked,
-                masked=True,
-                bits_cleared=bits_cleared_by(current, desired),
-                bits_retained=bits_retained_by(current, desired),
-                current_source="blank-check (D-C full-device-if-blank)",
-                current=current,
-            )
-        except ValueError as exc:
-            return None, str(exc)
-        return target, ""
+    # D-C's full-device-if-blank branch is GONE (D-4, operator-agreed
+    # 2026-08-22), and `chip_is_blank`/`full_device_permitted` no longer gate
+    # anything on this path. Recorded rather than silently dropped, because it
+    # reverses a decision made one day earlier:
+    #
+    # `dev test` validates the firmware, host and database for a chip TYPE. It
+    # is not a chip-qualification tool. Writing half of a virgin UV part buys
+    # no firmware coverage that a single top slot does not already give -- see
+    # `uv_slot_starts`, which is TOP-DOWN, so the very first slot chosen is the
+    # HIGHEST address on the device and every address line is exercised from
+    # run 1 -- while costing the part's entire remaining life as a regression
+    # rig. A 64 KiB part yields ~256 slot runs; the full-device branch spent
+    # all of them at once.
+    #
+    # `chip_is_blank` is still threaded in and still set by the blank-check
+    # step: it stays a reported FINDING (a UV part that is not blank is
+    # operator-actionable), it is simply no longer a scope decision.
 
     # D-2/D-8: the slot must support the whole CYCLE, not just one write.
     # Staging `cycles` tranches out of a slot needs each tranche to clear at
@@ -3114,6 +3115,7 @@ def _resolve_write_target(
     slot_length = length
     slots_per_block = max(_UV_PROBE_BLOCK_LENGTH // slot_length, 1)
     all_starts = uv_slot_starts(mem_size, slot_length)
+    slots_total = len(all_starts)
     for i in range(0, len(all_starts), slots_per_block):
         block_slot_starts = all_starts[i : i + slots_per_block]
         # `all_starts` is top-down: the FIRST entry in this batch is the
@@ -3124,7 +3126,7 @@ def _resolve_write_target(
         block_data = _read_region(operator, name, eprom_data, block_start, block_length)
         if len(block_data) != block_length:
             continue
-        for slot_start in block_slot_starts:
+        for slot_index, slot_start in enumerate(block_slot_starts, start=i):
             offset = slot_start - block_start
             current = block_data[offset : offset + slot_length]
             desired = generate_pattern(slot_start, slot_length)
@@ -3142,6 +3144,16 @@ def _resolve_write_target(
                     bits_retained=retained,
                     current_source="probe read",
                     current=current,
+                    # D-9, rig life, at ZERO extra I/O. `all_starts` is
+                    # top-down and this loop takes the FIRST acceptable slot,
+                    # so every slot above `slot_index` is already spent and
+                    # every slot below it is untouched. A run saturates
+                    # exactly one slot (measured: a slot's clearable count
+                    # goes 1024 -> 0 in one run, because the final staged
+                    # image IS `current & desired`), so "slots left" and
+                    # "runs left on this part" are the same number.
+                    slots_remaining=slots_total - slot_index,
+                    slots_total=slots_total,
                 )
             except ValueError:
                 # Defensive only: cleared/retained already satisfied both
