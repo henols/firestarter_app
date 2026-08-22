@@ -44,7 +44,7 @@ VECTOR_NAME_RE = re.compile(r"^VEC_[A-Z0-9][A-Z0-9_]*$")
 # Max payload / frame sizes for the C++ struct array dimensions.
 # Sized to the largest D-05 corpus member: 1024-byte payload, 1031-byte frame.
 MAX_PAYLOAD_LEN = 1024
-MAX_FRAME_LEN = 1031
+MAX_FRAME_LEN   = 1031
 
 # ===========================================================================
 # 2. CATALOG LOADING + VALIDATION
@@ -198,24 +198,25 @@ def emit_cpp_vectors(catalog: dict) -> str:
     lines: list[str] = []
     lines.append(_CPP_BANNER.format(version=version, count=count))
     lines.append(_CPP_HEADER_GUARD_OPEN)
-    lines.append(
-        _CPP_STRUCT.format(max_payload=MAX_PAYLOAD_LEN, max_frame=MAX_FRAME_LEN)
-    )
+    lines.append(_CPP_STRUCT.format(max_payload=MAX_PAYLOAD_LEN,
+                                    max_frame=MAX_FRAME_LEN))
     lines.append("/* --- Frame vectors (sorted by id ascending) --- */\n")
     lines.append("static const frame_vector_t FRAME_VECTORS[] PROGMEM = {\n")
 
     for vec in vectors:
         payload_bytes = _parse_hex_bytes(vec["payload_hex"], "payload_hex", vec["id"])
-        frame_bytes = _parse_hex_bytes(vec["frame_hex"], "frame_hex", vec["id"])
-        payload_arr = _bytes_to_cpp_array(payload_bytes)
-        frame_arr = _bytes_to_cpp_array(frame_bytes)
+        frame_bytes   = _parse_hex_bytes(vec["frame_hex"],   "frame_hex",   vec["id"])
+        payload_arr   = _bytes_to_cpp_array(payload_bytes)
+        frame_arr     = _bytes_to_cpp_array(frame_bytes)
         lines.append(
             f"    {{ 0x{vec['id']:02X}, {payload_arr}, {len(payload_bytes)}, "
             f"{frame_arr}, {len(frame_bytes)} }},  /* {vec['name']} */\n"
         )
 
     lines.append("};\n")
-    lines.append(f"\nstatic const uint16_t FRAME_VECTOR_COUNT PROGMEM = {count};\n")
+    lines.append(
+        f"\nstatic const uint16_t FRAME_VECTOR_COUNT PROGMEM = {count};\n"
+    )
     lines.append(_CPP_HEADER_GUARD_CLOSE)
 
     return "".join(lines)
@@ -290,7 +291,9 @@ def _bytes_to_py_field(field_name: str, data: bytes, indent: str = "        ") -
     # Wrapped form: ruff wraps long args to the next line with 4 extra spaces.
     inner_indent = indent + "    "
     return (
-        f'{indent}{field_name}=bytes.fromhex(\n{inner_indent}"{hex_str}"\n{indent}),\n'
+        f'{indent}{field_name}=bytes.fromhex(\n'
+        f'{inner_indent}"{hex_str}"\n'
+        f'{indent}),\n'
     )
 
 
@@ -307,13 +310,13 @@ def emit_python_vectors(catalog: dict) -> str:
 
     for vec in vectors:
         payload_bytes = _parse_hex_bytes(vec["payload_hex"], "payload_hex", vec["id"])
-        frame_bytes = _parse_hex_bytes(vec["frame_hex"], "frame_hex", vec["id"])
+        frame_bytes   = _parse_hex_bytes(vec["frame_hex"],   "frame_hex",   vec["id"])
         # Emit trailing-comma multi-line style — ruff-format-stable at any
         # line length.  Use double-quoted name to satisfy quote-style="double".
         entry = (
             f"    FrameVector(\n"
             f"        id=0x{vec['id']:02X},\n"
-            f'        name="{vec["name"]}",\n'
+            f"        name=\"{vec['name']}\",\n"
             + _bytes_to_py_field("payload", payload_bytes)
             + _bytes_to_py_field("frame", frame_bytes)
             + "    ),\n"
@@ -330,7 +333,7 @@ def emit_python_vectors(catalog: dict) -> str:
 # ===========================================================================
 
 LANGUAGE_EMITTERS = {
-    "cpp-vectors": emit_cpp_vectors,
+    "cpp-vectors":    emit_cpp_vectors,
     "python-vectors": emit_python_vectors,
 }
 
@@ -379,7 +382,8 @@ def main() -> int:
     try:
         catalog = _load_catalog(args.catalog)
     except tomllib.TOMLDecodeError as e:
-        print(f"ERROR: failed to parse TOML in {args.catalog}: {e}", file=sys.stderr)
+        print(f"ERROR: failed to parse TOML in {args.catalog}: {e}",
+              file=sys.stderr)
         return 1
 
     try:
@@ -390,16 +394,13 @@ def main() -> int:
 
     if args.check:
         n = len(catalog["vectors"])
-        print(
-            f"OK: catalog valid ({n} vectors, version {catalog['catalog']['version']})."
-        )
+        print(f"OK: catalog valid ({n} vectors, version "
+              f"{catalog['catalog']['version']}).")
         return 0
 
     if args.target is None or args.language is None:
-        print(
-            "ERROR: --target and --language are required unless --check.",
-            file=sys.stderr,
-        )
+        print("ERROR: --target and --language are required unless --check.",
+              file=sys.stderr)
         return 2
 
     emitter = LANGUAGE_EMITTERS[args.language]
@@ -408,9 +409,8 @@ def main() -> int:
     args.target.parent.mkdir(parents=True, exist_ok=True)
     # LF endings guaranteed on all platforms (LCAT-05):
     args.target.write_text(output, encoding="utf-8", newline="\n")
-    print(
-        f"OK: wrote {args.target} ({args.language}, {len(catalog['vectors'])} vectors)."
-    )
+    print(f"OK: wrote {args.target} ({args.language}, "
+          f"{len(catalog['vectors'])} vectors).")
     return 0
 
 
