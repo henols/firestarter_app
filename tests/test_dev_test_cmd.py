@@ -926,6 +926,35 @@ class TestReportDestination:
         # `run_count`) so the saved artifact states the repeat policy.
         assert "| Step | Verdict | Runs | Took | Reason |" in md_text
 
+    def test_md_artifact_na_row_suppresses_reason_json_retains_it(
+        self, runner: CliRunner
+    ) -> None:
+        """Quick task 260822-gxx (D-1/D-2): the saved `.md` artifact's table
+        half suppresses an NA-verdict row's reason to `-`, while the SAME
+        file's fenced JSON block still carries the full reason verbatim --
+        the render-layer suppression must never leak into the persisted
+        machine-readable half of the same artifact."""
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+        allowed, expected_reason = sdp_capability(_CHIP_NO_ID, _REAL_DB)
+        assert allowed is False, "fixture setup error: _CHIP_NO_ID must be REFUSE"
+
+        md_text = (_reports_dir() / f"dev-test-{_CHIP_NO_ID}.md").read_text()
+        table_half, json_half = md_text.split("```json", 1)
+
+        assert "| write-inhibited | NA | - | - | - |" in table_half
+        assert expected_reason not in table_half, (
+            "D-1: an NA row's reason prose must not reach the table half"
+        )
+        assert expected_reason in json_half, (
+            "D-2: the fenced JSON block must still carry the full reason verbatim"
+        )
+
     def test_fw_board_identity_auto_captured_end_to_end(
         self, runner: CliRunner
     ) -> None:
