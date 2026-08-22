@@ -452,6 +452,34 @@ REGION_POLICY_FIXED = "fixed"
 REGION_POLICY_FULL_DEVICE = "full-device"
 REGION_POLICY_UV_SLOT = "uv-slot"
 
+# Per-cycle PAYLOAD recipe (D-2), the second axis of the repeat cycle and a
+# sibling of the region-policy vocabulary above: `region_policy` says WHERE a
+# cycle writes, `cycle_payload` says whether successive cycles write the SAME
+# bytes there. Decided exactly once by `derive_plan` from the same
+# `is_uv`/`etype`/`protocol` facts it already has, and READ-ONLY at execution
+# time -- the same derive-once discipline `region_policy` follows.
+#
+# The rule the three values encode: each cycle must present the device with a
+# target state that DIFFERS from its current state, or its verify proves
+# nothing. There are exactly three ways to get that, and which one applies is
+# a property of the family:
+#
+#   `same`      -- something else already resets the state between cycles: an
+#                  erase step inside the cycle (258 rows), or a protocol whose
+#                  every page write auto-erases internally (0x0D/0x05, 111
+#                  rows). Identical bytes, real work every cycle.
+#   `alternate` -- freely rewritable in BOTH bit directions (SRAM/FRAM, 76
+#                  rows). Cycle n writes the pattern, cycle n+1 its
+#                  complement; free, and the complement also exercises the
+#                  data lines in the other direction.
+#   `uv-tranche`-- monotonic, cannot be erased at all (UV-EPROM, 301 rows).
+#                  Each cycle clears a disjoint tranche of the bits the write
+#                  would have cleared anyway -- see `uv_tranche_images`, which
+#                  is why this costs no extra bits.
+CYCLE_PAYLOAD_SAME = "same"
+CYCLE_PAYLOAD_ALTERNATE = "alternate"
+CYCLE_PAYLOAD_UV_TRANCHE = "uv-tranche"
+
 
 @dataclass
 class Step:
@@ -497,6 +525,10 @@ class Step:
     reason: str
     destructive: bool = False
     write_region: tuple[int, int] | None = None
+    # The per-cycle payload recipe (D-2). Set by `derive_plan` on the write
+    # and verify steps alongside `write_region`/`region_policy`; every other
+    # step keeps the `same` default, which is also the pre-cycle behaviour.
+    cycle_payload: str = CYCLE_PAYLOAD_SAME
     region_policy: str = REGION_POLICY_FIXED
     full_device_permitted: bool = False
 
@@ -675,6 +707,17 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     region_reason = ""
     full_device_permitted = write_scope == _WRITE_SCOPE_FULL
     mem_size = int(full.get("memory-size", 0) or 0)
+    # D-2: the per-cycle payload recipe, decided HERE and only here, from the
+    # same three facts this function already holds. Ordered UV first: a UV part
+    # is never SRAM, but keying on `is_uv` before the volatile test means a
+    # future electrical-type oddity cannot route a UV part to `alternate` and
+    # ask it for an impossible 0->1 transition.
+    if is_uv:
+        cycle_payload = CYCLE_PAYLOAD_UV_TRANCHE
+    elif etype in _SRAM_FRAM_ETYPES or protocol in _SRAM_PROTO_IDS:
+        cycle_payload = CYCLE_PAYLOAD_ALTERNATE
+    else:
+        cycle_payload = CYCLE_PAYLOAD_SAME
     if write_scope == _WRITE_SCOPE_NONE:
         write_region = None
         region_policy = REGION_POLICY_FIXED
@@ -821,6 +864,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
                 write_region=write_region,
                 region_policy=region_policy,
                 full_device_permitted=full_device_permitted,
+                cycle_payload=cycle_payload,
             )
         )
     else:
@@ -848,6 +892,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
                 write_region=write_region,
                 region_policy=region_policy,
                 full_device_permitted=full_device_permitted,
+                cycle_payload=cycle_payload,
             )
         )
     else:
@@ -1565,15 +1610,90 @@ def _plan_cycle_targets(
         eprom_data,
         operator,
         chip_is_blank=write_context.chip_is_blank,
+        cycles=cycles,
     )
     if target is None:
         return []
-    # Same target for every cycle at this stage. For the erasable families
-    # that is already correct and sufficient -- each cycle's erase blanks the
-    # part, so the next cycle's write does full real work on identical bytes.
-    # The families that cannot be erased need a per-cycle PAYLOAD instead;
-    # that is layered on top of this list, not bolted onto the dispatch.
+
+    if write_step.cycle_payload == CYCLE_PAYLOAD_ALTERNATE:
+        return _alternating_cycle_targets(target, cycles)
+    if write_step.cycle_payload == CYCLE_PAYLOAD_UV_TRANCHE and target.masked:
+        staged = _uv_cycle_targets(target, cycles)
+        if staged:
+            return staged
+        # Defensive only: `_resolve_write_target` was given the same `cycles`
+        # and applied the scaled clearable floor, so any slot it returned is
+        # tranche-feasible. Falling back to the single masked image keeps a
+        # future threshold change from becoming a crash -- at the cost of
+        # cycle 2 writing bytes the chip already holds, which is exactly the
+        # behaviour this task exists to remove.
+        return [target] * cycles
+    # CYCLE_PAYLOAD_SAME: identical bytes every cycle, correct here because
+    # something else resets the state between cycles -- the erase step inside
+    # the cycle, or a protocol whose every page write auto-erases internally.
     return [target] * cycles
+
+
+def _alternating_cycle_targets(target: WriteTarget, cycles: int) -> list[WriteTarget]:
+    """D-2's `alternate` recipe: pattern, complement, pattern, ...
+
+    For SRAM/FRAM, which are freely rewritable in BOTH bit directions, so a
+    differing payload costs nothing and the complement additionally exercises
+    every data line in the other direction. Bit-inverting an address-derived
+    pattern yields another roughly half-set image, so it can never trip
+    `WriteTarget`'s degenerate all-`0x00`/all-`0xFF` refusal.
+    """
+    complement = WriteTarget(
+        region=target.region,
+        pattern=bytes(0xFF ^ b for b in target.pattern),
+        masked=False,
+        bits_cleared=0,
+        bits_retained=0,
+        current_source="address-derived pattern, bit-inverted (cycle complement)",
+    )
+    return [target if cycle % 2 == 0 else complement for cycle in range(cycles)]
+
+
+def _uv_cycle_targets(target: WriteTarget, cycles: int) -> list[WriteTarget]:
+    """D-2's `uv-tranche` recipe: N cumulative images out of ONE slot.
+
+    Empty list when the slot cannot be staged -- see `_plan_cycle_targets`'s
+    defensive fallback for why that is unreachable through the normal path.
+
+    `bits_cleared` on each returned target is the PER-CYCLE tranche size, not
+    the slot total: it is the number that has to clear `_UV_MIN_CLEARED_BITS`
+    for *this cycle* to have done real work, and it is what
+    `WriteTarget.__post_init__`'s vacuous-pass floor then checks.
+    `bits_retained` is the popcount AFTER this cycle, decreasing as the stages
+    progress and bottoming out at the slot's own retained count.
+    """
+    if not target.current:
+        return []
+    start, length = target.region
+    desired = generate_pattern(start, length)
+    images = uv_tranche_images(target.current, desired, cycles)
+    if not images:
+        return []
+    tranche_bits = uv_tranche_bit_counts(
+        bits_cleared_by(target.current, desired), cycles
+    )
+    staged: list[WriteTarget] = []
+    for cycle, (image, cleared) in enumerate(zip(images, tranche_bits), start=1):
+        try:
+            staged.append(
+                WriteTarget(
+                    region=target.region,
+                    pattern=image,
+                    masked=True,
+                    bits_cleared=cleared,
+                    bits_retained=sum(byte.bit_count() for byte in image),
+                    current_source=f"{target.current_source} (tranche {cycle}/{cycles})",
+                    current=target.current,
+                )
+            )
+        except ValueError:
+            return []
+    return staged
 
 
 def _run_cycle_block(
@@ -2277,6 +2397,72 @@ def bits_cleared_by(current: bytes, desired: bytes) -> int:
     return sum((c & (~d & 0xFF)).bit_count() for c, d in zip(current, desired))
 
 
+def uv_tranche_images(current: bytes, desired: bytes, cycles: int) -> list[bytes]:
+    """Stage `current & desired` across `cycles` writes -- D-2's UV recipe.
+
+    Returns `cycles` CUMULATIVE images: image *n* is `current` with tranches
+    0..*n* cleared, so image `cycles-1` is exactly `current & desired`.
+    Empty list when the slot cannot support the staging (see the floor below);
+    the caller then falls back to the single-write path.
+
+    **This costs no extra bits.** That is the whole point and it is worth
+    stating plainly, because the design note assumed otherwise: the final
+    image equals what today's single masked write already produces, so the
+    total number of cells programmed is IDENTICAL. Cycling only splits the
+    same expenditure into stages. A UV part is a finite regression rig -- bits
+    spent are runs lost -- so a recipe that bought per-cycle rigour with extra
+    consumption would have been the wrong trade; this one buys it for free.
+
+    The bits are INTERLEAVED, not blocked: tranche *n* takes every
+    `cycles`-th clearable bit (`range(n, len, cycles)`) walking bytes in order
+    and bits LSB-first within each byte. So every tranche spans the whole
+    region and all eight bit positions rather than one corner of it, and each
+    cycle's programming exercises the same address and data lines the others
+    do.
+
+    Monotonic by construction: a tranche is a subset of the bits that are
+    currently `1` and are `0` in `desired`, so no cycle ever asks a UV cell for
+    the impossible `0 -> 1` transition, and no arithmetic at write time can
+    produce one.
+
+    The floor is `cycles * _UV_MIN_CLEARED_BITS`, not the single-write
+    `_UV_MIN_CLEARED_BITS`: staging N cycles out of a slot needs N tranches
+    each big enough to be non-vacuous on its own. A slot with 64..127
+    clearable bits passes today's single-write filter and CANNOT support a
+    two-cycle test -- it is refused here so the caller moves to the next slot
+    rather than running a cycle that clears too little to mean anything.
+    """
+    if cycles < 1 or len(current) != len(desired):
+        return []
+    clearable = [
+        (index, bit)
+        for index in range(len(current))
+        for bit in range(8)
+        if (current[index] >> bit) & 1 and not (desired[index] >> bit) & 1
+    ]
+    if len(clearable) < cycles * _UV_MIN_CLEARED_BITS:
+        return []
+    images: list[bytes] = []
+    staged = bytearray(current)
+    for cycle in range(cycles):
+        for position in range(cycle, len(clearable), cycles):
+            index, bit = clearable[position]
+            staged[index] &= 0xFF ^ (1 << bit)
+        images.append(bytes(staged))
+    return images
+
+
+def uv_tranche_bit_counts(clearable_total: int, cycles: int) -> list[int]:
+    """How many bits each cycle's tranche clears, for the same interleave
+    `uv_tranche_images` uses. Split out so `WriteTarget.bits_cleared` can be
+    the PER-CYCLE count -- the number that makes the vacuous-pass floor mean
+    "this cycle did real work" -- without re-walking the bit list.
+    """
+    if cycles < 1:
+        return []
+    return [len(range(cycle, clearable_total, cycles)) for cycle in range(cycles)]
+
+
 def bits_retained_by(current: bytes, desired: bytes) -> int:
     """Count bits set in BOTH `current` and `desired` (D-B).
 
@@ -2385,6 +2571,12 @@ class WriteTarget:
     bits_cleared: int
     bits_retained: int
     current_source: str
+    # The chip content the mask was taken against, kept ONLY so
+    # `_plan_cycle_targets` can stage UV tranches out of it without re-probing
+    # the device (D-2). Empty on every unmasked target. Deliberately absent
+    # from `diagnostic_report._step_dict` -- it is working state, not
+    # provenance, and a full-device image has no business in a filed issue.
+    current: bytes = b""
 
     def __post_init__(self) -> None:
         _start, length = self.region
@@ -2840,6 +3032,7 @@ def _resolve_write_target(
     operator: Any,
     *,
     chip_is_blank: bool | None,
+    cycles: int = 1,
 ) -> tuple[WriteTarget | None, str]:
     """The execution-time resolver -- the ONLY place a write mask is
     computed (D-A/D-B/D-C). Returns `(target, "")` on success, or `(None,
@@ -2903,11 +3096,21 @@ def _resolve_write_target(
                 bits_cleared=bits_cleared_by(current, desired),
                 bits_retained=bits_retained_by(current, desired),
                 current_source="blank-check (D-C full-device-if-blank)",
+                current=current,
             )
         except ValueError as exc:
             return None, str(exc)
         return target, ""
 
+    # D-2/D-8: the slot must support the whole CYCLE, not just one write.
+    # Staging `cycles` tranches out of a slot needs each tranche to clear at
+    # least `_UV_MIN_CLEARED_BITS` on its own, so the slot's own floor scales
+    # with the cycle count. A slot with 64..127 clearable bits passes the
+    # single-write filter and cannot support a two-cycle test; requiring the
+    # scaled floor HERE means every slot this function returns is
+    # tranche-feasible by construction, so `uv_tranche_images` can never come
+    # back empty for a slot that was already accepted.
+    cleared_floor = max(cycles, 1) * _UV_MIN_CLEARED_BITS
     slot_length = length
     slots_per_block = max(_UV_PROBE_BLOCK_LENGTH // slot_length, 1)
     all_starts = uv_slot_starts(mem_size, slot_length)
@@ -2927,7 +3130,7 @@ def _resolve_write_target(
             desired = generate_pattern(slot_start, slot_length)
             cleared = bits_cleared_by(current, desired)
             retained = bits_retained_by(current, desired)
-            if cleared < _UV_MIN_CLEARED_BITS or retained < _UV_MIN_RETAINED_BITS:
+            if cleared < cleared_floor or retained < _UV_MIN_RETAINED_BITS:
                 continue
             masked = mask_write_pattern(current, desired)
             try:
@@ -2938,6 +3141,7 @@ def _resolve_write_target(
                     bits_cleared=cleared,
                     bits_retained=retained,
                     current_source="probe read",
+                    current=current,
                 )
             except ValueError:
                 # Defensive only: cleared/retained already satisfied both
@@ -2948,7 +3152,7 @@ def _resolve_write_target(
             return target, ""
 
     return None, (
-        f"every UV slot exhausted without clearing >= {_UV_MIN_CLEARED_BITS} "
+        f"every UV slot exhausted without clearing >= {cleared_floor} "
         f"bits and retaining >= {_UV_MIN_RETAINED_BITS} bits under this "
         "pattern -- the chip is saturated; a UV erase is required before "
         "writing further"

@@ -2174,7 +2174,15 @@ class TestWriteCoverageProvenanceD_F:
         assert write_step["write_region_length"] == 256, write_step
         assert write_step["write_bits_cleared"] is not None, write_step
         assert write_step["write_bits_retained"] is not None, write_step
-        assert write_step["write_current_source"] == "probe read", write_step
+        # `probe read` names WHERE the mask's "current content" came from;
+        # the `(tranche n/N)` suffix names WHICH staged image of the repeat
+        # cycle this row reports (D-2). Asserted as prefix + annotation rather
+        # than an exact string so the provenance claim under test survives a
+        # change to the cycle count, and so the annotation cannot silently
+        # disappear either.
+        source = write_step["write_current_source"]
+        assert source.startswith("probe read"), write_step
+        assert "tranche" in source, write_step
 
         normalized = _normalize_console_text(result.output)
         assert "write coverage" in normalized, normalized
