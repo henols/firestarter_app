@@ -136,12 +136,44 @@ def make_clean_operator() -> Mock:
 
     check_eprom_id returns (True, None) -- no explicit chip-id disagreement
     (id is NA for chips with no chip-id in the DB, OK for chips whose id
-    exists and matches). read/blank-check/write/verify/erase all report
-    success so a full sweep comes back clean (exit 0).
+    exists and matches). write/verify/erase all report success so a full
+    sweep comes back clean (exit 0).
+
+    `read_eprom` (quick task 260821-wna, Task 3) is a `side_effect` rather
+    than a bare `return_value=True`: a plain `True` writes no file at all,
+    which would make every region/probe read see `b""` -- turning every UV
+    slot into a saturation refusal the moment run_plan's execution-time
+    resolver starts probing (Task 4). It writes an all-0xFF (blank-chip-
+    shaped) image at the requested ABSOLUTE offset, reproducing
+    `_write_to_file`'s `file_handle.seek(address)` (finding M-3) via the
+    same `_parse_addr_or_size` helper `fake_chip.FakeChip` uses -- a virgin
+    UV chip's slots are all comfortably above both D-B bit-count floors.
     """
+    from .fake_chip import _parse_addr_or_size
+
+    def _clean_read(
+        name,
+        eprom_data,
+        output_file=None,
+        operation_flags=0,
+        address_str=None,
+        size_str=None,
+    ):
+        if output_file is None:
+            return True
+        mem_size = int(eprom_data.get("memory-size", 0) or 0)
+        start = _parse_addr_or_size(address_str) or 0
+        length = _parse_addr_or_size(size_str)
+        if length is None:
+            length = max(mem_size - start, 0)
+        with open(output_file, "wb") as fh:
+            fh.seek(start)
+            fh.write(b"\xff" * length)
+        return True
+
     operator = Mock(spec=EpromOperator)
     operator.check_eprom_id.return_value = (True, None)
-    operator.read_eprom.return_value = True
+    operator.read_eprom.side_effect = _clean_read
     operator.check_eprom_blank.return_value = True
     operator.write_eprom.return_value = True
     operator.verify_eprom.return_value = True
@@ -189,20 +221,43 @@ def make_leaked_lock_operator(
     (the mixed BAD+marginal pin) without disturbing the state-tracking
     read-back the SDP leg's own verdicts depend on.
     """
-    state: dict[str, bytes] = {"data": b""}
+    # quick task 260821-wna, Task 3: `_write`/`_read` now accept (and honor)
+    # `address_str` -- required so a later keyword-only `address_str=...`
+    # call from `_dispatch_multi_run`/`_dispatch_sdp_leg` (Task 4) does not
+    # TypeError -- while deliberately PRESERVING the pre-existing "replace
+    # `state['data']` wholesale on every write" model rather than widening
+    # it into a persistent whole-device buffer: every ALLOW chip's write and
+    # SDP-leg regions in this suite start at address 0 (D-17: ALLOW chips
+    # are all non-UV, so `_address_arg(0)` is `None` on every reachable
+    # call), so `state['data']`'s SIZE tracking the most recent write's
+    # length -- not a fixed device size -- is exactly what keeps
+    # `_dispatch_sdp_leg`'s length gate meaningful without this fixture
+    # pre-emptively solving the region-scoped-readback problem Task 4 owns.
+    # `state['start']` records the last write's own address so `_read`'s
+    # `file_handle.seek(address)` (finding M-3) is still genuinely
+    # reproduced if a future case DOES pass a non-zero start.
+    from .fake_chip import _parse_addr_or_size
+
+    state = {"data": b"", "start": 0}
     calls = {"write": 0}
 
-    def _write(name, eprom_data, source_path, flags=0):
+    def _write(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
         idx = calls["write"]
         calls["write"] += 1
         state["data"] = Path(source_path).read_bytes()
+        state["start"] = _parse_addr_or_size(address_str) or 0
         if write_outcomes is not None and idx < len(write_outcomes):
             return write_outcomes[idx]
         return True
 
-    def _read(name, eprom_data, output_file=None, **kwargs):
-        if output_file is not None:
-            Path(output_file).write_bytes(state["data"])
+    def _read(
+        name, eprom_data, output_file=None, address_str=None, size_str=None, **_kw
+    ):
+        if output_file is None:
+            return True
+        with open(output_file, "wb") as fh:
+            fh.seek(state["start"])
+            fh.write(state["data"])
         return True
 
     operator = Mock(spec=EpromOperator)
@@ -241,9 +296,15 @@ def make_held_lock_operator(
     `.planning/REQUIREMENTS.md`); this is the closest honest proxy for the
     opposite outcome from `make_leaked_lock_operator`.
     """
-    state: dict[str, bytes] = {"data": b""}
+    # quick task 260821-wna, Task 3: address_str-aware, same rationale and
+    # same "replace wholesale, track the last write's own start" model as
+    # `make_leaked_lock_operator` above (see its comment for why this
+    # deliberately does NOT widen into a persistent whole-device buffer).
+    from .fake_chip import _parse_addr_or_size
 
-    def _write(name, eprom_data, source_path, flags=0):
+    state = {"data": b"", "start": 0}
+
+    def _write(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
         payload = Path(source_path).read_bytes()
         if flags & FLAG_SKIP_SDP_UNLOCK:
             # The inhibited-write call (D-01's one narrowing): the part
@@ -251,11 +312,17 @@ def make_held_lock_operator(
             # the state machine still completes and the ack is observed.
             return True
         state["data"] = payload
+        state["start"] = _parse_addr_or_size(address_str) or 0
         return True
 
-    def _read(name, eprom_data, output_file=None, **kwargs):
-        if output_file is not None:
-            Path(output_file).write_bytes(state["data"])
+    def _read(
+        name, eprom_data, output_file=None, address_str=None, size_str=None, **_kw
+    ):
+        if output_file is None:
+            return True
+        with open(output_file, "wb") as fh:
+            fh.seek(state["start"])
+            fh.write(state["data"])
         return True
 
     operator = Mock(spec=EpromOperator)
@@ -326,21 +393,32 @@ def make_restore_failed_operator() -> Mock:
     and its recovery line is NEUTRAL, not LOUD; this is the case a
     whole-run "lock leaked" fixture cannot itself produce).
     """
-    state: dict[str, bytes] = {"data": b""}
+    # quick task 260821-wna, Task 3: address_str-aware, same "replace
+    # wholesale, track the last write's own start" model as
+    # `make_leaked_lock_operator` above.
+    from .fake_chip import _parse_addr_or_size
+
+    state = {"data": b"", "start": 0}
     calls = {"write": 0}
 
-    def _write(name, eprom_data, source_path, flags=0):
+    def _write(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
         idx = calls["write"]
         calls["write"] += 1
         if idx < _ALWAYS_WRITES_PASS_COUNT - 1:
             state["data"] = Path(source_path).read_bytes()
+            state["start"] = _parse_addr_or_size(address_str) or 0
         # else: the LAST (write-restored) call does not persist -- the
         # part's read-back stays at whatever the second-to-last call left.
         return True
 
-    def _read(name, eprom_data, output_file=None, **kwargs):
-        if output_file is not None:
-            Path(output_file).write_bytes(state["data"])
+    def _read(
+        name, eprom_data, output_file=None, address_str=None, size_str=None, **_kw
+    ):
+        if output_file is None:
+            return True
+        with open(output_file, "wb") as fh:
+            fh.seek(state["start"])
+            fh.write(state["data"])
         return True
 
     operator = Mock(spec=EpromOperator)
