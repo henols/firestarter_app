@@ -2640,18 +2640,26 @@ def dev_test(app: "AppContext", chip: str) -> None:
     # module-level import here would tighten an already-layered graph for
     # one formatter.
     from firestarter.submit import _duration_text as submit_duration_text
+    from firestarter.submit import _runs_text as submit_runs_text
 
     md_lines = [
         f"# dev test -- {chip}",
         "",
-        "| Step | Verdict | Took | Reason |",
-        "| ---- | ------- | ---- | ------ |",
+        "| Step | Verdict | Runs | Took | Reason |",
+        "| ---- | ------- | ---- | ---- | ------ |",
     ]
     for r in results:
         # `Took` mirrors submit.build_body's own column (schema 1.5) so the
         # saved artifact and the filed issue body carry the same timings.
+        # `Runs` does the same for `run_count` (schema 1.7, quick task
+        # 260822-aq6) -- both formatters are imported from `submit` rather
+        # than re-implemented, so the two tables can never disagree on how
+        # an absent value renders.
         took = submit_duration_text(r.duration_s)
-        md_lines.append(f"| {r.op} | {r.verdict} | {took} | {r.reason or '-'} |")
+        runs = submit_runs_text(r.run_count)
+        md_lines.append(
+            f"| {r.op} | {r.verdict} | {runs} | {took} | {r.reason or '-'} |"
+        )
     md_lines.append("")
     md_lines.append(report.to_json_block())
     md_file = out_path / f"dev-test-{safe_chip}.md"

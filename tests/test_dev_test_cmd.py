@@ -914,8 +914,10 @@ class TestReportDestination:
         assert result.exit_code == 0, result.output
         md_text = (_reports_dir() / f"dev-test-{_CHIP_NO_ID}.md").read_text()
         assert "```json" in md_text
-        # `Took` column added 2026-08-21 (schema 1.5 per-step durations).
-        assert "| Step | Verdict | Took | Reason |" in md_text
+        # `Took` column added 2026-08-21 (schema 1.5 per-step durations);
+        # `Runs` column added by quick task 260822-aq6 (schema 1.7 per-step
+        # `run_count`) so the saved artifact states the repeat policy.
+        assert "| Step | Verdict | Runs | Took | Reason |" in md_text
 
     def test_fw_board_identity_auto_captured_end_to_end(
         self, runner: CliRunner

@@ -59,7 +59,7 @@ from firestarter.chip_test import (
 # Module constants (D-02, D-03) -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.6"  # D-02: single-sourced, baked into to_dict() output
+SCHEMA_VERSION = "1.7"  # D-02: single-sourced, baked into to_dict() output
 # 1.1 (Phase 114, GRAD-01): additive db_diff.ladder_state key -- backward
 # compatible, existing consumers reading current_support_status/
 # proposed_disposition are unaffected.
@@ -502,6 +502,31 @@ def _duration_cell(seconds: object) -> str:
     return f"{value:.2f}s" if value < 10 else f"{value:.1f}s"
 
 
+def _runs_cell(run_count: object) -> str:
+    """Format a step's `run_count` as `xN` -- `""` when it did not run.
+
+    Mirrors `_duration_cell`'s contract exactly (returns `""` rather than a
+    placeholder, so a caller can join cells without a separator dance).
+    `0` means the step never reached its operator method (NA/SKIPPED) and
+    renders empty -- `x0` would read as a measurement.
+
+    ASCII `x`, not a multiplication sign: this string reaches a `rich`
+    table in whatever terminal encoding the operator has, and every other
+    formatter in this module stays ASCII for the same reason.
+    """
+    if run_count is None:
+        return ""
+    try:
+        # `call-overload`, not `arg-type` (which is what `_duration_cell`'s
+        # `float()` needs): `int()` is overloaded and rejects a bare `object`
+        # at the overload-resolution step, so the narrower code is the one
+        # mypy actually reports here.
+        value = int(run_count)  # type: ignore[call-overload]
+    except (ValueError, TypeError):
+        return ""
+    return f"x{value}" if value > 0 else ""
+
+
 def _write_coverage_line(result: StepResult, step: Step | None) -> str | None:
     """Render/JSON D-F line: names write coverage whenever the write did
     NOT plainly cover the full device -- `None` when nothing should be
@@ -719,6 +744,17 @@ class DiagnosticReport:
         return {
             "op": result.op,
             "verdict": result.verdict,
+            # Schema 1.7 (quick task 260822-aq6): how many times the
+            # underlying operator method actually ran for this step. It has
+            # been 2 for every read/write/verify/erase since Phase 121's
+            # N>=2 repeat policy (D-05/D-06) and 1 for the ops that are
+            # single-run by design -- but the number reached NO consumer
+            # outside the test suite, so an operator watching `read, read,
+            # write, write` go past had no way to learn from the report that
+            # the doubling was deliberate. It is now stated on every
+            # disclosure surface, and a `--fast` run's `1` is what makes the
+            # weaker policy legible instead of silent.
+            "run_count": result.run_count,
             "reason": result.reason,
             "error_code": result.error_code,
             "fingerprint": (
@@ -819,6 +855,12 @@ class DiagnosticReport:
         `to_dict()` is unchanged throughout -- every one of those values is
         still in the JSON/markdown artifact and the filed issue body; only
         this console rendering got shorter.
+
+        Quick task 260822-aq6 added ONE cell back to each step row: the
+        step's own `run_count` as `xN` (`_runs_cell`), between the verdict
+        and the duration. It is the smallest thing that makes Phase 121's
+        N>=2 repeat policy legible at the point an operator actually
+        notices it -- watching the same op go past twice.
         """
         from rich.table import Table
 
@@ -866,10 +908,15 @@ class DiagnosticReport:
                 continue
             took = _duration_cell(step_row.get("duration_s"))
             verdict = str(step_row["verdict"])
-            table.add_row(
-                f"step: {step_row['op']}",
-                f"{verdict}  {took}".rstrip() if took else verdict,
-            )
+            # `xN` (quick task 260822-aq6): the step's own run count, on
+            # every step that ran, with no conditional. Showing `x1` on the
+            # single-run ops is the point rather than noise -- `read x2`
+            # sitting beside `blank-check x1` is what tells an operator that
+            # the doubled read they just watched go past was deliberate.
+            # Read off `d["steps"]`, never recomputed here.
+            runs = _runs_cell(step_row.get("run_count"))
+            cells = [c for c in (verdict, runs, took) if c]
+            table.add_row(f"step: {step_row['op']}", "  ".join(cells))
 
         banner = d["banner"]
         table.add_row("banner", f"{banner['n_ran']} of {banner['m_applicable']} ran")
