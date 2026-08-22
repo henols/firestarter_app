@@ -440,6 +440,18 @@ _SDP_LEG_STEP_ORDER: tuple[str, ...] = (
 # reason it does not own.
 _SDP_LOCKED_REASON = 'write_scope="none": {op} omitted (D-18)'
 
+# Region-policy vocabulary (quick task 260821-wna, D-A..D-F). Plain
+# module-level strings mirroring how this module already carries its op
+# vocabulary (OP_* above) -- `Step.region_policy` is set exactly once by
+# `derive_plan` and read-only downstream (`_resolve_write_target`,
+# execution time). `fixed` is today's pre-existing small-region behaviour
+# (both non-UV-at-partial and the SDP leg); `full-device` is a non-UV write
+# whose width comes from `memory-size` after `full_device_region`'s sanity
+# check; `uv-slot` is a UV part's execution-time-masked slot write.
+REGION_POLICY_FIXED = "fixed"
+REGION_POLICY_FULL_DEVICE = "full-device"
+REGION_POLICY_UV_SLOT = "uv-slot"
+
 
 @dataclass
 class Step:
@@ -454,13 +466,30 @@ class Step:
     `write_region` (D-02, this plan) is the CONSEQUENCE of `Plan.is_uv`: set
     once by `derive_plan` as `(start, length)` on both the write step and the
     verify step (a verify's region is definitionally the preceding write's --
-    D-07). `None` means "use the engine default region". The WIDTH always
+    D-07). `None` means "use the engine default region". The WIDTH
     originates from a module constant (`_WRITE_REGION_LENGTH` or
-    `_UV_WRITE_REGION_LENGTH`) and NEVER from a DB field (SC4 -- a malicious
-    or misconfigured DB entry must not be able to widen the write window);
-    `memory-size` only bounds WHERE the window is placed. `derive_plan` sets
-    this field and only this field; every downstream reader (`run_plan`, the
-    execution layer) may only READ it, never re-derive it.
+    `_UV_WRITE_REGION_LENGTH`) for the `fixed`/`uv-slot` policies (SC4 -- a
+    malicious or misconfigured DB entry must not be able to widen the UV
+    write window); `memory-size` only bounds WHERE the window is placed on
+    those two policies. Quick task 260821-wna (D-D/D-E) deliberately
+    REVERSES that rule for the `full-device` policy ONLY: there the WIDTH
+    itself comes from `memory-size`, after `full_device_region`'s sanity
+    check (see that function's own docstring for the bound). `derive_plan`
+    sets this field and only this field; every downstream reader (`run_plan`,
+    the execution layer) may only READ it, never re-derive it.
+
+    `region_policy` (quick task 260821-wna, D-A..D-F) is set once by
+    `derive_plan` alongside `write_region`, one of `REGION_POLICY_FIXED`,
+    `REGION_POLICY_FULL_DEVICE`, `REGION_POLICY_UV_SLOT`. Downstream code may
+    only READ it. The MASK it enables (D-A) is execution-time only and is
+    never computed by `derive_plan` -- see `_resolve_write_target`.
+
+    `full_device_permitted` (quick task 260821-wna, D-C) is set once by
+    `derive_plan`: whether this step's `write_scope` permits the
+    full-device-if-blank outcome for a UV part (`True` only for
+    `write_scope="full"`). Read-only downstream; it lets
+    `_resolve_write_target` make the D-C decision without a new parameter,
+    since the scope literal is otherwise not carried past `derive_plan`.
     """
 
     op: str
@@ -468,6 +497,8 @@ class Step:
     reason: str
     destructive: bool = False
     write_region: tuple[int, int] | None = None
+    region_policy: str = REGION_POLICY_FIXED
+    full_device_permitted: bool = False
 
 
 @dataclass
@@ -553,11 +584,19 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
       the advisory `Plan.locked_destructive` field (D-01) -- `run_plan` has
       no code path to iterate them.
     - `"full"` -- write, verify and erase are real supported steps in that
-      order; `locked_destructive` is empty.
-    - `"partial"` -- same step list as `"full"`, but the write/verify steps'
-      `Step.write_region` is the top-anchored UV window instead of the
-      engine default. Plan `121-06` will swap this scope's emitted write op
-      to `OP_WRITE_PARTIAL`; here it is still `OP_WRITE`.
+      order; `locked_destructive` is empty. Quick task 260821-wna: on a
+      non-UV chip this now carries `Step.region_policy ==
+      REGION_POLICY_FULL_DEVICE` and a `write_region` spanning the whole
+      device (minus flash4's boot blocks) whenever `full_device_region`
+      accepts `memory-size`; a UV chip gets `REGION_POLICY_UV_SLOT` and the
+      top slot candidate, and the consent ceiling this scope grants (D-C) is
+      carried on `Step.full_device_permitted`.
+    - `"partial"` -- same step list as `"full"`, but `Step.write_region` is
+      always the top-anchored small window (`REGION_POLICY_UV_SLOT` for a UV
+      part, `REGION_POLICY_FIXED` otherwise) -- `full_device_permitted` is
+      `False`, so the D-C full-device-if-blank outcome is unreachable on
+      this scope regardless of chip state. Plan `121-06` swapped this
+      scope's emitted write op to `OP_WRITE_PARTIAL`.
 
     An unrecognised `write_scope` raises `ValueError` naming the offending
     value and the three accepted literals -- this function never silently
@@ -565,12 +604,26 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
 
     `Plan.is_uv` is decided HERE and ONLY HERE, from `is_uv_eprom(full)` --
     the only axis that is both complete and exact (301/301). `Step.
-    write_region` is likewise set HERE and ONLY HERE, on both the write step
-    and the verify step (a verify's region is definitionally the preceding
-    write's -- D-07); downstream code may only READ these two fields, never
-    re-derive them. The write-region WIDTH always comes from a module
-    constant (`_UV_WRITE_REGION_LENGTH` / `_WRITE_REGION_LENGTH`), NEVER from
-    any DB field (SC4) -- `memory-size` only bounds WHERE the window sits.
+    write_region` and `Step.region_policy` are likewise set HERE and ONLY
+    HERE, on both the write step and the verify step (a verify's region is
+    definitionally the preceding write's -- D-07); downstream code may only
+    READ these fields, never re-derive them.
+
+    ⚠ D-E reversal, disclosed here rather than only at the point of use: the
+    write-region WIDTH comes from a module constant
+    (`_UV_WRITE_REGION_LENGTH` / `_WRITE_REGION_LENGTH`), NEVER from any DB
+    field (SC4), for the `fixed` and `uv-slot` policies -- `memory-size`
+    only bounds WHERE the window sits on those two paths. Quick task
+    260821-wna's `full-device` policy is the ONE deliberate exception: there
+    the width IS `memory-size`-derived, via `full_device_region`, and only
+    after that function's own sanity check (positive, a multiple of the slot
+    width, at or below `_MAX_FULL_DEVICE_LENGTH`) passes. A failing sanity
+    check falls back to `REGION_POLICY_FIXED` with the pre-existing small
+    region, never to a widened window.
+
+    The SDP leg's six steps (below) get their OWN `leg_region`, computed by
+    the pre-existing formula regardless of the policy decided above -- they
+    are never widened to the full device (D-D).
 
     Unknown chips (no DB entry) return an empty `Plan` with `reason` set --
     there is nothing to derive.
@@ -594,20 +647,82 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     write_execute = write_scope in (_WRITE_SCOPE_FULL, _WRITE_SCOPE_PARTIAL)
 
     # Region computation lives HERE, in derive_plan, computed from Plan.is_uv
-    # and full["memory-size"] -- never from any DB WIDTH field (SC4). The
-    # WIDTH always comes from _UV_WRITE_REGION_LENGTH / _WRITE_REGION_LENGTH.
+    # and full["memory-size"]. Quick task 260821-wna widens this from a bare
+    # region tuple to a (region, policy, reason) decision -- the POLICY
+    # travels on `Step.region_policy` so execution time knows what kind of
+    # region it is, never just where it sits.
     #
-    # "full" reproduces today's execution-time _write_region_for exactly:
-    # is_uv picks the top-anchored window (with its defensive fallback),
-    # non-UV gets the engine default region. "partial" always applies the
-    # top-anchored-window-or-fallback formula regardless of is_uv -- its
-    # whole purpose is the small-region write, so it is not is_uv-gated here.
-    if write_scope == _WRITE_SCOPE_FULL:
-        write_region = _top_anchored_or_default(full) if is_uv else _DEFAULT_REGION
-    elif write_scope == _WRITE_SCOPE_PARTIAL:
-        write_region = _top_anchored_or_default(full)
-    else:
+    # write_scope="none" -> region None, policy fixed (unchanged).
+    #
+    # UV part (either scope) -> uv-slot policy, region = the FIRST slot
+    # candidate from `uv_slot_starts` -- for every shipped UV size this is
+    # exactly today's top-anchored window, so the derived tuple is unchanged
+    # (e.g. M27C512 -> (65280, 256)). Falls back to `_top_anchored_or_default`
+    # with policy fixed when the device cannot hold even one slot. The scope
+    # literal still matters and reaches the executor via
+    # `full_device_permitted` below (D-C): `partial` forbids the full-device
+    # outcome, `full` permits it.
+    #
+    # Non-UV at "full" -> ask `full_device_region(mem_size, protocol)`
+    # (D-D/D-E). A tuple gives policy full-device with that region. A
+    # refusal gives policy fixed with `_DEFAULT_REGION`, and the refusal
+    # reason is recorded on the write/verify steps' `reason` field below so
+    # it reaches the report (D-D's "stated, visible reason rather than a
+    # FAIL").
+    #
+    # Non-UV at "partial" -> unchanged: `_top_anchored_or_default(full)`,
+    # policy fixed.
+    region_reason = ""
+    full_device_permitted = write_scope == _WRITE_SCOPE_FULL
+    mem_size = int(full.get("memory-size", 0) or 0)
+    if write_scope == _WRITE_SCOPE_NONE:
         write_region = None
+        region_policy = REGION_POLICY_FIXED
+    elif is_uv:
+        slot_starts = uv_slot_starts(mem_size, _UV_WRITE_REGION_LENGTH)
+        if slot_starts:
+            write_region = (slot_starts[0], _UV_WRITE_REGION_LENGTH)
+            region_policy = REGION_POLICY_UV_SLOT
+        else:
+            write_region = _top_anchored_or_default(full)
+            region_policy = REGION_POLICY_FIXED
+    elif write_scope == _WRITE_SCOPE_FULL:
+        full_result = full_device_region(mem_size, protocol)
+        if isinstance(full_result, str):
+            write_region = _DEFAULT_REGION
+            region_policy = REGION_POLICY_FIXED
+            region_reason = full_result
+        else:
+            write_region = full_result
+            region_policy = REGION_POLICY_FULL_DEVICE
+            if protocol == _PROTOCOL_FLASH4:
+                # D-D: the excluded region is named in the report even on
+                # a SUCCESSFUL carve-out, not only on refusal -- a stated,
+                # visible reason rather than a silent narrowing.
+                region_reason = (
+                    f"full-device write excludes the first and last "
+                    f"{_FLASH4_BOOT_BLOCK_LENGTH} bytes (flash4/protocol "
+                    "0x05 boot blocks, W29C040 datasheet section 6.6 -- "
+                    "permanently locked, no unlock command exists)"
+                )
+    else:
+        write_region = _top_anchored_or_default(full)
+        region_policy = REGION_POLICY_FIXED
+
+    # The SDP leg's own region (D-D): computed by EXACTLY today's formula
+    # (`_DEFAULT_REGION` at full, `_top_anchored_or_default(full)` at
+    # partial/none) regardless of the policy decision above. D-D keeps the
+    # leg small deliberately: it proves the lock mechanism, not coverage,
+    # and AT28C256's plan alone carries six region-sized write-shaped SDP
+    # ops that would otherwise become six full-device transfers per run.
+    # The leg's live path is always the full scope (SDP-ALLOW chips are all
+    # non-UV, D-17), so `leg_region` is `(0, 256)` on every reachable run
+    # and the leg's wire behaviour is unchanged by this task.
+    leg_region = (
+        _DEFAULT_REGION
+        if write_scope == _WRITE_SCOPE_FULL
+        else _top_anchored_or_default(full)
+    )
 
     steps: list[Step] = []
     locked_destructive: list[tuple[str, str]] = []
@@ -701,9 +816,11 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
             Step(
                 op=write_op,
                 supported=True,
-                reason="",
+                reason=region_reason,
                 destructive=True,
                 write_region=write_region,
+                region_policy=region_policy,
+                full_device_permitted=full_device_permitted,
             )
         )
     else:
@@ -724,7 +841,14 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     # is definitionally the preceding write's (D-07).
     if write_execute:
         steps.append(
-            Step(op=OP_VERIFY, supported=True, reason="", write_region=write_region)
+            Step(
+                op=OP_VERIFY,
+                supported=True,
+                reason="",
+                write_region=write_region,
+                region_policy=region_policy,
+                full_device_permitted=full_device_permitted,
+            )
         )
     else:
         locked_destructive.append(
@@ -797,9 +921,12 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     if write_execute:
         if sdp_allowed:
             # ALLOW chip, a real `dev test` run: six real, executable steps,
-            # sharing the SAME write_region the shipped write arm above
-            # already computed (never re-derived -- ALLOW chips are all
-            # non-UV, per D-17, so this is always `_DEFAULT_REGION`).
+            # using `leg_region` -- computed by the SAME formula the shipped
+            # write arm used before this task (never the new full-device/
+            # uv-slot policy; D-D keeps the leg small deliberately). ALLOW
+            # chips are all non-UV (D-17), so `leg_region` is always
+            # `_DEFAULT_REGION` on every reachable run. Policy is always
+            # `fixed` here -- the leg is never widened to the full device.
             for sdp_op in _SDP_LEG_STEP_ORDER:
                 steps.append(
                     Step(
@@ -807,7 +934,8 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
                         supported=True,
                         reason="",
                         destructive=True,
-                        write_region=write_region,
+                        write_region=leg_region,
+                        region_policy=REGION_POLICY_FIXED,
                     )
                 )
         else:
@@ -1089,10 +1217,46 @@ class StepResult:
     # Deliberately NOT part of `dedup_fingerprint`, which excludes every
     # volatile field so two runs of the same chip still dedup.
     duration_s: float | None = None
+    # The write step's resolved `WriteTarget` (quick task 260821-wna, Task 4)
+    # -- additive, `None` on every step that isn't a write, and `None` on a
+    # write step that was SKIPPED as saturated/refused (in which case
+    # `reason` names why). The verify step INHERITS this value from
+    # `WriteContext` rather than re-resolving it (D-07 moved to execution
+    # time) -- it never appears on a verify step's OWN `StepResult` (verify
+    # reads the context, it does not set this field on itself).
+    write_target: WriteTarget | None = None
 
 
 def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> StepResult:
     return StepResult(op=op, verdict=verdict, reason=reason, run_count=0)
+
+
+@dataclass
+class WriteContext:
+    """Execution-time state threaded through `run_plan`'s step loop (quick
+    task 260821-wna) -- the D-07 seam MOVED to execution time: `derive_plan`
+    still decides the REGION and the POLICY (`Step.write_region` /
+    `Step.region_policy`); this object carries the MASK decision, which is
+    necessarily execution-time-only (it reads the chip), from the write
+    step to the verify step so the verify step never re-derives it.
+
+    `chip_is_blank` is set exactly once, right after the blank-check step
+    runs, from that step's own verdict (`True`/`False`); it stays `None`
+    before the blank-check step runs, or when the blank-check step is
+    NA/SKIPPED for this chip -- `None` is the safe default: `_resolve_
+    write_target` only takes the D-C full-device-if-blank branch when this
+    is explicitly `True`.
+
+    `target` is the write step's resolved `WriteTarget`, copied here once
+    the write step completes; `None` when the write step was refused
+    (saturated slot, probe exhaustion, or a `full_device_region` sanity
+    refusal) -- `refusal` then carries that reason so the verify step's own
+    SKIPPED result can name it instead of inventing a new one.
+    """
+
+    chip_is_blank: bool | None = None
+    target: WriteTarget | None = None
+    refusal: str = ""
 
 
 def _resolve_or_none(
@@ -1250,6 +1414,15 @@ def run_plan(
     # still retries it.
     unlock_cleanup: Callable[[], None] | None = None
 
+    # WriteContext (quick task 260821-wna, Task 4): ONE instance for the
+    # whole run, created here and passed by reference to every `_run_step`
+    # call below. `derive_plan` still decides the REGION and POLICY; this
+    # object carries the MASK decision (necessarily execution-time) from
+    # the blank-check step -> the write step -> the verify step, so the
+    # verify step never re-derives either. This is the D-07 seam MOVED to
+    # execution time.
+    write_context = WriteContext()
+
     # `runs < 2` stays OUTSIDE this `try` (above): nothing is registered
     # yet, so there is nothing to drain. `results`, `destructive_gate_closed`
     # and `cleanup` are all created BEFORE the `try`. `return results` stays
@@ -1282,9 +1455,33 @@ def run_plan(
                 continue
 
             result = _run_step(
-                plan.name, step, operator, db, runs=runs, sampler=sampler
+                plan.name,
+                step,
+                operator,
+                db,
+                runs=runs,
+                sampler=sampler,
+                write_context=write_context,
             )
             results.append(result)
+
+            if step.op == OP_BLANK_CHECK and result.verdict in (
+                VERDICT_OK,
+                VERDICT_BAD,
+            ):
+                # D-C: the ONE place `chip_is_blank` is set, from the
+                # blank-check step's OWN verdict. Left `None` (the safe
+                # default) when blank-check is NA/SKIPPED for this chip.
+                write_context.chip_is_blank = result.verdict == VERDICT_OK
+
+            if step.op in (OP_WRITE, OP_WRITE_PARTIAL):
+                # The verify step inherits the write's ACTUAL resolved
+                # target (or refusal) -- never re-derived (D-07 moved to
+                # execution time).
+                write_context.target = result.write_target
+                write_context.refusal = (
+                    result.reason if result.write_target is None else ""
+                )
 
             if step.op == OP_SDP_LOCK and result.verdict == VERDICT_OK:
                 # Register the unlock ONLY on a successful lock (D-06):
@@ -1554,6 +1751,14 @@ _WRITE_REGION_LENGTH = 256
 # CONSTANT, never sourced from any DB field -- a malicious/misconfigured DB
 # entry must not be able to widen the write window. `memory-size` is only a
 # top-anchor PLACEMENT bound (where the window sits), never a WIDTH input.
+#
+# AMENDED (quick task 260821-wna, D-B/D-E): this is now specifically the UV
+# SLOT width -- the granularity `uv_slot_starts`/`WriteTarget` operate at --
+# and it is the BOUND D-E requires on the reversal below: `full_device_region`
+# derives a write WIDTH from `memory-size` for the non-UV full-device policy,
+# which deliberately reverses SC4/D-01's "width never comes from the DB" rule
+# on that one path -- but only after a sanity check, and never for this slot
+# width, which stays a module constant on every path.
 _UV_WRITE_REGION_LENGTH = 256
 
 # The engine default region as a concrete tuple (D-02) -- consumed by
@@ -1561,6 +1766,221 @@ _UV_WRITE_REGION_LENGTH = 256
 # defined earlier in this module; referenced here at call time only, after
 # module import completes).
 _DEFAULT_REGION = (_WRITE_REGION_START, _WRITE_REGION_LENGTH)
+
+
+# ---------------------------------------------------------------------------
+# UV bit-masking, slot arithmetic, and the full-device region (quick task
+# 260821-wna, D-A/D-B/D-D/D-E). Pure, bench-free compute over host-side byte
+# arrays and DB-derived integers -- no chip access, no operator calls, no
+# imports beyond the stdlib already present in this module. This is the
+# execution-time HALF of the D-A/D-B mechanism; `derive_plan` (above) decides
+# only the REGION and the POLICY, never the mask.
+# ---------------------------------------------------------------------------
+
+# Both per-SLOT (not per-byte) thresholds, each 64 of the 2048 bits in a
+# 256-byte slot (D-B, Claude's discretion). The verdict is per-slot, so a
+# per-byte rule would reject slots that are serviceable in aggregate. A
+# virgin slot offers 1024 clearable and 1024 retained bits (measured: the
+# address-derived pattern's popcount over a 256-byte slot is exactly 1024,
+# since `address_fold_byte` is an XOR-fold and averages to half its bits
+# set). 64 accepts a slot with only ~6% of its virgin headroom left while
+# staying far above anything a single-bit anomaly or a transport glitch
+# could account for; the retained floor is what makes an all-0x00 read-back
+# (or any near-degenerate image) structurally unable to satisfy `WriteTarget`.
+_UV_MIN_CLEARED_BITS = 64
+_UV_MIN_RETAINED_BITS = 64
+
+# How many bytes one probe read covers when walking candidate UV slots
+# top-down (16 slots per read at the 256-byte slot width) -- probe cost is
+# proportional to blocks read, not slots evaluated.
+_UV_PROBE_BLOCK_LENGTH = 4096
+
+# A MIRROR of `eprom_operations._BOOT_BLOCK_SIZE` (16 KiB, W29C040 datasheet
+# section 6.6's two irreversible boot blocks, first and last). Mirrored
+# rather than imported: `chip_test.py` deliberately keeps no dependency on
+# `eprom_operations.py` (the same reasoning `_diff_offsets`'s own comment,
+# above, already records for the divergence primitive). `_PROTOCOL_FLASH4`
+# (defined earlier in this module) is reused as the protocol id rather than
+# adding a second constant for it.
+_FLASH4_BOOT_BLOCK_LENGTH = 0x4000
+
+# The sanity ceiling D-E demands before any DB-derived WIDTH (the
+# full-device policy's region length) is honoured. The largest shipped
+# device measured at plan time is 1 MiB across 8 rows; 16 MiB leaves room
+# for a future part while refusing an absurd override value outright.
+_MAX_FULL_DEVICE_LENGTH = 1 << 24
+
+
+def mask_write_pattern(current: bytes, desired: bytes) -> bytes:
+    """The D-A arithmetic: `P = C & D`, per byte.
+
+    On a UV EPROM, programming only clears bits (1 -> 0); writing `desired`
+    into a cell currently holding `current` physically yields `current &
+    desired`. Raises `ValueError` on a length disagreement rather than
+    silently truncating to the shorter array -- a silent truncation here is
+    the empty-read-back trap (this project's absent-chip false-green
+    history) in a new costume.
+    """
+    if len(current) != len(desired):
+        raise ValueError(
+            f"mask_write_pattern: length disagreement (current={len(current)} "
+            f"bytes, desired={len(desired)} bytes) -- refusing rather than "
+            "silently truncating"
+        )
+    return bytes(c & d for c, d in zip(current, desired))
+
+
+def bits_cleared_by(current: bytes, desired: bytes) -> int:
+    """Count bits set in `current` and clear in `desired` (D-B).
+
+    This is how many bits the masked write `mask_write_pattern(current,
+    desired)` will actually CLEAR relative to `current` -- the slot-
+    saturation signal. A fully saturated slot (`current` all `0x00`) has no
+    set bits to clear, so this returns 0 regardless of `desired`.
+    """
+    if len(current) != len(desired):
+        raise ValueError(
+            f"bits_cleared_by: length disagreement (current={len(current)} "
+            f"bytes, desired={len(desired)} bytes)"
+        )
+    return sum((c & (~d & 0xFF)).bit_count() for c, d in zip(current, desired))
+
+
+def bits_retained_by(current: bytes, desired: bytes) -> int:
+    """Count bits set in BOTH `current` and `desired` (D-B).
+
+    Equals `popcount(mask_write_pattern(current, desired))` -- the number of
+    `1` bits the masked write leaves behind, which is what makes a
+    degenerate (near-all-`0x00`) read-back structurally distinguishable from
+    a genuinely serviceable slot.
+    """
+    if len(current) != len(desired):
+        raise ValueError(
+            f"bits_retained_by: length disagreement (current={len(current)} "
+            f"bytes, desired={len(desired)} bytes)"
+        )
+    return sum((c & d).bit_count() for c, d in zip(current, desired))
+
+
+def uv_slot_starts(mem_size: int, slot_length: int) -> list[int]:
+    """Top-down ordered candidate UV slot starts (D-B).
+
+    Top-down is deliberate: it preserves the existing top-anchored
+    convention (`_top_anchored_or_default`) and leaves the low address space
+    -- where a used EPROM's real payload usually lives -- untouched longest.
+    Empty when the device cannot hold even one slot.
+    """
+    if slot_length <= 0 or mem_size < slot_length:
+        return []
+    slot_count = mem_size // slot_length
+    return [mem_size - (i + 1) * slot_length for i in range(slot_count)]
+
+
+def full_device_region(mem_size: int, protocol: int) -> tuple[int, int] | str:
+    """The non-UV full-device write region, or a refusal reason (D-D/D-E).
+
+    Returns either a `(start, length)` tuple or a refusal reason string,
+    never both. Checks are ordered deliberately: `mem_size` is sanity-
+    checked FIRST (positive, a multiple of `_UV_WRITE_REGION_LENGTH`, at or
+    below `_MAX_FULL_DEVICE_LENGTH`) before the flash4 carve-out is even
+    considered, so a hostile/malformed `memory-size` never reaches the carve-
+    out arithmetic at all.
+
+    ⚠ D-E disclosure: this is the ONE place in this module a write WIDTH is
+    derived from a DB field (`memory-size`). SC4 and D-01 exist specifically
+    so a malicious/misconfigured DB entry cannot widen the UV write window --
+    this function deliberately reverses that rule for the NON-UV full-device
+    policy only. The bound: the UV slot width (`_UV_WRITE_REGION_LENGTH`)
+    stays a module constant on every path, and this function's own width is
+    honoured only after the sanity check above passes.
+
+    On protocol 0x05 (flash4), the first and last `_FLASH4_BOOT_BLOCK_LENGTH`
+    bytes are permanently locked (W29C040 datasheet section 6.6) and are
+    carved out of the returned region. When the two boot blocks cover the
+    entire device (measured: the three 32 KiB flash4 rows), a full write is
+    structurally impossible and this returns a refusal naming the boot
+    blocks rather than an empty or negative-length region.
+    """
+    if not mem_size or mem_size <= 0:
+        return "full-device write refused: memory-size is absent, zero, or negative"
+    if mem_size % _UV_WRITE_REGION_LENGTH != 0:
+        return (
+            f"full-device write refused: memory-size {mem_size} is not a "
+            f"multiple of {_UV_WRITE_REGION_LENGTH}"
+        )
+    if mem_size > _MAX_FULL_DEVICE_LENGTH:
+        return (
+            f"full-device write refused: memory-size {mem_size} exceeds the "
+            f"sanity ceiling {_MAX_FULL_DEVICE_LENGTH} (D-E)"
+        )
+    if protocol == _PROTOCOL_FLASH4:
+        carve = _FLASH4_BOOT_BLOCK_LENGTH
+        if mem_size <= 2 * carve:
+            return (
+                f"full-device write refused: flash4 (protocol 0x05) boot "
+                f"blocks ({carve} bytes each, first and last) cover the "
+                f"entire {mem_size}-byte device -- falling back to the "
+                "small fixed region"
+            )
+        return carve, mem_size - 2 * carve
+    return 0, mem_size
+
+
+@dataclass(frozen=True)
+class WriteTarget:
+    """The execution-time-resolved write target -- THE vacuous-pass guard.
+
+    `__post_init__` structurally REFUSES to construct a degenerate target:
+    every OK verdict downstream must be reachable only through an instance
+    of this class, so a saturated slot or a dead read-back can never be
+    reported as a write pass. This is the same failure family as this
+    project's absent-chip false-green trap (a `Mock` that answers `True`
+    with no chip attached) -- here it is a masked write that would trivially
+    "pass" because there was nothing left to clear.
+
+    `region` is `(start, length)`; `pattern` is the actual bytes to be
+    written (masked or not); `masked` records whether `pattern` is a D-A
+    masked image (UV) or a plain address-derived pattern (non-UV, or a blank
+    UV chip under D-C); `bits_cleared`/`bits_retained` are the D-B counts
+    (meaningless, and not checked, when `masked` is False); `current_source`
+    names where the "current chip content" came from for a masked target
+    (a probe read, or the blank-check for D-C) -- provenance for the report,
+    Task 5.
+    """
+
+    region: tuple[int, int]
+    pattern: bytes
+    masked: bool
+    bits_cleared: int
+    bits_retained: int
+    current_source: str
+
+    def __post_init__(self) -> None:
+        _start, length = self.region
+        if len(self.pattern) != length:
+            raise ValueError(
+                f"WriteTarget: pattern length {len(self.pattern)} disagrees "
+                f"with region length {length}"
+            )
+        if self.pattern == b"\x00" * length or self.pattern == b"\xff" * length:
+            raise ValueError(
+                "WriteTarget: refusing a degenerate all-0x00/all-0xFF "
+                "pattern -- the vacuous-pass guard, the absent-chip "
+                "false-green family wearing a new costume"
+            )
+        if self.masked and self.bits_cleared < _UV_MIN_CLEARED_BITS:
+            raise ValueError(
+                f"WriteTarget: masked target clears only {self.bits_cleared} "
+                f"bits, below _UV_MIN_CLEARED_BITS ({_UV_MIN_CLEARED_BITS}) "
+                "-- this slot is saturated under this pattern"
+            )
+        if self.masked and self.bits_retained < _UV_MIN_RETAINED_BITS:
+            raise ValueError(
+                f"WriteTarget: masked target retains only "
+                f"{self.bits_retained} bits, below _UV_MIN_RETAINED_BITS "
+                f"({_UV_MIN_RETAINED_BITS}) -- a read-back this degenerate "
+                "could never be told apart from an absent chip"
+            )
 
 
 def _write_region_for(step: Step | None, eprom_data: dict[str, Any]) -> tuple[int, int]:
@@ -1595,7 +2015,14 @@ def _write_region_for(step: Step | None, eprom_data: dict[str, Any]) -> tuple[in
 
 
 def _run_step(
-    name: str, step: Step, operator: Any, db: Any, *, runs: int, sampler: Any = None
+    name: str,
+    step: Step,
+    operator: Any,
+    db: Any,
+    *,
+    runs: int,
+    sampler: Any = None,
+    write_context: WriteContext | None = None,
 ) -> StepResult:
     """Time `_run_step_untimed` and stamp `duration_s` on its result.
 
@@ -1609,16 +2036,36 @@ def _run_step(
     NA/SKIPPED step keeps `duration_s = None` instead of a `0.0` that would
     read as real measured work. `time.monotonic` (never `time.time`) so a
     wall-clock adjustment mid-read cannot produce a negative duration.
+
+    `write_context` (quick task 260821-wna, Task 4) is threaded through
+    unchanged to `_run_step_untimed`; `None` is the default (the SDP
+    lock/unlock cleanup callable in `run_plan` calls this function without
+    one, since neither op is write-shaped).
     """
     start = time.monotonic()
-    result = _run_step_untimed(name, step, operator, db, runs=runs, sampler=sampler)
+    result = _run_step_untimed(
+        name,
+        step,
+        operator,
+        db,
+        runs=runs,
+        sampler=sampler,
+        write_context=write_context,
+    )
     if result.duration_s is None and result.verdict in _RAN_VERDICTS:
         result.duration_s = round(time.monotonic() - start, 3)
     return result
 
 
 def _run_step_untimed(
-    name: str, step: Step, operator: Any, db: Any, *, runs: int, sampler: Any = None
+    name: str,
+    step: Step,
+    operator: Any,
+    db: Any,
+    *,
+    runs: int,
+    sampler: Any = None,
+    write_context: WriteContext | None = None,
 ) -> StepResult:
     """Execute a single supported step through the guard-honoring resolver.
 
@@ -1635,7 +2082,8 @@ def _run_step_untimed(
     `resolve_chip(name, db=...)` + operator-method compose pattern used here.
 
     `sampler` (D-04) is threaded through unchanged to `_dispatch_step`;
-    `None` is the default and a proven no-op.
+    `None` is the default and a proven no-op. `write_context` (Task 4) is
+    likewise threaded through unchanged.
     """
     eprom_data, skip_stub, reason = _resolve_or_none(name, db)
     if skip_stub is not None or eprom_data is None:
@@ -1646,7 +2094,13 @@ def _run_step_untimed(
 
     try:
         return _dispatch_step(
-            name, step, eprom_data, operator, runs=runs, sampler=sampler
+            name,
+            step,
+            eprom_data,
+            operator,
+            runs=runs,
+            sampler=sampler,
+            write_context=write_context,
         )
     except (
         ProgrammerNotFoundError,
@@ -1708,6 +2162,7 @@ def _dispatch_step(
     *,
     runs: int,
     sampler: Any = None,
+    write_context: WriteContext | None = None,
 ) -> StepResult:
     """Dispatch `step.op` to its matching existing `EpromOperator` method.
 
@@ -1726,7 +2181,10 @@ def _dispatch_step(
 
     `sampler` (D-04) is threaded through unchanged to `_dispatch_multi_run`,
     the only op with a bracket site (OP_WRITE); `None` is the default and a
-    proven no-op for every other op.
+    proven no-op for every other op. `write_context` (quick task 260821-wna,
+    Task 4) is likewise threaded through to `_dispatch_multi_run` ONLY --
+    deliberately NOT to `_dispatch_sdp`/`_dispatch_sdp_leg`, which keep
+    `_write_region_for` and the fixed leg region unchanged.
     """
     if step.op == OP_ID:
         return _dispatch_id(name, eprom_data, operator)
@@ -1746,7 +2204,14 @@ def _dispatch_step(
     # `operator.erase_eprom()` (RESEARCH Pitfall 1a).
     if step.op in _MULTI_RUN_OPS:
         return _dispatch_multi_run(
-            step.op, name, eprom_data, operator, runs=runs, sampler=sampler, step=step
+            step.op,
+            name,
+            eprom_data,
+            operator,
+            runs=runs,
+            sampler=sampler,
+            step=step,
+            write_context=write_context,
         )
     # Arm 5, LAST (v1.30 Phase 133 D-04, LEG-09) -- immediately above the
     # terminal fail-closed `return` below. The measured arm order above is
@@ -1871,6 +2336,188 @@ def _sample(sampler: Any, phase: str) -> None:
         pass
 
 
+# ---------------------------------------------------------------------------
+# Execution-time mask/slot/region resolution (quick task 260821-wna, Task 4)
+# ---------------------------------------------------------------------------
+
+
+def _address_arg(start: int) -> str | None:
+    """`None` for a zero start, else a `0x`-prefixed hex address string.
+
+    The `None` case is load-bearing (M-1): it keeps every region-at-zero
+    call byte-identical to today's wire behaviour, since `_setup_operation`
+    (`eprom_operations.py`) only sets the command's `address` key when an
+    argument is actually supplied.
+    """
+    if start == 0:
+        return None
+    return f"0x{start:X}"
+
+
+def _size_arg(length: int) -> str:
+    """The matching `0x`-prefixed size string for a region read."""
+    return f"0x{length:X}"
+
+
+def _read_region(
+    operator: Any, name: str, eprom_data: dict[str, Any], start: int, length: int
+) -> bytes:
+    """One region read into a temp dir, then `[start:start+length]` off the
+    file (finding M-3) -- the ONE place this slice lives; every region
+    read-back in this module goes through this function.
+
+    A region read produces a hole-padded file whose real bytes sit at the
+    ABSOLUTE offset `start` (`eprom_operations._write_to_file`'s
+    `file_handle.seek(address)`), never at offset 0 -- slicing anywhere
+    else would silently read zero-padding instead of the requested bytes.
+    Returns `b""` on any `OSError`, a missing file, or a short/wrong-length
+    result -- never raises, so a probe/verify read-back failure degrades
+    gracefully rather than crashing the step.
+    """
+    try:
+        with tempfile.TemporaryDirectory(prefix="chip_test_region_") as tmp_dir:
+            out_path = str(Path(tmp_dir) / "region.bin")
+            operator.read_eprom(
+                name,
+                eprom_data,
+                output_file=out_path,
+                address_str=_address_arg(start),
+                size_str=_size_arg(length),
+            )
+            try:
+                raw = Path(out_path).read_bytes()
+            except OSError:
+                return b""
+    except EpromOperationError:
+        return b""
+    chunk = raw[start : start + length]
+    if len(chunk) != length:
+        return b""
+    return chunk
+
+
+def _resolve_write_target(
+    name: str,
+    step: Step | None,
+    eprom_data: dict[str, Any],
+    operator: Any,
+    *,
+    chip_is_blank: bool | None,
+) -> tuple[WriteTarget | None, str]:
+    """The execution-time resolver -- the ONLY place a write mask is
+    computed (D-A/D-B/D-C). Returns `(target, "")` on success, or `(None,
+    reason)` on a refusal; never both.
+
+    `derive_plan` already decided `step.write_region`/`step.region_policy`/
+    `step.full_device_permitted`; this function only READS them -- it never
+    re-derives the region or the policy, only the MASK.
+
+    * `fixed` / `full-device` policy -> an UNMASKED `WriteTarget` over
+      `step.write_region` (the plain address-derived pattern, unchanged
+      from today for non-UV chips).
+    * `uv-slot` policy, chip reported blank AND `step.full_device_permitted`
+      -> a MASKED `WriteTarget` over the full-device region, with the mask
+      taken as all-0xFF (D-C: the blank-check IS the "current content"
+      oracle here -- the device is never read again for this branch).
+    * `uv-slot` policy otherwise -> probe candidate slots top-down in
+      `_UV_PROBE_BLOCK_LENGTH`-sized reads (`uv_slot_starts`), evaluating
+      each slot inside the block with `bits_cleared_by`/`bits_retained_by`,
+      and returning the FIRST slot whose counts satisfy both D-B floors.
+      Never writes a cursor anywhere -- the probe reads ARE the state
+      lookup (D-B). A block whose read comes back short/empty is skipped
+      (its slots are simply unevaluable, not saturated) rather than
+      raising.
+    """
+    start, length = _write_region_for(step, eprom_data)
+    region_policy = step.region_policy if step is not None else REGION_POLICY_FIXED
+    full_device_permitted = step.full_device_permitted if step is not None else False
+
+    if region_policy != REGION_POLICY_UV_SLOT:
+        pattern = generate_pattern(start, length)
+        try:
+            target = WriteTarget(
+                region=(start, length),
+                pattern=pattern,
+                masked=False,
+                bits_cleared=0,
+                bits_retained=0,
+                current_source="address-derived pattern (unmasked)",
+            )
+        except ValueError as exc:
+            return None, str(exc)
+        return target, ""
+
+    mem_size = int(eprom_data.get("memory-size", 0) or 0)
+    protocol = eprom_data.get("algorithm", eprom_data.get("protocol-id", 0))
+
+    if chip_is_blank and full_device_permitted:
+        full_result = full_device_region(mem_size, protocol)
+        if isinstance(full_result, str):
+            return None, full_result
+        full_start, full_length = full_result
+        desired = generate_pattern(full_start, full_length)
+        current = b"\xff" * full_length
+        masked = mask_write_pattern(current, desired)
+        try:
+            target = WriteTarget(
+                region=(full_start, full_length),
+                pattern=masked,
+                masked=True,
+                bits_cleared=bits_cleared_by(current, desired),
+                bits_retained=bits_retained_by(current, desired),
+                current_source="blank-check (D-C full-device-if-blank)",
+            )
+        except ValueError as exc:
+            return None, str(exc)
+        return target, ""
+
+    slot_length = length
+    slots_per_block = max(_UV_PROBE_BLOCK_LENGTH // slot_length, 1)
+    all_starts = uv_slot_starts(mem_size, slot_length)
+    for i in range(0, len(all_starts), slots_per_block):
+        block_slot_starts = all_starts[i : i + slots_per_block]
+        # `all_starts` is top-down: the FIRST entry in this batch is the
+        # highest address, the LAST is the lowest -- the block's own start
+        # is that lowest address.
+        block_start = block_slot_starts[-1]
+        block_length = block_slot_starts[0] + slot_length - block_start
+        block_data = _read_region(operator, name, eprom_data, block_start, block_length)
+        if len(block_data) != block_length:
+            continue
+        for slot_start in block_slot_starts:
+            offset = slot_start - block_start
+            current = block_data[offset : offset + slot_length]
+            desired = generate_pattern(slot_start, slot_length)
+            cleared = bits_cleared_by(current, desired)
+            retained = bits_retained_by(current, desired)
+            if cleared < _UV_MIN_CLEARED_BITS or retained < _UV_MIN_RETAINED_BITS:
+                continue
+            masked = mask_write_pattern(current, desired)
+            try:
+                target = WriteTarget(
+                    region=(slot_start, slot_length),
+                    pattern=masked,
+                    masked=True,
+                    bits_cleared=cleared,
+                    bits_retained=retained,
+                    current_source="probe read",
+                )
+            except ValueError:
+                # Defensive only: cleared/retained already satisfied both
+                # floors above, so __post_init__'s bit-count refusals
+                # cannot fire here -- kept so a future threshold change
+                # cannot silently turn into an unhandled crash.
+                continue
+            return target, ""
+
+    return None, (
+        f"every UV slot exhausted without clearing >= {_UV_MIN_CLEARED_BITS} "
+        f"bits and retaining >= {_UV_MIN_RETAINED_BITS} bits under this "
+        "pattern -- the chip is saturated; a UV erase is required before "
+        "writing further"
+    )
+
+
 def _dispatch_multi_run(
     op: str,
     name: str,
@@ -1880,6 +2527,7 @@ def _dispatch_multi_run(
     runs: int,
     sampler: Any = None,
     step: Step | None = None,
+    write_context: WriteContext | None = None,
 ) -> StepResult:
     """Run a destructive/verify op `runs` times; `marginal` on disagreement.
 
@@ -1913,6 +2561,20 @@ def _dispatch_multi_run(
     function's run loop ended in a bare `else: # OP_ERASE`, so an unmapped op
     called `operator.erase_eprom()` once per run and reported `VERDICT_OK`
     (RESEARCH Pitfall 1a, proven empirically: 2 runs -> 2 calls -> OK).
+
+    Quick task 260821-wna, Task 4: for `OP_WRITE`/`OP_WRITE_PARTIAL`, the
+    write target (region + pattern, masked or not) is resolved HERE via
+    `_resolve_write_target` -- a saturated/refused target returns SKIPPED
+    with the refusal reason and `write_eprom` is NEVER called (the
+    structural vacuous-pass guard extends all the way to this dispatch
+    site). For `OP_VERIFY` on a non-`fixed` policy, the target is INHERITED
+    from `write_context.target` (set by the preceding write step) rather
+    than re-resolved -- the verify step never computes its own mask. For
+    `OP_ERASE` and every `fixed`-policy write/verify, behaviour is
+    unchanged from before this task. The write/verify read-back (for the
+    `Fingerprint`) is now region-scoped via `_read_region` instead of a
+    whole-device read (finding M-2: a whole-device read-back only "worked"
+    because every prior test double wrote exactly a region-sized payload).
     """
     if op not in _MULTI_RUN_OPS:
         return StepResult(
@@ -1929,9 +2591,56 @@ def _dispatch_multi_run(
     outcomes: list[bool] = []
     fingerprint: Fingerprint | None = None
     tmp_source_path: str | None = None
+    resolved_target: WriteTarget | None = None
+    region_start = 0
+    region_length = 0
+    expected = b""
 
-    region_start, region_length = _write_region_for(step, eprom_data)
-    expected = generate_pattern(region_start, region_length)
+    if op in (OP_WRITE, OP_WRITE_PARTIAL):
+        resolved_target, refusal = _resolve_write_target(
+            name,
+            step,
+            eprom_data,
+            operator,
+            chip_is_blank=(
+                write_context.chip_is_blank if write_context is not None else None
+            ),
+        )
+        if resolved_target is None:
+            # The vacuous-pass guard's SKIPPED path: `write_eprom` is NEVER
+            # called for a saturated/refused target -- no step reports OK
+            # for a write that did not happen.
+            return StepResult(
+                op=op,
+                verdict=VERDICT_SKIPPED,
+                reason=refusal,
+                run_count=0,
+                write_target=None,
+            )
+        region_start, region_length = resolved_target.region
+        expected = resolved_target.pattern
+    elif op == OP_VERIFY:
+        non_fixed_policy = (
+            step is not None and step.region_policy != REGION_POLICY_FIXED
+        )
+        if non_fixed_policy:
+            inherited = write_context.target if write_context is not None else None
+            if inherited is None:
+                refusal = (
+                    write_context.refusal
+                    if write_context is not None and write_context.refusal
+                    else "no write target available for verify"
+                )
+                return StepResult(
+                    op=op, verdict=VERDICT_SKIPPED, reason=refusal, run_count=0
+                )
+            resolved_target = inherited
+            region_start, region_length = inherited.region
+            expected = inherited.pattern
+        else:
+            region_start, region_length = _write_region_for(step, eprom_data)
+            expected = generate_pattern(region_start, region_length)
+
     if op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY):
         tmp_fh = tempfile.NamedTemporaryFile(
             prefix="chip_test_pattern_", suffix=".bin", delete=False
@@ -1946,11 +2655,23 @@ def _dispatch_multi_run(
         for _ in range(runs):
             if op in (OP_WRITE, OP_WRITE_PARTIAL):
                 _sample(sampler, "before")
-                outcomes.append(operator.write_eprom(name, eprom_data, tmp_source_path))
+                outcomes.append(
+                    operator.write_eprom(
+                        name,
+                        eprom_data,
+                        tmp_source_path,
+                        address_str=_address_arg(region_start),
+                    )
+                )
                 _sample(sampler, "after")
             elif op == OP_VERIFY:
                 outcomes.append(
-                    operator.verify_eprom(name, eprom_data, tmp_source_path)
+                    operator.verify_eprom(
+                        name,
+                        eprom_data,
+                        tmp_source_path,
+                        address_str=_address_arg(region_start),
+                    )
                 )
             elif op == OP_ERASE:
                 outcomes.append(operator.erase_eprom(name, eprom_data))
@@ -1972,18 +2693,11 @@ def _dispatch_multi_run(
             # write/verify runs themselves) must NOT convert an otherwise
             # successful write/verify outcome into BAD (Pitfall 1 extends to
             # this internal readback call too) -- it only means no
-            # Fingerprint could be attached.
-            actual = b""
-            try:
-                with tempfile.TemporaryDirectory(prefix="chip_test_verify_") as tmp_dir:
-                    readback_path = str(Path(tmp_dir) / "readback.bin")
-                    operator.read_eprom(name, eprom_data, output_file=readback_path)
-                    try:
-                        actual = Path(readback_path).read_bytes()
-                    except OSError:
-                        actual = b""
-            except EpromOperationError:
-                actual = b""
+            # Fingerprint could be attached. Region-scoped via `_read_region`
+            # (finding M-2) rather than a whole-device read.
+            actual = _read_region(
+                operator, name, eprom_data, region_start, region_length
+            )
 
             if actual:
                 diverged = len(set(outcomes)) != 1 if outcomes else False
@@ -2014,6 +2728,7 @@ def _dispatch_multi_run(
         reason=reason,
         run_count=runs,
         fingerprint=fingerprint,
+        write_target=resolved_target if op in (OP_WRITE, OP_WRITE_PARTIAL) else None,
     )
 
 
@@ -2178,27 +2893,26 @@ def _dispatch_sdp_leg(
     tmp_source_path = tmp_fh.name
 
     try:
-        wrote_ok = operator.write_eprom(name, eprom_data, tmp_source_path, flags)
+        wrote_ok = operator.write_eprom(
+            name,
+            eprom_data,
+            tmp_source_path,
+            flags,
+            address_str=_address_arg(region_start),
+        )
 
         # Read back. ⚠ Unlike `_dispatch_multi_run`'s read-back
         # (`:1483-1493`), this read-back is NOT best-effort decoration -- it
         # IS the verdict (D-05/LEG-05). A failed/degenerate read-back still
         # produces a verdict below (BAD via the length gate), it never
         # silently skips the Fingerprint the way the multi-run write/verify
-        # step does.
-        actual = b""
-        try:
-            with tempfile.TemporaryDirectory(
-                prefix="chip_test_sdp_leg_verify_"
-            ) as tmp_dir:
-                readback_path = str(Path(tmp_dir) / "readback.bin")
-                operator.read_eprom(name, eprom_data, output_file=readback_path)
-                try:
-                    actual = Path(readback_path).read_bytes()
-                except OSError:
-                    actual = b""
-        except EpromOperationError:
-            actual = b""
+        # step does. Region-scoped via `_read_region` (quick task
+        # 260821-wna, finding M-2): the length gate below was previously
+        # satisfiable only by a double whose read-back happened to return
+        # exactly `region_length` bytes; a region-scoped, sliced read is
+        # what makes it a real gate against a whole-device read on real
+        # hardware.
+        actual = _read_region(operator, name, eprom_data, region_start, region_length)
     finally:
         try:
             Path(tmp_source_path).unlink()

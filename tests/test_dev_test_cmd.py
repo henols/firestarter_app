@@ -136,12 +136,44 @@ def make_clean_operator() -> Mock:
 
     check_eprom_id returns (True, None) -- no explicit chip-id disagreement
     (id is NA for chips with no chip-id in the DB, OK for chips whose id
-    exists and matches). read/blank-check/write/verify/erase all report
-    success so a full sweep comes back clean (exit 0).
+    exists and matches). write/verify/erase all report success so a full
+    sweep comes back clean (exit 0).
+
+    `read_eprom` (quick task 260821-wna, Task 3) is a `side_effect` rather
+    than a bare `return_value=True`: a plain `True` writes no file at all,
+    which would make every region/probe read see `b""` -- turning every UV
+    slot into a saturation refusal the moment run_plan's execution-time
+    resolver starts probing (Task 4). It writes an all-0xFF (blank-chip-
+    shaped) image at the requested ABSOLUTE offset, reproducing
+    `_write_to_file`'s `file_handle.seek(address)` (finding M-3) via the
+    same `_parse_addr_or_size` helper `fake_chip.FakeChip` uses -- a virgin
+    UV chip's slots are all comfortably above both D-B bit-count floors.
     """
+    from .fake_chip import _parse_addr_or_size
+
+    def _clean_read(
+        name,
+        eprom_data,
+        output_file=None,
+        operation_flags=0,
+        address_str=None,
+        size_str=None,
+    ):
+        if output_file is None:
+            return True
+        mem_size = int(eprom_data.get("memory-size", 0) or 0)
+        start = _parse_addr_or_size(address_str) or 0
+        length = _parse_addr_or_size(size_str)
+        if length is None:
+            length = max(mem_size - start, 0)
+        with open(output_file, "wb") as fh:
+            fh.seek(start)
+            fh.write(b"\xff" * length)
+        return True
+
     operator = Mock(spec=EpromOperator)
     operator.check_eprom_id.return_value = (True, None)
-    operator.read_eprom.return_value = True
+    operator.read_eprom.side_effect = _clean_read
     operator.check_eprom_blank.return_value = True
     operator.write_eprom.return_value = True
     operator.verify_eprom.return_value = True
@@ -189,20 +221,43 @@ def make_leaked_lock_operator(
     (the mixed BAD+marginal pin) without disturbing the state-tracking
     read-back the SDP leg's own verdicts depend on.
     """
-    state: dict[str, bytes] = {"data": b""}
+    # quick task 260821-wna, Task 3: `_write`/`_read` now accept (and honor)
+    # `address_str` -- required so a later keyword-only `address_str=...`
+    # call from `_dispatch_multi_run`/`_dispatch_sdp_leg` (Task 4) does not
+    # TypeError -- while deliberately PRESERVING the pre-existing "replace
+    # `state['data']` wholesale on every write" model rather than widening
+    # it into a persistent whole-device buffer: every ALLOW chip's write and
+    # SDP-leg regions in this suite start at address 0 (D-17: ALLOW chips
+    # are all non-UV, so `_address_arg(0)` is `None` on every reachable
+    # call), so `state['data']`'s SIZE tracking the most recent write's
+    # length -- not a fixed device size -- is exactly what keeps
+    # `_dispatch_sdp_leg`'s length gate meaningful without this fixture
+    # pre-emptively solving the region-scoped-readback problem Task 4 owns.
+    # `state['start']` records the last write's own address so `_read`'s
+    # `file_handle.seek(address)` (finding M-3) is still genuinely
+    # reproduced if a future case DOES pass a non-zero start.
+    from .fake_chip import _parse_addr_or_size
+
+    state = {"data": b"", "start": 0}
     calls = {"write": 0}
 
-    def _write(name, eprom_data, source_path, flags=0):
+    def _write(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
         idx = calls["write"]
         calls["write"] += 1
         state["data"] = Path(source_path).read_bytes()
+        state["start"] = _parse_addr_or_size(address_str) or 0
         if write_outcomes is not None and idx < len(write_outcomes):
             return write_outcomes[idx]
         return True
 
-    def _read(name, eprom_data, output_file=None, **kwargs):
-        if output_file is not None:
-            Path(output_file).write_bytes(state["data"])
+    def _read(
+        name, eprom_data, output_file=None, address_str=None, size_str=None, **_kw
+    ):
+        if output_file is None:
+            return True
+        with open(output_file, "wb") as fh:
+            fh.seek(state["start"])
+            fh.write(state["data"])
         return True
 
     operator = Mock(spec=EpromOperator)
@@ -241,9 +296,15 @@ def make_held_lock_operator(
     `.planning/REQUIREMENTS.md`); this is the closest honest proxy for the
     opposite outcome from `make_leaked_lock_operator`.
     """
-    state: dict[str, bytes] = {"data": b""}
+    # quick task 260821-wna, Task 3: address_str-aware, same rationale and
+    # same "replace wholesale, track the last write's own start" model as
+    # `make_leaked_lock_operator` above (see its comment for why this
+    # deliberately does NOT widen into a persistent whole-device buffer).
+    from .fake_chip import _parse_addr_or_size
 
-    def _write(name, eprom_data, source_path, flags=0):
+    state = {"data": b"", "start": 0}
+
+    def _write(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
         payload = Path(source_path).read_bytes()
         if flags & FLAG_SKIP_SDP_UNLOCK:
             # The inhibited-write call (D-01's one narrowing): the part
@@ -251,11 +312,17 @@ def make_held_lock_operator(
             # the state machine still completes and the ack is observed.
             return True
         state["data"] = payload
+        state["start"] = _parse_addr_or_size(address_str) or 0
         return True
 
-    def _read(name, eprom_data, output_file=None, **kwargs):
-        if output_file is not None:
-            Path(output_file).write_bytes(state["data"])
+    def _read(
+        name, eprom_data, output_file=None, address_str=None, size_str=None, **_kw
+    ):
+        if output_file is None:
+            return True
+        with open(output_file, "wb") as fh:
+            fh.seek(state["start"])
+            fh.write(state["data"])
         return True
 
     operator = Mock(spec=EpromOperator)
@@ -326,21 +393,32 @@ def make_restore_failed_operator() -> Mock:
     and its recovery line is NEUTRAL, not LOUD; this is the case a
     whole-run "lock leaked" fixture cannot itself produce).
     """
-    state: dict[str, bytes] = {"data": b""}
+    # quick task 260821-wna, Task 3: address_str-aware, same "replace
+    # wholesale, track the last write's own start" model as
+    # `make_leaked_lock_operator` above.
+    from .fake_chip import _parse_addr_or_size
+
+    state = {"data": b"", "start": 0}
     calls = {"write": 0}
 
-    def _write(name, eprom_data, source_path, flags=0):
+    def _write(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
         idx = calls["write"]
         calls["write"] += 1
         if idx < _ALWAYS_WRITES_PASS_COUNT - 1:
             state["data"] = Path(source_path).read_bytes()
+            state["start"] = _parse_addr_or_size(address_str) or 0
         # else: the LAST (write-restored) call does not persist -- the
         # part's read-back stays at whatever the second-to-last call left.
         return True
 
-    def _read(name, eprom_data, output_file=None, **kwargs):
-        if output_file is not None:
-            Path(output_file).write_bytes(state["data"])
+    def _read(
+        name, eprom_data, output_file=None, address_str=None, size_str=None, **_kw
+    ):
+        if output_file is None:
+            return True
+        with open(output_file, "wb") as fh:
+            fh.seek(state["start"])
+            fh.write(state["data"])
         return True
 
     operator = Mock(spec=EpromOperator)
@@ -652,6 +730,27 @@ class TestUVOnlyStopAndAsk:
         assert "write" not in steps
         operator.write_eprom.assert_called()
 
+    def test_uv_prompt_names_both_outcomes(self, runner: CliRunner) -> None:
+        """The prompt text must name BOTH outcomes -- the blank-device
+        full-write ceiling (D-C) and the single-slot floor -- so a future
+        edit cannot silently make it inert again (D-01's original defect:
+        both answers used to resolve to the same 256-byte window)."""
+        operator = make_clean_operator()
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        with (
+            patch("firestarter.cli_handlers._is_interactive", return_value=True),
+            patch("firestarter.cli_handlers.Confirm") as mock_confirm,
+        ):
+            mock_confirm.ask.return_value = False
+            runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
+        mock_confirm.ask.assert_called_once()
+        prompt = mock_confirm.ask.call_args[0][0]
+        assert "whole device" in prompt
+        assert "blank" in prompt
+        assert "256-byte slot" in prompt
+
     def test_off_tty_partial_write_actually_happens(self, runner: CliRunner) -> None:
         """Off-TTY on a UV part, the confirm callable is never invoked AND
         write_eprom IS called with the 256-byte top-anchored region -- D-03
@@ -667,7 +766,7 @@ class TestUVOnlyStopAndAsk:
         captured_region_lengths: list[int] = []
 
         def _capture_region_and_write_ok(
-            name: str, eprom_data: dict, tmp_source_path: str
+            name: str, eprom_data: dict, tmp_source_path: str, *_args, **_kwargs
         ) -> bool:
             captured_region_lengths.append(len(Path(tmp_source_path).read_bytes()))
             return True
@@ -1382,12 +1481,31 @@ class TestExitFloorD15:
         assert result.exit_code == 2, result.output
 
     def test_bad_and_notrun_exits_1_not_2(self, runner: CliRunner) -> None:
-        """ALLOW chip, oracle NOT-RUN AND a BAD step (the dead-write-path
-        operator's baseline BAD closes the gate) -- exit 1, never 2. A
+        """ALLOW chip, oracle NOT-RUN AND a BAD step -- exit 1, never 2. A
         naive `max(code, 2)` would return 2 here (`max(1, 2) == 2`),
         re-creating exactly the laundering D-14 removed; composing the
-        floor as a precedence CANDIDATE instead keeps BAD's rank intact."""
+        floor as a precedence CANDIDATE instead keeps BAD's rank intact.
+
+        RETARGETED by quick task 260821-wna: before this task,
+        `make_clean_operator`'s `read_eprom` wrote NO file at all, so the
+        SDP leg's baseline read-back genuinely length-gated BAD by
+        accident. Task 3 fixed that gap (a Mock answering every probe read
+        with an empty file would turn every UV write into a saturation
+        refusal) -- `make_clean_operator` is now honestly "clean" end to
+        end, so the leg's baseline read-back is correct-length-but-all-0xFF
+        and lands `marginal` (the content-degeneracy arm), not `BAD`. A
+        genuinely SHORT read-back is the double this test now needs to
+        exercise the length gate's `BAD` arm specifically -- it overrides
+        ONLY this test's `read_eprom`, leaving the shared fixture's default
+        "clean" behaviour unchanged for every other test."""
         operator = make_clean_operator()
+
+        def _short_read(name, eprom_data, output_file=None, **kwargs):
+            if output_file is not None:
+                Path(output_file).write_bytes(b"")
+            return True
+
+        operator.read_eprom.side_effect = _short_read
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
@@ -1967,3 +2085,52 @@ class TestBlankCheckAfterEraseKaq:
         steps = {s["op"]: s for s in data["steps"]}
         assert steps["blank-check"]["verdict"] == "NA", steps["blank-check"]
         operator.check_eprom_blank.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Write-coverage provenance end to end (quick task 260821-wna, Task 5): a
+# real CLI run over a used UV `FakeChip` saves a JSON whose write step
+# carries the slot region, and the console output contains the coverage
+# line -- both surfaces, driven through the real `dev test` command.
+# ---------------------------------------------------------------------------
+
+
+class TestWriteCoverageProvenanceD_F:
+    def test_used_uv_chip_cli_run_carries_slot_region_in_json_and_console(
+        self, runner: CliRunner
+    ) -> None:
+        """AM27512 (UV, 65536 B) with its top slot already partially
+        programmed (0xF0 in every byte -- some bits already cleared, still
+        comfortably above both D-B floors): off-TTY forces write_scope=
+        "partial" (D-01/D-03), so the execution-time resolver probes and
+        masks rather than taking the D-C full-device shortcut. The saved
+        JSON's write step carries the resolved slot region/bit counts, and
+        the console shows the D-F "write coverage" row."""
+        from .fake_chip import FakeChip
+
+        chip = FakeChip.uv_with_content(65536, b"\xf0" * 256, start=65280)
+        app = make_app_context(
+            eprom_operator=chip, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
+        # exit 1, not 0: a used chip is genuinely NOT all-0xFF, so
+        # `check_eprom_blank` (real, chip-content-derived, not stubbed)
+        # honestly reports BAD -- that BAD is what makes this a "used chip"
+        # scenario at all, and it does not stop the write/verify steps from
+        # running and succeeding, which is what this test actually pins.
+        assert result.exit_code == 1, result.output
+
+        data = _load_report(_CHIP_UV)
+        steps = {s["op"]: s for s in data["steps"]}
+        write_step = steps["write-partial"]
+        assert write_step["verdict"] == "OK", write_step
+        assert write_step["write_region_start"] == 65280, write_step
+        assert write_step["write_region_length"] == 256, write_step
+        assert write_step["write_bits_cleared"] is not None, write_step
+        assert write_step["write_bits_retained"] is not None, write_step
+        assert write_step["write_current_source"] == "probe read", write_step
+
+        normalized = _normalize_console_text(result.output)
+        assert "write coverage" in normalized, normalized
+        assert "0xFF00" in normalized, normalized

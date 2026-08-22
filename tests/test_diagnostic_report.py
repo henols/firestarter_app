@@ -60,6 +60,8 @@ import inspect
 import json
 from unittest.mock import Mock
 
+import pytest
+
 import firestarter
 from firestarter.chip_test import (
     FP_ADDRESS_LINE,
@@ -1085,7 +1087,7 @@ def test_hold_state_is_str_never_bool():
     assert not isinstance(value, bool)
 
 
-def test_schema_version_1_5_single_sourced():
+def test_schema_version_1_6_single_sourced():
     """`to_dict()["schema_version"]` equals the IMPORTED `SCHEMA_VERSION`
     (never a literal restated here), and the production module bumps the
     constant to its new value in exactly ONE place (single-sourced, D-10) --
@@ -1094,8 +1096,9 @@ def test_schema_version_1_5_single_sourced():
     one". Renamed from `test_schema_version_1_3_single_sourced` (v1.32 Phase
     147 plan 03, D-09): the 1.3 -> 1.4 bump would otherwise leave this test's
     own literal-count assertion asserting a now-absent quoted string. Renamed
-    again for the 1.4 -> 1.5 bump (2026-08-21), which added the additive
-    per-step `duration_s` key."""
+    again for the 1.5 -> 1.6 bump (quick task 260821-wna), which added the
+    additive per-step `write_region_start`/`write_region_length`/
+    `write_bits_cleared`/`write_bits_retained`/`write_current_source` keys."""
     import inspect
 
     from firestarter import diagnostic_report as dr_mod
@@ -1104,7 +1107,7 @@ def test_schema_version_1_5_single_sourced():
     assert report.to_dict()["schema_version"] == dr_mod.SCHEMA_VERSION
 
     source = inspect.getsource(dr_mod)
-    assert source.count('"1.5"') == 1
+    assert source.count('"1.6"') == 1
 
 
 def test_dedup_fingerprint_sensitive_to_sdp_step_verdict_change():
@@ -1200,17 +1203,18 @@ def test_populated_identity_rows_render_the_value_verbatim():
     assert NOT_REPORTED not in _rendered_text(table)
 
 
-def test_schema_version_is_one_five():
-    """PROV-04: the imported constant equals `"1.5"`, and a freshly built
+def test_schema_version_is_one_six():
+    """PROV-04: the imported constant equals `"1.6"`, and a freshly built
     report's `to_dict()["schema_version"]` equals the IMPORTED constant --
     never a restated literal in the second assertion. This is the only
     place in the suite that pins WHICH version this phase shipped; every
-    other site (including `test_schema_version_1_5_single_sourced` above)
-    keeps importing the constant. 1.5 (2026-08-21) added the additive
-    per-step `duration_s` key -- pre-1.5 consumers ignore it."""
+    other site (including `test_schema_version_1_6_single_sourced` above)
+    keeps importing the constant. 1.6 (quick task 260821-wna) added the
+    additive per-step write-coverage keys read off `StepResult.write_target`
+    -- pre-1.6 consumers ignore them."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == "1.5"
+    assert SCHEMA_VERSION == "1.6"
 
     report = _minimal_report()
     assert report.to_dict()["schema_version"] == SCHEMA_VERSION
@@ -1535,3 +1539,107 @@ def test_duration_cell_formatting_boundaries():
     assert _duration_cell(41.875) == "41.9s"
     assert _duration_cell(None) == ""
     assert _duration_cell("not-a-number") == ""
+
+
+# ---------------------------------------------------------------------------
+# D-F disclosure follow-up fix (found post-260821-wna-green-suite): the
+# write-coverage line/row must read the PLAN-TIME `Step.reason`
+# (`derive_plan`'s own disclosure), never `StepResult.reason` -- which
+# `_dispatch_multi_run` legitimately clears to `""` on a clean OK write.
+# The two named real-DB cases below are the exact regression the fix
+# targets: a SUCCESSFUL flash4 boot-block carve (W29C040) previously
+# disclosed NOTHING, and a whole-device-is-boot-block FIXED-policy fallback
+# (AT29C256/257/LV256) previously rendered misleading UV "bits clearable"
+# wording on a chip that was never masked. Both are exercised through a
+# real derive_plan() + run_plan() + render()/to_dict(), never a hand-built
+# StepResult, so a regression in the real wiring (not just the helper
+# function) would be caught here.
+# ---------------------------------------------------------------------------
+
+
+def _build_full_scope_report(chip_name: str):
+    """Like `_build_report` above, but `write_scope="full"` -- the scope
+    this follow-up fix's two named cases both need."""
+    from firestarter.diagnostic_report import (
+        AutoCapture,
+        DiagnosticReport,
+        TransportHealth,
+    )
+
+    plan = derive_plan(chip_name, _REAL_DB, write_scope="full")
+    # (True, None) -- no explicit chip-ID disagreement: `_dispatch_id`'s
+    # mismatch clause is `is_ok and expected_id and detected_id is not None
+    # and detected_id != expected_id`, so a `None` detected id can never
+    # close the destructive gate regardless of this chip's own real
+    # expected chip-id (which these flash4 test chips do carry).
+    operator = _mock_operator(check_eprom_id=(True, None))
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    auto_capture = AutoCapture(
+        host_version=firestarter.__version__, chip=chip_name, protocol="0x05"
+    )
+    return DiagnosticReport(
+        auto_capture=auto_capture,
+        transport=TransportHealth(),
+        plan=plan,
+        results=results,
+    )
+
+
+def test_successful_flash4_carve_discloses_boot_block_exclusion_in_json():
+    """W29C040 (real DB entry, protocol 0x05, 524288 B): the write step's
+    verdict is a clean OK (StepResult.reason == ""), yet `to_dict()`'s
+    write_coverage key must still name the excluded boot blocks -- the
+    disclosure comes from Step.reason (derive_plan's own, set even on a
+    SUCCESSFUL carve), never from the now-empty StepResult.reason."""
+    report = _build_full_scope_report("W29C040")
+    d = report.to_dict()
+
+    write_row = next(r for r in d["steps"] if r.get("write_region_start") == 16384)
+    assert write_row["verdict"] == "OK", write_row
+    assert write_row["reason"] == "", write_row  # StepResult.reason IS empty
+    coverage = write_row["write_coverage"]
+    assert coverage, "write_coverage must not be empty/None on a carved write"
+    assert "boot block" in coverage.lower(), coverage
+    assert "16384" in coverage, coverage
+
+
+def test_successful_flash4_carve_discloses_boot_block_exclusion_in_console():
+    """Same run as above, checked at the render() surface: the console
+    table must carry a 'write coverage' row naming the boot blocks."""
+    report = _build_full_scope_report("W29C040")
+    table = report.render()
+    rendered = _rendered_text(table)
+
+    assert "write coverage" in rendered
+    assert "boot block" in rendered.lower(), rendered
+
+
+@pytest.mark.parametrize("chip_name", ["AT29C256", "AT29C257", "AT29LV256"])
+def test_whole_device_boot_block_fallback_discloses_refusal_not_uv_wording(
+    chip_name,
+):
+    """AT29C256/257/LV256 (real DB entries, protocol 0x05, 32768 B): the
+    two 16 KiB boot blocks cover the ENTIRE device, so derive_plan falls
+    back to the small fixed region -- region_policy is `fixed`, not
+    `full-device`. The write is never masked (a non-UV chip), so the
+    coverage line must state the REAL refusal reason and must NEVER say
+    "bits clearable" (that phrasing is only meaningful for a masked UV
+    slot)."""
+    full = _REAL_DB.get_eprom(chip_name)
+    assert full["protocol-id"] == 5
+    assert full["memory-size"] == 32768
+
+    report = _build_full_scope_report(chip_name)
+    d = report.to_dict()
+
+    write_row = next(r for r in d["steps"] if r.get("write_region_start") is not None)
+    coverage = write_row["write_coverage"]
+    assert coverage, "write_coverage must not be empty/None on the fallback"
+    assert "boot block" in coverage.lower(), coverage
+    assert "bits clearable" not in coverage.lower(), coverage
+
+    table = report.render()
+    rendered = _rendered_text(table)
+    assert "write coverage" in rendered
+    assert "bits clearable" not in rendered.lower(), rendered

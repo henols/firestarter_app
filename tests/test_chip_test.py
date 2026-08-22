@@ -51,6 +51,8 @@ import pytest
 from firestarter.chip_test import (
     _DEFAULT_REGION,  # test-internal: engine module constant (v1.30 Phase 134)
     _DESTRUCTIVE_GATE_REASON,  # test-internal: chip-ID gate reason (SWEEP-03)
+    _MAX_FULL_DEVICE_LENGTH,  # test-internal: 260821-wna D-E sanity ceiling
+    _PROTOCOL_FLASH4,  # test-internal: reused protocol id constant
     _SDP_LEG_STEP_ORDER,  # test-internal: the D-06 six-op order (v1.30 Phase 134)
     _UV_WRITE_REGION_LENGTH,  # test-internal: engine module constant (PATT-03)
     OP_BLANK_CHECK,
@@ -60,6 +62,9 @@ from firestarter.chip_test import (
     OP_VERIFY,
     OP_WRITE,
     OP_WRITE_PARTIAL,  # 121-06 D-06: the seventh op string
+    REGION_POLICY_FIXED,  # test-internal: 260821-wna region-policy vocab
+    REGION_POLICY_FULL_DEVICE,  # test-internal: 260821-wna region-policy vocab
+    REGION_POLICY_UV_SLOT,  # test-internal: 260821-wna region-policy vocab
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
@@ -78,6 +83,7 @@ from firestarter.chip_test import (
     derive_plan,
     generate_pattern,
     is_uv_eprom,  # exact 301/301 UV-EPROM axis (D-02, 121-05)
+    mask_write_pattern,  # test-internal: 260821-wna D-A masking arithmetic
     prepass_images,
     run_plan,
 )
@@ -794,6 +800,148 @@ def test_derive_plan_partial_write_region_missing_memory_size_falls_back():
 
 
 # ---------------------------------------------------------------------------
+# region_policy (quick task 260821-wna, D-A..D-F): derive_plan decides the
+# region POLICY, purely from the DB. No chip access anywhere in this block.
+# ---------------------------------------------------------------------------
+
+
+def test_derive_plan_full_device_region_non_uv_eeprom():
+    # AT28C256 (EEPROM, 32768 B, protocol 0x0D -- not flash4): full-device
+    # policy, whole-device region.
+    plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
+    write_step = _step(plan, "write")
+    verify_step = _step(plan, "verify")
+    assert write_step.region_policy == REGION_POLICY_FULL_DEVICE
+    assert write_step.write_region == (0, 32768)
+    assert verify_step.region_policy == REGION_POLICY_FULL_DEVICE
+    assert verify_step.write_region == (0, 32768)
+    assert write_step.full_device_permitted is True
+
+
+def test_derive_plan_full_device_region_flash4_carves_boot_blocks():
+    # W29C040 (Flash/EEPROM, protocol 5, 524288 B): full-device region minus
+    # the two 16 KiB boot blocks, and a reason naming the exclusion even
+    # though this is a SUCCESSFUL carve-out (D-D: the exclusion is stated
+    # and visible, not merely a refusal-path artifact).
+    plan = derive_plan("W29C040", _REAL_DB, write_scope="full")
+    write_step = _step(plan, "write")
+    assert write_step.region_policy == REGION_POLICY_FULL_DEVICE
+    assert write_step.write_region == (16384, 491520)
+    assert "boot block" in write_step.reason.lower()
+
+
+def test_derive_plan_full_device_region_flash4_whole_device_boot_block_falls_back():
+    # A synthetic protocol-5, 32768 B row: the two boot blocks cover the
+    # entire device, so a full write is structurally impossible -- falls
+    # back to the fixed small region with a stated reason, never a FAIL.
+    full = {
+        "electrical-type": "Flash/EEPROM",
+        "memory-size": 32768,
+        "protocol-id": _PROTOCOL_FLASH4,
+    }
+    prog = {"algorithm": _PROTOCOL_FLASH4, "flags": 0, "chip-id": 0}
+    spy_db = Mock(spec=["get_eprom", "convert_to_programmer"])
+    spy_db.get_eprom.return_value = full
+    spy_db.convert_to_programmer.return_value = prog
+
+    plan = derive_plan("SYNTHETIC_FLASH4", spy_db, write_scope="full")
+    write_step = _step(plan, "write")
+    assert write_step.region_policy == REGION_POLICY_FIXED
+    assert write_step.write_region == _DEFAULT_REGION
+    assert "boot block" in write_step.reason.lower()
+
+
+def test_derive_plan_uv_full_scope_uses_uv_slot_policy_and_permits_full_device():
+    # M27C512 (UV, 65536 B): region_policy uv-slot, write_region is the
+    # FIRST slot candidate (top-anchored, unchanged from pre-task
+    # behaviour), and full_device_permitted is True at "full" (D-C).
+    plan = derive_plan("M27C512", _REAL_DB, write_scope="full")
+    write_step = _step(plan, "write")
+    verify_step = _step(plan, "verify")
+    assert write_step.region_policy == REGION_POLICY_UV_SLOT
+    assert write_step.write_region == (65280, 256)
+    assert verify_step.region_policy == REGION_POLICY_UV_SLOT
+    assert write_step.full_device_permitted is True
+
+
+def test_derive_plan_uv_partial_scope_forbids_full_device_outcome():
+    # Same first slot candidate as "full", but full_device_permitted is
+    # False -- the scope literal forbids the D-C full-device-if-blank
+    # outcome regardless of chip state.
+    plan = derive_plan("M27C512", _REAL_DB, write_scope="partial")
+    write_step = _step(plan, "write-partial")
+    assert write_step.region_policy == REGION_POLICY_UV_SLOT
+    assert write_step.write_region == (65280, 256)
+    assert write_step.full_device_permitted is False
+
+
+def test_derive_plan_sdp_leg_keeps_fixed_region_at_full_scope():
+    # The six SDP-leg steps keep the region they get today at the same
+    # scope -- (0, 256) at full for AT28C256 -- and carry region_policy
+    # fixed. They are never widened to the full device even though the
+    # chip's OWN write step now is.
+    plan = derive_plan("AT28C256", _REAL_DB, write_scope="full")
+    write_step = _step(plan, "write")
+    assert write_step.write_region == (0, 32768)  # the chip's own write IS widened
+    for sdp_op in _SDP_LEG_STEP_ORDER:
+        leg_step = _step(plan, sdp_op)
+        assert leg_step.region_policy == REGION_POLICY_FIXED
+        assert leg_step.write_region == _DEFAULT_REGION
+
+
+def test_derive_plan_write_scope_none_unchanged_by_region_policy():
+    plan = derive_plan("AT28C256", _REAL_DB, write_scope="none")
+    assert [s.write_region for s in plan.steps if s.op in ("write", "verify")] == []
+    # write_scope="none" structurally omits write/verify from `steps`.
+    assert all(s.op not in ("write", "verify") for s in plan.steps)
+
+
+@pytest.mark.parametrize("hostile_mem_size", [1 << 40, 300, None, 0])
+def test_derive_plan_hostile_memory_size_never_widens_the_window(hostile_mem_size):
+    # A hostile DB dict never widens the window: the write step falls back
+    # to region_policy fixed with the pre-existing small region and a
+    # stated reason (T-wna-01).
+    full = {
+        "electrical-type": "EEPROM",
+        "memory-size": hostile_mem_size,
+        "protocol-id": 13,
+    }
+    prog = {"algorithm": 13, "flags": 0, "chip-id": 0}
+    spy_db = Mock(spec=["get_eprom", "convert_to_programmer"])
+    spy_db.get_eprom.return_value = full
+    spy_db.convert_to_programmer.return_value = prog
+
+    plan = derive_plan("SYNTHETIC_HOSTILE", spy_db, write_scope="full")
+    write_step = _step(plan, "write")
+    assert write_step.region_policy == REGION_POLICY_FIXED
+    assert write_step.write_region == _DEFAULT_REGION
+    assert write_step.reason
+
+
+def test_derive_plan_full_device_region_at_sanity_ceiling_is_honoured():
+    full = {
+        "electrical-type": "EEPROM",
+        "memory-size": _MAX_FULL_DEVICE_LENGTH,
+        "protocol-id": 13,
+    }
+    prog = {"algorithm": 13, "flags": 0, "chip-id": 0}
+    spy_db = Mock(spec=["get_eprom", "convert_to_programmer"])
+    spy_db.get_eprom.return_value = full
+    spy_db.convert_to_programmer.return_value = prog
+
+    plan = derive_plan("SYNTHETIC_CEILING", spy_db, write_scope="full")
+    write_step = _step(plan, "write")
+    assert write_step.region_policy == REGION_POLICY_FULL_DEVICE
+    assert write_step.write_region == (0, _MAX_FULL_DEVICE_LENGTH)
+
+
+# The no-chip-access invariant with region_policy in play is already pinned
+# by `test_derive_plan_reads_via_get_eprom_and_convert_to_programmer_only`
+# above (unmodified by this task) -- it exercises the same derive_plan code
+# path this task changed and stays green, so no separate leg is added here.
+
+
+# ---------------------------------------------------------------------------
 # write_scope rejects anything else fail-closed (D-02, 121-05 Task 3 leg 2)
 # ---------------------------------------------------------------------------
 
@@ -905,7 +1053,7 @@ def _sdp_leg_readback_operator():
     op.check_eprom_blank.return_value = True
     op.erase_eprom.return_value = True
 
-    def _write_eprom(name, eprom_data, source_path, flags=0):
+    def _write_eprom(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
         payload = Path(source_path).read_bytes()
         if state["locked"] and (flags & FLAG_SKIP_SDP_UNLOCK):
             # Genuinely blocked: the chip ignores the write while locked
@@ -921,7 +1069,7 @@ def _sdp_leg_readback_operator():
             Path(output_file).write_bytes(state["image"])
         return True
 
-    def _verify_eprom(name, eprom_data, source_path):
+    def _verify_eprom(name, eprom_data, source_path, *_args, **_kwargs):
         expected = Path(source_path).read_bytes()
         return expected == state["image"]
 
@@ -1167,11 +1315,46 @@ def test_id_mismatch_does_not_gate_non_destructive_steps():
 
 
 def _writes_bytes_to_output_file(data: bytes):
-    """Build a `read_eprom` side_effect that writes `data` to `output_file`."""
+    """Build a `read_eprom` side_effect that writes `data` at the requested
+    ABSOLUTE offset (quick task 260821-wna, finding M-3), defaulting to
+    offset 0 when no `address_str` is supplied -- reproducing
+    `_write_to_file`'s `file_handle.seek(address)` via the same
+    `_parse_addr_or_size` helper `fake_chip.FakeChip` uses.
+    """
+    from .fake_chip import _parse_addr_or_size
 
-    def _side_effect(_name, _eprom_data, output_file=None, **_kwargs):
+    def _side_effect(_name, _eprom_data, output_file=None, address_str=None, **_kwargs):
         if output_file:
-            Path(output_file).write_bytes(data)
+            start = _parse_addr_or_size(address_str) or 0
+            with open(output_file, "wb") as fh:
+                fh.seek(start)
+                fh.write(data)
+        return True
+
+    return _side_effect
+
+
+def _writes_fill_at_requested_region(fill: int = 0xFF):
+    """Build a `read_eprom` side_effect that answers ANY region request
+    with `fill` repeated for the requested size, written at the requested
+    ABSOLUTE offset -- models a virgin/blank chip for the execution-time
+    UV-slot probe walk (quick task 260821-wna, Task 4). Falls back to a
+    zero-length write when `size_str` is absent (the plain OP_READ step's
+    own whole-device call, which this helper is never used for in this
+    module -- kept total rather than partial for defensiveness).
+    """
+    from .fake_chip import _parse_addr_or_size
+
+    def _side_effect(
+        _name, _eprom_data, output_file=None, address_str=None, size_str=None, **_kw
+    ):
+        if not output_file:
+            return True
+        start = _parse_addr_or_size(address_str) or 0
+        length = _parse_addr_or_size(size_str) or 0
+        with open(output_file, "wb") as fh:
+            fh.seek(start)
+            fh.write(bytes([fill]) * length)
         return True
 
     return _side_effect
@@ -1626,7 +1809,9 @@ def _capturing_write(captured: dict):
     in its `finally` block once the run loop returns, so the bytes MUST be
     read back from inside the call itself, not after `run_plan` returns."""
 
-    def _write(name: str, eprom_data: dict, source_path: str) -> bool:
+    def _write(
+        name: str, eprom_data: dict, source_path: str, *_args, **_kwargs
+    ) -> bool:
         captured["bytes"] = Path(source_path).read_bytes()
         return True
 
@@ -1635,23 +1820,29 @@ def _capturing_write(captured: dict):
 
 def test_write_region_via_run_plan_uses_the_plan_carried_window():
     # M27C512 (UV-EPROM, memory-size 65536): write_scope="partial" carries
-    # the top-anchored (65280, 256) window on the write-partial step (D-02).
-    # Driving run_plan end to end (real resolve_chip/convert_to_programmer),
-    # operator.write_eprom must be called with a pattern file containing
-    # EXACTLY _UV_WRITE_REGION_LENGTH bytes generated for that base.
+    # the top-anchored (65280, 256) window on the write-partial step (D-02)
+    # as the FIRST uv-slot candidate. `full_device_permitted` is False at
+    # "partial" (D-C), so the execution-time resolver ALWAYS probes rather
+    # than taking the blank-check shortcut -- quick task 260821-wna, Task 4.
+    # `_writes_fill_at_requested_region(0xFF)` models a virgin chip so the
+    # probe finds the top slot immediately virgin (bits_cleared ==
+    # bits_retained == 1024, comfortably above both D-B floors), and the
+    # resulting masked pattern for an all-0xFF current is byte-identical to
+    # the plain address-derived pattern (mask_write_pattern(0xFF, D) == D)
+    # -- so this test's original expected bytes are UNCHANGED even though
+    # the mechanism producing them is now the probe, not a bare region copy.
     name = "M27C512"
     expected_id = _real_expected_chip_id(name)
     plan = derive_plan(name, _REAL_DB, write_scope="partial")
     write_step = _step(plan, OP_WRITE_PARTIAL)
     assert write_step.write_region == (65280, 256)
+    assert write_step.full_device_permitted is False
 
     operator = _mock_operator()
     operator.check_eprom_id.return_value = (True, expected_id)
     captured: dict = {}
     operator.write_eprom.side_effect = _capturing_write(captured)
-    operator.read_eprom.side_effect = _writes_bytes_to_output_file(
-        generate_pattern(65280, 256)
-    )
+    operator.read_eprom.side_effect = _writes_fill_at_requested_region(0xFF)
 
     results = run_plan(plan, operator, _REAL_DB, runs=2)
 
@@ -1660,41 +1851,51 @@ def test_write_region_via_run_plan_uses_the_plan_carried_window():
     assert write_result.verdict == VERDICT_OK
     assert len(captured["bytes"]) == _UV_WRITE_REGION_LENGTH == 256
     assert captured["bytes"] == generate_pattern(65280, 256)
+    assert write_result.write_target is not None
+    assert write_result.write_target.region == (65280, 256)
 
 
 def test_write_region_via_run_plan_uv_part_full_scope_uses_full_window():
-    # Correction recorded in 121-06-SUMMARY.md: measured (unchanged since
-    # 121-05's derive_plan), write_scope="full" for a UV part ALSO uses the
-    # top-anchored window -- identical to "partial"'s, because derive_plan's
-    # "full" arm is is_uv-gated onto `_top_anchored_or_default` exactly like
-    # "partial". The REGION does not distinguish the two scopes for a UV
-    # part; the OP STRING does (OP_WRITE here vs OP_WRITE_PARTIAL for the
-    # partial plan) -- which is precisely why D-06 introduces a dedicated op
-    # string: dedup_fingerprint hashes on `op`, so the region axis alone
-    # could not keep a UV part's full and partial runs from cross-agreeing
-    # (T-121-24).
+    # RETARGETED by quick task 260821-wna (D-C): `derive_plan` still sets
+    # `Step.write_region` to the top-anchored slot candidate at "full"
+    # scope (unchanged, asserted below) -- but `Step.full_device_permitted`
+    # is now True at "full" scope, and `_mock_operator()`'s
+    # `check_eprom_blank.return_value = True` means this chip reports
+    # blank. D-C's execution-time resolver takes that combination straight
+    # to the full-device-if-blank branch: the ACTUAL bytes handed to
+    # `write_eprom` are now the address-derived pattern over the WHOLE
+    # DEVICE (0, 65536), not merely the top slot -- the behaviour this test
+    # originally pinned ("full" == "partial"'s window for a UV part) is
+    # deliberately GONE for a chip the blank-check reports blank. The
+    # pre-D-C assertion is preserved as a comment for the historical
+    # record: `assert captured["bytes"] == generate_pattern(65280, 256)`.
     name = "M27C512"
     expected_id = _real_expected_chip_id(name)
     plan = derive_plan(name, _REAL_DB, write_scope="full")
     write_step = _step(plan, OP_WRITE)
     assert write_step.write_region == (65280, 256)
+    assert write_step.full_device_permitted is True
 
     operator = _mock_operator()
     operator.check_eprom_id.return_value = (True, expected_id)
+    operator.check_eprom_blank.return_value = True
     captured: dict = {}
     operator.write_eprom.side_effect = _capturing_write(captured)
-    operator.read_eprom.side_effect = _writes_bytes_to_output_file(
-        generate_pattern(65280, 256)
-    )
+    operator.read_eprom.side_effect = _writes_fill_at_requested_region(0xFF)
 
     results = run_plan(plan, operator, _REAL_DB, runs=2)
 
     operator.write_eprom.assert_called()
     write_result = _result(results, OP_WRITE)
     assert write_result.verdict == VERDICT_OK
-    assert captured["bytes"] == generate_pattern(65280, 256)
-    # Same region as the partial plan (see correction above); op strings
-    # differ ("write" vs "write-partial"), which is the actual distinguisher.
+    assert captured["bytes"] == generate_pattern(0, 65536)
+    assert write_result.write_target is not None
+    assert write_result.write_target.region == (0, 65536)
+    assert write_result.write_target.masked is True
+    assert write_result.write_target.current_source.startswith("blank-check")
+    # `Step.write_region` (derive_plan's own decision) is UNCHANGED --
+    # still the top-anchored slot candidate; only the EXECUTION-time
+    # resolved target widens to the full device under D-C.
     assert write_step.write_region == (65280, 256)
 
 
@@ -2521,3 +2722,185 @@ def test_count_applicable_sdp_banner_row_renders_the_dropped_ratio():
     rendered = console.export_text()
     assert f"{banner.n_ran} of {banner.m_applicable} ran" in rendered, rendered
     assert "4 of 4 ran" not in rendered, rendered
+
+
+# ---------------------------------------------------------------------------
+# Execution-time mask, slot selection and region-scoped I/O (quick task
+# 260821-wna, Task 4) -- driven against `fake_chip.FakeChip` through
+# `run_plan` (not through the CLI) so each property is pinned at the engine
+# seam. `FakeChip` genuinely models UV AND-write physics and absolute-offset
+# reads (M-3); a plain `Mock` cannot exercise these properties honestly.
+# ---------------------------------------------------------------------------
+
+from .fake_chip import FakeChip  # noqa: E402
+
+
+def test_full_device_write_non_uv_covers_whole_device():
+    # AT28C256 (EEPROM, 32768 B, protocol 0x0D -- not flash4): the write
+    # step's resolved target spans the WHOLE device, address_str is None
+    # (region start 0), and the verify step's target is the SAME object.
+    name = "AT28C256"
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    chip = FakeChip.non_uv(32768)
+    results = run_plan(plan, chip, _REAL_DB)
+
+    write_result = _result(results, "write")
+    verify_result = _result(results, "verify")
+    assert write_result.verdict == VERDICT_OK, write_result
+    assert write_result.write_target is not None
+    assert write_result.write_target.region == (0, 32768)
+    assert len(write_result.write_target.pattern) == 32768
+    assert verify_result.verdict == VERDICT_OK, verify_result
+    write_calls = [c for c in chip.calls if c[0] == "write_eprom"]
+    assert write_calls and all(c[1]["address_str"] is None for c in write_calls)
+
+
+def test_full_device_write_flash4_carves_out_boot_blocks():
+    # W29C040 (Flash/EEPROM, protocol 5, 524288 B): the write target excludes
+    # the first/last 16 KiB boot blocks, and `write_eprom` receives an
+    # `address_str` naming 0x4000 with a file of `memory-size - 32768` bytes.
+    name = "W29C040"
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    chip = FakeChip.non_uv(524288)
+    results = run_plan(plan, chip, _REAL_DB)
+
+    write_result = _result(results, "write")
+    assert write_result.verdict == VERDICT_OK, write_result
+    assert write_result.write_target is not None
+    assert write_result.write_target.region == (16384, 491520)
+    assert len(write_result.write_target.pattern) == 524288 - 32768
+    write_calls = [c for c in chip.calls if c[0] == "write_eprom"]
+    assert write_calls and all(c[1]["address_str"] == "0x4000" for c in write_calls)
+
+
+def test_uv_virgin_full_scope_gets_full_device_masked_write():
+    # M27C512 (UV, 65536 B), write_scope="full", virgin chip: blank-check
+    # OK + full_device_permitted -> D-C's full-device-if-blank branch. The
+    # written file equals the plain address-derived pattern over the WHOLE
+    # device (mask_write_pattern(0xFF, D) == D), and the step is OK.
+    name = "M27C512"
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    chip = FakeChip.virgin_uv(65536)
+    results = run_plan(plan, chip, _REAL_DB)
+
+    write_result = _result(results, "write")
+    assert write_result.verdict == VERDICT_OK, write_result
+    target = write_result.write_target
+    assert target is not None
+    assert target.region == (0, 65536)
+    assert target.pattern == generate_pattern(0, 65536)
+    assert target.masked is True
+    assert target.current_source.startswith("blank-check")
+
+
+def test_uv_virgin_partial_scope_writes_single_top_slot_not_whole_device():
+    # Same virgin chip, write_scope="partial": full_device_permitted is
+    # False, so the scope literal is honoured -- a single top slot, never
+    # the whole device.
+    name = "M27C512"
+    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    chip = FakeChip.virgin_uv(65536)
+    results = run_plan(plan, chip, _REAL_DB)
+
+    write_result = _result(results, "write-partial")
+    assert write_result.verdict == VERDICT_OK, write_result
+    target = write_result.write_target
+    assert target is not None
+    assert target.region == (65280, 256)
+    assert target.pattern == generate_pattern(65280, 256)
+
+
+def test_uv_used_chip_write_is_genuinely_masked_and_verify_reads_the_region():
+    # A UV chip whose top slot already carries SOME content (0xF0 in every
+    # byte -- half its bits already cleared relative to a virgin cell): the
+    # file `write_eprom` receives equals `mask_write_pattern(slot_content,
+    # generate_pattern(slot_start, slot_length))`, and the verify step's
+    # own read-back is the REGION slice, not a device-prefix read.
+    name = "M27C512"
+    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    slot_content = b"\xf0" * 256
+    chip = FakeChip.uv_with_content(65536, slot_content, start=65280)
+    expected_pattern = generate_pattern(65280, 256)
+    expected_masked = mask_write_pattern(slot_content, expected_pattern)
+
+    results = run_plan(plan, chip, _REAL_DB)
+
+    write_result = _result(results, "write-partial")
+    assert write_result.verdict == VERDICT_OK, write_result
+    target = write_result.write_target
+    assert target is not None
+    assert target.masked is True
+    assert target.pattern == expected_masked
+    verify_result = _result(results, "verify")
+    assert verify_result.verdict == VERDICT_OK, verify_result
+
+
+def test_slot_advance_skips_a_saturated_top_slot():
+    # The top slot (65280, 256) already carries EXACTLY this pattern (a
+    # prior UV write with the same address-derived pattern) -- saturated
+    # under D-B (bits_cleared == 0). The selector must advance to the next
+    # slot down (65024, 256), and `address_str` must name THAT slot.
+    name = "M27C512"
+    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    chip = FakeChip.uv_with_content(65536, generate_pattern(65280, 256), start=65280)
+    results = run_plan(plan, chip, _REAL_DB)
+
+    write_result = _result(results, "write-partial")
+    assert write_result.verdict == VERDICT_OK, write_result
+    target = write_result.write_target
+    assert target is not None
+    assert target.region == (65024, 256), target.region
+    write_calls = [c for c in chip.calls if c[0] == "write_eprom"]
+    assert write_calls and all(c[1]["address_str"] == "0xFE00" for c in write_calls)
+
+
+def test_zeroed_slot_is_never_targeted():
+    # The top slot reads all-0x00 -- the vacuous-pass refusal's other named
+    # case. It must never be targeted; the selector advances past it to the
+    # next (virgin) slot.
+    name = "M27C512"
+    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    chip = FakeChip.uv_with_slot_zeroed(65536, 65280, 256)
+    results = run_plan(plan, chip, _REAL_DB)
+
+    write_result = _result(results, "write-partial")
+    assert write_result.verdict == VERDICT_OK, write_result
+    target = write_result.write_target
+    assert target is not None
+    assert target.region != (65280, 256)
+    assert target.region == (65024, 256)
+
+
+def test_every_slot_saturated_write_is_skipped_never_ok():
+    # A UV chip whose EVERY candidate slot is saturated under this pattern:
+    # the write step verdict is SKIPPED naming saturation, the verify step
+    # is SKIPPED too, `write_eprom` is NEVER called, and no step reports OK
+    # for the write.
+    name = "M27C512"
+    plan = derive_plan(name, _REAL_DB, write_scope="full")
+    chip = FakeChip.uv_all_saturated(65536, 256)
+    assert chip.check_eprom_blank(name, {}) is False  # sanity: not the D-C path
+
+    results = run_plan(plan, chip, _REAL_DB)
+
+    write_result = _result(results, "write")
+    verify_result = _result(results, "verify")
+    assert write_result.verdict == VERDICT_SKIPPED, write_result
+    assert "saturat" in write_result.reason.lower(), write_result.reason
+    assert write_result.write_target is None
+    assert verify_result.verdict == VERDICT_SKIPPED, verify_result
+    write_calls = [c for c in chip.calls if c[0] == "write_eprom"]
+    assert write_calls == [], "write_eprom must never be called on a saturated chip"
+    assert all(r.verdict != VERDICT_OK for r in (write_result, verify_result))
+
+
+def test_probe_never_persists_a_slot_cursor_to_disk(tmp_path, monkeypatch):
+    # Slot selection is stateless: the chip's own content is the state.
+    # Patch the config dir to a throwaway directory and assert nothing new
+    # appears there after a UV partial-scope run that must probe.
+    monkeypatch.setenv("FIRESTARTER_CONFIG_DIR", str(tmp_path))
+    name = "M27C512"
+    plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    chip = FakeChip.virgin_uv(65536)
+    run_plan(plan, chip, _REAL_DB)
+    assert list(tmp_path.iterdir()) == [], "a slot cursor was persisted to disk"

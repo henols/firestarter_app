@@ -2433,20 +2433,33 @@ def _resolve_write_scope(
 ) -> str:
     """Decide this run's `derive_plan(..., write_scope=...)` literal (D-01/D-03).
 
+    Quick task 260821-wna (D-C) changes what the scope literal MEANS on a UV
+    part: it used to pick "how wide is the write window" (both answers
+    resolved to the same 256-byte window, D-01's original inert-prompt
+    finding); it now picks the CONSENT CEILING the execution-time resolver
+    is permitted to reach -- `full` permits a full-device write when the
+    chip reads blank (D-C), `partial` never does, regardless of chip state.
+    On a chip that is NOT blank, `full` and `partial` still both resolve to
+    a single masked 256-byte slot (D-A/D-B) -- the ceiling only matters when
+    the blank-check actually reports blank.
+
     1. Not UV (`_is_uv_eprom` False) -> the full-write scope, **no prompt at
        all**. A UV write is irrecoverable without a lamp; EEPROM and Flash
        writes are recoverable via erase and SRAM/FRAM writes are essentially
        free, so every other family -- explicitly including this milestone's
        own AT28C family -- runs the full write/verify/erase round-trip
-       unprompted.
+       unprompted (and, since this task, covers the FULL DEVICE rather than
+       a small region, D-D).
     2. UV and not interactive -> the partial scope, no prompt. Per D-03 an
-       absent TTY is a DECLINED prompt, not absent consent -- the 256-byte
-       top-anchored window is still written so a piped or CI run still
-       yields write evidence.
+       absent TTY is a DECLINED prompt, not absent consent -- a single
+       256-byte slot is written (never the whole device, regardless of
+       chip state) so a piped or CI run still yields write evidence.
     3. UV and interactive -> ask, defaulting to decline. A yes returns the
-       full scope (the whole device may be written); a no returns the
-       partial scope -- never described as non-destructive or read-only,
-       because it writes a small top-anchored region.
+       full scope: the whole device MAY be written, but only if the chip
+       reads blank (D-C) -- a used chip still receives just one masked
+       256-byte slot even under this answer. A no returns the partial
+       scope: one 256-byte slot only, unconditionally. Neither answer is
+       ever described as non-destructive or read-only.
 
     `interactive` is taken as a parameter rather than calling
     `_is_interactive()` internally, and `confirm_fn` is an injected
@@ -2460,9 +2473,10 @@ def _resolve_write_scope(
     chip_upper = chip.upper()
     prompt = (
         f"{chip_upper} is a UV-erasable EPROM -- its write cannot be undone "
-        "without a UV eraser. Write the WHOLE device now? Yes writes the "
-        "entire chip; no writes only a small 256-byte top-anchored region "
-        "instead -- that still writes, it is not read-only or non-destructive."
+        "without a UV eraser. Yes permits the whole device to be written if "
+        "it reads blank, and otherwise writes one 256-byte slot; no writes "
+        "one 256-byte slot only -- neither answer is read-only or "
+        "non-destructive."
     )
     if confirm_fn(prompt):
         return "full"
@@ -2498,15 +2512,22 @@ _ALWAYS_WRITES_PASS_COUNT = 6
 # an unknown option.
 #
 # ALWAYS WRITES (D-04): every run writes to the chip, unconditionally. A
-# UV-erasable EPROM is asked first (D-01): yes writes the whole device,
-# no writes only a small 256-byte top-anchored region (still a write,
-# never read-only or non-destructive); off a TTY the ask is treated as a
-# DECLINED prompt, not absent consent, so the 256-byte window is written
-# anyway (D-03). Every OTHER family -- explicitly including this
-# milestone's own AT28C family, an electrically-erasable EEPROM -- is
-# written in full with NO prompt at all, because that write is
-# recoverable via erase (unlike an irrecoverable UV write). The report is
-# unconditionally persisted to `<config dir>/reports` (honors
+# UV-erasable EPROM is asked first (D-01), and quick task 260821-wna (D-C)
+# changes what the two answers DO: yes permits the whole device to be
+# written IF the chip reads blank, and otherwise writes one masked
+# 256-byte slot (D-A/D-B); no writes one 256-byte slot only,
+# unconditionally -- never read-only or non-destructive either way, and
+# the two answers no longer resolve to the same window on a used chip. Off
+# a TTY the ask is treated as a DECLINED prompt, not absent consent, so a
+# single 256-byte slot is written anyway (D-03). Every OTHER family --
+# explicitly including this milestone's own AT28C family, an
+# electrically-erasable EEPROM -- is written in full with NO prompt at
+# all, because that write is recoverable via erase (unlike an
+# irrecoverable UV write); as of this task that full write now covers the
+# WHOLE DEVICE (minus flash4's two boot blocks) rather than a small region
+# (D-D). A large part's full-device pass is therefore several
+# device-length transfers at 250000 baud -- minutes, not seconds. The
+# report is unconditionally persisted to `<config dir>/reports` (honors
 # `FIRESTARTER_CONFIG_DIR`) and is always handed to `submit_report`
 # (DEVTEST-05/06; Plan 121-11 owns that function's internals).
 #
