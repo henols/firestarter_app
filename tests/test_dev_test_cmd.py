@@ -2064,3 +2064,51 @@ class TestBlankCheckAfterEraseKaq:
         steps = {s["op"]: s for s in data["steps"]}
         assert steps["blank-check"]["verdict"] == "NA", steps["blank-check"]
         operator.check_eprom_blank.assert_not_called()
+
+# ---------------------------------------------------------------------------
+# Write-coverage provenance end to end (quick task 260821-wna, Task 5): a
+# real CLI run over a used UV `FakeChip` saves a JSON whose write step
+# carries the slot region, and the console output contains the coverage
+# line -- both surfaces, driven through the real `dev test` command.
+# ---------------------------------------------------------------------------
+
+
+class TestWriteCoverageProvenanceD_F:
+    def test_used_uv_chip_cli_run_carries_slot_region_in_json_and_console(
+        self, runner: CliRunner
+    ) -> None:
+        """AM27512 (UV, 65536 B) with its top slot already partially
+        programmed (0xF0 in every byte -- some bits already cleared, still
+        comfortably above both D-B floors): off-TTY forces write_scope=
+        "partial" (D-01/D-03), so the execution-time resolver probes and
+        masks rather than taking the D-C full-device shortcut. The saved
+        JSON's write step carries the resolved slot region/bit counts, and
+        the console shows the D-F "write coverage" row."""
+        from .fake_chip import FakeChip
+
+        chip = FakeChip.uv_with_content(65536, b"\xf0" * 256, start=65280)
+        app = make_app_context(
+            eprom_operator=chip, hardware_manager=make_hardware_manager()
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
+        # exit 1, not 0: a used chip is genuinely NOT all-0xFF, so
+        # `check_eprom_blank` (real, chip-content-derived, not stubbed)
+        # honestly reports BAD -- that BAD is what makes this a "used chip"
+        # scenario at all, and it does not stop the write/verify steps from
+        # running and succeeding, which is what this test actually pins.
+        assert result.exit_code == 1, result.output
+
+        data = _load_report(_CHIP_UV)
+        steps = {s["op"]: s for s in data["steps"]}
+        write_step = steps["write-partial"]
+        assert write_step["verdict"] == "OK", write_step
+        assert write_step["write_region_start"] == 65280, write_step
+        assert write_step["write_region_length"] == 256, write_step
+        assert write_step["write_bits_cleared"] is not None, write_step
+        assert write_step["write_bits_retained"] is not None, write_step
+        assert write_step["write_current_source"] == "probe read", write_step
+
+        normalized = _normalize_console_text(result.output)
+        assert "write coverage" in normalized, normalized
+        assert "0xFF00" in normalized, normalized

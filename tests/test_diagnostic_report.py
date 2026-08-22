@@ -1085,7 +1085,7 @@ def test_hold_state_is_str_never_bool():
     assert not isinstance(value, bool)
 
 
-def test_schema_version_1_5_single_sourced():
+def test_schema_version_1_6_single_sourced():
     """`to_dict()["schema_version"]` equals the IMPORTED `SCHEMA_VERSION`
     (never a literal restated here), and the production module bumps the
     constant to its new value in exactly ONE place (single-sourced, D-10) --
@@ -1094,8 +1094,9 @@ def test_schema_version_1_5_single_sourced():
     one". Renamed from `test_schema_version_1_3_single_sourced` (v1.32 Phase
     147 plan 03, D-09): the 1.3 -> 1.4 bump would otherwise leave this test's
     own literal-count assertion asserting a now-absent quoted string. Renamed
-    again for the 1.4 -> 1.5 bump (2026-08-21), which added the additive
-    per-step `duration_s` key."""
+    again for the 1.5 -> 1.6 bump (quick task 260821-wna), which added the
+    additive per-step `write_region_start`/`write_region_length`/
+    `write_bits_cleared`/`write_bits_retained`/`write_current_source` keys."""
     import inspect
 
     from firestarter import diagnostic_report as dr_mod
@@ -1104,7 +1105,7 @@ def test_schema_version_1_5_single_sourced():
     assert report.to_dict()["schema_version"] == dr_mod.SCHEMA_VERSION
 
     source = inspect.getsource(dr_mod)
-    assert source.count('"1.5"') == 1
+    assert source.count('"1.6"') == 1
 
 
 def test_dedup_fingerprint_sensitive_to_sdp_step_verdict_change():
@@ -1200,17 +1201,18 @@ def test_populated_identity_rows_render_the_value_verbatim():
     assert NOT_REPORTED not in _rendered_text(table)
 
 
-def test_schema_version_is_one_five():
-    """PROV-04: the imported constant equals `"1.5"`, and a freshly built
+def test_schema_version_is_one_six():
+    """PROV-04: the imported constant equals `"1.6"`, and a freshly built
     report's `to_dict()["schema_version"]` equals the IMPORTED constant --
     never a restated literal in the second assertion. This is the only
     place in the suite that pins WHICH version this phase shipped; every
-    other site (including `test_schema_version_1_5_single_sourced` above)
-    keeps importing the constant. 1.5 (2026-08-21) added the additive
-    per-step `duration_s` key -- pre-1.5 consumers ignore it."""
+    other site (including `test_schema_version_1_6_single_sourced` above)
+    keeps importing the constant. 1.6 (quick task 260821-wna) added the
+    additive per-step write-coverage keys read off `StepResult.write_target`
+    -- pre-1.6 consumers ignore them."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == "1.5"
+    assert SCHEMA_VERSION == "1.6"
 
     report = _minimal_report()
     assert report.to_dict()["schema_version"] == SCHEMA_VERSION

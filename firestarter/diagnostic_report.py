@@ -46,13 +46,21 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from firestarter.chip_test import _RAN_VERDICTS, BannerCounts, Plan, StepResult
+from firestarter.chip_test import (
+    _RAN_VERDICTS,
+    OP_WRITE,
+    OP_WRITE_PARTIAL,
+    REGION_POLICY_FULL_DEVICE,
+    BannerCounts,
+    Plan,
+    StepResult,
+)
 
 # ---------------------------------------------------------------------------
 # Module constants (D-02, D-03) -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.5"  # D-02: single-sourced, baked into to_dict() output
+SCHEMA_VERSION = "1.6"  # D-02: single-sourced, baked into to_dict() output
 # 1.1 (Phase 114, GRAD-01): additive db_diff.ladder_state key -- backward
 # compatible, existing consumers reading current_support_status/
 # proposed_disposition are unaffected.
@@ -99,6 +107,13 @@ SCHEMA_VERSION = "1.5"  # D-02: single-sourced, baked into to_dict() output
 # gone and unrepeatable -- and are unfixable by design; they must keep
 # parsing. That is PROV-04, pinned by the frozen literal fixtures in
 # `tests/test_parse_devtest_issue.py`.
+# 1.6 (quick task 260821-wna): additive per-step keys -- `write_region_start`,
+# `write_region_length`, `write_bits_cleared`, `write_bits_retained`,
+# `write_current_source` -- read off `StepResult.write_target` (`None` on a
+# step with no resolved target, i.e. every non-write/verify step and any
+# write/verify step SKIPPED as saturated/refused). No top-level key is added;
+# `parse_devtest_issue.py` still accepts `schema_version` by PRESENCE ONLY,
+# so this bump is invisible to it.
 NOT_MEASURED = "not measured"  # D-03: honest fallback, never a false 0
 NOT_REPORTED = "not reported"  # D-11 (v1.32 Phase 147): honest fallback for
 # an identity field that was never ASKED, not merely measured-and-empty --
@@ -488,6 +503,39 @@ def _duration_cell(seconds: object) -> str:
     return f"{value:.2f}s" if value < 10 else f"{value:.1f}s"
 
 
+def _write_coverage_line(step_row: dict[str, Any], policy: str | None) -> str | None:
+    """Render-only D-F line: names write coverage whenever the write did
+    NOT cover the full device -- `None` when nothing should be shown.
+
+    Derived from the SAME `step_row` dict `to_dict()` already produced
+    (never a second field list, never a re-parse of the JSON string) plus
+    the step's `region_policy` (read off `Plan.steps`, the object `render()`
+    already holds a reference to). Kept to one short, measurement-shaped
+    line: the region, the byte count and the bit count, or the reason
+    nothing was written.
+    """
+    start = step_row.get("write_region_start")
+    length = step_row.get("write_region_length")
+    reason = str(step_row.get("reason") or "")
+
+    if start is None and length is None:
+        # No resolved target at all: a saturated/refused write. Name the
+        # reason (the SKIPPED verdict already names saturation).
+        return reason or "no target resolved"
+
+    if policy == REGION_POLICY_FULL_DEVICE:
+        # A full-device write, possibly carved out (flash4 boot blocks) --
+        # only a row when there IS an exclusion to disclose (derive_plan
+        # records that as a non-empty `reason` even on a successful carve).
+        return reason or None
+
+    cleared = step_row.get("write_bits_cleared")
+    region = f"0x{start:X} ({length} bytes)"
+    if cleared is not None:
+        return f"slot {region}, {cleared} bits clearable"
+    return f"region {region}"
+
+
 # ---------------------------------------------------------------------------
 # DiagnosticReport (RPT-01, RPT-02, XPORT-01) -- single-source dual render
 # ---------------------------------------------------------------------------
@@ -595,6 +643,23 @@ class DiagnosticReport:
         }
 
     def _step_dict(self, result: StepResult) -> dict[str, Any]:
+        # Schema 1.6 (quick task 260821-wna): the five `write_*` keys below
+        # are read off `StepResult.write_target` -- `None` on every step
+        # that isn't a write/verify, and `None` on a write/verify step that
+        # was SKIPPED as saturated/refused (there is no resolved target to
+        # report on). Additive INSIDE `steps[]` only, never a top-level key
+        # -- the top-level shape is pinned elsewhere and `parse_devtest_
+        # issue.py` consumes it.
+        #
+        # Deliberate residual, recorded here rather than silently patched:
+        # `dedup_fingerprint` (above) intentionally does NOT read any of
+        # these fields, so it does NOT distinguish a full-device UV run
+        # from a slot run -- the chosen slot is volatile by design (D-B:
+        # the chip's own content is the state), so keying it into the hash
+        # would make every UV run its own group and destroy the N>=2
+        # agreement `count_agreeing` depends on. The coverage is recorded
+        # here as PROVENANCE instead, never as part of the dedup identity.
+        target = result.write_target
         return {
             "op": result.op,
             "verdict": result.verdict,
@@ -606,6 +671,11 @@ class DiagnosticReport:
             # Schema 1.5: wall-clock seconds for the step, or `None` when it
             # did not run. Additive -- every pre-1.5 consumer ignores it.
             "duration_s": result.duration_s,
+            "write_region_start": target.region[0] if target else None,
+            "write_region_length": target.region[1] if target else None,
+            "write_bits_cleared": target.bits_cleared if target else None,
+            "write_bits_retained": target.bits_retained if target else None,
+            "write_current_source": target.current_source if target else None,
         }
 
     def _banner_dict(self) -> dict[str, Any]:
@@ -747,6 +817,27 @@ class DiagnosticReport:
         # a wrapped full sentence in the box); the reason still rides the
         # `to_dict()` string into the JSON, markdown and issue body.
         table.add_row("sdp_hold_state", _state_cell(d["sdp_hold_state"]))
+
+        # D-F (quick task 260821-wna): one extra row, only when the write
+        # did not cover the full device -- the slot range and clearable-bit
+        # count for a slot write, the excluded range and reason for a
+        # carved-out full-device write, or the saturation reason when
+        # nothing was written. No row at all for a plain, unexcluded
+        # full-device write. Adds no console call and no new helper to
+        # `dev_test`'s body -- this lives entirely inside this module.
+        write_step_row = next(
+            (r for r in d["steps"] if r["op"] in (OP_WRITE, OP_WRITE_PARTIAL)),
+            None,
+        )
+        if write_step_row is not None:
+            write_step = next(
+                (s for s in self.plan.steps if s.op == write_step_row["op"]),
+                None,
+            )
+            policy = write_step.region_policy if write_step is not None else None
+            coverage = _write_coverage_line(write_step_row, policy)
+            if coverage:
+                table.add_row("write coverage", coverage)
 
         v = d["voltage"]
         table.add_row(
