@@ -201,23 +201,34 @@ def test_title_reflects_fail_verdict():
 def test_build_body_table_from_sanitized_steps():
     sanitized = {
         "steps": [
-            {"op": "id", "verdict": "OK", "reason": "", "duration_s": 0.03},
+            {
+                "op": "id",
+                "verdict": "OK",
+                "reason": "",
+                "duration_s": 0.03,
+                "run_count": 1,
+            },
             {
                 "op": "write",
                 "verdict": "BAD",
                 "reason": "port /dev/tty<redacted> gone",
                 "duration_s": 41.875,
+                # The N>=2 repeat policy's own number, reaching the filed
+                # body for the first time (schema 1.7): a triager can tell
+                # this write ran twice without unfolding the JSON block.
+                "run_count": 2,
             },
-            # No `duration_s` key at all: a pre-1.5 report replayed through
-            # build_body must not KeyError, it must render `-`.
+            # Neither a `duration_s` NOR a `run_count` key: a pre-1.5 /
+            # pre-1.7 report replayed through build_body must not KeyError,
+            # it must render `-` in both columns.
             {"op": "erase", "verdict": "NA", "reason": ""},
         ]
     }
     body = submit.build_body(sanitized, [], include_json=False)
-    assert "| Step | Verdict | Took | Reason |" in body
-    assert "| id | OK | 0.03s | - |" in body
-    assert "| write | BAD | 41.9s | port /dev/tty<redacted> gone |" in body
-    assert "| erase | NA | - | - |" in body
+    assert "| Step | Verdict | Runs | Took | Reason |" in body
+    assert "| id | OK | 1 | 0.03s | - |" in body
+    assert "| write | BAD | 2 | 41.9s | port /dev/tty<redacted> gone |" in body
+    assert "| erase | NA | - | - | - |" in body
     assert "```json" not in body
 
 

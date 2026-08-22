@@ -1087,7 +1087,7 @@ def test_hold_state_is_str_never_bool():
     assert not isinstance(value, bool)
 
 
-def test_schema_version_1_6_single_sourced():
+def test_schema_version_1_7_single_sourced():
     """`to_dict()["schema_version"]` equals the IMPORTED `SCHEMA_VERSION`
     (never a literal restated here), and the production module bumps the
     constant to its new value in exactly ONE place (single-sourced, D-10) --
@@ -1098,7 +1098,9 @@ def test_schema_version_1_6_single_sourced():
     own literal-count assertion asserting a now-absent quoted string. Renamed
     again for the 1.5 -> 1.6 bump (quick task 260821-wna), which added the
     additive per-step `write_region_start`/`write_region_length`/
-    `write_bits_cleared`/`write_bits_retained`/`write_current_source` keys."""
+    `write_bits_cleared`/`write_bits_retained`/`write_current_source` keys,
+    and again for the 1.6 -> 1.7 bump (quick task 260822-aq6), which added
+    the additive per-step `run_count` key."""
     import inspect
 
     from firestarter import diagnostic_report as dr_mod
@@ -1107,7 +1109,7 @@ def test_schema_version_1_6_single_sourced():
     assert report.to_dict()["schema_version"] == dr_mod.SCHEMA_VERSION
 
     source = inspect.getsource(dr_mod)
-    assert source.count('"1.6"') == 1
+    assert source.count('"1.7"') == 1
 
 
 def test_dedup_fingerprint_sensitive_to_sdp_step_verdict_change():
@@ -1203,18 +1205,108 @@ def test_populated_identity_rows_render_the_value_verbatim():
     assert NOT_REPORTED not in _rendered_text(table)
 
 
-def test_schema_version_is_one_six():
-    """PROV-04: the imported constant equals `"1.6"`, and a freshly built
+# ---------------------------------------------------------------------------
+# run_count disclosure (quick task 260822-aq6)
+# ---------------------------------------------------------------------------
+
+
+def _run_count_report(*specs):
+    """A `_minimal_report` whose steps carry explicit `run_count` values.
+
+    `_minimal_report`'s own `step_specs` tuple has no run-count slot (it
+    predates schema 1.7), so rather than widen that shared helper's tuple
+    shape -- and rewrite every existing caller -- this narrow local builds
+    the same report and then stamps the counts on. `specs` is
+    `(op, run_count)` pairs.
+    """
+    report = _minimal_report(step_specs=[(op, VERDICT_OK, None, "") for op, _ in specs])
+    for result, (_, run_count) in zip(report.results, specs):
+        result.run_count = run_count
+    return report
+
+
+def test_step_dict_carries_run_count():
+    """The defect this task fixes: `StepResult.run_count` was populated on
+    every step since Phase 121 and reached NO consumer outside the test
+    suite -- not `_step_dict`, so not the JSON artifact, not the markdown
+    file, not the filed issue body."""
+    report = _run_count_report(("read", 2), ("write", 2), ("erase", 0))
+    steps = report.to_dict()["steps"]
+
+    assert [row["run_count"] for row in steps] == [2, 2, 0]
+
+
+def test_console_step_row_states_the_run_count():
+    """`read x2` has to be visible in the terminal -- that is the surface an
+    operator is looking at when they notice the same op go past twice."""
+    report = _run_count_report(("read", 2), ("id", 1))
+    text = _rendered_text(report.render())
+
+    assert "x2" in text
+    assert "x1" in text
+
+
+def test_runs_cell_absent_value_contract():
+    """`_runs_cell` mirrors `_duration_cell`: empty string, never a
+    placeholder, so `render()` can join cells without a separator dance.
+    `0` renders empty too -- `x0` would read as a measurement of a step
+    that never reached its operator method."""
+    from firestarter.diagnostic_report import _runs_cell
+
+    assert _runs_cell(2) == "x2"
+    assert _runs_cell(1) == "x1"
+    assert _runs_cell(0) == ""
+    assert _runs_cell(None) == ""
+    assert _runs_cell("nonsense") == ""
+
+
+def test_dedup_fingerprint_separates_a_fast_run_from_an_accurate_one():
+    """The promotion-ladder guard (quick task 260822-aq6).
+
+    `tools/parse_devtest_issue.py::count_agreeing` groups filed reports by
+    this fingerprint and promotes a chip on N>=2 agreement. A `--fast`
+    report is a strictly weaker test -- nothing in it can be `marginal` --
+    so it must never land in an accurate run's group. Same chip, same ops,
+    same verdicts; ONLY the repeat policy differs.
+    """
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    accurate = _run_count_report(("read", 2), ("write", 2))
+    fast = _run_count_report(("read", 1), ("write", 1))
+
+    assert dedup_fingerprint(accurate) != dedup_fingerprint(fast)
+
+
+def test_dedup_fingerprint_unchanged_for_any_non_degraded_run_count():
+    """The deliberate difference from v1.30 D-11, which accepted a full
+    re-key: `repeat_policy_tag` returns `""` for the default policy and the
+    append is skipped ENTIRELY, so every accurate run's fingerprint is
+    byte-identical to the ones already filed. Proven by varying `run_count`
+    across every non-degraded value and getting one hash -- including the
+    `0` that `_minimal_report` leaves on a directly-built report, which is
+    what every pre-existing dedup test in this file relies on."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    hashes = {
+        dedup_fingerprint(_run_count_report(("read", n), ("write", n)))
+        for n in (0, 2, 3, 5)
+    }
+    assert len(hashes) == 1
+
+
+def test_schema_version_is_one_seven():
+    """PROV-04: the imported constant equals `"1.7"`, and a freshly built
     report's `to_dict()["schema_version"]` equals the IMPORTED constant --
     never a restated literal in the second assertion. This is the only
     place in the suite that pins WHICH version this phase shipped; every
-    other site (including `test_schema_version_1_6_single_sourced` above)
-    keeps importing the constant. 1.6 (quick task 260821-wna) added the
-    additive per-step write-coverage keys read off `StepResult.write_target`
-    -- pre-1.6 consumers ignore them."""
+    other site (including `test_schema_version_1_7_single_sourced` above)
+    keeps importing the constant. 1.7 (quick task 260822-aq6) added the
+    additive per-step `run_count` key -- the repeat count that had been
+    populated on every `StepResult` since Phase 121 and read by nothing
+    outside this suite. Pre-1.7 consumers ignore it."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == "1.6"
+    assert SCHEMA_VERSION == "1.7"
 
     report = _minimal_report()
     assert report.to_dict()["schema_version"] == SCHEMA_VERSION

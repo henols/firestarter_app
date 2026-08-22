@@ -1893,12 +1893,25 @@ def test_derive_plan_allow_population_emits_six_supported_ops():
     )
 
 
-def test_derive_plan_allow_dev_test_exposes_zero_cli_options():
-    """LEG-01: no new CLI option -- `dev test`'s Click command still
-    exposes ZERO `click.Option` instances. Asserted STRUCTURALLY by
-    inspecting the registered Click command's `params` -- an exit-code-only
-    check would pass vacuously even if an option were added with a
-    harmless default."""
+def test_derive_plan_allow_adds_no_cli_option():
+    """LEG-01: the SDP leg adds NO CLI option of its own.
+
+    Asserted STRUCTURALLY by inspecting the registered Click command's
+    `params` -- an exit-code-only check would pass vacuously even if an
+    option were added with a harmless default.
+
+    NARROWED (quick task 260822-aq6), recorded rather than silently
+    relaxed: this assertion was written as `options == []` because at the
+    time LEG-01's claim ("this leg needs no new option") and the state of
+    the command ("zero options") were the same sentence. They are no longer.
+    `--fast` -- unrelated to SDP, and a deliberate reversal of Phase 121
+    D-05's zero-option surface -- now exists, so the absolute form would
+    fail for a reason LEG-01 never claimed anything about. The assertion
+    below keeps LEG-01's real content by pinning the option set EXACTLY:
+    the leg still contributes nothing, and a future SDP option cannot slip
+    in. The canonical home for the option surface itself is
+    `tests/test_dev_test_cmd.py::TestZeroOptionSurface`.
+    """
     import click
 
     import firestarter.cli_handlers as cli_handlers_mod
@@ -1906,9 +1919,11 @@ def test_derive_plan_allow_dev_test_exposes_zero_cli_options():
     options = [
         p for p in cli_handlers_mod.dev_test.params if isinstance(p, click.Option)
     ]
-    assert options == [], (
-        f"dev_test carries {len(options)} click.Option instance(s): "
-        f"{options!r} -- LEG-01 requires `dev test` to keep ZERO options"
+    assert [o.name for o in options] == ["fast"], (
+        f"dev_test carries unexpected click.Option instance(s): "
+        f"{[o.name for o in options]!r} -- LEG-01 requires the SDP leg to "
+        "add no CLI option, so the only option here must be the one quick "
+        "task 260822-aq6 introduced"
     )
 
 

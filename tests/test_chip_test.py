@@ -1376,6 +1376,305 @@ def test_runs_boundary_rejects_below_2_before_any_operator_call():
     assert "runs" in results[0].reason.lower()
 
 
+def _record_operator_calls(operator, calls, *methods):
+    """Make each named operator method append its own name to `calls`.
+
+    Preserves the mock's configured `return_value` -- `_mock_operator` sets
+    those, and a bare `side_effect` would otherwise shadow them and hand every
+    step a `Mock` instead of a bool.
+    """
+
+    def _make(method_name, value):
+        def _side(*_args, **_kwargs):
+            calls.append(method_name)
+            return value
+
+        return _side
+
+    for method_name in methods:
+        mock_method = getattr(operator, method_name)
+        mock_method.side_effect = _make(method_name, mock_method.return_value)
+
+
+def test_write_and_verify_run_as_a_cycle_not_two_inner_loops():
+    """D-1: the ORDER is `write, verify, write, verify` -- not `write, write,
+    verify, verify`.
+
+    This is the property the whole cycle loop exists for. A second write onto
+    the state the first one produced is a no-op on the 27C path (see
+    `_MULTI_RUN_OPS`' note in the engine), so pairing each write with its own
+    verify is what makes the repeat mean anything.
+    """
+    calls: list[str] = []
+    operator = _mock_operator()
+    _record_operator_calls(operator, calls, "write_eprom", "verify_eprom")
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+        Step(op=OP_VERIFY, supported=True, reason=""),
+    )
+    run_plan(plan, operator, _REAL_DB, runs=2)
+
+    assert calls == ["write_eprom", "verify_eprom", "write_eprom", "verify_eprom"]
+
+
+def test_erasable_cycle_puts_the_erase_before_the_next_write():
+    """D-3, and the reason the erasable families are fixed by the cycle loop
+    ALONE, with no payload change: each cycle's erase blanks the part for the
+    NEXT cycle's write, so from cycle 2 on the write has full real work to do
+    even though the bytes are identical. The blank-check rides inside the
+    cycle and validates that erase every time round.
+    """
+    calls: list[str] = []
+    operator = _mock_operator()
+    _record_operator_calls(
+        operator,
+        calls,
+        "write_eprom",
+        "verify_eprom",
+        "erase_eprom",
+        "check_eprom_blank",
+    )
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+        Step(op=OP_VERIFY, supported=True, reason=""),
+        Step(op=OP_ERASE, supported=True, reason="", destructive=True),
+        Step(op=OP_BLANK_CHECK, supported=True, reason=""),
+    )
+    run_plan(plan, operator, _REAL_DB, runs=2)
+
+    one_cycle = ["write_eprom", "verify_eprom", "erase_eprom", "check_eprom_blank"]
+    assert calls == one_cycle * 2
+    # The load-bearing consequence, asserted directly rather than inferred
+    # from the list above: an erase precedes the second write.
+    assert calls.index("erase_eprom") < calls.index("write_eprom", 1)
+
+
+def test_cycle_block_bounds_matches_each_family_plan_shape():
+    """The block is CONSECUTIVE ops starting at the write -- which is what
+    keeps a UV plan's pre-write blank-check (a once-only, operator-actionable
+    finding) outside the cycle while an erasable plan's post-erase blank-check
+    lands inside it, with no per-family special case in the detector."""
+    import firestarter.chip_test as chip_test_mod
+
+    for name, expected in (
+        ("M8720", [OP_WRITE, OP_VERIFY, OP_ERASE, OP_BLANK_CHECK]),
+        ("W27C512", [OP_WRITE, OP_VERIFY, OP_ERASE, OP_BLANK_CHECK]),
+        ("M27C512", [OP_WRITE, OP_VERIFY, OP_ERASE]),
+        ("W29C040", [OP_WRITE, OP_VERIFY, OP_ERASE]),
+    ):
+        plan = derive_plan(name, _REAL_DB, write_scope="full")
+        bounds = chip_test_mod.cycle_block_bounds(plan.steps)
+        assert bounds is not None, name
+        assert [s.op for s in plan.steps[bounds[0] : bounds[1]]] == expected, name
+        # The SDP leg is NEVER swallowed by the block.
+        after = [s.op for s in plan.steps[bounds[1] :]]
+        sdp_ops = chip_test_mod._SDP_LEG_OPS | chip_test_mod._SDP_OPS
+        assert all(op in sdp_ops for op in after), (
+            f"{name}: block ran past the write cycle into {after}"
+        )
+
+
+def test_no_write_step_means_no_cycle_block():
+    """A `write_scope="none"` plan has nothing to cycle, so the detector
+    returns None and every step takes the untouched per-step path."""
+    import firestarter.chip_test as chip_test_mod
+
+    plan = derive_plan("M8720", _REAL_DB, write_scope="none")
+    assert not any(s.op in (OP_WRITE, OP_WRITE_PARTIAL) for s in plan.steps)
+    assert chip_test_mod.cycle_block_bounds(plan.steps) is None
+
+
+def test_cycle_loop_reports_one_result_per_step_with_run_count_n():
+    """The aggregation contract that keeps the blast radius small: cycling
+    changes the EXECUTION order only. The report still sees one row per plan
+    step, `run_count` still counts operator calls, so the schema-1.7
+    disclosure, the banner counts and `dedup_fingerprint` are all untouched."""
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+        Step(op=OP_VERIFY, supported=True, reason=""),
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    assert [r.op for r in results] == [OP_WRITE, OP_VERIFY]
+    assert _result(results, OP_WRITE).run_count == 2
+    assert _result(results, OP_VERIFY).run_count == 2
+    assert operator.write_eprom.call_count == 2
+    assert operator.verify_eprom.call_count == 2
+
+
+def test_fingerprint_readback_happens_once_not_once_per_cycle():
+    """`collect_fingerprint` is True only on the final cycle. Without that
+    gate the write and verify steps would each add a region read-back per
+    cycle -- real cost on a full-device region, for a fingerprint that only
+    ever describes the device's FINAL state."""
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+        Step(op=OP_VERIFY, supported=True, reason=""),
+    )
+    run_plan(plan, operator, _REAL_DB, runs=3)
+
+    # One read-back for the write step, one for the verify step. NOT 3 + 3.
+    assert operator.read_eprom.call_count == 2
+
+
+def test_cycle_disagreement_still_reports_marginal():
+    """`marginal` moved from `_dispatch_multi_run` (which now sees one cycle at
+    a time) to the aggregation, with its MEANING unchanged: cycles that
+    disagree never fold to a confident OK/BAD."""
+    operator = _mock_operator()
+    operator.write_eprom.side_effect = [True, False]
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    write_result = _result(results, OP_WRITE)
+    assert write_result.verdict == VERDICT_MARGINAL
+    assert write_result.run_count == 2
+    assert "disagreed" in write_result.reason
+
+
+def test_allow_single_run_admits_runs_1_and_reports_run_count_1():
+    """The ONLY way past the fail-closed guard (quick task 260822-aq6).
+
+    The sibling test above proves `runs=1` alone still fails the whole plan
+    -- an accidentally mis-wired caller cannot silently forfeit the marginal
+    detector. This one proves the deliberate opt-in works and that the
+    forfeit is RECORDED: `run_count == 1` is what every disclosure surface
+    and `repeat_policy_tag` read to say so.
+    """
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_READ, supported=True, reason=""),
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=1, allow_single_run=True)
+
+    assert _result(results, OP_READ).run_count == 1
+    assert _result(results, OP_WRITE).run_count == 1
+    assert operator.write_eprom.call_count == 1
+    # TWO read_eprom calls, not one: `_dispatch_read` made the single
+    # policy-governed read, and `_dispatch_multi_run` made its own
+    # region-scoped read-back for the write step's `Fingerprint`. The
+    # read-back has never been part of the repeat policy and `--fast` does
+    # not remove it -- pinned here so a future change to either cannot be
+    # mistaken for the other.
+    assert operator.read_eprom.call_count == 2
+
+
+def test_allow_single_run_still_rejects_runs_below_1():
+    """`allow_single_run=True` unlocks ONE run, not zero. A zero-run step
+    would report a verdict for an operator call that never happened -- the
+    vacuous pass this codebase refuses everywhere else."""
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=0, allow_single_run=True)
+
+    operator.write_eprom.assert_not_called()
+    assert len(results) == 1
+    assert results[0].verdict == VERDICT_BAD
+
+
+def test_single_run_write_cannot_report_marginal():
+    """The cost of `--fast`, proven rather than asserted in prose.
+
+    Identical operator to `test_marginal_on_disagreeing_write_runs` below
+    (write#1 True, write#2 False -- the AM27C020 case). At `runs=2` that is
+    `marginal`. At `runs=1` the second outcome is never sampled, so the step
+    reports a confident OK and the divergence is INVISIBLE. This is exactly
+    what the `--fast` help text warns about.
+    """
+    operator = _mock_operator()
+    operator.write_eprom.side_effect = [True, False]
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=1, allow_single_run=True)
+
+    write_result = _result(results, OP_WRITE)
+    assert write_result.verdict == VERDICT_OK
+    assert write_result.verdict != VERDICT_MARGINAL
+    assert write_result.run_count == 1
+
+
+def test_repeat_policy_tag_empty_for_the_default_policy():
+    from firestarter.chip_test import repeat_policy_tag
+
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_READ, supported=True, reason=""),
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    assert repeat_policy_tag(results) == ""
+
+
+def test_repeat_policy_tag_marks_a_single_run_plan():
+    from firestarter.chip_test import (
+        REPEAT_POLICY_DEGRADED_TAG,
+        repeat_policy_tag,
+    )
+
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=1, allow_single_run=True)
+
+    assert repeat_policy_tag(results) == REPEAT_POLICY_DEGRADED_TAG
+
+
+def test_repeat_policy_tag_ignores_ops_that_are_single_run_by_design():
+    """`run_count == 1` is NORMAL for the id check, the blank check and all
+    six SDP-leg ops -- those dispatch arms hard-set it. Reading them as a
+    degraded repeat policy would tag every AT28C256 sweep as `--fast` and
+    split its dedup group for no reason."""
+    import firestarter.chip_test as chip_test_mod
+    from firestarter.chip_test import (
+        OP_BLANK_CHECK,
+        OP_ID,
+        OP_SDP_LOCK,
+        OP_WRITE_INHIBITED,
+        repeat_policy_tag,
+    )
+
+    step_result = chip_test_mod.StepResult
+    by_design = [
+        step_result(op=op, verdict=VERDICT_OK, run_count=1)
+        for op in (OP_ID, OP_BLANK_CHECK, OP_SDP_LOCK, OP_WRITE_INHIBITED)
+    ]
+    # A real N>=2 write/read alongside them, so the list is a plausible sweep.
+    by_design += [
+        step_result(op=OP_READ, verdict=VERDICT_OK, run_count=2),
+        step_result(op=OP_WRITE, verdict=VERDICT_OK, run_count=2),
+    ]
+
+    assert repeat_policy_tag(by_design) == ""
+
+
+def test_repeat_policy_tag_ignores_steps_that_never_ran():
+    """A SKIPPED/NA step carries `run_count == 0` and says nothing about the
+    policy -- it must not be read as either value."""
+    import firestarter.chip_test as chip_test_mod
+    from firestarter.chip_test import repeat_policy_tag
+
+    step_result = chip_test_mod.StepResult
+    assert (
+        repeat_policy_tag(
+            [
+                step_result(op=OP_WRITE, verdict=VERDICT_SKIPPED, run_count=0),
+                step_result(op=OP_VERIFY, verdict=VERDICT_SKIPPED, run_count=0),
+            ]
+        )
+        == ""
+    )
+
+
 def test_marginal_on_disagreeing_write_runs():
     operator = _mock_operator()
     # write#1 True, write#2 False -- the AM27C020 write#1/write#2 case.
@@ -1855,29 +2154,30 @@ def test_write_region_via_run_plan_uses_the_plan_carried_window():
     assert write_result.write_target.region == (65280, 256)
 
 
-def test_write_region_via_run_plan_uv_part_full_scope_uses_full_window():
-    # RETARGETED by quick task 260821-wna (D-C): `derive_plan` still sets
-    # `Step.write_region` to the top-anchored slot candidate at "full"
-    # scope (unchanged, asserted below) -- but `Step.full_device_permitted`
-    # is now True at "full" scope, and `_mock_operator()`'s
-    # `check_eprom_blank.return_value = True` means this chip reports
-    # blank. D-C's execution-time resolver takes that combination straight
-    # to the full-device-if-blank branch: the ACTUAL bytes handed to
-    # `write_eprom` are now the address-derived pattern over the WHOLE
-    # DEVICE (0, 65536), not merely the top slot -- the behaviour this test
-    # originally pinned ("full" == "partial"'s window for a UV part) is
-    # deliberately GONE for a chip the blank-check reports blank. The
-    # pre-D-C assertion is preserved as a comment for the historical
-    # record: `assert captured["bytes"] == generate_pattern(65280, 256)`.
+def test_write_region_via_run_plan_uv_part_full_scope_uses_the_top_slot():
+    # RETARGETED AGAIN by quick task 260822-aq6 (D-4), and this reverses the
+    # 260821-wna retarget the previous version of this test recorded. D-C's
+    # full-device-if-blank branch is GONE: `dev test` validates the firmware
+    # for a chip TYPE, so writing half of a virgin UV part buys no coverage
+    # the top slot does not already give -- `uv_slot_starts` is TOP-DOWN, so
+    # slot 0xFF00 already exercises every address line -- while costing the
+    # part's whole remaining life as a regression rig.
+    #
+    # So a UV part now receives the top slot at BOTH scopes, blank or not,
+    # which is what this test's ORIGINAL pre-D-C form asserted. The two
+    # superseded expectations, kept for the record:
+    #   pre-D-C   : captured["bytes"] == generate_pattern(65280, 256)   <- back
+    #   D-C era   : captured["bytes"] == generate_pattern(0, 65536)     <- gone
     name = "M27C512"
     expected_id = _real_expected_chip_id(name)
     plan = derive_plan(name, _REAL_DB, write_scope="full")
     write_step = _step(plan, OP_WRITE)
     assert write_step.write_region == (65280, 256)
-    assert write_step.full_device_permitted is True
 
     operator = _mock_operator()
     operator.check_eprom_id.return_value = (True, expected_id)
+    # Blank -- the state that used to trigger the full-device branch. It no
+    # longer changes the region at all, which is the point of this test.
     operator.check_eprom_blank.return_value = True
     captured: dict = {}
     operator.write_eprom.side_effect = _capturing_write(captured)
@@ -1888,14 +2188,16 @@ def test_write_region_via_run_plan_uv_part_full_scope_uses_full_window():
     operator.write_eprom.assert_called()
     write_result = _result(results, OP_WRITE)
     assert write_result.verdict == VERDICT_OK
-    assert captured["bytes"] == generate_pattern(0, 65536)
     assert write_result.write_target is not None
-    assert write_result.write_target.region == (0, 65536)
+    assert write_result.write_target.region == (65280, 256)
     assert write_result.write_target.masked is True
-    assert write_result.write_target.current_source.startswith("blank-check")
-    # `Step.write_region` (derive_plan's own decision) is UNCHANGED --
-    # still the top-anchored slot candidate; only the EXECUTION-time
-    # resolved target widens to the full device under D-C.
+    assert write_result.write_target.current_source.startswith("probe read")
+    # The LAST cycle's bytes are the fully-staged image, which on a virgin
+    # slot is exactly the unstaged masked pattern the pre-D-C form expected.
+    assert captured["bytes"] == mask_write_pattern(
+        b"\xff" * 256, generate_pattern(65280, 256)
+    )
+    # `Step.write_region` (derive_plan's own decision) is unchanged.
     assert write_step.write_region == (65280, 256)
 
 
@@ -2097,11 +2399,26 @@ def test_safe02_routes_via_resolve_chip_for_every_executed_step(monkeypatch):
     executed_steps = [s for s in plan.steps if s.supported]
     assert len(executed_steps) >= 4
 
-    run_plan(plan, operator, _REAL_DB)
+    runs = 2
+    run_plan(plan, operator, _REAL_DB, runs=runs)
 
-    # resolve_chip is called once per executed (supported) step -- never
-    # reused from derive_plan's guard-bypassing dict.
-    assert spy.call_count == len(executed_steps)
+    # resolve_chip is called once per executed (supported) step PER CYCLE --
+    # never reused from derive_plan's guard-bypassing dict. The expected count
+    # is DERIVED from the plan and the engine's own cycle bounds rather than
+    # restated, so it tracks a change in either without a hand edit: steps
+    # outside the repeat cycle resolve once, steps inside it resolve once per
+    # cycle, plus ONE resolve for the cycle planner itself (which resolves the
+    # chip to compute the per-cycle write targets before cycle 1 begins).
+    block = chip_test_mod.cycle_block_bounds(plan.steps)
+    assert block is not None, "M8720's plan must contain a write cycle"
+    in_cycle = [s for s in plan.steps[block[0] : block[1]] if s.supported]
+    outside_cycle = [s for s in executed_steps if s not in in_cycle]
+    expected = len(outside_cycle) + len(in_cycle) * runs + 1
+    assert spy.call_count == expected, (
+        f"{spy.call_count} resolve_chip calls, expected {expected} "
+        f"({len(outside_cycle)} outside the cycle + {len(in_cycle)} inside "
+        f"x {runs} cycles + 1 for the cycle planner)"
+    )
     for call in spy.call_args_list:
         assert call.args == ("M8720",)
         assert call.kwargs == {"db": _REAL_DB}
@@ -2773,11 +3090,19 @@ def test_full_device_write_flash4_carves_out_boot_blocks():
     assert write_calls and all(c[1]["address_str"] == "0x4000" for c in write_calls)
 
 
-def test_uv_virgin_full_scope_gets_full_device_masked_write():
-    # M27C512 (UV, 65536 B), write_scope="full", virgin chip: blank-check
-    # OK + full_device_permitted -> D-C's full-device-if-blank branch. The
-    # written file equals the plain address-derived pattern over the WHOLE
-    # device (mask_write_pattern(0xFF, D) == D), and the step is OK.
+def test_uv_virgin_full_scope_gets_the_top_slot_not_the_whole_device():
+    # REVERSAL of D-C, operator-agreed 2026-08-22 (D-4). This test used to
+    # assert the opposite -- that a virgin UV part at "full" scope received a
+    # full-device masked write -- and its superseded expectations are kept
+    # here for the record:
+    #     assert target.region == (0, 65536)
+    #     assert target.pattern == generate_pattern(0, 65536)
+    #     assert target.current_source.startswith("blank-check")
+    #
+    # A virgin part is now treated exactly like a used one: one top slot. The
+    # blank-check still RUNS and is still reported (a UV part that is not
+    # blank is an operator-actionable finding) -- it simply no longer decides
+    # how much of the part gets consumed.
     name = "M27C512"
     plan = derive_plan(name, _REAL_DB, write_scope="full")
     chip = FakeChip.virgin_uv(65536)
@@ -2787,10 +3112,31 @@ def test_uv_virgin_full_scope_gets_full_device_masked_write():
     assert write_result.verdict == VERDICT_OK, write_result
     target = write_result.write_target
     assert target is not None
-    assert target.region == (0, 65536)
-    assert target.pattern == generate_pattern(0, 65536)
+    assert target.region == (65280, 256)
     assert target.masked is True
-    assert target.current_source.startswith("blank-check")
+    assert target.current_source.startswith("probe read")
+    # On a virgin slot the masked image IS the plain address-derived pattern
+    # (mask_write_pattern(0xFF, D) == D), fully staged by the final cycle.
+    assert target.pattern == generate_pattern(65280, 256)
+
+
+def test_uv_full_and_partial_scope_now_resolve_to_the_same_slot():
+    """The consequence that retired the UV prompt: with D-C gone, both scope
+    literals produce an identical write on a UV part, so a yes/no ask could
+    not change the outcome -- which is the inert-prompt defect quick task
+    260821-wna existed to fix. Asserted here so a future re-introduction of a
+    scope-keyed UV branch has to break this test to land."""
+    name = "M27C512"
+    targets = []
+    for scope, op in (("full", "write"), ("partial", "write-partial")):
+        plan = derive_plan(name, _REAL_DB, write_scope=scope)
+        result = _result(run_plan(plan, FakeChip.virgin_uv(65536), _REAL_DB), op)
+        assert result.verdict == VERDICT_OK, result
+        assert result.write_target is not None
+        targets.append(result.write_target)
+
+    assert targets[0].region == targets[1].region
+    assert targets[0].pattern == targets[1].pattern
 
 
 def test_uv_virgin_partial_scope_writes_single_top_slot_not_whole_device():

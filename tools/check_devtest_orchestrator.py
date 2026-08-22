@@ -158,7 +158,6 @@ _HANDLER_FUNCTION_NAMES = frozenset(
         "_sanitize_chip_token",
         "_is_uv_eprom",
         "_resolve_write_scope",
-        "_default_uv_write_confirm",
         "_chip_id_fields",
         "_is_interactive",
         "_make_sampler",

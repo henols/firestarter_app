@@ -193,6 +193,24 @@ def _duration_text(seconds: Any) -> str:
     return f"{value:.2f}s" if value < 10 else f"{value:.1f}s"
 
 
+def _runs_text(run_count: Any) -> str:
+    """`run_count` -> a markdown cell; `-` when the step did not run.
+
+    Local for the same reason as `_duration_text` above: the markdown table
+    wants a non-empty placeholder where `diagnostic_report._runs_cell`
+    wants an omittable empty string. Renders the BARE number (the `xN`
+    prefix belongs to the console's single value cell, which has no column
+    header to carry the meaning).
+    """
+    if run_count is None:
+        return "-"
+    try:
+        value = int(run_count)
+    except (ValueError, TypeError):
+        return "-"
+    return str(value) if value > 0 else "-"
+
+
 def build_body(
     sanitized_dict: dict[str, Any], results: Any, *, include_json: bool = True
 ) -> str:
@@ -200,24 +218,32 @@ def build_body(
     JSON block -- both derived from the SAME sanitized dict (SUB-02).
 
     Mirrors the `dev-test-<chip>.md` table shape (`cli_handlers.py`:
-    `| Step | Verdict | Took | Reason |`), but sources the reason cells from
-    `sanitized_dict["steps"]` so PII stays scrubbed even when `results`
-    (the unsanitized `StepResult` objects) is also passed in for shaping.
+    `| Step | Verdict | Runs | Took | Reason |`), but sources the reason
+    cells from `sanitized_dict["steps"]` so PII stays scrubbed even when
+    `results` (the unsanitized `StepResult` objects) is also passed in for
+    shaping.
 
     The `Took` column (schema 1.5) carries each step's wall-clock seconds so
     a filed report shows WHERE a slow run spent its time -- the operator
     asked for timings to reach GitHub, not just the console. A step that did
     not run has no duration and renders `-`.
+
+    The `Runs` column (schema 1.7, quick task 260822-aq6) carries the step's
+    `run_count`. A triager reading a filed issue must be able to tell an
+    accurate N>=2 run from a `dev test --fast` single-run one WITHOUT
+    unfolding the JSON block: a `1` in this column on a write or verify row
+    means nothing in that report could ever have been reported `marginal`.
     """
     lines = [
-        "| Step | Verdict | Took | Reason |",
-        "| ---- | ------- | ---- | ------ |",
+        "| Step | Verdict | Runs | Took | Reason |",
+        "| ---- | ------- | ---- | ---- | ------ |",
     ]
     for step in sanitized_dict.get("steps", []):
         reason = step.get("reason") or "-"
         took = _duration_text(step.get("duration_s"))
+        runs = _runs_text(step.get("run_count"))
         lines.append(
-            f"| {step.get('op')} | {step.get('verdict')} | {took} | {reason} |"
+            f"| {step.get('op')} | {step.get('verdict')} | {runs} | {took} | {reason} |"
         )
     body = "\n".join(lines)
     if include_json:

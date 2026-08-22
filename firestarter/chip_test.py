@@ -452,6 +452,34 @@ REGION_POLICY_FIXED = "fixed"
 REGION_POLICY_FULL_DEVICE = "full-device"
 REGION_POLICY_UV_SLOT = "uv-slot"
 
+# Per-cycle PAYLOAD recipe (D-2), the second axis of the repeat cycle and a
+# sibling of the region-policy vocabulary above: `region_policy` says WHERE a
+# cycle writes, `cycle_payload` says whether successive cycles write the SAME
+# bytes there. Decided exactly once by `derive_plan` from the same
+# `is_uv`/`etype`/`protocol` facts it already has, and READ-ONLY at execution
+# time -- the same derive-once discipline `region_policy` follows.
+#
+# The rule the three values encode: each cycle must present the device with a
+# target state that DIFFERS from its current state, or its verify proves
+# nothing. There are exactly three ways to get that, and which one applies is
+# a property of the family:
+#
+#   `same`      -- something else already resets the state between cycles: an
+#                  erase step inside the cycle (258 rows), or a protocol whose
+#                  every page write auto-erases internally (0x0D/0x05, 111
+#                  rows). Identical bytes, real work every cycle.
+#   `alternate` -- freely rewritable in BOTH bit directions (SRAM/FRAM, 76
+#                  rows). Cycle n writes the pattern, cycle n+1 its
+#                  complement; free, and the complement also exercises the
+#                  data lines in the other direction.
+#   `uv-tranche`-- monotonic, cannot be erased at all (UV-EPROM, 301 rows).
+#                  Each cycle clears a disjoint tranche of the bits the write
+#                  would have cleared anyway -- see `uv_tranche_images`, which
+#                  is why this costs no extra bits.
+CYCLE_PAYLOAD_SAME = "same"
+CYCLE_PAYLOAD_ALTERNATE = "alternate"
+CYCLE_PAYLOAD_UV_TRANCHE = "uv-tranche"
+
 
 @dataclass
 class Step:
@@ -497,6 +525,10 @@ class Step:
     reason: str
     destructive: bool = False
     write_region: tuple[int, int] | None = None
+    # The per-cycle payload recipe (D-2). Set by `derive_plan` on the write
+    # and verify steps alongside `write_region`/`region_policy`; every other
+    # step keeps the `same` default, which is also the pre-cycle behaviour.
+    cycle_payload: str = CYCLE_PAYLOAD_SAME
     region_policy: str = REGION_POLICY_FIXED
     full_device_permitted: bool = False
 
@@ -675,6 +707,17 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     region_reason = ""
     full_device_permitted = write_scope == _WRITE_SCOPE_FULL
     mem_size = int(full.get("memory-size", 0) or 0)
+    # D-2: the per-cycle payload recipe, decided HERE and only here, from the
+    # same three facts this function already holds. Ordered UV first: a UV part
+    # is never SRAM, but keying on `is_uv` before the volatile test means a
+    # future electrical-type oddity cannot route a UV part to `alternate` and
+    # ask it for an impossible 0->1 transition.
+    if is_uv:
+        cycle_payload = CYCLE_PAYLOAD_UV_TRANCHE
+    elif etype in _SRAM_FRAM_ETYPES or protocol in _SRAM_PROTO_IDS:
+        cycle_payload = CYCLE_PAYLOAD_ALTERNATE
+    else:
+        cycle_payload = CYCLE_PAYLOAD_SAME
     if write_scope == _WRITE_SCOPE_NONE:
         write_region = None
         region_policy = REGION_POLICY_FIXED
@@ -821,6 +864,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
                 write_region=write_region,
                 region_policy=region_policy,
                 full_device_permitted=full_device_permitted,
+                cycle_payload=cycle_payload,
             )
         )
     else:
@@ -848,6 +892,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
                 write_region=write_region,
                 region_policy=region_policy,
                 full_device_permitted=full_device_permitted,
+                cycle_payload=cycle_payload,
             )
         )
     else:
@@ -1106,6 +1151,35 @@ _DESTRUCTIVE_OPS = frozenset(
 # `_dispatch_sdp` instead (`_SDP_OPS`, below).
 _MULTI_RUN_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE, OP_VERIFY})
 
+# ⚠ WHAT THE WRITE REPEAT ACTUALLY MEASURES (recorded 2026-08-22, read before
+# reasoning about `marginal`). Every run in this loop sends the SAME payload to
+# the SAME address -- deliberately, since two runs' outcomes are only
+# comparable with the input held constant. The consequence is protocol-
+# dependent and is NOT what D-05/D-06's prose implies:
+#
+#   * Protocols 0x07 / 0x08 / 0x0B (329 of 746 DB rows -- every UV-EPROM plus
+#     the 27-series EEPROMs) route to the firmware's `eprom_write_execute`,
+#     whose LOOP-06 skips a byte BEFORE any pulse when `expected == 0xFF` or
+#     the byte already reads back as expected. After a successful write #1
+#     every byte qualifies, so write #2 emits ZERO programming pulses and is a
+#     pure read pass. `marginal` on such a write is reachable ONLY as "attempt
+#     1 failed, attempt 2 recovered" -- it structurally CANNOT catch a path
+#     that works once and then degrades, because attempt 2 never tries.
+#   * Protocols 0x0D and the flash family write unconditionally, so there the
+#     second write is a real second write.
+#
+# The AM27C020 write#1/write#2 divergence this policy is usually credited with
+# (v1.18 Phase 99) predates the LOOP-06 rewrite (firmware Phase 141,
+# 2026-08-10), so it was measured against a different loop -- do not cite it as
+# evidence that today's repeat detects a degrading write path.
+#
+# Read the repeat as a RIG-HEALTH check (rail droop, marginal timing, socket
+# contact), not as coverage of the firmware's programming algorithm, which is
+# deterministic and cannot disagree with itself. Making each cycle do real work
+# requires a per-family cycle recipe (erase-first, complement payload, or a
+# monotonic UV tranche); that is scoped in
+# `.planning/todos/pending/devtest-cycle-loop-per-family-write-recipes.md`.
+
 # LIVE DISPATCH ALLOW-LIST for the SDP arm (v1.30 Phase 133 D-01/D-02,
 # LEG-09). `_dispatch_sdp` refuses any op outside this frozenset. A module
 # constant is used rather than a DB field because anything that widens a
@@ -1231,6 +1305,48 @@ def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> Ste
     return StepResult(op=op, verdict=verdict, reason=reason, run_count=0)
 
 
+# The ops whose `StepResult.run_count` is EXACTLY `run_plan`'s `runs` kwarg
+# (quick task 260822-aq6) -- the multi-run destructive/verify set plus the
+# read step, which `_dispatch_read` also loops `runs` times. Deliberately
+# NOT every op: `_dispatch_id`, the blank-check arm and all six SDP-leg ops
+# hard-set `run_count=1` BY DESIGN and would otherwise read as a degraded
+# repeat policy on a perfectly normal run.
+_REPEAT_POLICY_OPS = _MULTI_RUN_OPS | {OP_READ}
+
+# The degraded-policy marker (quick task 260822-aq6). Spelled as the kwarg
+# value it describes rather than the CLI flag that produces it: `run_plan`
+# owns the policy, `--fast` is merely one caller that asks for it.
+REPEAT_POLICY_DEGRADED_TAG = "runs=1"
+
+
+def repeat_policy_tag(results: list[StepResult]) -> str:
+    """`""` for the default N>=2 repeat policy; the degraded marker otherwise.
+
+    A single-run plan is a strictly WEAKER test: with one run there is
+    nothing to compare, so `_dispatch_multi_run` can never return
+    `marginal` and `_dispatch_read` computes no divergence (its own guard
+    needs `len(run_bytes) >= 2`). This tag is what lets
+    `dedup_fingerprint` keep such a run out of the N>=2 promotion groups
+    that `tools/parse_devtest_issue.py::count_agreeing` builds -- the same
+    principle Phase 121 D-06/D-08 established for `write-partial` vs
+    `write`, applied to the repeat policy instead of the write region.
+
+    Keyed on `run_count == 1` over `_REPEAT_POLICY_OPS` only. A SKIPPED or
+    NA step carries `run_count == 0` and is ignored (it reports nothing
+    about the policy), and every op outside that set is ignored because its
+    `run_count` is a design constant, not the `runs` kwarg.
+
+    Returning `""` for the default is load-bearing: `dedup_fingerprint`
+    appends this tag only when non-empty, so every fingerprint produced by
+    an accurate run is byte-identical to the ones already filed. No
+    historical grouping resets, and no promotion count is lost.
+    """
+    for result in results:
+        if result.op in _REPEAT_POLICY_OPS and result.run_count == 1:
+            return REPEAT_POLICY_DEGRADED_TAG
+    return ""
+
+
 @dataclass
 class WriteContext:
     """Execution-time state threaded through `run_plan`'s step loop (quick
@@ -1257,6 +1373,23 @@ class WriteContext:
     chip_is_blank: bool | None = None
     target: WriteTarget | None = None
     refusal: str = ""
+    # The repeat CYCLE's per-cycle write targets and the index of the cycle
+    # currently executing (D-1). Planned exactly once by
+    # `_plan_cycle_targets`, before the first cycle, and thereafter READ-ONLY
+    # to the dispatch layer -- the same derive-once/read-many discipline
+    # `Step.region_policy` already follows. An EMPTY list is the proven no-op
+    # signal: every caller that does not go through `_run_cycle_block` (the
+    # SDP leg, direct `run_plan` callers in tests) leaves it empty and
+    # `_dispatch_multi_run` falls back to resolving its own target exactly as
+    # before.
+    #
+    # Load-bearing for UV parts even when every entry is identical: without
+    # it, each cycle would re-probe and could land on a DIFFERENT slot once
+    # cycle 1 has consumed bits from the first one -- and two cycles on two
+    # different slots no longer isolate the write path from a cell defect,
+    # which is the entire point of comparing them.
+    cycle_targets: list[WriteTarget] = field(default_factory=list)
+    cycle_index: int = 0
 
 
 def _resolve_or_none(
@@ -1294,12 +1427,397 @@ def _resolve_or_none(
 _UNLOCK_CLEANUP_SWALLOWED = (SerialError, HardwareOperationError, EpromOperationError)
 
 
+# ---------------------------------------------------------------------------
+# The repeat CYCLE (D-1..D-3). Replaces the per-step inner repeat loop for the
+# write-shaped block: `write -> verify -> erase -> blank-check` runs as a UNIT,
+# N times, instead of `write, write, verify, verify, erase, erase, ...`.
+#
+# WHY, in one sentence: a verify only proves the write worked if the write had
+# to CHANGE something, and a second identical write onto the state the first
+# one produced does not (see `_MULTI_RUN_OPS`'s own note above for the
+# firmware mechanism). Cycling puts the erase BEFORE the next write, so from
+# cycle 2 onward every erasable family's write starts from a blank device and
+# does full real work -- and it makes room for a per-cycle payload on the
+# families that cannot be erased.
+#
+# Deliberate deviation from the design note's D-3, recorded rather than
+# smoothed over: D-3 specified the cycle as `erase -> blank-check -> write ->
+# verify`, which would have REORDERED `derive_plan`'s emission. The shipped
+# cycle keeps today's order (`write -> verify -> erase -> blank-check`) and
+# simply repeats it, which achieves the same property from cycle 2 on -- each
+# cycle's erase blanks the part for the NEXT cycle's write, and the
+# blank-check still validates that erase inside the cycle. Only cycle 1's
+# write can start from an unknown state. Reordering `derive_plan` would have
+# bought one cycle's worth of extra rigour at the cost of every step-order
+# assertion in the suite.
+# ---------------------------------------------------------------------------
+
+# Ops eligible to be INSIDE the cycle. Membership alone does not put a step in
+# the block -- `cycle_block_bounds` requires them to be CONSECUTIVE and to
+# start at a write step, which is what keeps a UV plan's pre-write blank-check
+# (emitted BEFORE the write, deliberately, as a once-only operator-actionable
+# finding) outside the cycle while an erasable plan's post-erase blank-check
+# lands inside it.
+_CYCLE_BLOCK_OPS = frozenset(
+    {OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY, OP_ERASE, OP_BLANK_CHECK}
+)
+
+# The cycle can only OPEN on a write: a plan with no executable write step has
+# nothing to cycle, and an erase/verify with no write in front of it is not a
+# write-path test.
+_CYCLE_BLOCK_START_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL})
+
+
+def cycle_block_bounds(steps: list[Step]) -> tuple[int, int] | None:
+    """Half-open `(start, stop)` index range of the repeat cycle, or `None`.
+
+    The block is the maximal run of CONSECUTIVE steps drawn from
+    `_CYCLE_BLOCK_OPS` that begins at the first `_CYCLE_BLOCK_START_OPS`
+    step. Measured against `derive_plan`'s actual emission order:
+
+    * erasable  -- `id, read, [write, verify, erase, blank-check], sdp x6`
+    * UV        -- `id, read, blank-check, [write, verify], sdp x6`
+    * flash4    -- `id, read, blank-check(NA), [write, verify], sdp x6`
+    * SRAM/FRAM -- `id, read, blank-check(NA), [write, verify], sdp x6`
+
+    so the SDP leg is never swallowed (its six ops are outside the set) and a
+    `write_scope="none"` plan -- which emits no write step at all -- returns
+    `None` and takes the untouched per-step path.
+    """
+    start = next(
+        (i for i, step in enumerate(steps) if step.op in _CYCLE_BLOCK_START_OPS),
+        None,
+    )
+    if start is None:
+        return None
+    stop = start + 1
+    while stop < len(steps) and steps[stop].op in _CYCLE_BLOCK_OPS:
+        stop += 1
+    return start, stop
+
+
+def _cycle_target(write_context: WriteContext | None) -> WriteTarget | None:
+    """The target planned for the cycle currently executing, or `None`.
+
+    `None` means "no cycle plan applies" -- either there is no
+    `write_context`, or its `cycle_targets` is empty (every non-cycle
+    caller), or the index has run past the plan. Every one of those cases
+    makes `_dispatch_multi_run` fall back to resolving its own target, which
+    is exactly the pre-cycle behaviour.
+    """
+    if write_context is None or not write_context.cycle_targets:
+        return None
+    if not 0 <= write_context.cycle_index < len(write_context.cycle_targets):
+        return None
+    return write_context.cycle_targets[write_context.cycle_index]
+
+
+def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
+    """Fold one step's per-cycle results into the SINGLE `StepResult` the
+    report expects.
+
+    This is what keeps the cycle loop's blast radius small: the report shape,
+    the schema-1.7 `run_count` disclosure, the banner counts,
+    `dedup_fingerprint`'s keying and `tools/parse_devtest_issue.py` all
+    continue to see exactly one row per op. Only the EXECUTION order became
+    cyclic.
+
+    `marginal` moves here from `_dispatch_multi_run` (which now runs one
+    cycle at a time and so can never see a disagreement itself): cycles whose
+    verdicts differ fold to `marginal`, never to a confident OK/BAD -- the
+    D-06 policy, unchanged in meaning.
+
+    Field-by-field, and each choice is deliberate:
+    * `verdict`  -- `marginal` on disagreement; otherwise the common verdict.
+    * `run_count` -- how many cycles actually REACHED the operator (a
+      SKIPPED cycle did not), so `run_count` keeps meaning "operator calls",
+      which is the claim every disclosure surface makes about it.
+    * `fingerprint`/`write_target` -- from the LAST cycle that produced one:
+      the device's final state is the one a reader can still verify.
+    * `duration_s` -- the SUM across cycles, so "steps total" stays honest.
+    * `error_code`/`reason` -- the FIRST non-empty, so the earliest failure
+      explains the row rather than being overwritten by a later cycle.
+    """
+    if not results:
+        # Unreachable via `_run_cycle_block` (it appends either a pre-computed
+        # skip or one result per cycle) -- kept so a future caller cannot turn
+        # an empty list into an IndexError.
+        return _skip_result(op, "no cycle produced a result")
+    if len(results) == 1:
+        return results[0]
+
+    ran = [r for r in results if r.verdict in _RAN_VERDICTS]
+    if not ran:
+        first = results[0]
+        first.run_count = 0
+        return first
+
+    verdicts = {r.verdict for r in ran}
+    if len(verdicts) > 1:
+        verdict = VERDICT_MARGINAL
+        reason = f"{len(ran)} cycles disagreed on outcome (D-06 marginal policy)"
+    else:
+        verdict = ran[0].verdict
+        reason = next((r.reason for r in ran if r.reason), "")
+
+    durations = [r.duration_s for r in results if r.duration_s is not None]
+    return StepResult(
+        op=op,
+        verdict=verdict,
+        reason=reason,
+        error_code=next(
+            (r.error_code for r in results if r.error_code is not None), None
+        ),
+        fingerprint=next((r.fingerprint for r in reversed(ran) if r.fingerprint), None),
+        run_count=len(ran),
+        divergence=next((r.divergence for r in reversed(ran) if r.divergence), None),
+        duration_s=round(sum(durations), 3) if durations else None,
+        write_target=next(
+            (r.write_target for r in reversed(ran) if r.write_target is not None), None
+        ),
+    )
+
+
+def _plan_cycle_targets(
+    name: str,
+    steps: list[Step],
+    operator: Any,
+    db: Any,
+    *,
+    cycles: int,
+    write_context: WriteContext,
+) -> list[WriteTarget]:
+    """Resolve the N per-cycle write targets ONCE, before cycle 1 begins.
+
+    Returns an EMPTY list on any refusal (chip unresolvable, saturated slot,
+    no executable write step). Empty is not an error path that needs its own
+    reason string: `_dispatch_multi_run` then falls back to resolving its own
+    target and produces the SAME refusal, with the same wording, through the
+    same `WriteTarget` guard -- so there is exactly one place a refusal is
+    phrased, and this function never has to duplicate it.
+    """
+    write_step = next(
+        (s for s in steps if s.op in _CYCLE_BLOCK_START_OPS and s.supported), None
+    )
+    if write_step is None:
+        return []
+    eprom_data, _stub, _reason = _resolve_or_none(name, db)
+    if eprom_data is None:
+        return []
+    target, _refusal = _resolve_write_target(
+        name,
+        write_step,
+        eprom_data,
+        operator,
+        chip_is_blank=write_context.chip_is_blank,
+        cycles=cycles,
+    )
+    if target is None:
+        return []
+
+    if write_step.cycle_payload == CYCLE_PAYLOAD_ALTERNATE:
+        return _alternating_cycle_targets(target, cycles)
+    if write_step.cycle_payload == CYCLE_PAYLOAD_UV_TRANCHE and target.masked:
+        staged = _uv_cycle_targets(target, cycles)
+        if staged:
+            return staged
+        # Defensive only: `_resolve_write_target` was given the same `cycles`
+        # and applied the scaled clearable floor, so any slot it returned is
+        # tranche-feasible. Falling back to the single masked image keeps a
+        # future threshold change from becoming a crash -- at the cost of
+        # cycle 2 writing bytes the chip already holds, which is exactly the
+        # behaviour this task exists to remove.
+        return [target] * cycles
+    # CYCLE_PAYLOAD_SAME: identical bytes every cycle, correct here because
+    # something else resets the state between cycles -- the erase step inside
+    # the cycle, or a protocol whose every page write auto-erases internally.
+    return [target] * cycles
+
+
+def _alternating_cycle_targets(target: WriteTarget, cycles: int) -> list[WriteTarget]:
+    """D-2's `alternate` recipe: pattern, complement, pattern, ...
+
+    For SRAM/FRAM, which are freely rewritable in BOTH bit directions, so a
+    differing payload costs nothing and the complement additionally exercises
+    every data line in the other direction. Bit-inverting an address-derived
+    pattern yields another roughly half-set image, so it can never trip
+    `WriteTarget`'s degenerate all-`0x00`/all-`0xFF` refusal.
+    """
+    complement = WriteTarget(
+        region=target.region,
+        pattern=bytes(0xFF ^ b for b in target.pattern),
+        masked=False,
+        bits_cleared=0,
+        bits_retained=0,
+        current_source="address-derived pattern, bit-inverted (cycle complement)",
+    )
+    return [target if cycle % 2 == 0 else complement for cycle in range(cycles)]
+
+
+def _uv_cycle_targets(target: WriteTarget, cycles: int) -> list[WriteTarget]:
+    """D-2's `uv-tranche` recipe: N cumulative images out of ONE slot.
+
+    Empty list when the slot cannot be staged -- see `_plan_cycle_targets`'s
+    defensive fallback for why that is unreachable through the normal path.
+
+    `bits_cleared` on each returned target is the PER-CYCLE tranche size, not
+    the slot total: it is the number that has to clear `_UV_MIN_CLEARED_BITS`
+    for *this cycle* to have done real work, and it is what
+    `WriteTarget.__post_init__`'s vacuous-pass floor then checks.
+    `bits_retained` is the popcount AFTER this cycle, decreasing as the stages
+    progress and bottoming out at the slot's own retained count.
+    """
+    if not target.current:
+        return []
+    start, length = target.region
+    desired = generate_pattern(start, length)
+    images = uv_tranche_images(target.current, desired, cycles)
+    if not images:
+        return []
+    tranche_bits = uv_tranche_bit_counts(
+        bits_cleared_by(target.current, desired), cycles
+    )
+    staged: list[WriteTarget] = []
+    for cycle, (image, cleared) in enumerate(zip(images, tranche_bits), start=1):
+        try:
+            staged.append(
+                WriteTarget(
+                    region=target.region,
+                    pattern=image,
+                    masked=True,
+                    bits_cleared=cleared,
+                    bits_retained=sum(byte.bit_count() for byte in image),
+                    current_source=f"{target.current_source} (tranche {cycle}/{cycles})",
+                    current=target.current,
+                    # Carried through from the probe target, NOT dropped: the
+                    # staged copies describe the SAME slot, and these are the
+                    # only targets that ever reach the report -- leaving them
+                    # None made D-9's rig-life line invisible on exactly the
+                    # family it exists for (caught by running it, not by the
+                    # suite).
+                    slots_remaining=target.slots_remaining,
+                    slots_total=target.slots_total,
+                )
+            )
+        except ValueError:
+            return []
+    return staged
+
+
+def _run_cycle_block(
+    name: str,
+    steps: list[Step],
+    operator: Any,
+    db: Any,
+    *,
+    cycles: int,
+    sampler: Any,
+    write_context: WriteContext,
+    gate_closed: bool,
+) -> list[StepResult]:
+    """Run the write-shaped block as a UNIT, `cycles` times, and fold the
+    per-cycle results into one `StepResult` per step (D-1).
+
+    Returns exactly `len(steps)` results, in the SAME order as `steps`, so
+    `run_plan` can splice them in where the block sat and every downstream
+    consumer keeps seeing one row per plan step.
+
+    The two gates are applied ONCE, before any cycle: an unsupported step is
+    NA and a destructive step behind a closed chip-ID gate is SKIPPED, in both
+    cases with the same wording `run_plan`'s own per-step path uses. A gated
+    step is simply not part of the cycle -- it is never retried per cycle,
+    which would multiply one skip reason into N identical rows.
+
+    `collect_fingerprint` is True only on the FINAL cycle. Without that the
+    write and verify steps would each add a region read-back per cycle,
+    turning the fingerprint's one extra read into N -- real cost on a
+    full-device region, for a fingerprint that only ever describes the
+    device's final state anyway.
+    """
+    pre: list[StepResult | None] = []
+    for step in steps:
+        if not step.supported:
+            pre.append(_skip_result(step.op, step.reason, verdict=VERDICT_NA))
+        elif gate_closed and step.op in _DESTRUCTIVE_OPS:
+            pre.append(_skip_result(step.op, _DESTRUCTIVE_GATE_REASON))
+        else:
+            pre.append(None)
+
+    per_step: list[list[StepResult]] = [[] if r is None else [r] for r in pre]
+    live = [i for i, r in enumerate(pre) if r is None]
+    # SAFE-02 retry guard, preserved across the move to a cycle loop: a
+    # firmware ERROR response (a non-None `error_code` -- the VPP-out-of-range
+    # guard refusal 0xA9 is the case that motivated it) is a FINDING, not
+    # something to retry. Before the cycle loop the raised exception aborted
+    # `_dispatch_multi_run`'s runs-loop, so runs 2..N never reached the
+    # hardware; a naive cycle loop would re-energize a rail the firmware just
+    # refused. The current cycle still finishes -- mirroring the old
+    # behaviour, where `run_plan` moved on to the next STEP after the raise --
+    # and no further cycle starts.
+    #
+    # Deliberately keyed on `error_code`, NOT on a non-OK verdict: a plain
+    # `False` return from `write_eprom` (no exception, no error code) is the
+    # AM27C020 shape, where cycle 2 recovering from cycle 1's failure is real
+    # information and must still be collected.
+    hardware_refused = False
+
+    write_context.cycle_targets = _plan_cycle_targets(
+        name, steps, operator, db, cycles=cycles, write_context=write_context
+    )
+    try:
+        for cycle in range(cycles):
+            write_context.cycle_index = cycle
+            final = cycle == cycles - 1
+            for i in live:
+                step = steps[i]
+                result = _run_step(
+                    name,
+                    step,
+                    operator,
+                    db,
+                    runs=1,
+                    sampler=sampler,
+                    write_context=write_context,
+                    collect_fingerprint=final,
+                )
+                per_step[i].append(result)
+                # The same two context assignments `run_plan`'s per-step path
+                # makes, replicated here because these steps no longer pass
+                # through it. Both must happen INSIDE the cycle: the verify
+                # inherits the write target of the cycle it belongs to, not
+                # of some other cycle.
+                if step.op == OP_BLANK_CHECK and result.verdict in (
+                    VERDICT_OK,
+                    VERDICT_BAD,
+                ):
+                    write_context.chip_is_blank = result.verdict == VERDICT_OK
+                if step.op in (OP_WRITE, OP_WRITE_PARTIAL):
+                    write_context.target = result.write_target
+                    write_context.refusal = (
+                        result.reason if result.write_target is None else ""
+                    )
+                if result.error_code is not None:
+                    hardware_refused = True
+            if hardware_refused:
+                break
+    finally:
+        # Cleared unconditionally: the SDP leg runs AFTER this block and must
+        # never pick up a stale cycle target, on the exception path too.
+        write_context.cycle_targets = []
+        write_context.cycle_index = 0
+
+    return [
+        _aggregate_cycle_results(per_step[i], steps[i].op) for i in range(len(steps))
+    ]
+
+
 def run_plan(
     plan: Plan,
     operator: Any,
     db: Any,
     *,
     runs: int = 2,
+    allow_single_run: bool = False,
     sampler: Any = None,
 ) -> list[StepResult]:
     """Execute `plan.steps` as independent, non-fatal steps (SWEEP-02).
@@ -1329,7 +1847,12 @@ def run_plan(
     `marginal` -- never coerced to a confident OK/BAD (D-06, the AM27C020
     write#1 60/64 vs write#2 0/64 case made structural). `runs < 2` is
     rejected BEFORE any resolve/operator call (D-05 guard, mirrors
-    `consistency_check_eprom`). Read-step disagreement across `runs` is
+    `consistency_check_eprom`) UNLESS the caller passes
+    `allow_single_run=True` (quick task 260822-aq6, `dev test --fast`) --
+    a deliberately weaker plan that forfeits the marginal detector and the
+    read-divergence metric entirely, and is tagged as such by
+    `repeat_policy_tag` so it cannot join an accurate run's dedup group.
+    Read-step disagreement across `runs` is
     reported as a byte-level divergence metric only -- NOT a verdict flip,
     NOT `marginal` (D-06). The write/verify step attaches a `Fingerprint`
     (Task 3, PATT-02 wiring) built from `generate_pattern` vs the read-back,
@@ -1361,14 +1884,22 @@ def run_plan(
     run_plan(...)` assignment never completes, so there is nothing to
     render (D-07's residual).
     """
-    if runs < 2:
+    # Fail-closed repeat-policy guard. `runs < 2` still fails the WHOLE plan
+    # for every caller that did not explicitly opt in -- an accidentally
+    # mis-wired `runs=1` must never silently cost the marginal detector
+    # (D-05). `allow_single_run=True` (quick task 260822-aq6) is the ONLY way
+    # past it, and `runs < 1` fails regardless: there is no such thing as a
+    # zero-run step.
+    if runs < 1 or (runs < 2 and not allow_single_run):
         return [
             StepResult(
                 op="__plan__",
                 verdict=VERDICT_BAD,
                 reason=(
                     f"runs must be >= 2 (got {runs}); a destructive/verify "
-                    "step requires at least 2 runs to compare (D-05)"
+                    "step requires at least 2 runs to compare (D-05) -- "
+                    "pass allow_single_run=True to run a deliberately "
+                    "weaker single-run plan"
                 ),
                 run_count=0,
             )
@@ -1427,8 +1958,36 @@ def run_plan(
     # yet, so there is nothing to drain. `results`, `destructive_gate_closed`
     # and `cleanup` are all created BEFORE the `try`. `return results` stays
     # INSIDE the `try`, textually unchanged.
+    # The repeat cycle's index range, computed ONCE from the plan (D-1). The
+    # loop below walks by index so the whole block can be handed to
+    # `_run_cycle_block` as a unit and skipped over; every step OUTSIDE the
+    # block keeps the untouched per-step path, including the SDP leg and the
+    # read step (whose own N-run divergence metric is a read-repeatability
+    # check, not part of the write cycle).
+    cycle_block = cycle_block_bounds(plan.steps)
+
     try:
-        for step in plan.steps:
+        index = 0
+        while index < len(plan.steps):
+            if cycle_block is not None and index == cycle_block[0]:
+                results.extend(
+                    _run_cycle_block(
+                        plan.name,
+                        plan.steps[cycle_block[0] : cycle_block[1]],
+                        operator,
+                        db,
+                        cycles=runs,
+                        sampler=sampler,
+                        write_context=write_context,
+                        gate_closed=destructive_gate_closed,
+                    )
+                )
+                index = cycle_block[1]
+                continue
+
+            step = plan.steps[index]
+            index += 1
+
             if not step.supported:
                 results.append(_skip_result(step.op, step.reason, verdict=VERDICT_NA))
                 continue
@@ -1846,6 +2405,72 @@ def bits_cleared_by(current: bytes, desired: bytes) -> int:
     return sum((c & (~d & 0xFF)).bit_count() for c, d in zip(current, desired))
 
 
+def uv_tranche_images(current: bytes, desired: bytes, cycles: int) -> list[bytes]:
+    """Stage `current & desired` across `cycles` writes -- D-2's UV recipe.
+
+    Returns `cycles` CUMULATIVE images: image *n* is `current` with tranches
+    0..*n* cleared, so image `cycles-1` is exactly `current & desired`.
+    Empty list when the slot cannot support the staging (see the floor below);
+    the caller then falls back to the single-write path.
+
+    **This costs no extra bits.** That is the whole point and it is worth
+    stating plainly, because the design note assumed otherwise: the final
+    image equals what today's single masked write already produces, so the
+    total number of cells programmed is IDENTICAL. Cycling only splits the
+    same expenditure into stages. A UV part is a finite regression rig -- bits
+    spent are runs lost -- so a recipe that bought per-cycle rigour with extra
+    consumption would have been the wrong trade; this one buys it for free.
+
+    The bits are INTERLEAVED, not blocked: tranche *n* takes every
+    `cycles`-th clearable bit (`range(n, len, cycles)`) walking bytes in order
+    and bits LSB-first within each byte. So every tranche spans the whole
+    region and all eight bit positions rather than one corner of it, and each
+    cycle's programming exercises the same address and data lines the others
+    do.
+
+    Monotonic by construction: a tranche is a subset of the bits that are
+    currently `1` and are `0` in `desired`, so no cycle ever asks a UV cell for
+    the impossible `0 -> 1` transition, and no arithmetic at write time can
+    produce one.
+
+    The floor is `cycles * _UV_MIN_CLEARED_BITS`, not the single-write
+    `_UV_MIN_CLEARED_BITS`: staging N cycles out of a slot needs N tranches
+    each big enough to be non-vacuous on its own. A slot with 64..127
+    clearable bits passes today's single-write filter and CANNOT support a
+    two-cycle test -- it is refused here so the caller moves to the next slot
+    rather than running a cycle that clears too little to mean anything.
+    """
+    if cycles < 1 or len(current) != len(desired):
+        return []
+    clearable = [
+        (index, bit)
+        for index in range(len(current))
+        for bit in range(8)
+        if (current[index] >> bit) & 1 and not (desired[index] >> bit) & 1
+    ]
+    if len(clearable) < cycles * _UV_MIN_CLEARED_BITS:
+        return []
+    images: list[bytes] = []
+    staged = bytearray(current)
+    for cycle in range(cycles):
+        for position in range(cycle, len(clearable), cycles):
+            index, bit = clearable[position]
+            staged[index] &= 0xFF ^ (1 << bit)
+        images.append(bytes(staged))
+    return images
+
+
+def uv_tranche_bit_counts(clearable_total: int, cycles: int) -> list[int]:
+    """How many bits each cycle's tranche clears, for the same interleave
+    `uv_tranche_images` uses. Split out so `WriteTarget.bits_cleared` can be
+    the PER-CYCLE count -- the number that makes the vacuous-pass floor mean
+    "this cycle did real work" -- without re-walking the bit list.
+    """
+    if cycles < 1:
+        return []
+    return [len(range(cycle, clearable_total, cycles)) for cycle in range(cycles)]
+
+
 def bits_retained_by(current: bytes, desired: bytes) -> int:
     """Count bits set in BOTH `current` and `desired` (D-B).
 
@@ -1954,6 +2579,19 @@ class WriteTarget:
     bits_cleared: int
     bits_retained: int
     current_source: str
+    # The chip content the mask was taken against, kept ONLY so
+    # `_plan_cycle_targets` can stage UV tranches out of it without re-probing
+    # the device (D-2). Empty on every unmasked target. Deliberately absent
+    # from `diagnostic_report._step_dict` -- it is working state, not
+    # provenance, and a full-device image has no business in a filed issue.
+    current: bytes = b""
+    # D-9 rig life: how many UV slots on this part can still support a run,
+    # and how many it has in total. `None` on every non-UV target. Derived
+    # from the chosen slot's INDEX in the top-down candidate list -- no extra
+    # read -- and carried through onto the staged tranche copies, which are
+    # the only targets that reach the report.
+    slots_remaining: int | None = None
+    slots_total: int | None = None
 
     def __post_init__(self) -> None:
         _start, length = self.region
@@ -2023,6 +2661,7 @@ def _run_step(
     runs: int,
     sampler: Any = None,
     write_context: WriteContext | None = None,
+    collect_fingerprint: bool = True,
 ) -> StepResult:
     """Time `_run_step_untimed` and stamp `duration_s` on its result.
 
@@ -2051,6 +2690,7 @@ def _run_step(
         runs=runs,
         sampler=sampler,
         write_context=write_context,
+        collect_fingerprint=collect_fingerprint,
     )
     if result.duration_s is None and result.verdict in _RAN_VERDICTS:
         result.duration_s = round(time.monotonic() - start, 3)
@@ -2066,6 +2706,7 @@ def _run_step_untimed(
     runs: int,
     sampler: Any = None,
     write_context: WriteContext | None = None,
+    collect_fingerprint: bool = True,
 ) -> StepResult:
     """Execute a single supported step through the guard-honoring resolver.
 
@@ -2101,6 +2742,7 @@ def _run_step_untimed(
             runs=runs,
             sampler=sampler,
             write_context=write_context,
+            collect_fingerprint=collect_fingerprint,
         )
     except (
         ProgrammerNotFoundError,
@@ -2163,6 +2805,7 @@ def _dispatch_step(
     runs: int,
     sampler: Any = None,
     write_context: WriteContext | None = None,
+    collect_fingerprint: bool = True,
 ) -> StepResult:
     """Dispatch `step.op` to its matching existing `EpromOperator` method.
 
@@ -2212,6 +2855,7 @@ def _dispatch_step(
             sampler=sampler,
             step=step,
             write_context=write_context,
+            collect_fingerprint=collect_fingerprint,
         )
     # Arm 5, LAST (v1.30 Phase 133 D-04, LEG-09) -- immediately above the
     # terminal fail-closed `return` below. The measured arm order above is
@@ -2403,6 +3047,7 @@ def _resolve_write_target(
     operator: Any,
     *,
     chip_is_blank: bool | None,
+    cycles: int = 1,
 ) -> tuple[WriteTarget | None, str]:
     """The execution-time resolver -- the ONLY place a write mask is
     computed (D-A/D-B/D-C). Returns `(target, "")` on success, or `(None,
@@ -2430,7 +3075,6 @@ def _resolve_write_target(
     """
     start, length = _write_region_for(step, eprom_data)
     region_policy = step.region_policy if step is not None else REGION_POLICY_FIXED
-    full_device_permitted = step.full_device_permitted if step is not None else False
 
     if region_policy != REGION_POLICY_UV_SLOT:
         pattern = generate_pattern(start, length)
@@ -2448,32 +3092,38 @@ def _resolve_write_target(
         return target, ""
 
     mem_size = int(eprom_data.get("memory-size", 0) or 0)
-    protocol = eprom_data.get("algorithm", eprom_data.get("protocol-id", 0))
 
-    if chip_is_blank and full_device_permitted:
-        full_result = full_device_region(mem_size, protocol)
-        if isinstance(full_result, str):
-            return None, full_result
-        full_start, full_length = full_result
-        desired = generate_pattern(full_start, full_length)
-        current = b"\xff" * full_length
-        masked = mask_write_pattern(current, desired)
-        try:
-            target = WriteTarget(
-                region=(full_start, full_length),
-                pattern=masked,
-                masked=True,
-                bits_cleared=bits_cleared_by(current, desired),
-                bits_retained=bits_retained_by(current, desired),
-                current_source="blank-check (D-C full-device-if-blank)",
-            )
-        except ValueError as exc:
-            return None, str(exc)
-        return target, ""
+    # D-C's full-device-if-blank branch is GONE (D-4, operator-agreed
+    # 2026-08-22), and `chip_is_blank`/`full_device_permitted` no longer gate
+    # anything on this path. Recorded rather than silently dropped, because it
+    # reverses a decision made one day earlier:
+    #
+    # `dev test` validates the firmware, host and database for a chip TYPE. It
+    # is not a chip-qualification tool. Writing half of a virgin UV part buys
+    # no firmware coverage that a single top slot does not already give -- see
+    # `uv_slot_starts`, which is TOP-DOWN, so the very first slot chosen is the
+    # HIGHEST address on the device and every address line is exercised from
+    # run 1 -- while costing the part's entire remaining life as a regression
+    # rig. A 64 KiB part yields ~256 slot runs; the full-device branch spent
+    # all of them at once.
+    #
+    # `chip_is_blank` is still threaded in and still set by the blank-check
+    # step: it stays a reported FINDING (a UV part that is not blank is
+    # operator-actionable), it is simply no longer a scope decision.
 
+    # D-2/D-8: the slot must support the whole CYCLE, not just one write.
+    # Staging `cycles` tranches out of a slot needs each tranche to clear at
+    # least `_UV_MIN_CLEARED_BITS` on its own, so the slot's own floor scales
+    # with the cycle count. A slot with 64..127 clearable bits passes the
+    # single-write filter and cannot support a two-cycle test; requiring the
+    # scaled floor HERE means every slot this function returns is
+    # tranche-feasible by construction, so `uv_tranche_images` can never come
+    # back empty for a slot that was already accepted.
+    cleared_floor = max(cycles, 1) * _UV_MIN_CLEARED_BITS
     slot_length = length
     slots_per_block = max(_UV_PROBE_BLOCK_LENGTH // slot_length, 1)
     all_starts = uv_slot_starts(mem_size, slot_length)
+    slots_total = len(all_starts)
     for i in range(0, len(all_starts), slots_per_block):
         block_slot_starts = all_starts[i : i + slots_per_block]
         # `all_starts` is top-down: the FIRST entry in this batch is the
@@ -2484,13 +3134,13 @@ def _resolve_write_target(
         block_data = _read_region(operator, name, eprom_data, block_start, block_length)
         if len(block_data) != block_length:
             continue
-        for slot_start in block_slot_starts:
+        for slot_index, slot_start in enumerate(block_slot_starts, start=i):
             offset = slot_start - block_start
             current = block_data[offset : offset + slot_length]
             desired = generate_pattern(slot_start, slot_length)
             cleared = bits_cleared_by(current, desired)
             retained = bits_retained_by(current, desired)
-            if cleared < _UV_MIN_CLEARED_BITS or retained < _UV_MIN_RETAINED_BITS:
+            if cleared < cleared_floor or retained < _UV_MIN_RETAINED_BITS:
                 continue
             masked = mask_write_pattern(current, desired)
             try:
@@ -2501,6 +3151,17 @@ def _resolve_write_target(
                     bits_cleared=cleared,
                     bits_retained=retained,
                     current_source="probe read",
+                    current=current,
+                    # D-9, rig life, at ZERO extra I/O. `all_starts` is
+                    # top-down and this loop takes the FIRST acceptable slot,
+                    # so every slot above `slot_index` is already spent and
+                    # every slot below it is untouched. A run saturates
+                    # exactly one slot (measured: a slot's clearable count
+                    # goes 1024 -> 0 in one run, because the final staged
+                    # image IS `current & desired`), so "slots left" and
+                    # "runs left on this part" are the same number.
+                    slots_remaining=slots_total - slot_index,
+                    slots_total=slots_total,
                 )
             except ValueError:
                 # Defensive only: cleared/retained already satisfied both
@@ -2511,7 +3172,7 @@ def _resolve_write_target(
             return target, ""
 
     return None, (
-        f"every UV slot exhausted without clearing >= {_UV_MIN_CLEARED_BITS} "
+        f"every UV slot exhausted without clearing >= {cleared_floor} "
         f"bits and retaining >= {_UV_MIN_RETAINED_BITS} bits under this "
         "pattern -- the chip is saturated; a UV erase is required before "
         "writing further"
@@ -2528,6 +3189,7 @@ def _dispatch_multi_run(
     sampler: Any = None,
     step: Step | None = None,
     write_context: WriteContext | None = None,
+    collect_fingerprint: bool = True,
 ) -> StepResult:
     """Run a destructive/verify op `runs` times; `marginal` on disagreement.
 
@@ -2597,15 +3259,24 @@ def _dispatch_multi_run(
     expected = b""
 
     if op in (OP_WRITE, OP_WRITE_PARTIAL):
-        resolved_target, refusal = _resolve_write_target(
-            name,
-            step,
-            eprom_data,
-            operator,
-            chip_is_blank=(
-                write_context.chip_is_blank if write_context is not None else None
-            ),
-        )
+        # The cycle plan wins when there is one (D-1): `_run_cycle_block`
+        # already resolved this cycle's target, so re-resolving here would
+        # re-probe the device and could land on a different UV slot than the
+        # cycle it belongs to. `None` means no cycle plan applies and the
+        # pre-cycle resolve path runs unchanged.
+        planned = _cycle_target(write_context)
+        if planned is not None:
+            resolved_target, refusal = planned, ""
+        else:
+            resolved_target, refusal = _resolve_write_target(
+                name,
+                step,
+                eprom_data,
+                operator,
+                chip_is_blank=(
+                    write_context.chip_is_blank if write_context is not None else None
+                ),
+            )
         if resolved_target is None:
             # The vacuous-pass guard's SKIPPED path: `write_eprom` is NEVER
             # called for a saturated/refused target -- no step reports OK
@@ -2687,7 +3358,7 @@ def _dispatch_multi_run(
                     f"unreachable: op {op!r} passed the _MULTI_RUN_OPS guard"
                 )
 
-        if op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY):
+        if collect_fingerprint and op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY):
             # Readback for the fingerprint is best-effort: a readback failure
             # (e.g. the SAME boot-block-locked condition that failed the
             # write/verify runs themselves) must NOT convert an otherwise
