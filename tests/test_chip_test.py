@@ -1376,6 +1376,166 @@ def test_runs_boundary_rejects_below_2_before_any_operator_call():
     assert "runs" in results[0].reason.lower()
 
 
+def _record_operator_calls(operator, calls, *methods):
+    """Make each named operator method append its own name to `calls`.
+
+    Preserves the mock's configured `return_value` -- `_mock_operator` sets
+    those, and a bare `side_effect` would otherwise shadow them and hand every
+    step a `Mock` instead of a bool.
+    """
+
+    def _make(method_name, value):
+        def _side(*_args, **_kwargs):
+            calls.append(method_name)
+            return value
+
+        return _side
+
+    for method_name in methods:
+        mock_method = getattr(operator, method_name)
+        mock_method.side_effect = _make(method_name, mock_method.return_value)
+
+
+def test_write_and_verify_run_as_a_cycle_not_two_inner_loops():
+    """D-1: the ORDER is `write, verify, write, verify` -- not `write, write,
+    verify, verify`.
+
+    This is the property the whole cycle loop exists for. A second write onto
+    the state the first one produced is a no-op on the 27C path (see
+    `_MULTI_RUN_OPS`' note in the engine), so pairing each write with its own
+    verify is what makes the repeat mean anything.
+    """
+    calls: list[str] = []
+    operator = _mock_operator()
+    _record_operator_calls(operator, calls, "write_eprom", "verify_eprom")
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+        Step(op=OP_VERIFY, supported=True, reason=""),
+    )
+    run_plan(plan, operator, _REAL_DB, runs=2)
+
+    assert calls == ["write_eprom", "verify_eprom", "write_eprom", "verify_eprom"]
+
+
+def test_erasable_cycle_puts_the_erase_before_the_next_write():
+    """D-3, and the reason the erasable families are fixed by the cycle loop
+    ALONE, with no payload change: each cycle's erase blanks the part for the
+    NEXT cycle's write, so from cycle 2 on the write has full real work to do
+    even though the bytes are identical. The blank-check rides inside the
+    cycle and validates that erase every time round.
+    """
+    calls: list[str] = []
+    operator = _mock_operator()
+    _record_operator_calls(
+        operator,
+        calls,
+        "write_eprom",
+        "verify_eprom",
+        "erase_eprom",
+        "check_eprom_blank",
+    )
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+        Step(op=OP_VERIFY, supported=True, reason=""),
+        Step(op=OP_ERASE, supported=True, reason="", destructive=True),
+        Step(op=OP_BLANK_CHECK, supported=True, reason=""),
+    )
+    run_plan(plan, operator, _REAL_DB, runs=2)
+
+    one_cycle = ["write_eprom", "verify_eprom", "erase_eprom", "check_eprom_blank"]
+    assert calls == one_cycle * 2
+    # The load-bearing consequence, asserted directly rather than inferred
+    # from the list above: an erase precedes the second write.
+    assert calls.index("erase_eprom") < calls.index("write_eprom", 1)
+
+
+def test_cycle_block_bounds_matches_each_family_plan_shape():
+    """The block is CONSECUTIVE ops starting at the write -- which is what
+    keeps a UV plan's pre-write blank-check (a once-only, operator-actionable
+    finding) outside the cycle while an erasable plan's post-erase blank-check
+    lands inside it, with no per-family special case in the detector."""
+    import firestarter.chip_test as chip_test_mod
+
+    for name, expected in (
+        ("M8720", [OP_WRITE, OP_VERIFY, OP_ERASE, OP_BLANK_CHECK]),
+        ("W27C512", [OP_WRITE, OP_VERIFY, OP_ERASE, OP_BLANK_CHECK]),
+        ("M27C512", [OP_WRITE, OP_VERIFY, OP_ERASE]),
+        ("W29C040", [OP_WRITE, OP_VERIFY, OP_ERASE]),
+    ):
+        plan = derive_plan(name, _REAL_DB, write_scope="full")
+        bounds = chip_test_mod.cycle_block_bounds(plan.steps)
+        assert bounds is not None, name
+        assert [s.op for s in plan.steps[bounds[0] : bounds[1]]] == expected, name
+        # The SDP leg is NEVER swallowed by the block.
+        after = [s.op for s in plan.steps[bounds[1] :]]
+        sdp_ops = chip_test_mod._SDP_LEG_OPS | chip_test_mod._SDP_OPS
+        assert all(op in sdp_ops for op in after), (
+            f"{name}: block ran past the write cycle into {after}"
+        )
+
+
+def test_no_write_step_means_no_cycle_block():
+    """A `write_scope="none"` plan has nothing to cycle, so the detector
+    returns None and every step takes the untouched per-step path."""
+    import firestarter.chip_test as chip_test_mod
+
+    plan = derive_plan("M8720", _REAL_DB, write_scope="none")
+    assert not any(s.op in (OP_WRITE, OP_WRITE_PARTIAL) for s in plan.steps)
+    assert chip_test_mod.cycle_block_bounds(plan.steps) is None
+
+
+def test_cycle_loop_reports_one_result_per_step_with_run_count_n():
+    """The aggregation contract that keeps the blast radius small: cycling
+    changes the EXECUTION order only. The report still sees one row per plan
+    step, `run_count` still counts operator calls, so the schema-1.7
+    disclosure, the banner counts and `dedup_fingerprint` are all untouched."""
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+        Step(op=OP_VERIFY, supported=True, reason=""),
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    assert [r.op for r in results] == [OP_WRITE, OP_VERIFY]
+    assert _result(results, OP_WRITE).run_count == 2
+    assert _result(results, OP_VERIFY).run_count == 2
+    assert operator.write_eprom.call_count == 2
+    assert operator.verify_eprom.call_count == 2
+
+
+def test_fingerprint_readback_happens_once_not_once_per_cycle():
+    """`collect_fingerprint` is True only on the final cycle. Without that
+    gate the write and verify steps would each add a region read-back per
+    cycle -- real cost on a full-device region, for a fingerprint that only
+    ever describes the device's FINAL state."""
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+        Step(op=OP_VERIFY, supported=True, reason=""),
+    )
+    run_plan(plan, operator, _REAL_DB, runs=3)
+
+    # One read-back for the write step, one for the verify step. NOT 3 + 3.
+    assert operator.read_eprom.call_count == 2
+
+
+def test_cycle_disagreement_still_reports_marginal():
+    """`marginal` moved from `_dispatch_multi_run` (which now sees one cycle at
+    a time) to the aggregation, with its MEANING unchanged: cycles that
+    disagree never fold to a confident OK/BAD."""
+    operator = _mock_operator()
+    operator.write_eprom.side_effect = [True, False]
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    write_result = _result(results, OP_WRITE)
+    assert write_result.verdict == VERDICT_MARGINAL
+    assert write_result.run_count == 2
+    assert "disagreed" in write_result.reason
+
+
 def test_allow_single_run_admits_runs_1_and_reports_run_count_1():
     """The ONLY way past the fail-closed guard (quick task 260822-aq6).
 
@@ -2236,11 +2396,26 @@ def test_safe02_routes_via_resolve_chip_for_every_executed_step(monkeypatch):
     executed_steps = [s for s in plan.steps if s.supported]
     assert len(executed_steps) >= 4
 
-    run_plan(plan, operator, _REAL_DB)
+    runs = 2
+    run_plan(plan, operator, _REAL_DB, runs=runs)
 
-    # resolve_chip is called once per executed (supported) step -- never
-    # reused from derive_plan's guard-bypassing dict.
-    assert spy.call_count == len(executed_steps)
+    # resolve_chip is called once per executed (supported) step PER CYCLE --
+    # never reused from derive_plan's guard-bypassing dict. The expected count
+    # is DERIVED from the plan and the engine's own cycle bounds rather than
+    # restated, so it tracks a change in either without a hand edit: steps
+    # outside the repeat cycle resolve once, steps inside it resolve once per
+    # cycle, plus ONE resolve for the cycle planner itself (which resolves the
+    # chip to compute the per-cycle write targets before cycle 1 begins).
+    block = chip_test_mod.cycle_block_bounds(plan.steps)
+    assert block is not None, "M8720's plan must contain a write cycle"
+    in_cycle = [s for s in plan.steps[block[0] : block[1]] if s.supported]
+    outside_cycle = [s for s in executed_steps if s not in in_cycle]
+    expected = len(outside_cycle) + len(in_cycle) * runs + 1
+    assert spy.call_count == expected, (
+        f"{spy.call_count} resolve_chip calls, expected {expected} "
+        f"({len(outside_cycle)} outside the cycle + {len(in_cycle)} inside "
+        f"x {runs} cycles + 1 for the cycle planner)"
+    )
     for call in spy.call_args_list:
         assert call.args == ("M8720",)
         assert call.kwargs == {"db": _REAL_DB}
