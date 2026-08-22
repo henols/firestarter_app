@@ -2536,3 +2536,75 @@ def test_deregistration_failed_explicit_unlock_retries_via_drain_twice():
         f"{unlock_result.verdict!r}, expected BAD (operator.sdp_unlock "
         "returned False)"
     )
+
+
+# ---------------------------------------------------------------------------
+# Region-scoped read-back (quick task 260821-wna, Task 4, finding M-2/M-3):
+# `_dispatch_sdp_leg`'s length gate is only a REAL gate once the read-back is
+# region-scoped and sliced -- these two legs prove it against doubles that
+# behave like real hardware rather than a region-sized-by-construction Mock.
+# ---------------------------------------------------------------------------
+
+
+def test_sdp_leg_length_gate_passes_against_a_full_size_readback_double():
+    """The length gate must pass when the double returns a FULL-SIZE image
+    (finding M-2): before this task, the gate was only satisfiable by a
+    double whose read-back happened to return exactly `region_length`
+    bytes. `_read_region`'s absolute-offset slice is what makes a
+    whole-device-sized read-back a genuine pass, not merely a double that
+    conveniently matches."""
+    region = _DEFAULT_REGION
+    a = generate_pattern(*region)
+    device_size = 32768
+
+    def _full_size_read(name, eprom_data, output_file=None, **kwargs):
+        if output_file is not None:
+            # A real chip's whole-device read-back: `a` at offset 0,
+            # zero-padded out to the full device size.
+            payload = a + b"\x00" * (device_size - len(a))
+            Path(output_file).write_bytes(payload)
+        return True
+
+    operator = Mock(spec=_OPERATOR_METHODS)
+    operator.check_eprom_id.return_value = (True, 0x1234)
+    operator.check_eprom_blank.return_value = True
+    operator.erase_eprom.return_value = True
+    operator.verify_eprom.return_value = True
+    operator.write_eprom.return_value = True
+    operator.read_eprom.side_effect = _full_size_read
+
+    result = _dispatch_sdp_leg(OP_WRITE_INHIBITED, "M8720", {}, operator)
+
+    assert result.verdict == VERDICT_OK, (
+        f"expected OK against a full-size read-back double, got "
+        f"{result.verdict!r}: {result.reason}"
+    )
+
+
+def test_sdp_leg_readback_reproduces_absolute_offset_seek():
+    """A double that writes its payload at the requested ABSOLUTE offset
+    (finding M-3), not offset 0, must still satisfy the oracle at a
+    non-zero region start -- proving the read-back is genuinely
+    region-scoped rather than merely reading from a fixed offset 0 that
+    happens to coincide with every currently-shipped leg region.
+    `OP_WRITE_BASELINE_A`'s oracle is the simple symmetric case (write A,
+    expect A back) -- it needs no simulated SDP-lock behaviour, unlike
+    `OP_WRITE_INHIBITED`, so `FakeChip`'s plain overwrite semantics satisfy
+    it directly.
+    """
+    from .fake_chip import FakeChip
+
+    start, length = 0x2000, 256
+    chip = FakeChip.non_uv(0x4000)
+    step = Step(op=OP_WRITE, supported=True, reason="", write_region=(start, length))
+
+    result = _dispatch_sdp_leg(OP_WRITE_BASELINE_A, "M8720", {}, chip, step=step)
+
+    assert result.verdict == VERDICT_OK, (
+        f"expected OK against a real absolute-offset double at a non-zero "
+        f"start, got {result.verdict!r}: {result.reason}"
+    )
+    read_calls = [c for c in chip.calls if c[0] == "read_eprom"]
+    assert read_calls and any(c[1]["address_str"] == "0x2000" for c in read_calls), (
+        read_calls
+    )

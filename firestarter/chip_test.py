@@ -1217,10 +1217,46 @@ class StepResult:
     # Deliberately NOT part of `dedup_fingerprint`, which excludes every
     # volatile field so two runs of the same chip still dedup.
     duration_s: float | None = None
+    # The write step's resolved `WriteTarget` (quick task 260821-wna, Task 4)
+    # -- additive, `None` on every step that isn't a write, and `None` on a
+    # write step that was SKIPPED as saturated/refused (in which case
+    # `reason` names why). The verify step INHERITS this value from
+    # `WriteContext` rather than re-resolving it (D-07 moved to execution
+    # time) -- it never appears on a verify step's OWN `StepResult` (verify
+    # reads the context, it does not set this field on itself).
+    write_target: WriteTarget | None = None
 
 
 def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> StepResult:
     return StepResult(op=op, verdict=verdict, reason=reason, run_count=0)
+
+
+@dataclass
+class WriteContext:
+    """Execution-time state threaded through `run_plan`'s step loop (quick
+    task 260821-wna) -- the D-07 seam MOVED to execution time: `derive_plan`
+    still decides the REGION and the POLICY (`Step.write_region` /
+    `Step.region_policy`); this object carries the MASK decision, which is
+    necessarily execution-time-only (it reads the chip), from the write
+    step to the verify step so the verify step never re-derives it.
+
+    `chip_is_blank` is set exactly once, right after the blank-check step
+    runs, from that step's own verdict (`True`/`False`); it stays `None`
+    before the blank-check step runs, or when the blank-check step is
+    NA/SKIPPED for this chip -- `None` is the safe default: `_resolve_
+    write_target` only takes the D-C full-device-if-blank branch when this
+    is explicitly `True`.
+
+    `target` is the write step's resolved `WriteTarget`, copied here once
+    the write step completes; `None` when the write step was refused
+    (saturated slot, probe exhaustion, or a `full_device_region` sanity
+    refusal) -- `refusal` then carries that reason so the verify step's own
+    SKIPPED result can name it instead of inventing a new one.
+    """
+
+    chip_is_blank: bool | None = None
+    target: WriteTarget | None = None
+    refusal: str = ""
 
 
 def _resolve_or_none(
@@ -1378,6 +1414,15 @@ def run_plan(
     # still retries it.
     unlock_cleanup: Callable[[], None] | None = None
 
+    # WriteContext (quick task 260821-wna, Task 4): ONE instance for the
+    # whole run, created here and passed by reference to every `_run_step`
+    # call below. `derive_plan` still decides the REGION and POLICY; this
+    # object carries the MASK decision (necessarily execution-time) from
+    # the blank-check step -> the write step -> the verify step, so the
+    # verify step never re-derives either. This is the D-07 seam MOVED to
+    # execution time.
+    write_context = WriteContext()
+
     # `runs < 2` stays OUTSIDE this `try` (above): nothing is registered
     # yet, so there is nothing to drain. `results`, `destructive_gate_closed`
     # and `cleanup` are all created BEFORE the `try`. `return results` stays
@@ -1410,9 +1455,33 @@ def run_plan(
                 continue
 
             result = _run_step(
-                plan.name, step, operator, db, runs=runs, sampler=sampler
+                plan.name,
+                step,
+                operator,
+                db,
+                runs=runs,
+                sampler=sampler,
+                write_context=write_context,
             )
             results.append(result)
+
+            if step.op == OP_BLANK_CHECK and result.verdict in (
+                VERDICT_OK,
+                VERDICT_BAD,
+            ):
+                # D-C: the ONE place `chip_is_blank` is set, from the
+                # blank-check step's OWN verdict. Left `None` (the safe
+                # default) when blank-check is NA/SKIPPED for this chip.
+                write_context.chip_is_blank = result.verdict == VERDICT_OK
+
+            if step.op in (OP_WRITE, OP_WRITE_PARTIAL):
+                # The verify step inherits the write's ACTUAL resolved
+                # target (or refusal) -- never re-derived (D-07 moved to
+                # execution time).
+                write_context.target = result.write_target
+                write_context.refusal = (
+                    result.reason if result.write_target is None else ""
+                )
 
             if step.op == OP_SDP_LOCK and result.verdict == VERDICT_OK:
                 # Register the unlock ONLY on a successful lock (D-06):
@@ -1946,7 +2015,14 @@ def _write_region_for(step: Step | None, eprom_data: dict[str, Any]) -> tuple[in
 
 
 def _run_step(
-    name: str, step: Step, operator: Any, db: Any, *, runs: int, sampler: Any = None
+    name: str,
+    step: Step,
+    operator: Any,
+    db: Any,
+    *,
+    runs: int,
+    sampler: Any = None,
+    write_context: WriteContext | None = None,
 ) -> StepResult:
     """Time `_run_step_untimed` and stamp `duration_s` on its result.
 
@@ -1960,16 +2036,36 @@ def _run_step(
     NA/SKIPPED step keeps `duration_s = None` instead of a `0.0` that would
     read as real measured work. `time.monotonic` (never `time.time`) so a
     wall-clock adjustment mid-read cannot produce a negative duration.
+
+    `write_context` (quick task 260821-wna, Task 4) is threaded through
+    unchanged to `_run_step_untimed`; `None` is the default (the SDP
+    lock/unlock cleanup callable in `run_plan` calls this function without
+    one, since neither op is write-shaped).
     """
     start = time.monotonic()
-    result = _run_step_untimed(name, step, operator, db, runs=runs, sampler=sampler)
+    result = _run_step_untimed(
+        name,
+        step,
+        operator,
+        db,
+        runs=runs,
+        sampler=sampler,
+        write_context=write_context,
+    )
     if result.duration_s is None and result.verdict in _RAN_VERDICTS:
         result.duration_s = round(time.monotonic() - start, 3)
     return result
 
 
 def _run_step_untimed(
-    name: str, step: Step, operator: Any, db: Any, *, runs: int, sampler: Any = None
+    name: str,
+    step: Step,
+    operator: Any,
+    db: Any,
+    *,
+    runs: int,
+    sampler: Any = None,
+    write_context: WriteContext | None = None,
 ) -> StepResult:
     """Execute a single supported step through the guard-honoring resolver.
 
@@ -1986,7 +2082,8 @@ def _run_step_untimed(
     `resolve_chip(name, db=...)` + operator-method compose pattern used here.
 
     `sampler` (D-04) is threaded through unchanged to `_dispatch_step`;
-    `None` is the default and a proven no-op.
+    `None` is the default and a proven no-op. `write_context` (Task 4) is
+    likewise threaded through unchanged.
     """
     eprom_data, skip_stub, reason = _resolve_or_none(name, db)
     if skip_stub is not None or eprom_data is None:
@@ -1997,7 +2094,13 @@ def _run_step_untimed(
 
     try:
         return _dispatch_step(
-            name, step, eprom_data, operator, runs=runs, sampler=sampler
+            name,
+            step,
+            eprom_data,
+            operator,
+            runs=runs,
+            sampler=sampler,
+            write_context=write_context,
         )
     except (
         ProgrammerNotFoundError,
@@ -2059,6 +2162,7 @@ def _dispatch_step(
     *,
     runs: int,
     sampler: Any = None,
+    write_context: WriteContext | None = None,
 ) -> StepResult:
     """Dispatch `step.op` to its matching existing `EpromOperator` method.
 
@@ -2077,7 +2181,10 @@ def _dispatch_step(
 
     `sampler` (D-04) is threaded through unchanged to `_dispatch_multi_run`,
     the only op with a bracket site (OP_WRITE); `None` is the default and a
-    proven no-op for every other op.
+    proven no-op for every other op. `write_context` (quick task 260821-wna,
+    Task 4) is likewise threaded through to `_dispatch_multi_run` ONLY --
+    deliberately NOT to `_dispatch_sdp`/`_dispatch_sdp_leg`, which keep
+    `_write_region_for` and the fixed leg region unchanged.
     """
     if step.op == OP_ID:
         return _dispatch_id(name, eprom_data, operator)
@@ -2097,7 +2204,14 @@ def _dispatch_step(
     # `operator.erase_eprom()` (RESEARCH Pitfall 1a).
     if step.op in _MULTI_RUN_OPS:
         return _dispatch_multi_run(
-            step.op, name, eprom_data, operator, runs=runs, sampler=sampler, step=step
+            step.op,
+            name,
+            eprom_data,
+            operator,
+            runs=runs,
+            sampler=sampler,
+            step=step,
+            write_context=write_context,
         )
     # Arm 5, LAST (v1.30 Phase 133 D-04, LEG-09) -- immediately above the
     # terminal fail-closed `return` below. The measured arm order above is
@@ -2222,6 +2336,188 @@ def _sample(sampler: Any, phase: str) -> None:
         pass
 
 
+# ---------------------------------------------------------------------------
+# Execution-time mask/slot/region resolution (quick task 260821-wna, Task 4)
+# ---------------------------------------------------------------------------
+
+
+def _address_arg(start: int) -> str | None:
+    """`None` for a zero start, else a `0x`-prefixed hex address string.
+
+    The `None` case is load-bearing (M-1): it keeps every region-at-zero
+    call byte-identical to today's wire behaviour, since `_setup_operation`
+    (`eprom_operations.py`) only sets the command's `address` key when an
+    argument is actually supplied.
+    """
+    if start == 0:
+        return None
+    return f"0x{start:X}"
+
+
+def _size_arg(length: int) -> str:
+    """The matching `0x`-prefixed size string for a region read."""
+    return f"0x{length:X}"
+
+
+def _read_region(
+    operator: Any, name: str, eprom_data: dict[str, Any], start: int, length: int
+) -> bytes:
+    """One region read into a temp dir, then `[start:start+length]` off the
+    file (finding M-3) -- the ONE place this slice lives; every region
+    read-back in this module goes through this function.
+
+    A region read produces a hole-padded file whose real bytes sit at the
+    ABSOLUTE offset `start` (`eprom_operations._write_to_file`'s
+    `file_handle.seek(address)`), never at offset 0 -- slicing anywhere
+    else would silently read zero-padding instead of the requested bytes.
+    Returns `b""` on any `OSError`, a missing file, or a short/wrong-length
+    result -- never raises, so a probe/verify read-back failure degrades
+    gracefully rather than crashing the step.
+    """
+    try:
+        with tempfile.TemporaryDirectory(prefix="chip_test_region_") as tmp_dir:
+            out_path = str(Path(tmp_dir) / "region.bin")
+            operator.read_eprom(
+                name,
+                eprom_data,
+                output_file=out_path,
+                address_str=_address_arg(start),
+                size_str=_size_arg(length),
+            )
+            try:
+                raw = Path(out_path).read_bytes()
+            except OSError:
+                return b""
+    except EpromOperationError:
+        return b""
+    chunk = raw[start : start + length]
+    if len(chunk) != length:
+        return b""
+    return chunk
+
+
+def _resolve_write_target(
+    name: str,
+    step: Step | None,
+    eprom_data: dict[str, Any],
+    operator: Any,
+    *,
+    chip_is_blank: bool | None,
+) -> tuple[WriteTarget | None, str]:
+    """The execution-time resolver -- the ONLY place a write mask is
+    computed (D-A/D-B/D-C). Returns `(target, "")` on success, or `(None,
+    reason)` on a refusal; never both.
+
+    `derive_plan` already decided `step.write_region`/`step.region_policy`/
+    `step.full_device_permitted`; this function only READS them -- it never
+    re-derives the region or the policy, only the MASK.
+
+    * `fixed` / `full-device` policy -> an UNMASKED `WriteTarget` over
+      `step.write_region` (the plain address-derived pattern, unchanged
+      from today for non-UV chips).
+    * `uv-slot` policy, chip reported blank AND `step.full_device_permitted`
+      -> a MASKED `WriteTarget` over the full-device region, with the mask
+      taken as all-0xFF (D-C: the blank-check IS the "current content"
+      oracle here -- the device is never read again for this branch).
+    * `uv-slot` policy otherwise -> probe candidate slots top-down in
+      `_UV_PROBE_BLOCK_LENGTH`-sized reads (`uv_slot_starts`), evaluating
+      each slot inside the block with `bits_cleared_by`/`bits_retained_by`,
+      and returning the FIRST slot whose counts satisfy both D-B floors.
+      Never writes a cursor anywhere -- the probe reads ARE the state
+      lookup (D-B). A block whose read comes back short/empty is skipped
+      (its slots are simply unevaluable, not saturated) rather than
+      raising.
+    """
+    start, length = _write_region_for(step, eprom_data)
+    region_policy = step.region_policy if step is not None else REGION_POLICY_FIXED
+    full_device_permitted = step.full_device_permitted if step is not None else False
+
+    if region_policy != REGION_POLICY_UV_SLOT:
+        pattern = generate_pattern(start, length)
+        try:
+            target = WriteTarget(
+                region=(start, length),
+                pattern=pattern,
+                masked=False,
+                bits_cleared=0,
+                bits_retained=0,
+                current_source="address-derived pattern (unmasked)",
+            )
+        except ValueError as exc:
+            return None, str(exc)
+        return target, ""
+
+    mem_size = int(eprom_data.get("memory-size", 0) or 0)
+    protocol = eprom_data.get("algorithm", eprom_data.get("protocol-id", 0))
+
+    if chip_is_blank and full_device_permitted:
+        full_result = full_device_region(mem_size, protocol)
+        if isinstance(full_result, str):
+            return None, full_result
+        full_start, full_length = full_result
+        desired = generate_pattern(full_start, full_length)
+        current = b"\xff" * full_length
+        masked = mask_write_pattern(current, desired)
+        try:
+            target = WriteTarget(
+                region=(full_start, full_length),
+                pattern=masked,
+                masked=True,
+                bits_cleared=bits_cleared_by(current, desired),
+                bits_retained=bits_retained_by(current, desired),
+                current_source="blank-check (D-C full-device-if-blank)",
+            )
+        except ValueError as exc:
+            return None, str(exc)
+        return target, ""
+
+    slot_length = length
+    slots_per_block = max(_UV_PROBE_BLOCK_LENGTH // slot_length, 1)
+    all_starts = uv_slot_starts(mem_size, slot_length)
+    for i in range(0, len(all_starts), slots_per_block):
+        block_slot_starts = all_starts[i : i + slots_per_block]
+        # `all_starts` is top-down: the FIRST entry in this batch is the
+        # highest address, the LAST is the lowest -- the block's own start
+        # is that lowest address.
+        block_start = block_slot_starts[-1]
+        block_length = block_slot_starts[0] + slot_length - block_start
+        block_data = _read_region(operator, name, eprom_data, block_start, block_length)
+        if len(block_data) != block_length:
+            continue
+        for slot_start in block_slot_starts:
+            offset = slot_start - block_start
+            current = block_data[offset : offset + slot_length]
+            desired = generate_pattern(slot_start, slot_length)
+            cleared = bits_cleared_by(current, desired)
+            retained = bits_retained_by(current, desired)
+            if cleared < _UV_MIN_CLEARED_BITS or retained < _UV_MIN_RETAINED_BITS:
+                continue
+            masked = mask_write_pattern(current, desired)
+            try:
+                target = WriteTarget(
+                    region=(slot_start, slot_length),
+                    pattern=masked,
+                    masked=True,
+                    bits_cleared=cleared,
+                    bits_retained=retained,
+                    current_source="probe read",
+                )
+            except ValueError:
+                # Defensive only: cleared/retained already satisfied both
+                # floors above, so __post_init__'s bit-count refusals
+                # cannot fire here -- kept so a future threshold change
+                # cannot silently turn into an unhandled crash.
+                continue
+            return target, ""
+
+    return None, (
+        f"every UV slot exhausted without clearing >= {_UV_MIN_CLEARED_BITS} "
+        f"bits and retaining >= {_UV_MIN_RETAINED_BITS} bits under this "
+        "pattern -- the chip is saturated; a UV erase is required before "
+        "writing further"
+    )
+
+
 def _dispatch_multi_run(
     op: str,
     name: str,
@@ -2231,6 +2527,7 @@ def _dispatch_multi_run(
     runs: int,
     sampler: Any = None,
     step: Step | None = None,
+    write_context: WriteContext | None = None,
 ) -> StepResult:
     """Run a destructive/verify op `runs` times; `marginal` on disagreement.
 
@@ -2264,6 +2561,20 @@ def _dispatch_multi_run(
     function's run loop ended in a bare `else: # OP_ERASE`, so an unmapped op
     called `operator.erase_eprom()` once per run and reported `VERDICT_OK`
     (RESEARCH Pitfall 1a, proven empirically: 2 runs -> 2 calls -> OK).
+
+    Quick task 260821-wna, Task 4: for `OP_WRITE`/`OP_WRITE_PARTIAL`, the
+    write target (region + pattern, masked or not) is resolved HERE via
+    `_resolve_write_target` -- a saturated/refused target returns SKIPPED
+    with the refusal reason and `write_eprom` is NEVER called (the
+    structural vacuous-pass guard extends all the way to this dispatch
+    site). For `OP_VERIFY` on a non-`fixed` policy, the target is INHERITED
+    from `write_context.target` (set by the preceding write step) rather
+    than re-resolved -- the verify step never computes its own mask. For
+    `OP_ERASE` and every `fixed`-policy write/verify, behaviour is
+    unchanged from before this task. The write/verify read-back (for the
+    `Fingerprint`) is now region-scoped via `_read_region` instead of a
+    whole-device read (finding M-2: a whole-device read-back only "worked"
+    because every prior test double wrote exactly a region-sized payload).
     """
     if op not in _MULTI_RUN_OPS:
         return StepResult(
@@ -2280,9 +2591,56 @@ def _dispatch_multi_run(
     outcomes: list[bool] = []
     fingerprint: Fingerprint | None = None
     tmp_source_path: str | None = None
+    resolved_target: WriteTarget | None = None
+    region_start = 0
+    region_length = 0
+    expected = b""
 
-    region_start, region_length = _write_region_for(step, eprom_data)
-    expected = generate_pattern(region_start, region_length)
+    if op in (OP_WRITE, OP_WRITE_PARTIAL):
+        resolved_target, refusal = _resolve_write_target(
+            name,
+            step,
+            eprom_data,
+            operator,
+            chip_is_blank=(
+                write_context.chip_is_blank if write_context is not None else None
+            ),
+        )
+        if resolved_target is None:
+            # The vacuous-pass guard's SKIPPED path: `write_eprom` is NEVER
+            # called for a saturated/refused target -- no step reports OK
+            # for a write that did not happen.
+            return StepResult(
+                op=op,
+                verdict=VERDICT_SKIPPED,
+                reason=refusal,
+                run_count=0,
+                write_target=None,
+            )
+        region_start, region_length = resolved_target.region
+        expected = resolved_target.pattern
+    elif op == OP_VERIFY:
+        non_fixed_policy = (
+            step is not None and step.region_policy != REGION_POLICY_FIXED
+        )
+        if non_fixed_policy:
+            inherited = write_context.target if write_context is not None else None
+            if inherited is None:
+                refusal = (
+                    write_context.refusal
+                    if write_context is not None and write_context.refusal
+                    else "no write target available for verify"
+                )
+                return StepResult(
+                    op=op, verdict=VERDICT_SKIPPED, reason=refusal, run_count=0
+                )
+            resolved_target = inherited
+            region_start, region_length = inherited.region
+            expected = inherited.pattern
+        else:
+            region_start, region_length = _write_region_for(step, eprom_data)
+            expected = generate_pattern(region_start, region_length)
+
     if op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY):
         tmp_fh = tempfile.NamedTemporaryFile(
             prefix="chip_test_pattern_", suffix=".bin", delete=False
@@ -2297,11 +2655,23 @@ def _dispatch_multi_run(
         for _ in range(runs):
             if op in (OP_WRITE, OP_WRITE_PARTIAL):
                 _sample(sampler, "before")
-                outcomes.append(operator.write_eprom(name, eprom_data, tmp_source_path))
+                outcomes.append(
+                    operator.write_eprom(
+                        name,
+                        eprom_data,
+                        tmp_source_path,
+                        address_str=_address_arg(region_start),
+                    )
+                )
                 _sample(sampler, "after")
             elif op == OP_VERIFY:
                 outcomes.append(
-                    operator.verify_eprom(name, eprom_data, tmp_source_path)
+                    operator.verify_eprom(
+                        name,
+                        eprom_data,
+                        tmp_source_path,
+                        address_str=_address_arg(region_start),
+                    )
                 )
             elif op == OP_ERASE:
                 outcomes.append(operator.erase_eprom(name, eprom_data))
@@ -2323,18 +2693,11 @@ def _dispatch_multi_run(
             # write/verify runs themselves) must NOT convert an otherwise
             # successful write/verify outcome into BAD (Pitfall 1 extends to
             # this internal readback call too) -- it only means no
-            # Fingerprint could be attached.
-            actual = b""
-            try:
-                with tempfile.TemporaryDirectory(prefix="chip_test_verify_") as tmp_dir:
-                    readback_path = str(Path(tmp_dir) / "readback.bin")
-                    operator.read_eprom(name, eprom_data, output_file=readback_path)
-                    try:
-                        actual = Path(readback_path).read_bytes()
-                    except OSError:
-                        actual = b""
-            except EpromOperationError:
-                actual = b""
+            # Fingerprint could be attached. Region-scoped via `_read_region`
+            # (finding M-2) rather than a whole-device read.
+            actual = _read_region(
+                operator, name, eprom_data, region_start, region_length
+            )
 
             if actual:
                 diverged = len(set(outcomes)) != 1 if outcomes else False
@@ -2365,6 +2728,7 @@ def _dispatch_multi_run(
         reason=reason,
         run_count=runs,
         fingerprint=fingerprint,
+        write_target=resolved_target if op in (OP_WRITE, OP_WRITE_PARTIAL) else None,
     )
 
 
@@ -2529,27 +2893,26 @@ def _dispatch_sdp_leg(
     tmp_source_path = tmp_fh.name
 
     try:
-        wrote_ok = operator.write_eprom(name, eprom_data, tmp_source_path, flags)
+        wrote_ok = operator.write_eprom(
+            name,
+            eprom_data,
+            tmp_source_path,
+            flags,
+            address_str=_address_arg(region_start),
+        )
 
         # Read back. ⚠ Unlike `_dispatch_multi_run`'s read-back
         # (`:1483-1493`), this read-back is NOT best-effort decoration -- it
         # IS the verdict (D-05/LEG-05). A failed/degenerate read-back still
         # produces a verdict below (BAD via the length gate), it never
         # silently skips the Fingerprint the way the multi-run write/verify
-        # step does.
-        actual = b""
-        try:
-            with tempfile.TemporaryDirectory(
-                prefix="chip_test_sdp_leg_verify_"
-            ) as tmp_dir:
-                readback_path = str(Path(tmp_dir) / "readback.bin")
-                operator.read_eprom(name, eprom_data, output_file=readback_path)
-                try:
-                    actual = Path(readback_path).read_bytes()
-                except OSError:
-                    actual = b""
-        except EpromOperationError:
-            actual = b""
+        # step does. Region-scoped via `_read_region` (quick task
+        # 260821-wna, finding M-2): the length gate below was previously
+        # satisfiable only by a double whose read-back happened to return
+        # exactly `region_length` bytes; a region-scoped, sliced read is
+        # what makes it a real gate against a whole-device read on real
+        # hardware.
+        actual = _read_region(operator, name, eprom_data, region_start, region_length)
     finally:
         try:
             Path(tmp_source_path).unlink()

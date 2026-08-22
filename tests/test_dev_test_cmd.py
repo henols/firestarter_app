@@ -745,7 +745,7 @@ class TestUVOnlyStopAndAsk:
         captured_region_lengths: list[int] = []
 
         def _capture_region_and_write_ok(
-            name: str, eprom_data: dict, tmp_source_path: str
+            name: str, eprom_data: dict, tmp_source_path: str, *_args, **_kwargs
         ) -> bool:
             captured_region_lengths.append(len(Path(tmp_source_path).read_bytes()))
             return True
@@ -1460,12 +1460,31 @@ class TestExitFloorD15:
         assert result.exit_code == 2, result.output
 
     def test_bad_and_notrun_exits_1_not_2(self, runner: CliRunner) -> None:
-        """ALLOW chip, oracle NOT-RUN AND a BAD step (the dead-write-path
-        operator's baseline BAD closes the gate) -- exit 1, never 2. A
+        """ALLOW chip, oracle NOT-RUN AND a BAD step -- exit 1, never 2. A
         naive `max(code, 2)` would return 2 here (`max(1, 2) == 2`),
         re-creating exactly the laundering D-14 removed; composing the
-        floor as a precedence CANDIDATE instead keeps BAD's rank intact."""
+        floor as a precedence CANDIDATE instead keeps BAD's rank intact.
+
+        RETARGETED by quick task 260821-wna: before this task,
+        `make_clean_operator`'s `read_eprom` wrote NO file at all, so the
+        SDP leg's baseline read-back genuinely length-gated BAD by
+        accident. Task 3 fixed that gap (a Mock answering every probe read
+        with an empty file would turn every UV write into a saturation
+        refusal) -- `make_clean_operator` is now honestly "clean" end to
+        end, so the leg's baseline read-back is correct-length-but-all-0xFF
+        and lands `marginal` (the content-degeneracy arm), not `BAD`. A
+        genuinely SHORT read-back is the double this test now needs to
+        exercise the length gate's `BAD` arm specifically -- it overrides
+        ONLY this test's `read_eprom`, leaving the shared fixture's default
+        "clean" behaviour unchanged for every other test."""
         operator = make_clean_operator()
+
+        def _short_read(name, eprom_data, output_file=None, **kwargs):
+            if output_file is not None:
+                Path(output_file).write_bytes(b"")
+            return True
+
+        operator.read_eprom.side_effect = _short_read
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
