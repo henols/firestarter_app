@@ -435,6 +435,47 @@ class EpromOperator:
         self.comm: SerialCommunicator | None = None
         self.config = config
         self.progress_callback = progress_callback
+        # Debug session w27c512-devtest-all-bad. The firmware's own
+        # explanation of a failure -- its message id and rendered text --
+        # had NO route out of this class. `_run_state_machine` catches
+        # `EpromOperationError` (which carries `error_code=response.id`) and
+        # returns `(False, str(e))`; `write_eprom`/`verify_eprom` then
+        # discard that string (`is_ok, _ = ...`) and every one of the four
+        # mutation methods returns a bare bool. So `chip_test`'s
+        # `except EpromOperationError: ... error_code=exc.error_code`
+        # handler is structurally unreachable for write/verify/erase/
+        # blank-check, and every failing step in a `dev test` report carried
+        # `error_code: null, reason: ""` -- which is how issue #41 came to
+        # read as four independent faults with no evidence attached, when
+        # the firmware had already named the offending address and byte via
+        # MSG_ERR_NOT_BLANK.
+        #
+        # These two attributes are that route. Deliberately NOT a signature
+        # change on the four methods: their `-> bool` contract is relied on
+        # directly by cli_handlers.py's `write` / `verify` / `blank` /
+        # `erase` commands, each of which ends in
+        # `sys.exit(0 if ok else 1)` on the bare bool, by chip_test.py, and
+        # by a large body of test doubles. Widening it would be a far bigger
+        # blast radius than this bug warrants. (Verified against origin/beta,
+        # not a feature branch: the exit code on those four paths is 1. The
+        # `exit 2` this file's other comments mention belongs to
+        # `consistency_check_eprom`'s own mapping, a different path.)
+        #
+        # Lifetime, stated because it is the whole reason an instance
+        # attribute works here: `_operation_context`'s `finally` tears down
+        # `self.comm`, but never the operator itself, so these survive the
+        # call that set them and are readable by the caller immediately
+        # after. `_run_state_machine` CLEARS them on entry, so a value can
+        # never be stale from an earlier operation.
+        #
+        # Scope, deliberately narrow: only the `EpromOperationError` arm
+        # sets these -- a real firmware ERROR frame. The transport arm
+        # (`SerialError`/`SerialTimeoutError`) does not: its text can carry
+        # a host device path, it has no firmware message id to report, and
+        # `chip_test._run_step` already has its own handler for the
+        # transport exceptions that escape.
+        self.last_firmware_error_code: Optional[int] = None
+        self.last_firmware_error_message: Optional[str] = None
 
     def _calculate_buffer_size(self) -> int:
         # CAP-01 (Phase 55): firmware_max_chunk is now populated by the
@@ -603,6 +644,11 @@ class EpromOperator:
 
         progress = ClassProgressHandler(self.progress_callback)
         final_msg = None
+        # Cleared per operation -- see __init__'s comment. A caller reading
+        # these after a SUCCESSFUL call must see None, not the previous
+        # operation's failure.
+        self.last_firmware_error_code = None
+        self.last_firmware_error_message = None
         try:
             with logging_redirect_tqdm():
                 # --- INIT Phase ---
@@ -630,6 +676,12 @@ class EpromOperator:
             return False, str(e)
         except EpromOperationError as e:
             logger.error(f"Programmer error during {operation_name}: {e}")
+            # Debug session w27c512-devtest-all-bad: record the firmware's
+            # own id and text before collapsing this to a bool, so the
+            # diagnostic report can state WHY a step failed instead of
+            # emitting `error_code: null, reason: ""`.
+            self.last_firmware_error_code = e.error_code
+            self.last_firmware_error_message = str(e)
             return False, str(e)
         finally:
             progress.close()
