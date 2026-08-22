@@ -45,67 +45,50 @@ from pathlib import Path
 
 VALID_SEVERITIES = ("OK", "INIT", "MAIN", "END", "INFO", "WARN", "ERROR", "DATA")
 SEVERITY_CODES = {
-    "OK": 0x01,
-    "INIT": 0x02,
-    "MAIN": 0x03,
-    "END": 0x04,
-    "INFO": 0x05,
-    "WARN": 0x06,
+    "OK":    0x01,
+    "INIT":  0x02,
+    "MAIN":  0x03,
+    "END":   0x04,
+    "INFO":  0x05,
+    "WARN":  0x06,
     "ERROR": 0x07,
-    "DATA": 0x08,
+    "DATA":  0x08,
 }
 
-VALID_PARAM_TYPES = (
-    "u8",
-    "u16",
-    "u24",
-    "u32",
-    "i8",
-    "i16",
-    "i32",
-    "ascii_str",
-    "bytes",
-)
+VALID_PARAM_TYPES = ("u8", "u16", "u24", "u32", "i8", "i16", "i32", "ascii_str", "bytes")
 PARAM_TYPE_BYTES = {
-    "u8": 1,
-    "u16": 2,
-    "u24": 3,
-    "u32": 4,
-    "i8": 1,
-    "i16": 2,
-    "i32": 4,
+    "u8":        1,
+    "u16":       2,
+    "u24":       3,
+    "u32":       4,
+    "i8":        1,
+    "i16":       2,
+    "i32":       4,
     # ascii_str is variable length on the wire; we store 0xFF in the param-byte
     # table to flag "variable" (callers must use a length prefix).
     "ascii_str": None,
     # bytes is a raw payload; no fixed wire-byte count. Used for MSG_DATA_CHUNK
     # (chip-read streaming payload) and MSG_DEBUG sub-payload. No printf specifier
     # is emitted for bytes params — the host decoder handles them as raw bytes.
-    "bytes": None,
+    "bytes":     None,
 }
 
 VALID_RENDERS = (
-    "dec",
-    "hex",
-    "hex_byte",
-    "hex_word",
-    "hex_addr",
-    "hex_dword",
-    "signed_dec",
-    "ascii_char",
-    "ascii_str",
+    "dec", "hex", "hex_byte", "hex_word", "hex_addr", "hex_dword",
+    "signed_dec", "ascii_char", "ascii_str",
 )
 
 DEFAULT_RENDER_BY_TYPE = {
-    "u8": "dec",
-    "i8": "signed_dec",
-    "u16": "dec",
-    "i16": "signed_dec",
-    "u24": "hex_addr",
-    "u32": "hex",
-    "i32": "signed_dec",
+    "u8":        "dec",
+    "i8":        "signed_dec",
+    "u16":       "dec",
+    "i16":       "signed_dec",
+    "u24":       "hex_addr",
+    "u32":       "hex",
+    "i32":       "signed_dec",
     "ascii_str": "ascii_str",
     # bytes is a raw payload; rendered as a hex dump by the host if needed.
-    "bytes": "hex",
+    "bytes":     "hex",
 }
 
 VALID_WIRE_FORMATS = ("id_frame", "text")
@@ -168,7 +151,6 @@ PY_BANNER_TEMPLATE = (
 # 2. CATALOG VALIDATION (LCAT-02 + LCI-04)
 # ===========================================================================
 
-
 class CatalogError(Exception):
     """Raised by validate_catalog() on any rule violation."""
 
@@ -228,7 +210,9 @@ def validate_catalog(catalog):
         # Rule 2: name missing / wrong format / duplicate
         name = msg.get("name")
         if name is None or not isinstance(name, str):
-            raise CatalogError(f"Missing or non-string 'name' for ID 0x{mid:02X}")
+            raise CatalogError(
+                f"Missing or non-string 'name' for ID 0x{mid:02X}"
+            )
         if not NAME_PATTERN.match(name):
             raise CatalogError(
                 f"Invalid name format for ID 0x{mid:02X}: '{name}' "
@@ -237,13 +221,16 @@ def validate_catalog(catalog):
         if name in seen_names:
             other_id = seen_names[name]
             raise CatalogError(
-                f"Duplicate name '{name}' at ID 0x{mid:02X} (prior ID 0x{other_id:02X})"
+                f"Duplicate name '{name}' at ID 0x{mid:02X} "
+                f"(prior ID 0x{other_id:02X})"
             )
 
         # Rule 3: format missing or empty
         fmt = msg.get("format")
         if not isinstance(fmt, str) or fmt == "":
-            raise CatalogError(f"Missing or empty 'format' for ID 0x{mid:02X} ({name})")
+            raise CatalogError(
+                f"Missing or empty 'format' for ID 0x{mid:02X} ({name})"
+            )
 
         # Rule 4: params missing / not a list of tables
         params = msg.get("params")
@@ -343,9 +330,7 @@ def validate_catalog(catalog):
         # Rule D1: id missing / not int / out of range / duplicate (within debug namespace)
         did = dbg.get("id")
         if did is None:
-            raise CatalogError(
-                f"Missing 'id' field in [[debug.messages]] entry: {dbg!r}"
-            )
+            raise CatalogError(f"Missing 'id' field in [[debug.messages]] entry: {dbg!r}")
         if not isinstance(did, int) or isinstance(did, bool):
             raise CatalogError(
                 f"[[debug.messages]] 'id' must be an integer; got "
@@ -460,7 +445,6 @@ def validate_catalog(catalog):
 # 3. HELPERS
 # ===========================================================================
 
-
 def _param_wire_bytes(params):
     """Return integer wire-byte count for fixed-shape params, or None when any
     param is variable-length (ascii_str). The caller decides how to render
@@ -487,7 +471,6 @@ def _sorted_messages(catalog):
 # 4. EMITTERS
 # ===========================================================================
 
-
 def emit_cpp_header(catalog):
     """Render messages.h source text."""
     version = catalog["catalog"]["version"]
@@ -499,13 +482,11 @@ def emit_cpp_header(catalog):
     )
 
     parts = []
-    parts.append(
-        CPP_BANNER_TEMPLATE.format(
-            side="C++ firmware side",
-            version=version,
-            count=count,
-        )
-    )
+    parts.append(CPP_BANNER_TEMPLATE.format(
+        side="C++ firmware side",
+        version=version,
+        count=count,
+    ))
     parts.append("\n")
     parts.append("#ifndef __MESSAGES_H__\n")
     parts.append("#define __MESSAGES_H__\n")
@@ -519,14 +500,18 @@ def emit_cpp_header(catalog):
     parts.append("\n")
     parts.append("// --- Severity codes (mirrors host catalog) ---\n")
     for sev in VALID_SEVERITIES:
-        parts.append(f"#define MSG_SEVERITY_{sev:<6}0x{SEVERITY_CODES[sev]:02X}\n")
+        parts.append(
+            f"#define MSG_SEVERITY_{sev:<6}0x{SEVERITY_CODES[sev]:02X}\n"
+        )
     parts.append("\n")
     parts.append("// --- Message IDs (sorted ascending) ---\n")
     # Width: longest name + 2 chars for alignment.
     max_name_len = max(len(m["name"]) for m in messages)
     name_col = max_name_len + 2
     for m in messages:
-        parts.append(f"#define {m['name']:<{name_col}}0x{m['id']:02X}\n")
+        parts.append(
+            f"#define {m['name']:<{name_col}}0x{m['id']:02X}\n"
+        )
     # --- Debug sub-IDs (sorted ascending) ---
     if debug_messages:
         parts.append("\n")
@@ -536,7 +521,9 @@ def emit_cpp_header(catalog):
         max_dbg_name_len = max(len(d["name"]) for d in debug_messages)
         dbg_name_col = max_dbg_name_len + 2
         for d in debug_messages:
-            parts.append(f"#define {d['name']:<{dbg_name_col}}0x{d['id']:02X}\n")
+            parts.append(
+                f"#define {d['name']:<{dbg_name_col}}0x{d['id']:02X}\n"
+            )
     parts.append("\n")
     parts.append("#ifdef __cplusplus\n")
     parts.append("}\n")
@@ -676,8 +663,8 @@ def emit_python(catalog):
 # ===========================================================================
 
 LANGUAGE_EMITTERS = {
-    "cpp": emit_cpp_header,
-    "python": emit_python,
+    "cpp":       emit_cpp_header,
+    "python":    emit_python,
 }
 
 
@@ -685,32 +672,18 @@ def _build_argparser():
     p = argparse.ArgumentParser(
         prog="codegen.py",
         description="Generate firmware/host catalog artifacts from the "
-        "canonical messages.toml.",
+                    "canonical messages.toml.",
     )
-    p.add_argument(
-        "--catalog",
-        required=True,
-        type=Path,
-        help="Path to messages.toml (canonical or vendored copy).",
-    )
-    p.add_argument(
-        "--target",
-        type=Path,
-        default=None,
-        help="Output path (required unless --check). "
-        "Suggested suffix: .h for cpp, .py for python.",
-    )
-    p.add_argument(
-        "--language",
-        choices=sorted(LANGUAGE_EMITTERS.keys()),
-        default=None,
-        help="Output language (required unless --check).",
-    )
-    p.add_argument(
-        "--check",
-        action="store_true",
-        help="Validate the catalog and exit 0/1. No files written.",
-    )
+    p.add_argument("--catalog", required=True, type=Path,
+                   help="Path to messages.toml (canonical or vendored copy).")
+    p.add_argument("--target", type=Path, default=None,
+                   help="Output path (required unless --check). "
+                        "Suggested suffix: .h for cpp, .py for python.")
+    p.add_argument("--language", choices=sorted(LANGUAGE_EMITTERS.keys()),
+                   default=None,
+                   help="Output language (required unless --check).")
+    p.add_argument("--check", action="store_true",
+                   help="Validate the catalog and exit 0/1. No files written.")
     return p
 
 
@@ -718,13 +691,15 @@ def main():
     args = _build_argparser().parse_args()
 
     if not args.catalog.is_file():
-        print(f"ERROR: catalog file not found: {args.catalog}", file=sys.stderr)
+        print(f"ERROR: catalog file not found: {args.catalog}",
+              file=sys.stderr)
         return 2
 
     try:
         catalog = _load_catalog(args.catalog)
     except tomllib.TOMLDecodeError as e:
-        print(f"ERROR: failed to parse TOML in {args.catalog}: {e}", file=sys.stderr)
+        print(f"ERROR: failed to parse TOML in {args.catalog}: {e}",
+              file=sys.stderr)
         return 1
 
     try:
@@ -735,17 +710,13 @@ def main():
 
     if args.check:
         n = len(catalog["messages"])
-        print(
-            f"OK: catalog valid ({n} messages, version "
-            f"{catalog['catalog']['version']})."
-        )
+        print(f"OK: catalog valid ({n} messages, version "
+              f"{catalog['catalog']['version']}).")
         return 0
 
     if args.target is None or args.language is None:
-        print(
-            "ERROR: --target and --language are required unless --check.",
-            file=sys.stderr,
-        )
+        print("ERROR: --target and --language are required unless --check.",
+              file=sys.stderr)
         return 2
 
     emitter = LANGUAGE_EMITTERS[args.language]
@@ -755,10 +726,8 @@ def main():
     # newline='' + writing '\n' explicitly: LF endings guaranteed regardless
     # of platform (per Python docs for write_text + newline kwarg).
     args.target.write_text(output, encoding="utf-8", newline="\n")
-    print(
-        f"OK: wrote {args.target} ({args.language}, "
-        f"{len(catalog['messages'])} messages)."
-    )
+    print(f"OK: wrote {args.target} ({args.language}, "
+          f"{len(catalog['messages'])} messages).")
     return 0
 
 
