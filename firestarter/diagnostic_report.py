@@ -51,6 +51,7 @@ from firestarter.chip_test import (
     REGION_POLICY_FULL_DEVICE,
     BannerCounts,
     Plan,
+    Step,
     StepResult,
 )
 
@@ -501,37 +502,64 @@ def _duration_cell(seconds: object) -> str:
     return f"{value:.2f}s" if value < 10 else f"{value:.1f}s"
 
 
-def _write_coverage_line(step_row: dict[str, Any], policy: str | None) -> str | None:
-    """Render-only D-F line: names write coverage whenever the write did
-    NOT cover the full device -- `None` when nothing should be shown.
+def _write_coverage_line(result: StepResult, step: Step | None) -> str | None:
+    """Render/JSON D-F line: names write coverage whenever the write did
+    NOT plainly cover the full device -- `None` when nothing should be
+    shown (a non-write step, or a plain unexcluded full-device write).
 
-    Derived from the SAME `step_row` dict `to_dict()` already produced
-    (never a second field list, never a re-parse of the JSON string) plus
-    the step's `region_policy` (read off `Plan.steps`, the object `render()`
-    already holds a reference to). Kept to one short, measurement-shaped
-    line: the region, the byte count and the bit count, or the reason
-    nothing was written.
+    Follow-up fix (found post-1893-green-suite by external review):
+    `step.reason` -- the PLAN-TIME disclosure `derive_plan` records (e.g.
+    a flash4 boot-block exclusion, or a hostile-`memory-size` fallback) --
+    is read here, NEVER `result.reason` (`StepResult.reason`), which
+    `_dispatch_multi_run` legitimately clears to `""` on a clean OK write
+    (chip_test.py). Reading `StepResult.reason` was the original defect:
+    a SUCCESSFUL carved full-device write (W29C040) disclosed NOTHING
+    (`step_row["reason"]` was `""`), and a whole-device-is-boot-block
+    FIXED-policy fallback (AT29C256/257/LV256) rendered misleading UV
+    slot wording ("N bits clearable") on a chip that was never masked.
+
+    `step` is `None` for every step that is not the located write/
+    write-partial step (see `DiagnosticReport._write_step_index`) -- this
+    function is a no-op for all of them.
     """
-    start = step_row.get("write_region_start")
-    length = step_row.get("write_region_length")
-    reason = str(step_row.get("reason") or "")
+    if step is None:
+        return None
+    target = result.write_target
+    policy = step.region_policy
+    plan_reason = step.reason or ""
 
-    if start is None and length is None:
-        # No resolved target at all: a saturated/refused write. Name the
-        # reason (the SKIPPED verdict already names saturation).
-        return reason or "no target resolved"
+    if target is None:
+        # No resolved target at all: refused/saturated at EXECUTION time
+        # (a probe exhaustion or a masked-target refusal) -- that refusal
+        # IS the disclosure, and it is recorded on `StepResult.reason`
+        # (the SKIPPED verdict's own reason), not on `Step.reason`.
+        return result.reason or plan_reason or "no target resolved"
+
+    start, length = target.region
 
     if policy == REGION_POLICY_FULL_DEVICE:
-        # A full-device write, possibly carved out (flash4 boot blocks) --
-        # only a row when there IS an exclusion to disclose (derive_plan
-        # records that as a non-empty `reason` even on a successful carve).
-        return reason or None
+        # A full-device write, possibly carved out (flash4 boot blocks).
+        # The exclusion is a PLAN-TIME fact `derive_plan`/`full_device_
+        # region` recorded on `Step.reason` even on a SUCCESSFUL carve --
+        # only a row when there IS one to disclose.
+        return plan_reason or None
 
-    cleared = step_row.get("write_bits_cleared")
-    region = f"0x{start:X} ({length} bytes)"
-    if cleared is not None:
-        return f"slot {region}, {cleared} bits clearable"
-    return f"region {region}"
+    if target.masked:
+        # A genuine D-A/D-B masked UV write (a real slot, or D-C's
+        # blank-chip full-device write, which is also `masked=True`).
+        return (
+            f"slot 0x{start:X} ({length} bytes), {target.bits_cleared} bits clearable"
+        )
+
+    # `fixed` policy, unmasked: a non-UV region write with no D-A mask
+    # (partial-scope non-UV, or a hostile/malformed-`memory-size`
+    # fallback, or a UV part too small to hold a slot). State the REAL
+    # plan-time reason when `derive_plan` recorded one -- "N bits
+    # clearable" is meaningful ONLY for a masked UV slot and must never
+    # be borrowed here.
+    if plan_reason:
+        return plan_reason
+    return f"region 0x{start:X} ({length} bytes)"
 
 
 # ---------------------------------------------------------------------------
@@ -640,14 +668,44 @@ class DiagnosticReport:
             "vpe_mv": NOT_MEASURED if self.vpe_mv is None else self.vpe_mv,
         }
 
-    def _step_dict(self, result: StepResult) -> dict[str, Any]:
+    def _write_step_index(self) -> int | None:
+        """Structurally locate the shipped write/write-partial step's
+        index in `self.plan.steps` -- NEVER by comparing against a
+        specific `OP_*` constant (LEG-15, `tests/test_op_registration_
+        parity.py::test_non_registry_still_has_no_ops`; this class is a
+        declared op-vocabulary non-registry, re-measured every run by an
+        AST walk over this class's body).
+
+        `verify` never sets `destructive`; `erase` never carries
+        `write_region`; the SDP leg's six steps (indistinguishable from a
+        `fixed`-policy write by these two fields alone) always come LAST
+        -- so the FIRST step carrying both `destructive=True` and a
+        non-`None` `write_region` is unambiguously the shipped write step.
+        `None` when `self.plan.steps` carries no such step (a synthetic/
+        minimal report built with an empty `Plan`, or `write_scope="none"`).
+        """
+        return next(
+            (
+                i
+                for i, s in enumerate(self.plan.steps)
+                if s.destructive and s.write_region is not None
+            ),
+            None,
+        )
+
+    def _step_dict(
+        self, result: StepResult, step: Step | None = None
+    ) -> dict[str, Any]:
         # Schema 1.6 (quick task 260821-wna): the five `write_*` keys below
         # are read off `StepResult.write_target` -- `None` on every step
         # that isn't a write/verify, and `None` on a write/verify step that
         # was SKIPPED as saturated/refused (there is no resolved target to
-        # report on). Additive INSIDE `steps[]` only, never a top-level key
-        # -- the top-level shape is pinned elsewhere and `parse_devtest_
-        # issue.py` consumes it.
+        # report on). `write_coverage` (follow-up fix, same schema
+        # version) is the D-F disclosure line -- `None` on every step
+        # except the located write step (`step` is passed ONLY for that
+        # one row; see `_write_step_index`/`to_dict`). Additive INSIDE
+        # `steps[]` only, never a top-level key -- the top-level shape is
+        # pinned elsewhere and `parse_devtest_issue.py` consumes it.
         #
         # Deliberate residual, recorded here rather than silently patched:
         # `dedup_fingerprint` (above) intentionally does NOT read any of
@@ -674,6 +732,7 @@ class DiagnosticReport:
             "write_bits_cleared": target.bits_cleared if target else None,
             "write_bits_retained": target.bits_retained if target else None,
             "write_current_source": target.current_source if target else None,
+            "write_coverage": _write_coverage_line(result, step),
         }
 
     def _banner_dict(self) -> dict[str, Any]:
@@ -695,6 +754,27 @@ class DiagnosticReport:
             "ladder_state": dd.ladder_state,
         }
 
+    def _steps_list(self) -> list[dict[str, Any]]:
+        """Build `steps[]`, passing the located write step's `Step` object
+        into `_step_dict` for ONLY its own row (`write_coverage`'s home) --
+        `self.plan.steps` and `self.results` are the SAME length in the
+        SAME order for a real `run_plan()`-produced report (it appends
+        exactly one result per step), but a synthetic/minimal report built
+        directly (as most of `tests/test_diagnostic_report.py` does) may
+        carry an empty or shorter `Plan.steps` -- indexed defensively, never
+        assumed in bounds.
+        """
+        write_idx = self._write_step_index()
+        write_step = (
+            self.plan.steps[write_idx]
+            if write_idx is not None and write_idx < len(self.plan.steps)
+            else None
+        )
+        return [
+            self._step_dict(r, write_step if i == write_idx else None)
+            for i, r in enumerate(self.results)
+        ]
+
     def to_dict(self) -> dict[str, Any]:
         """CANONICAL serializable mapping -- the single source both render()
         and to_json_block() consume (RPT-01, D-01). Hand-written (NOT
@@ -707,7 +787,7 @@ class DiagnosticReport:
             "generated": self._utc_now(),
             "auto_capture": self._auto_capture_dict(),
             "transport_health": self._transport_dict(),
-            "steps": [self._step_dict(r) for r in self.results],
+            "steps": self._steps_list(),
             "banner": self._banner_dict(),
             "voltage": self._voltage_dict(),
             "is_submittable": is_submittable(self.auto_capture),
@@ -824,31 +904,15 @@ class DiagnosticReport:
         # full-device write. Adds no console call and no new helper to
         # `dev_test`'s body -- this lives entirely inside this module.
         #
-        # The write step is located STRUCTURALLY, never by comparing
-        # against a specific `OP_*` constant: this class is a declared
-        # op-vocabulary non-registry (LEG-15,
-        # `tests/test_op_registration_parity.py`) -- `to_dict()`/`render()`/
-        # `_step_dict()` read `StepResult.op` generically for display and
-        # must never special-case a specific op string. `plan.steps` and
-        # `self.results` are the SAME length in the SAME order (`run_plan`
-        # appends exactly one result per step); the shipped write/
-        # write-partial step is always the FIRST step carrying BOTH
-        # `destructive=True` AND a non-`None` `write_region` -- `verify`
-        # never sets `destructive`, `erase` never carries `write_region`,
-        # and the SDP leg's six steps (indistinguishable from a
-        # fixed-policy write by these two fields alone) always come LAST.
-        write_step_index = next(
-            (
-                i
-                for i, s in enumerate(self.plan.steps)
-                if s.destructive and s.write_region is not None
-            ),
-            None,
-        )
-        if write_step_index is not None and write_step_index < len(d["steps"]):
-            write_step = self.plan.steps[write_step_index]
-            write_step_row = d["steps"][write_step_index]
-            coverage = _write_coverage_line(write_step_row, write_step.region_policy)
+        # Read straight off `d["steps"]` -- `write_coverage` was already
+        # computed once, in `to_dict()`/`_step_dict()`, off the located
+        # write step's OWN row (`_write_step_index`, LEG-15-compliant:
+        # never a specific-`OP_*` comparison inside this class). Never a
+        # second computation here, and never a re-parse of the JSON string
+        # -- single-sourced, same discipline every other render() row uses.
+        write_idx = self._write_step_index()
+        if write_idx is not None and write_idx < len(d["steps"]):
+            coverage = d["steps"][write_idx].get("write_coverage")
             if coverage:
                 table.add_row("write coverage", coverage)
 
