@@ -155,7 +155,7 @@ def test_firmware_too_old_is_reported_when_unknown_cmd_comes_back() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase 151 (LOCK-02/LOCK-03, D-04, C-4) -- the strictly-additive extension.
+# (LOCK-02/LOCK-03, D-04, C-4) -- the strictly-additive extension.
 # `unreadable_state_caveat()` and both `emission_summary()` directions are
 # pinned as literals here too, on top of the four surviving cases above and
 # `test_chip_test_sdp_leg.py`'s own four pinning legs, so an edit to either

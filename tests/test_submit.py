@@ -28,7 +28,7 @@ import pytest
 from firestarter import submit
 
 # ---------------------------------------------------------------------------
-# Task 1: sanitize_dict -- one test per leak vector (A3 fails-open discipline)
+# sanitize_dict -- one test per leak vector (A3 fails-open discipline)
 # ---------------------------------------------------------------------------
 
 
@@ -147,7 +147,7 @@ def test_sanitize_uses_getpass_default_when_user_omitted(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Task 2: overall_verdict / build_title / build_body / build_issue_url
+# overall_verdict / build_title / build_body / build_issue_url
 # ---------------------------------------------------------------------------
 
 
@@ -341,7 +341,7 @@ def test_build_issue_url_not_derived_from_git_remote():
 
 
 # ---------------------------------------------------------------------------
-# Task 3: gh_available + submit_via_gh (list argv, stdin body)
+# gh_available + submit_via_gh (list argv, stdin body)
 # ---------------------------------------------------------------------------
 
 
@@ -496,7 +496,7 @@ def test_gsd_inbox_label_constant_retained():
 
 
 # ---------------------------------------------------------------------------
-# Task 3: deny-set negative argv on BOTH gh paths (DEVTEST-06, D-09/D-11,
+# deny-set negative argv on BOTH gh paths (DEVTEST-06, D-09/D-11,
 # RESEARCH Pitfall 6) -- widens the single-flag idiom above, does not
 # replace it. `gh issue create`'s write/triage-gated flags are broader than
 # `--label` alone: `-l`/`--label`, `-a`/`--assignee`, `-m`/`--milestone`,
@@ -662,7 +662,7 @@ def test_every_interactive_run_asks_even_when_the_check_fails():
 
 
 # ---------------------------------------------------------------------------
-# Task 1: submit_via_browser -- D-05 oversize escalation (small/mid/huge)
+# submit_via_browser -- D-05 oversize escalation (small/mid/huge)
 # ---------------------------------------------------------------------------
 
 
@@ -826,7 +826,7 @@ def test_browser_reachable_true_returns_the_url():
 
 
 # ---------------------------------------------------------------------------
-# Task 2: submit_report -- D-03 refuse gate + D-04 TTY/off-TTY dispatch
+# submit_report -- D-03 refuse gate + D-04 TTY/off-TTY dispatch
 # ---------------------------------------------------------------------------
 
 
@@ -1314,7 +1314,7 @@ def test_refuse_never_calls_isatty():
 
 
 # ---------------------------------------------------------------------------
-# Task 2: submit_report -- D-09/D-10/D-11 dedup-first, always-ask, comment
+# submit_report -- D-09/D-10/D-11 dedup-first, always-ask, comment
 # ---------------------------------------------------------------------------
 
 

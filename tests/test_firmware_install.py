@@ -118,11 +118,11 @@ _STABLE_RELEASE_LEONARDO = {
     ],
 }
 
-# Phase 23 — 3-asset stable release fixture for uno328pb-driven resolution.
+# 3-asset stable release fixture for uno328pb-driven resolution.
 # tag_name "3.0.1" distinguishes from the existing uno/leonardo fixtures
 # (both at 3.0.0). Asset order [uno, uno328pb, leonardo] follows Phase 21
 # D-08 section-order discipline (matches platformio.ini default_envs order
-# Phase 22 D-01 landed).
+# D-01 landed).
 _STABLE_RELEASE_UNO328PB = {
     "tag_name": "3.0.1",
     "prerelease": False,
@@ -1020,7 +1020,7 @@ class TestMagicDefault:
 # TestFirmwareCommandDispatch — --json without --list post-parse validation
 # ===========================================================================
 #
-# Phase 41 / Wave 4 (CLI-01..04) note: this class previously held 5
+# (CLI-01..04) note: this class previously held 5
 # argparse-form mutex/validator tests that imported `create_firmware_args`
 # from `firestarter.main`. With the entry-point swap to Click, that argparse
 # factory + its 14 sibling `create_*_args` factories are deleted outright.
@@ -1252,7 +1252,7 @@ class TestUno328pbResolution:
         )
         assert captured["baud_rate"] == 115200
 
-    # Phase 41 / Wave 4 note: `test_argparse_accepts_uno328pb_board_choice`
+    # note: `test_argparse_accepts_uno328pb_board_choice`
     # deleted on the entry-point swap. The Click form uses
     # `@click.option("-b", "--board", type=click.Choice(["uno", "uno328pb",
     # "leonardo"]))` which structurally enforces the allowlist — the contract
@@ -1261,7 +1261,7 @@ class TestUno328pbResolution:
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 / ERR-03 coverage lift (D-14.3)
+# ERR-03 coverage lift (D-14.3)
 # Adds tests for _fetch_all_releases pagination/JSON parsing + _compare_versions
 # PEP 440 edge cases not pinned by the TestVersionComparator block above.
 # ---------------------------------------------------------------------------

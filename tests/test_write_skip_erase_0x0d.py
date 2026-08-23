@@ -77,7 +77,7 @@ _NON_0X0D_CHIP = "W27C512"
 _SKIP_ERASE_WARNING = "has nothing to skip on this chip's protocol"
 _AUTO_SET_LINE = "auto-setting --skip-sdp-unlock on your behalf"
 
-# Phase 153 / D-153-05 / RESEARCH Pitfall 5 guard literal (leg 7 below): a
+# D-153-05 / RESEARCH Pitfall 5 guard literal (leg 7 below): a
 # short, distinctive fragment of the hypothetical warning this project
 # deliberately chose NOT to add -- a "the blank-check flag is vacuous on
 # 0x0D" line. Asserted against as a module-level literal (not an inline

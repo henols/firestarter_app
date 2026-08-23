@@ -87,7 +87,7 @@ def test_generate_pin_names_bare_int_still_works(
 
 
 # ---------------------------------------------------------------------------
-# Phase 84 — fm-fram-full display-layer companion tests
+# fm-fram-full display-layer companion tests
 #
 # These tests pin the two display-layer changes that accompany the FM1608
 # SRAM→FRAM relabel (operator decision fm-fram-full, 2026-06-25):
@@ -150,7 +150,7 @@ def test_fm1608_vpp_row_hidden_after_relabel(
 
 
 # ---------------------------------------------------------------------------
-# Phase 102 — HOST protocol-display-name consolidation companion tests
+# HOST protocol-display-name consolidation companion tests
 #
 # These tests pin the two Phase 102 display-layer changes:
 #   1. Single-source invariant (D-01): _get_protocol_info_structured's `type`
@@ -206,7 +206,7 @@ def test_protocol_display_name_coverage_reconciled(
 
 
 # ---------------------------------------------------------------------------
-# Phase 153 Plan 12 (ERASE-06) — `info`'s can-be-erased row and the wire
+# (ERASE-06) — `info`'s can-be-erased row and the wire
 # FLAG_CAN_ERASE bit must AGREE, asserted in both directions.
 #
 # No `ic_layout.py` edit is owed here. Its can-be-erased block

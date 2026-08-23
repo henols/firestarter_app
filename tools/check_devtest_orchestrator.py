@@ -138,12 +138,12 @@ FIRESTARTER_DEVTEST_SUBMIT = os.environ.get(
 # these SAME names so the same name-filtered scan path exercises the
 # anti-hollow proof.
 #
-# RESEARCH C-4 (Phase 121 Plan 09) proved this allow-list is not merely
+# RESEARCH C-4 proved this allow-list is not merely
 # documentation: a violating helper placed in a function NOT named here
 # passes this gate with `PASS ... EXIT=0` while the IDENTICAL violation
 # placed inside `dev_test` itself trips `EXIT=1`. `_is_uv_eprom` sat in this
-# set since Phase 112 pointing at nothing (a leftover speculative name) --
-# Plan 121-09 landed the real handler-side UV predicate under that exact
+# set pointing at nothing (a leftover speculative name) --
+# a later allow-list update landed the real handler-side UV predicate under that exact
 # name, and added `_resolve_write_scope` alongside it. Every future helper
 # added to the `dev test` surface MUST be listed here, or this gate silently
 # under-covers exactly that new code -- `tests/test_check_devtest_orchestrator

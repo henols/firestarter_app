@@ -69,7 +69,7 @@ from firestarter.diagnostic_report import is_submittable
 # Module constants (D-01, D-05)
 # ---------------------------------------------------------------------------
 
-# D-01: hardcoded, never remote-inferred. Target is the project-wide tracker,
+# Hardcoded, never remote-inferred. Target is the project-wide tracker,
 # NOT the repo this code lives in: `henols/firestarter_prom` is the single
 # repository for issue tracking per firestarter_prom#6 ("New GitHub issues must
 # be allowed only in henols/firestarter_prom"; creation is to be disabled in

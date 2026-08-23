@@ -36,7 +36,7 @@ from firestarter.protection_readability import GATE_TOKEN_READ_PERMITTED
 from firestarter.sdp_honesty import unreadable_state_caveat
 
 # ---------------------------------------------------------------------------
-# D-09's eight class tokens, frozen. `GATE_TOKEN_READ_PERMITTED`
+# The eight class tokens, frozen. `GATE_TOKEN_READ_PERMITTED`
 # ("read_permitted") is a **gate** token from `protection_readability.py` --
 # it means "proceed to the silicon read" and is never printed to a user --
 # so it is deliberately absent from this tuple. The other four gate tokens
@@ -82,7 +82,7 @@ _CLASS_UNADJUDICATED_PROBE = "unadjudicated_probe"
 _CLASS_NOT_READABLE = "not_readable"
 
 # ---------------------------------------------------------------------------
-# D-10's exit-code map: a literal `str -> int` dict, never a `max()` over
+# The exit-code map: a literal `str -> int` dict, never a `max()` over
 # severities. This codebase already carries an exit-code precedence defect
 # where `max()` picked the wrong verdict -- `dev test`'s exit precedence is
 # `max(1, 2) == 2` (MARGINAL beats BAD is FALSE; a comment and a docstring
@@ -99,11 +99,11 @@ _CLASS_NOT_READABLE = "not_readable"
 #        state and not an operational failure.
 #   3 -- operational failure: `firmware_outdated` (the command was never
 #        even answered -- either the firmware predates it, keyed on
-#        `MSG_ERR_UNKNOWN_CMD`'s id per D-04, or the payload never arrived
+#        `MSG_ERR_UNKNOWN_CMD`'s id, or the payload never arrived
 #        intact at all; both are indistinguishable to a script and share
 #        this one token and code).
-#   4 -- `unadjudicated_probe` gets its own, distinct code. D-10 places it
-#        in none of the other three bands: it is not a state (D-07 -- a
+#   4 -- `unadjudicated_probe` gets its own, distinct code. It belongs in
+#        none of the other three bands: it is not a state (a
 #        forced read is never a state claim), not a refusal (the sequence
 #        actually ran), and not an operational failure (the command did
 #        answer). A fourth band is the only honest reading, and it is

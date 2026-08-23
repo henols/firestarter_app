@@ -40,7 +40,7 @@ from firestarter.messages import (
 
 logger = logging.getLogger("Codec")
 
-# Phase 34: REVISION_* byte → silkscreen-string mapping for MSG_OK_REV rendering.
+# REVISION_* byte → silkscreen-string mapping for MSG_OK_REV rendering.
 # Mirrors firmware enum at firestarter/include/rurp_shield.h. Lookup-via-dict.get()
 # so unknown bytes fall back to "Rev{n}" instead of raising.
 _REVISION_SILKSCREEN = {
@@ -99,14 +99,14 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> Optiona
         r1, r2, override = params[0], params[1], params[2]
         if override == 0xFF:
             return f"R1: {r1}, R2: {r2}"
-        # Phase 35 D-04 / WR-02 close: route the override byte through
+        # Route the override byte through
         # _REVISION_SILKSCREEN so the same byte that renders "Rev 2.0-class"
         # on MSG_OK_REV no longer renders "Rev2" on this adjacent ack line.
         # No-space "Rev{n}" fallback mirrors the MSG_OK_REV branch shape.
         override_str = _REVISION_SILKSCREEN.get(override, f"Rev{override}")
         return f"R1: {r1}, R2: {r2}, Override HW: {override_str}"
 
-    # Phase 35 D-03 / WR-01 close — silkscreen-aware rendering for the two
+    # Silkscreen-aware rendering for the two
     # boot-time INFO surfaces that carry the same revision byte as
     # MSG_OK_REV. Mirror of the MSG_OK_REV branch shape above: lookup via
     # _REVISION_SILKSCREEN.get() with no-space "Rev{n}" fallback.
@@ -208,9 +208,9 @@ def decode_id_frame(frame_len: int, body: bytes) -> Optional[LogMessage]:
         logger.warning(f"Unknown message ID 0x{msg_id:02x} — catalog out of date?")
         return None
 
-    # WR-03: reject id-frame payloads for catalog entries flagged
+    # Reject id-frame payloads for catalog entries flagged
     # wire_format="text". MSG_OK_FW_VERSION (0x03) is expected to arrive
-    # over the legacy text channel only (LFW-05). A buggy or malicious
+    # over the legacy text channel only. A buggy or malicious
     # peer emitting id=0x03 as a binary frame would otherwise render via
     # the catalog format string and bypass the host's pre-v1.2 firmware-
     # version guard in _probe_port (which only inspects the text path).

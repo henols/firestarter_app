@@ -253,7 +253,7 @@ def test_class_progress_handler_set_progress() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase 44 Plan 03 — read_timing block
+# read_timing block
 # Tests for host-side read-timing knob params in consistency_check_eprom.
 # Selectable with: pytest -k "read_timing"
 # ---------------------------------------------------------------------------
@@ -400,7 +400,7 @@ def test_read_timing_default_params_absent_from_command() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase-53 Plan 01 Task 1: RED tests for write_cycle_eprom 3-way verdict
+# RED tests for write_cycle_eprom 3-way verdict
 #
 # These tests MUST FAIL until 53-02 adds EpromOperator.write_cycle_eprom.
 # They pin the 3-way verdict contract: 0=all cycles match source / 1=mismatch
@@ -578,7 +578,7 @@ class TestWriteCycleEprom:
 
 
 # ---------------------------------------------------------------------------
-# Phase-53 Plan 02: unit tests for fault_inject_cycle (coverage gate)
+# unit tests for fault_inject_cycle (coverage gate)
 #
 # These tests exercise fault_inject_cycle directly to keep total coverage
 # at >=70%. The CLI smoke tests (test_cli_handlers.py) only mock the method,
@@ -833,7 +833,7 @@ class TestFaultInjectCycle:
 
 
 # ---------------------------------------------------------------------------
-# Phase 53-04 harness refinement: measure_command_nak_latency
+# harness refinement: measure_command_nak_latency
 # Per-frame firmware NAK latency on an established single-port connection.
 # ---------------------------------------------------------------------------
 
@@ -907,7 +907,7 @@ class TestMeasureCommandNakLatency:
 
 
 # ---------------------------------------------------------------------------
-# Phase-84 Plan 02 Task 1 (RED): SRAM/FRAM blank-check host short-circuit
+# (RED): SRAM/FRAM blank-check host short-circuit
 #
 # D-30: FM1608 (0x28 SRAM_STD) blank-check surfaces firmware 0xA4
 # MSG_ERR_EMPTY_INPUT because configure_sram() leaves a NULL
@@ -1001,7 +1001,7 @@ class TestSramBlankCheckShortCircuit:
 
 
 # ---------------------------------------------------------------------------
-# Plan 120-06 Task 3 — pin the SDP payload-free wire shape + the emitted
+# pin the SDP payload-free wire shape + the emitted
 # `flags` residue + the new FLAG_SKIP_SDP_UNLOCK bit, all at the wire
 # boundary (the composed command_dict SerialCommunicator.find_and_connect
 # receives), not at the Python function-return boundary.
@@ -1211,7 +1211,7 @@ class TestSdpOperationsWireShape:
 
 
 # ---------------------------------------------------------------------------
-# Plan 120-10 Task 3 — D-15 / HOST-06: the 0x86 ack requirement inside
+# D-15 / HOST-06: the 0x86 ack requirement inside
 # write_eprom, both ack directions plus the flag-not-set case, and the
 # bounded seen_message_ids record itself.
 # ---------------------------------------------------------------------------

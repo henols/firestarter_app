@@ -9,7 +9,7 @@
  * exits non-zero on a real logging call planted inside the SDP timing
  * window.
  *
- * Phase 118 Plan 01 (D-06) redefined the checker's scanned window from the
+ * (D-06) redefined the checker's scanned window from the
  * span BETWEEN the emit and wait call sites to the union of the emitter
  * body (`eeprom28c_emit_command_sequence`) and the completion-poll body
  * (`eeprom28c_wait_for_sdp_completion`). Under that new window the old

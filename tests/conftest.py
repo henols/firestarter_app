@@ -43,7 +43,7 @@ from unittest.mock import Mock
 
 import pytest
 
-# Phase 132 Plan 05 (RETIRE-05, D-10): the six real-class annotations below
+# (RETIRE-05, D-10): the six real-class annotations below
 # are for mypy only. Runtime imports of these same modules happen INSIDE
 # make_app_context()'s body (see that function) -- never at module scope --
 # because conftest's module-scope import set is deliberately free of any
@@ -66,7 +66,7 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
-# Phase 127 / Plan 127-06 (HOST-04 / D-02) — optional-dependency collection
+# (HOST-04 / D-02) — optional-dependency collection
 # gate.
 #
 # tests/test_pyusb_api_surface.py imports `usb.core` at module scope and is
@@ -215,11 +215,11 @@ def make_comm(fake_serial):
         instance.baud_rate = 250000
         instance.timeout = 0.1
         instance.programmer_info = None
-        # Phase-53: mirror SerialCommunicator.__init__ attribute (T-53-03 default)
+        # mirror SerialCommunicator.__init__ attribute (T-53-03 default)
         instance._fault_inject_outgoing = None
-        # Phase-53: firmware-advertised DATA_BUFFER_SIZE (None until probed)
+        # firmware-advertised DATA_BUFFER_SIZE (None until probed)
         instance.firmware_buffer_size = None
-        # Phase-54 (EVEN-01): firmware-advertised MAIN-path decode capacity (None until probed)
+        # (EVEN-01): firmware-advertised MAIN-path decode capacity (None until probed)
         instance.firmware_max_chunk = None
         # CAP-02: firmware identity + effective HW revision, both carried in the
         # MSG_OK_READY ack. None until probed — and None is a REJECT for the
@@ -231,7 +231,7 @@ def make_comm(fake_serial):
         # and None means "not advertised", so the write-path safe default
         # applies (D-10), never an error and never a refusal.
         instance.write_block_budget_s = None
-        # Phase-120 (D-15 / HOST-06): bounded per-connection observed-id record
+        # (D-15 / HOST-06): bounded per-connection observed-id record
         instance.seen_message_ids = set()
         return instance
 

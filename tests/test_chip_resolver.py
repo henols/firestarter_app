@@ -57,7 +57,7 @@ def test_resolve_chip_conversion_correctness(db):
 
 
 # ---------------------------------------------------------------------------
-# Phase 66 Plan 05 — runtime-boundary tests (D-12, T-66-01)
+# runtime-boundary tests (D-12, T-66-01)
 # resolve_chip must refuse non-supported chips (support_status != "supported")
 # BEFORE any wire dict is built or serial byte emitted.
 # ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ def test_resolve_chip_guard_fires_before_convert_to_programmer(db):
 
 
 # ---------------------------------------------------------------------------
-# Phase 106 Plan 03 — HOST-04 algorithm-presence guard (D-01/D-02, SC#4).
+# HOST-04 algorithm-presence guard (D-01/D-02, SC#4).
 # A support_status=="supported" entry whose programming.algorithm is absent
 # or 0 must still be refused, BEFORE any wire dict is built or serial byte
 # emitted. Mirrors the firmware's protocol==0 -> 0xBB fail-close.

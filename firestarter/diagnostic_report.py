@@ -62,11 +62,11 @@ from firestarter.chip_test import (
 # Module constants (D-02, D-03) -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.7"  # D-02: single-sourced, baked into to_dict() output
-# 1.1 (Phase 114, GRAD-01): additive db_diff.ladder_state key -- backward
+SCHEMA_VERSION = "1.7"  # single-sourced, baked into to_dict() output
+# 1.1: additive db_diff.ladder_state key -- backward
 # compatible, existing consumers reading current_support_status/
 # proposed_disposition are unaffected.
-# 1.2 (Phase 121 Plan 06/07, D-06): the bump marks the seventh op string
+# 1.2: the bump marks the seventh op string
 # (`OP_WRITE_PARTIAL = "write-partial"`, chip_test.py) entering the report
 # vocabulary. It breaks no consumer: `tools/parse_devtest_issue.py` accepts
 # `schema_version` by PRESENCE ONLY (see `_extract_fenced_report`), never an
@@ -75,24 +75,21 @@ SCHEMA_VERSION = "1.7"  # D-02: single-sourced, baked into to_dict() output
 # vocabulary (id/read/blank-check/write/verify/erase) and MUST keep parsing
 # and keep grouping -- pinned by a frozen literal fixture in
 # `tests/test_parse_devtest_issue.py`.
-# 1.3 (v1.30 Phase 134 plan 134-06, D-10/LEG-12): additive `sdp_hold_state`
+# 1.3: additive `sdp_hold_state`
 # key -- `chip_test.sdp_hold_state()`'s three-valued `HELD`/`NOT-HELD`/
 # `NOT-RUN: <reason>` string, carried verbatim (never derived here -- see
-# `to_dict`). MEASURED DISCREPANCY, recorded rather than silently
-# reconciled (same convention as 134-02/134-04's own measured findings):
-# this plan's own PLAN.md read `to_dict`'s prior key count as nine; the
-# live count on disk at plan time was already TEN (schema_version,
-# generated, auto_capture, transport_health, steps, banner, voltage,
-# is_submittable, dedup_fingerprint, db_diff), so `sdp_hold_state` is this
-# dict's ELEVENTH key, not its tenth. This does not change the bump's own
-# argument: the change is still purely additive, existing consumers reading
-# any of the ten prior keys are unaffected, and `tools/parse_devtest_issue.py`
+# `to_dict`). At the time of this bump `to_dict` already emitted TEN keys
+# (schema_version, generated, auto_capture, transport_health, steps,
+# banner, voltage, is_submittable, dedup_fingerprint, db_diff), so
+# `sdp_hold_state` is this dict's ELEVENTH key. The bump's argument is
+# unaffected: the change is purely additive, existing consumers reading any
+# of the ten prior keys are unaffected, and `tools/parse_devtest_issue.py`
 # accepts `schema_version` by PRESENCE ONLY, never an exact-value match, so
 # this bump is invisible to that parser. REJECTED: a field-plus-JSON change
 # with no version bump -- the artifact shape would change while its own
-# version claimed it had not, in the milestone whose close phase (Phase 137)
-# arms a claim gate over exactly that kind of statement.
-# 1.4 (v1.32 Phase 147, D-09): marks a value-population change, not a key
+# version claimed it had not -- a claim gate exists over exactly that kind
+# of statement.
+# 1.4: marks a value-population change, not a key
 # addition -- `auto_capture.fw_board_identity` already existed in
 # `to_dict()`'s output and was unconditionally `null`; from this version it
 # carries data whenever the connection captured one. No key is added and no
@@ -104,23 +101,23 @@ SCHEMA_VERSION = "1.7"  # D-02: single-sourced, baked into to_dict() output
 # fixture carries `schema_version: "9.9-future"`, `tests/test_parse_devtest_
 # issue.py:138`), so this bump is invisible to them and needs no parser
 # change -- and no ordering/comparison logic over this string is introduced
-# anywhere as part of this bump (D-17). Reports already in the wild carry
+# anywhere as part of this bump. Reports already in the wild carry
 # `fw_board_identity: null` PERMANENTLY -- the run that produced them is
 # gone and unrepeatable -- and are unfixable by design; they must keep
-# parsing. That is PROV-04, pinned by the frozen literal fixtures in
+# parsing -- pinned by the frozen literal fixtures in
 # `tests/test_parse_devtest_issue.py`.
-# 1.6 (quick task 260821-wna): additive per-step keys -- `write_region_start`,
+# 1.6: additive per-step keys -- `write_region_start`,
 # `write_region_length`, `write_bits_cleared`, `write_bits_retained`,
 # `write_current_source` -- read off `StepResult.write_target` (`None` on a
 # step with no resolved target, i.e. every non-write/verify step and any
 # write/verify step SKIPPED as saturated/refused). No top-level key is added;
 # `parse_devtest_issue.py` still accepts `schema_version` by PRESENCE ONLY,
 # so this bump is invisible to it.
-NOT_MEASURED = "not measured"  # D-03: honest fallback, never a false 0
-NOT_REPORTED = "not reported"  # D-11 (v1.32 Phase 147): honest fallback for
+NOT_MEASURED = "not measured"  # honest fallback, never a false 0
+NOT_REPORTED = "not reported"  # honest fallback for
 # an identity field that was never ASKED, not merely measured-and-empty --
 # reusing NOT_MEASURED here would conflate "asked and got nothing" with
-# "never asked", the exact ambiguity PROV-05 exists to remove. Pre-checked
+# "never asked" -- an ambiguity worth removing. Pre-checked
 # clean against check_diagnostic_report_claims.py's 14 forbidden patterns.
 
 # Elevated-counter threshold for `transport_suspect` (dormant today -- no
@@ -239,9 +236,8 @@ def is_submittable(ac: AutoCapture) -> bool:
 # ---------------------------------------------------------------------------
 
 
-# D-11 (v1.30 Phase 134, plan 134-06): the SDP leg's ACCEPTED, RECORDED cost
-# to this function -- NOT a bug, and this function's body below is left
-# byte-unchanged by this plan. The SDP leg's six new steps (see
+# The SDP leg's ACCEPTED, RECORDED cost to this function -- NOT a bug. The
+# SDP leg's six new steps (see
 # `chip_test._SDP_LEG_STEP_ORDER` for the ordered tuple by name -- not
 # spelled out literally here: this module is a declared non-registry,
 # re-measured every run by `test_non_registry_still_has_no_ops`'s AST
@@ -249,10 +245,8 @@ def is_submittable(ac: AutoCapture) -> bool:
 # string literals) necessarily re-key every one of the 43 measured ALLOW
 # chips through the hashed `op=verdict:cls` triples below -- b14/b15-era
 # reports stop grouping with v1.30-era ones and their accumulated N>=2
-# promotion counts reset. gh#20's orphaned id `00e121446ceb` is named
-# explicitly in plan 134-11's LEG-18 finding; the outward description of
-# this discontinuity is Phase 137's release notes (CLOSE-05), not this
-# phase's. REJECTED: excluding the SDP steps from this hash (preserves
+# promotion counts reset; gh#20's orphaned id `00e121446ceb` is a recorded
+# instance. REJECTED: excluding the SDP steps from this hash (preserves
 # continuity and the promotion ladder, but two reports differing ONLY in
 # their SDP outcome would then dedup identically -- a leaked lock grouping
 # with a held one, blinding the mechanism that decides which reports get
@@ -641,7 +635,7 @@ def _write_coverage_line(result: StepResult, step: Step | None) -> str | None:
             f"slot 0x{start:X} ({length} bytes), "
             f"{target.bits_cleared} bits cleared this cycle"
         )
-        # D-9 rig life. A UV part is a finite regression rig -- one run
+        # Rig life. A UV part is a finite regression rig -- one run
         # saturates one slot -- so "slots left" IS "runs left", and an
         # operator planning a firmware regression pass needs the number
         # without having to work it out from the slot address. Appended only
@@ -696,7 +690,7 @@ class DiagnosticReport:
     plan: Plan
     results: list[StepResult] = field(default_factory=list)
     banner: BannerCounts | None = None
-    # D-01 split / D-03 destructive before-after / D-04 standalone honest-fallback
+    # Split destructive before/after VPP readings, with a standalone honest fallback.
     vpp_before_mv: int | None = None
     vpp_after_mv: int | None = None
     vpe_before_mv: int | None = None

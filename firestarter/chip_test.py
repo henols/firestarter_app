@@ -42,8 +42,8 @@ from typing import Any
 from firestarter.chip_resolver import resolve_chip
 from firestarter.constants import (
     FLAG_CAN_ERASE,  # 0x02 -- do NOT redefine; import
-    FLAG_SKIP_SDP_UNLOCK,  # 0x100 -- passed on OP_WRITE_INHIBITED ONLY (v1.30
-    # Phase 134, T-134-02, D-01). Do NOT redefine; import.
+    FLAG_SKIP_SDP_UNLOCK,  # 0x100 -- passed on OP_WRITE_INHIBITED ONLY.
+    # Do NOT redefine; import.
 )
 from firestarter.exceptions import (
     ChipNotFoundError,
@@ -279,7 +279,7 @@ def classify_fingerprint(
 
 
 # ---------------------------------------------------------------------------
-# Plan derivation (SWEEP-01, D-01/D-02) -- guard-BYPASSING derivation path
+# Plan derivation -- the guard-BYPASSING derivation path
 # ---------------------------------------------------------------------------
 #
 # derive_plan() reads the frozen DB fields via db.get_eprom() (database.py:506)
@@ -287,8 +287,8 @@ def classify_fingerprint(
 # guard lives exclusively inside chip_resolver.resolve_chip() (chip_resolver.py:16)
 # -- derivation never calls it, so a chip whose support_status would make
 # resolve_chip refuse it (e.g. "adapter-required") still yields a full plan
-# (Pattern 2 / T-108-06). The guard-HONORING path is Plan 108-04's run_plan,
-# which re-resolves each executed step through resolve_chip(name, db).
+# (Pattern 2). The guard-HONORING path is run_plan below, which re-resolves
+# each executed step through resolve_chip(name, db).
 #
 # Op inclusion is a PURE function of the frozen fields protocol-id /
 # electrical-type / FLAG_CAN_ERASE -- the build-time classifier
@@ -305,10 +305,10 @@ _PROTOCOL_FLASH4 = 0x05
 
 # Protocol 0x0D (EEPROM_POLL / "28C family", firmware's configure_eeprom28c).
 #
-# Phase 153 (ERASE-03/ERASE-04) implemented the AN-0544B software chip erase
-# in `configure_eeprom28c` and restored FLAG_CAN_ERASE at the source
-# (database.py:582-645, the fourth REVERSAL RECORD entry in that chain,
-# after 119 D-18 / 120 D-20 / 121 D-12). For every algorithm-13 row in the
+# The firmware implements the AN-0544B software chip erase in
+# `configure_eeprom28c` and FLAG_CAN_ERASE is restored at the source
+# (database.py:570-625, the fourth REVERSAL RECORD entry in that
+# chain). For every algorithm-13 row in the
 # shipped database (all 84 qualify -- electrical-type is EEPROM or
 # Flash/EEPROM for each), the erase arm below now takes the *supported*
 # branch (`can_erase and protocol != _PROTOCOL_FLASH4`), so this constant's
@@ -320,7 +320,7 @@ _PROTOCOL_FLASH4 = 0x05
 # database shape, since no shipped row is in this state. Routing such a row
 # into the generic flag-keyed fallback instead (`"FLAG_CAN_ERASE not set for
 # this chip"`) would name the internal wire flag in a diagnostic report a
-# community tester reads, which DEVTEST-01 forbids. See the reachability
+# community tester reads, which is forbidden. See the reachability
 # leg `test_protocol_eeprom_28c_arm_reachable_for_non_qualifying_etype` in
 # `tests/test_chip_test.py`, which proves this arm is not untested dead
 # code. Checked, not assumed: ruff's `select` list (`pyproject.toml`,
@@ -355,14 +355,14 @@ _AUTO_ERASE_ON_WRITE_PROTOCOLS = frozenset({_PROTOCOL_FLASH4, _PROTOCOL_EEPROM_2
 _SRAM_FRAM_ETYPES = frozenset({"SRAM", "FRAM"})
 _SRAM_PROTO_IDS = frozenset({0x0E, 0x27, 0x28, 0x29})
 
-# Ordered op vocabulary (id-check FIRST per SWEEP-03). Seven strings as of
-# Phase 121 D-06/D-07 (this plan): `OP_WRITE_PARTIAL` joins the vocabulary so
+# Ordered op vocabulary (id-check FIRST). Seven strings:
+# `OP_WRITE_PARTIAL` is in the vocabulary so
 # the partial-vs-full distinction is visible in the op name itself -- every
 # consumer that reads `StepResult.op` (the `dedup_fingerprint` hash, the
-# report renderer) sees it without learning a new field. D-07 deliberately
-# stops the vocabulary here: no `verify-partial` partner exists, because a
-# verify's region is definitionally the preceding write's region (D-07,
-# `Step.write_region` is set equal on both steps by `derive_plan`) -- a
+# report renderer) sees it without learning a new field. The vocabulary
+# deliberately stops here: no `verify-partial` partner exists, because a
+# verify's region is definitionally the preceding write's region
+# (`Step.write_region` is set equal on both steps by `derive_plan`) -- a
 # partner string would encode zero new information.
 OP_ID = "id"
 OP_READ = "read"
@@ -372,25 +372,25 @@ OP_WRITE_PARTIAL = "write-partial"
 OP_VERIFY = "verify"
 OP_ERASE = "erase"
 
-# SDP lock/unlock op strings (v1.30 Phase 133 D-02, LEG-09). Exactly two --
-# Phase 133 defines only the two ops its own mechanism criteria exercise;
-# Phase 134's other leg ops are deliberately NOT pre-defined here (`ruff`'s
+# SDP lock/unlock op strings. Exactly two --
+# only the two ops the mechanism criteria exercise are defined here; the
+# leg's other ops are deliberately NOT pre-defined (`ruff`'s
 # `F` rules do not flag unused module-level constants, so extra constants
-# would be genuinely dead code for a whole phase). Engine-local op strings,
+# would be genuinely dead code). Engine-local op strings,
 # NOT wire constants -- no `constants.py` / `firestarter.h` mirroring is
 # triggered by adding these.
 OP_SDP_LOCK = "sdp-lock"
 OP_SDP_UNLOCK = "sdp-unlock"
 
-# The SDP leg's four remaining op strings (v1.30 Phase 134, D-06/D-07,
-# LEG-01/02/03/04/16). Engine-local op strings, NOT wire constants -- no
+# The SDP leg's four remaining op strings. Engine-local op strings, NOT
+# wire constants -- no
 # `constants.py` / `firestarter.h` mirroring is triggered by adding these,
-# so this phase needs no firmware lockstep and no `.hex` re-cut. Ordered in
-# the leg's own D-06 step order (baseline-B, baseline-A, inhibited,
+# so they need no firmware lockstep and no `.hex` re-cut. Ordered in
+# the leg's own step order (baseline-B, baseline-A, inhibited,
 # restored) so a reader scanning top-to-bottom sees the same order the leg
 # runs in.
 #
-# D-07 chose TWO baseline ops (`write-baseline-b` / `write-baseline-a`)
+# TWO baseline ops (`write-baseline-b` / `write-baseline-a`) were chosen
 # rather than one folded `sdp-baseline` op: `DiagnosticReport.render()`'s
 # terminal-facing table shows only `op` / `verdict` / `error_code` /
 # `fingerprint` -- `reason` reaches only the markdown table and the JSON
@@ -432,7 +432,7 @@ _SDP_LEG_STEP_ORDER: tuple[str, ...] = (
     OP_WRITE_RESTORED,
 )
 
-# D-18's `write_scope="none"` advisory prose, in the same
+# The `write_scope="none"` advisory prose, in the same
 # `'write_scope="none": ... omitted (D-01)'` shape the shipped write/verify/
 # erase `locked_destructive` reasons already use above -- naming the SDP
 # leg's own governing decision (D-18) rather than reusing D-01's tag on a
@@ -706,7 +706,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     region_reason = ""
     full_device_permitted = write_scope == _WRITE_SCOPE_FULL
     mem_size = int(full.get("memory-size", 0) or 0)
-    # D-2: the per-cycle payload recipe, decided HERE and only here, from the
+    # The per-cycle payload recipe, decided HERE and only here, from the
     # same three facts this function already holds. Ordered UV first: a UV part
     # is never SRAM, but keying on `is_uv` before the volatile test means a
     # future electrical-type oddity cannot route a UV part to `alternate` and
@@ -1122,31 +1122,31 @@ _DESTRUCTIVE_OPS = frozenset(
         OP_WRITE_RESTORED,
     }
 )
-# LIVE DISPATCH ALLOW-LIST (121-02, T-121-05/06/07). Originally documented as
-# only the N>=2 disagreement-policy set (D-06: destructive/verify ONLY --
+# LIVE DISPATCH ALLOW-LIST. Originally documented as
+# only the N>=2 disagreement-policy set (destructive/verify ONLY --
 # write, erase, verify; read disagreement is a divergence metric, never a
-# verdict flip) -- but RESEARCH C-5 / Open Question 4 found this frozenset had
+# verdict flip) -- but this frozenset was found to have
 # ZERO references anywhere in the tree before this change: `_dispatch_step`'s
 # trailing `return _dispatch_multi_run(...)` was unconditional, and
 # `_dispatch_multi_run`'s run loop ended in a bare `else: # OP_ERASE`, so ANY
 # op string reached `operator.erase_eprom()` and reported `VERDICT_OK`
-# (RESEARCH Pitfall 1a, proven empirically: an unmapped op called
+# (proven empirically: an unmapped op called
 # erase_eprom() twice and returned OK). This is now the dispatch allow-list
 # both `_dispatch_step` and `_dispatch_multi_run` gate on -- the host mirror
-# of Phase 119 D-06/D-07's firmware NULL-`main` refusal
+# of the firmware's NULL-`main` refusal
 # (`operation_utils.cpp::op_execute_stateful_operation`). Made LIVE, not
-# documented dead: `OP_WRITE_PARTIAL` (Phase 121 Plan 06, D-06) is added here
+# documented dead: `OP_WRITE_PARTIAL` is included here
 # too -- any future op added to the vocabulary MUST be added to both
 # frozensets in this block or it fails closed by construction (proven by a
-# deliberate-break test, plan 121-06 Task 3).
+# deliberate-break test).
 #
-# `OP_SDP_LOCK`/`OP_SDP_UNLOCK` are DELIBERATELY EXCLUDED here (v1.30 Phase
-# 133 D-03, LEG-09) -- and the exclusion is one of plan 133-06's asserted
+# `OP_SDP_LOCK`/`OP_SDP_UNLOCK` are DELIBERATELY EXCLUDED here -- and the
+# exclusion is one of the op-registry parity gate's asserted
 # parity exemptions, not an omission: running a lock twice is a second
 # mutation with no comparison value, and this set's marginal-on-disagreement
 # policy is meaningless for an emission whose result cannot be read back at
-# all -- SDP protection state is not readable on this family (Phase 117 D-05,
-# Phase 119 D-12). SDP emissions are single-run; they dispatch through
+# all -- SDP protection state is not readable on this family. SDP
+# emissions are single-run; they dispatch through
 # `_dispatch_sdp` instead (`_SDP_OPS`, below).
 _MULTI_RUN_OPS = frozenset({OP_WRITE, OP_WRITE_PARTIAL, OP_ERASE, OP_VERIFY})
 
@@ -1209,8 +1209,8 @@ _SDP_LEG_OPS = frozenset(
     }
 )
 
-# The baseline gate's inputs and outputs (v1.30 Phase 134, plan 134-04,
-# D-08/D-20). `_SDP_BASELINE_OPS` is what `_baseline_closes_sdp_gate` is
+# The baseline gate's inputs and outputs. `_SDP_BASELINE_OPS` is what
+# `_baseline_closes_sdp_gate` is
 # evaluated FROM -- the two baseline-direction steps whose own verdict
 # decides whether a lock may be emitted. Disjoint from `_SDP_LEG_GATED_OPS`
 # by construction: a baseline op decides the gate and always runs
@@ -1463,10 +1463,10 @@ def _resolve_or_none(
     return eprom_data, None, ""
 
 
-# The cleanup drain's per-callable narrow exception set (v1.30 Phase 133
-# D-10, LEG-10). Named exactly the same three classes `_run_step`'s D-08
+# The cleanup drain's per-callable narrow exception set. Named exactly
+# the same three classes `_run_step`'s own
 # degrading clause and EpromOperationError clause catch on the step path --
-# declared once as a module constant so plan 133-06's op-registry parity
+# declared once as a module constant so the op-registry parity
 # reasoning has a single named fact to point at, rather than the tuple
 # being re-typed inline at the drain site. Deliberately NOT also naming
 # ProgrammerNotFoundError/FirmwareOutdatedError: both are SerialError
@@ -2649,7 +2649,7 @@ class WriteTarget:
     # from `diagnostic_report._step_dict` -- it is working state, not
     # provenance, and a full-device image has no business in a filed issue.
     current: bytes = b""
-    # D-9 rig life: how many UV slots on this part can still support a run,
+    # Rig life: how many UV slots on this part can still support a run,
     # and how many it has in total. `None` on every non-UV target. Derived
     # from the chosen slot's INDEX in the top-down candidate list -- no extra
     # read -- and carried through onto the staged tranche copies, which are
@@ -2834,7 +2834,7 @@ def _run_step_untimed(
         FirmwareOutdatedError,
         HardwareRevisionUnsupportedError,
     ):
-        # D-08/LEG-11: these SerialError subclasses are run-fatal
+        # These SerialError subclasses are run-fatal
         # host-setup conditions ("no programmer attached", "firmware too
         # old", "shield revision cannot safely drive this chip"), not chip
         # findings -- they belong to cli_handlers.py's
@@ -2850,7 +2850,7 @@ def _run_step_untimed(
         # false-green no-board trap, reproduced structurally.
         raise
     except (SerialError, HardwareOperationError) as exc:
-        # D-08/LEG-11: a half-seated cable or other transport-level fault
+        # A half-seated cable or other transport-level fault
         # (SerialError itself, SerialTimeoutError, or HardwareOperationError
         # -- a sibling of Exception, not an EpromOperationError subclass, so
         # the existing `except EpromOperationError` clause below never
@@ -3212,7 +3212,7 @@ def _resolve_write_target(
     # step: it stays a reported FINDING (a UV part that is not blank is
     # operator-actionable), it is simply no longer a scope decision.
 
-    # D-2/D-8: the slot must support the whole CYCLE, not just one write.
+    # The slot must support the whole CYCLE, not just one write.
     # Staging `cycles` tranches out of a slot needs each tranche to clear at
     # least `_UV_MIN_CLEARED_BITS` on its own, so the slot's own floor scales
     # with the cycle count. A slot with 64..127 clearable bits passes the
@@ -3253,7 +3253,7 @@ def _resolve_write_target(
                     bits_retained=retained,
                     current_source="probe read",
                     current=current,
-                    # D-9, rig life, at ZERO extra I/O. `all_starts` is
+                    # Rig life, at ZERO extra I/O. `all_starts` is
                     # top-down and this loop takes the FIRST acceptable slot,
                     # so every slot above `slot_index` is already spent and
                     # every slot below it is untouched. A run saturates
@@ -3482,10 +3482,9 @@ def _dispatch_multi_run(
                 # Unreachable in practice: the fail-closed `_MULTI_RUN_OPS`
                 # guard at the top of this function already refused any op
                 # outside {OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY, OP_ERASE}
-                # before this loop could start (121-02, T-121-05; 121-06,
-                # D-06). Kept explicit rather than a bare `else: # OP_ERASE`
-                # -- the pre-fix shape that silently routed an unmapped op to
-                # `erase_eprom()` (RESEARCH Pitfall 1a).
+                # before this loop could start. Kept explicit rather than a
+                # bare `else: # OP_ERASE` -- the pre-fix shape that
+                # silently routed an unmapped op to `erase_eprom()`.
                 raise AssertionError(
                     f"unreachable: op {op!r} passed the _MULTI_RUN_OPS guard"
                 )
@@ -3782,7 +3781,7 @@ def _dispatch_sdp_leg(
     equal = actual == expected_readback
 
     if op == OP_WRITE_INHIBITED:
-        # D-03's full 2x2, on pattern A (unchanged) as the expected value.
+        # The full 2x2, on pattern A (unchanged) as the expected value.
         if wrote_ok and equal:
             verdict, reason = VERDICT_OK, ""
         elif wrote_ok and not equal:
@@ -3798,7 +3797,7 @@ def _dispatch_sdp_leg(
                 ),
             )
         else:
-            # D-01/D-02: a failed precondition is marginal in BOTH read-back
+            # A failed precondition is marginal in BOTH read-back
             # directions -- BAD here would manufacture a chip-fault report
             # for a community member running older firmware.
             verdict, reason = (

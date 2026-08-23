@@ -95,11 +95,11 @@ from typing import Any, Mapping  # noqa: UP035
 # second copy would be exactly the drift this codebase keeps removing.
 from firestarter.sdp_capability import split_part_number_tokens
 
-# D-06's three readability states, frozen. `undocumented` deliberately has no
+# The three readability states, frozen. `undocumented` deliberately has no
 # backing collection anywhere in this module — it is the complement of the
 # union of the two frozensets below, so a token can reach it only by absence,
 # never by an explicit assignment that could itself be wrong. Adding a fourth
-# state is a decision D-06 forbids; DESIGN.md §5(a) restates this for the C-17
+# state is forbidden; DESIGN.md §5(a) restates this for the disputed-token
 # ambiguity specifically: the tiebreak does not add a state, it only decides
 # which of the existing three a disputed token lands in.
 READABILITY_STATES: tuple[str, ...] = (
@@ -678,12 +678,11 @@ def readability_for_token(token: str) -> str:
 # and it is documented-readable *and* permanent).
 #
 # These two axes are **reporting-only**. They do not gate answering anywhere:
-# D-06 keys the read/refuse decision only on the readability axis above, never
-# on mechanism or permanence. Consequently `151-09`'s AST gate's rule for these
+# the read/refuse decision keys only on the readability axis above, never
+# on mechanism or permanence. Consequently the AST gate's rule for these
 # two mappings is deliberately **weaker** than the literal-frozenset-membership
-# rule it applies to readability -- stated here in words, per PATTERNS.md's
-# requirement that the weakening not be left implicit, and restated in
-# `151-09`'s gate docstring.
+# rule it applies to readability -- stated here in words so the weakening is
+# not left implicit, and restated in that gate's own docstring.
 MECHANISM_STATES: tuple[str, ...] = (
     "boot_block_lockout",
     "sector_protection",

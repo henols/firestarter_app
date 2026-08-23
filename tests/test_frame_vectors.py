@@ -185,7 +185,7 @@ class TestHostChunkFitsFirmwareDecodeCap:
     (no -2); absent field raises FirmwareOutdatedError (D-05 no fallback).
     """
 
-    # Phase 54: MAIN-path cap is DATA_BUFFER_SIZE (512 Uno / 1024 Leonardo).
+    # MAIN-path cap is DATA_BUFFER_SIZE (512 Uno / 1024 Leonardo).
     # The old FW_DECODE_CAP = 511 is superseded by the advertised <maxchunk>.
     FW_DECODE_CAP = 512
 

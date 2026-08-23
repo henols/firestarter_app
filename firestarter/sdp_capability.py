@@ -42,7 +42,7 @@ not removing, the curation this module performs.
 
 from __future__ import annotations
 
-# D-03 purity (Task 2): the module's top-level import set is a subset of
+# Import purity: the module's top-level import set is a subset of
 # {"__future__", "typing"} — no click, no serial, no firestarter.* imports.
 # `Mapping` is imported from `typing` (not `collections.abc`) to keep that
 # invariant literal; ruff's UP035 (prefer collections.abc) is suppressed

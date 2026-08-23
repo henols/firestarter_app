@@ -754,7 +754,7 @@ def test_dev_consistency_check_hardware_error_verdict(runner: CliRunner) -> None
 
 
 # ---------------------------------------------------------------------------
-# Phase-53 Plan 01 Task 3: RED smoke tests for dev write-cycle + dev fault-inject
+# RED smoke tests for dev write-cycle + dev fault-inject
 #
 # All four tests MUST FAIL until 53-02 registers the subcommands. Click will
 # report "No such command 'write-cycle'" / "No such command 'fault-inject'",

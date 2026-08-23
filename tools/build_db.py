@@ -185,7 +185,7 @@ VCC_VOLTAGES = {
 }
 
 # [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
-# Phase 148 DATA-01 (D-01/D-02/D-03): 4 V is a real number that is not a real
+# 4 V is a real number that is not a real
 # operating voltage — no part in this database has a 4.0 V nominal supply.
 # VCC_VOLTAGES index 0x02 is the TL866's low-margin VCC *verify* rail, not
 # the chip's operating supply. This is a statement about the decode table
@@ -196,8 +196,8 @@ VCC_VOLTAGES = {
 # construction and cannot drift from it even if the table is ever corrected.
 _VCC_MARGIN_RAIL_MV = VCC_VOLTAGES[0x02]
 
-# D-02: DIP28_VARIANT_MAP, PIN_MAP_TO_PINOUT, and PIN_MAP_PROTO_TO_PINOUT
-# have been DELETED (Phase 58 Plan 02). The principled resolve_pinout_key
+# DIP28_VARIANT_MAP, PIN_MAP_TO_PINOUT, and PIN_MAP_PROTO_TO_PINOUT
+# have been DELETED. The principled resolve_pinout_key
 # function below is the sole pinout-selection path. See RESEARCH.md
 # §"Full Principled Rule Structure" for derivation evidence.
 
@@ -249,7 +249,7 @@ def resolve_pinout_key(
         elif pm_idx == 0:
             key = "DIP24_6116"  # SRAM-class (type=4 or proto=0x27)
         else:
-            key = None  # D-06 fail-safe
+            key = None  # fail-safe
 
     elif pin_count == 28:
         if pm_idx == 22:
@@ -284,7 +284,7 @@ def resolve_pinout_key(
             else:
                 key = None
         else:
-            key = None  # D-06 fail-safe
+            key = None  # fail-safe
 
     elif pin_count == 32:
         if pm_idx == 0:
@@ -298,10 +298,10 @@ def resolve_pinout_key(
                 key = "DIP32_28C512_EEPROM"  # 5V EEPROM; WE=30, no VPP
             elif proto_id in {0x07, 0x08, 0x10}:
                 if proto_id == 0x08 and mem_size <= MAX_27C020_SIZE:
-                    # D-02/D-04: ≤256K 0x08 chips (27C010/27C020 class) have pin 31 = PGM
+                    # ≤256K 0x08 chips (27C010/27C020 class) have pin 31 = PGM
                     # (NOT A18 — A18 = bit 18 = mask 0x40000 is unused at ≤256K).
                     # 512K AM27C040 (524288) and 1M AM27C080 (1048576) legitimately use
-                    # pin 31 = A18 and MUST stay on DIP32_STD (host-side D-04 alias guard).
+                    # pin 31 = A18 and MUST stay on DIP32_STD.
                     key = (
                         "DIP32_27C020"  # PGM on pin 31 (off address bus); VPP on pin 1
                     )
@@ -310,7 +310,7 @@ def resolve_pinout_key(
             else:
                 key = None
         else:
-            key = None  # D-06 fail-safe
+            key = None  # fail-safe
 
     if key is not None and key not in VALID_PINOUT_KEYS:
         print(f"WARN: resolved pinout key '{key}' not in pinouts.json", file=sys.stderr)
@@ -417,14 +417,14 @@ def interpret_timing(raw_hex, protocol_id):
     try:
         val = int(raw_hex, 16)
     except (TypeError, ValueError):
-        # WR-05 (98-03): narrowed from bare `except Exception` so an unparseable
+        # Narrowed from bare `except Exception` so an unparseable
         # pulse_delay is visible (not silently masked as a valid 0 us timing) —
         # an upstream infoic.xml decode fault would otherwise ship wrong timing
-        # to the firmware unnoticed. Phase 148 D-08 finishes what WR-05 started:
-        # after the string/int collapse a returned `0` would otherwise mean
-        # either "algorithm-controlled" (417 chips) or "decode fault on a
-        # 0x07/0x08/0x0B chip", so this branch is now fatal instead of masked —
-        # main() aborts before the JSON write and no wrong database is emitted.
+        # to the firmware unnoticed. After the string/int collapse a returned
+        # `0` would otherwise mean either "algorithm-controlled" (417 chips) or
+        # "decode fault on a 0x07/0x08/0x0B chip", so this branch is now fatal
+        # instead of masked — main() aborts before the JSON write and no wrong
+        # database is emitted.
         raise ValueError(
             f"chip with protocol {protocol_id:#04x} has unparseable "
             f"pulse_delay {raw_hex!r} — refusing to default to 0 us"
@@ -672,7 +672,7 @@ def main():
                     type_int, proto_id, pm_idx, flags, pinout_key, mem_size
                 )
 
-                # Phase 84 D-40 per-chip cosmetic relabel (fm-fram-full decision).
+                # Per-chip cosmetic relabel (fm-fram-full decision).
                 # Runs AFTER Pass-2 so the override is applied on top of the
                 # protocol-based _etype derivation.  Keyed on part_number; does NOT
                 # touch proto_id / pinout / vpp / algorithm — label-only correction.

@@ -43,12 +43,12 @@ from firestarter.serial_comm import SerialCommunicator
 
 logger = logging.getLogger("Firmware")
 
-# Phase 18: FIRMWARE_VERSION_RE validates consumer-side --firmware-version input.
-# Superset of Phase 15's BETA_VERSION_RE (which validates publisher-side input).
-# D-07: accepts stable (X.Y.Z) and pre-release (X.Y.ZbN, X.Y.ZrcN) forms.
+# FIRMWARE_VERSION_RE validates consumer-side --firmware-version input.
+# Superset of BETA_VERSION_RE (which validates publisher-side input).
+# Accepts stable (X.Y.Z) and pre-release (X.Y.ZbN, X.Y.ZrcN) forms.
 # Note: anchor with \Z (not $) — $ matches before a trailing \n in Python,
 # letting "3.1.0\n" sneak through and corrupt the URL template downstream.
-# Fixed 2026-05-20 per Phase 18 code review CR-02.
+# Fixed 2026-05-20 after code review.
 FIRMWARE_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+((b|rc)[0-9]+)?\Z")
 
 # Used by _fetch_all_releases to follow pagination Link headers.
@@ -229,7 +229,7 @@ class FirmwareManager:
                 )
                 return None, None, None
         except FirmwareOutdatedError:
-            raise  # Phase 6 (LHOST-04): surface lockstep refuse to operator (do NOT swallow)  # noqa: E501
+            raise  # surface lockstep refuse to operator (do NOT swallow)  # noqa: E501
         except (ProgrammerNotFoundError, SerialError) as e:
             logger.error(f"Failed to read firmware version: {e}")
             return None, None, None
@@ -516,12 +516,12 @@ class FirmwareManager:
         if board.lower() == "leonardo":
             partno, programmer_id, baud_rate = ("atmega32u4", "avr109", 57600)
         elif board.lower() == "uno328pb":
-            # Phase 21 D-10 hand-off: ATmega328PB signature 0x1E 0x95 0x16 differs
+            # ATmega328PB signature 0x1E 0x95 0x16 differs
             # from 328P's 0x1E 0x95 0x0F -- partno must be "atmega328pb" exactly,
             # else avrdude aborts on signature mismatch. programmer_id "urclock"
             # matches MiniCore's stock Urclock bootloader on operator's 328PB-Uno
             # (bench-validated 2026-05-21 — "arduino" was the initial guess from
-            # Phase 23 CONTEXT D-02 but the bootloader rejected it; this is the
+            # an earlier design note, but the bootloader rejected it; this is the
             # documented 1-line contingency swap).
             partno, programmer_id, baud_rate = ("atmega328pb", "urclock", 115200)
 

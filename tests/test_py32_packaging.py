@@ -77,11 +77,11 @@ _D17_PROXIMITY_PHRASE = "accepted deviation"
 _FLASH_METHOD_DEF = "def flash_method("
 _D17_PROXIMITY_LINES = 25
 
-# Plan 127-10 / D-15: the install doc's non-vacuity anchor -- the same
+# D-15: the install doc's non-vacuity anchor -- the same
 # section header the doc's own text calls "§3".
 _INSTALL_DOC_SECTION_3_HEADING = "## 3. What the host does during an install"
 
-# Plan 127-10: the doc must name all three non-VERIFIED outcomes using the
+# the doc must name all three non-VERIFIED outcomes using the
 # exact words the flasher/CLI actually print (or the flasher's own attribute
 # name), so a future edit cannot quietly drop the honest half of the
 # install's outcome vocabulary.
@@ -229,7 +229,7 @@ def test_d17_gate_fails_closed_on_a_planted_file_lacking_the_record(
 
 
 # --------------------------------------------------------------------------
-# Plan 127-10 / D-15, D-13: doc-vs-constant parity gate. The install doc's
+# D-15, D-13: doc-vs-constant parity gate. The install doc's
 # flash-map figure and pyusb floor must not be able to disagree with the
 # code they describe without a red test here -- including when Phase 129
 # moves the map.

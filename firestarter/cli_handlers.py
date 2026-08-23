@@ -212,9 +212,9 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
                 f"Unsupported protocol: {e} — this protocol is recognized but not yet implemented in the firmware."
             ) from e
         except ChipNotImplementedError as e:
-            # DB-04 SC#2 Approach A: render the reason string verbatim.
-            # Plan 01 reworded unsupported_reason strings to begin with the
-            # SC-required wording, so str(e) = "<name>: <reason>" is already
+            # Render the reason string verbatim.
+            # The unsupported_reason strings begin with the
+            # required wording, so str(e) = "<name>: <reason>" is already
             # the authoritative status-specific message. Drop the generic
             # "Chip not usable:" prefix so the DB string is the single source
             # of truth for both info display and chip-op refusal.
@@ -248,7 +248,7 @@ def build_arg_flags(args: object) -> int:
     force = getattr(args, "force", False)
     verbose = getattr(args, "verbose", False)
     vpe_as_vpp = getattr(args, "vpe_as_vpp", False)
-    # Phase 92 decouple: skip-erase is its own explicit flag, NOT implied by
+    # Skip-erase is its own explicit flag, NOT implied by
     # `not blank_check`. See _build_op_flags for the rationale (write -b must
     # still erase an erase-capable chip).
     flags = build_flags(
@@ -296,9 +296,9 @@ def _maybe_auto_route_to_pre(args: object) -> None:
     #   * `fw --force` — the documented reinstall escape hatch — resolved the
     #     stable asset and would have DOWNGRADED the board to firmware this
     #     host cannot speak to, bricking the pairing it was invoked to repair.
-    # D-23 (a stable-installed app is unaffected) and D-24 (--stable or
-    # --firmware-version opts out) are both unchanged: they are the other two
-    # clauses below and the is_prerelease test.
+    # A stable-installed app is unaffected, and --stable or --firmware-version
+    # opts out: those are the other two clauses below and the is_prerelease
+    # test.
     if (
         getattr(args, "pre", False)
         or getattr(args, "firmware_version", None)
@@ -330,11 +330,11 @@ def _build_op_flags(
     verbose: bool = False,
     vpe_as_vpp: bool = False,
     skip_erase: bool = False,
-    # D-14 / RETIRE-07 tripwire, edit point 1 of 2: this default is one of
+    # SDP auto-unlock tripwire, edit point 1 of 2: this default is one of
     # the two places a developer would touch to disable the host's
     # auto-unlock. Before changing it, read the tripwire comment at the
-    # D-04 auto-set condition inside write() below -- flipping this default
-    # invalidates the removal-safety argument RETIRE-01 rests on.
+    # SDP auto-set condition inside write() below -- flipping this default
+    # invalidates the removal-safety argument the `dev sdp` removal rests on.
     skip_sdp_unlock: bool = False,
     input_enable: Optional[bool] = None,
     chip_disable: Optional[bool] = None,
@@ -362,7 +362,7 @@ def _build_op_flags(
     poll reported "successful" (the Phase-90/91 "12V-VPP regression" false alarm).
     `skip_erase` is now an explicit opt-in (write `--skip-erase`), default False.
     """
-    # D-19: FLAG_SKIP_SDP_UNLOCK is passed into build_flags as a keyword
+    # FLAG_SKIP_SDP_UNLOCK is passed into build_flags as a keyword
     # argument, NOT OR-ed into `flags` after the call the way
     # FLAG_OUTPUT_ENABLE / FLAG_CHIP_ENABLE are below — every wire-flag bit
     # stays mapped in the one function that maps wire flags (build_flags),
@@ -439,7 +439,7 @@ def cli(ctx: click.Context, verbose: bool, port: Optional[str]) -> None:
     # ctx.obj starts as None (Click default) so the manager-construction path
     # runs verbatim. This is the standard "AppContext-on-ctx.obj" pattern from
     # Click's docs (https://click.palletsprojects.com/en/stable/complex/).
-    # WR-02: _setup_logging must run AFTER the test-mode short-circuit so it
+    # _setup_logging must run AFTER the test-mode short-circuit so it
     # does not destructively replace pytest's caplog handler on the root logger.
     if ctx.obj is not None and isinstance(ctx.obj, AppContext):
         return
@@ -610,11 +610,11 @@ def read(
     "1-65535). This bound is minipro parity (-o pulse=N is a uint16), NOT a "
     "wire-type or hardware limit -- see write()'s docstring.",
 )
-# D-14 / RETIRE-07 tripwire, edit point 2 of 2: this option's `default=False`
+# SDP auto-unlock tripwire, edit point 2 of 2: this option's `default=False`
 # is the second place a developer would touch to disable the host's
-# auto-unlock. Before changing it, read the tripwire comment at the D-04
+# auto-unlock. Before changing it, read the tripwire comment at the SDP
 # auto-set condition inside write() below -- flipping this default
-# invalidates the removal-safety argument RETIRE-01 rests on.
+# invalidates the removal-safety argument the `dev sdp` removal rests on.
 @click.option(
     "--skip-sdp-unlock",
     "skip_sdp_unlock",
@@ -702,13 +702,13 @@ def write(
     """
     eprom_data = resolve_chip(eprom, db=app.db)
 
-    # D-17 (v1.31 HOST-04/HOST-05): a SEPARATE, sibling `if` -- never an
-    # `elif` chained onto the D-04 or D-13 blocks below, so this can co-fire
-    # with either on the same chip (S-6). click.echo (never logger.info):
+    # A SEPARATE, sibling `if` -- never an
+    # `elif` chained onto the SDP auto-set or skip-erase blocks below, so this
+    # can co-fire with either on the same chip. click.echo (never logger.info):
     # this must be visible at DEFAULT verbosity, with no -v needed. Reason:
     # a bench artifact or log captured without the command line beside it
     # cannot otherwise tell you the pulse was not the database's -- and
-    # Phase 145's evidence will be read by strangers.
+    # this evidence will be read by strangers.
     if pulse_us is not None:
         db_pulse = eprom_data.get("pulse-delay", 0)
         db_shown = (
@@ -722,9 +722,9 @@ def write(
             "This run's timing is NOT the database's."
         )
 
-    # D-04 auto-set (v1.22 HOST-04): decided here, in the handler, because
+    # SDP auto-set: decided here, in the handler, because
     # this is the last place with both the chip NAME and app.db — resolve_chip's
-    # programmer dict carries neither `protocol-id` nor `name` (RESEARCH F-06).
+    # programmer dict carries neither `protocol-id` nor `name`.
     # This is a DELIBERATE DIVERGENCE from 3.0.0b11 for the capability-refused
     # 0x0D subset, not a no-op: today's `write` already emits the SDP-disable
     # sequence before the payload on those parts, leaving 0x2AAA<-0x55 /
@@ -733,14 +733,14 @@ def write(
     # The trade-off is dissolved rather than decided on the derived 43/41
     # partition: a part with no SDP has nothing to unlock, so suppressing its
     # auto-unlock costs that part nothing and additionally avoids those three
-    # stored bytes. Residual risk is confined to 120-WATCHLIST.md's 9 entries.
+    # stored bytes. Residual risk is confined to 9 watch-listed entries.
     sdp_entry = app.db.get_eprom(eprom)
     is_protocol_0x0d = (
         bool(sdp_entry) and sdp_entry.get("protocol-id") == SDP_PROTOCOL_ID
     )
     allowed, sdp_reason = sdp_capability(eprom, app.db)
-    # D-14 / RETIRE-07 tripwire -- THE decision site. This condition IS the
-    # removal-safety argument for RETIRE-01 (Phase 132 deleted the standalone
+    # SDP auto-unlock tripwire -- THE decision site. This condition IS the
+    # removal-safety argument for deleting the standalone
     # `firestarter dev sdp` subcommand): that deletion was safe only BECAUSE
     # this auto-unlock fires by default, unconditionally, for every
     # capability-refused protocol-0x0D part on every `write` -- no user needs
@@ -749,13 +749,11 @@ def write(
     # `_build_op_flags` above, or the `--skip-sdp-unlock` Click option's
     # `default=False` above), narrowing this condition, or making the flag
     # default to SKIPPING the unlock invalidates the removal argument and
-    # requires RETIRE-01 to be revisited alongside the change. The companion
-    # test that pins this dependency and fails if it breaks is
+    # requires that removal decision to be revisited alongside the change. The
+    # companion test that pins this dependency and fails if it breaks is
     # `test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on`
     # in tests/test_write_skip_sdp_unlock.py; the companion note lives at
-    # FLAG_SKIP_SDP_UNLOCK's definition in constants.py. This is a comment
-    # only (D-05) -- no output is added here, and the condition itself is
-    # unchanged.
+    # FLAG_SKIP_SDP_UNLOCK's definition in constants.py.
     if is_protocol_0x0d and not allowed and not skip_sdp_unlock:
         skip_sdp_unlock = True
         click.echo(
@@ -767,7 +765,7 @@ def write(
             "decoder."
         )
     elif skip_sdp_unlock and not is_protocol_0x0d:
-        # D-18 warn-and-proceed: the user asked for something vacuous on this
+        # Warn and proceed: the user asked for something vacuous on this
         # protocol. Do NOT refuse, do NOT abort, do NOT suppress the bit —
         # firmware never reads FLAG_SKIP_SDP_UNLOCK outside protocol 0x0D, so
         # nothing unsafe happens either way, and a blanket-flag script across
@@ -780,27 +778,27 @@ def write(
             "normal write."
         )
 
-    # D-13 warn-and-proceed (v1.22 GATE-02, contributes-only): a DELIBERATE
+    # Warn and proceed: a DELIBERATE
     # SIBLING `if`, not an `elif` chained onto the block above — this checks
-    # `--skip-erase`, an entirely different flag from the D-04/D-18 block's
+    # `--skip-erase`, an entirely different flag from the SDP block's
     # `skip_sdp_unlock`, so both blocks must be free to fire independently on
-    # the same 0x0D chip (e.g. a capability-refused 0x0D part gets the D-04
+    # the same 0x0D chip (e.g. a capability-refused 0x0D part gets the SDP
     # auto-set line AND this line together). Do NOT refuse, do NOT abort, do
     # NOT suppress the bit: nothing on the 0x0D WRITE path reads an
     # erase-capability bit, so the flag is inert here regardless of whether
     # this message fires. The bit is still emitted (unconditionally, via
     # `_build_op_flags` below) so a blanket-flag script across a mixed batch
     # of chips still produces byte-identical wire frames whether or not this
-    # line printed. Scope unchanged from D-13: this arm still deliberately
+    # line printed. Scope: this arm still deliberately
     # does NOT extend to `-b`/`--no-blank-check`.
     #
-    # Phase 153 correction (RESEARCH C-8, now inverted): this arm's message
+    # Correction, now inverted: this arm's message
     # used to justify itself by claiming the 28C family "has no erase
-    # operation at all". That clause is now FALSE — ERASE-03 restored
+    # operation at all". That clause is now FALSE — the firmware restored
     # `FLAG_CAN_ERASE` for algorithm 13 and the family gained a standalone
-    # `firestarter erase` (D-153-04, D-153-05). What is still true, and is
+    # `firestarter erase`. What is still true, and is
     # now the message's only justification, is narrower: the WRITE path
-    # specifically performs no erase (D-153-05 deliberately keeps erase out
+    # specifically performs no erase (erase is deliberately kept out
     # of `eeprom28c_write_init`), so this flag still has nothing to skip
     # there. The corrected message states only that, and names the
     # standalone command so it is a useful redirect rather than a merely
@@ -809,14 +807,14 @@ def write(
     # The original comment's OWN reasoning for not extending this arm to
     # `-b`/`--no-blank-check` has ALSO inverted: it argued `-b` was
     # "genuinely useful on a non-blank 0x0D part precisely because there is
-    # no erase to make the part blank" — but ERASE-01 removed the pre-write
-    # blank check on this protocol entirely, so `-b` is now itself a no-op
+    # no erase to make the part blank" — but the pre-write
+    # blank check on this protocol was removed entirely, so `-b` is a no-op
     # on 0x0D, for an unrelated reason (there is no blank check left for it
     # to skip). The CONCLUSION is nevertheless unchanged — still no second
-    # warning here — but for a different reason: per RESEARCH §Common
-    # Pitfalls Pitfall 5, warning that `-b` is vacuous would train users to
+    # warning here — but for a different reason: warning that `-b` is
+    # vacuous would train users to
     # think the write needs a flag, which is exactly the recommendation
-    # 152-CONTEXT.md D-08 exists to keep out of the public release notes.
+    # deliberately kept out of the public release notes.
     # This paragraph records that the inversion was noticed and the
     # conclusion re-derived, not merely carried over stale.
     if skip_erase and is_protocol_0x0d:
@@ -842,9 +840,9 @@ def write(
             skip_erase=skip_erase,
             skip_sdp_unlock=skip_sdp_unlock,
         ),
-        # D-14: translate Click's `None` ("--pulse-us not supplied") into
+        # Translate Click's `None` ("--pulse-us not supplied") into
         # write_eprom's own integer sentinel (0 means "use the database
-        # value" -- see that function's docstring, plan 143-04).
+        # value" -- see that function's docstring).
         pulse_us=pulse_us or 0,
     )
     sys.exit(0 if ok else 1)
@@ -1227,7 +1225,7 @@ def fw(
     """
     app: AppContext = ctx.obj
 
-    # WR-03: 3-way --pre / --firmware-version / --stable mutex enforced once,
+    # 3-way --pre / --firmware-version / --stable mutex enforced once,
     # post-parse, with a deterministic error message that doesn't depend on
     # the user's option ordering. Raises click.UsageError → exit-2, matching
     # argparse's add_mutually_exclusive_group() contract.
@@ -1246,7 +1244,7 @@ def fw(
             f"--{set_channel_opts[1]}."
         )
 
-    # D-14 narrow UsageError upgrade (was: fw_parser.error in main.py:798).
+    # Narrow UsageError upgrade (was a parser-level error).
     if json_output and not list_releases:
         raise click.UsageError("--json requires --list")
 
@@ -1294,7 +1292,7 @@ def fw(
                 )
         sys.exit(0)
 
-    # D-15: SimpleNamespace adapter for the magic-default helper (zero churn).
+    # SimpleNamespace adapter for the magic-default helper (zero churn).
     pre = _maybe_auto_route_to_pre_click(install, pre, firmware_version, stable)
 
     # Channel resolution for install path.
@@ -1775,8 +1773,7 @@ if _DEV_TOOLS_ENABLED:
 
 
 # ---------------------------------------------------------------------------
-# dev lock-status (Phase 151 / LOCK-02, LOCK-03, LOCK-04 -- D-01, D-04, D-06,
-# D-07, D-08, D-10). D-01 chose a real silicon read exposed only on a
+# dev lock-status. This is a real silicon read, exposed only on a
 # pre-release install, deliberately overruling the host-only recommendation,
 # so this command lives inside the same `_DEV_TOOLS_ENABLED` gate every
 # other bench subcommand above does.
@@ -1801,11 +1798,11 @@ if _DEV_TOOLS_ENABLED:
     @map_typed_errors
     def dev_lock_status(app: AppContext, eprom: str, force: bool) -> None:
         """Diagnostic read of a chip's write-protection state -- not a guarantee (D-01)."""
-        # D-04: resolve through db.get_eprom(), never resolve_chip()'s
+        # Resolve through db.get_eprom(), never resolve_chip()'s
         # programmer dict -- that dict carries neither 'protocol-id' nor
         # 'name', the exact shape protection_gate_for_entry hard-fails on.
         # This is the last place in this handler with both the chip NAME
-        # and app.db, mirroring write()'s own D-04 idiom above.
+        # and app.db, mirroring write()'s own idiom above.
         entry = app.db.get_eprom(eprom)
         if not entry:
             raise ChipNotFoundError(f"{eprom}: not found in database")
@@ -1835,7 +1832,7 @@ if _DEV_TOOLS_ENABLED:
                 eprom, eprom_data, operation_flags=_build_op_flags()
             )
         except EpromOperationError as exc:
-            # D-04, keyed on the message **id**, never on text -- a version
+            # Keyed on the message **id**, never on text -- a version
             # probe cannot work here because _probe_port's [\d.x]+ truncates
             # the pre-release suffix, so it cannot distinguish the beta that
             # has this command from the beta that does not, and would have
@@ -2077,7 +2074,7 @@ if _DEV_TOOLS_ENABLED:
         spec = _load_validation_spec()
         families = _families_for_selection(family, spec)
 
-        # D-06 SKIP-deferred: no port / board / chip / source → record all cells
+        # SKIP-deferred: no port / board / chip / source → record all cells
         # as SKIP-deferred, emit artifact, exit 0.
         port = app.config_manager.get_value("port", None)
         if not port or not board or not chip or not source:
@@ -2459,15 +2456,15 @@ def _resolve_write_scope(
     return "partial"
 
 
-# D-09 (v1.30 Phase 134): the write-pass number backing a real sweep
+# The write-pass number backing a real sweep
 # invariant -- a full ALLOW-shaped run makes 6 write passes over the write
 # region (the shipped write/verify/erase steps write twice, plus this
-# phase's SDP leg's baseline/inhibited/restore writes).
+# the SDP leg's baseline/inhibited/restore writes).
 # `tests/test_dev_test_cmd.py` derives this same number from a live
 # `derive_plan` result and asserts it equals this constant; if that test
 # ever measures a different number, change THIS constant, never the test.
-# (Quick task 260821-spg removed the console notice this constant used to
-# feed; the invariant itself, and this constant, stay.)
+# (The console notice this constant used to feed was removed; the
+# invariant itself, and this constant, stay.)
 _ALWAYS_WRITES_PASS_COUNT = 6
 
 
@@ -2683,7 +2680,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
 
     if not results:
         sys.exit(0)
-    # D-15: the exit floor is ALLOW-only -- `sdp_oracle_applicable(plan)`
+    # The exit floor is ALLOW-only -- `sdp_oracle_applicable(plan)`
     # gates it, so a REFUSE chip's legitimate `NOT-RUN` (the oracle was
     # never applicable) is never floored.
     code = _dev_test_exit_code(

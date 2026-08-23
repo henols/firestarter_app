@@ -514,7 +514,7 @@ class TestDispatchChain:
         # Stub database lookups so dispatch reaches the operator method.
         # get_eprom_config must also be stubbed (Phase 66-05): resolve_chip now calls
         # get_eprom_config FIRST to read support_status before calling convert_to_programmer.
-        # Phase 106-03 (HOST-04): resolve_chip also requires a usable
+        # (HOST-04): resolve_chip also requires a usable
         # programming.algorithm on the same raw record, or it refuses before
         # convert_to_programmer is reached.
         monkeypatch.setattr(
@@ -541,7 +541,7 @@ class TestDispatchChain:
         )
 
         # Inject argv and run main()
-        # Phase 41 / Wave 4 (D-08): main is re-exported as Click's `cli`. Click
+        # (D-08): main is re-exported as Click's `cli`. Click
         # invokes sys.exit(...) at the end of every command, so we catch the
         # SystemExit instead of relying on a return value from main_mod.main().
         argv_saved = sys.argv

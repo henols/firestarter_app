@@ -111,15 +111,15 @@ DFUSE_VERSION = 0x011A  # bcdDFUVersion that marks the ST dialect
 # PY32F071xB memory map (Puya UM1504 + PY32F071xB_FLASH.ld on the firmware
 # branch). Used only as a safety envelope — geometry comes from the device.
 #
-# D-13: `FLASH_SIZE` is the physical part size (128 KiB) — kept verbatim,
+# `FLASH_SIZE` is the physical part size (128 KiB) — kept verbatim,
 # because an existing test writes `FLASH_SIZE + 1` bytes and expects a
 # refusal. It is NOT what `_check_envelope` bounds on. The firmware's own
 # linker script (`platform/py32f071/linker/PY32F071xB_FLASH.ld`) reserves
 # only the bottom 120 KiB (`APP_REGION_SIZE`, ending at `APP_REGION_END`) for
-# the application; the top `CONFIG_REGION_SIZE` (8 KiB, Sector 15) is Phase
-# 126's config-storage reservation (page 256 B / sector 8192 B per
+# the application; the top `CONFIG_REGION_SIZE` (8 KiB, Sector 15) is the
+# config-storage reservation (page 256 B / sector 8192 B per
 # `platform/py32f071/CONFIG-STORAGE.md`). `BOOTLOADER` is currently a
-# zero-length NAMED SEAM at the same origin as `FLASH` — Phase 129 giving it
+# zero-length NAMED SEAM at the same origin as `FLASH` — giving it
 # a length would move the application's ORIGIN, so the *lower* bound of the
 # accepted span would move too, not just `APP_REGION_END`.
 #
@@ -715,12 +715,12 @@ class Py32DfuFlasher:
         # reason the _finish() comment just below does.
         self._verify_readback(interface, base, payload)
 
-        # D-12 / C-5: _finish() leaves DFU mode and lets the device reset off
+        # _finish() leaves DFU mode and lets the device reset off
         # the bus, so it must be the LAST thing flash() does. Both download
         # strategies used to call _finish() themselves, as their own last
         # statement; it is hoisted to this single call site so the ordering
         # is structural rather than a convention a future edit could break.
-        # D-11: a MISMATCH raises inside _verify_readback(), above this line,
+        # A MISMATCH raises inside _verify_readback(), above this line,
         # so a bad image is never manifested -- the device is deliberately
         # left in DFU mode instead of being told to leave and reset.
         self._finish(finish_base, next_block, dfuse=interface.is_dfuse)
@@ -880,7 +880,7 @@ class Py32DfuFlasher:
         branches are ordered this way.
         """
         if not interface.is_dfuse:
-            # D-09: plain DFU 1.1 never tells the host what address it
+            # Plain DFU 1.1 never tells the host what address it
             # loaded the image at, so a readback here could not be compared
             # to anything meaningful. This converts flash()'s existing
             # runtime warning (logged just above, in the plain-DFU branch)

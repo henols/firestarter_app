@@ -100,8 +100,8 @@ _DB_CHECKED_VPP_INVARIANTS: frozenset[str] = frozenset({"configure_flash_intel"}
 # must NOT route to `configure_eprom`. configure_eprom would assert P1_VPP_ENABLE,
 # applying 12V to socket pin 1 — which on the DIP28_2764 pinout is A14 on these
 # 5V parallel EEPROMs (AT28C-family, MICROCHIP 28C*, NEC UPD28C*, XICOR X28C*, etc.).
-# The safe handler is `configure_eeprom28c` (algorithm=0x0D); chips reach it after
-# Plan 02 regenerates the DB with `_PROTOCOL_OVERRIDES` in build_db.py.
+# The safe handler is `configure_eeprom28c` (algorithm=0x0D); chips reach it
+# after regenerating the DB with `_PROTOCOL_OVERRIDES` in build_db.py.
 # See WARNING-5 in .planning/v1.0-MILESTONE-AUDIT.md.
 _28C_EEPROM_HAZARD_PINOUT = "DIP28_2764"
 # "EEPROM" is added alongside "Flash/EEPROM" so that any future chip reclassified
@@ -109,7 +109,7 @@ _28C_EEPROM_HAZARD_PINOUT = "DIP28_2764"
 # is also caught. Use set membership, not == string, for forward-compatibility.
 _28C_EEPROM_HAZARD_ETYPES = {"Flash/EEPROM", "EEPROM"}
 
-# D-10 consistency assertion 2: a chip tagged support_status=protocol-not-implemented
+# Assertion 2: a chip tagged support_status=protocol-not-implemented
 # must genuinely have an unimplemented protocol (i.e. proto NOT in KNOWN_PROTOCOLS).
 # IMPORTANT: this set is the INCLUSION-GATE mirror of build_db.py's KNOWN_PROTOCOLS.
 # It is intentionally a SUBSET of that set: 0x34 (XICOR X88C64P) is in build_db.py's
@@ -147,8 +147,8 @@ def dispatch(protocol, mem_type):
         return "configure_eprom"  # noqa: E701
     if protocol in (0x0E, 0x27, 0x28, 0x29):
         return "configure_sram"  # noqa: E701
-    # Phase-64 mirror: non-zero unrecognized protocol → not_implemented
-    # (In firmware: protocol != 0 guard before the mem_type chain)
+    # Mirrors the firmware: non-zero unrecognized protocol → not_implemented
+    # (protocol != 0 guard before the mem_type chain)
     if protocol != 0:
         return "not_implemented"
     # mem_type fallback chain — protocol == 0 only (backward-compat)
@@ -195,18 +195,18 @@ def main():
     eeprom28c_in_eprom = []
     novpp_in_eprom = []
     wire_regressions = []
-    # D-10 Assertion 1: every non-supported chip must have a non-empty unsupported_reason.
+    # Assertion 1: every non-supported chip must have a non-empty unsupported_reason.
     missing_reason = []
-    # D-10 Assertion 2: a protocol-not-implemented chip must genuinely have an unimplemented
+    # Assertion 2: a protocol-not-implemented chip must genuinely have an unimplemented
     # protocol (proto not in KNOWN_PROTOCOLS — would indicate a DB build bug).
     pni_with_known_proto = []
-    # D-10 Assertion 3: no supported chip resolves to not_implemented (enforced above
+    # Assertion 3: no supported chip resolves to not_implemented (enforced above
     # in the per-chip loop via the reworked not_implemented bucket — no separate list needed).
     # SC#3 / D-03 HARD inverse guard: non-supported chip wired to a real handler is a
     # gate failure. check_dispatch previously only checked the regression direction
     # (supported → not_implemented); this bucket catches the dangerous inverse.
     non_supported_dispatchable = []
-    # Phase 71 HARN-04 / D-09: per-family VPP range violation list.
+    # Per-family VPP range violation list.
     # Populated when a chip's declared vpp_mv falls outside _FAMILY_VPP_INVARIANTS[handler].
     # A non-empty list fails the gate (chip DB declares a VPP the handler must not enable).
     family_vpp_violations: list[str] = []
@@ -241,7 +241,7 @@ def main():
                     mt = 4
             handler = dispatch(proto, mt)
             part = chip.get("part_number", "<unknown>")
-            # D-10 consistency assertions: populate for every chip regardless of handler.
+            # Consistency assertions: populate for every chip regardless of handler.
             chip_ss = chip.get("support_status", "supported")
             if chip_ss != "supported":
                 non_supported_count += 1
@@ -305,7 +305,7 @@ def main():
                 # else: expected — protocol-not-implemented/adapter-required/vpp-exceeds-max
                 # chips correctly route to not_implemented (no handler exists; that is the point).
                 continue  # skip VPP/wire checks — no real handler to evaluate
-            # Phase 71 HARN-04 / D-09: per-family VPP invariant check.
+            # Per-family VPP invariant check.
             # Scope: only handlers in _DB_CHECKED_VPP_INVARIANTS (currently configure_flash_intel).
             # For 5V-only handlers, electrical.vpp_mv encodes the WP-pin voltage (not programming
             # VPP), producing false positives — those invariants are proven via synthetic fixture
@@ -477,16 +477,16 @@ def main():
                 print(f"  ... and {len(non_supported_dispatchable) - 20} more")
         sys.exit(1)
 
-    # WR-03: non_dispatchable_count must equal non_supported_count — every non-supported
+    # non_dispatchable_count must equal non_supported_count — every non-supported
     # chip must be accounted for as non-dispatchable (either via non-handler simulation
-    # outcome or via the D-12 host-guard exemption that covers real-handler simulation
+    # outcome or via the host-guard exemption that covers real-handler simulation
     # outcomes).  A delta indicates a chip fell through neither path.
     assert non_dispatchable_count == non_supported_count, (
         f"{non_supported_count - non_dispatchable_count} non-supported chip(s) not "
         f"counted as non-dispatchable (non_dispatchable={non_dispatchable_count}, "
         f"non_supported={non_supported_count})"
     )
-    # WR-02: assert the list is empty (live count) before printing the PASS line.
+    # Assert the list is empty (live count) before printing the PASS line.
     assert not non_supported_dispatchable, (
         f"non_supported_dispatchable should be empty but has "
         f"{len(non_supported_dispatchable)} entries"

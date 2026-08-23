@@ -91,11 +91,11 @@ from firestarter.database import EpromDatabase
 # ---------------------------------------------------------------------------
 _HERE = Path(__file__).resolve().parent
 _GOLDEN = _HERE / "golden" / "wire_dict_baseline.json"
-# Phase 149 (D-17): the committed expected-delta list on top of the
+# (D-17): the committed expected-delta list on top of the
 # preserved golden -- see this file's module docstring and
 # tests/golden/wire_dict_expected_deltas_149.json's own "meta" block.
 _DELTAS_149 = _HERE / "golden" / "wire_dict_expected_deltas_149.json"
-# Phase 153 (D-153-05, ERASE-03): the second, field-disjoint delta layer --
+# (D-153-05, ERASE-03): the second, field-disjoint delta layer --
 # see this file's module docstring and
 # tests/golden/wire_dict_expected_deltas_153.json's own "meta" block.
 _DELTAS_153 = _HERE / "golden" / "wire_dict_expected_deltas_153.json"

@@ -28,13 +28,13 @@ was retired when this module was authored.
 
 from __future__ import annotations
 
-# Import-set invariant (checked by an AST-based test added in plan 132-03):
+# Import-set invariant (checked by an AST-based test):
 # this module's top-level import set is a subset of
 # {"__future__", "firestarter.exceptions", "firestarter.messages"}, both leaf
 # modules (`exceptions.py` has zero top-level imports; `messages.py` imports
 # only `dataclasses`). In particular, no `click` -- the caller performs the
-# echo, so a `click` dependency here would make this module unusable from
-# Phase 134's report layer, which has no CLI context of its own.
+# echo, so a `click` dependency here would make this module unusable from the
+# report layer, which has no CLI context of its own.
 from firestarter.exceptions import EpromOperationError, FirmwareOutdatedError
 from firestarter.messages import MSG_ERR_UNKNOWN_CMD
 

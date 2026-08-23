@@ -355,7 +355,7 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
         logger.info("No EPROMs to display.")
         return
 
-    # D-01: dynamic Name column width clamped to [13, 20].
+    # Dynamic Name column width clamped to [13, 20].
     # Compute the widest rendered name (including any [!] suffix) across all rows,
     # then clamp to the [13, 20] range.  Names that would exceed 20 chars are
     # truncated to 19 chars + '…' (ellipsis counts toward the 20-char cap).
@@ -383,36 +383,36 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
     for name, ic in zip(rendered_names, eproms_data):
         chip_id_str = f"0x{ic.get('chip-id', 0):04X}" if ic.get("chip-id") else ""
 
-        # D-03: VPP gate mirrors info view — show voltage only when
+        # VPP gate mirrors info view — show voltage only when
         # vpp_mv > 0 AND electrical-type not in {"SRAM", "FRAM"}.
         # Defensive int() coercion matches build_specifications (user-override entries
         # may store vpp_mv as a string).
-        # Phase 84 fm-fram-full: FRAM added alongside SRAM (Pitfall-2 parity gate).
+        # FRAM is gated alongside SRAM (parity gate).
         try:
             _vpp_mv = int(ic.get("vpp_mv", 0) or 0)
         except (TypeError, ValueError):
             _vpp_mv = 0
         _etype = ic.get("electrical-type", "")
         if _etype not in {"SRAM", "FRAM"} and _vpp_mv > 0:
-            # WR-02: parity with the info view is now structural, not two
+            # Parity with the info view is structural, not two
             # hand-mirrored 'N/A' fallbacks — both views call format_mv on the
-            # same already-coerced _vpp_mv, so they cannot diverge (D-03).
+            # same already-coerced _vpp_mv, so they cannot diverge.
             vpp_str = format_mv(_vpp_mv)
         else:
             vpp_str = "-"
 
-        # D-04: Type via the single shared helper (resolve_type_label).
+        # Type via the single shared helper (resolve_type_label).
         type_str = spec_builder.resolve_type_label(
             ic.get("electrical-type"),
             ic.get("protocol-id"),
         )
-        # WR-01: the Type column is a fixed-width 12-char cell. The
+        # The Type column is a fixed-width 12-char cell. The
         # protocol-based fallback in resolve_type_label can return labels of
         # 13-39 chars (e.g. legacy/operator-override entries lacking
         # electrical-type), which would rupture table alignment. Clamp to 12
         # so the column stays aligned. The info view (present_eprom_details)
         # is a free-form line and intentionally shows the full label, so it
-        # is NOT clamped — D-04 parity is about the shared label *source*,
+        # is NOT clamped — parity is about the shared label *source*,
         # not the per-view presentation width.
         type_str_display = type_str[:12]
 

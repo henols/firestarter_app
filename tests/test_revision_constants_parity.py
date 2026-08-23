@@ -138,7 +138,7 @@ from tests.fw_presence import fw_path, requires_fw
 # `fw_path` target below covers both headers (RESEARCH Open Question 1,
 # resolved).
 #
-# Phase 120 Plan 07: FIRMWARE_HEADER now doubles as a SECOND seam beyond the
+# FIRMWARE_HEADER now doubles as a SECOND seam beyond the
 # repo-presence gate above -- it is the fixture-injection point the
 # planted-violation legs below `monkeypatch.setattr` to point the rebuilt
 # gate at a committed fixture under tests/fixtures/ instead of the real,
@@ -164,7 +164,7 @@ def test_revision_byte_values_match_firmware_enum():
 
 
 # ---------------------------------------------------------------------------
-# Phase 120 Plan 07 (HOST-03) — real header-parsing two-way parity gate.
+# (HOST-03) — real header-parsing two-way parity gate.
 # ---------------------------------------------------------------------------
 
 _MISSING = object()

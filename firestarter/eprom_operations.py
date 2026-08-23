@@ -478,10 +478,10 @@ class EpromOperator:
         self.last_firmware_error_message: Optional[str] = None
 
     def _calculate_buffer_size(self) -> int:
-        # CAP-01 (Phase 55): firmware_max_chunk is now populated by the
+        # CAP-01: firmware_max_chunk is populated by the
         # _decode_id_frame MSG_OK_READY ack override in serial_comm.py, not
-        # by parsing the FW identity string (Phase 54 mechanism removed).
-        # Phase 54 D-05 is reversed: when the field is absent (old firmware
+        # by parsing the FW identity string (that mechanism was removed).
+        # Reversal: when the field is absent (old firmware
         # or ack with 0 param bytes), return 512 — the Uno floor, universally
         # safe minimum — instead of raising FirmwareOutdatedError.
         max_chunk = (
@@ -1069,7 +1069,7 @@ class EpromOperator:
 
         REPRO-03 (Phase 26 / Plan 26-01).
         """
-        # D-10 Test 6: reject runs < 2 BEFORE any state-machine invocation
+        # Reject runs < 2 BEFORE any state-machine invocation
         if runs < 2:
             logger.error(
                 f"--runs must be >= 2 (got {runs}); "
@@ -1131,7 +1131,7 @@ class EpromOperator:
                     ) as (cmd_data, _, op_name):
                         if not cmd_data:
                             logger.error(f"Run {i}: failed to set up read operation.")
-                            return 2  # D-05 hardware error
+                            return 2  # hardware error
                         try:
                             with open(run_path, "wb") as fh:
 
@@ -1187,8 +1187,8 @@ class EpromOperator:
             distinct = sorted({r[1] for r in results})
             exit_code = 0 if len(distinct) == 1 else 1
 
-            # Print verdict block (D-04 -- exact substrings pinned by
-            # Phase 29 forward-compat regex test_stdout_verdict_block_format).
+            # Print verdict block -- exact substrings pinned by the
+            # forward-compat regex in test_stdout_verdict_block_format.
             verdict = "PASS" if exit_code == 0 else "FAIL"
             port = (
                 self.config.get_value("port")
@@ -1985,15 +1985,15 @@ class EpromOperator:
                 response_timeout=self._write_block_timeout(),
             )
 
-            # D-15 (Phase 120 / v1.22 HOST-06): when --skip-sdp-unlock was set,
+            # When --skip-sdp-unlock was set,
             # require firmware's MSG_WARN_SDP_UNLOCK_SKIPPED (0x86) ack that it
             # actually honoured the opt-out. An unknown *command* produces a
-            # loud error (D-14, plan 120-08); an unknown *flag bit* produces
+            # loud error; an unknown *flag bit* produces
             # silence — old firmware simply ignores 0x100 and runs the unlock
             # it was told to skip, then reports success. The absence of 0x86
             # is the only signal available, so its absence converts that
             # silent failure into a loud one, using machinery (0x86) that
-            # already shipped in Phase 118 for a different purpose — zero
+            # already shipped for a different purpose — zero
             # firmware change. This check MUST read self.comm.seen_message_ids
             # here, inside the _operation_context `with` block: that block's
             # `finally` calls _disconnect_programmer(), which sets self.comm to
@@ -2004,18 +2004,18 @@ class EpromOperator:
             # the fact, it does not PREVENT. On old firmware the unlock has
             # already been emitted by the time the user is told.
             #
-            # No version floor is used instead (D-16): the host structurally
+            # No version floor is used instead: the host structurally
             # cannot distinguish 3.0.0b11 from a later pre-release because
             # _probe_port's capture regex truncates the suffix, and widening
             # it would touch the ring-fenced transport version-capture path.
             #
-            # Scoped to protocol 0x0D (D-18, plan 120-09's is_protocol_0x0d
+            # Scoped to protocol 0x0D (the is_protocol_0x0d
             # predicate). firmware ONLY reads FLAG_SKIP_SDP_UNLOCK — and only
             # emits MSG_WARN_SDP_UNLOCK_SKIPPED — on protocol-0x0D writes. On
-            # any other protocol the bit is emitted on the wire (D-18
-            # warn-and-proceed, unconditional per D-19) but firmware never
+            # any other protocol the bit is emitted on the wire
+            # (warn-and-proceed, unconditional) but firmware never
             # acts on it and never answers with 0x86, on old AND new firmware
-            # alike — that is not the silent-failure case HOST-06 names, so
+            # alike — that is not the silent-failure case this check names, so
             # requiring the ack there would be a false positive on every
             # non-0x0D --skip-sdp-unlock write.
             #
@@ -2025,7 +2025,7 @@ class EpromOperator:
             # (CLAUDE.md: "the algorithm field carries the upstream
             # protocol_id integer"), NOT under "protocol-id" — that raw-db-row
             # key name belongs to app.db.get_eprom()'s entry, a different
-            # dict cli_handlers.py's own D-18 check reads instead.
+            # dict cli_handlers.py's own protocol check reads instead.
             is_protocol_0x0d = eprom_data_dict.get("algorithm") == SDP_PROTOCOL_ID
             if is_protocol_0x0d and (operation_flags & FLAG_SKIP_SDP_UNLOCK):
                 if MSG_WARN_SDP_UNLOCK_SKIPPED not in self.comm.seen_message_ids:
@@ -2213,12 +2213,12 @@ class EpromOperator:
     def check_eprom_blank(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
     ) -> bool:
-        # D-30: SRAM/FRAM blank-check short-circuit — detect before issuing any
+        # SRAM/FRAM blank-check short-circuit — detect before issuing any
         # firmware command.  configure_sram() leaves a NULL main-op for
         # CMD_BLANK_CHECK, so the firmware emits 0xA4 MSG_ERR_EMPTY_INPUT.
         # SRAM/FRAM are volatile or byte-rewritable; "blank" has no meaningful
         # concept for them.  Short-circuit with a clear message; do NOT touch the
-        # wire protocol or firmware (D-11/D-30 bound).
+        # wire protocol or firmware.
         etype = eprom_data_dict.get("electrical-type", "")
         proto = eprom_data_dict.get("protocol-id", 0)
         if etype in ("SRAM", "FRAM") or proto in self._SRAM_PROTO_IDS:

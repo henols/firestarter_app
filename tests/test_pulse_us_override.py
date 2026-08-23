@@ -259,7 +259,7 @@ def test_absent_flag_leaves_db_pulse(tmp_path, make_comm, fake_serial) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Plan 143-07: the CLI half -- the `--pulse-us` option itself, its
+# the CLI half -- the `--pulse-us` option itself, its
 # `click.IntRange(1, 65535)` bounds (D-15/HOST-05), the mandatory D-17
 # report line, and the write-only scope (D-18). Six `CliRunner` cases.
 # ---------------------------------------------------------------------------

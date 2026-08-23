@@ -106,7 +106,7 @@ _PREDICATE_FUNC_NAME = "is_memory_cmd"
 # them in this predicate would recreate exactly the divergence is_memory_cmd()
 # exists to remove.
 #
-# Phase 151 / LOCK-02 (OD-3) grew this set from eight names to nine, adding
+# This set grew from eight names to nine, adding
 # CMD_LOCK_STATUS -- the protection-status read, a memory command because it
 # is issued through firestarter_get_data, set only by configure_memory().
 _EXPECTED_CMD_NAMES = frozenset(
