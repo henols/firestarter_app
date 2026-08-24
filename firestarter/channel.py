@@ -10,7 +10,7 @@ The channel is derived from the app's own version: a PEP 440 pre-release
 (`3.0.0b13`, `3.0.0rc1`, `2.0.7_dev`) means this build came off `beta`, and a
 final release (`3.0.0`) means it came off `main`. That is the same predicate
 `_maybe_auto_route_to_pre` already uses to decide a beta app should default to
-`--pre` (D-23), so beta-gating adds no new notion of "what channel am I".
+`--pre`, so beta-gating adds no new notion of "what channel am I".
 
 The channel gate itself (`is_prerelease_build`, `is_board_available`,
 `available_boards`) reads nothing from the environment. A channel gate that
@@ -20,7 +20,7 @@ thing, because an unset variable still *defines* the macro. To exercise the
 stable behaviour of the channel gate itself, monkeypatch
 `firestarter.__version__` (unit tests) or install the stable wheel.
 
-`dev_tools_enabled_by_env` (Phase 136 / CHAN-06) is a deliberate, narrow
+`dev_tools_enabled_by_env` is a deliberate, narrow
 exception to that rule, not a contradiction of it: it is a single-purpose
 bench override for `dev` subcommands that would otherwise vanish on a stable
 build, and it is built to fail **closed** rather than open — presence of
@@ -54,7 +54,7 @@ BETA_ONLY_BOARDS: tuple[str, ...] = ("py32f071",)
 # recommendation to expose, only on a pre-release install — bringing the
 # total to 9 and the gated count to seven, up by one). Consulted for the
 # informative-refusal message ONLY, by `_DevGroup.get_command` in
-# `cli_handlers.py` (plan 136-02) — the actual gate is non-registration of
+# `cli_handlers.py` — the actual gate is non-registration of
 # the seven `@dev.command` blocks, not membership in this tuple, so this
 # list existing or not existing changes nothing about whether a command
 # runs; it only changes whether its refusal is informative or Click's own
@@ -150,7 +150,7 @@ def is_dev_tools_enabled() -> bool:
     """True when this build is pre-release, OR the bench override is set.
 
     `is_prerelease_build() or dev_tools_enabled_by_env()` — reusing the
-    existing channel detector rather than writing a second one (D-02).
+    existing channel detector rather than writing a second one.
     `channel.py` has exactly one notion of "what channel am I"; a second,
     independently-derived detector is how two sources of truth drift apart.
 

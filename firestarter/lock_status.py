@@ -1,7 +1,7 @@
 """The response-consuming half of the protection-readability split (LOCK-02,
 LOCK-03, LOCK-04; D-04, D-08, D-09, D-10).
 
-`firestarter/protection_readability.py` (plan 151-02/151-06) is the *pure*
+`firestarter/protection_readability.py` is the *pure*
 half: `protection_gate_for_entry(entry, display_name) -> (gate_token,
 reason)` decides, from the chip database alone, whether a silicon read is
 even permitted -- and its signature accepts no device response, so it is

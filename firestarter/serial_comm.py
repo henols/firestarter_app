@@ -46,7 +46,7 @@ from firestarter.exceptions import (
 # Re-exports for backward compatibility — test_decoder.py imports MAGIC_PREAMBLE,
 # LogMessage, Response, _crc8_ccitt directly from firestarter.serial_comm and must
 # keep passing UNCHANGED (SC#2 / D-07). The canonical definitions now live in
-# frame_parser.py (D-05). _decode_param is also pulled in so _format_message /
+# frame_parser.py. _decode_param is also pulled in so _format_message /
 # _decode_id_frame in this module resolve it via the new leaf.
 from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_decoder.py
     MAGIC_PREAMBLE,
@@ -212,7 +212,7 @@ class SerialCommunicator:
         """Write raw bytes to the serial port and return the byte count written."""
         if not self.is_connected():
             raise SerialError("Not connected.")
-        assert self.connection is not None  # narrow for mypy strict (D-06)
+        assert self.connection is not None  # narrow for mypy strict
         try:
             written_bytes = self.connection.write(data_bytes)
             self.connection.flush()
@@ -232,7 +232,7 @@ class SerialCommunicator:
     def send_json_command(self, command_dict: dict) -> int:
         """Serialise ``command_dict`` as a COBS+CRC8 framed command and send it.
 
-        Frame layout (ADR §4.3, FRAME-05, CRC-01):
+        Frame layout (ADR §4.3):
             COBS(json_bytes + CRC8(json_bytes)) + 0x00
 
         Encode order is LOAD-BEARING: CRC8 is computed over the RAW json_bytes
@@ -249,9 +249,9 @@ class SerialCommunicator:
         body = cobs_encode(json_bytes + bytes([crc]))
         frame = body + b"\x00"
         # PHASE-53 FAULT INJECTION — only active when _fault_inject_outgoing is set.
-        # Production path: attribute is None by default → no-op (T-53-03).
+        # Production path: attribute is None by default → no-op.
         # Hook is set only within fault_inject_cycle / dev fault-inject scope and
-        # cleared after the single corrupted transfer (D-01 / D-02).
+        # cleared after the single corrupted transfer.
         _hook = getattr(self, "_fault_inject_outgoing", None)
         if _hook is not None:
             frame = _hook(frame)
@@ -344,13 +344,13 @@ class SerialCommunicator:
     def _decode_id_frame(self, frame_len: int, body: bytes) -> Optional[LogMessage]:
         """Compatibility wrapper — see codec.decode_id_frame.
 
-        CAP-01 (Phase 55): after decoding, when the message is MSG_OK_READY and
+        CAP-01: after decoding, when the message is MSG_OK_READY and
         the param region is exactly 2 bytes, extract the big-endian u16 and store
         it as firmware_max_chunk (buffer-size advertisement relocated from the FW
         identity string to the operation-setup ack). A plausibility clamp rejects
         values outside [1, 4096] so a hostile/corrupt ack cannot over-size chunks
         (T-55-05 / T-55-06). 0-byte param region (old firmware) leaves
-        firmware_max_chunk unchanged (graceful degradation, T-55-07).
+        firmware_max_chunk unchanged (graceful degradation).
 
         D-15 (Phase 120 / v1.22 HOST-06): every successfully decoded id frame
         has its id recorded into seen_message_ids, regardless of which id it
@@ -360,9 +360,9 @@ class SerialCommunicator:
         id absent from the set — that absence is exactly the signal callers
         such as write_eprom's D-15 check key on. The record is bounded by
         construction: it stores only the decoded id integer (0-255), never
-        anything sized from frame content (T-120-39).
+        anything sized from frame content.
 
-        CAP-03 (HOST-01): a third length-discriminated field, appended AFTER
+        CAP-03: a third length-discriminated field, appended AFTER
         CAP-02's variable-length identity tail, carrying the firmware's
         advertised per-block write-time budget in seconds as a big-endian
         u16. Read at the COMPUTED ver_end offset -- never a fixed index, the
@@ -396,7 +396,7 @@ class SerialCommunicator:
                     # Plausibility clamp: reject values outside [1, 4096].
                     # No real board exceeds the 1024-byte Leonardo buffer; 4096
                     # is a generous ceiling. Values outside this range leave
-                    # firmware_max_chunk unset so the 512 floor applies (T-55-06).
+                    # firmware_max_chunk unset so the 512 floor applies.
                     if 1 <= value <= 4096:
                         self.firmware_max_chunk = value
                 # CAP-02 tail: [hw_revision u8][ver_len u8][ver bytes]. Absent
@@ -432,7 +432,7 @@ class SerialCommunicator:
                                 ">H", params_bytes[ver_end : ver_end + 2]
                             )[0]
                             # Plausibility clamp, mirroring CAP-01's [1, 4096]
-                            # in spirit (T-55-06): a hostile or corrupt ack
+                            # in spirit: a hostile or corrupt ack
                             # must not be able to install an unbounded host
                             # timeout. Values outside this range leave
                             # write_block_budget_s unset so the D-10 fallback
@@ -623,7 +623,7 @@ class SerialCommunicator:
         """Consumes and logs any pending input from the serial buffer."""
         if not self.is_connected():
             return
-        assert self.connection is not None  # narrow for mypy strict (D-06)
+        assert self.connection is not None  # narrow for mypy strict
 
         # Temporarily set a short timeout for the underlying serial read
         original_timeout = self.connection.timeout
@@ -744,7 +744,7 @@ class SerialCommunicator:
     ) -> None:
         """Pure-policy version guard. Raises FirmwareOutdatedError on reject.
 
-        Owns the complete version-guard policy (D-01 / D-03): strips trailing
+        Owns the complete version-guard policy: strips trailing
         alpha suffix (e.g. ``"3.0.0-dev"`` -> ``"3.0.0"``) per RESEARCH §7
         Option A, parses the major version (``ValueError``/``IndexError`` ->
         ``major=0``), refuses pre-v1.2 (``major < 3``) unless ``allow_pre_v12``,
@@ -883,7 +883,7 @@ class SerialCommunicator:
                 communicator.disconnect()
                 return None
 
-            # Version gate. The POLICY is untouched (D-01/D-03) — only its
+            # Version gate. The POLICY is untouched — only its
             # source moved, from the retired probe's "OK: FW: <ver>" text line
             # to the identity field of the ack. Same [\d.x]+ extraction as the
             # old regex performed, so _validate_firmware_version still receives
@@ -1013,7 +1013,7 @@ class SerialCommunicator:
         ``fault_inject_outgoing`` (Phase 53-04 / XACT-02, dev-only) installs an
         outgoing-frame mutation hook on each probed communicator BEFORE the first
         ``send_json_command`` (the setup/handshake command). It defaults to None, so
-        the production path is byte-identical (T-53-03). It exists because a READ's
+        the production path is byte-identical. It exists because a READ's
         MAIN phase emits only plaintext acks (``send_string``) — the setup command
         sent here is the ONLY corruptible host→fw command frame, so the outgoing
         fault MUST be injected at connection time, not after setup.

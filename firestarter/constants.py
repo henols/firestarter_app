@@ -36,7 +36,7 @@ MAX_DATA_CHUNK = BUFFER_SIZE - 2  # 510
 # Command-channel frame size limit — Firmware sync: firestarter.h CMD_FRAME_MAX
 # Largest legitimate JSON command (~422 B) + headroom = 512; equals BUFFER_SIZE.
 # Firmware parity: firestarter.h #define CMD_FRAME_MAX DATA_BUFFER_SIZE
-# per CLAUDE.md constant-parity rule (FRAME-05 / D-06).
+# per CLAUDE.md constant-parity rule.
 CMD_FRAME_MAX = 512
 
 # IN-02 (Phase 98-03/98-05): <=256K (262144 byte) size boundary for 0x08
@@ -73,7 +73,7 @@ COMMAND_DEV_REGISTERS = 8
 # COMMAND_NAMES[cmd] is dereferenced by _setup_operation (eprom_operations.py:329)
 # and again by _operation_context (eprom_operations.py:405) — a missing entry
 # is a KeyError at operation setup, not a cosmetic display gap. Corrected
-# 2026-08-03 (RETIRE-08, D-11): a prior milestone's insertion staled the
+# 2026-08-03: a prior milestone's insertion staled the
 # original 301/377 citation, which is why the corrected form names the
 # function first with the line number alongside, not the number alone. See
 # test_command_names_dereferences_both_sdp_commands in
@@ -154,7 +154,7 @@ FLAG_SKIP_SDP_UNLOCK = 0x100
 # Used by consistency_check_eprom() to emit knob values in per-read JSON commands.
 JSON_KEY_READ_SETTLING_DELAY = "read-settling-delay"
 JSON_KEY_READ_STROBE_US = "read-strobe-us"
-# Per-chip page size wire field (PGSZ-01/PGSZ-03). Emitted by database.py's
+# Per-chip page size wire field. Emitted by database.py's
 # convert_to_programmer only when the DB supplies a page_size (curated or,
 # as of Phase 149, provenance-keyed for upstream-native 0x0D rows) --
 # emit-when-present, mirrors the chip-id pattern. When absent, firmware

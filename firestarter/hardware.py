@@ -40,7 +40,7 @@ class ProgrammerIdentity(NamedTuple):
     human hardware-revision bucket string (ACK #2, `CMD_HW_VERSION`) and the
     raw `"<version>:<board>"` firmware/board tail (ACK #1, set on
     `comm.firmware_identity` during the setup-ack decode). Fields are named
-    so callers read them by name (D-03) -- two `Optional[str]` positionals
+    so callers read them by name -- two `Optional[str]` positionals
     type-check clean when swapped, and a name makes that impossible."""
 
     hw_revision: Optional[str]
@@ -49,13 +49,13 @@ class ProgrammerIdentity(NamedTuple):
 
 def _scrub_identity(raw: Optional[str]) -> Optional[str]:
     """Scrub a raw firmware/board identity string for safe recording and
-    rendering (T-147-01 / T-147-03).
+    rendering.
 
     Keeps only printable ASCII (0x20-0x7E inclusive, so ':', '.', digits and
     letters all survive) and replaces every other character -- U+FFFD from
     serial_comm.py's errors="replace" decode, '\\n', '\\r', any control byte
     -- with a single "?". A partially mangled identity survives with "?" in
-    place of the bad bytes and therefore stays visibly faulty (D-07): a
+    place of the bad bytes and therefore stays visibly faulty: a
     mangled identity is evidence of a transport fault, never silently
     converted to unknown. Truncates to a defensive maximum of 64 characters
     (the firmware caps its tail at 32 in firestarter.cpp, so this is slack,
@@ -166,7 +166,7 @@ class HardwareManager:
         (SAFE-02 clean). Does NOT change get_hardware_revision's existing
         bool contract -- the `dev hw` CLI command depends on that.
 
-        `comm.firmware_identity` is read before `comm.expect_ack()` (D-04):
+        `comm.firmware_identity` is read before `comm.expect_ack()`:
         it is populated by the setup ack that already happened inside
         find_and_connect, and reading it early means the ack-failure branch
         can still return it -- the two values fail independently. A board

@@ -528,7 +528,7 @@ def dfu_device_present() -> bool:
 
 
 class VerifyResult(enum.Enum):
-    """The outcome of the post-write `DFU_UPLOAD` readback verification (D-10).
+    """The outcome of the post-write `DFU_UPLOAD` readback verification.
 
     `flash()` deliberately keeps returning `bool` regardless of which member
     ends up here -- that is a blast-radius choice: widening `flash()`'s
@@ -733,7 +733,7 @@ class Py32DfuFlasher:
 
         Bounded on `APP_REGION_END` (0x0801E000), not the 128 KiB physical
         part size — the top `CONFIG_REGION_SIZE` bytes are the firmware's
-        reserved config storage (D-13) and must never be reachable by an
+        reserved config storage and must never be reachable by an
         installed image, even though DfuSe erase is payload-scoped and a
         legitimate ≤120 KiB image would never touch it anyway.
         """

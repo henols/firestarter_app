@@ -75,7 +75,7 @@ def cobs_encode(payload: bytes) -> bytes:
       254 bytes but does NOT consume an implicit zero (Pitfall 2 /
       254-run phantom-zero edge).
 
-    The output contains no ``0x00`` byte by construction (FRAME-04).
+    The output contains no ``0x00`` byte by construction.
     """
     out = bytearray()
     i = 0

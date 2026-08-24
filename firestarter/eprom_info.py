@@ -348,7 +348,7 @@ def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
       truncated with a trailing ellipsis ('…') that counts toward the 20-char cap.
     - Manufacturer: fixed 17; Pins: fixed 5; Chip ID: fixed 11; Type: fixed 12.
     - VPP: fixed 5 (every voltage string is 5 chars; '-' padded to 5).
-    - Type is sourced from electrical-type via spec_builder.resolve_type_label (D-04).
+    - Type is sourced from electrical-type via spec_builder.resolve_type_label.
     - VPP shown only when vpp_mv > 0 AND electrical-type != 'SRAM' (D-03 parity gate).
     """
     if not eproms_data:

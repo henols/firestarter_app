@@ -131,8 +131,8 @@ def format_mv(mv: int) -> str:
     This is the single definition of the millivolt-to-human render used by every
     display call site (`ic_layout.py`'s `vcc_str`/`vpp_str` and `eprom_info.py`'s
     `vpp_str`). The one-decimal lowercase-`v` format (`f"{mv / 1000:.1f}v"`) is
-    byte-identical to the pre-Phase-148 string-schema output (D-15) — it takes an
-    `int` because the numeric convention is enforced upstream in `_map_data` (D-10)
+    byte-identical to the pre-Phase-148 string-schema output — it takes an
+    `int` because the numeric convention is enforced upstream in `_map_data`
     rather than tolerated here.
     """
     return f"{mv / 1000:.1f}v"
@@ -535,8 +535,8 @@ class EpromDatabase:
             return {}
 
         # vpp_mv is the sole VPP source (integer millivolts from build_db.py) —
-        # the legacy string-schema volts-key fallback is gone (D-16); `_map_data`
-        # always sets `vpp_mv` via direct indexing (D-10).
+        # the legacy string-schema volts-key fallback is gone; `_map_data`
+        # always sets `vpp_mv` via direct indexing.
         vpp_mv = full_eprom_data["vpp_mv"]
 
         # Keys to keep from the full data

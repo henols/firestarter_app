@@ -202,7 +202,7 @@ class FirmwareManager:
             is_ok, msg = comm.expect_ack()
 
             # Firmware emits the legacy text line "OK: FW: <version>:<board>"
-            # (LFW-05). _parse_response_line strips the "OK:" prefix, so the
+            #. _parse_response_line strips the "OK:" prefix, so the
             # payload reaching us here is "FW: <version>:<board>". Strip the
             # secondary "FW:" tag before splitting on the colons.
             payload = None
@@ -287,7 +287,7 @@ class FirmwareManager:
             return False  # Treat as not up-to-date if parsing fails
 
     def _fetch_all_releases(self, max_pages: int = 5) -> list:
-        """Paginate GET /releases via Link: rel="next" headers. Cap at max_pages (D-04).
+        """Paginate GET /releases via Link: rel="next" headers. Cap at max_pages.
 
         Returns a flat list of all release dicts from all pages fetched.
         Logs INFO when the cap is hit so operators know truncation occurred.
@@ -326,8 +326,8 @@ class FirmwareManager:
 
         channel='stable'  → delegates to fetch_latest_release_info (D-15 back-compat shim).
         channel='pre'     → paginates /releases, filters prerelease=True, sorts by PEP 440
-                            descending, takes highest; falls back to stable if none (D-05).
-        channel='pinned'  → fetches /releases/tags/{version} directly (D-09).
+                            descending, takes highest; falls back to stable if none.
+        channel='pinned'  → fetches /releases/tags/{version} directly.
         """  # noqa: E501
         if channel == "stable":
             return self.fetch_latest_release_info(board=board)
@@ -411,7 +411,7 @@ class FirmwareManager:
         Omits draft releases and releases without a board-matching .hex asset.
         Omits releases whose tag_name cannot be parsed by packaging.version.Version.
 
-        channel_filter='all'    → include stable + prerelease (D-13).
+        channel_filter='all'    → include stable + prerelease.
         channel_filter='pre'    → prerelease only.
         channel_filter='stable' → stable only.
 
@@ -449,7 +449,7 @@ class FirmwareManager:
             # Resolve board-matching asset.
             asset_url = _pick_asset(r.get("assets", []), board)
             if not asset_url:
-                continue  # Silently omit releases without the board asset (D-11).
+                continue  # Silently omit releases without the board asset.
 
             out.append(
                 ReleaseInfo(
@@ -761,8 +761,8 @@ class FirmwareManager:
         Returns True if an operation (check or install) was successful in some sense, False on major failure.
 
         channel='stable'  → uses /releases/latest (default, INST-01 non-regression).
-        channel='pre'     → selects highest pre-release (INST-02).
-        channel='pinned'  → uses exact tag from pinned_version (INST-03).
+        channel='pre'     → selects highest pre-release.
+        channel='pinned'  → uses exact tag from pinned_version.
         """  # noqa: E501
         connected_port, current_version, current_board = self.check_current_firmware(
             preferred_port=port_override, flags=flags

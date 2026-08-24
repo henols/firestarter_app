@@ -122,7 +122,7 @@ _FLASH4_PROTOCOL_ID = 5
 # beta firmware (has CAP-02, lacks CAP-03) or a v1.31 build after the CAP-02
 # port but before CAP-03 lands -- NOT a mid-milestone v1.31 build, which
 # cannot connect at all (BF-1). DEFAULT_RESPONSE_TIMEOUT's own value is
-# untouched by this constant (D-12) -- it is imported only to resolve
+# untouched by this constant -- it is imported only to resolve
 # _main_phase_send_data's new response_timeout kwarg below.
 WRITE_BLOCK_TIMEOUT_FALLBACK_S = 120.0
 
@@ -161,7 +161,7 @@ _LOCK_STATUS_RE = re.compile(r"raw=0x([0-9A-Fa-f]{2}) decode=(\d+)")
 def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional[str]:
     """Return a boot-block-locked inference hint string, or None.
 
-    FIX-01b (Phase 94 Plan 03): when a flash4 (protocol 0x05) write fails with
+    FIX-01b: when a flash4 (protocol 0x05) write fails with
     MSG_ERR_FL4_VERIFY_TIMEOUT and the failing address is in the first or last
     16K of the chip, the operator cannot distinguish a silicon boot-block lockout
     from a firmware bug without additional context.  This function returns a
@@ -297,7 +297,7 @@ def _budget_failure_hint_message(response) -> Optional[str]:
             "omit --pulse-us entirely to use this chip's database value."
         )
 
-    # MSG_ERR_MAX_PULSES / MSG_ERR_ENERGY_CAP: the abort disposition (D-21).
+    # MSG_ERR_MAX_PULSES / MSG_ERR_ENERGY_CAP: the abort disposition.
     return (
         "the write aborted at this address: bytes before this block were "
         "already programmed, this block is only partially programmed, and "
@@ -343,7 +343,7 @@ def build_flags(
     # Emitted unconditionally when requested: firmware never reads this bit on
     # a protocol other than 0x0D, so no per-protocol branch belongs in a
     # flag-mapping function. D-18's "warn and proceed" for a non-0x0D chip is
-    # the handler's job (plan 120-09), not this function's.
+    # the handler's job, not this function's.
     if skip_sdp_unlock:
         flags |= FLAG_SKIP_SDP_UNLOCK
 
@@ -602,7 +602,7 @@ class EpromOperator:
 
         ``fault_inject_outgoing`` (Phase 53-04 / XACT-02, dev-only) is forwarded to
         ``find_and_connect`` so the setup command frame can be corrupted at connection
-        time. Default None keeps the production path byte-identical (T-53-03).
+        time. Default None keeps the production path byte-identical.
         """
         command_dict, buffer_size = self._setup_operation(
             eprom_name,
@@ -824,12 +824,12 @@ class EpromOperator:
         """Main phase handler for writing or verifying data.
 
         ``eprom_data_dict`` is forwarded from the write/verify caller so that
-        the boot-block-locked heuristic hint (FIX-01b, Phase 94) can be appended
+        the boot-block-locked heuristic hint (FIX-01b) can be appended
         to MSG_ERR_FL4_VERIFY_TIMEOUT errors when the failing address is in the
         first or last 16K of a flash4 (protocol 0x05) chip.  Passing None (the
         default) keeps behaviour identical to pre-FIX-01b for all other callers.
 
-        ``response_timeout`` (HOST-01 / D-12) is the write-only per-response
+        ``response_timeout`` is the write-only per-response
         wait: ``write_eprom`` passes ``self._write_block_timeout()`` from
         inside its ``_operation_context`` ``with`` block; ``verify_eprom``
         does not pass it at all, so the default of ``None`` (which resolves
@@ -839,7 +839,7 @@ class EpromOperator:
         paragraph above already uses. ``get_response(timeout)`` is an
         already-supported call form (``expect_ack`` uses it); this is the
         ONLY timeout change on the write path -- ``_read_and_parse_lines``
-        and its timeout-reset semantics are untouched (D-13, GATE-1.8d).
+        and its timeout-reset semantics are untouched (GATE-1.8d).
         """
         if not os.path.exists(input_file_path):
             raise EpromOperationError(f"Input file {input_file_path} not found.")
@@ -1201,7 +1201,7 @@ class EpromOperator:
             print(f"Distinct SHAs: {len(distinct)}")
             print(f"Output dir: {output_dir}/")
 
-            # Divergence detail on FAIL (D-04)
+            # Divergence detail on FAIL
             if exit_code == 1:
                 run1_path = output_path / "run_01.bin"
                 run2_path = output_path / "run_02.bin"
@@ -1342,7 +1342,7 @@ class EpromOperator:
                 logger.error(f"Cycle {i}: {e}")
                 return 2
 
-            # (d) Host-side SHA-256 compare against source image (D-06)
+            # (d) Host-side SHA-256 compare against source image
             readback_sha = hashlib.sha256(cycle_path.read_bytes()).hexdigest()
             if readback_sha != source_sha:
                 logger.error(
@@ -1509,7 +1509,7 @@ class EpromOperator:
             corrupted_detail = f"{direction}: {type(e).__name__} (expected): {e}"
 
         # Persist the latency + verdict so the operator can confirm the sub-second
-        # clean error (no 2 s cascade) XACT-02 requires (D-01/D-02).
+        # clean error (no 2 s cascade) XACT-02 requires.
         self._write_fault_inject_log(
             output_path,
             direction,
@@ -1940,14 +1940,14 @@ class EpromOperator:
         # (b) the key ALREADY EXISTS -- database.py's convert_to_programmer
         #     emits "pulse-delay" unconditionally -- so this REPLACES a
         #     value rather than adding a field, which is how "no new wire
-        #     field and no new command" (HOST-04) is satisfied structurally.
+        #     field and no new command" is satisfied structurally.
         # (c) the shallow copy exists so a caller that reuses its programmer
         #     dict for a second chip (e.g. a batch loop) is unaffected.
         # (d) the 1..65535 bound is NOT enforced here -- it is Click's
-        #     IntRange at parse time (plan 143-07, D-15), and the firmware's
+        #     IntRange at parse time, and the firmware's
         #     energy_cap_us-keyed pre-flight refusal (MSG_ERR_PULSE_TOO_WIDE)
         #     is the independent second gate, firing before any high voltage
-        #     is enabled (D-16). No host-side check and no energy_cap_us
+        #     is enabled. No host-side check and no energy_cap_us
         #     mirror belongs here.
         if pulse_us:
             eprom_data_dict = dict(
@@ -2118,7 +2118,7 @@ class EpromOperator:
         """Emit the SDP-disable (unlock) command sequence (cmd 9).
 
         This operation is **payload-free**: firmware leaves ``init``/``end``
-        NULL for CMD_SDP_UNLOCK (Phase 119 LOCK-02 / D-13), so no ``#`` data
+        NULL for CMD_SDP_UNLOCK, so no ``#`` data
         frame is written and there is no host ``DONE`` round-trip. Phase 119's
         correction still applies here: NULL ``init``/``end`` does NOT skip the
         INIT and END frame pairs themselves — both ``_execute_phase("INIT", ...)``
@@ -2166,7 +2166,7 @@ class EpromOperator:
         """Emit the SDP-enable (lock) command sequence (cmd 10).
 
         This operation is **payload-free**: firmware leaves ``init``/``end``
-        NULL for CMD_SDP_LOCK (Phase 119 LOCK-02 / D-13), so no ``#`` data
+        NULL for CMD_SDP_LOCK, so no ``#`` data
         frame is written and there is no host ``DONE`` round-trip. Phase 119's
         correction still applies here: NULL ``init``/``end`` does NOT skip the
         INIT and END frame pairs themselves — both ``_execute_phase("INIT", ...)``
@@ -2287,7 +2287,7 @@ class EpromOperator:
     def _main_phase_capture_lock_status(
         self, progress: ClassProgressHandler, captured: list
     ) -> Optional[str]:
-        """Main-phase handler for `CMD_LOCK_STATUS` (plan 151-11).
+        """Main-phase handler for `CMD_LOCK_STATUS`.
 
         Mirrors `_main_phase_simple` exactly (same MAIN/ERROR/OK handling,
         same unconditional `_handle_progress_response(..., ack_data=True)`
@@ -2357,7 +2357,7 @@ class EpromOperator:
         error to warning -- and this command performs no chip-ID check at
         all, so the bit would have no firmware-visible meaning here.
         `--force` on `dev lock-status` is a host-side-only bypass of the
-        readability table's refusal (D-07); it never reaches the wire on
+        readability table's refusal; it never reaches the wire on
         this command.
         """
         captured: list = [None]

@@ -6,9 +6,9 @@ Permission is hereby granted under MIT license.
 
 Community Chip-Validation Test-Plan Engine (v1.21 Phase 108)
 
-Pure, bench-free compute layer for `firestarter dev test <chip>` (Phase 112):
+Pure, bench-free compute layer for `firestarter dev test <chip>`:
 - `address_fold_byte` / `generate_pattern` / `prepass_images` — an
-  address-derived write/verify pattern (PATT-01, D-01/D-02) that exposes
+  address-derived write/verify pattern that exposes
   stuck/shorted/aliased address lines instead of hiding them behind a fixed
   pattern.
 - `classify_fingerprint` — a four-bucket byte-mismatch classifier (PATT-02,
@@ -58,12 +58,12 @@ from firestarter.exceptions import (
 from firestarter.sdp_capability import sdp_capability  # LEG-01/02's derivation source
 
 # ---------------------------------------------------------------------------
-# Address-derived pattern generator (PATT-01, D-01/D-02)
+# Address-derived pattern generator
 # ---------------------------------------------------------------------------
 
 
 def address_fold_byte(addr: int) -> int:
-    """XOR-fold an absolute address into a single expected byte (D-01).
+    """XOR-fold an absolute address into a single expected byte.
 
     Every address line (A0..A31) contributes to the expected byte via the
     fold, so a stuck/shorted/aliased high address line changes the expected
@@ -74,7 +74,7 @@ def address_fold_byte(addr: int) -> int:
 
 
 def generate_pattern(start: int, length: int) -> bytes:
-    """Region-parameterized address-derived pattern (D-02).
+    """Region-parameterized address-derived pattern.
 
     Derives each byte from its ABSOLUTE address (`start + i`), never from
     the offset alone -- no full-chip assumption is baked in, so this same
@@ -98,7 +98,7 @@ def generate_inhibited_pattern(start: int, length: int) -> bytes:
     -- A and B are guaranteed to differ at every byte by construction, never
     by chance.
 
-    A nonce or timestamp was rejected (D-19): it would break reproducibility
+    A nonce or timestamp was rejected: it would break reproducibility
     (two runs over the same region would no longer agree on B) and re-key
     `dedup_fingerprint` (diagnostic_report.py) on every single run, since
     `StepResult.op`'s hash is stable but this function's OUTPUT is not
@@ -110,7 +110,7 @@ def generate_inhibited_pattern(start: int, length: int) -> bytes:
 
 
 def prepass_images(length: int) -> tuple[bytes, bytes]:
-    """Cheap all-0x00 / all-0xFF pre-pass images (PATT-01).
+    """Cheap all-0x00 / all-0xFF pre-pass images.
 
     A cheap sanity pre-pass before the address-derived pattern: an
     all-0xFF read-back before writing anything is itself evidence of a
@@ -148,17 +148,17 @@ def _diff_offsets(
 
 
 # ---------------------------------------------------------------------------
-# Four-bucket byte-mismatch fingerprint classifier (PATT-02, D-03/D-04)
+# Four-bucket byte-mismatch fingerprint classifier
 # ---------------------------------------------------------------------------
 
-# The four locked outcome labels (D-03) -- never coerce an ambiguous
+# The four locked outcome labels -- never coerce an ambiguous
 # distribution into one of the first three; fall back to indeterminate.
 FP_BLANK_CONTACT = "blank/contact"
 FP_ADDRESS_LINE = "address-line"
 FP_TRANSPORT = "transport"
 FP_INDETERMINATE = "indeterminate"
 
-# Candidate thresholds (Claude's discretion, D-04) -- direction is
+# Candidate thresholds (Claude's discretion) -- direction is
 # HIGH-confidence, exact numbers are tunable/bench-informed later. A wrong
 # number only produces more `indeterminate`, never a false confident label.
 _FF_RATIO_THRESHOLD = 0.98  # blank/contact: >= this fraction of actual == 0xFF
@@ -191,13 +191,13 @@ def classify_fingerprint(
     here applied to expected-pattern-vs-read-back). Never writes a second
     divergence implementation.
 
-    Classification order is LOCKED (D-04):
+    Classification order is LOCKED:
       1. blank/contact  -- cheapest, most common false-PASS source
       2. address-line   -- power-of-two high-bit clustering (needs addr_base
                             to map offsets to ABSOLUTE addresses, Pitfall 3)
       3. transport       -- scattered + non-repeatable across N>=2 runs
       4. indeterminate   -- fallback; NEVER coerce an ambiguous distribution
-                            into a confident label (D-03).
+                            into a confident label.
     """
     cmp_len, diff_offsets, bad_pct, first_offset = _diff_offsets(expected, actual)
     bad = len(diff_offsets)
@@ -268,7 +268,7 @@ def classify_fingerprint(
             evidence=evidence,
         )
 
-    # 4. indeterminate: never coerce an ambiguous distribution (D-03).
+    # 4. indeterminate: never coerce an ambiguous distribution.
     return Fingerprint(
         total=cmp_len,
         bad=bad,
@@ -420,7 +420,7 @@ OP_WRITE_RESTORED = "write-restored"
 # that produces evidence the part was left writable again, on a family
 # whose protection state cannot be read back at all (`sdp_honesty`'s
 # Evidence Ceiling). Dropping it would end every run on `sdp-unlock OK` --
-# an EMISSION claim with nothing behind it (D-06). The leg implemented here
+# an EMISSION claim with nothing behind it. The leg implemented here
 # is SIX steps. Both readings (the inherited four, and the measured six)
 # are recorded in 134-03-SUMMARY.md; this is not a silent widening.
 _SDP_LEG_STEP_ORDER: tuple[str, ...] = (
@@ -433,9 +433,9 @@ _SDP_LEG_STEP_ORDER: tuple[str, ...] = (
 )
 
 # The `write_scope="none"` advisory prose, in the same
-# `'write_scope="none": ... omitted (D-01)'` shape the shipped write/verify/
+# `'write_scope="none": ... omitted'` shape the shipped write/verify/
 # erase `locked_destructive` reasons already use above -- naming the SDP
-# leg's own governing decision (D-18) rather than reusing D-01's tag on a
+# leg's own governing decision rather than reusing D-01's tag on a
 # reason it does not own.
 _SDP_LOCKED_REASON = 'write_scope="none": {op} omitted (D-18)'
 
@@ -451,7 +451,7 @@ REGION_POLICY_FIXED = "fixed"
 REGION_POLICY_FULL_DEVICE = "full-device"
 REGION_POLICY_UV_SLOT = "uv-slot"
 
-# Per-cycle PAYLOAD recipe (D-2), the second axis of the repeat cycle and a
+# Per-cycle PAYLOAD recipe, the second axis of the repeat cycle and a
 # sibling of the region-policy vocabulary above: `region_policy` says WHERE a
 # cycle writes, `cycle_payload` says whether successive cycles write the SAME
 # bytes there. Decided exactly once by `derive_plan` from the same
@@ -486,11 +486,11 @@ class Step:
 
     `supported=False` means the step is NA for this chip (a reason is always
     recorded); `destructive` marks steps that write/erase the part. As of
-    Phase 109 (D-01, SAFE-01) a `destructive=False` call to `derive_plan`
+    Phase 109 a `destructive=False` call to `derive_plan`
     structurally OMITS these steps from `Plan.steps` -- see `Plan.
     locked_destructive` for where they are recorded instead.
 
-    `write_region` (D-02, this plan) is the CONSEQUENCE of `Plan.is_uv`: set
+    `write_region` (this plan) is the CONSEQUENCE of `Plan.is_uv`: set
     once by `derive_plan` as `(start, length)` on both the write step and the
     verify step (a verify's region is definitionally the preceding write's --
     D-07). `None` means "use the engine default region". The WIDTH
@@ -524,7 +524,7 @@ class Step:
     reason: str
     destructive: bool = False
     write_region: tuple[int, int] | None = None
-    # The per-cycle payload recipe (D-2). Set by `derive_plan` on the write
+    # The per-cycle payload recipe. Set by `derive_plan` on the write
     # and verify steps alongside `write_region`/`region_policy`; every other
     # step keeps the `same` default, which is also the pre-cycle behaviour.
     cycle_payload: str = CYCLE_PAYLOAD_SAME
@@ -534,9 +534,9 @@ class Step:
 
 @dataclass
 class Plan:
-    """Ordered, derived test plan for a single chip (SWEEP-01).
+    """Ordered, derived test plan for a single chip.
 
-    `locked_destructive` (D-01, SAFE-01) is an ADVISORY-ONLY field: it
+    `locked_destructive` is an ADVISORY-ONLY field: it
     records the `(op, reason)` of write/erase steps that a `destructive=True`
     call would have added to `steps` but were omitted because the caller
     passed `destructive=False`. `run_plan` MUST NOT iterate this field --
@@ -552,7 +552,7 @@ class Plan:
     `resolve_chip` refuses a step (RESEARCH C-6). Removal is an explicitly
     deferred cleanup, not this phase's work.
 
-    `is_uv` (D-02, this plan) is THE DECISION: whether this chip is a
+    `is_uv` (this plan) is THE DECISION: whether this chip is a
     UV-erasable EPROM, decided EXACTLY ONCE by `derive_plan` from the `full`
     DB dict's `electrical-type` field (the only axis that is both complete
     and exact -- 301 of 301 UV parts, 0 non-UV wrongly included; see
@@ -603,16 +603,16 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     """Derive the ordered op list for `name` strictly from frozen DB fields.
 
     Reads `db.get_eprom(name)` then `db.convert_to_programmer(full)` --
-    NEVER `chip_resolver.resolve_chip` (Pattern 1/2, T-108-06) -- so this
+    NEVER `chip_resolver.resolve_chip` (Pattern 1/2) -- so this
     works even for chips whose `support_status` would make `resolve_chip`
     refuse them. `write_scope` is read ONLY from this call's kwarg -- never
-    from config or environment (SAFE-01).
+    from config or environment.
 
     Three accepted literal values, fail-closed against anything else:
 
     - `"none"` -- write/verify/erase are structurally OMITTED from the
       returned `Plan.steps` and instead recorded as `(op, reason)` tuples on
-      the advisory `Plan.locked_destructive` field (D-01) -- `run_plan` has
+      the advisory `Plan.locked_destructive` field -- `run_plan` has
       no code path to iterate them.
     - `"full"` -- write, verify and erase are real supported steps in that
       order; `locked_destructive` is empty. Quick task 260821-wna: on a
@@ -769,7 +769,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     steps: list[Step] = []
     locked_destructive: list[tuple[str, str]] = []
 
-    # id-check: ALWAYS first (SWEEP-03). Supported only when the chip
+    # id-check: ALWAYS first. Supported only when the chip
     # carries a real (nonzero) chip-id to compare against -- the sentinel
     # value 0 means "no chip-id in DB entry" (Open Question 2 -> NA).
     if chip_id:
@@ -847,10 +847,10 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
 
     # write: always supported, always flagged destructive. When
     # write_scope="none" the step is OMITTED from the executable `steps`
-    # list -- structurally absent, not skipped at exec time (D-01, SAFE-01)
+    # list -- structurally absent, not skipped at exec time
     # -- and recorded on the advisory `locked_destructive` list instead.
     # write_scope="partial" emits `OP_WRITE_PARTIAL` instead of `OP_WRITE`
-    # (D-06, Phase 121 Plan 06) so the partial-vs-full distinction is visible
+    # so the partial-vs-full distinction is visible
     # in the op string itself, everywhere `StepResult.op` is read.
     if write_execute:
         write_op = OP_WRITE_PARTIAL if write_scope == _WRITE_SCOPE_PARTIAL else OP_WRITE
@@ -881,7 +881,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     # something in the plan can leave the device blank, blank-check doubles
     # as that step's own oracle instead of reporting pre-existing chip
     # state. Its write_region equals the write step's -- a verify's region
-    # is definitionally the preceding write's (D-07).
+    # is definitionally the preceding write's.
     if write_execute:
         steps.append(
             Step(
@@ -956,7 +956,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     # erase arm -- no shipped step's index moves (the existing
     # `d_ops.index(OP_VERIFY) < d_ops.index(OP_ERASE)`-shaped comparisons
     # stay true). Derived from `sdp_capability(name, db)` -- the injected
-    # decision source (LEG-01) -- never a re-implemented protocol/pinout
+    # decision source -- never a re-implemented protocol/pinout
     # heuristic; `sdp_capability` is itself fail-closed and count-pinned at
     # 43 ALLOW / 41 REFUSE / 84 total. No new CLI option is introduced by
     # this: `derive_plan`'s signature gains no parameter, so `dev test`
@@ -968,7 +968,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
             # using `leg_region` -- computed by the SAME formula the shipped
             # write arm used before this task (never the new full-device/
             # uv-slot policy; D-D keeps the leg small deliberately). ALLOW
-            # chips are all non-UV (D-17), so `leg_region` is always
+            # chips are all non-UV, so `leg_region` is always
             # `_DEFAULT_REGION` on every reachable run. Policy is always
             # `fixed` here -- the leg is never widened to the full device.
             for sdp_op in _SDP_LEG_STEP_ORDER:
@@ -984,7 +984,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
                 )
         else:
             # REFUSE chip, a real `dev test` run: six NA steps carrying
-            # sdp_capability()'s OWN refusal prose verbatim (LEG-02).
+            # sdp_capability()'s OWN refusal prose verbatim.
             # `run_plan:877-879`'s existing NA path turns each into a
             # `_skip_result(..., verdict=VERDICT_NA)` with NO operator
             # call -- zero new machinery needed for LEG-02.
@@ -1041,7 +1041,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
 
 
 def _top_anchored_or_default(full: dict) -> tuple[int, int]:
-    """Top-anchored high-address window, or the engine default region (D-02).
+    """Top-anchored high-address window, or the engine default region.
 
     Always computes `(mem_size - _UV_WRITE_REGION_LENGTH,
     _UV_WRITE_REGION_LENGTH)` from `full["memory-size"]` when it is large
@@ -1074,7 +1074,7 @@ def _top_anchored_or_default(full: dict) -> tuple[int, int]:
 # dispatches to the existing EpromOperator methods only -- it sets no VPP,
 # builds no wire dict, and passes no --force.
 
-# Verdict vocabulary (SWEEP-02). `MARGINAL` is destructive/verify-only (D-06,
+# Verdict vocabulary. `MARGINAL` is destructive/verify-only (D-06,
 # wired in Task 3) -- never forced onto read-step disagreement.
 VERDICT_OK = "OK"
 VERDICT_BAD = "BAD"
@@ -1082,12 +1082,12 @@ VERDICT_NA = "NA"
 VERDICT_SKIPPED = "SKIPPED"
 VERDICT_MARGINAL = "marginal"
 
-# Ops that mutate the chip -- gated by the id-first destructive_gate (SWEEP-03)
-# and run N>=2 with a `marginal`-on-disagreement policy (SWEEP-04, Task 3).
+# Ops that mutate the chip -- gated by the id-first destructive_gate
+# and run N>=2 with a `marginal`-on-disagreement policy.
 # This is the ONLY live safety use of either frozenset in this module: it is
 # the exact set `run_plan`'s chip-ID destructive gate (`if step.op in
 # _DESTRUCTIVE_OPS and destructive_gate_closed:`) consults before admitting a
-# step. `OP_WRITE_PARTIAL` joins it here (D-06, Phase 121 Plan 06) precisely
+# step. `OP_WRITE_PARTIAL` joins it here precisely
 # because a partial write is still a write -- a write-shaped op absent from
 # this frozenset would write to a misidentified chip ungated by the chip-ID
 # mismatch check, which is a critical-severity correctness bug, not a
@@ -1103,7 +1103,7 @@ VERDICT_MARGINAL = "marginal"
 # 133 this absence is forward-protection for Phase 134 (where the unlock
 # becomes step 4 of the derived leg) -- it is NOT a live Phase 133 path,
 # because this phase derives no SDP step; the unlock here is only reachable
-# via a directly-constructed test Step or the cleanup registry (133-04).
+# via a directly-constructed test Step or the cleanup registry.
 #
 # The four SDP-leg ops (v1.30 Phase 134, LEG-03) join here too: each one
 # mutates the part (a baseline write, the inhibited write, or the restore
@@ -1225,7 +1225,7 @@ _SDP_BASELINE_OPS = frozenset({OP_WRITE_BASELINE_B, OP_WRITE_BASELINE_A})
 # (operator decision 2026-08-04), which SUPERSEDES D-08's own
 # literally-written clause ("sdp-unlock is never attempted because nothing
 # was locked"): that clause was measured-WRONG -- `OP_SDP_UNLOCK` is
-# deliberately ABSENT from `_DESTRUCTIVE_OPS` (LEG-09), so as D-08 was
+# deliberately ABSENT from `_DESTRUCTIVE_OPS`, so as D-08 was
 # literally written the unlock step would RUN and report OK at a part that
 # was never locked (the P-06 emission-claim shape: an emission claim read
 # as a state claim, on a run whose premise -- a lock was emitted -- did not
@@ -1272,7 +1272,7 @@ class StepResult:
     the number of times the underlying operator method was actually invoked
     for this step (1 for single-run steps; N for multi-run destructive/verify
     steps, Task 3). `divergence` carries the read-step byte-level divergence
-    metric (D-06) when the step's `runs` disagreed -- a metric only, never a
+    metric when the step's `runs` disagreed -- a metric only, never a
     verdict flip and never `marginal` (marginal is destructive/verify-only).
     """
 
@@ -1290,7 +1290,7 @@ class StepResult:
     # Deliberately NOT part of `dedup_fingerprint`, which excludes every
     # volatile field so two runs of the same chip still dedup.
     duration_s: float | None = None
-    # The write step's resolved `WriteTarget` (quick task 260821-wna, Task 4)
+    # The write step's resolved `WriteTarget` (quick task 260821-wna)
     # -- additive, `None` on every step that isn't a write, and `None` on a
     # write step that was SKIPPED as saturated/refused (in which case
     # `reason` names why). The verify step INHERITS this value from
@@ -1425,7 +1425,7 @@ class WriteContext:
     target: WriteTarget | None = None
     refusal: str = ""
     # The repeat CYCLE's per-cycle write targets and the index of the cycle
-    # currently executing (D-1). Planned exactly once by
+    # currently executing. Planned exactly once by
     # `_plan_cycle_targets`, before the first cycle, and thereafter READ-ONLY
     # to the dispatch layer -- the same derive-once/read-many discipline
     # `Step.region_policy` already follows. An EMPTY list is the proven no-op
@@ -1479,7 +1479,7 @@ _UNLOCK_CLEANUP_SWALLOWED = (SerialError, HardwareOperationError, EpromOperation
 
 
 # ---------------------------------------------------------------------------
-# The repeat CYCLE (D-1..D-3). Replaces the per-step inner repeat loop for the
+# The repeat CYCLE. Replaces the per-step inner repeat loop for the
 # write-shaped block: `write -> verify -> erase -> blank-check` runs as a UNIT,
 # N times, instead of `write, write, verify, verify, erase, erase, ...`.
 #
@@ -1778,7 +1778,7 @@ def _run_cycle_block(
     gate_closed: bool,
 ) -> list[StepResult]:
     """Run the write-shaped block as a UNIT, `cycles` times, and fold the
-    per-cycle results into one `StepResult` per step (D-1).
+    per-cycle results into one `StepResult` per step.
 
     Returns exactly `len(steps)` results, in the SAME order as `steps`, so
     `run_plan` can splice them in where the block sat and every downstream
@@ -1882,7 +1882,7 @@ def run_plan(
     allow_single_run: bool = False,
     sampler: Any = None,
 ) -> list[StepResult]:
-    """Execute `plan.steps` as independent, non-fatal steps (SWEEP-02).
+    """Execute `plan.steps` as independent, non-fatal steps.
 
     Each supported step re-resolves `plan.name` through `resolve_chip(name,
     db=db)` -- the guard-HONORING execution path (Pattern 2) -- and dispatches
@@ -1891,7 +1891,7 @@ def run_plan(
     write_eprom, verify -> verify_eprom, erase -> erase_eprom). NA steps from
     `derive_plan` are recorded NA WITHOUT any operator call.
 
-    The id-check step runs FIRST (SWEEP-03): a chip-ID mismatch -- `is_ok is
+    The id-check step runs FIRST: a chip-ID mismatch -- `is_ok is
     False` OR the firmware-detected id differing from the DB's expected
     `chip-id` (Pitfall 4) -- closes a `destructive_gate` that every
     destructive step (write/erase) consults BEFORE calling its operator
@@ -1901,7 +1901,7 @@ def run_plan(
 
     One step's `BAD` verdict or raised exception NEVER aborts the remaining
     steps (Pitfall 1) -- each step's body is wrapped in its own try/except.
-    `EpromOperationError` -> `BAD` capturing `err.error_code` (RPT-03); a
+    `EpromOperationError` -> `BAD` capturing `err.error_code`; a
     `resolve_chip` refusal -> `SKIPPED`/`NA` with reason (Pitfall 2).
 
     Destructive/verify steps (write/erase/verify) run `runs` times (default
@@ -1916,11 +1916,11 @@ def run_plan(
     `repeat_policy_tag` so it cannot join an accurate run's dedup group.
     Read-step disagreement across `runs` is
     reported as a byte-level divergence metric only -- NOT a verdict flip,
-    NOT `marginal` (D-06). The write/verify step attaches a `Fingerprint`
+    NOT `marginal`. The write/verify step attaches a `Fingerprint`
     (Task 3, PATT-02 wiring) built from `generate_pattern` vs the read-back,
     with `addr_base` == the write region start (Pitfall 3).
 
-    `sampler` (D-04, Phase 112) is an OPTIONAL opaque callable the caller
+    `sampler` is an OPTIONAL opaque callable the caller
     supplies -- this engine never imports `hardware.py` and stays entirely
     sampler-agnostic. When provided, it is invoked as `sampler("before")`
     immediately before and `sampler("after")` immediately after EACH
@@ -1949,7 +1949,7 @@ def run_plan(
     # Fail-closed repeat-policy guard. `runs < 2` still fails the WHOLE plan
     # for every caller that did not explicitly opt in -- an accidentally
     # mis-wired `runs=1` must never silently cost the marginal detector
-    # (D-05). `allow_single_run=True` (quick task 260822-aq6) is the ONLY way
+    #. `allow_single_run=True` (quick task 260822-aq6) is the ONLY way
     # past it, and `runs < 1` fails regardless: there is no such thing as a
     # zero-run step.
     if runs < 1 or (runs < 2 and not allow_single_run):
@@ -2007,7 +2007,7 @@ def run_plan(
     # still retries it.
     unlock_cleanup: Callable[[], None] | None = None
 
-    # WriteContext (quick task 260821-wna, Task 4): ONE instance for the
+    # WriteContext (quick task 260821-wna): ONE instance for the
     # whole run, created here and passed by reference to every `_run_step`
     # call below. `derive_plan` still decides the REGION and POLICY; this
     # object carries the MASK decision (necessarily execution-time) from
@@ -2020,7 +2020,7 @@ def run_plan(
     # yet, so there is nothing to drain. `results`, `destructive_gate_closed`
     # and `cleanup` are all created BEFORE the `try`. `return results` stays
     # INSIDE the `try`, textually unchanged.
-    # The repeat cycle's index range, computed ONCE from the plan (D-1). The
+    # The repeat cycle's index range, computed ONCE from the plan. The
     # loop below walks by index so the whole block can be handed to
     # `_run_cycle_block` as a unit and skipped over; every step OUTSIDE the
     # block keeps the untouched per-step path, including the SDP leg and the
@@ -2105,7 +2105,7 @@ def run_plan(
                 )
 
             if step.op == OP_SDP_LOCK and result.verdict == VERDICT_OK:
-                # Register the unlock ONLY on a successful lock (D-06):
+                # Register the unlock ONLY on a successful lock:
                 # registering after a failed lock would attempt to unlock a
                 # part that was never locked. Routed through `_run_step`
                 # rather than calling `_dispatch_sdp` directly because
@@ -2161,7 +2161,7 @@ def run_plan(
                 # Sticky by construction (only ever ORed True, never reset
                 # False): a failing `write-baseline-b` followed by a
                 # passing `write-baseline-a` must leave the gate CLOSED,
-                # never reopened (D-08).
+                # never reopened.
                 baseline_gate_closed = (
                     baseline_gate_closed or _baseline_closes_sdp_gate(result)
                 )
@@ -2188,7 +2188,7 @@ def run_plan(
         # this phase (no plan derives an SDP step), so this is LATENT here
         # and would DETONATE in Phase 134.
         #
-        # Each callable gets its OWN narrow `try/except` (D-10) over
+        # Each callable gets its OWN narrow `try/except` over
         # exactly `_UNLOCK_CLEANUP_SWALLOWED`, and the drain CONTINUES past
         # a caught failure rather than stranding the entries behind it in
         # the registry -- never `raise` from this `finally`. An exception
@@ -2209,7 +2209,7 @@ def run_plan(
         # nothing), `exc.add_note()` is 3.11+ against this module's >=3.9
         # floor, and the drain must not touch `results`. The honest
         # residual: a failed unlock is NOT user-visible until Phase 134's
-        # `HELD`/`NOT-RUN` report field (LEG-12).
+        # `HELD`/`NOT-RUN` report field.
         for cleanup_call in cleanup:
             try:
                 cleanup_call()
@@ -2261,7 +2261,7 @@ SDP_HOLD_NOT_RUN = "NOT-RUN"
 
 
 def sdp_oracle_applicable(plan: Plan) -> bool:
-    """`True` iff `plan` carries a RUNNABLE `write-inhibited` entry (LEG-12).
+    """`True` iff `plan` carries a RUNNABLE `write-inhibited` entry.
 
     Derived STRUCTURALLY from the `plan` object the caller already holds --
     never a second call to `sdp_capability`, which would be a second source
@@ -2271,7 +2271,7 @@ def sdp_oracle_applicable(plan: Plan) -> bool:
     `True` when `plan.steps` carries an `OP_WRITE_INHIBITED` `Step` with
     `supported=True` (a real `dev test` run, ALLOW chip), OR when
     `plan.locked_destructive` carries an `OP_WRITE_INHIBITED` `(op, reason)`
-    pair (the `write_scope="none"` ALLOW-chip shape, D-18). `False` for a
+    pair (the `write_scope="none"` ALLOW-chip shape). `False` for a
     REFUSE chip: its `OP_WRITE_INHIBITED` step IS present in `plan.steps`
     (LEG-02's NA path), but with `supported=False` -- the oracle never runs
     for a REFUSE chip, so that presence must not count as "applicable".
@@ -2365,12 +2365,12 @@ def sdp_left_writable(results: list[StepResult]) -> bool:
 # Region used for the write/verify address-derived pattern fingerprint
 # (Task 3, PATT-01/02 wiring). A small fixed region keeps the bench-free
 # engine's write/verify step cheap and matches the region-parameterized
-# generator contract (D-02). This is the NON-UV default region -- Phase 109
-# (PATT-03) owns the UV-EPROM branch below via `_write_region_for`.
+# generator contract. This is the NON-UV default region -- Phase 109
+# owns the UV-EPROM branch below via `_write_region_for`.
 _WRITE_REGION_START = 0
 _WRITE_REGION_LENGTH = 256
 
-# UV-EPROM write-region WIDTH (PATT-03, SC4). This is an ENGINE MODULE
+# UV-EPROM write-region WIDTH (SC4). This is an ENGINE MODULE
 # CONSTANT, never sourced from any DB field -- a malicious/misconfigured DB
 # entry must not be able to widen the write window. `memory-size` is only a
 # top-anchor PLACEMENT bound (where the window sits), never a WIDTH input.
@@ -2384,7 +2384,7 @@ _WRITE_REGION_LENGTH = 256
 # width, which stays a module constant on every path.
 _UV_WRITE_REGION_LENGTH = 256
 
-# The engine default region as a concrete tuple (D-02) -- consumed by
+# The engine default region as a concrete tuple -- consumed by
 # `_top_anchored_or_default` (used by `derive_plan`'s region computation,
 # defined earlier in this module; referenced here at call time only, after
 # module import completes).
@@ -2645,7 +2645,7 @@ class WriteTarget:
     current_source: str
     # The chip content the mask was taken against, kept ONLY so
     # `_plan_cycle_targets` can stage UV tranches out of it without re-probing
-    # the device (D-2). Empty on every unmasked target. Deliberately absent
+    # the device. Empty on every unmasked target. Deliberately absent
     # from `diagnostic_report._step_dict` -- it is working state, not
     # provenance, and a full-device image has no business in a filed issue.
     current: bytes = b""
@@ -2707,7 +2707,7 @@ class WriteTarget:
 
 
 def _write_region_for(step: Step | None, eprom_data: dict[str, Any]) -> tuple[int, int]:
-    """Return the write/verify region `derive_plan` already decided (D-02).
+    """Return the write/verify region `derive_plan` already decided.
 
     This function READS `step.write_region` -- the value `derive_plan` set
     exactly once, from `Plan.is_uv` (`is_uv_eprom(full)`, 301/301 exact) and
@@ -2761,7 +2761,7 @@ def _run_step(
     read as real measured work. `time.monotonic` (never `time.time`) so a
     wall-clock adjustment mid-read cannot produce a negative duration.
 
-    `write_context` (quick task 260821-wna, Task 4) is threaded through
+    `write_context` (quick task 260821-wna) is threaded through
     unchanged to `_run_step_untimed`; `None` is the default (the SDP
     lock/unlock cleanup callable in `run_plan` calls this function without
     one, since neither op is write-shaped).
@@ -2807,8 +2807,8 @@ def _run_step_untimed(
     cli_handlers.py:1568 `dev_validate_family` -- the same
     `resolve_chip(name, db=...)` + operator-method compose pattern used here.
 
-    `sampler` (D-04) is threaded through unchanged to `_dispatch_step`;
-    `None` is the default and a proven no-op. `write_context` (Task 4) is
+    `sampler` is threaded through unchanged to `_dispatch_step`;
+    `None` is the default and a proven no-op. `write_context` is
     likewise threaded through unchanged.
     """
     eprom_data, skip_stub, reason = _resolve_or_none(name, db)
@@ -2896,8 +2896,8 @@ def _dispatch_step(
 
     id -> check_eprom_id (single run, bool/Optional[int]); blank-check ->
     single run; read -> `runs`-times with a byte-level divergence metric
-    (D-06, never a verdict flip); write/verify/erase -> `runs`-times with a
-    marginal-on-disagreement policy (D-05/D-06); write/verify additionally
+    (never a verdict flip); write/verify/erase -> `runs`-times with a
+    marginal-on-disagreement policy; write/verify additionally
     attach a `Fingerprint` (PATT-02 wiring, Pitfall 3 addr_base). SDP
     lock/unlock (v1.30 Phase 133 D-01/D-04, LEG-09) -> single run via
     `_dispatch_sdp`, arm 5. The SDP leg's four write-shaped ops (v1.30 Phase
@@ -2907,7 +2907,7 @@ def _dispatch_step(
     deliberate D-01 narrowing), and passes NO --force -- it only calls the
     operator's existing public methods.
 
-    `sampler` (D-04) is threaded through unchanged to `_dispatch_multi_run`,
+    `sampler` is threaded through unchanged to `_dispatch_multi_run`,
     the only op with a bracket site (OP_WRITE); `None` is the default and a
     proven no-op for every other op. `write_context` (quick task 260821-wna,
     Task 4) is likewise threaded through to `_dispatch_multi_run` ONLY --
@@ -2934,9 +2934,9 @@ def _dispatch_step(
         )
     if step.op == OP_READ:
         return _dispatch_read(name, eprom_data, operator, runs=runs)
-    # write / verify / erase: multi-run marginal policy (D-05/D-06). Dispatch
+    # write / verify / erase: multi-run marginal policy. Dispatch
     # ONLY when `step.op` is on the live `_MULTI_RUN_OPS` allow-list --
-    # anything else refuses fail-closed (121-02, T-121-07). Before this
+    # anything else refuses fail-closed. Before this
     # guard, this `return` was unconditional, so any op string outside
     # {OP_ID, OP_BLANK_CHECK, OP_READ} fell through to
     # `_dispatch_multi_run`'s own terminal `else` and reached
@@ -2960,7 +2960,7 @@ def _dispatch_step(
     # evaluate this membership test at all -- proven mechanically by
     # `tests/test_chip_test_sdp_leg.py::test_shipped_ops_never_reach_sdp_arm`
     # (D-13b's sentinel), not merely asserted. Keys on `_SDP_OPS` membership
-    # of the op string rather than a new `Step.group` field (D-05) -- the op
+    # of the op string rather than a new `Step.group` field -- the op
     # string already carries the distinction, the argument this module
     # itself makes for `write-partial` above. Honest consequence, recorded
     # rather than smoothed over: ROADMAP criterion 4's clause about "an op
@@ -3064,7 +3064,7 @@ def _dispatch_read(
 
 
 def _sample(sampler: Any, phase: str) -> None:
-    """Best-effort sampler invocation (D-04) -- never lets an exception
+    """Best-effort sampler invocation -- never lets an exception
     escape (Pitfall 1 extended to the sampler: it is a diagnostic hook, not
     part of the write contract). No-op when `sampler is None`.
     """
@@ -3077,7 +3077,7 @@ def _sample(sampler: Any, phase: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Execution-time mask/slot/region resolution (quick task 260821-wna, Task 4)
+# Execution-time mask/slot/region resolution (quick task 260821-wna)
 # ---------------------------------------------------------------------------
 
 
@@ -3329,14 +3329,14 @@ def _dispatch_multi_run(
     for write/write-partial/erase; write/write-partial/verify ALSO builds
     the expected address-derived pattern and reads back via
     `operator.verify_eprom`'s outcome plus a fresh `read_eprom` to compute
-    the `Fingerprint` (PATT-02). Disagreement across the N per-run outcomes
+    the `Fingerprint`. Disagreement across the N per-run outcomes
     -> `marginal`, never coerced to a confident OK/BAD (D-06, the AM27C020
     structural case). The write/verify region is READ from `step.
     write_region` via `_write_region_for(step, eprom_data)` (D-02, Phase 121
     Plan 06) -- `derive_plan` already decided it; this function never
     re-derives UV-ness.
 
-    `sampler` (D-04, Phase 112) is invoked as `sampler("before")` /
+    `sampler` is invoked as `sampler("before")` /
     `sampler("after")` tightly bracketing EACH `operator.write_eprom(...)`
     call -- in the `op in (OP_WRITE, OP_WRITE_PARTIAL)` branch (a partial
     write is still a write), never around OP_VERIFY or OP_ERASE, and never
@@ -3391,7 +3391,7 @@ def _dispatch_multi_run(
     expected = b""
 
     if op in (OP_WRITE, OP_WRITE_PARTIAL):
-        # The cycle plan wins when there is one (D-1): `_run_cycle_block`
+        # The cycle plan wins when there is one: `_run_cycle_block`
         # already resolved this cycle's target, so re-resolving here would
         # re-probe the device and could land on a different UV slot than the
         # cycle it belongs to. `None` means no cycle plan applies and the
@@ -3557,12 +3557,12 @@ def _dispatch_sdp(
     `(op: str, name: str, eprom_data: dict[str, Any], operator: Any)` --
     because ROADMAP Phase 134's "Depends on" line names this arm verbatim
     and builds its four-step leg on it. No keyword-only parameters: SDP
-    emissions are single-run (D-03, `_MULTI_RUN_OPS` exclusion above), so
+    emissions are single-run (`_MULTI_RUN_OPS` exclusion above), so
     `runs` and `sampler` are deliberately absent here, not merely omitted by
     oversight.
 
     Structurally clones `_dispatch_multi_run`'s guard -> branch -> terminal
-    `raise AssertionError` shape (D-01) rather than importing/reusing it, so
+    `raise AssertionError` shape rather than importing/reusing it, so
     the module gains no new idiom and criterion 5's deliberate-break test
     gets a single choke point to attack.
     """
@@ -3718,7 +3718,7 @@ def _dispatch_sdp_leg(
 
         # Read back. ⚠ Unlike `_dispatch_multi_run`'s read-back
         # (`:1483-1493`), this read-back is NOT best-effort decoration -- it
-        # IS the verdict (D-05/LEG-05). A failed/degenerate read-back still
+        # IS the verdict. A failed/degenerate read-back still
         # produces a verdict below (BAD via the length gate), it never
         # silently skips the Fingerprint the way the multi-run write/verify
         # step does. Region-scoped via `_read_region` (quick task
@@ -3734,7 +3734,7 @@ def _dispatch_sdp_leg(
         except OSError:
             pass
 
-    # a. LENGTH gate FIRST (D-04, P-02). Measured:
+    # a. LENGTH gate FIRST (P-02). Measured:
     # `classify_fingerprint(A, b"")` returns `total=0, bad=0` -- an empty
     # read-back reads as PERFECT equality, and `_diff_offsets` silently
     # truncates to the common prefix and never raises. This gate runs
@@ -3753,7 +3753,7 @@ def _dispatch_sdp_leg(
             run_count=1,
         )
 
-    # b. CONTENT degeneracy (D-04). Correct length but degenerate content
+    # b. CONTENT degeneracy. Correct length but degenerate content
     # (all-0x00 / all-0xFF) routes through `classify_fingerprint` and lands
     # `marginal` -- a loose socket or blank chip reads as a contact fault,
     # never a confidently-reported chip finding.
@@ -3786,7 +3786,7 @@ def _dispatch_sdp_leg(
             verdict, reason = VERDICT_OK, ""
         elif wrote_ok and not equal:
             # LEG-06, the leg's whole value -- covers both a full change to
-            # B and a PARTIAL change (LEG-07, gh#11's exact symptom).
+            # B and a PARTIAL change (gh#11's exact symptom).
             verdict, reason = (
                 VERDICT_BAD,
                 (
@@ -3861,7 +3861,7 @@ def _dispatch_sdp_leg(
 
 
 # ---------------------------------------------------------------------------
-# Applicable-only N-of-M banner DATA (SWEEP-05, Phase 109 Plan 02)
+# Applicable-only N-of-M banner DATA
 # ---------------------------------------------------------------------------
 #
 # DATA ONLY -- this module emits no print/render/CLI output; rendering the
@@ -3877,7 +3877,7 @@ def _dispatch_sdp_leg(
 # entries on `plan.locked_destructive` (every entry there is, by 109-01's
 # construction, an applicable destructive op a `--destructive` run WOULD
 # execute; NA destructive ops are never placed there) -- derive_plan is
-# NEVER called a second time to compute M (D-01).
+# NEVER called a second time to compute M.
 #
 # N counts the steps THIS run actually executed: any StepResult verdict in
 # {OK, BAD, marginal} counts as "ran" (a ran-but-BAD step still counts,
@@ -3889,7 +3889,7 @@ _RAN_VERDICTS = frozenset({VERDICT_OK, VERDICT_BAD, VERDICT_MARGINAL})
 
 @dataclass
 class BannerCounts:
-    """Applicable-only N-of-M banner DATA (SWEEP-05) -- no rendering here.
+    """Applicable-only N-of-M banner DATA -- no rendering here.
 
     `n_ran` is the number of applicable steps THIS run executed (any
     verdict); `m_applicable` is the number of applicable steps a
@@ -3909,7 +3909,7 @@ def count_applicable(plan: Plan, results: list[StepResult]) -> BannerCounts:
 
     M = `sum(1 for s in plan.steps if s.supported)` PLUS
     `len(plan.locked_destructive)` -- both read off the ONE `plan` object
-    passed in; this function never calls `derive_plan` (D-01/T-109-08).
+    passed in; this function never calls `derive_plan`.
 
     N = count of `results` whose verdict is in {OK, BAD, marginal} (ran);
     NA and SKIPPED results are excluded.

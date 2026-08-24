@@ -212,7 +212,7 @@ class EpromSpecBuilder:
         """
         if protocol_id is not None:
             # 0x35 (ITE EC MCU, 0 DB chips) and 0x39 (phantom, 0 DB chips) removed
-            # in Phase 57 (DEC-05); no DB chip uses either protocol. Firmware still
+            # in Phase 57; no DB chip uses either protocol. Firmware still
             # dispatches both → configure_flash4 for forward-compat (memory.cpp:89);
             # host routes them to not_implemented (excluded from KNOWN_PROTOCOLS).
             if protocol_id in self._PROTOCOL_DISPLAY_NAME:
@@ -540,8 +540,8 @@ class EpromSpecBuilder:
 
         ``electrical_type`` is the raw ``electrical.type`` string from the DB record
         (e.g. ``"EEPROM"``, ``"UV-EPROM"``, ``"Flash/EEPROM"``, ``"SRAM"``).  When
-        provided it is used as the sole source of the Type label (D-01) and the
-        "Can be erased" derivation (D-02).  Pass ``None`` for legacy user-override
+        provided it is used as the sole source of the Type label and the
+        "Can be erased" derivation.  Pass ``None`` for legacy user-override
         entries that do not carry ``electrical.type``.
         """
         if not eprom_data:

@@ -1,4 +1,4 @@
-"""Hand-curated family-level protection-readability table (LOCK-01).
+"""Hand-curated family-level protection-readability table.
 
 (a) This table is hand-curated, and hand-curation is DATA-04-compliant here rather
 than a violation of it, because ``infoic.xml`` was measured and found unable to
@@ -25,7 +25,7 @@ other 529 of 746 rows are algorithm-derivable and appear in no frozenset here �
 they need no curated token at all.
 
 (d) Nothing reads this module at runtime except ``protection_gate_for_entry``
-(plan 151-06, not yet written when this module was authored), and nothing in it
+(not yet written when this module was authored), and nothing in it
 reaches the wire — it is a pure, static, hand-transcribed lookup.
 
 (e) The fail-closed direction: a token present in neither
@@ -78,9 +78,9 @@ from __future__ import annotations
 # copy is precisely the kind of drift this codebase keeps removing. No
 # `click`, no `json`, no `pathlib`, no `firestarter.database`, no
 # `firestarter.sdp_honesty` — the composed refusal *prose* lives one layer up,
-# in `lock_status.py` (plan 151-08+), so `sdp_honesty.py` keeps the caveat
+# in `lock_status.py`, so `sdp_honesty.py` keeps the caveat
 # sentence's single home and this module never depends on it. In this task
-# (151-02) the actual import list is only `__future__` and `typing`; 151-06
+# the actual import list is only `__future__` and `typing`; 151-06
 # adds the `sdp_capability` import when it adds the function that needs it.
 # `Mapping` is imported from `typing` (not `collections.abc`) to keep the
 # invariant literal; ruff's UP035 (prefer collections.abc) is suppressed below
@@ -89,7 +89,7 @@ from __future__ import annotations
 from typing import Any, Mapping  # noqa: UP035
 
 # The one import the declared purity invariant admits beyond {__future__,
-# typing} (plan 151-06): `split_part_number_tokens` is not re-implemented
+# typing}: `split_part_number_tokens` is not re-implemented
 # here because its no-parenthetical-stripping rule
 # (`120-SDP-PARTITION.md` §5) is a measured correctness requirement, and a
 # second copy would be exactly the drift this codebase keeps removing.
@@ -121,14 +121,14 @@ REASON_UNDOCUMENTED_ALIAS = "not documented in lockable-proms.md"
 REASON_READ_PERMITTED = "every alias documented-readable; silicon read permitted"
 
 # A **gate** token, not one of D-09's eight output classes — the CLI never
-# prints this string. `protection_gate_for_entry` (plan 151-06) returns it
+# prints this string. `protection_gate_for_entry` returns it
 # internally to mean "proceed to the silicon read"; `lock_status.py` (plan
 # 151-08+) is the only place D-09's eight class tokens are assembled and
 # emitted.
 GATE_TOKEN_READ_PERMITTED: str = "read_permitted"
 # Four of D-09's eight output classes are reachable from THIS module — never
 # `protected` and never `unprotected`, both of which require a real silicon
-# read and therefore live only in `lock_status.py` (plan 151-11), whose
+# read and therefore live only in `lock_status.py`, whose
 # signature accepts a device response and this module's does not (D-12 leg
 # 4). The literals below are the same class tokens D-09 names; this module
 # only ever hands one of these five (including GATE_TOKEN_READ_PERMITTED
@@ -139,7 +139,7 @@ GATE_TOKEN_NOT_READABLE: str = "not_readable"
 GATE_TOKEN_UNDOCUMENTED_ALIAS: str = "undocumented_alias"
 
 # ---------------------------------------------------------------------------
-# Protocol-id classification (plan 151-06). Every `protocol-id` value the
+# Protocol-id classification. Every `protocol-id` value the
 # chip database carries lands in exactly one of these four frozensets, or
 # `protection_gate_for_entry` raises naming the row — there is no default
 # branch. Counts measured directly against the shipped
@@ -155,7 +155,7 @@ NOT_IMPLEMENTED_PROTOCOL_IDS: frozenset[int] = frozenset({16, 52})
 # VALIDATION.md's earlier figure of 39:
 #   0x10 (16, 39 rows: Intel/AMD/Catalyst/ST) — documented-readable per
 #   `lockable-proms.md`, but this release deliberately does not implement
-#   the read (D-02).
+#   the read.
 #   0x34 (52, 1 row: XICOR/X88C64P,X88C64S) — D-09's seven no-mechanism
 #   algorithms sum to 405, not 406; this row is the 406th and lands in no
 #   class under D-09's prose as written. It carries
@@ -191,7 +191,7 @@ def protection_gate_for_entry(
     `GATE_TOKEN_READ_PERMITTED` — structurally never `protected` or
     `unprotected`, neither of which appears anywhere in this module in any
     quoting style. Those two class tokens require a real silicon read and
-    are assembled only in `lock_status.py` (plan 151-11), whose signature
+    are assembled only in `lock_status.py`, whose signature
     accepts a device response; this function's signature has none, which
     is the mechanism (not a convention) that makes them unreachable here
     (D-12 leg 4).
@@ -554,7 +554,7 @@ DOCUMENTED_NOT_READABLE_TOKENS: frozenset[str] = frozenset(
         # the more-restrictive state by rule. See AMBIGUOUS_DOC_CITATIONS.
         "W29C020",
         # WINBOND -- lockable-proms.md:22 §1 "W29C040 / W29C040P"
-        # Variant-dependent (D-03): the readable part is W29C020C, not this family.
+        # Variant-dependent: the readable part is W29C020C, not this family.
         "W29C040",
         # WINBOND -- lockable-proms.md:23 §1 "W29EE011 / W29EE012"
         # Usually no for SDP, whole device.

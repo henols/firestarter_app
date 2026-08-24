@@ -1,7 +1,7 @@
 """Shared honesty carrier for SDP (Software Data Protection) wording.
 
-Phase 132 (RETIRE-03), D-01/D-02: `firestarter dev sdp` -- the only production
-carrier of the honesty caveat (D-10) and the D-14 unknown-command-to-outdated-
+Phase 132, D-01/D-02: `firestarter dev sdp` -- the only production
+carrier of the honesty caveat and the D-14 unknown-command-to-outdated-
 firmware mapping -- is being retired. Neither piece of wording has anywhere
 else to live: `eprom_operations.py`'s `sdp_lock`/`sdp_unlock` cannot carry the
 caveat because `serial_comm.py`'s `get_response()` filters the entire INFO
@@ -11,7 +11,7 @@ pieces of wording into a shared, standalone production helper authored in
 this phase, so the four honesty tests retarget onto a real SUT instead of a
 scanning gate.
 
-Forward contract (D-02, D-01), updated by Phase 151 (C-4): Phase 134's
+Forward contract, updated by Phase 151 (C-4): Phase 134's
 leg-report rows and the `write --sdp-relock` path (Backlog 999.28) were
 both DEFERRED, not landed, when this module was authored. Phase 151's
 `dev lock-status` is the first forward caller to actually land. Since
@@ -42,7 +42,7 @@ from firestarter.messages import MSG_ERR_UNKNOWN_CMD
 def unreadable_state_caveat() -> str:
     """Return the caveat clause alone, byte-identical to the wording
     formerly composed inline in `cli_handlers.py`'s retired `dev sdp`
-    subcommand (D-10). Exposed separately from `emission_summary` because
+    subcommand. Exposed separately from `emission_summary` because
     Phase 134's report rows need the clause without the emission preamble.
     """
     return (
@@ -54,7 +54,7 @@ def unreadable_state_caveat() -> str:
 def emission_summary(mode: str, chip_name: str) -> str:
     """Return the full single-line summary for an emitted SDP sequence.
 
-    Honest and symmetric on both directions (D-10): the claim is that the
+    Honest and symmetric on both directions: the claim is that the
     sequence was EMITTED, never that the resulting state was verified. No
     duration figure appears here -- this is mechanically enforced, not
     merely a discipline: `get_response()` filters the entire INFO band out
@@ -80,7 +80,7 @@ def map_unknown_cmd_to_outdated(
 
     D-14: an `EpromOperationError` whose `error_code` is
     `MSG_ERR_UNKNOWN_CMD` means the attached firmware predates
-    CMD_SDP_LOCK/CMD_SDP_UNLOCK (Phase 119) and does not recognise this
+    CMD_SDP_LOCK/CMD_SDP_UNLOCK and does not recognise this
     command at all. This exploits the one real asymmetry in the wire surface
     (HOST-06): an unknown COMMAND produces an error and is therefore
     detectable after the fact, whereas an unknown flag BIT produces silence.
@@ -112,7 +112,7 @@ def map_unknown_cmd_to_outdated_for_operation(
     because that function's returned message is byte-identical-pinned at
     multiple call sites and this module's own extension discipline (C-4)
     is strictly additive -- no existing function's signature or wording
-    changes here. `dev lock-status` (D-04) is this sibling's first caller;
+    changes here. `dev lock-status` is this sibling's first caller;
     it is not itself SDP, so wording the message around a caller-supplied
     label rather than a fixed protocol name is the honest generalisation.
 

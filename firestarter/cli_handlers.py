@@ -1,7 +1,7 @@
 """Click-based CLI handlers for firestarter (Phase 41 / v1.8).
 
 This module is the production CLI surface; main.py re-exports ``cli`` as
-``main`` for the ``firestarter`` console-script entry point (D-08, D-16).
+``main`` for the ``firestarter`` console-script entry point.
 The argparse machinery in main.py was deleted in Plan 41-04 (Wave 4).
 
 Commands surfaced from here:
@@ -119,7 +119,7 @@ def _setup_logging(verbose: bool) -> None:
 
 @dataclass
 class AppContext:
-    """Typed DI container threaded through every Click handler via ctx.obj (D-05, D-07).
+    """Typed DI container threaded through every Click handler via ctx.obj.
 
     Constructed once at group entry; pulled by handlers via @click.pass_obj.
     CliRunner tests construct a fresh AppContext per test (mock managers OK).
@@ -162,7 +162,7 @@ _PY32_ENABLED: bool = "py32f071" in _BOARD_CHOICES
 
 
 def _reject_py32_only_option(name: str, given: bool) -> None:
-    """Refuse a py32-only CLI option outside its owning channel (HOST-02 / D-08).
+    """Refuse a py32-only CLI option outside its owning channel.
 
     ``hidden=not _PY32_ENABLED`` on an option's ``@click.option`` decorator is a
     ``--help`` cosmetic only: it keeps the option out of the rendered help text,
@@ -195,7 +195,7 @@ def _reject_py32_only_option(name: str, given: bool) -> None:
 
 
 def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
-    """Map service-layer typed exceptions to ClickException + stable exit codes (D-03)."""
+    """Map service-layer typed exceptions to ClickException + stable exit codes."""
 
     @functools.wraps(f)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -236,7 +236,7 @@ def build_arg_flags(args: object) -> int:
     """Argparse-Namespace/PlainArgs-bag adapter over ``_build_op_flags``.
 
     Relocated verbatim (W1's getattr fix preserved byte-identical) from
-    main.py:504-518 per Phase 41 D-16. This is the bag-introspection form
+    main.py:504-518. This is the bag-introspection form
     used by tests/test_bug_characterization.py to pin the BUG-1 contract
     (PlainArgs object with no ``__contains__`` must not raise TypeError).
 
@@ -274,7 +274,7 @@ def _maybe_auto_route_to_pre(args: object) -> None:
     of the condition — see the comment on the guard below for the two defects
     that gating on it caused.
 
-    Relocated verbatim from main.py:211-249 per Phase 41 D-16. Signature is
+    Relocated verbatim from main.py:211-249. Signature is
     ``(args) -> None`` — NO logger parameter (Phase 18 revision warning #6).
     Uses ``logging.getLogger(__name__)`` internally so pytest's caplog captures
     records automatically by logger name.
@@ -385,13 +385,13 @@ def _build_op_flags(
 class _FirmwareVersionType(click.ParamType):
     """Click ParamType that mirrors main.py:194-208 `_validate_firmware_version`.
 
-    Validates against `FIRMWARE_VERSION_RE` before any network call (D-07);
-    accepts stable (X.Y.Z) and pre-release (X.Y.ZbN, X.Y.ZrcN) forms (D-08).
+    Validates against `FIRMWARE_VERSION_RE` before any network call;
+    accepts stable (X.Y.Z) and pre-release (X.Y.ZbN, X.Y.ZrcN) forms.
     On mismatch, `self.fail(...)` raises `click.BadParameter` which Click
     converts to `SystemExit(2)` — preserves the argparse `ArgumentTypeError`
     → exit-2 contract.
 
-    Custom ParamType subclass picked over a plain option callback per D-13.5
+    Custom ParamType subclass picked over a plain option callback.5
     (Claude's Discretion): more Click-canonical + reusable across
     `--firmware-version` instances if ever added elsewhere.
 
@@ -652,7 +652,7 @@ def write(
     a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip the erase
     (previously implied by ``-b``) for already-blank or non-erasable parts.
 
-    Phase 153 (ERASE-01/ERASE-02): since this phase, ``-b``/``--no-blank-check``
+    Phase 153: since this phase, ``-b``/``--no-blank-check``
     is **unread** on protocols ``0x0D`` and ``0x05`` — neither protocol's write
     path performs a pre-write blank check any more, so the flag is a no-op on
     both families and is not needed to write a non-blank part on either one.
@@ -664,7 +664,7 @@ def write(
     TRAP #6 / D-17/D-18 (v1.22 HOST-02): ``--skip-sdp-unlock`` is exposed
     on ``write`` ONLY — firmware auto-unlocks in ``eeprom28c_write_init`` and
     nowhere else, so ``read``/``verify``/``blank``/``erase`` have nothing to
-    skip and the flag is deliberately absent from all four (D-17). On a
+    skip and the flag is deliberately absent from all four. On a
     non-protocol-0x0D chip the flag has no effect: firmware never reads this
     bit outside protocol 0x0D, so the host warns and proceeds rather than
     refusing or silently dropping the bit — the bit is still emitted so a
@@ -1333,7 +1333,7 @@ def fw(
 
 
 # ---------------------------------------------------------------------------
-# CHAN-01..07 (Phase 136) — dev-tools channel gate. D-01: the gate is BOTH
+# CHAN-01..07 — dev-tools channel gate. D-01: the gate is BOTH
 # mechanisms below, not either. `_DEV_TOOLS_ENABLED` is computed ONCE, at
 # import time, from `channel.is_dev_tools_enabled()` -- mirroring
 # `_PY32_ENABLED` above: a wheel's `__version__` is fixed when it is built, so
@@ -1343,8 +1343,8 @@ def fw(
 # it into a module global here is what freezes the decision). `_DevGroup` is
 # the other half: it holds the six gated NAMES only
 # (`channel.BETA_ONLY_DEV_COMMANDS`), never a callback, and supplies the
-# informative refusal (CHAN-03) for a name that resolves to nothing real.
-# Genuine non-registration (CHAN-02) happens separately, below, at each of the
+# informative refusal for a name that resolves to nothing real.
+# Genuine non-registration happens separately, below, at each of the
 # six gated `@dev.command` blocks, each guarded at module scope by
 # `_DEV_TOOLS_ENABLED`.
 # ---------------------------------------------------------------------------
@@ -1360,7 +1360,7 @@ class _DevGroup(click.Group):
     must not exist as an invokable object in a stable process; that is
     enforced by conditional registration (the `_DEV_TOOLS_ENABLED` guards
     below), not by this class. This class's only job is the informative
-    refusal (CHAN-03): when a gated-but-unregistered name is looked up, raise
+    refusal: when a gated-but-unregistered name is looked up, raise
     a channel-specific `UsageError` instead of letting Click fall through to
     its generic, typo-indistinguishable `No such command %r.` error.
 
@@ -1748,7 +1748,7 @@ if _DEV_TOOLS_ENABLED:
         """Demonstrate COBS resync: inject a corrupted frame and assert recovery on the next.
 
         cycle mode: one corrupted transfer then asserts the same connection recovers on a
-        clean follow-on transfer (XACT-02 / Phase 53 Plan 02).
+        clean follow-on transfer.
 
         latency mode: opens ONE pinned port and times the firmware's per-frame NAK on a
         corrupt CMD_FW_VERSION frame (established connection — avoids the multi-port
@@ -1797,7 +1797,7 @@ if _DEV_TOOLS_ENABLED:
     @click.pass_obj
     @map_typed_errors
     def dev_lock_status(app: AppContext, eprom: str, force: bool) -> None:
-        """Diagnostic read of a chip's write-protection state -- not a guarantee (D-01)."""
+        """Diagnostic read of a chip's write-protection state -- not a guarantee."""
         # Resolve through db.get_eprom(), never resolve_chip()'s
         # programmer dict -- that dict carries neither 'protocol-id' nor
         # 'name', the exact shape protection_gate_for_entry hard-fails on.
@@ -1823,7 +1823,7 @@ if _DEV_TOOLS_ENABLED:
             sys.exit(exit_code_for_class(gate_token))
 
         # Either the table permits the read, or --force is bypassing its
-        # refusal (D-07). Both dicts are needed from here on: get_eprom()
+        # refusal. Both dicts are needed from here on: get_eprom()
         # fed the predicate above; resolve_chip() is what the firmware
         # operation itself needs.
         eprom_data = resolve_chip(eprom, db=app.db)
@@ -1995,7 +1995,7 @@ def _classify_sha_result(
     source_sha: str,
     board: str,
 ) -> Dict[str, Any]:  # noqa: UP006
-    """Classify a post-write SHA comparison result per oracle rules (HARN-03 / D-08).
+    """Classify a post-write SHA comparison result per oracle rules.
 
     Leonardo: authoritative PASS/FAIL.
     Other boards: result is advisory (not a hard FAIL for the cell).
@@ -2053,19 +2053,19 @@ if _DEV_TOOLS_ENABLED:
         source: Optional[str],
         output_dir: Optional[str],
     ) -> None:
-        """Run the per-family validation matrix Tier-3 runner (HARN-01 / D-05).
+        """Run the per-family validation matrix Tier-3 runner.
 
         Composes write_cycle_eprom / consistency_check_eprom (no re-implementation).
-        Emits validation-matrix.{json,md} results artifact (D-02).
+        Emits validation-matrix.{json,md} results artifact.
 
-        SKIP-deferred path (D-06): when no board/chip/source is available, records
+        SKIP-deferred path: when no board/chip/source is available, records
         all Tier-3 cells as SKIP-deferred and exits 0 — milestone stays closeable
         at partial bench coverage.
 
         3-way verdict contract (mirrors dev write-cycle + consistency-check):
             0 = PASS  1 = FAIL  2 = hw-error
 
-        Non-vacuous oracle (HARN-03 / D-08):
+        Non-vacuous oracle:
         - Leonardo is the only authoritative PASS board; other boards are advisory.
         - uno328pb write/program cells are hard N/A (brownout 999.2).
         - r1 ≈ 270000 ±25% precondition aborts before any write cycle.
@@ -2103,7 +2103,7 @@ if _DEV_TOOLS_ENABLED:
             _write_artifact(cells, output_dir)
             sys.exit(0)
 
-        # r1 precondition: abort before any cycle if r1 is out of band (D-08).
+        # r1 precondition: abort before any cycle if r1 is out of band.
         # The r1 value is read from hardware config via the HardwareManager.
         # In Phase 71 (software scaffold), the hardware path is exercised only
         # in Phase 73 with real hardware; here we gate on the operator config.
@@ -2162,7 +2162,7 @@ if _DEV_TOOLS_ENABLED:
             # MUST NOT add a source==source self-comparison call here (vacuous).
             # The real readback compare already happened inside write_cycle_eprom.
             # Preserve board-class semantics via pass_type: "authoritative" on
-            # Leonardo, "advisory" on all other non-uno328pb boards (HARN-03 / D-08).
+            # Leonardo, "advisory" on all other non-uno328pb boards.
             if verdict_int == 0:
                 pass_type = (
                     "authoritative"
@@ -2205,12 +2205,12 @@ if _DEV_TOOLS_ENABLED:
 
 
 # ---------------------------------------------------------------------------
-# `dev test` -- community chip-validation sweep (Phase 112, D-01..D-05)
+# `dev test` -- community chip-validation sweep
 # ---------------------------------------------------------------------------
 
-# Per-verdict -> exit-code mapping (D-01): OK/NA/SKIPPED are exit-clean;
+# Per-verdict -> exit-code mapping: OK/NA/SKIPPED are exit-clean;
 # `marginal` is an inconclusive result (exit 2); BAD beats marginal via
-# EXPLICIT PRECEDENCE (`_overall_exit_code`, D-14), mirroring
+# EXPLICIT PRECEDENCE (`_overall_exit_code`), mirroring
 # dev_validate_family's own `if verdict_int > overall_verdict` pattern
 # (cli_handlers.py:1622-1623).
 #
@@ -2238,7 +2238,7 @@ def _verdict_code(verdict: str) -> int:
     return _VERDICT_EXIT_CODES.get(verdict, 0)
 
 
-# Exit codes ordered MOST-SEVERE-FIRST (D-14). `_overall_exit_code` walks
+# Exit codes ordered MOST-SEVERE-FIRST. `_overall_exit_code` walks
 # this tuple and returns the first code present among a run's per-step
 # codes -- an explicit precedence list, never a numeric `max` (a `max` over
 # {1, 2} incorrectly picks 2, which is exactly the bug this replaces).
@@ -2247,7 +2247,7 @@ _EXIT_CODE_PRECEDENCE: tuple[int, ...] = (1, 2, 0)
 
 def _overall_exit_code(results: list[StepResult]) -> int:
     """The run's overall exit code: the most severe code present, per
-    `_EXIT_CODE_PRECEDENCE` (D-14) -- BAD (exit 1) outranks marginal
+    `_EXIT_CODE_PRECEDENCE` -- BAD (exit 1) outranks marginal
     (exit 2) outranks a clean run (exit 0).
 
     `_verdict_code`'s `.get(verdict, 0)` stays the single vocabulary
@@ -2357,7 +2357,7 @@ def _chip_id_fields(
 
 def _is_interactive() -> bool:
     """TTY check factored into its own function so tests can monkeypatch it
-    directly (D-02) -- `click.testing.CliRunner.invoke` replaces `sys.stdin`
+    directly -- `click.testing.CliRunner.invoke` replaces `sys.stdin`
     with its own stream for the duration of the call, so a test-time
     `patch("sys.stdin.isatty", ...)` applied before `invoke()` does not
     survive; patching `firestarter.cli_handlers._is_interactive` does.
@@ -2443,7 +2443,7 @@ def _resolve_write_scope(
     the prompt is removed: this command already writes unconditionally on
     every other family, the operator deliberately removed the always-writes
     preamble in quick task 260821-spg, and the report now states both the
-    slot actually written and how many slots the part has left (D-9), which
+    slot actually written and how many slots the part has left, which
     is better disclosure than a yes/no that cannot alter the outcome.
 
     `interactive` is retained as a parameter, unused by the branch logic, so
@@ -2479,20 +2479,20 @@ _ALWAYS_WRITES_PASS_COUNT = 6
 # behaviour they described (six write passes, SDP lock applied/released)
 # is unchanged and is still computed and still in the JSON/console table.
 #
-# Takes ZERO options -- CHIP is the only argument (D-05, Phase 121). The
+# Takes ZERO options -- CHIP is the only argument. The
 # four flags this command carried through v1.21 (`--destructive`,
 # `--output-dir`, `-y`/`--yes`, `--submit`) are gone; each now errors as
 # an unknown option.
 #
-# ALWAYS WRITES (D-04): every run writes to the chip, unconditionally. A
-# UV-erasable EPROM is asked first (D-01), and quick task 260821-wna (D-C)
+# ALWAYS WRITES: every run writes to the chip, unconditionally. A
+# UV-erasable EPROM is asked first, and quick task 260821-wna (D-C)
 # changes what the two answers DO: yes permits the whole device to be
 # written IF the chip reads blank, and otherwise writes one masked
 # 256-byte slot (D-A/D-B); no writes one 256-byte slot only,
 # unconditionally -- never read-only or non-destructive either way, and
 # the two answers no longer resolve to the same window on a used chip. Off
 # a TTY the ask is treated as a DECLINED prompt, not absent consent, so a
-# single 256-byte slot is written anyway (D-03). Every OTHER family --
+# single 256-byte slot is written anyway. Every OTHER family --
 # explicitly including this milestone's own AT28C family, an
 # electrically-erasable EEPROM -- is written in full with NO prompt at
 # all, because that write is recoverable via erase (unlike an
@@ -2515,7 +2515,7 @@ _ALWAYS_WRITES_PASS_COUNT = 6
 # not an identity-collection one; shield revision, chip origin and
 # pot-adjustment stay un-asked.
 #
-# Exit code (D-01): 0 if every step is OK/NA/SKIPPED, 2 if any step is
+# Exit code: 0 if every step is OK/NA/SKIPPED, 2 if any step is
 # marginal (and none BAD), 1 if any step is BAD (including a chip-ID
 # mismatch) -- computed as max over per-step exit codes.
 @dev.command(name="test")
@@ -2562,8 +2562,8 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # after every operator call (see 112-02-SUMMARY.md) -- there is no live
     # comm to read programmer_info off of after run_plan returns without
     # opening a new, extraneous connection, which would violate the
-    # orchestrator-only contract (SAFE-02). Both identity values instead
-    # come off the hardware-revision read's OWN connection (D-01): its
+    # orchestrator-only contract. Both identity values instead
+    # come off the hardware-revision read's OWN connection: its
     # find_and_connect triggers the CAP-02 setup ack, which sets
     # comm.firmware_identity before the HARDWARE_REVISION dispatch even
     # runs, so one orchestrator-safe energize/query read (Part A,
@@ -2583,7 +2583,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
         plan=plan,
     )
 
-    # Always built (D-04): every run writes now, so there is no
+    # Always built: every run writes now, so there is no
     # non-destructive mode left that would have no write step to bracket.
     sampler = _make_sampler(app, report)
     # `--fast` (quick task 260822-aq6) is the ONLY caller that opts out of
@@ -2659,7 +2659,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
         # disagree on how an absent value renders or an NA row suppresses.
         # The console needs no equivalent: `DiagnosticReport.render()`
         # already drops every non-`_RAN_VERDICTS` row (including NA)
-        # entirely before it ever reaches a Reason cell (D-3).
+        # entirely before it ever reaches a Reason cell.
         took = submit_duration_text(r.duration_s)
         runs = submit_runs_text(r.run_count)
         reason = submit_reason_text(r.verdict, r.reason)
@@ -2671,7 +2671,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
 
     console.print(f"[dim]Report written to {json_file}[/dim]")
 
-    # Unconditional (DEVTEST-05): every run reaches the filing ask, not only
+    # Unconditional: every run reaches the filing ask, not only
     # an explicit --submit run -- Plan 121-11 owns submit_report's internal
     # dedup-before-ask / ask-anyway-on-failure / comment-on-duplicate logic.
     from firestarter import submit as submit_mod

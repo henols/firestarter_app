@@ -28,7 +28,7 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
     its ``support_status`` is not ``"supported"`` (covers protocol-not-implemented,
     adapter-required, and vpp-exceeds-max).  This guard fires BEFORE any wire dict
     is built or serial byte emitted — the host will not drive hardware for a
-    non-supported chip (D-12 / T-66-01).  The ``info``/``list``/``id`` display
+    non-supported chip.  The ``info``/``list``/``id`` display
     paths bypass ``resolve_chip`` entirely and are unaffected.
 
     The ``db`` parameter is a dependency-injection seam: tests pass
@@ -48,7 +48,7 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
     if raw_config is None:
         raise ChipNotFoundError(name)
 
-    # Support-status guard (D-12 / T-66-01): refuse every program-capable operation
+    # Support-status guard: refuse every program-capable operation
     # for non-supported chips BEFORE convert_to_programmer builds any wire dict.
     # Driven by support_status, not the incidental electrical.type string.
     support_status = raw_config.get("support_status", "supported")
@@ -56,12 +56,12 @@ def resolve_chip(name: str, db: EpromDatabase | None = None) -> dict[str, Any]:
         reason = raw_config.get("unsupported_reason", "unsupported on this hardware")
         raise ChipNotImplementedError(f"{name}: {reason}")
 
-    # Algorithm-presence guard (HOST-04 / D-01 / D-02): mirrors the firmware's
-    # fail-closed protocol==0 -> 0xBB dispatch refusal (Phase 105). A chip entry
+    # Algorithm-presence guard: mirrors the firmware's
+    # fail-closed protocol==0 -> 0xBB dispatch refusal. A chip entry
     # (built-in or user-override) whose programming.algorithm is absent or 0 has
     # no usable protocol to dispatch on and must be refused here, BEFORE
     # convert_to_programmer builds any wire dict or a serial byte is sent. A
-    # non-zero-but-unknown algorithm is deliberately NOT refused here (D-01) —
+    # non-zero-but-unknown algorithm is deliberately NOT refused here —
     # it falls through to the firmware's own fail-closed dispatch.
     algorithm = raw_config.get("programming", {}).get("algorithm", 0)
     if not algorithm:

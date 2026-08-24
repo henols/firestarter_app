@@ -46,7 +46,7 @@ logger = logging.getLogger("Codec")
 _REVISION_SILKSCREEN = {
     REVISION_0: "Rev 0",
     REVISION_1: "Rev 1",
-    REVISION_2_0: "Rev 2.0-class",  # broad bucket per Phase 34 D-04
+    REVISION_2_0: "Rev 2.0-class",  # broad bucket
     REVISION_2_1: "Rev 2.1 (override)",
     REVISION_2_2: "Rev 2.2 (override)",
     REVISION_2_3: "Rev 2.3",
@@ -253,7 +253,7 @@ def decode_id_frame(frame_len: int, body: bytes) -> Optional[LogMessage]:
     if text is None:
         # Generic render via the catalog format string. Format errors fall
         # back to a tagged placeholder so the read loop continues yielding
-        # subsequent frames (T-06-12).
+        # subsequent frames.
         # Filter out raw-bytes values (bytes-type params, e.g. MSG_DATA_CHUNK)
         # before printf-style substitution — they have no corresponding %
         # specifier in the format string.
