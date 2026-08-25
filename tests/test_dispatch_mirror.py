@@ -246,7 +246,9 @@ def test_dispatch_mirror_firmware_leg_enumerates_all_protocols() -> None:
 
 _FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures"
 _FIXTURE_DISPATCH_MISSING_HEX = _FIXTURES_DIR / "planted_dispatch_missing_hex.cpp"
-_FIXTURE_DISPATCH_COMMENT_ONLY_HEX = _FIXTURES_DIR / "planted_dispatch_comment_only_hex.cpp"
+_FIXTURE_DISPATCH_COMMENT_ONLY_HEX = (
+    _FIXTURES_DIR / "planted_dispatch_comment_only_hex.cpp"
+)
 
 
 def _git_hash_object(path: pathlib.Path) -> str:
@@ -320,7 +322,9 @@ def test_planted_missing_hex_is_detected(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 @requires_fw
-def test_planted_comment_only_hex_is_NOT_detected(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_planted_comment_only_hex_is_NOT_detected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """SWEEP-07 fail-OPEN control -- the finding, not a bug to fix.
 
     `planted_dispatch_comment_only_hex.cpp` carries the SAME rewrite as the

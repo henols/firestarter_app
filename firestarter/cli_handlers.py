@@ -592,35 +592,64 @@ def write(
 ) -> None:
     """Writes a binary file to an EPROM.
 
-    `--no-blank-check` uses `is_flag=True, flag_value=False, default=True`, so
-    passing `-b` flips `blank_check` to False. The `erase` command carries the
-    inverse `--blank-check` polarity; both coexist deliberately.
+    TRAP #3 / D-13.3: ``--no-blank-check`` uses
+    ``is_flag=True, flag_value=False, default=True`` so the presence of ``-b``
+    flips ``blank_check`` to False (mirrors argparse ``store_false default=True``).
+    The inverse ``--blank-check`` polarity lives on the ``erase`` command —
+    both polarities coexist verbatim per the rationale lock.
 
-    `-b` skips ONLY the blank check -- the pre-write erase still runs for
-    electrically-erasable chips, so `write -b` on a non-blank flash/EEPROM
-    works. Use `--skip-erase` to also skip the erase. On protocols 0x0D and
-    0x05 the flag is UNREAD: neither write path performs a pre-write blank
-    check any more.
+    Phase 92 decouple: ``-b`` now skips ONLY the blank check. The pre-write erase
+    still runs for electrically-erasable chips (FLAG_CAN_ERASE) so ``write -b`` on
+    a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip the erase
+    (previously implied by ``-b``) for already-blank or non-erasable parts.
 
-    `--skip-sdp-unlock` is exposed on `write` ONLY -- firmware auto-unlocks in
-    the 0x0D write init and nowhere else, so read/verify/blank/erase have
-    nothing to skip. On a non-0x0D chip the bit has no effect; the host warns
-    and still emits it, so a blanket-flag script across a mixed batch produces
-    identical wire frames. The host may also set the bit ITSELF when the
-    resolved chip is 0x0D and capability-refused -- that always prints a
-    default-visible report line.
+    Phase 153 (ERASE-01/ERASE-02): since this phase, ``-b``/``--no-blank-check``
+    is **unread** on protocols ``0x0D`` and ``0x05`` — neither protocol's write
+    path performs a pre-write blank check any more, so the flag is a no-op on
+    both families and is not needed to write a non-blank part on either one.
+    The flag remains live, with its Phase 92 meaning above, on every other
+    protocol. This does not change the paragraph above: the erase/blank-check
+    decoupling it describes still governs whichever protocols still read the
+    flag.
 
-    `--pulse-us` overrides the database program-pulse width for this run only.
-    It rides the existing pulse-delay wire key -- no new command, no new field.
-    Bounds are enforced by click.IntRange at PARSE time, exit 2. Nothing in the
-    group callback or AppContext construction opens a serial port, so a
-    parse-time refusal is structurally before any serial byte is sent. A value
-    in 50001..65535 is host-legal but firmware-refused on protocol 0x0B, before
-    any high voltage is enabled; the host deliberately does not mirror that
-    table value to pre-empt it. Using the flag ALWAYS prints a report line
-    naming the database pulse it replaced -- a bench artifact captured without
-    the command line beside it cannot otherwise tell you the pulse was not the
-    database's. `write` only, for the same reason as --skip-sdp-unlock.
+    TRAP #6 / D-17/D-18 (v1.22 HOST-02): ``--skip-sdp-unlock`` is exposed
+    on ``write`` ONLY — firmware auto-unlocks in ``eeprom28c_write_init`` and
+    nowhere else, so ``read``/``verify``/``blank``/``erase`` have nothing to
+    skip and the flag is deliberately absent from all four (D-17). On a
+    non-protocol-0x0D chip the flag has no effect: firmware never reads this
+    bit outside protocol 0x0D, so the host warns and proceeds rather than
+    refusing or silently dropping the bit — the bit is still emitted so a
+    blanket-flag script across a mixed batch produces identical wire frames
+    (D-18). The host may also set this bit **on its own**, without the user
+    passing it, when the resolved chip is protocol-0x0D and capability-refused
+    (``firestarter.sdp_capability``) — see the D-04 auto-set block below,
+    which always prints a mandatory, default-visible report line when it
+    fires.
+
+    TRAP #7 / D-14..D-18 (v1.31 HOST-04/HOST-05): ``--pulse-us`` overrides
+    the database program-pulse width for this run only. D-14: it rides the
+    existing ``"pulse-delay"`` wire key (``write_eprom``'s own ``pulse_us``
+    parameter, plan 143-04's transport half) — no new command, no new wire
+    field. D-15: bounds are enforced by the option's own
+    ``click.IntRange(1, 65535)``, which refuses out of range at Click PARSE
+    TIME, exit 2. The guarantee this gives HOST-05 ("before any serial byte
+    is sent") is NOT "before ``AppContext`` builds" — ``cli()``'s group
+    callback runs first, before this command's own parameters are even
+    type-converted — the guarantee is that NOTHING in ``cli()`` or
+    ``AppContext`` construction opens a serial port, so a parse-time refusal
+    is still structurally before any serial byte. D-16: a value in
+    ``50001..65535`` is host-legal but firmware-refused on protocol ``0x0B``
+    only (``configure_eprom``'s ``energy_cap_us``-keyed pre-flight check,
+    ``MSG_ERR_PULSE_TOO_WIDE``) before any high voltage is enabled — the host
+    deliberately mirrors no table value to pre-empt it (that would require
+    duplicating ``energy_cap_us`` host-side). D-17: using the flag ALWAYS
+    prints a default-visible report line (see below) naming both the
+    database pulse replaced and the override — provenance, because a bench
+    artifact or log captured without the command line beside it cannot
+    otherwise tell you the pulse was not the database's. D-18: the flag
+    exists on ``write`` ONLY, mirroring the reasoning above for
+    ``--skip-sdp-unlock`` — ``read``/``verify``/``blank``/``erase`` emit no
+    program pulse, so there is nothing to override.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
 
@@ -831,17 +860,21 @@ def erase(
 ) -> None:
     """Erase an EPROM, if supported.
 
-    This command keeps the INVERSE `--blank-check` polarity (flag, default
-    False) -- opposite of `write`'s `--no-blank-check`. Both coexist
-    deliberately.
+    TRAP #3 / D-13.3: this command keeps the inverse ``--blank-check`` polarity
+    (``is_flag=True default=False``) — opposite of ``write``'s
+    ``--no-blank-check``. Both polarities coexist verbatim from argparse.
 
-    Unlike write's `-b`, this one requests a blank check performed AFTER the
-    erase, not skipped before it: a naming inversion, not just a default flip.
-    On protocol 0x0D that post-erase check is not wired, so `-b` is a
-    documented no-op there.
+    D-153-04: unlike ``write``'s ``-b``, this command's ``-b``/``--blank-check``
+    requests a blank check performed **after** the erase, not skipped before it
+    — the inverse polarity above is a naming/default inversion, not just a
+    default flip. On protocol ``0x0D`` this post-erase check is not wired (no
+    ``operation_end`` arm was added to the software chip-erase handler), so
+    ``-b`` is a documented no-op there, not a discovered one.
 
-    `-s`/`--sector-address` exists for the 0x06 sector-erase protocol. The 0x0D
-    software chip erase is device-global by construction and ignores it.
+    D-153-04 (RESEARCH A7): ``-s``/``--sector-address`` exists for the
+    ``0x06`` sector-erase protocol. The ``0x0D`` software chip erase is
+    device-global by construction (the whole part is erased in one AN 0544B
+    sequence) and ignores any sector address given for it.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.erase_eprom(
@@ -1625,7 +1658,7 @@ if _DEV_TOOLS_ENABLED:
         """Demonstrate COBS resync: inject a corrupted frame and assert recovery on the next.
 
         cycle mode: one corrupted transfer then asserts the same connection recovers on a
-        clean follow-on transfer.
+        clean follow-on transfer (XACT-02 / Phase 53 Plan 02).
 
         latency mode: opens ONE pinned port and times the firmware's per-frame NAK on a
         corrupt CMD_FW_VERSION frame (established connection — avoids the multi-port
@@ -1674,7 +1707,7 @@ if _DEV_TOOLS_ENABLED:
     @click.pass_obj
     @map_typed_errors
     def dev_lock_status(app: AppContext, eprom: str, force: bool) -> None:
-        """Diagnostic read of a chip's write-protection state -- not a guarantee."""
+        """Diagnostic read of a chip's write-protection state -- not a guarantee (D-01)."""
         # Resolve through db.get_eprom(), never resolve_chip()'s
         # programmer dict -- that dict carries neither 'protocol-id' nor
         # 'name', the exact shape protection_gate_for_entry hard-fails on.
@@ -1930,19 +1963,23 @@ if _DEV_TOOLS_ENABLED:
         source: Optional[str],
         output_dir: Optional[str],
     ) -> None:
-        """Run the per-family validation matrix Tier-3 runner.
+        """Run the per-family validation matrix Tier-3 runner (HARN-01 / D-05).
 
-        Composes write_cycle_eprom / consistency_check_eprom and emits
-        validation-matrix.{json,md}.
+        Composes write_cycle_eprom / consistency_check_eprom (no re-implementation).
+        Emits validation-matrix.{json,md} results artifact (D-02).
 
-        When no board/chip/source is available it records every Tier-3 cell as
-        SKIP-deferred and exits 0.
+        SKIP-deferred path (D-06): when no board/chip/source is available, records
+        all Tier-3 cells as SKIP-deferred and exits 0 — milestone stays closeable
+        at partial bench coverage.
 
-        Verdicts: 0 PASS, 1 FAIL, 2 hw-error.
+        3-way verdict contract (mirrors dev write-cycle + consistency-check):
+            0 = PASS  1 = FAIL  2 = hw-error
 
-        Leonardo is the only authoritative PASS board; others are advisory.
-        uno328pb write/program cells are hard N/A. An r1 outside ~270000 +/-25%
-        aborts before any write cycle.
+        Non-vacuous oracle (HARN-03 / D-08):
+        - Leonardo is the only authoritative PASS board; other boards are advisory.
+        - uno328pb write/program cells are hard N/A (brownout 999.2).
+        - r1 ≈ 270000 ±25% precondition aborts before any write cycle.
+        - retry_count is captured into each cell.
         """
         spec = _load_validation_spec()
         families = _families_for_selection(family, spec)
@@ -2328,8 +2365,8 @@ _ALWAYS_WRITES_PASS_COUNT = 6
 # electrically-erasable EEPROM -- is written in full with NO prompt at
 # all, because that write is recoverable via erase (unlike an
 # irrecoverable UV write); as of this task that full write now covers the
-# WHOLE DEVICE (minus flash4's two boot blocks) rather than a small region
-#. A large part's full-device pass is therefore several
+# WHOLE DEVICE (minus flash4's two boot blocks) rather than a small region.
+# A large part's full-device pass is therefore several
 # device-length transfers at 250000 baud -- minutes, not seconds. The
 # report is unconditionally persisted to `<config dir>/reports` (honors
 # `FIRESTARTER_CONFIG_DIR`) and is always handed to `submit_report`

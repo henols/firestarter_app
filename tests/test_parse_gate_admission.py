@@ -296,6 +296,8 @@ def test_non_vacuity_control_reports_absence_on_old_gate_only() -> None:
         "pre-Phase-151 ordinal-only gate (no is_memory_cmd disjunct)"
     )
     assert "ABSENT" in observed_message
+
+
 # ---------------------------------------------------------------------------
 # Leg 5: non-vacuity control for leg 2 -- the stated-choice helper must be
 # ABLE to report absence

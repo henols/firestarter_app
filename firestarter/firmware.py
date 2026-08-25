@@ -201,8 +201,8 @@ class FirmwareManager:
             # The firmware then executes the fw_version command and sends a second OK with the payload.  # noqa: E501
             is_ok, msg = comm.expect_ack()
 
-            # Firmware emits the legacy text line "OK: FW: <version>:<board>"
-            #. _parse_response_line strips the "OK:" prefix, so the
+            # Firmware emits the legacy text line "OK: FW: <version>:<board>".
+            # _parse_response_line strips the "OK:" prefix, so the
             # payload reaching us here is "FW: <version>:<board>". Strip the
             # secondary "FW:" tag before splitting on the colons.
             payload = None
