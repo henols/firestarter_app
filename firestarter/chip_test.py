@@ -261,7 +261,6 @@ def classify_fingerprint(
 
 
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 # Plan derivation -- the guard-BYPASSING path.
 #
 # `derive_plan` reads frozen DB fields only. The support-status guard lives
@@ -370,7 +369,7 @@ _SDP_LEG_STEP_ORDER: tuple[str, ...] = (
 # reason it does not own.
 _SDP_LOCKED_REASON = 'write_scope="none": {op} omitted (D-18)'
 
-# Region-policy vocabulary (quick task 260821-wna, D-A..D-F). Plain
+# Region-policy vocabulary. Plain
 # module-level strings mirroring how this module already carries its op
 # vocabulary (OP_* above) -- `Step.region_policy` is set exactly once by
 # `derive_plan` and read-only downstream (`_resolve_write_target`,
@@ -600,7 +599,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
         write_region = _top_anchored_or_default(full)
         region_policy = REGION_POLICY_FIXED
 
-    # The SDP leg's own region (D-D): computed by EXACTLY today's formula
+    # The SDP leg's own region: computed by EXACTLY today's formula
     # (`_DEFAULT_REGION` at full, `_top_anchored_or_default(full)` at
     # partial/none) regardless of the policy decision above. D-D keeps the
     # leg small deliberately: it proves the lock mechanism, not coverage,
@@ -629,7 +628,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     # read / verify: always supported -- every protocol reads.
     steps.append(Step(op=OP_READ, supported=True, reason=""))
 
-    # erase_is_executable (quick task 260807-kaq): the SINGLE boolean deciding
+    # erase_is_executable: the SINGLE boolean deciding
     # whether the supported OP_ERASE Step below actually gets appended --
     # consumed a second time, read-only, by the blank-check placement logic
     # immediately below, so the two decisions can never drift apart. Mirrors
@@ -1012,7 +1011,7 @@ _DESTRUCTIVE_GATE_REASON = (
     "chip-ID mismatch — destructive steps gated (chip left pristine)"
 )
 
-# The SDP leg's own gate-closure reasons (v1.30 Phase 134, D-08/D-20),
+# The SDP leg's own gate-closure reasons,
 # consumed by plan 134-04's baseline gate. Both name the family FACT (the
 # baseline write/read-back transition did not complete; the part is left as
 # found) -- never a mechanism name, and never `_DESTRUCTIVE_GATE_REASON`'s
@@ -1057,7 +1056,7 @@ class StepResult:
     # Deliberately NOT part of `dedup_fingerprint`, which excludes every
     # volatile field so two runs of the same chip still dedup.
     duration_s: float | None = None
-    # The write step's resolved `WriteTarget` (quick task 260821-wna)
+    # The write step's resolved `WriteTarget`
     # -- additive, `None` on every step that isn't a write, and `None` on a
     # write step that was SKIPPED as saturated/refused (in which case
     # `reason` names why). The verify step INHERITS this value from
@@ -1072,14 +1071,14 @@ def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> Ste
 
 
 # The ops whose `StepResult.run_count` is EXACTLY `run_plan`'s `runs` kwarg
-# (quick task 260822-aq6) -- the multi-run destructive/verify set plus the
+# -- the multi-run destructive/verify set plus the
 # read step, which `_dispatch_read` also loops `runs` times. Deliberately
 # NOT every op: `_dispatch_id`, the blank-check arm and all six SDP-leg ops
 # hard-set `run_count=1` BY DESIGN and would otherwise read as a degraded
 # repeat policy on a perfectly normal run.
 _REPEAT_POLICY_OPS = _MULTI_RUN_OPS | {OP_READ}
 
-# The degraded-policy marker (quick task 260822-aq6). Spelled as the kwarg
+# The degraded-policy marker. Spelled as the kwarg
 # value it describes rather than the CLI flag that produces it: `run_plan`
 # owns the policy, `--fast` is merely one caller that asks for it.
 REPEAT_POLICY_DEGRADED_TAG = "runs=1"
@@ -1652,7 +1651,7 @@ def run_plan(
 
     results: list[StepResult] = []
     destructive_gate_closed = False
-    # The SDP baseline gate (v1.30 Phase 134, plan 134-04, D-08/D-20) --
+    # The SDP baseline gate --
     # a SEPARATE flag from `destructive_gate_closed` above, deliberately:
     # the two gates are structurally different mechanisms (chip-ID mismatch
     # vs. a baseline write/read-back transition that did not complete), and
@@ -1662,7 +1661,7 @@ def run_plan(
     # (only ever set True, never reset False) so a failing `write-baseline-b`
     # followed by a passing `write-baseline-a` cannot reopen it.
     baseline_gate_closed = False
-    # Cleanup registry (v1.30 Phase 133 D-06, LEG-10): a plain `list` of
+    # Cleanup registry: a plain `list` of
     # zero-argument callables, deliberately GENERIC rather than a hardcoded
     # lock-to-unlock window with the unlock written inline. The inline form
     # is literally what research P-20 prevention #2 describes and is
@@ -1690,7 +1689,7 @@ def run_plan(
     # still retries it.
     unlock_cleanup: Callable[[], None] | None = None
 
-    # WriteContext (quick task 260821-wna): ONE instance for the
+    # WriteContext: ONE instance for the
     # whole run, created here and passed by reference to every `_run_step`
     # call below. `derive_plan` still decides the REGION and POLICY; this
     # object carries the MASK decision (necessarily execution-time) from
@@ -1741,7 +1740,7 @@ def run_plan(
                 results.append(_skip_result(step.op, _DESTRUCTIVE_GATE_REASON))
                 continue
 
-            # The SDP baseline gate (v1.30 Phase 134, D-08/D-20). Ordered
+            # The SDP baseline gate. Ordered
             # AFTER the chip-ID destructive gate above and BEFORE the
             # dispatch call below -- load-bearing: the chip-ID gate fires
             # first and renders its OWN wording, so a write-path closure is
@@ -2002,7 +2001,7 @@ _WRITE_REGION_LENGTH = 256
 # entry must not be able to widen the write window. `memory-size` is only a
 # top-anchor PLACEMENT bound (where the window sits), never a WIDTH input.
 #
-# AMENDED (quick task 260821-wna, D-B/D-E): this is now specifically the UV
+# AMENDED: this is now specifically the UV
 # SLOT width -- the granularity `uv_slot_starts`/`WriteTarget` operate at --
 # and it is the BOUND D-E requires on the reversal below: `full_device_region`
 # derives a write WIDTH from `memory-size` for the non-UV full-device policy,
@@ -2028,7 +2027,7 @@ _DEFAULT_REGION = (_WRITE_REGION_START, _WRITE_REGION_LENGTH)
 # ---------------------------------------------------------------------------
 
 # Both per-SLOT (not per-byte) thresholds, each 64 of the 2048 bits in a
-# 256-byte slot (D-B, Claude's discretion). The verdict is per-slot, so a
+# 256-byte slot (Claude's discretion). The verdict is per-slot, so a
 # per-byte rule would reject slots that are serviceable in aggregate. A
 # virgin slot offers 1024 clearable and 1024 retained bits (measured: the
 # address-derived pattern's popcount over a 256-byte slot is exactly 1024,
@@ -2081,7 +2080,7 @@ def mask_write_pattern(current: bytes, desired: bytes) -> bytes:
 
 
 def bits_cleared_by(current: bytes, desired: bytes) -> int:
-    """Count bits set in `current` and clear in `desired` (D-B).
+    """Count bits set in `current` and clear in `desired`.
 
     This is how many bits the masked write `mask_write_pattern(current,
     desired)` will actually CLEAR relative to `current` -- the slot-
@@ -2160,7 +2159,7 @@ def uv_tranche_bit_counts(clearable_total: int, cycles: int) -> list[int]:
 
 
 def bits_retained_by(current: bytes, desired: bytes) -> int:
-    """Count bits set in BOTH `current` and `desired` (D-B).
+    """Count bits set in BOTH `current` and `desired`.
 
     Equals `popcount(mask_write_pattern(current, desired))` -- the number of
     `1` bits the masked write leaves behind, which is what makes a
@@ -2176,7 +2175,7 @@ def bits_retained_by(current: bytes, desired: bytes) -> int:
 
 
 def uv_slot_starts(mem_size: int, slot_length: int) -> list[int]:
-    """Top-down ordered candidate UV slot starts (D-B).
+    """Top-down ordered candidate UV slot starts.
 
     Top-down is deliberate: it preserves the existing top-anchored
     convention (`_top_anchored_or_default`) and leaves the low address space
@@ -2377,7 +2376,7 @@ def _run_step(
     read as real measured work. `time.monotonic` (never `time.time`) so a
     wall-clock adjustment mid-read cannot produce a negative duration.
 
-    `write_context` (quick task 260821-wna) is threaded through
+    `write_context` is threaded through
     unchanged to `_run_step_untimed`; `None` is the default (the SDP
     lock/unlock cleanup callable in `run_plan` calls this function without
     one, since neither op is write-shaped).
@@ -2515,7 +2514,7 @@ def _dispatch_step(
     (never a verdict flip); write/verify/erase -> `runs`-times with a
     marginal-on-disagreement policy; write/verify additionally
     attach a `Fingerprint` (PATT-02 wiring, Pitfall 3 addr_base). SDP
-    lock/unlock (v1.30 Phase 133 D-01/D-04, LEG-09) -> single run via
+    lock/unlock -> single run via
     `_dispatch_sdp`, arm 5. The SDP leg's four write-shaped ops (v1.30 Phase
     134 T-134-02, LEG-05/06/07/08/16) -> single run via `_dispatch_sdp_leg`,
     arm 6, LAST -- see below. The engine sets NO VPP, builds NO wire dict
@@ -2569,7 +2568,7 @@ def _dispatch_step(
             write_context=write_context,
             collect_fingerprint=collect_fingerprint,
         )
-    # Arm 5, LAST (v1.30 Phase 133 D-04, LEG-09) -- immediately above the
+    # Arm 5, LAST -- immediately above the
     # terminal fail-closed `return` below. The measured arm order above is
     # OP_ID -> OP_BLANK_CHECK -> OP_READ -> _MULTI_RUN_OPS -> here, so all
     # seven ops shipped before this phase return from arms 1-4 and NEVER
@@ -2693,7 +2692,7 @@ def _sample(sampler: Any, phase: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Execution-time mask/slot/region resolution (quick task 260821-wna)
+# Execution-time mask/slot/region resolution
 # ---------------------------------------------------------------------------
 
 
@@ -2762,7 +2761,7 @@ def _resolve_write_target(
     cycles: int = 1,
 ) -> tuple[WriteTarget | None, str]:
     """The execution-time resolver -- the ONLY place a write mask is
-    computed (D-A/D-B/D-C). Returns `(target, "")` on success, or `(None,
+    computed. Returns `(target, "")` on success, or `(None,
     reason)` on a refusal; never both.
 
     `derive_plan` already decided `step.write_region`/`step.region_policy`/
@@ -2781,7 +2780,7 @@ def _resolve_write_target(
       each slot inside the block with `bits_cleared_by`/`bits_retained_by`,
       and returning the FIRST slot whose counts satisfy both D-B floors.
       Never writes a cursor anywhere -- the probe reads ARE the state
-      lookup (D-B). A block whose read comes back short/empty is skipped
+      lookup. A block whose read comes back short/empty is skipped
       (its slots are simply unevaluable, not saturated) rather than
       raising.
     """
@@ -3168,7 +3167,7 @@ def _dispatch_sdp(
 ) -> StepResult:
     """Dispatch an SDP lock/unlock op to its matching `EpromOperator` method.
 
-    Signature is a FORWARD CONTRACT (v1.30 Phase 133 D-01, LEG-09): the same
+    Signature is a FORWARD CONTRACT: the same
     first four positional parameters as `_dispatch_multi_run` --
     `(op: str, name: str, eprom_data: dict[str, Any], operator: Any)` --
     because ROADMAP Phase 134's "Depends on" line names this arm verbatim

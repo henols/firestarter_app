@@ -572,7 +572,7 @@ class DiagnosticReport:
     vpp_mv: int | None = None
     vpe_mv: int | None = None
     db_diff: DbDiff | None = None
-    # LEG-12 (v1.30 Phase 134, plan 134-06, D-10): the carriage half only --
+    # LEG-12: the carriage half only --
     # a plain `str`, NEVER a `bool` and NEVER a key named `locked` or
     # `protection_enabled` (P-06 prevention 3: a JSON `true` on such a key
     # is read as ground truth for a protection state this chip family
@@ -668,7 +668,7 @@ class DiagnosticReport:
     def _step_dict(
         self, result: StepResult, step: Step | None = None
     ) -> dict[str, Any]:
-        # Schema 1.6 (quick task 260821-wna): the five `write_*` keys below
+        # Schema 1.6: the five `write_*` keys below
         # are read off `StepResult.write_target` -- `None` on every step
         # that isn't a write/verify, and `None` on a write/verify step that
         # was SKIPPED as saturated/refused (there is no resolved target to
@@ -691,7 +691,7 @@ class DiagnosticReport:
         return {
             "op": result.op,
             "verdict": result.verdict,
-            # Schema 1.7 (quick task 260822-aq6): how many times the
+            # Schema 1.7: how many times the
             # underlying operator method actually ran for this step. It has
             # been 2 for every read/write/verify/erase since Phase 121's
             # N>=2 repeat policy and 1 for the ops that are
@@ -866,7 +866,7 @@ class DiagnosticReport:
                 continue
             took = _duration_cell(step_row.get("duration_s"))
             verdict = str(step_row["verdict"])
-            # `xN` (quick task 260822-aq6): the step's own run count, on
+            # `xN`: the step's own run count, on
             # every step that ran, with no conditional. Showing `x1` on the
             # single-run ops is the point rather than noise -- `read x2`
             # sitting beside `blank-check x1` is what tells an operator that
@@ -901,7 +901,7 @@ class DiagnosticReport:
         # for why the truncation stays rather than being deleted.
         table.add_row("sdp_hold_state", _state_cell(d["sdp_hold_state"]))
 
-        # D-F (quick task 260821-wna): one extra row, only when the write
+        # D-F: one extra row, only when the write
         # did not cover the full device -- the slot range and clearable-bit
         # count for a slot write, the excluded range and reason for a
         # carved-out full-device write, or the saturation reason when

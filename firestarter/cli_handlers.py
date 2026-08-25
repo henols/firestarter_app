@@ -2316,10 +2316,10 @@ _ALWAYS_WRITES_PASS_COUNT = 6
 # an unknown option.
 #
 # ALWAYS WRITES: every run writes to the chip, unconditionally. A
-# UV-erasable EPROM is asked first, and quick task 260821-wna (D-C)
+# UV-erasable EPROM is asked first, and quick task 260821-wna
 # changes what the two answers DO: yes permits the whole device to be
 # written IF the chip reads blank, and otherwise writes one masked
-# 256-byte slot (D-A/D-B); no writes one 256-byte slot only,
+# 256-byte slot; no writes one 256-byte slot only,
 # unconditionally -- never read-only or non-destructive either way, and
 # the two answers no longer resolve to the same window on a used chip. Off
 # a TTY the ask is treated as a DECLINED prompt, not absent consent, so a
@@ -2329,7 +2329,7 @@ _ALWAYS_WRITES_PASS_COUNT = 6
 # all, because that write is recoverable via erase (unlike an
 # irrecoverable UV write); as of this task that full write now covers the
 # WHOLE DEVICE (minus flash4's two boot blocks) rather than a small region
-# (D-D). A large part's full-device pass is therefore several
+#. A large part's full-device pass is therefore several
 # device-length transfers at 250000 baud -- minutes, not seconds. The
 # report is unconditionally persisted to `<config dir>/reports` (honors
 # `FIRESTARTER_CONFIG_DIR`) and is always handed to `submit_report`
@@ -2417,7 +2417,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # Always built: every run writes now, so there is no
     # non-destructive mode left that would have no write step to bracket.
     sampler = _make_sampler(app, report)
-    # `--fast` (quick task 260822-aq6) is the ONLY caller that opts out of
+    # `--fast` is the ONLY caller that opts out of
     # the N>=2 repeat policy, and it must say so twice: `runs=1` asks for the
     # single-run plan and `allow_single_run=True` unlocks `run_plan`'s
     # fail-closed guard. Both are required deliberately -- a caller that

@@ -201,7 +201,7 @@ def _runs_text(run_count: Any) -> str:
 
 
 def _reason_text(verdict: Any, reason: Any) -> str:
-    """`(verdict, reason)` -> a markdown Reason cell (quick task 260822-gxx).
+    """`(verdict, reason)` -> a markdown Reason cell.
 
     Keyed on the VERDICT, never on the reason text: an `NA` verdict always
     renders `-`, regardless of what prose is attached to it. This is a
@@ -241,7 +241,7 @@ def build_body(
     asked for timings to reach GitHub, not just the console. A step that did
     not run has no duration and renders `-`.
 
-    The `Runs` column (schema 1.7, quick task 260822-aq6) carries the step's
+    The `Runs` column (schema 1.7) carries the step's
     `run_count`. A triager reading a filed issue must be able to tell an
     accurate N>=2 run from a `dev test --fast` single-run one WITHOUT
     unfolding the JSON block: a `1` in this column on a write or verify row
@@ -542,7 +542,7 @@ def submit_via_browser(
     headless environment) also returns `None` and prints an actionable
     manual-filing message carrying the full issue URL plus the full local
     report path, so the caller can never mistake an unreachable browser
-    for a filed report (quick task 260728-ahy).
+    for a filed report.
     """
     url = build_issue_url(title, body)
     n = len(url.encode("utf-8"))
