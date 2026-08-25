@@ -107,23 +107,15 @@ _TIMEOUT_ADDR_RE = re.compile(r"at 0x([0-9a-fA-F]+)")
 # page-write flash family (protocol 0x05, FLASH_AMD_STD).
 _FLASH4_PROTOCOL_ID = 5
 
-# HOST-01 / D-09-D-10: fallback write-path response timeout for when the
-# firmware does not advertise a per-block write-time budget (CAP-03,
-# SerialCommunicator.write_block_budget_s). DERIVED, not picked: the worst
-# shipped-database block time under the new per-byte loop with no
-# advertisement is 0x0B at 50 ms/byte x 1024 B = 51.2 s (the energy cap
-# lands on exactly 50 ms for every shipped 0x0B width), and 0x07/0x08 at
-# 25 x 1000 us x 1024 B = 25.6 s -- so 120 s is more than 2x the worst
-# shipped case. Sharper still: 120 s covers EVERY REACHABLE 0x0B width,
-# because that protocol's per-byte bound can never exceed 99998 us and
-# 99998 x 1024 = 102.4 s. Residual non-claim: the gap is 0x07/0x08 only, at
-# 120 / (25 x 1024) = 4687 us on a Leonardo and 120 / (25 x 512) = 9375 us
-# on an Uno; and the reachable absent-advertisement cases are a released
-# beta firmware (has CAP-02, lacks CAP-03) or a v1.31 build after the CAP-02
-# port but before CAP-03 lands -- NOT a mid-milestone v1.31 build, which
-# cannot connect at all (BF-1). DEFAULT_RESPONSE_TIMEOUT's own value is
-# untouched by this constant -- it is imported only to resolve
-# _main_phase_send_data's new response_timeout kwarg below.
+# Fallback write-path response timeout, used when the firmware advertises no
+# per-block write-time budget. DERIVED, not picked: the worst shipped-database
+# block time with no advertisement is 0x0B at 50 ms/byte x 1024 B = 51.2 s, and
+# 0x07/0x08 at 25 x 1000 us x 1024 B = 25.6 s, so this is over 2x the worst
+# shipped case -- and it covers every REACHABLE 0x0B width, whose per-byte
+# bound cannot exceed 99998 us.
+#
+# Residual gap, stated: 0x07/0x08 only, at ~4687 us/byte on a Leonardo and
+# ~9375 us on an Uno.
 WRITE_BLOCK_TIMEOUT_FALLBACK_S = 120.0
 
 # HOST-03 / D-20: the three per-byte program-budget ids _budget_failure_hint_
@@ -161,25 +153,14 @@ _LOCK_STATUS_RE = re.compile(r"raw=0x([0-9A-Fa-f]{2}) decode=(\d+)")
 def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional[str]:
     """Return a boot-block-locked inference hint string, or None.
 
-    FIX-01b: when a flash4 (protocol 0x05) write fails with
-    MSG_ERR_FL4_VERIFY_TIMEOUT and the failing address is in the first or last
-    16K of the chip, the operator cannot distinguish a silicon boot-block lockout
-    from a firmware bug without additional context.  This function returns a
-    hint string that can be appended to the error message so the operator
-    understands the probable root cause.
+    A flash4 write that fails with MSG_ERR_FL4_VERIFY_TIMEOUT in the first or
+    last 16K cannot be told apart from a firmware bug without this context.
 
-    Returns a hint string (to be appended to the error message) when:
-      - response.id == MSG_ERR_FL4_VERIFY_TIMEOUT (0xB3), AND
-      - protocol == 5 (flash4 / FLASH_AMD_STD), AND
-      - the failing address is in the first 16K (< 0x4000) OR
-        the last 16K (>= mem_size - 0x4000).
+    Returns a hint only when the id, the protocol AND the address range all
+    match, so unrelated faults are never mislabelled.
 
-    Returns None for all other cases (different protocol, different error id,
-    or mid-chip address) so unrelated faults are not mislabelled (T-94-MISLABEL).
-
-    Wording per A3 / STRIDE T-94-MISLABEL: the hint INFERS the lockout from the
-    address range; it does NOT confirm it (only the firmware §6.6 DETECT read
-    can read the FF/FE lockout bit and confirm).
+    The wording INFERS the lockout from the address range; it does not confirm
+    it. Only the firmware's own detect read can read the lockout bit.
     """
     from firestarter.messages import MSG_ERR_FL4_VERIFY_TIMEOUT
 
@@ -228,56 +209,24 @@ def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional
 def _budget_failure_hint_message(response) -> Optional[str]:
     """Return a per-byte program-budget-failure disposition hint, or None.
 
-    HOST-03 / D-19: mirrors `_boot_block_hint_message`'s shape immediately
-    above -- a pure, module-level function keyed on `response.id` first,
-    with the message-id names imported LOCALLY to avoid the same import
-    cycle that function's docstring names. The firmware's own catalog
-    format already interpolates the failing address (`MSG_ERR_MAX_PULSES`
-    (0xBD) / `MSG_ERR_ENERGY_CAP` (0xBE), `firestarter/messages.py`) or the
-    refused pulse width (`MSG_ERR_PULSE_TOO_WIDE`, 0xAE), so this hint adds
-    *disposition*, not location or value -- it explains what the id MEANS
-    for the write in progress, not where it happened or how wide the pulse
-    was.
+    Keyed on MSG_ERR_MAX_PULSES, MSG_ERR_ENERGY_CAP and MSG_ERR_PULSE_TOO_WIDE.
+    The firmware's catalog format already interpolates the failing address or
+    the refused pulse width, so this adds DISPOSITION -- what the id means for
+    the write in progress -- not location or value.
 
-    D-21 (`.planning/phases/141-per-byte-program-loop/141-LOOP-RECORD.md`
-    §4, traced against live firmware source this session, not this plan's
-    paraphrase of it): on a budget failure,
-    `eprom_internal_write_execute_body` (src/proms/eprom.cpp) returns
-    before `handle->address` is ever advanced; `_process_incoming_data`
-    (src/eprom_operations.cpp) sees that failure and returns `false`
-    immediately, never reaching its own `handle->address +=
-    handle->data_size` line; `command_done()` (src/firestarter.cpp) then
-    zeroes `CONTROL_REGISTER`, `LEAST_SIGNIFICANT_BYTE` and
-    `MOST_SIGNIFICANT_BYTE` and sets `handle->cmd = CMD_IDLE`. The write
-    stopping and the firmware refusing every later block for that write are
-    the SAME event, not two claims that happen to coincide -- so for
-    `MSG_ERR_MAX_PULSES` / `MSG_ERR_ENERGY_CAP` this hint gives no advice to
-    attempt the failed block again and implies no firmware-side
-    continuation: starting the write over is a fresh run of the whole file,
-    never a pick-up-where-it-stopped.
+    On a budget failure the firmware returns before advancing the address and
+    then idles the command, so the write stopping and every later block being
+    refused are the SAME event. The hint therefore never advises retrying the
+    failed block: starting over is a fresh run of the whole file, never a
+    pick-up-where-it-stopped.
 
-    D-20: deliberately keyed on `_BUDGET_FAILURE_IDS` only -- in particular
-    never on error id 0xB1 (the OLD, now-retired per-block loop's own
-    failure id -- see `_BUDGET_FAILURE_IDS`'s own comment, above, for its
-    name), which F-141-06 confirms is emitted by nothing on the 27C write
-    path any more (the per-byte loop reports 0xBD/0xBE instead, with a
-    different, smaller payload shape). A hint keyed on 0xB1 here would
-    never fire.
+    MSG_ERR_PULSE_TOO_WIDE is different: it is a pre-flight refusal that fires
+    before any high voltage is enabled, so no byte was touched and a smaller
+    --pulse-us IS legitimate remediation -- unlike a byte that will not converge
+    however often it is pulsed.
 
-    D-16: `MSG_ERR_PULSE_TOO_WIDE` is the firmware's pre-flight refusal for
-    a host-legal (`click.IntRange(1, 65535)`, plan 143-07), firmware-
-    refused `--pulse-us` on protocol 0x0B -- plan 143-07 deliberately left
-    this window unmirrored host-side, to avoid duplicating
-    `energy_cap_us`'s single definition site. This hint is what makes that
-    refusal actionable instead of opaque: it fires before any high voltage
-    is enabled, so unlike the other two ids, no byte was touched and a
-    smaller `--pulse-us` is legitimate remediation -- unlike a byte that
-    will not converge no matter how many more times it is pulsed.
-
-    Returns None for any id not in `_BUDGET_FAILURE_IDS`, and also for a
-    `MSG_ERR_PULSE_TOO_WIDE` response whose message does not carry a
-    parsable width (mirrors `_boot_block_hint_message`'s own "no hint
-    without a parsable address" precedent immediately above).
+    Returns None for any other id, and for a too-wide response carrying no
+    parsable width.
     """
     if response.id not in _BUDGET_FAILURE_IDS:
         return None
@@ -435,45 +384,23 @@ class EpromOperator:
         self.comm: SerialCommunicator | None = None
         self.config = config
         self.progress_callback = progress_callback
-        # Debug session w27c512-devtest-all-bad. The firmware's own
-        # explanation of a failure -- its message id and rendered text --
-        # had NO route out of this class. `_run_state_machine` catches
-        # `EpromOperationError` (which carries `error_code=response.id`) and
-        # returns `(False, str(e))`; `write_eprom`/`verify_eprom` then
-        # discard that string (`is_ok, _ = ...`) and every one of the four
-        # mutation methods returns a bare bool. So `chip_test`'s
-        # `except EpromOperationError: ... error_code=exc.error_code`
-        # handler is structurally unreachable for write/verify/erase/
-        # blank-check, and every failing step in a `dev test` report carried
-        # `error_code: null, reason: ""` -- which is how issue #41 came to
-        # read as four independent faults with no evidence attached, when
-        # the firmware had already named the offending address and byte via
-        # MSG_ERR_NOT_BLANK.
+        # The firmware's own explanation of a failure -- its message id and rendered
+        # text -- had no route out of this class: the state machine returns
+        # `(False, str(e))` and the four mutation methods discard the string and return
+        # a bare bool, so every failing step in a report carried a null error_code and
+        # an empty reason.
         #
-        # These two attributes are that route. Deliberately NOT a signature
-        # change on the four methods: their `-> bool` contract is relied on
-        # directly by cli_handlers.py's `write` / `verify` / `blank` /
-        # `erase` commands, each of which ends in
-        # `sys.exit(0 if ok else 1)` on the bare bool, by chip_test.py, and
-        # by a large body of test doubles. Widening it would be a far bigger
-        # blast radius than this bug warrants. (Verified against origin/beta,
-        # not a feature branch: the exit code on those four paths is 1. The
-        # `exit 2` this file's other comments mention belongs to
-        # `consistency_check_eprom`'s own mapping, a different path.)
+        # These two attributes are that route. Deliberately NOT a signature change: the
+        # `-> bool` contract is relied on by four CLI commands, chip_test, and a large
+        # body of test doubles.
         #
-        # Lifetime, stated because it is the whole reason an instance
-        # attribute works here: `_operation_context`'s `finally` tears down
-        # `self.comm`, but never the operator itself, so these survive the
-        # call that set them and are readable by the caller immediately
-        # after. `_run_state_machine` CLEARS them on entry, so a value can
-        # never be stale from an earlier operation.
+        # Lifetime: the operation context's finally tears down `self.comm` but never
+        # the operator, so these survive the call that set them. `_run_state_machine`
+        # CLEARS them on entry, so a value can never be stale from an earlier op.
         #
-        # Scope, deliberately narrow: only the `EpromOperationError` arm
-        # sets these -- a real firmware ERROR frame. The transport arm
-        # (`SerialError`/`SerialTimeoutError`) does not: its text can carry
-        # a host device path, it has no firmware message id to report, and
-        # `chip_test._run_step` already has its own handler for the
-        # transport exceptions that escape.
+        # Scope, deliberately narrow: only the EpromOperationError arm sets these -- a
+        # real firmware ERROR frame. The transport arm does not; its text can carry a
+        # host device path and it has no firmware message id to report.
         self.last_firmware_error_code: Optional[int] = None
         self.last_firmware_error_message: Optional[str] = None
 
@@ -495,32 +422,21 @@ class EpromOperator:
     def _write_block_timeout(self) -> float:
         """Return the per-response wait for a write's MAIN phase, in seconds.
 
-        HOST-01 / D-09: the firmware's advertised ``write_block_budget_s``
-        (CAP-03, decoded in ``serial_comm.py``) is used VERBATIM -- the
-        firmware already padded it (its own ``delay(500)`` VPE settle, the
-        final full-block verify pass and the per-pulse settle are all
-        folded in), so the host applies no multiplier of its own on top.
+        The firmware's advertised budget is used VERBATIM -- it is already
+        padded firmware-side, so the host applies no multiplier.
 
-        D-10: an absent, truncated or implausible advertisement returns the
-        derived ``WRITE_BLOCK_TIMEOUT_FALLBACK_S`` instead -- never an error
-        and never a refusal. Mirrors ``_calculate_buffer_size``'s precedent
-        directly above: Phase 54's ``FirmwareOutdatedError`` was reversed
-        into exactly this "safe default on absence" shape, which is the
-        standing argument against refusing the write here too.
+        An absent, truncated or implausible advertisement falls back to the
+        derived constant, never an error and never a refusal.
 
-        The ``[1, WRITE_BUDGET_MAX_S]`` range test is a second line of
-        defence behind ``serial_comm``'s own decode-time plausibility
-        clamp: a value outside that range can only reach
-        ``write_block_budget_s`` if something bypassed the decoder, and
-        this method must not trust it even then -- both a too-small
-        (``0``) and an implausibly-large (``> WRITE_BUDGET_MAX_S``) value
-        fall back identically, so a corrupt or hostile ack can never
-        install either a too-tight or an unbounded host wait.
+        The range test is a second line of defence behind the decoder's own
+        plausibility clamp: a value outside it can only arrive if something
+        bypassed the decoder. Too-small and implausibly-large fall back
+        identically, so a corrupt or hostile ack can install neither a
+        too-tight nor an unbounded host wait.
 
-        MUST be called from inside ``write_eprom``'s ``_operation_context``
-        ``with`` block: that block's ``finally`` sets ``self.comm`` to
-        ``None`` on exit, so a call after it exits would always take the
-        None-comm branch below.
+        MUST be called from inside `write_eprom`'s operation context: that
+        block's finally sets `self.comm` to None on exit, so a later call would
+        always take the None branch.
         """
         budget = getattr(self.comm, "write_block_budget_s", None) if self.comm else None
         if budget is not None and 1 <= budget <= WRITE_BUDGET_MAX_S:
@@ -764,39 +680,28 @@ class EpromOperator:
     def _apply_write_progress(
         self, response, progress: ClassProgressHandler, start_addr: int
     ) -> bool:
-        """Render an intra-block MSG_DATA_PROGRESS (0xE0) frame on the write
-        path. Returns True when a position was actually applied -- the
-        caller (``_main_phase_send_data``) uses this to latch the
-        chunk-handoff ``update()`` off once the firmware starts driving the
-        bar itself (HOST-02 / Pitfall 1). Returns False when the frame's
-        message was absent or unparsable, so the latch never engages on a
-        malformed frame.
+        """Render an intra-block progress frame on the write path.
 
-        D-04: applies the frame's ``current`` and IGNORES its ``total`` --
-        and performs ``set_progress``'s final three operations DIRECTLY
-        rather than calling it. ``set_progress(current, total)`` calls
-        ``self.start(total)`` whenever the frame's total differs from the
-        bar's, and ``start()`` CLOSES AND RE-CREATES the tqdm bar and zeroes
-        ``current_step``. The write bar is started with ``file_size`` while
-        ``0xE0`` carries ``handle->mem_size`` -- for a short input file or
-        an ``--address``-offset write these differ, so every single frame
-        would tear the bar down and rebuild it if routed through
-        ``set_progress``. This method never reaches that arm.
+        Returns True when a position was actually applied -- the caller uses
+        this to latch the chunk-handoff update off once the firmware starts
+        driving the bar. False when the frame was absent or unparsable, so the
+        latch never engages on a malformed frame.
 
-        D-04's arithmetic: ``0xE0`` carries an ABSOLUTE chip address, but
-        the write bar's origin is the write's own start address, not 0.
-        Getting this wrong shows up as a bar that starts mid-way (or beyond
-        100%) on an ``--address`` write.
+        Applies the frame's `current` and IGNORES its `total`, performing the
+        final operations DIRECTLY rather than calling `set_progress`. That
+        method calls `start(total)` whenever the frame's total differs from the
+        bar's, and `start()` CLOSES AND RE-CREATES the bar. The write bar is
+        started with the file size while the frame carries the chip's memory
+        size -- for a short file or an --address-offset write those differ, so
+        every frame would tear the bar down and rebuild it.
 
-        D-05: this method NEVER acks. Callers must not route a write-path
-        DATA frame through ``_handle_progress_response`` instead of this
-        method -- that helper's ``ack_data`` defaults to True and its DATA
-        arm calls ``set_progress`` directly, which is exactly the rebuild
-        path this method exists to avoid.
+        The frame carries an ABSOLUTE chip address while the bar's origin is the
+        write's start address. Getting that wrong shows as a bar starting
+        mid-way, or beyond 100%, on an --address write.
 
-        Scope: fixing ``set_progress``'s rebuild-on-differing-total at its
-        source is a deferred idea, out of scope here -- it is shared code on
-        the read and blank-check paths this plan does not own.
+        This method NEVER acks. Do not route a write-path DATA frame through
+        `_handle_progress_response` instead -- it acks by default and its DATA
+        arm calls `set_progress`, which is the rebuild path this exists to avoid.
         """
         if not response.message or "/" not in response.message:
             return False
@@ -823,23 +728,15 @@ class EpromOperator:
     ) -> None:
         """Main phase handler for writing or verifying data.
 
-        ``eprom_data_dict`` is forwarded from the write/verify caller so that
-        the boot-block-locked heuristic hint (FIX-01b) can be appended
-        to MSG_ERR_FL4_VERIFY_TIMEOUT errors when the failing address is in the
-        first or last 16K of a flash4 (protocol 0x05) chip.  Passing None (the
-        default) keeps behaviour identical to pre-FIX-01b for all other callers.
+        `eprom_data_dict` is forwarded from the caller so the boot-block hint can
+        be appended to a flash4 verify timeout. None keeps behaviour identical
+        for every other caller.
 
-        ``response_timeout`` is the write-only per-response
-        wait: ``write_eprom`` passes ``self._write_block_timeout()`` from
-        inside its ``_operation_context`` ``with`` block; ``verify_eprom``
-        does not pass it at all, so the default of ``None`` (which resolves
-        to ``DEFAULT_RESPONSE_TIMEOUT`` below) keeps ``verify_eprom`` byte
-        -identical to its pre-HOST-01 behaviour -- exactly the same
-        default-preserves-old-callers contract the ``eprom_data_dict``
-        paragraph above already uses. ``get_response(timeout)`` is an
-        already-supported call form (``expect_ack`` uses it); this is the
-        ONLY timeout change on the write path -- ``_read_and_parse_lines``
-        and its timeout-reset semantics are untouched (GATE-1.8d).
+        `response_timeout` is write-only: `write_eprom` passes its computed
+        block timeout from inside its operation context, `verify_eprom` does not
+        pass it at all, so the None default leaves verify byte-identical. This
+        is the ONLY timeout change on the write path -- the reader's own timeout
+        semantics are untouched.
         """
         if not os.path.exists(input_file_path):
             raise EpromOperationError(f"Input file {input_file_path} not found.")
@@ -1062,12 +959,9 @@ class EpromOperator:
         Same exit-code convention as grep(1). Precedent for non-bool return:
         check_eprom_id() returns Tuple[bool, Optional[int]] above.
 
-        Reuses _run_state_machine + _main_phase_read_data verbatim (per Phase 26
-        CONTEXT.md D-03 reuse-not-duplicate rule) -- the diagnostic exercises
-        the same code path the read bug lives in. Do NOT refactor into a
-        parallel read implementation.
-
-        REPRO-03 (Phase 26 / Plan 26-01).
+        Reuses _run_state_machine + _main_phase_read_data verbatim, so the
+        diagnostic exercises the same code path the read bug lives in. Do NOT
+        refactor into a parallel read implementation.
         """
         # Reject runs < 2 BEFORE any state-machine invocation
         if runs < 2:
@@ -1250,8 +1144,8 @@ class EpromOperator:
         output_dir: Optional[str] = None,
         operation_flags: int = 0,
     ) -> int:
-        """Erase → write source image → read-back N times; compare each read-back
-        against source image SHA-256 (D-06 independent host-side compare).
+        """Erase, write the source image, read back N times, and compare each
+        read-back against the source image's SHA-256.
 
         Returns:
             0 -- all N read-backs match source image SHA-256 (PASS)
@@ -1263,10 +1157,8 @@ class EpromOperator:
         hw-error is NEVER collapsed to mismatch (verdict 2 != verdict 1).
 
         Reuses _operation_context + _run_state_machine + _main_phase_read_data
-        verbatim from consistency_check_eprom (per reuse-not-duplicate rule).
-        Do NOT refactor the read-back block into a parallel read implementation.
-
-        XACT-01 / Phase 53 Plan 02.
+        verbatim from consistency_check_eprom. Do NOT refactor the read-back
+        block into a parallel read implementation.
         """
         source_sha = hashlib.sha256(Path(source_image_path).read_bytes()).hexdigest()
 
@@ -1377,17 +1269,14 @@ class EpromOperator:
             connection time. This is the ONLY corruptible host→fw command frame — a
             READ's MAIN phase sends only plaintext acks (send_string). The firmware
             rejects the corrupt frame and the connection fails with a bounded error;
-            a fresh clean transfer then succeeds. (The prior wiring set the hook AFTER
-            setup, so it never fired — a false negative; see
-            .planning/debug/fault-inject-harness-outgoing.md.)
+            a fresh clean transfer then succeeds. The hook must be threaded in BEFORE
+            setup -- wiring it after means it never fires, a silent false negative.
         direction="incoming": corrupt fw→host frame via FaultInjectingSerialCommunicator
             on an established connection; the host decoder catches it and the same
             connection recovers on the clean follow-on (Pitfall 2).
 
         Writes fault-inject-<direction>-log.txt with the measured error latency so the
-        sub-second clean error (no 2 s cascade) XACT-02 requires can be confirmed.
-
-        XACT-02 / Phase 53 Plan 02 (harness fix: 53-04).
+        sub-second clean error can be confirmed.
         """
         from firestarter.serial_comm import FaultInjectingSerialCommunicator
 

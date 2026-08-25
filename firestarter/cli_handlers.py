@@ -1,18 +1,7 @@
-"""Click-based CLI handlers for firestarter (Phase 41 / v1.8).
+"""Click-based CLI handlers for firestarter.
 
-This module is the production CLI surface; main.py re-exports ``cli`` as
-``main`` for the ``firestarter`` console-script entry point.
-The argparse machinery in main.py was deleted in Plan 41-04 (Wave 4).
-
-Commands surfaced from here:
-  - 3 read-only: list / info / search
-  - 6 chip-ops: read / write / verify / blank / erase / id
-  - 2 voltage: vpp / vpe
-  - 2 hardware: hw / config
-  - 1 firmware: fw (3-way --pre/--firmware-version/--stable mutex + version
-    validator)
-  - 1 group: dev (6 sub-commands: read / reg / addr / consistency-check /
-                              write-cycle / validate-family)
+This module is the production CLI surface; main.py re-exports `cli` as `main`
+for the console-script entry point.
 """
 
 import datetime
@@ -164,31 +153,18 @@ _PY32_ENABLED: bool = "py32f071" in _BOARD_CHOICES
 def _reject_py32_only_option(name: str, given: bool) -> None:
     """Refuse a py32-only CLI option outside its owning channel.
 
-    ``hidden=not _PY32_ENABLED`` on an option's ``@click.option`` decorator is a
-    ``--help`` cosmetic only: it keeps the option out of the rendered help text,
-    it does not reject the option when a user types it anyway. That confusion
-    is exactly the bug HOST-02 exists to close: on a stable build, ``--usb-id``
-    was accepted (exit 0) while ``--dfu-probe`` was refused (exit 2), even
-    though both are py32-only surface.
+    `hidden=not _PY32_ENABLED` is a --help cosmetic ONLY: it hides the option
+    from the rendered help, it does not reject it when a user types it anyway.
 
-    This helper is the single sanctioned refusal mechanism for every py32-only
-    option. It is called unconditionally for each option, passing that
-    option's givenness, before either option is consumed. One shared code
-    path means the two refusals cannot drift apart from each other, and a
-    third py32-only option added later inherits the same behaviour for free
-    just by calling this helper here — see the one-code-path guard in
-    ``tests/test_py32_channel_gating.py``, which asserts this refusal's
-    message occurs exactly once in this file.
+    This is the single sanctioned refusal mechanism for every py32-only option,
+    called unconditionally for each one before either is consumed, so the
+    refusals cannot drift apart and a third option added later inherits the
+    behaviour by calling it here. A test asserts this message occurs exactly
+    once in this file.
 
-    Reads ``_PY32_ENABLED`` at call time — a module global, not a captured
-    default argument — which is what makes this helper directly unit-testable
-    in-process via monkeypatch while the Click command surface built from the
-    decorators above stays frozen at import time.
-
-    The message text and the resulting exit code are preserved exactly from
-    the pre-existing ``--dfu-probe`` refusal this helper replaces, per
-    HOST-02's requirement that ``--usb-id`` be rejected exactly as
-    ``--dfu-probe`` already is.
+    Reads `_PY32_ENABLED` at CALL time -- a module global, not a captured
+    default -- which is what makes it monkeypatchable while the Click surface
+    stays frozen at import time.
     """
     if given and not _PY32_ENABLED:
         raise click.UsageError(f"no such option: {name}")
@@ -268,23 +244,14 @@ def build_arg_flags(args: object) -> int:
 
 
 def _maybe_auto_route_to_pre(args: object) -> None:
-    """D-22 / D-25 beta-app magic default: when installed app is a pre-release,
-    any 'fw' invocation that pins no channel (no --pre, no --firmware-version,
-    no --stable) auto-routes to the --pre channel. ``args.install`` is NOT part
-    of the condition — see the comment on the guard below for the two defects
-    that gating on it caused.
+    """When the installed app is a pre-release, any `fw` invocation that pins
+    no channel auto-routes to `--pre`.
 
-    Relocated verbatim from main.py:211-249. Signature is
-    ``(args) -> None`` — NO logger parameter (Phase 18 revision warning #6).
-    Uses ``logging.getLogger(__name__)`` internally so pytest's caplog captures
-    records automatically by logger name.
+    `install` is deliberately NOT part of the condition -- see the guard below
+    for the two defects gating on it caused.
 
-    Callers in cli_handlers.py reach this helper via ``_maybe_auto_route_to_pre_click``
-    which builds a ``SimpleNamespace`` from the explicit Click kwargs (D-15
-    adapter pattern — zero churn to this helper's body).
-
-    D-23: stable-installed apps (Version.is_prerelease=False) are unaffected.
-    D-24: explicit --firmware-version OR --stable opts out of this magic.
+    A stable-installed app is unaffected, and an explicit --firmware-version or
+    --stable opts out.
     """
     helper_logger = logging.getLogger(__name__)
     # The condition is "the operator pinned no channel", NOT "the operator
@@ -339,34 +306,25 @@ def _build_op_flags(
     input_enable: Optional[bool] = None,
     chip_disable: Optional[bool] = None,
 ) -> int:
-    """Click-side equivalent of main.py's build_arg_flags helper.
-
-    Click handlers receive their options as explicit kwargs, so there is no
-    args-bag introspection needed. This helper applies the same flag-mapping
-    rules build_arg_flags uses (post-41-01 truthiness semantics):
+    """Map Click kwargs to wire flags.
 
         - blank_check / force / vpe_as_vpp / verbose -> build_flags(...)
-        - skip_erase -> FLAG_SKIP_ERASE (explicit; see decouple note below)
-        - input_enable presence (any value, even False) -> apply OE mask rule
-        - chip_disable presence (any value, even False) -> apply CE mask rule
+        - skip_erase -> FLAG_SKIP_ERASE (explicit; see below)
+        - input_enable / chip_disable presence (any value, even False) -> apply
+          the OE / CE mask rule
 
-    The OE/CE flags use None to mean "this command does not take this flag"
-    so they behave like the main.py `hasattr(args, "input_enable")` gate:
-    only `dev reg` and `dev addr` opt into them.
+    OE/CE use None to mean "this command does not take this flag", so only
+    `dev reg` and `dev addr` opt in.
 
-    Phase 92 decouple (was `skip_erase=not blank_check`): `-b`/`--no-blank-check`
-    no longer implies skip-erase. Skipping the blank check must NOT skip the
-    erase that electrically-erasable parts (FLAG_CAN_ERASE: flash3/flash4/EEPROM
-    /EPROM-EEPROM) require — `write -b` on a non-blank such chip used to silently
-    skip the erase, leaving un-erasable 0->1 bits while the firmware's DQ7-only
-    poll reported "successful" (the Phase-90/91 "12V-VPP regression" false alarm).
-    `skip_erase` is now an explicit opt-in (write `--skip-erase`), default False.
+    `-b`/`--no-blank-check` does NOT imply skip-erase. Skipping the blank check
+    must not skip the erase that electrically-erasable parts require: `write -b`
+    on a non-blank such chip used to silently skip the erase, leaving
+    un-erasable 0->1 bits while the firmware's DQ7-only poll reported success.
+    `skip_erase` is an explicit opt-in.
     """
-    # FLAG_SKIP_SDP_UNLOCK is passed into build_flags as a keyword
-    # argument, NOT OR-ed into `flags` after the call the way
-    # FLAG_OUTPUT_ENABLE / FLAG_CHIP_ENABLE are below — every wire-flag bit
-    # stays mapped in the one function that maps wire flags (build_flags),
-    # deliberately not following the OE/CE precedent in this same helper.
+    # FLAG_SKIP_SDP_UNLOCK is passed INTO build_flags as a keyword, not OR-ed in
+    # afterwards the way OE/CE are below: every wire-flag bit stays mapped in the
+    # one function that maps wire flags.
     flags = build_flags(
         blank_check,
         force,
@@ -383,21 +341,14 @@ def _build_op_flags(
 
 
 class _FirmwareVersionType(click.ParamType):
-    """Click ParamType that mirrors main.py:194-208 `_validate_firmware_version`.
+    """Validates a firmware version against FIRMWARE_VERSION_RE before any
+    network call; accepts stable (X.Y.Z) and pre-release (X.Y.ZbN, X.Y.ZrcN).
 
-    Validates against `FIRMWARE_VERSION_RE` before any network call;
-    accepts stable (X.Y.Z) and pre-release (X.Y.ZbN, X.Y.ZrcN) forms.
-    On mismatch, `self.fail(...)` raises `click.BadParameter` which Click
-    converts to `SystemExit(2)` — preserves the argparse `ArgumentTypeError`
-    → exit-2 contract.
+    `self.fail(...)` raises click.BadParameter, which Click converts to
+    SystemExit(2).
 
-    Custom ParamType subclass picked over a plain option callback.5
-    (Claude's Discretion): more Click-canonical + reusable across
-    `--firmware-version` instances if ever added elsewhere.
-
-    NOTE: Distinct from `SerialCommunicator._validate_firmware_version`
-    @staticmethod introduced in Phase 40 D-01..D-05 — that's the
-    TRANSPORT-layer guard. This class is the CLI-layer input validator.
+    Distinct from `SerialCommunicator._validate_firmware_version`, which is the
+    TRANSPORT-layer guard; this is the CLI-layer input validator.
     """
 
     name = "firmware_version"
@@ -641,64 +592,35 @@ def write(
 ) -> None:
     """Writes a binary file to an EPROM.
 
-    TRAP #3 / D-13.3: ``--no-blank-check`` uses
-    ``is_flag=True, flag_value=False, default=True`` so the presence of ``-b``
-    flips ``blank_check`` to False (mirrors argparse ``store_false default=True``).
-    The inverse ``--blank-check`` polarity lives on the ``erase`` command —
-    both polarities coexist verbatim per the rationale lock.
+    `--no-blank-check` uses `is_flag=True, flag_value=False, default=True`, so
+    passing `-b` flips `blank_check` to False. The `erase` command carries the
+    inverse `--blank-check` polarity; both coexist deliberately.
 
-    Phase 92 decouple: ``-b`` now skips ONLY the blank check. The pre-write erase
-    still runs for electrically-erasable chips (FLAG_CAN_ERASE) so ``write -b`` on
-    a non-blank flash/EEPROM works. Use ``--skip-erase`` to also skip the erase
-    (previously implied by ``-b``) for already-blank or non-erasable parts.
+    `-b` skips ONLY the blank check -- the pre-write erase still runs for
+    electrically-erasable chips, so `write -b` on a non-blank flash/EEPROM
+    works. Use `--skip-erase` to also skip the erase. On protocols 0x0D and
+    0x05 the flag is UNREAD: neither write path performs a pre-write blank
+    check any more.
 
-    Phase 153: since this phase, ``-b``/``--no-blank-check``
-    is **unread** on protocols ``0x0D`` and ``0x05`` — neither protocol's write
-    path performs a pre-write blank check any more, so the flag is a no-op on
-    both families and is not needed to write a non-blank part on either one.
-    The flag remains live, with its Phase 92 meaning above, on every other
-    protocol. This does not change the paragraph above: the erase/blank-check
-    decoupling it describes still governs whichever protocols still read the
-    flag.
+    `--skip-sdp-unlock` is exposed on `write` ONLY -- firmware auto-unlocks in
+    the 0x0D write init and nowhere else, so read/verify/blank/erase have
+    nothing to skip. On a non-0x0D chip the bit has no effect; the host warns
+    and still emits it, so a blanket-flag script across a mixed batch produces
+    identical wire frames. The host may also set the bit ITSELF when the
+    resolved chip is 0x0D and capability-refused -- that always prints a
+    default-visible report line.
 
-    TRAP #6 / D-17/D-18 (v1.22 HOST-02): ``--skip-sdp-unlock`` is exposed
-    on ``write`` ONLY — firmware auto-unlocks in ``eeprom28c_write_init`` and
-    nowhere else, so ``read``/``verify``/``blank``/``erase`` have nothing to
-    skip and the flag is deliberately absent from all four. On a
-    non-protocol-0x0D chip the flag has no effect: firmware never reads this
-    bit outside protocol 0x0D, so the host warns and proceeds rather than
-    refusing or silently dropping the bit — the bit is still emitted so a
-    blanket-flag script across a mixed batch produces identical wire frames
-    (D-18). The host may also set this bit **on its own**, without the user
-    passing it, when the resolved chip is protocol-0x0D and capability-refused
-    (``firestarter.sdp_capability``) — see the D-04 auto-set block below,
-    which always prints a mandatory, default-visible report line when it
-    fires.
-
-    TRAP #7 / D-14..D-18 (v1.31 HOST-04/HOST-05): ``--pulse-us`` overrides
-    the database program-pulse width for this run only. D-14: it rides the
-    existing ``"pulse-delay"`` wire key (``write_eprom``'s own ``pulse_us``
-    parameter, plan 143-04's transport half) — no new command, no new wire
-    field. D-15: bounds are enforced by the option's own
-    ``click.IntRange(1, 65535)``, which refuses out of range at Click PARSE
-    TIME, exit 2. The guarantee this gives HOST-05 ("before any serial byte
-    is sent") is NOT "before ``AppContext`` builds" — ``cli()``'s group
-    callback runs first, before this command's own parameters are even
-    type-converted — the guarantee is that NOTHING in ``cli()`` or
-    ``AppContext`` construction opens a serial port, so a parse-time refusal
-    is still structurally before any serial byte. D-16: a value in
-    ``50001..65535`` is host-legal but firmware-refused on protocol ``0x0B``
-    only (``configure_eprom``'s ``energy_cap_us``-keyed pre-flight check,
-    ``MSG_ERR_PULSE_TOO_WIDE``) before any high voltage is enabled — the host
-    deliberately mirrors no table value to pre-empt it (that would require
-    duplicating ``energy_cap_us`` host-side). D-17: using the flag ALWAYS
-    prints a default-visible report line (see below) naming both the
-    database pulse replaced and the override — provenance, because a bench
-    artifact or log captured without the command line beside it cannot
-    otherwise tell you the pulse was not the database's. D-18: the flag
-    exists on ``write`` ONLY, mirroring the reasoning above for
-    ``--skip-sdp-unlock`` — ``read``/``verify``/``blank``/``erase`` emit no
-    program pulse, so there is nothing to override.
+    `--pulse-us` overrides the database program-pulse width for this run only.
+    It rides the existing pulse-delay wire key -- no new command, no new field.
+    Bounds are enforced by click.IntRange at PARSE time, exit 2. Nothing in the
+    group callback or AppContext construction opens a serial port, so a
+    parse-time refusal is structurally before any serial byte is sent. A value
+    in 50001..65535 is host-legal but firmware-refused on protocol 0x0B, before
+    any high voltage is enabled; the host deliberately does not mirror that
+    table value to pre-empt it. Using the flag ALWAYS prints a report line
+    naming the database pulse it replaced -- a bench artifact captured without
+    the command line beside it cannot otherwise tell you the pulse was not the
+    database's. `write` only, for the same reason as --skip-sdp-unlock.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
 
@@ -778,45 +700,21 @@ def write(
             "normal write."
         )
 
-    # Warn and proceed: a DELIBERATE
-    # SIBLING `if`, not an `elif` chained onto the block above — this checks
-    # `--skip-erase`, an entirely different flag from the SDP block's
-    # `skip_sdp_unlock`, so both blocks must be free to fire independently on
-    # the same 0x0D chip (e.g. a capability-refused 0x0D part gets the SDP
-    # auto-set line AND this line together). Do NOT refuse, do NOT abort, do
-    # NOT suppress the bit: nothing on the 0x0D WRITE path reads an
-    # erase-capability bit, so the flag is inert here regardless of whether
-    # this message fires. The bit is still emitted (unconditionally, via
-    # `_build_op_flags` below) so a blanket-flag script across a mixed batch
-    # of chips still produces byte-identical wire frames whether or not this
-    # line printed. Scope: this arm still deliberately
-    # does NOT extend to `-b`/`--no-blank-check`.
+    # Warn and proceed. A deliberate SIBLING `if`, not an `elif`: this checks
+    # --skip-erase, a different flag from the SDP block above, so both must be free
+    # to fire on the same 0x0D chip.
     #
-    # Correction, now inverted: this arm's message
-    # used to justify itself by claiming the 28C family "has no erase
-    # operation at all". That clause is now FALSE — the firmware restored
-    # `FLAG_CAN_ERASE` for algorithm 13 and the family gained a standalone
-    # `firestarter erase`. What is still true, and is
-    # now the message's only justification, is narrower: the WRITE path
-    # specifically performs no erase (erase is deliberately kept out
-    # of `eeprom28c_write_init`), so this flag still has nothing to skip
-    # there. The corrected message states only that, and names the
-    # standalone command so it is a useful redirect rather than a merely
-    # non-false statement.
+    # Do NOT refuse, abort, or suppress the bit. Nothing on the 0x0D write path
+    # reads an erase-capability bit, so the flag is inert here either way, and the
+    # bit is still emitted so a blanket-flag script across a mixed batch produces
+    # byte-identical wire frames.
     #
-    # The original comment's OWN reasoning for not extending this arm to
-    # `-b`/`--no-blank-check` has ALSO inverted: it argued `-b` was
-    # "genuinely useful on a non-blank 0x0D part precisely because there is
-    # no erase to make the part blank" — but the pre-write
-    # blank check on this protocol was removed entirely, so `-b` is a no-op
-    # on 0x0D, for an unrelated reason (there is no blank check left for it
-    # to skip). The CONCLUSION is nevertheless unchanged — still no second
-    # warning here — but for a different reason: warning that `-b` is
-    # vacuous would train users to
-    # think the write needs a flag, which is exactly the recommendation
-    # deliberately kept out of the public release notes.
-    # This paragraph records that the inversion was noticed and the
-    # conclusion re-derived, not merely carried over stale.
+    # The message must NOT claim the 28C family has no erase operation -- it has a
+    # standalone `erase`. What is true is narrower: the WRITE path performs no
+    # erase, so the flag has nothing to skip there.
+    #
+    # Deliberately not extended to -b/--no-blank-check: warning that it is vacuous
+    # would train users to think the write needs a flag.
     if skip_erase and is_protocol_0x0d:
         click.echo(
             f"{eprom.upper()}: --skip-erase has nothing to skip on this "
@@ -933,21 +831,17 @@ def erase(
 ) -> None:
     """Erase an EPROM, if supported.
 
-    TRAP #3 / D-13.3: this command keeps the inverse ``--blank-check`` polarity
-    (``is_flag=True default=False``) — opposite of ``write``'s
-    ``--no-blank-check``. Both polarities coexist verbatim from argparse.
+    This command keeps the INVERSE `--blank-check` polarity (flag, default
+    False) -- opposite of `write`'s `--no-blank-check`. Both coexist
+    deliberately.
 
-    D-153-04: unlike ``write``'s ``-b``, this command's ``-b``/``--blank-check``
-    requests a blank check performed **after** the erase, not skipped before it
-    — the inverse polarity above is a naming/default inversion, not just a
-    default flip. On protocol ``0x0D`` this post-erase check is not wired (no
-    ``operation_end`` arm was added to the software chip-erase handler), so
-    ``-b`` is a documented no-op there, not a discovered one.
+    Unlike write's `-b`, this one requests a blank check performed AFTER the
+    erase, not skipped before it: a naming inversion, not just a default flip.
+    On protocol 0x0D that post-erase check is not wired, so `-b` is a
+    documented no-op there.
 
-    D-153-04 (RESEARCH A7): ``-s``/``--sector-address`` exists for the
-    ``0x06`` sector-erase protocol. The ``0x0D`` software chip erase is
-    device-global by construction (the whole part is erased in one AN 0544B
-    sequence) and ignores any sector address given for it.
+    `-s`/`--sector-address` exists for the 0x06 sector-erase protocol. The 0x0D
+    software chip erase is device-global by construction and ignores it.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
     ok = app.eprom_operator.erase_eprom(
@@ -1333,47 +1227,37 @@ def fw(
 
 
 # ---------------------------------------------------------------------------
-# CHAN-01..07 — dev-tools channel gate. D-01: the gate is BOTH
-# mechanisms below, not either. `_DEV_TOOLS_ENABLED` is computed ONCE, at
-# import time, from `channel.is_dev_tools_enabled()` -- mirroring
-# `_PY32_ENABLED` above: a wheel's `__version__` is fixed when it is built, so
-# the choice a stable install renders is decided once, and decided correctly,
-# rather than re-evaluated per invocation (`is_dev_tools_enabled()` is itself
-# call-time/unmemoized -- see its own docstring in channel.py -- so capturing
-# it into a module global here is what freezes the decision). `_DevGroup` is
-# the other half: it holds the six gated NAMES only
-# (`channel.BETA_ONLY_DEV_COMMANDS`), never a callback, and supplies the
-# informative refusal for a name that resolves to nothing real.
-# Genuine non-registration happens separately, below, at each of the
-# six gated `@dev.command` blocks, each guarded at module scope by
-# `_DEV_TOOLS_ENABLED`.
+# ---------------------------------------------------------------------------
+# Dev-tools channel gate -- BOTH mechanisms below, not either.
+#
+# `_DEV_TOOLS_ENABLED` is computed ONCE at import: a wheel's __version__ is
+# fixed when it is built, so the choice a stable install renders is decided
+# once. (`is_dev_tools_enabled()` is itself call-time, so capturing it into a
+# module global here is what freezes the decision.)
+#
+# `_DevGroup` is the other half: it holds the gated NAMES only, never a
+# callback, and supplies the informative refusal. Genuine non-registration
+# happens separately at each gated @dev.command block below.
 # ---------------------------------------------------------------------------
 
 _DEV_TOOLS_ENABLED: bool = is_dev_tools_enabled()
 
 
 class _DevGroup(click.Group):
-    """`dev` group's Click command class (D-01's exact name).
+    """The `dev` group's Click command class.
 
-    Holds the six gated `dev` subcommand NAMES only, via
-    `channel.BETA_ONLY_DEV_COMMANDS` -- never a callback. A gated command
-    must not exist as an invokable object in a stable process; that is
-    enforced by conditional registration (the `_DEV_TOOLS_ENABLED` guards
-    below), not by this class. This class's only job is the informative
-    refusal: when a gated-but-unregistered name is looked up, raise
-    a channel-specific `UsageError` instead of letting Click fall through to
-    its generic, typo-indistinguishable `No such command %r.` error.
+    Holds the gated subcommand NAMES only, never a callback. A gated command
+    must not exist as an invokable object in a stable process -- that is
+    enforced by conditional registration below, not by this class. This class's
+    only job is the informative refusal, so a gated name raises a
+    channel-specific UsageError rather than Click's generic,
+    typo-indistinguishable "No such command".
 
-    `get_command` is the only method overridden, and that choice is not a
-    guess -- it is the empirically-settled hook from plan 136-01's spike
-    (`tests/test_click_group_gate_hook.py`): `click.Group.resolve_command()`
-    calls `self.get_command(ctx, cmd_name)` itself and only falls through to
-    its own generic error when `get_command` returns `None`, so overriding
-    `get_command` intercepts strictly before that fallback ever runs.
-    `resolve_command` therefore needs no override at all, and `list_commands`
-    needs none either: once a gated name is genuinely unregistered (Task 2,
-    below), it is already absent from `self.commands`, so it is already
-    absent from `list_commands`'s output with no extra code.
+    `get_command` is the only method overridden, and that is the settled hook:
+    `Group.resolve_command()` calls it and falls through to its own generic
+    error only when it returns None, so overriding it intercepts strictly
+    before that fallback. `resolve_command` and `list_commands` need no
+    override -- an unregistered name is already absent from `self.commands`.
     """
 
     def get_command(self, ctx: click.Context, cmd_name: str) -> Optional[click.Command]:
@@ -1436,23 +1320,16 @@ def dev_read(
 
 
 if _DEV_TOOLS_ENABLED:
-    # CHAN-06 tripwire (Phase 136, RETIRE-07-style: names WHY before a future
-    # edit touches the gate). `dev reg` is gated behind `_DEV_TOOLS_ENABLED`,
-    # which freezes `channel.is_dev_tools_enabled()` at import time --
-    # `is_prerelease_build() OR dev_tools_enabled_by_env()`. This command is
-    # load-bearing bench tooling: it is the held-erase-rail DMM proxy an
-    # operator uses to hold a register state (and therefore a voltage rail)
-    # energised long enough for a multimeter reading outside a normal
-    # read/write cycle. Gating purely on `__version__` would silently strand
-    # that bench dependency the moment a stable version is cut, or between
-    # betas, on an editable devcontainer install -- no error, just an absent
-    # command. That is exactly why the `FIRESTARTER_DEV_TOOLS=1` bench
-    # override exists: `channel.dev_tools_enabled_by_env` (exact-match
-    # `"1"` against the `FIRESTARTER_DEV_TOOLS` environment variable, fails
-    # closed on everything else) and `channel.is_dev_tools_enabled`'s `OR`
-    # composing it with the channel check are the two companions this
-    # depends on: narrowing the accepted `FIRESTARTER_DEV_TOOLS` value, or
-    # removing that `OR`, strands the bench tooling without warning.
+    # TRIPWIRE. `dev reg` is gated behind `_DEV_TOOLS_ENABLED`, and it is
+    # load-bearing bench tooling: the held-erase-rail DMM proxy an operator uses to
+    # hold a register state -- and so a voltage rail -- energised long enough to
+    # take a multimeter reading outside a normal read/write cycle.
+    #
+    # Gating purely on __version__ would silently strand that the moment a stable
+    # version is cut, with no error, just an absent command. That is why the
+    # FIRESTARTER_DEV_TOOLS=1 bench override exists. Narrowing the accepted value,
+    # or removing the OR that composes it with the channel check, strands the bench
+    # tooling without warning.
     @dev.command(name="reg")
     @click.argument("msb")
     @click.argument("lsb")
@@ -2055,21 +1932,17 @@ if _DEV_TOOLS_ENABLED:
     ) -> None:
         """Run the per-family validation matrix Tier-3 runner.
 
-        Composes write_cycle_eprom / consistency_check_eprom (no re-implementation).
-        Emits validation-matrix.{json,md} results artifact.
+        Composes write_cycle_eprom / consistency_check_eprom and emits
+        validation-matrix.{json,md}.
 
-        SKIP-deferred path: when no board/chip/source is available, records
-        all Tier-3 cells as SKIP-deferred and exits 0 — milestone stays closeable
-        at partial bench coverage.
+        When no board/chip/source is available it records every Tier-3 cell as
+        SKIP-deferred and exits 0.
 
-        3-way verdict contract (mirrors dev write-cycle + consistency-check):
-            0 = PASS  1 = FAIL  2 = hw-error
+        Verdicts: 0 PASS, 1 FAIL, 2 hw-error.
 
-        Non-vacuous oracle:
-        - Leonardo is the only authoritative PASS board; other boards are advisory.
-        - uno328pb write/program cells are hard N/A (brownout 999.2).
-        - r1 ≈ 270000 ±25% precondition aborts before any write cycle.
-        - retry_count is captured into each cell.
+        Leonardo is the only authoritative PASS board; others are advisory.
+        uno328pb write/program cells are hard N/A. An r1 outside ~270000 +/-25%
+        aborts before any write cycle.
         """
         spec = _load_validation_spec()
         families = _families_for_selection(family, spec)
@@ -2208,22 +2081,13 @@ if _DEV_TOOLS_ENABLED:
 # `dev test` -- community chip-validation sweep
 # ---------------------------------------------------------------------------
 
-# Per-verdict -> exit-code mapping: OK/NA/SKIPPED are exit-clean;
-# `marginal` is an inconclusive result (exit 2); BAD beats marginal via
-# EXPLICIT PRECEDENCE (`_overall_exit_code`), mirroring
-# dev_validate_family's own `if verdict_int > overall_verdict` pattern
-# (cli_handlers.py:1622-1623).
+# Per-verdict exit-code mapping. OK/NA/SKIPPED are exit-clean; `marginal` is
+# inconclusive (2); BAD beats marginal by EXPLICIT PRECEDENCE in
+# `_overall_exit_code`.
 #
-# v1.30 Phase 134 correction 3 (134-CONTEXT.md, D-14): this contract was
-# shipped INVERTED against both its own prose and `dev_test`'s docstring
-# below (:2119-2121) -- the mechanism used to be a bare call to Python's
-# builtin numeric maximum over `_verdict_code(r.verdict) for r in results`.
-# Because `_VERDICT_EXIT_CODES` maps `marginal -> 2` and `BAD -> 1`, that
-# numeric maximum picked 2 whenever both were present: marginal numerically
-# outranked BAD, so a run containing BOTH verdicts exited 2, not 1 -- the
-# exact opposite of what this comment and that docstring already claimed.
-# `_overall_exit_code` restores the claimed behaviour; it is a bugfix, not
-# a contract change.
+# It must not be a numeric max(): `marginal` maps to 2 and BAD to 1, so a max
+# picks 2 whenever both are present and a run containing both would exit
+# inconclusive rather than failed.
 _VERDICT_EXIT_CODES = {
     VERDICT_OK: 0,
     VERDICT_NA: 0,
@@ -2262,40 +2126,25 @@ def _overall_exit_code(results: list[StepResult]) -> int:
 
 
 def _dev_test_exit_code(results: list[StepResult], *, sdp_oracle_not_run: bool) -> int:
-    """`_overall_exit_code`'s D-15 extension (v1.30 Phase 134 plan 134-07,
-    LEG-12/LEG-13): an ALLOW-chip run whose SDP oracle (`write-inhibited`)
-    did NOT run gets an exit FLOOR of 2, so `firestarter dev test <chip>`
-    can no longer return 0 on a run that never exercised the oracle at all
-    (the P-04 shape: a not-run oracle filed as PASS by a community
-    reporter).
+    """Exit floor for an ALLOW-chip run whose SDP oracle did not run, so
+    `dev test` cannot return 0 on a run that never exercised the oracle at all.
 
-    Composed the SAME WAY `_overall_exit_code` composes BAD-outranks-
-    marginal: the floor CONTRIBUTES a candidate code (`2`) into the set fed
-    to `_EXIT_CODE_PRECEDENCE`'s most-severe-first selection -- it is NEVER
-    the builtin numeric maximum applied between the observed code and the
-    floor value. That builtin, given `1` (BAD) and `2` (the floor), returns
-    `2` -- so a naive floor would re-launder a BAD run's exit 1 into exit 2,
-    recreating exactly the laundering D-14 removed. Composing it as a
-    precedence candidate instead keeps BAD's rank intact: a run that is
-    both BAD and NOT-RUN still exits 1, not 2.
+    Composed as a precedence CANDIDATE, never as a numeric max against the
+    observed code. A max of 1 (BAD) and 2 (the floor) returns 2, which would
+    launder a BAD run into an inconclusive one -- exactly the inversion the
+    precedence map exists to prevent. A run that is both BAD and NOT-RUN still
+    exits 1.
 
-    Stated cost (D-15, recorded here because this is the one place a
-    future reader would look for it): `dev test`'s exit code stops being a
-    PURE function of step verdicts -- it gains exactly ONE non-verdict
-    term, this `sdp_oracle_not_run` flag.
+    Cost, stated: `dev test`'s exit code is no longer a pure function of step
+    verdicts -- it gains exactly this one non-verdict term.
 
-    Why the not-run oracle stays `SKIPPED` rather than becoming `marginal`
-    (D-15's own reasoning, restated at this call site): `_RAN_VERDICTS =
-    frozenset({OK, BAD, MARGINAL})` (`chip_test.py`) counts `marginal` as
-    *ran* -- recording a non-running oracle as `marginal` would hold
-    `N == M` in `count_applicable`'s ratio and defeat LEG-13 outright, the
-    exact laundering this milestone exists to stop.
+    The not-run oracle stays SKIPPED rather than becoming `marginal`, because
+    `marginal` counts as *ran* and would hold N == M in the applicable ratio,
+    defeating the point.
 
-    The floor is ALLOW-only: callers gate `sdp_oracle_not_run` with
-    `sdp_oracle_applicable(plan)` at the call site, never here -- a REFUSE
-    chip's SDP steps read `NOT-RUN` legitimately (the oracle was never
-    applicable to begin with), and flooring that chip's exit code would
-    misrepresent a correct refusal as an inconclusive result.
+    ALLOW-only: callers gate this at the call site. A REFUSE chip reads NOT-RUN
+    legitimately, and flooring its exit code would misrepresent a correct
+    refusal as inconclusive.
     """
     codes = {_verdict_code(r.verdict) for r in results}
     if sdp_oracle_not_run:
@@ -2393,21 +2242,13 @@ def _make_sampler(app: "AppContext", report: DiagnosticReport) -> Any:
 
 
 def _is_uv_eprom(app: "AppContext", chip: str) -> bool:
-    """Read this chip's UV-erasable-EPROM axis directly off the DB entry.
+    """Read this chip's UV-erasable axis directly off the DB entry.
 
-    Delegates to `chip_test.is_uv_eprom` on the **full** DB dict from
-    `app.db.get_eprom(chip)` -- never `resolve_chip`'s/`convert_to_
-    programmer`'s programmer dict, which carries no `electrical-type` and is
-    the wrong seam per `is_uv_eprom`'s own docstring (D-01, DEVTEST-03,
-    RESEARCH C-4). Named exactly `_is_uv_eprom` because
-    `check_devtest_orchestrator.py`'s `_HANDLER_FUNCTION_NAMES` allow-list
-    has carried that name since Phase 112 pointing at nothing -- landing the
-    handler-side helper under this name is free gate coverage rather than a
-    new allow-list entry.
+    Delegates to `chip_test.is_uv_eprom` on the FULL DB dict -- never the
+    programmer dict, which carries no `electrical-type`.
 
-    Returns `False` for a chip absent from the DB; every caller reaches this
-    helper only after SAFE-04's absent-chip hard-fail has already run, so
-    that case is unreached in practice.
+    Returns False for a chip absent from the DB; every caller reaches this only
+    after the absent-chip hard-fail has run, so that case is unreached.
     """
     full = app.db.get_eprom(chip)
     if not full:
@@ -2421,34 +2262,24 @@ def _resolve_write_scope(
     *,
     interactive: bool,
 ) -> str:
-    """Decide this run's `derive_plan(..., write_scope=...)` literal.
+    """Decide this run's `write_scope` literal.
 
-    UV parts get `"partial"`, everything else gets `"full"`. That is the whole
-    rule now, and there is no prompt on any path.
+    UV parts get "partial", everything else "full". That is the whole rule, and
+    there is no prompt on any path.
 
-    **REVERSAL of quick task 260821-wna's D-C, operator-agreed 2026-08-22.**
-    D-C made a UV part's scope a CONSENT CEILING: `full` permitted a
-    full-device write when the chip read blank. That is retired. `dev test`
-    validates the firmware, host and database for a chip TYPE -- it is not a
-    chip-qualification tool -- so writing half of a virgin UV part buys no
-    firmware coverage a single top slot does not already give, and costs the
-    part's entire remaining life as a regression rig. `_resolve_write_target`
-    no longer has a full-device-if-blank branch at all.
+    A UV part's scope is deliberately NOT a consent ceiling that would permit a
+    full-device write on a blank chip. `dev test` validates the firmware, host
+    and database for a chip TYPE -- it is not a chip-qualification tool -- so
+    writing half a virgin UV part buys no coverage a single top slot does not,
+    and costs the part's remaining life as a regression rig.
 
-    **And the prompt goes with it, for the reason 260821-wna itself
-    established.** With no full-device ceiling left, both answers resolved to
-    the same masked slot write -- which is exactly the inert-prompt defect
-    D-01 found and 260821-wna fixed by giving the answers different
-    consequences. Rather than re-ship a prompt whose answer changes nothing,
-    the prompt is removed: this command already writes unconditionally on
-    every other family, the operator deliberately removed the always-writes
-    preamble in quick task 260821-spg, and the report now states both the
-    slot actually written and how many slots the part has left, which
-    is better disclosure than a yes/no that cannot alter the outcome.
+    The prompt went with it: with no ceiling, both answers resolved to the same
+    masked slot write, and a prompt whose answer cannot alter the outcome is
+    worse than none. The report states which slot was written and how many the
+    part has left, which is better disclosure than that yes/no was.
 
-    `interactive` is retained as a parameter, unused by the branch logic, so
-    the two call sites and the orchestrator gate keep their shape; it is what
-    a future scope decision would key on if one is ever needed again.
+    `interactive` is retained, unused, so the call sites and the orchestrator
+    gate keep their shape.
     """
     del interactive  # no branch keys on it any more -- see the docstring
     if not _is_uv_eprom(app, chip):

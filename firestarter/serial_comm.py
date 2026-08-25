@@ -296,40 +296,23 @@ class SerialCommunicator:
         elif response.type == "WARN":
             level = logging.WARNING
         elif response.type == "INFO":
-            # Before this arm, the whole INFO band
-            # fell through to the `logging.DEBUG` initialiser above, while
-            # `_setup_logging` (cli_handlers.py:83) sets the root logger to
-            # `logging.INFO` unless `-v` is passed. That meant every SDP
-            # report line — emitted unconditionally by firmware —
-            # was silently discarded by the host for a long time: a
-            # two-repo requirement that passed verification on both sides
-            # and was still false end to end.
+            # Promote the INFO band to logging.INFO. Without this the whole band falls
+            # through to the DEBUG initialiser while the root logger sits at INFO, so
+            # unconditionally-emitted firmware report lines are silently discarded by the
+            # host.
             #
-            # This promotion is deliberately scoped to the `INFO` label only.
-            # `OK`, `INIT`, `MAIN`, `END` and `DATA` are protocol-phase frames
-            # and stay on the `logging.DEBUG` default — promoting them would
-            # flood default-verbosity output.
+            # Scoped to the INFO label ONLY. OK, INIT, MAIN, END and DATA are
+            # protocol-phase frames and stay on DEBUG -- promoting them floods default
+            # output.
             #
-            # The blast radius is SIX unconditionally-emitted INFO-band ids,
-            # not five: `0x5E`, `0x5F`, `0x60`, `0x61`, `0x62` via
-            # `LOG_ID`/`LOG_ID_U32`, plus `0x5B` `MSG_INFO_HW` — emitted via
-            # the unconditional `LOG_WARN_ID_U8` alias at
-            # `rurp_hw_rev_utils.h:96` (`logging_id.h:115` makes that macro an
-            # unconditional plain `LOG_ID_U8` despite its name), while its
-            # *catalog* severity is INFO. Every other INFO id in the tree is
-            # `FLAG_VERBOSE`-gated in firmware and therefore only sent when
-            # the host passed `-v`.
+            # Blast radius is six unconditionally-emitted INFO-band ids. Note 0x5B
+            # MSG_INFO_HW among them: it is emitted through an alias whose name says WARN
+            # but which expands to a plain unconditional log, while its catalog severity is
+            # INFO. That is the hard-fail-loud revision warning, visible at default
+            # verbosity because of this arm. Every other INFO id is FLAG_VERBOSE-gated in
+            # firmware.
             #
-            # That `0x5B` case is the hard-fail-loud revision
-            # warning — this arm makes it visible at default verbosity for
-            # the first time, a partial fix for a second, older observability
-            # defect independent of the SDP work.
-            #
-            # Side effect: under `-v`, an INFO frame's rendered prefix changes
-            # from `I:` to `INFO:`, because the one-character abbreviation
-            # below applies only while `rurp_logger.isEnabledFor(logging.DEBUG)`
-            # and the type is in `NON_RESPONSE_PREFIXES` — at `-v` the DEBUG
-            # gate is open regardless of this arm's level assignment.
+            # Side effect: under -v an INFO frame's prefix changes from `I:` to `INFO:`.
             level = logging.INFO
 
         # Shorten prefix for debug, full for others
@@ -342,41 +325,26 @@ class SerialCommunicator:
         rurp_logger.log(level, f"{log_prefix}: {message}")
 
     def _decode_id_frame(self, frame_len: int, body: bytes) -> Optional[LogMessage]:
-        """Compatibility wrapper — see codec.decode_id_frame.
+        """Compatibility wrapper -- see codec.decode_id_frame.
 
-        CAP-01: after decoding, when the message is MSG_OK_READY and
-        the param region is exactly 2 bytes, extract the big-endian u16 and store
-        it as firmware_max_chunk (buffer-size advertisement relocated from the FW
-        identity string to the operation-setup ack). A plausibility clamp rejects
-        values outside [1, 4096] so a hostile/corrupt ack cannot over-size chunks
-        (T-55-05 / T-55-06). 0-byte param region (old firmware) leaves
-        firmware_max_chunk unchanged (graceful degradation).
+        CAP-01: on MSG_OK_READY with a 2-byte param region, extract the
+        big-endian u16 as firmware_max_chunk. A plausibility clamp rejects
+        values outside [1, 4096] so a corrupt or hostile ack cannot over-size
+        chunks. A 0-byte region leaves it unchanged.
 
-        D-15 (Phase 120 / v1.22 HOST-06): every successfully decoded id frame
-        has its id recorded into seen_message_ids, regardless of which id it
-        is. Trigger: any id for which codec.decode_id_frame returns non-None.
-        Degradation against old firmware: a firmware build that never emits a
-        given id (e.g. MSG_WARN_SDP_UNLOCK_SKIPPED / 0x86) simply leaves that
-        id absent from the set — that absence is exactly the signal callers
-        such as write_eprom's D-15 check key on. The record is bounded by
-        construction: it stores only the decoded id integer (0-255), never
-        anything sized from frame content.
+        Every successfully decoded id is recorded into seen_message_ids. A
+        firmware build that never emits a given id simply leaves it absent, and
+        that absence is exactly what callers key on. Bounded by construction:
+        it stores only the id integer, never anything sized from frame content.
 
-        CAP-03: a third length-discriminated field, appended AFTER
-        CAP-02's variable-length identity tail, carrying the firmware's
-        advertised per-block write-time budget in seconds as a big-endian
-        u16. Read at the COMPUTED ver_end offset -- never a fixed index, the
-        same discipline CAP-02 itself uses for the identity string -- and
-        plausibility-clamped to [1, WRITE_BUDGET_MAX_S] exactly as CAP-01
-        clamps a buffer size to [1, 4096]. Absent, truncated or implausible
-        advertisements all leave write_block_budget_s None, which downstream
-        means "apply the safe default", never an error and never a refusal
-        (D-10). This plan does not fix BF-1: firmware that emits only the
-        bare 2-byte legacy ack is refused by _probe_port before this arm is
-        ever reached.
+        CAP-03: a third length-discriminated field appended AFTER CAP-02's
+        variable-length identity tail, read at the COMPUTED ver_end -- never a
+        fixed index -- and clamped to a plausible range. Absent, truncated or
+        implausible values all leave it None, which downstream means "apply the
+        safe default", never an error.
 
-        The GATE-1.8d ring-fenced _read_and_parse_lines body is not touched —
-        only this override seam is used (Pitfall 4 / Open Question 3).
+        The ring-fenced _read_and_parse_lines body is not touched; only this
+        override seam is used.
         """
         result = codec.decode_id_frame(frame_len, body)
         # body layout: [id_byte][params_bytes...][crc_byte]
@@ -412,21 +380,16 @@ class SerialCommunicator:
                         self.firmware_identity = params_bytes[4:ver_end].decode(
                             "ascii", errors="replace"
                         )
-                        # CAP-03: the per-block write-time budget,
-                        # appended AFTER CAP-02's variable-length identity
-                        # tail. The offset MUST be the COMPUTED ver_end, never
-                        # a fixed index: a fixed index works on every board
-                        # whose identity string happens to be one length and
-                        # silently misreads on the next -- offsets 2 and 3
-                        # are already claimed by CAP-02, so a budget written
-                        # there would be read as a hardware revision and a
-                        # version length. Nested here, past the ver_end
-                        # guard, because an ack with no identity tail cannot
-                        # carry CAP-03 -- the arm is unreachable there by
-                        # construction. A truncated tail leaves the field
-                        # None rather than yielding a partial value, the same
-                        # posture as
-                        # test_decode_truncated_version_prefix_leaves_identity_none.
+                        # CAP-03, appended AFTER CAP-02's variable-length identity tail.
+                        # The offset MUST be the COMPUTED ver_end, never a fixed index: a
+                        # fixed index works on whichever board's identity string happens to
+                        # be that length and silently misreads on the next. Offsets 2 and 3
+                        # are already claimed, so a budget written there reads back as a
+                        # hardware revision and a version length.
+                        #
+                        # Nested past the ver_end guard because an ack with no identity tail
+                        # cannot carry this field. A truncated tail leaves it None rather
+                        # than yielding a partial value.
                         if len(params_bytes) >= ver_end + 2:
                             value = struct.unpack(
                                 ">H", params_bytes[ver_end : ver_end + 2]
@@ -680,18 +643,16 @@ class SerialCommunicator:
     ) -> List[str]:  # noqa: UP006
         """Candidate ports to probe, most preferred first.
 
-        ``restrict_to_preferred`` makes ``preferred_port`` the ONLY candidate.
-        Set it when the operator named the port on this invocation; leave it
-        False for a port merely remembered from a previous successful run.
+        `restrict_to_preferred` makes `preferred_port` the ONLY candidate. Set
+        it when the operator named the port on this invocation; leave it False
+        for a port merely remembered from a previous run.
 
-        The distinction matters because plain ordering was actively dangerous.
-        When the named port failed to answer — firmware too old to parse the
-        current command framing, or a busy port — probing continued and the
-        caller was handed a DIFFERENT board's identity. `FirmwareManager` then
-        combined that identity with `port_to_use = port_override or
-        connected_port`, i.e. board A's release asset aimed at port B. Only
-        avrdude's part-signature check stood between that and a wrong-firmware
-        flash, and two boards sharing an MCU would not even get that.
+        Plain ordering was actively dangerous: when the named port failed to
+        answer -- old firmware, or a busy port -- probing continued and the
+        caller was handed a DIFFERENT board's identity, which the firmware
+        manager then combined with the originally-named port. Board A's release
+        asset aimed at port B, with only avrdude's part-signature check in
+        between -- and two boards sharing an MCU would not even get that.
         """
         ports = []
         if preferred_port:

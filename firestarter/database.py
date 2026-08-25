@@ -3,25 +3,12 @@ Project Name: Firestarter
 Copyright (c) 2024 Henrik Olsson
 Permission is hereby granted under MIT license.
 
-This module handles the EPROM and pin map database for the Firestarter application.
-It is responsible for:
-- Loading EPROM definitions from JSON files (a base set and user overrides).
-- Loading pin map configurations from JSON files (base and user overrides).
-- Merging these data sources.
-- Providing functions to query EPROM information, search for EPROMs,
-  and retrieve specific configurations.
-- Translating generic EPROM pinouts to the RURP (Relatively Universal ROM Programmer) hardware-specific bus configuration.
+EPROM and pin-map database: loads the base JSON plus user overrides, merges
+them, answers queries, and translates a generic EPROM pinout into the RURP's
+hardware-specific bus configuration.
 
-The database is initialized once when the EpromDatabase class is first instantiated.
-Subsequent instantiations will return the same initialized instance.
-
-Key data structures:
-- `self.proms`: A dictionary storing EPROM data, keyed by manufacturer.
-- `self.pin_maps`: A dictionary storing pin map configurations, keyed by pin count and then by pin map variant/name.
-
-Module-level constants:
-- `pin_conversions`: A hardcoded dictionary mapping standard EPROM pin numbers
-  (for 24, 28, 32-pin DIP packages) to the RURP's internal address/control lines.
+`EpromDatabase` is a singleton -- it initialises once and later instantiations
+return the same instance.
 """  # noqa: E501
 
 import json
@@ -566,63 +553,28 @@ class EpromDatabase:
         if full_eprom_data.get("page_size"):
             programmer_data["page-size"] = full_eprom_data["page_size"]
 
-        # Calculate the simple 'flags' key for the programmer.
-        # Canonical erase-capability ground truth: set FLAG_CAN_ERASE directly
-        # from electrical.type ∈ {"EEPROM","Flash/EEPROM"} rather than the
-        # fragile synthetic `info-flags & 0x10` round-trip injected by _map_data.
-        # This reads the same canonical field _map_data keys off (line ~434), so
-        # the derivation cannot drift under a future _map_data refactor, and a
-        # missing key degrades safely to flag-clear exactly as the old path did.
+        # FLAG_CAN_ERASE is set directly from electrical.type rather than from a
+        # synthetic info-flags round-trip, so the derivation reads the same canonical
+        # field and cannot drift. A missing key degrades to flag-clear.
         #
-        # Algorithm 5 is the only exclusion, and it is a hardware-safety one.
-        # Algorithm 13 was excluded here too, for an entirely unrelated reason;
-        # that exclusion has since been REVERSED (record below). The two were
-        # never the same argument and must not be collapsed into one.
+        # Algorithm 5 (flash4) is the ONLY exclusion, and it is a HARDWARE-SAFETY one:
+        # flash4 auto-erases per page during the page write, and setting the flag
+        # routes the firmware into an erase that asserts the VPP regulator on a
+        # 5V-only chip. 12V on a 5V part. This argument is live, not retired.
         #
-        # Algorithm 5 (flash4): flash4 auto-erases per page during the
-        # page-write; no separate 12V bulk erase is needed or safe. Setting
-        # FLAG_CAN_ERASE for 0x05 routes firmware flash4_write_init →
-        # flash4_erase_execute which asserts CTRL_VPP_REGULATOR_ENABLE on a
-        # 5V-only chip (12V on a 5V part — hardware-damage hazard). Scope:
-        # algorithm==5 only; the 0x07 and 0x0D paths are unaffected by this
-        # particular exclusion. This is a live hardware-hazard argument, not a
-        # retired one -- it is the reason the tuple still keeps 5 even after 13
-        # was dropped from it.
+        # Algorithm 13 was once excluded too, for an unrelated reason -- the firmware
+        # had no 28C erase, so the flag was a false capability claim. It now has one
+        # (the AN-0544B software chip erase), and the standalone `erase` command's
+        # refusal gate does read the flag, so it is not firmware-inert there either.
         #
-        # Algorithm 13 / protocol 0x0D (AT28C / 28C-family SDP EEPROMs) --
-        # REVERSAL RECORD, the fourth recorded reversal in this chain. The flag
-        # was once cleared here on the premise that the firmware's
-        # configure_eeprom28c handler (firestarter/src/proms/eeprom_28c.cpp)
-        # implemented no erase whatsoever, so advertising FLAG_CAN_ERASE for
-        # these 84 chips was a false capability statement. That premise no
-        # longer holds: a real CMD_ERASE dispatch arm was added to
-        # configure_eeprom28c implementing the AN-0544B software six-byte chip
-        # erase, so the capability statement this flag makes is now TRUE. The
-        # companion claim that the 0x0D firmware path "genuinely never reads"
-        # this flag is false too: `eprom_operations.cpp`'s eprom_erase()
-        # precondition -- the standalone `erase` command's refusal gate -- does
-        # read FLAG_CAN_ERASE, so the bit is not firmware-inert on this protocol.
+        # READ THIS BEFORE RE-CLEARING THE FLAG for algorithm 13: the old policy was
+        # correct given its premise, and only the premise changed. Re-clearing it
+        # without first showing the firmware erase arm is gone re-reverses a reversal;
+        # it does not fix a bug. The two exclusions were never the same argument and
+        # must not be collapsed into one.
         #
-        # READ THIS BEFORE RE-CLEARING THE FLAG: the earlier *policy* was
-        # correct given its premise; only the premise changed. Record it as
-        # mechanism-corrected and intent-satisfied, never as failed -- the
-        # honest resolution was to make the firmware do more, not to make the
-        # host claim less. Re-clearing the bit without first showing the
-        # firmware erase arm is gone re-reverses a reversal; it does not fix a bug.
-        #
-        # Restoring the flag deliberately does NOT make `write` erase
-        # implicitly: no FLAG_CAN_ERASE-gated erase block was added to
-        # eeprom28c_write_init, and `erase` was not added to `write`'s
-        # FLAG_SKIP_SDP_UNLOCK auto-set path. Erase stays a standalone step.
-        #
-        # Blast radius: no `chip_database.json` entry carries a `flags` key, so
-        # `diff_db.py` identity cannot break, and the only other host reader of
-        # this bit (`serial_comm.py`'s `_log_command_details`) is DEBUG-only
-        # logging. Two intended behavioural deltas: `firestarter erase` on a
-        # 0x0D part now performs a real erase instead of being refused a layer
-        # earlier, and `chip_test.py`'s `derive_plan` now offers erase as a
-        # supported destructive step on all 84 algorithm-13 rows, with
-        # blank-check moved after it where it doubles as the erase's oracle.
+        # Restoring the flag does NOT make `write` erase implicitly -- erase stays a
+        # standalone step.
         simple_flags = 0
         algo = programmer_data["algorithm"]  # already computed above from protocol-id
         if full_eprom_data.get("electrical-type", "") in ("EEPROM", "Flash/EEPROM"):

@@ -1,43 +1,16 @@
-"""SDP (Software Data Protection) capability predicate for protocol ``0x0D``.
+"""SDP (Software Data Protection) capability predicate for protocol 0x0D.
 
-(a) This module is a **static fail-closed allow-list** held in production code.
-A ``0x0D`` part a user adds to ``~/.firestarter/database.json`` (merged live at
-``database.py:187-199``, invisible to CI) is therefore **refused** by default,
-not silently permitted, because it can never appear on the allow-list below.
+This module is a static fail-closed allow-list. A 0x0D part a user adds to
+`~/.firestarter/database.json` -- merged live, invisible to CI -- is therefore
+REFUSED by default rather than silently permitted, because it can never appear
+on the list below.
 
-(b) Source: minipro ``infoic.xml`` at commit
-``a8efaedc236c1d9718bd28299dfbb99536b010ff``, section
-``<database type="INFOIC2PLUS">``, axis ``flags`` **bit 15** (``0x8000``,
-``MP_PROTECT_AFTER``).
+Source: minipro `infoic.xml`, flags bit 15 (MP_PROTECT_AFTER). Nothing reads
+that file at runtime or in CI, and it is not committed here: the table below is
+a TRANSCRIPTION, not a computation.
 
-(c) Counts: **43 ALLOW / 41 REFUSE / 84 total** ``(manufacturer, part_number)``
-pairs, yielding **65 distinct allow tokens** (and 65 distinct refuse tokens,
-disjoint) after comma-splitting the ``part_number`` strings.
-
-(d) **Nothing reads ``infoic.xml`` at runtime or in CI**, and it is not
-committed to either sub-repo. The table below is a transcription, not a
-computation.
-
-(e) Full derivation, tables, and provenance:
-``.planning/phases/120-host-cli-surface-wire-emission-capability-refusal/120-SDP-PARTITION.md``.
-
-(f) Three ground-truth probes validated the ``flags`` bit-15 axis before it was
-adopted: HOST-04's 8 named pre-SDP entries (``2804``, ``2816``, ``2817``,
-``X2804A``/``X2804AI``, ``X2816A``, ``X2816B``/``X2816C``, ``XL2804A``,
-``XL2816A``/``XLE28C16A``/``XLS28C16A``) all have bit 15 = 0; both FRAM parts
-(``FM28V020``, ``MB85R256H``) have bit 15 = 0; the four datasheet-of-record
-Atmel parts (``AT28C256``, ``AT28C64B``, ``AT28C010``, ``AT28C040``) all have
-bit 15 = 1.
-
-(g) Bit 15 is **not** a page-write proxy — it disagrees with ``page_size > 1``
-on 12 of the 84 entries. See ``120-SDP-PARTITION.md`` §4's 9-entry
-residual-risk watch-list for where a wrong bit-15 call would be least
-intuitive.
-
-(h) Decoding bits 14/15 into the DB proper (see
-``.planning/todos/pending/decode-infoic-flags-bits-14-15-protect-metadata.md``)
-would later make this table *generated* rather than *transcribed* — narrowing,
-not removing, the curation this module performs.
+Bit 15 is NOT a page-write proxy: it disagrees with `page_size > 1` on
+12 of the 84 entries, so do not substitute one for the other.
 """
 
 from __future__ import annotations
@@ -57,25 +30,8 @@ from typing import Any, Mapping  # noqa: UP035
 # `convert_to_programmer()`, which do not carry this key (RESEARCH F-02, F-06).
 SDP_PROTOCOL_ID = 13
 
-# The 65 distinct uppercased alias tokens derived from the 43 ALLOW entries in
-# `120-sdp-partition.json` (transcribed, never re-derived from a structural or
-# lexical rule — RESEARCH F-03: `DIP28_28C64` splits 15 ALLOW / 20 REFUSE, and
-# `2817` sits on a different pinout from `2804`/`2816`). Parentheticals are
-# retained verbatim — see `split_part_number_tokens`.
-#
-# Four tokens (`M28010`, `M28C64`, `M28C64A`, `M28C64-XXW`) each appear on two
-# entries — the `SGS-THOMSON` and `ST` second-source listings of the same
-# parts — which is why 43 entries yield 65 (not 86) distinct tokens; both
-# copies land on the same (ALLOW) side, so token keying stays well-defined.
-#
-# This static transcription is no longer merely asserted equal to a
-# hand-curated snapshot — `tests/test_sdp_db_invariant.py::
-# test_sdp_partition_matches_infoic_derived_field_element_wise` now proves it
-# equal, element-wise, to `chip_database.json`'s own `protect_on_after` field
-# (PROV-02/03, Phase 136.1) — and this frozenset still cannot itself read
-# that field at runtime, by design: `tools/check_sdp_capability_invariants.py`'s
-# Class 2(b) gate forbids any binding shape other than a literal
-# `frozenset(...)` of string literals, unchanged and untouched by this phase.
+# The distinct uppercased alias tokens for the allowed parts, comma-split from
+# their part_number strings.
 SDP_CAPABLE_TOKENS: frozenset[str] = frozenset(
     {
         # ATMEL

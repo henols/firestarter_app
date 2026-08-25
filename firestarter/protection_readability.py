@@ -1,91 +1,50 @@
 """Hand-curated family-level protection-readability table.
 
-(a) This table is hand-curated, and hand-curation is DATA-04-compliant here rather
-than a violation of it, because ``infoic.xml`` was measured and found unable to
-supply protection readability at all. `.planning/notes/infoic-xml-protection-
-flags-research.md` is the negative result: ``status_readable`` is not derivable
-from any ``infoic.xml`` flag, and the sharpest evidence is that **W29C020C** (a
-readable, permanently-locking boot block) is flag-identical to **W29EE011**
-(SDP-only, unreadable) — two devices this table must tell apart carry the same
-upstream bits. The whole AMD Autoselect-readable group additionally carries zero
-protection bits of its own. With no machine-derivable axis, a hand transcription
-of the one document that *does* state readability, cited row by row, is the
-honest option DATA-04 leaves open.
+HAND-CURATED DELIBERATELY. `infoic.xml` was measured and cannot supply
+protection readability at all: W29C020C (readable, permanently-locking boot
+block) is flag-identical to W29EE011 (SDP-only, unreadable) -- two devices this
+table must tell apart carry the same upstream bits -- and the whole AMD
+Autoselect-readable group carries no protection bits of its own. With no
+machine-derivable axis, a cited transcription of the one document that does
+state readability is the honest option.
 
-(b) The source axis is ``firestarter_app/doc/lockable-proms.md`` — 399 lines, 126
-family rows across 18 numbered sections, each family cited to its own vendor
-datasheet where the document names one. Its ``## Key`` section defines the
-``Yes—sector`` / ``Yes—global`` / ``Yes—special`` / ``Indirect`` / ``No`` /
-``Permanent`` vocabulary this module reads off of, row by row.
+The source is `doc/lockable-proms.md`, whose `## Key` section defines the
+Yes-sector / Yes-global / Yes-special / Indirect / No / Permanent vocabulary
+this module reads off row by row.
 
-(c) The census: the chip database holds 746 rows across 59 vendors. The curation
-surface this module covers is 217 entries across algorithms ``0x05`` (27
-entries) and ``0x06`` (190 entries), carrying 273 distinct alias tokens. The
-other 529 of 746 rows are algorithm-derivable and appear in no frozenset here —
-they need no curated token at all.
+Coverage is algorithms 0x05 and 0x06 only; the remaining rows are
+algorithm-derivable and need no curated token.
 
-(d) Nothing reads this module at runtime except ``protection_gate_for_entry``
-(not yet written when this module was authored), and nothing in it
-reaches the wire — it is a pure, static, hand-transcribed lookup.
-
-(e) The fail-closed direction: a token present in neither
-``DOCUMENTED_READABLE_TOKENS`` nor ``DOCUMENTED_NOT_READABLE_TOKENS`` resolves to
-``undocumented`` by complement. Forgetting to curate a token can therefore only
-ever produce a refusal downstream, never a silently-granted permission to read
+FAIL-CLOSED: a token in neither the readable nor the not-readable set resolves
+to `undocumented` by complement, so forgetting to curate a token can only ever
+produce a refusal downstream -- never a silently-granted permission to read
 silicon.
 
-(f) Measured reason literal matching cannot build this table by itself: only 10
-of the 42 ``0x05`` tokens and 20 of the 231 ``0x06`` tokens appear verbatim
-anywhere in ``lockable-proms.md``, because the document writes families in
-elided shorthand — ``Am29F010 / F010B``, ``MX29F010 / F020 / F040`` — where a
-bare suffix like ``F010B`` is a continuation of the row's shared stem, not an
-independent part number. Curating the remaining 243 tokens means recognising
-which row's stem a given DB alias continues, or recognising that no row's stem
-covers it at all.
+Exact string matching cannot build this table: the document writes families in
+elided shorthand (`Am29F010 / F010B`), where a bare suffix continues the row's
+shared stem rather than naming an independent part. Curating a token means
+recognising which row's stem it continues, or that none does.
 
-(g) The C-17 ambiguity is recorded, not silently resolved: ``lockable-proms.md``'s
-row key at line 21 is ``W29C020 / W29C020C`` and covers both parts, but every
-restatement of that row elsewhere in the document (lines 30, 335, 350) names
-``W29C020C`` only. Per `151-DESIGN.md` §5's named tiebreak rule, the token that
-the restatements are silent about — bare ``W29C020`` — takes the **more
-restrictive** of the two readings (``documented-not-readable``), and the
-disagreement itself is recorded in ``AMBIGUOUS_DOC_CITATIONS`` rather than
-erased. This changes nothing about the worked ``W29C020,W29C020C,W29C022`` DB
-entry's refusal: ``W29C022`` is undocumented either way, so the entry refuses
-regardless of how the ``W29C020`` tiebreak resolves — the tiebreak only changes
-how many offending aliases the refusal names.
-
-(h) Negative control: of the 5 ``0x05`` DB entries whose *every* alias token
-happens to match the document verbatim (``AT29C020``, ``AT29C040``, ``AT29C256``,
-``AT29C512``, ``W29EE011``), four are Atmel ``AT29C*`` parts that
-`doc/lockable-proms.md` §15 records as having "No explicit SDP state" — i.e.
-documented-**not**-readable. The set of tokens that are easy to locate by exact
-string match is not the set of tokens that are readable; the two are close to
-disjoint here.
+One recorded ambiguity: the document's row key covers both `W29C020` and
+`W29C020C`, but every restatement names `W29C020C` only. The token the
+restatements are silent about takes the MORE RESTRICTIVE reading, and the
+disagreement is recorded in AMBIGUOUS_DOC_CITATIONS rather than erased.
 """
 
 from __future__ import annotations
 
-# Import-purity invariant (mirrors sdp_honesty.py's own invariant comment,
-# which names its two permitted modules and asserts both are leaves): this
-# module's top-level import set is a subset of {"__future__", "typing",
-# "firestarter.sdp_capability"}. The third entry is admitted only because
-# `sdp_capability` is itself import-pure ({"__future__", "typing"} only, so
-# the set stays a shallow, checkable tree, not an unbounded one) and because
-# plan 151-06 needs exactly one name from it — `split_part_number_tokens` —
-# whose no-parenthetical-stripping rule is a measured correctness requirement
-# (`120-SDP-PARTITION.md` §5) that must not be copied a second time; a second
-# copy is precisely the kind of drift this codebase keeps removing. No
-# `click`, no `json`, no `pathlib`, no `firestarter.database`, no
-# `firestarter.sdp_honesty` — the composed refusal *prose* lives one layer up,
-# in `lock_status.py`, so `sdp_honesty.py` keeps the caveat
-# sentence's single home and this module never depends on it. In this task
-# the actual import list is only `__future__` and `typing`; 151-06
-# adds the `sdp_capability` import when it adds the function that needs it.
-# `Mapping` is imported from `typing` (not `collections.abc`) to keep the
-# invariant literal; ruff's UP035 (prefer collections.abc) is suppressed below
-# since this file has no runtime dependency on the deprecated alias beyond a
-# lazily-evaluated annotation (`from __future__ import annotations`).
+# Import purity: this module's top-level imports are limited to __future__,
+# typing and firestarter.sdp_capability. That third is admitted only because it
+# is itself import-pure, keeping the tree shallow and checkable, and because
+# exactly one name is needed from it -- `split_part_number_tokens`, whose
+# no-parenthetical-stripping rule is a measured correctness requirement that
+# must not be copied a second time.
+#
+# No click, no json, no pathlib, no firestarter.database, no
+# firestarter.sdp_honesty: the composed refusal PROSE lives one layer up in
+# lock_status.py, so the caveat sentence keeps its single home.
+#
+# Mapping comes from typing, not collections.abc, to keep that list literal.
 from typing import Any, Mapping  # noqa: UP035
 
 # The one import the declared purity invariant admits beyond {__future__,
@@ -183,68 +142,42 @@ CURATION_PROTOCOL_IDS: frozenset[int] = frozenset({5, 6})
 def protection_gate_for_entry(
     entry: Mapping[str, Any] | None, display_name: str
 ) -> tuple[str, str]:
-    """Resolve one `db.get_eprom()`-shaped full entry dict to one gate token.
+    """Resolve one full entry dict to one gate token.
 
-    Returns a 2-tuple `(class_token, reason)`. `class_token` is always one
-    of `GATE_TOKEN_NO_MECHANISM`, `GATE_TOKEN_NOT_IMPLEMENTED`,
-    `GATE_TOKEN_NOT_READABLE`, `GATE_TOKEN_UNDOCUMENTED_ALIAS`, or
-    `GATE_TOKEN_READ_PERMITTED` — structurally never `protected` or
-    `unprotected`, neither of which appears anywhere in this module in any
-    quoting style. Those two class tokens require a real silicon read and
-    are assembled only in `lock_status.py`, whose signature
-    accepts a device response; this function's signature has none, which
-    is the mechanism (not a convention) that makes them unreachable here
-    (D-12 leg 4).
+    Returns `(class_token, reason)`. The token is structurally NEVER
+    `protected` or `unprotected` -- neither literal appears anywhere in this
+    module in any quoting style. Those require a real silicon read and are
+    assembled only in `lock_status.py`, whose signature accepts a device
+    response; this one's does not, and that is the mechanism, not a convention.
 
-    Guard cascade, one early return per outcome, no single exit:
+    Guard cascade, one early return per outcome:
 
-    1. A falsy `entry` raises `KeyError`. This diverges from
-       `sdp_capability_for_entry`'s analogous guard *deliberately*: that
-       predicate returns a refusal for a not-found chip because a
-       capability question about an unknown chip has a sensible negative
-       answer, but none of D-09's eight classes means "chip unknown", and
-       inventing one would be exactly the fabricated value LOCK-03/LOCK-04
-       forbid. The CLI resolves the chip and raises `ChipNotFoundError`
-       there, before this function is ever called.
-    2. A missing `protocol-id` key raises `KeyError` naming the likely
-       caller mistake — never a silent `.get(..., default)`. See the
-       message body for the historical vacuity this repeats
-       (`check_eprom_blank`'s `_SRAM_PROTO_IDS` short-circuit).
-    3. `protocol-id` in `NO_MECHANISM_PROTOCOL_IDS` ->
-       `GATE_TOKEN_NO_MECHANISM`.
-    4. `protocol-id` in `NOT_IMPLEMENTED_PROTOCOL_IDS` ->
-       `GATE_TOKEN_NOT_IMPLEMENTED`, with a reason distinguishing 0x10 from
-       0x34 (see the frozenset's comment above). Never worded to read as
+    1. A falsy entry raises KeyError. Deliberately unlike
+       `sdp_capability_for_entry`, which returns a refusal for an unknown chip:
+       none of the eight classes means "chip unknown", and inventing one would
+       be a fabricated value. The CLI raises ChipNotFoundError before this is
+       ever called.
+    2. A missing `protocol-id` raises KeyError naming the likely caller
+       mistake -- never a silent `.get(..., default)`.
+    3-5. Membership in the no-mechanism / not-implemented / not-readable
+       protocol sets returns the matching token. Never worded to read as
        unprotected.
-    5. `protocol-id` in `NOT_READABLE_PROTOCOL_IDS` ->
-       `GATE_TOKEN_NOT_READABLE`.
-    6. `protocol-id` in `CURATION_PROTOCOL_IDS` -> token resolution via
-       `readability_for_token` over every alias in `entry["name"]` (D-06's
-       unanimity rule: one entry, one answer, never a per-token verdict).
-       Any `undocumented` offending token -> `GATE_TOKEN_UNDOCUMENTED_ALIAS`;
-       else any `documented-not-readable` offending token ->
-       `GATE_TOKEN_NOT_READABLE`; else -> `GATE_TOKEN_READ_PERMITTED`. The
-       refusal reason names every offending alias with its state, and
-       appends the recorded `AMBIGUOUS_DOC_CITATIONS` note for any token
-       that is a key of that mapping, so a C-17 disagreement surfaces in
-       the refusal rather than sitting inert in the module.
-    7. Any other `protocol-id` raises `ValueError` naming both the numeric
-       id and the display name. No default branch exists: a new DB row
-       with a novel algorithm must make this walk fail loudly, naming the
-       row, rather than silently landing in a class or a permission it was
-       never adjudicated for.
+    6. A curation protocol resolves every alias in `entry["name"]` under a
+       UNANIMITY rule -- one entry, one answer, never a per-token verdict. Any
+       undocumented token wins, else any documented-not-readable token, else
+       read-permitted. The refusal names every offending alias with its state
+       and appends any recorded ambiguity note, so a disagreement surfaces in
+       the refusal rather than sitting inert.
+    7. Anything else raises ValueError naming the id and the display name.
+       There is deliberately NO default branch: a new DB row with a novel
+       algorithm must fail loudly rather than land in a class it was never
+       adjudicated for.
 
-    Note for future editors touching this function: no branch above reads
-    `entry["programming"]` fields (`protect_on_after` / `protect_off_before`)
-    — classification here is entirely by `protocol-id` membership or by
-    curated alias token, never by those two advisory fields. If a future
-    edit ever needs to read them, use `.get(...)` with a strict `is True`
-    comparison, never a direct subscript: two of the 746 rows (both
-    protocol 11 / `NO_MECHANISM_PROTOCOL_IDS`, resolved at step 3 without
-    touching either field) carry neither key at all.
+    No branch reads `entry["programming"]`. If a future edit needs those
+    advisory fields, use `.get(...)` with a strict `is True` -- two rows carry
+    neither key at all.
 
-    Pure: no serial, no Click, no DB construction, no file I/O. Two calls
-    on the same input return equal tuples.
+    Pure: no serial, no Click, no DB construction, no file I/O.
     """
     if not entry:
         raise KeyError(
@@ -348,29 +281,17 @@ def protection_gate(chip_name: str, db: Any) -> tuple[str, str]:
 
 
 # ---------------------------------------------------------------------------
-# The 273-token curated surface: algorithms 0x05 (Winbond/Atmel/SST 5V
-# boot-block family, 27 DB entries / 42 tokens) and 0x06 (AMD Autoselect and
-# its command-compatible clones, 190 DB entries / 231 tokens). Every token
-# below is transcribed from a specific `lockable-proms.md` row, cited by line
-# number, document section number (`§N`, matching the document's own "# N. ..."
-# headings — there is no separate per-row vendor-datasheet reference for most
-# of these rows; where the document does cite one by footnote number (AMD
-# `[1]`, Macronix `[4]`/`[5]`, SST `[6]`, Atmel AT29C `[7]`), that footnote
-# number is carried in the citation comment too) and the row-key text, quoted
-# verbatim (markdown `**bold**` markers stripped) so it can be located in the
-# document by substring search.
+# The curated surface: algorithms 0x05 (Winbond/Atmel/SST 5V boot-block) and
+# 0x06 (AMD Autoselect and command-compatible clones). Every token below is
+# transcribed from a specific `lockable-proms.md` row, cited by line number,
+# section and verbatim row-key text so it can be found by substring search.
 #
-# Suffix-collapsing rule (measured necessity — see module docstring (f)): a
-# `lockable-proms.md` row names a family by its shared numeric stem plus a
-# short list of explicit suffix continuations (`Am29F010 / F010B`). Where the
-# DB's own alias tokens for that same numeric stem carry *additional*
-# boot-sector-orientation or revision suffixes the row does not spell out
-# (`AM29F002BB`, `AM29F002NBT`, ...), this module extends the row's verdict to
-# those additional suffix variants of the *same* numeric stem — never to a
-# different numeric stem, and never across a voltage-class change (5 V "F" vs
-# low-voltage "LV"/"BV" are always separately curated). This is the same kind
-# of judgement `sdp_capability.py`'s docstring describes as "a curator's
-# adjudication", made explicit here rather than performed silently.
+# SUFFIX-COLLAPSING RULE: a row names a family by its shared numeric stem plus
+# a few explicit suffixes. Where the DB's aliases for that same stem carry
+# additional orientation or revision suffixes the row does not spell out, the
+# row's verdict extends to them -- never to a different numeric stem, and NEVER
+# across a voltage-class change (5 V "F" vs low-voltage "LV"/"BV" are always
+# curated separately).
 DOCUMENTED_READABLE_TOKENS: frozenset[str] = frozenset(
     {
         # WINBOND -- lockable-proms.md:21 §1 "W29C020 / W29C020C"
