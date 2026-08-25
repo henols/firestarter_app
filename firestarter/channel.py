@@ -6,30 +6,19 @@ Permission is hereby granted under MIT license.
 
 Release-channel gate for features that ship on beta but not on stable.
 
-The channel is derived from the app's own version: a PEP 440 pre-release
-(`3.0.0b13`, `3.0.0rc1`, `2.0.7_dev`) means this build came off `beta`, and a
-final release (`3.0.0`) means it came off `main`. That is the same predicate
-`_maybe_auto_route_to_pre` already uses to decide a beta app should default to
-`--pre`, so beta-gating adds no new notion of "what channel am I".
+The channel is derived from the app's own version: a PEP 440 pre-release means
+this build came off `beta`, a final release means `main`.
 
-The channel gate itself (`is_prerelease_build`, `is_board_available`,
-`available_boards`) reads nothing from the environment. A channel gate that
-can be flipped by an env var is not a gate — the firmware side already
-learned that `-D X=${sysenv.VAR}` fails OPEN and quietly ships the gated
-thing, because an unset variable still *defines* the macro. To exercise the
-stable behaviour of the channel gate itself, monkeypatch
-`firestarter.__version__` (unit tests) or install the stable wheel.
+The gate itself reads NOTHING from the environment. A channel gate that an env
+var can flip is not a gate -- the firmware side already learned that
+`-D X=${sysenv.VAR}` fails OPEN, because an unset variable still defines the
+macro. To exercise stable behaviour, monkeypatch `firestarter.__version__` or
+install the stable wheel.
 
-`dev_tools_enabled_by_env` is a deliberate, narrow
-exception to that rule, not a contradiction of it: it is a single-purpose
-bench override for `dev` subcommands that would otherwise vanish on a stable
-build, and it is built to fail **closed** rather than open — presence of
-`FIRESTARTER_DEV_TOOLS` is never enough; only the exact literal value `"1"`
-enables anything. See that function's own docstring for the full reasoning.
-`is_dev_tools_enabled` composes it with `is_prerelease_build`, so it is the
-one function in this module whose result *can* be flipped by an env var, on
-purpose, and only in the direction of exposing bench tooling — never in the
-direction of hiding the channel gate's own decision.
+`dev_tools_enabled_by_env` is a deliberate, narrow exception: a bench override
+for `dev` subcommands that would otherwise vanish on a stable build, built to
+fail CLOSED -- presence is never enough, only the exact literal "1". It can
+only ever expose bench tooling, never hide the channel gate's own decision.
 """
 
 from __future__ import annotations
@@ -118,30 +107,17 @@ def beta_only_message(board: str) -> str:
 
 
 def dev_tools_enabled_by_env() -> bool:
-    """True only when `FIRESTARTER_DEV_TOOLS` is the exact literal string "1".
+    """True only when FIRESTARTER_DEV_TOOLS is the exact literal string "1".
 
-    This is the fail-**closed** bench override CHAN-06 requires (136-CONTEXT.md
-    D-03). It exists because of a recorded near-miss: gating `dev reg` (the
-    held-erase-rail DMM proxy — load-bearing bench tooling) off `__version__`
-    alone means an editable devcontainer install silently loses it at any
-    stable version cut, or between betas.
+    Read at CALL time, not cached at import, so a test or a shell can flip it
+    without reimporting.
 
-    Read `os.environ.get(...)` at CALL time — mirroring `get_config_dir`'s
-    call-time-read style (`config.py`) rather than an import-time-cached
-    constant — so a test (or a developer's shell) can flip it without
-    reimporting this module.
-
-    **Presence must never be enough; only the one exact value is.** The
-    firmware-side analogue, `-D DEV_TOOLS=${sysenv.VAR}`, is on record as
-    fail-**OPEN**: an unset variable still *defines* the macro, so every
-    `#ifdef DEV_TOOLS` in that source stays true regardless of what the
-    variable was set to. The obvious-looking Python translation of that same
-    idea, `bool(os.environ.get("FIRESTARTER_DEV_TOOLS"))`, falls into the
-    identical trap in a different language: `bool("0")` and `bool("false")`
-    are both `True`, because a non-empty string is truthy no matter what it
-    says. There is no `.strip()` and no case-folding here either, for the
-    same reason — a whitespace-padded or differently-cased value must not be
-    treated as equivalent to the one literal that enables anything.
+    PRESENCE MUST NEVER BE ENOUGH; only the one exact value is. The obvious
+    `bool(os.environ.get(...))` falls into the same trap the firmware's
+    `-D DEV_TOOLS=${sysenv.VAR}` did: `bool("0")` and `bool("false")` are both
+    True, because any non-empty string is truthy. No .strip() and no
+    case-folding either -- a padded or differently-cased value must not be
+    treated as equivalent.
     """
     return os.environ.get("FIRESTARTER_DEV_TOOLS") == "1"
 

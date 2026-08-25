@@ -1,31 +1,17 @@
-"""The response-consuming half of the protection-readability split (LOCK-02,
-LOCK-03, LOCK-04; D-04, D-08, D-09, D-10).
+"""The response-consuming half of the protection-readability split.
 
-`firestarter/protection_readability.py` is the *pure*
-half: `protection_gate_for_entry(entry, display_name) -> (gate_token,
-reason)` decides, from the chip database alone, whether a silicon read is
-even permitted -- and its signature accepts no device response, so it is
-structurally incapable of returning a real state ("protected" /
-"unprotected"). Plan 151-09's AST gate polices that module and asserts
-those two literals never appear there in any quoting style.
+`protection_readability.py` is the PURE half: it decides from the chip database
+alone whether a silicon read is even permitted, and its signature accepts no
+device response, so it is structurally incapable of returning a real state. An
+AST gate asserts the literals "protected"/"unprotected" never appear there.
 
-THIS module is the other half: the only place in the codebase permitted to
-turn an actual device response into one of D-09's eight class tokens.
-`PATTERNS.md` records this split as having no analog anywhere else in the
-codebase -- `sdp_capability.py` is pure-only and `sdp_honesty.py` is
-prose-only, so no existing two-function pure/impure precedent exists here.
+THIS module is the only place permitted to turn an actual device response into
+one of the eight class tokens.
 
-Import-purity invariant (mirrors `sdp_honesty.py:22-28`'s own invariant
-comment): this module's top-level import set is a subset of
-`{"__future__", "typing", "firestarter.exceptions", "firestarter.messages",
-"firestarter.protection_readability", "firestarter.sdp_honesty"}`. In
-particular there is deliberately no `click` anywhere in this set -- the
-caller performs the echo, so a `click` dependency here would make this
-module unusable from a future report layer that has no CLI context of its
-own (the same reason `sdp_honesty.py` itself excludes `click`). This
-module also performs no I/O of its own: it classifies a payload it is
-handed, and never imports `firestarter.serial_comm` or
-`firestarter.eprom_operations`.
+Import purity: no `click` anywhere -- the caller performs the echo, so a click
+dependency would make this unusable from a report layer with no CLI context.
+No I/O either: it classifies a payload it is handed and imports neither
+serial_comm nor eprom_operations.
 """
 
 from __future__ import annotations
@@ -82,32 +68,19 @@ _CLASS_UNADJUDICATED_PROBE = "unadjudicated_probe"
 _CLASS_NOT_READABLE = "not_readable"
 
 # ---------------------------------------------------------------------------
-# The exit-code map: a literal `str -> int` dict, never a `max()` over
-# severities. This codebase already carries an exit-code precedence defect
-# where `max()` picked the wrong verdict -- `dev test`'s exit precedence is
-# `max(1, 2) == 2` (MARGINAL beats BAD is FALSE; a comment and a docstring
-# both claim the opposite there) -- so this map is authored as an explicit
-# per-token lookup instead, where every token's code is visible on its own
-# line rather than derived from a comparison that can silently invert.
+# The exit-code map: a literal str -> int dict, NEVER a max() over severities.
+# This codebase already carries an exit-code precedence defect where max()
+# picked the wrong verdict, so every token's code is visible on its own line
+# rather than derived from a comparison that can silently invert.
 #
-# Exactly four distinct codes are used, over all eight tokens:
-#   0 -- a REAL silicon read: `protected` or `unprotected`, the only two
-#        tokens `SILICON_ONLY_TOKENS` names. `$? == 0` therefore means
-#        exactly "I hold a real state", nothing weaker.
-#   2 -- "cannot answer": `not_readable`, `not_implemented`,
-#        `undocumented_alias`, `no_mechanism` -- an honest refusal, not a
-#        state and not an operational failure.
-#   3 -- operational failure: `firmware_outdated` (the command was never
-#        even answered -- either the firmware predates it, keyed on
-#        `MSG_ERR_UNKNOWN_CMD`'s id, or the payload never arrived
-#        intact at all; both are indistinguishable to a script and share
-#        this one token and code).
-#   4 -- `unadjudicated_probe` gets its own, distinct code. It belongs in
-#        none of the other three bands: it is not a state (a
-#        forced read is never a state claim), not a refusal (the sequence
-#        actually ran), and not an operational failure (the command did
-#        answer). A fourth band is the only honest reading, and it is
-#        reachable only via an explicit `--force` past a table refusal.
+# Four codes over eight tokens:
+#   0 -- a REAL silicon read: protected or unprotected. $? == 0 means "I hold
+#        a real state", nothing weaker.
+#   2 -- cannot answer: an honest refusal, not a state and not a failure.
+#   3 -- operational failure: the command was never answered at all.
+#   4 -- unadjudicated_probe, its own band. Not a state (a forced read is never
+#        a state claim), not a refusal (the sequence ran), not a failure (the
+#        command answered). Reachable only via an explicit --force.
 EXIT_BY_CLASS: Mapping[str, int] = {
     "protected": 0,
     "unprotected": 0,
@@ -132,36 +105,25 @@ def exit_code_for_class(class_token: str) -> int:
 def classify_protection_response(
     gate_token: str, payload: bytes | None, *, forced: bool
 ) -> tuple[str, str]:
-    """The only function in the codebase permitted to return
-    `"protected"` or `"unprotected"`.
+    """The only function permitted to return "protected" or "unprotected".
 
-    Guard cascade, one early return per outcome -- order matters, and the
-    forced-probe check runs BEFORE the payload is ever consulted, so a
-    forced read can never become a state claim by accident even if a
-    caller passes a payload that looks like a definite decode:
+    Guard cascade, one early return per outcome. ORDER MATTERS -- the
+    forced-probe check runs BEFORE the payload is consulted, so a forced read
+    can never become a state claim even if the payload looks like a definite
+    decode:
 
-    1. `forced` and `gate_token != GATE_TOKEN_READ_PERMITTED` ->
-       `unadjudicated_probe`. D-07: `--force` runs the sequence past a
-       table refusal anyway, but the result is never a state claim,
-       regardless of what the payload's decode byte says.
-    2. `gate_token != GATE_TOKEN_READ_PERMITTED` (not forced) -> return
-       `gate_token` itself, unchanged, and do not touch `payload` at all.
-       The table already decided this part refuses before any silicon
-       read was attempted.
-    3. `payload` is `None` or shorter than 2 bytes -> `firmware_outdated`,
-       the operational-failure token -- not a state token. This is the
-       same class a dead port or a too-old-firmware unknown-command error
-       maps to (see `sdp_honesty.map_unknown_cmd_to_outdated_for_operation`),
-       so a truncated frame and a dead port are indistinguishable to a
-       script reading `$?` -- both mean "the command was never actually
-       answered".
-    4. `payload[1] == DECODE_UNPROTECTED` -> `"unprotected"`;
-       `payload[1] == DECODE_PROTECTED` -> `"protected"`. The only two
-       branches that can produce a `SILICON_ONLY_TOKENS` member.
-    5. Anything else, including `DECODE_INDETERMINATE` -> **not** a state
-       token. Returns `not_readable`, naming the raw byte in the reason so
-       D-03's probe can still record what silicon actually said even when
-       firmware's own decode did not resolve. Never coerced into a guess.
+    1. forced, and the gate did not permit the read -> `unadjudicated_probe`.
+       --force runs the sequence past a table refusal, but the result is never
+       a state claim regardless of what the decode byte says.
+    2. gate did not permit (not forced) -> return the gate token unchanged and
+       do not touch `payload` at all.
+    3. payload absent or shorter than 2 bytes -> `firmware_outdated`, an
+       operational-failure token, NOT a state token. A truncated frame and a
+       dead port are indistinguishable to a script reading $?.
+    4. the decode byte -> "unprotected" / "protected". The only two branches
+       that can produce a silicon-only token.
+    5. anything else, including an indeterminate decode -> `not_readable`,
+       naming the raw byte in the reason. Never coerced into a guess.
     """
     if forced and gate_token != GATE_TOKEN_READ_PERMITTED:
         return _CLASS_UNADJUDICATED_PROBE, (

@@ -4,41 +4,24 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Community Chip-Validation Submission Flow (v1.21 Phase 113)
+Submission flow for `firestarter dev test <chip> --submit`.
 
-This module is ORCHESTRATOR-ONLY (SAFE-02, milestone non-regression
-invariant): it sets no VPP, builds no wire/protocol command dict, and adds
-no firmware dispatch entry. Filing a report to the maintainer's tracker --
-via `gh` shell-out or a prefilled browser URL -- is a submission concern,
-not a hardware path. It imports no serial-transport or hardware-manager
-class and calls no `EpromOperator` method.
+ORCHESTRATOR ONLY: sets no VPP, builds no wire dict, adds no firmware dispatch,
+imports no transport or hardware class.
 
-Two-tier `--submit` flow: `gh issue create` (stdin body, no
-length cap) when `gh` is present on PATH and authenticated, else a
-prefilled `issues/new` browser URL whose *encoded* byte length is
-measured and whose fenced JSON block is dropped as it approaches
-GitHub's ~8 KB server cap. Every submitted report is sanitized
-(SUB-02) -- a recursive scrub of every string leaf in `to_dict()`'s
-output for home-dir paths, serial device names, `/tmp` paths, and the
-current username -- and carries a dedup fingerprint in its
-issue title.
+Two tiers: `gh issue create` (stdin body, no length cap) when `gh` is present
+and authenticated, else a prefilled `issues/new` browser URL whose ENCODED byte
+length is measured and whose fenced JSON block is dropped as it approaches
+GitHub's ~8 KB cap. Every report is recursively sanitized -- home-dir paths,
+serial device names, /tmp paths and the current username -- and carries a dedup
+fingerprint in its title.
 
-The `gh` tier's create argv is permission-independent by construction
-(quick task 260728-ahy): it carries only the repo, title, and stdin
-body -- no triage/write-gated argument -- so a community tester with only
-read access on the target repo can file. Maintainer-side triage still
-applies the `gsd-inbox` label post-hoc (`gh issue edit <n> --add-label
-gsd-inbox`); detection continues to rely on the `[dev test]` title marker
-plus the fenced-JSON `schema_version` (unchanged). A non-zero `gh`
-exit and an unreachable browser both narrate their failure through the
-`console` seam instead of reporting phantom success.
+The `gh` argv is permission-independent by construction: repo, title and stdin
+body only, no write-gated argument, so a tester with read access can file.
+Labels are applied maintainer-side afterwards.
 
-`SUBMIT_REPO` is a hardcoded module constant: the target repo is
-NEVER inferred from cwd or a git remote, so a community tester's own fork
-never receives their own report. It names `henols/firestarter_prom`, the
-project-wide tracker -- deliberately NOT the repo this module lives in
-(firestarter_prom#6 centralizes issue creation there and disables it on
-`henols/firestarter` and `henols/firestarter_app`).
+`SUBMIT_REPO` is a hardcoded constant. The target repo is NEVER inferred from
+cwd or a git remote, so a tester's own fork never receives their own report.
 """
 
 from __future__ import annotations

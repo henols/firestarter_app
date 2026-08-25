@@ -1,29 +1,13 @@
 """Shared honesty carrier for SDP (Software Data Protection) wording.
 
-Phase 132, D-01/D-02: `firestarter dev sdp` -- the only production
-carrier of the honesty caveat and the D-14 unknown-command-to-outdated-
-firmware mapping -- is being retired. Neither piece of wording has anywhere
-else to live: `eprom_operations.py`'s `sdp_lock`/`sdp_unlock` cannot carry the
-caveat because `serial_comm.py`'s `get_response()` filters the entire INFO
-band at `:424`, so the operation layer never sees the firmware's `0x5F`/`0x61`
-duration frame the caveat exists to disclaim. This module relocates both
-pieces of wording into a shared, standalone production helper authored in
-this phase, so the four honesty tests retarget onto a real SUT instead of a
-scanning gate.
+Holds the unreadable-state caveat and the unknown-command-to-outdated-firmware
+mapping. Neither can live in the operation layer: `serial_comm.get_response()`
+filters the entire INFO band, so that layer never sees the firmware duration
+frame the caveat exists to disclaim.
 
-Forward contract, updated by Phase 151 (C-4): Phase 134's
-leg-report rows and the `write --sdp-relock` path (Backlog 999.28) were
-both DEFERRED, not landed, when this module was authored. Phase 151's
-`dev lock-status` is the first forward caller to actually land. Since
-then, `unreadable_state_caveat()` has acquired three production callers of
-its own -- `cli_handlers.py`'s `_sdp_recovery_line` (two call sites) and
-`chip_test.py`'s `sdp_hold_state` -- plus four pinning tests in
-`tests/test_chip_test_sdp_leg.py`, so its **text** is now load-bearing at
-seven sites and must never be re-authored; new forward callers extend this
-module additively (see `map_unknown_cmd_to_outdated_for_operation` below)
-rather than editing what is already here. Its API is named for what it
-carries -- the honesty wording -- not for the `dev sdp` subcommand that
-was retired when this module was authored.
+`unreadable_state_caveat()`'s TEXT is load-bearing at seven call sites and is
+pinned by tests -- extend this module additively rather than re-authoring what
+is here.
 """
 
 from __future__ import annotations
