@@ -265,7 +265,7 @@ def validate_rows(rows: list) -> None:
                 f"trace goldens would be stale)"
             )
 
-    # D-09 premise: the two DIP32 rows share an identical bus_config.
+    # Premise: the two DIP32 rows share an identical bus_config.
     dip32_rows = [r for r in rows if r["chip_name"] in ("AT28C010", "AT28C040")]
     if len(dip32_rows) == 2:
         a, b = dip32_rows

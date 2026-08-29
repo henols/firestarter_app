@@ -446,7 +446,7 @@ class TestIdFrameDecoder:
         assert response.message == "R1: 10000, R2: 4700, Override HW: Rev153"
 
     # -----------------------------------------------------------------
-    # Phase 35 D-03 / WR-01 close: MSG_INFO_HW + MSG_INFO_PHYSICAL_HW
+    # D-03 / WR-01 close: MSG_INFO_HW + MSG_INFO_PHYSICAL_HW
     # silkscreen-string rendering.
     #
     # WR-01: both INFO frames carry the same revision byte as MSG_OK_REV

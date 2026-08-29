@@ -46,7 +46,7 @@ from firestarter.exceptions import (
 # Re-exports for backward compatibility — test_decoder.py imports MAGIC_PREAMBLE,
 # LogMessage, Response, _crc8_ccitt directly from firestarter.serial_comm and must
 # keep passing UNCHANGED (SC#2 / D-07). The canonical definitions now live in
-# frame_parser.py (D-05). _decode_param is also pulled in so _format_message /
+# frame_parser.py. _decode_param is also pulled in so _format_message /
 # _decode_id_frame in this module resolve it via the new leaf.
 from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_decoder.py
     MAGIC_PREAMBLE,
@@ -64,22 +64,22 @@ rurp_logger = logging.getLogger("RURP")
 
 DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
-# CAP-03 (HOST-01): plausibility ceiling for the firmware-advertised per-block
+# CAP-03: plausibility ceiling for the firmware-advertised per-block
 # write-time budget decoded by _decode_id_frame's CAP-03 arm below. DERIVED,
 # not chosen: the largest value a legitimate firmware could compute is
 # ceil(max_pulses 25 * 65535 us * buffer 4096 B / 1e6) * 2 + 2 = 13424 s,
 # evaluated at CAP-01's own [1, 4096] buffer-size plausibility ceiling --
 # rounded up to 14400 s (4 h). A value outside [1, WRITE_BUDGET_MAX_S] leaves
 # write_block_budget_s unset so the write-path fallback applies, mirroring
-# CAP-01's T-55-06 behaviour exactly. The clamp exists so a malfunctioning or
+# CAP-01's own behaviour exactly. The clamp exists so a malfunctioning or
 # mismatched board cannot wedge the host -- it is not a defense against an
 # adversarial one.
 WRITE_BUDGET_MAX_S = 14400  # seconds; derived ceiling, see comment above
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
 
-# Phase 8 W-01: INIT/MAIN/END removed (now arrive as ID frames via the catalog
-# severity-band lookup). OK + DATA remain until Plan 04 + 05 firmware
-# conversions land (firmware still emits those as text prefixes for now).
+# INIT/MAIN/END are absent here -- they arrive as ID frames via the catalog
+# severity-band lookup. OK + DATA remain until the firmware conversions
+# land; firmware still emits those two as text prefixes.
 EXPECTED_PREFIXES = [
     "OK",
     "INFO",
@@ -138,20 +138,20 @@ class SerialCommunicator:
         self.timeout = timeout
         self.connection: Optional[serial.Serial] = None
         self.programmer_info: str | None = None
-        # Phase-53 fault-injection hook — None by default; production path is byte-identical.
+        # Fault-injection hook — None by default; production path is byte-identical.
         # Set only within dev fault-inject scope; cleared after the single corrupted transfer.
-        # T-53-03: getattr-guarded in send_json_command; this attribute is the formal default.
+        # getattr-guarded in send_json_command; this attribute is the formal default.
         self._fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None
         # DEPRECATED (Phase 55 CAP-01): firmware_buffer_size was set by the Phase 53
         # identity-string parse (3rd colon-field). That parse block is removed; capacity
         # now comes from the MSG_OK_READY ack via firmware_max_chunk. Declaration kept
         # so conftest.py make_comm factory mirrors __init__ without breakage.
         self.firmware_buffer_size: Optional[int] = None
-        # CAP-01 (Phase 55): firmware advertises effective MAIN-path decode capacity
+        # CAP-01: firmware advertises effective MAIN-path decode capacity
         # via the MSG_OK_READY operation-setup ack (2-byte big-endian u16 param).
         # Populated by _decode_id_frame override; None until the first MSG_OK_READY
         # with a 2-byte param is decoded. _calculate_buffer_size returns 512 (safe
-        # Uno floor) when None (Phase 54 D-05 reversed; no FirmwareOutdatedError).
+        # Uno floor) when None; never a FirmwareOutdatedError.
         self.firmware_max_chunk: Optional[int] = None
         # CAP-02: the MSG_OK_READY ack was extended past CAP-01's 2-byte
         # buffer-size region to also carry the effective hardware revision and
@@ -166,20 +166,20 @@ class SerialCommunicator:
         # _probe_port does.
         self.firmware_identity: Optional[str] = None
         self.hw_revision: Optional[int] = None
-        # CAP-03 (HOST-01): the firmware's advertised worst-case seconds for
+        # CAP-03: the firmware's advertised worst-case seconds for
         # one write block. The firmware ALREADY pads this figure -- only it
         # knows its own delay(500) VPE settle, the final full-block verify
         # pass and the per-pulse settle -- so the host applies no multiplier
-        # of its own on top (D-09). None means "not advertised", and
+        # of its own on top. None means "not advertised", and
         # downstream that means a safe default applies, never an error and
-        # never a refusal (D-10; mirrors CAP-01's Phase 54 reversal of
+        # never a refusal (mirroring CAP-01's own reversal of
         # FirmwareOutdatedError into a safe default). Populated by
         # _decode_id_frame below. Consumed only on the write path.
         self.write_block_budget_s: Optional[int] = None
-        # D-15 (Phase 120 / v1.22 HOST-06): bounded record of every id frame
+        # Bounded record of every id frame
         # successfully decoded on this connection. Populated by the
         # _decode_id_frame override below. A set of integers only — nothing
-        # sized from frame content is ever allocated here (T-120-39), mirroring
+        # sized from frame content is ever allocated here, mirroring
         # the defensive posture of the firmware_max_chunk plausibility clamp
         # above. Per-connection instance state, not shared across connections.
         self.seen_message_ids: set[int] = set()
@@ -212,7 +212,7 @@ class SerialCommunicator:
         """Write raw bytes to the serial port and return the byte count written."""
         if not self.is_connected():
             raise SerialError("Not connected.")
-        assert self.connection is not None  # narrow for mypy strict (D-06)
+        assert self.connection is not None  # narrow for mypy strict
         try:
             written_bytes = self.connection.write(data_bytes)
             self.connection.flush()
@@ -232,7 +232,7 @@ class SerialCommunicator:
     def send_json_command(self, command_dict: dict) -> int:
         """Serialise ``command_dict`` as a COBS+CRC8 framed command and send it.
 
-        Frame layout (ADR §4.3, FRAME-05, CRC-01):
+        Frame layout (ADR §4.3):
             COBS(json_bytes + CRC8(json_bytes)) + 0x00
 
         Encode order is LOAD-BEARING: CRC8 is computed over the RAW json_bytes
@@ -249,9 +249,9 @@ class SerialCommunicator:
         body = cobs_encode(json_bytes + bytes([crc]))
         frame = body + b"\x00"
         # PHASE-53 FAULT INJECTION — only active when _fault_inject_outgoing is set.
-        # Production path: attribute is None by default → no-op (T-53-03).
+        # Production path: attribute is None by default → no-op.
         # Hook is set only within fault_inject_cycle / dev fault-inject scope and
-        # cleared after the single corrupted transfer (D-01 / D-02).
+        # cleared after the single corrupted transfer.
         _hook = getattr(self, "_fault_inject_outgoing", None)
         if _hook is not None:
             frame = _hook(frame)
@@ -296,40 +296,23 @@ class SerialCommunicator:
         elif response.type == "WARN":
             level = logging.WARNING
         elif response.type == "INFO":
-            # D-09 / HOST-05 / F-120-02: before this arm, the whole INFO band
-            # fell through to the `logging.DEBUG` initialiser above, while
-            # `_setup_logging` (cli_handlers.py:83) sets the root logger to
-            # `logging.INFO` unless `-v` is passed. That meant every Phase
-            # 118/119 SDP report line — emitted unconditionally by firmware —
-            # was silently discarded by the host for a whole phase: a
-            # two-repo requirement that passed its own phase's verification
-            # and was still false end to end.
+            # Promote the INFO band to logging.INFO. Without this the whole band falls
+            # through to the DEBUG initialiser while the root logger sits at INFO, so
+            # unconditionally-emitted firmware report lines are silently discarded by the
+            # host.
             #
-            # This promotion is deliberately scoped to the `INFO` label only.
-            # `OK`, `INIT`, `MAIN`, `END` and `DATA` are protocol-phase frames
-            # and stay on the `logging.DEBUG` default — promoting them would
-            # flood default-verbosity output.
+            # Scoped to the INFO label ONLY. OK, INIT, MAIN, END and DATA are
+            # protocol-phase frames and stay on DEBUG -- promoting them floods default
+            # output.
             #
-            # The blast radius is SIX unconditionally-emitted INFO-band ids,
-            # not five: `0x5E`, `0x5F`, `0x60`, `0x61`, `0x62` via
-            # `LOG_ID`/`LOG_ID_U32`, plus `0x5B` `MSG_INFO_HW` — emitted via
-            # the unconditional `LOG_WARN_ID_U8` alias at
-            # `rurp_hw_rev_utils.h:96` (`logging_id.h:115` makes that macro an
-            # unconditional plain `LOG_ID_U8` despite its name), while its
-            # *catalog* severity is INFO. Every other INFO id in the tree is
-            # `FLAG_VERBOSE`-gated in firmware and therefore only sent when
-            # the host passed `-v`.
+            # Blast radius is six unconditionally-emitted INFO-band ids. Note 0x5B
+            # MSG_INFO_HW among them: it is emitted through an alias whose name says WARN
+            # but which expands to a plain unconditional log, while its catalog severity is
+            # INFO. That is the hard-fail-loud revision warning, visible at default
+            # verbosity because of this arm. Every other INFO id is FLAG_VERBOSE-gated in
+            # firmware.
             #
-            # That `0x5B` case is Phase 35's CR-02 hard-fail-loud revision
-            # warning — this arm makes it visible at default verbosity for
-            # the first time, a partial fix for a second, older observability
-            # defect independent of the SDP work.
-            #
-            # Side effect: under `-v`, an INFO frame's rendered prefix changes
-            # from `I:` to `INFO:`, because the one-character abbreviation
-            # below applies only while `rurp_logger.isEnabledFor(logging.DEBUG)`
-            # and the type is in `NON_RESPONSE_PREFIXES` — at `-v` the DEBUG
-            # gate is open regardless of this arm's level assignment.
+            # Side effect: under -v an INFO frame's prefix changes from `I:` to `INFO:`.
             level = logging.INFO
 
         # Shorten prefix for debug, full for others
@@ -342,47 +325,32 @@ class SerialCommunicator:
         rurp_logger.log(level, f"{log_prefix}: {message}")
 
     def _decode_id_frame(self, frame_len: int, body: bytes) -> Optional[LogMessage]:
-        """Compatibility wrapper — see codec.decode_id_frame.
+        """Compatibility wrapper -- see codec.decode_id_frame.
 
-        CAP-01 (Phase 55): after decoding, when the message is MSG_OK_READY and
-        the param region is exactly 2 bytes, extract the big-endian u16 and store
-        it as firmware_max_chunk (buffer-size advertisement relocated from the FW
-        identity string to the operation-setup ack). A plausibility clamp rejects
-        values outside [1, 4096] so a hostile/corrupt ack cannot over-size chunks
-        (T-55-05 / T-55-06). 0-byte param region (old firmware) leaves
-        firmware_max_chunk unchanged (graceful degradation, T-55-07).
+        CAP-01: on MSG_OK_READY with a 2-byte param region, extract the
+        big-endian u16 as firmware_max_chunk. A plausibility clamp rejects
+        values outside [1, 4096] so a corrupt or hostile ack cannot over-size
+        chunks. A 0-byte region leaves it unchanged.
 
-        D-15 (Phase 120 / v1.22 HOST-06): every successfully decoded id frame
-        has its id recorded into seen_message_ids, regardless of which id it
-        is. Trigger: any id for which codec.decode_id_frame returns non-None.
-        Degradation against old firmware: a firmware build that never emits a
-        given id (e.g. MSG_WARN_SDP_UNLOCK_SKIPPED / 0x86) simply leaves that
-        id absent from the set — that absence is exactly the signal callers
-        such as write_eprom's D-15 check key on. The record is bounded by
-        construction: it stores only the decoded id integer (0-255), never
-        anything sized from frame content (T-120-39).
+        Every successfully decoded id is recorded into seen_message_ids. A
+        firmware build that never emits a given id simply leaves it absent, and
+        that absence is exactly what callers key on. Bounded by construction:
+        it stores only the id integer, never anything sized from frame content.
 
-        CAP-03 (HOST-01): a third length-discriminated field, appended AFTER
-        CAP-02's variable-length identity tail, carrying the firmware's
-        advertised per-block write-time budget in seconds as a big-endian
-        u16. Read at the COMPUTED ver_end offset -- never a fixed index, the
-        same discipline CAP-02 itself uses for the identity string -- and
-        plausibility-clamped to [1, WRITE_BUDGET_MAX_S] exactly as CAP-01
-        clamps a buffer size to [1, 4096]. Absent, truncated or implausible
-        advertisements all leave write_block_budget_s None, which downstream
-        means "apply the safe default", never an error and never a refusal
-        (D-10). This plan does not fix BF-1: firmware that emits only the
-        bare 2-byte legacy ack is refused by _probe_port before this arm is
-        ever reached.
+        CAP-03: a third length-discriminated field appended AFTER CAP-02's
+        variable-length identity tail, read at the COMPUTED ver_end -- never a
+        fixed index -- and clamped to a plausible range. Absent, truncated or
+        implausible values all leave it None, which downstream means "apply the
+        safe default", never an error.
 
-        The GATE-1.8d ring-fenced _read_and_parse_lines body is not touched —
-        only this override seam is used (Pitfall 4 / Open Question 3).
+        The ring-fenced _read_and_parse_lines body is not touched; only this
+        override seam is used.
         """
         result = codec.decode_id_frame(frame_len, body)
         # body layout: [id_byte][params_bytes...][crc_byte]
         if result is not None and len(body) >= 2:
             msg_id = body[0]
-            # D-15: record every successfully decoded id, bounded (set of ints).
+            # Record every successfully decoded id, bounded (set of ints).
             self.seen_message_ids.add(msg_id)
             if msg_id == MSG_OK_READY:
                 params_bytes = body[1:-1]  # strip id byte and trailing CRC
@@ -396,7 +364,7 @@ class SerialCommunicator:
                     # Plausibility clamp: reject values outside [1, 4096].
                     # No real board exceeds the 1024-byte Leonardo buffer; 4096
                     # is a generous ceiling. Values outside this range leave
-                    # firmware_max_chunk unset so the 512 floor applies (T-55-06).
+                    # firmware_max_chunk unset so the 512 floor applies.
                     if 1 <= value <= 4096:
                         self.firmware_max_chunk = value
                 # CAP-02 tail: [hw_revision u8][ver_len u8][ver bytes]. Absent
@@ -412,27 +380,22 @@ class SerialCommunicator:
                         self.firmware_identity = params_bytes[4:ver_end].decode(
                             "ascii", errors="replace"
                         )
-                        # CAP-03 (HOST-01): the per-block write-time budget,
-                        # appended AFTER CAP-02's variable-length identity
-                        # tail. The offset MUST be the COMPUTED ver_end, never
-                        # a fixed index: a fixed index works on every board
-                        # whose identity string happens to be one length and
-                        # silently misreads on the next -- offsets 2 and 3
-                        # are already claimed by CAP-02, so a budget written
-                        # there would be read as a hardware revision and a
-                        # version length. Nested here, past the ver_end
-                        # guard, because an ack with no identity tail cannot
-                        # carry CAP-03 -- the arm is unreachable there by
-                        # construction. A truncated tail leaves the field
-                        # None rather than yielding a partial value, the same
-                        # posture as
-                        # test_decode_truncated_version_prefix_leaves_identity_none.
+                        # CAP-03, appended AFTER CAP-02's variable-length identity tail.
+                        # The offset MUST be the COMPUTED ver_end, never a fixed index: a
+                        # fixed index works on whichever board's identity string happens to
+                        # be that length and silently misreads on the next. Offsets 2 and 3
+                        # are already claimed, so a budget written there reads back as a
+                        # hardware revision and a version length.
+                        #
+                        # Nested past the ver_end guard because an ack with no identity tail
+                        # cannot carry this field. A truncated tail leaves it None rather
+                        # than yielding a partial value.
                         if len(params_bytes) >= ver_end + 2:
                             value = struct.unpack(
                                 ">H", params_bytes[ver_end : ver_end + 2]
                             )[0]
                             # Plausibility clamp, mirroring CAP-01's [1, 4096]
-                            # in spirit (T-55-06): a hostile or corrupt ack
+                            # in spirit: a hostile or corrupt ack
                             # must not be able to install an unbounded host
                             # timeout. Values outside this range leave
                             # write_block_budget_s unset so the D-10 fallback
@@ -623,7 +586,7 @@ class SerialCommunicator:
         """Consumes and logs any pending input from the serial buffer."""
         if not self.is_connected():
             return
-        assert self.connection is not None  # narrow for mypy strict (D-06)
+        assert self.connection is not None  # narrow for mypy strict
 
         # Temporarily set a short timeout for the underlying serial read
         original_timeout = self.connection.timeout
@@ -680,18 +643,16 @@ class SerialCommunicator:
     ) -> List[str]:  # noqa: UP006
         """Candidate ports to probe, most preferred first.
 
-        ``restrict_to_preferred`` makes ``preferred_port`` the ONLY candidate.
-        Set it when the operator named the port on this invocation; leave it
-        False for a port merely remembered from a previous successful run.
+        `restrict_to_preferred` makes `preferred_port` the ONLY candidate. Set
+        it when the operator named the port on this invocation; leave it False
+        for a port merely remembered from a previous run.
 
-        The distinction matters because plain ordering was actively dangerous.
-        When the named port failed to answer — firmware too old to parse the
-        current command framing, or a busy port — probing continued and the
-        caller was handed a DIFFERENT board's identity. `FirmwareManager` then
-        combined that identity with `port_to_use = port_override or
-        connected_port`, i.e. board A's release asset aimed at port B. Only
-        avrdude's part-signature check stood between that and a wrong-firmware
-        flash, and two boards sharing an MCU would not even get that.
+        Plain ordering was actively dangerous: when the named port failed to
+        answer -- old firmware, or a busy port -- probing continued and the
+        caller was handed a DIFFERENT board's identity, which the firmware
+        manager then combined with the originally-named port. Board A's release
+        asset aimed at port B, with only avrdude's part-signature check in
+        between -- and two boards sharing an MCU would not even get that.
         """
         ports = []
         if preferred_port:
@@ -744,7 +705,7 @@ class SerialCommunicator:
     ) -> None:
         """Pure-policy version guard. Raises FirmwareOutdatedError on reject.
 
-        Owns the complete version-guard policy (D-01 / D-03): strips trailing
+        Owns the complete version-guard policy: strips trailing
         alpha suffix (e.g. ``"3.0.0-dev"`` -> ``"3.0.0"``) per RESEARCH §7
         Option A, parses the major version (``ValueError``/``IndexError`` ->
         ``major=0``), refuses pre-v1.2 (``major < 3``) unless ``allow_pre_v12``,
@@ -854,7 +815,7 @@ class SerialCommunicator:
         try:
             logger.debug(f"Probing for programmer on {port_name}...")
             communicator = SerialCommunicator(port=port_name, baud_rate=baud_rate)
-            # Phase 53-04 / XACT-02 (dev-only): arm the outgoing-frame fault BEFORE
+            # Dev-only: arm the outgoing-frame fault BEFORE
             # the first send_json_command below. Default None => production no-op.
             if fault_inject_outgoing is not None:
                 communicator._fault_inject_outgoing = fault_inject_outgoing
@@ -883,7 +844,7 @@ class SerialCommunicator:
                 communicator.disconnect()
                 return None
 
-            # Version gate. The POLICY is untouched (D-01/D-03) — only its
+            # Version gate. The POLICY is untouched — only its
             # source moved, from the retired probe's "OK: FW: <ver>" text line
             # to the identity field of the ack. Same [\d.x]+ extraction as the
             # old regex performed, so _validate_firmware_version still receives
@@ -930,8 +891,8 @@ class SerialCommunicator:
                     f"firmware-update read path."
                 )
             elif not allow_outdated_firmware:
-                # Phase 6 (LFW-05 + LHOST-04): refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
-                # to major=3 in Phase 9. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
+                # Refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
+                # to major=3 later. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
                 # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
                 SerialCommunicator._validate_firmware_version(
                     version_match.group(0),
@@ -1013,7 +974,7 @@ class SerialCommunicator:
         ``fault_inject_outgoing`` (Phase 53-04 / XACT-02, dev-only) installs an
         outgoing-frame mutation hook on each probed communicator BEFORE the first
         ``send_json_command`` (the setup/handshake command). It defaults to None, so
-        the production path is byte-identical (T-53-03). It exists because a READ's
+        the production path is byte-identical. It exists because a READ's
         MAIN phase emits only plaintext acks (``send_string``) — the setup command
         sent here is the ONLY corruptible host→fw command frame, so the outgoing
         fault MUST be injected at connection time, not after setup.

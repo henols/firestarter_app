@@ -43,12 +43,12 @@ from firestarter.serial_comm import SerialCommunicator
 
 logger = logging.getLogger("Firmware")
 
-# Phase 18: FIRMWARE_VERSION_RE validates consumer-side --firmware-version input.
-# Superset of Phase 15's BETA_VERSION_RE (which validates publisher-side input).
-# D-07: accepts stable (X.Y.Z) and pre-release (X.Y.ZbN, X.Y.ZrcN) forms.
+# FIRMWARE_VERSION_RE validates consumer-side --firmware-version input.
+# Superset of BETA_VERSION_RE (which validates publisher-side input).
+# Accepts stable (X.Y.Z) and pre-release (X.Y.ZbN, X.Y.ZrcN) forms.
 # Note: anchor with \Z (not $) — $ matches before a trailing \n in Python,
 # letting "3.1.0\n" sneak through and corrupt the URL template downstream.
-# Fixed 2026-05-20 per Phase 18 code review CR-02.
+# Fixed 2026-05-20 after code review.
 FIRMWARE_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+((b|rc)[0-9]+)?\Z")
 
 # Used by _fetch_all_releases to follow pagination Link headers.
@@ -201,8 +201,8 @@ class FirmwareManager:
             # The firmware then executes the fw_version command and sends a second OK with the payload.  # noqa: E501
             is_ok, msg = comm.expect_ack()
 
-            # Firmware emits the legacy text line "OK: FW: <version>:<board>"
-            # (LFW-05). _parse_response_line strips the "OK:" prefix, so the
+            # Firmware emits the legacy text line "OK: FW: <version>:<board>".
+            # _parse_response_line strips the "OK:" prefix, so the
             # payload reaching us here is "FW: <version>:<board>". Strip the
             # secondary "FW:" tag before splitting on the colons.
             payload = None
@@ -229,7 +229,7 @@ class FirmwareManager:
                 )
                 return None, None, None
         except FirmwareOutdatedError:
-            raise  # Phase 6 (LHOST-04): surface lockstep refuse to operator (do NOT swallow)  # noqa: E501
+            raise  # surface lockstep refuse to operator (do NOT swallow)  # noqa: E501
         except (ProgrammerNotFoundError, SerialError) as e:
             logger.error(f"Failed to read firmware version: {e}")
             return None, None, None
@@ -287,7 +287,7 @@ class FirmwareManager:
             return False  # Treat as not up-to-date if parsing fails
 
     def _fetch_all_releases(self, max_pages: int = 5) -> list:
-        """Paginate GET /releases via Link: rel="next" headers. Cap at max_pages (D-04).
+        """Paginate GET /releases via Link: rel="next" headers. Cap at max_pages.
 
         Returns a flat list of all release dicts from all pages fetched.
         Logs INFO when the cap is hit so operators know truncation occurred.
@@ -326,8 +326,8 @@ class FirmwareManager:
 
         channel='stable'  → delegates to fetch_latest_release_info (D-15 back-compat shim).
         channel='pre'     → paginates /releases, filters prerelease=True, sorts by PEP 440
-                            descending, takes highest; falls back to stable if none (D-05).
-        channel='pinned'  → fetches /releases/tags/{version} directly (D-09).
+                            descending, takes highest; falls back to stable if none.
+        channel='pinned'  → fetches /releases/tags/{version} directly.
         """  # noqa: E501
         if channel == "stable":
             return self.fetch_latest_release_info(board=board)
@@ -411,7 +411,7 @@ class FirmwareManager:
         Omits draft releases and releases without a board-matching .hex asset.
         Omits releases whose tag_name cannot be parsed by packaging.version.Version.
 
-        channel_filter='all'    → include stable + prerelease (D-13).
+        channel_filter='all'    → include stable + prerelease.
         channel_filter='pre'    → prerelease only.
         channel_filter='stable' → stable only.
 
@@ -449,7 +449,7 @@ class FirmwareManager:
             # Resolve board-matching asset.
             asset_url = _pick_asset(r.get("assets", []), board)
             if not asset_url:
-                continue  # Silently omit releases without the board asset (D-11).
+                continue  # Silently omit releases without the board asset.
 
             out.append(
                 ReleaseInfo(
@@ -516,12 +516,12 @@ class FirmwareManager:
         if board.lower() == "leonardo":
             partno, programmer_id, baud_rate = ("atmega32u4", "avr109", 57600)
         elif board.lower() == "uno328pb":
-            # Phase 21 D-10 hand-off: ATmega328PB signature 0x1E 0x95 0x16 differs
+            # ATmega328PB signature 0x1E 0x95 0x16 differs
             # from 328P's 0x1E 0x95 0x0F -- partno must be "atmega328pb" exactly,
             # else avrdude aborts on signature mismatch. programmer_id "urclock"
             # matches MiniCore's stock Urclock bootloader on operator's 328PB-Uno
             # (bench-validated 2026-05-21 — "arduino" was the initial guess from
-            # Phase 23 CONTEXT D-02 but the bootloader rejected it; this is the
+            # an earlier design note, but the bootloader rejected it; this is the
             # documented 1-line contingency swap).
             partno, programmer_id, baud_rate = ("atmega328pb", "urclock", 115200)
 
@@ -761,8 +761,8 @@ class FirmwareManager:
         Returns True if an operation (check or install) was successful in some sense, False on major failure.
 
         channel='stable'  → uses /releases/latest (default, INST-01 non-regression).
-        channel='pre'     → selects highest pre-release (INST-02).
-        channel='pinned'  → uses exact tag from pinned_version (INST-03).
+        channel='pre'     → selects highest pre-release.
+        channel='pinned'  → uses exact tag from pinned_version.
         """  # noqa: E501
         connected_port, current_version, current_board = self.check_current_firmware(
             preferred_port=port_override, flags=flags

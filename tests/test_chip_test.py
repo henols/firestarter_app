@@ -2987,8 +2987,8 @@ def test_count_applicable_sdp_gated_allow_chip_ratio_drops():
     results = run_plan(plan, operator, _REAL_DB)
 
     counts = count_applicable(plan, results)
-    assert counts.m_applicable == 10, counts  # Phase 153: erase joined M (9 -> 10)
-    assert counts.n_ran == 6, counts  # Phase 153: erase joined N (5 -> 6)
+    assert counts.m_applicable == 10, counts  # erase joined M (9 -> 10)
+    assert counts.n_ran == 6, counts  # erase joined N (5 -> 6)
     assert counts.n_ran < counts.m_applicable, counts  # the ratio drops (LEG-13)
 
     erase_result = _result(results, OP_ERASE)
@@ -3077,7 +3077,7 @@ def test_count_applicable_sdp_banner_row_renders_the_dropped_ratio():
     operator = _gated_allow_operator()
     results = run_plan(plan, operator, _REAL_DB)
     banner = count_applicable(plan, results)
-    # Phase 153 (third generation): n_ran/m_applicable rose 5/9 -> 6/10 --
+    # (third generation): n_ran/m_applicable rose 5/9 -> 6/10 --
     # erase is now a real supported step that runs for this
     # protocol-0x0D chip. See the docstring above on
     # `test_count_applicable_sdp_gated_allow_chip_ratio_drops` for the

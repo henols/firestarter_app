@@ -6,7 +6,7 @@ Permission is hereby granted under MIT license.
 
 Consolidated application exception hierarchy for the Firestarter host CLI.
 AvrdudeNotFoundError and AvrdudeConfigNotFoundError stay in avr_tool.py
-(different domain — avrdude binary discovery) per CONTEXT.md D-01/D-02.
+(different domain — avrdude binary discovery).
 """
 
 

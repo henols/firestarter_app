@@ -4,38 +4,21 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Community Chip-Validation Diagnostic Report Model (v1.21 Phase 110, reworked
-Phase 112 Plan 04)
+Diagnostic report model for `firestarter dev test <chip>`.
 
-Pure host-side data assembly for `firestarter dev test <chip>` (Phase 112):
-composes the Phase-108/109 `Plan` / `StepResult` / `Fingerprint` /
-`BannerCounts` objects plus new auto-capture and transport-health
-sub-objects into one `DiagnosticReport`, rendered two ways -- a `rich` table
-and a fenced ```json``` block -- from a SINGLE canonical `to_dict()` mapping
-(RPT-01). Neither render maintains a second hand-written field list, and
-neither re-parses the other's output: add a field to `to_dict()` once, both
-renders pick it up.
+Composes the Plan / StepResult / Fingerprint / BannerCounts objects plus the
+auto-capture and transport-health sub-objects into one DiagnosticReport,
+rendered two ways -- a rich table and a fenced json block -- from a SINGLE
+canonical `to_dict()`. Neither render keeps its own field list and neither
+re-parses the other: add a field to `to_dict()` once and both pick it up.
 
-This module is ORCHESTRATOR-ONLY (SAFE-02, milestone non-regression
-invariant): it imports no serial-transport or hardware-manager class, sets
-no VPP, builds no wire/protocol command dict, passes no force-override flag,
-and adds zero firmware dispatch entries. `AutoCapture.fw_board_identity` and
-`AutoCapture.hw_revision` are RECEIVED as threaded-in input (Phase 112
-captures them host-side and passes them in) -- this module never fetches
-them and never opens a serial connection (RESEARCH Pitfall 1).
+ORCHESTRATOR ONLY: this module imports no transport or hardware class, sets no
+VPP, builds no wire dict, passes no force flag and adds no firmware dispatch.
+`fw_board_identity` and `hw_revision` are threaded IN as input -- this module
+never fetches them and never opens a connection.
 
-REVERSAL (Phase 112 Plan 04, operator-approved per `112-UAT.md` test 2): the
-entire interactive tester-input-collection model (RPT-04, D-04/D-05/D-06) is
-REMOVED from this module -- its collector function, its human-input
-dataclass, and its enumerated choice-list constants no longer exist. Those
-choice strings contained a path-separator character that collided with the
-third-party prompt library's own separator-rendered choice display, so
-partial natural inputs like `new`/`used`/`2.0` were rejected. Every question
-that collector asked is now either firmware/DB auto-captured (`hw_revision`,
-`fw_board_identity`, `protocol`) or dropped as self-reported-and-unverifiable
-/ redundant (chip origin, UV-eraser ownership, pot-touched). `is_submittable`
-is now computed from auto-capture completeness ONLY -- no human-input field
-gates it.
+`is_submittable` is computed from auto-capture completeness only; no
+human-input field gates it.
 """
 
 from __future__ import annotations
@@ -59,69 +42,14 @@ from firestarter.chip_test import (
 )
 
 # ---------------------------------------------------------------------------
-# Module constants (D-02, D-03) -- single sources of truth
+# Module constants -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.7"  # D-02: single-sourced, baked into to_dict() output
-# 1.1 (Phase 114, GRAD-01): additive db_diff.ladder_state key -- backward
-# compatible, existing consumers reading current_support_status/
-# proposed_disposition are unaffected.
-# 1.2 (Phase 121 Plan 06/07, D-06): the bump marks the seventh op string
-# (`OP_WRITE_PARTIAL = "write-partial"`, chip_test.py) entering the report
-# vocabulary. It breaks no consumer: `tools/parse_devtest_issue.py` accepts
-# `schema_version` by PRESENCE ONLY (see `_extract_fenced_report`), never an
-# exact-value match, so this bump is invisible to that parser. Reports
-# already in the wild from `3.0.0b11` carry `"1.1"` and the six-string
-# vocabulary (id/read/blank-check/write/verify/erase) and MUST keep parsing
-# and keep grouping -- pinned by a frozen literal fixture in
-# `tests/test_parse_devtest_issue.py`.
-# 1.3 (v1.30 Phase 134 plan 134-06, D-10/LEG-12): additive `sdp_hold_state`
-# key -- `chip_test.sdp_hold_state()`'s three-valued `HELD`/`NOT-HELD`/
-# `NOT-RUN: <reason>` string, carried verbatim (never derived here -- see
-# `to_dict`). MEASURED DISCREPANCY, recorded rather than silently
-# reconciled (same convention as 134-02/134-04's own measured findings):
-# this plan's own PLAN.md read `to_dict`'s prior key count as nine; the
-# live count on disk at plan time was already TEN (schema_version,
-# generated, auto_capture, transport_health, steps, banner, voltage,
-# is_submittable, dedup_fingerprint, db_diff), so `sdp_hold_state` is this
-# dict's ELEVENTH key, not its tenth. This does not change the bump's own
-# argument: the change is still purely additive, existing consumers reading
-# any of the ten prior keys are unaffected, and `tools/parse_devtest_issue.py`
-# accepts `schema_version` by PRESENCE ONLY, never an exact-value match, so
-# this bump is invisible to that parser. REJECTED: a field-plus-JSON change
-# with no version bump -- the artifact shape would change while its own
-# version claimed it had not, in the milestone whose close phase (Phase 137)
-# arms a claim gate over exactly that kind of statement.
-# 1.4 (v1.32 Phase 147, D-09): marks a value-population change, not a key
-# addition -- `auto_capture.fw_board_identity` already existed in
-# `to_dict()`'s output and was unconditionally `null`; from this version it
-# carries data whenever the connection captured one. No key is added and no
-# key is removed. The 1.3 note above explicitly REJECTED "a field-plus-JSON
-# change with no version bump" -- the artifact shape changing while its own
-# version claimed it had not. Populating a permanently-null key is that same
-# class of change, so it takes a bump too. Both `[dev test]` parsers accept
-# `schema_version` by PRESENCE ONLY, never an exact-value match (a live
-# fixture carries `schema_version: "9.9-future"`, `tests/test_parse_devtest_
-# issue.py:138`), so this bump is invisible to them and needs no parser
-# change -- and no ordering/comparison logic over this string is introduced
-# anywhere as part of this bump (D-17). Reports already in the wild carry
-# `fw_board_identity: null` PERMANENTLY -- the run that produced them is
-# gone and unrepeatable -- and are unfixable by design; they must keep
-# parsing. That is PROV-04, pinned by the frozen literal fixtures in
-# `tests/test_parse_devtest_issue.py`.
-# 1.6 (quick task 260821-wna): additive per-step keys -- `write_region_start`,
-# `write_region_length`, `write_bits_cleared`, `write_bits_retained`,
-# `write_current_source` -- read off `StepResult.write_target` (`None` on a
-# step with no resolved target, i.e. every non-write/verify step and any
-# write/verify step SKIPPED as saturated/refused). No top-level key is added;
-# `parse_devtest_issue.py` still accepts `schema_version` by PRESENCE ONLY,
-# so this bump is invisible to it.
-NOT_MEASURED = "not measured"  # D-03: honest fallback, never a false 0
-NOT_REPORTED = "not reported"  # D-11 (v1.32 Phase 147): honest fallback for
-# an identity field that was never ASKED, not merely measured-and-empty --
-# reusing NOT_MEASURED here would conflate "asked and got nothing" with
-# "never asked", the exact ambiguity PROV-05 exists to remove. Pre-checked
-# clean against check_diagnostic_report_claims.py's 14 forbidden patterns.
+SCHEMA_VERSION = "1.7"  # baked into to_dict() output
+NOT_MEASURED = "not measured"  # honest fallback, never a false 0
+# Distinct from NOT_MEASURED: this field was never ASKED, rather than asked and
+# empty. Reusing NOT_MEASURED would conflate the two.
+NOT_REPORTED = "not reported"
 
 # Elevated-counter threshold for `transport_suspect` (dormant today -- no
 # transport counter is reachable per RESEARCH §Transport Counter Survey; a
@@ -130,13 +58,13 @@ _SUSPECT_THRESHOLD = 5
 
 
 # ---------------------------------------------------------------------------
-# AutoCapture (RPT-02) -- no method fetches identity or opens serial
+# AutoCapture -- no method fetches identity or opens serial
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class AutoCapture:
-    """Auto-captured identity/protocol fields (RPT-02) -- no tester input.
+    """Auto-captured identity/protocol fields -- no tester input.
 
     `fw_board_identity` is `str | None` because it is RECEIVED as threaded-in
     input from Phase 112 (which captures `version:board` off the transient
@@ -166,13 +94,13 @@ class AutoCapture:
 
 
 # ---------------------------------------------------------------------------
-# TransportHealth (XPORT-01, D-03) -- honest "not measured" fallback
+# TransportHealth -- honest "not measured" fallback
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class TransportHealth:
-    """Best-effort transport-health counters (XPORT-01).
+    """Best-effort transport-health counters.
 
     Every counter defaults to `None` -- "not measured" -- because no
     COBS-decode-error / CRC-failure / retry / timeout counter is reachable
@@ -190,7 +118,7 @@ class TransportHealth:
 
 
 def _is_transport_suspect(th: TransportHealth) -> bool:
-    """True only when a counter is PRESENT (not None) AND elevated (D-03).
+    """True only when a counter is PRESENT (not None) AND elevated.
 
     Absent counters can never fabricate suspicion -- mirrors Phase 108's
     honest `indeterminate` fingerprint bucket. Since no counter is reachable
@@ -205,7 +133,7 @@ def _is_transport_suspect(th: TransportHealth) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Submittability (Phase 112 Plan 04) -- auto-capture-only, no human gate
+# Submittability -- auto-capture-only, no human gate
 # ---------------------------------------------------------------------------
 #
 # REVERSAL: this section previously held the RPT-04 / D-04/D-05/D-06
@@ -221,7 +149,7 @@ def _is_transport_suspect(th: TransportHealth) -> bool:
 
 def is_submittable(ac: AutoCapture) -> bool:
     """True iff the auto-captured identity needed to act on a report is
-    present (Phase 112 Plan 04) -- NO human-provenance field is involved.
+    present -- NO human-provenance field is involved.
 
     A report is submittable when the objective, machine-captured identity
     is complete: `chip` (the name under test), `protocol` (the DB-derived
@@ -235,13 +163,12 @@ def is_submittable(ac: AutoCapture) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Dedup fingerprint (SUB-03, D-02) -- deterministic, volatile-field-free
+# Dedup fingerprint -- deterministic, volatile-field-free
 # ---------------------------------------------------------------------------
 
 
-# D-11 (v1.30 Phase 134, plan 134-06): the SDP leg's ACCEPTED, RECORDED cost
-# to this function -- NOT a bug, and this function's body below is left
-# byte-unchanged by this plan. The SDP leg's six new steps (see
+# The SDP leg's ACCEPTED, RECORDED cost to this function -- NOT a bug. The
+# SDP leg's six new steps (see
 # `chip_test._SDP_LEG_STEP_ORDER` for the ordered tuple by name -- not
 # spelled out literally here: this module is a declared non-registry,
 # re-measured every run by `test_non_registry_still_has_no_ops`'s AST
@@ -249,88 +176,47 @@ def is_submittable(ac: AutoCapture) -> bool:
 # string literals) necessarily re-key every one of the 43 measured ALLOW
 # chips through the hashed `op=verdict:cls` triples below -- b14/b15-era
 # reports stop grouping with v1.30-era ones and their accumulated N>=2
-# promotion counts reset. gh#20's orphaned id `00e121446ceb` is named
-# explicitly in plan 134-11's LEG-18 finding; the outward description of
-# this discontinuity is Phase 137's release notes (CLOSE-05), not this
-# phase's. REJECTED: excluding the SDP steps from this hash (preserves
+# promotion counts reset; gh#20's orphaned id `00e121446ceb` is a recorded
+# instance. REJECTED: excluding the SDP steps from this hash (preserves
 # continuity and the promotion ladder, but two reports differing ONLY in
 # their SDP outcome would then dedup identically -- a leaked lock grouping
 # with a held one, blinding the mechanism that decides which reports get
 # triaged); carrying a second legacy fingerprint (preserves continuity
 # without blinding dedup, but adds a field and a hash nothing else needs).
 def dedup_fingerprint(report: DiagnosticReport) -> str:
-    """Deterministic 12-char lowercase hex short-hash for report dedup (D-02).
+    """Deterministic 12-char hex short-hash keying report dedup.
 
-    Reads ONLY `AutoCapture.chip`/`.protocol` (via `report.auto_capture`) and,
-    per step in `report.results` order, `StepResult.op`/`.verdict` plus
-    `StepResult.fingerprint.classification` when present (empty string
-    otherwise -- the graceful-degradation case for a non-destructive run with
-    no write/verify fingerprint attached), and `repeat_policy_tag(results)`
-    when and only when it is non-empty (quick task 260822-aq6 -- see the
-    call site below for why the empty default must not be appended).
-    The hash deliberately EXCLUDES
-    every volatile field -- `generated`, `host_version`, measured
-    `vpp_*`/`vpe_*` millivolt readings, `error_code`, and the free-text
-    `reason` string -- so a clean re-test of the same chip with the same
-    outcome shape dedups to the SAME id, and no scrubbable-PII-bearing
-    `reason` text ever influences it (T-113-02).
+    Hashes chip name, plus each step's op / verdict / fingerprint
+    classification, plus `repeat_policy_tag` and `coverage_tag` when non-empty.
 
-    This is a non-secret dedup id, not a security control (T-113-06) --
-    `hashlib.sha256` is used here purely for its distribution properties,
-    truncated to 12 hex characters (collision-safe at this scale, short
-    enough for an issue title).
+    It deliberately EXCLUDES every volatile field -- timestamps, host version,
+    measured millivolts, error_code and the free-text `reason` -- so a clean
+    re-test of the same chip with the same outcome shape dedups to the SAME id,
+    and no scrubbable free text can influence it.
 
-    Phase 121 D-06/D-08 depends on two properties of hashing `result.op`
-    (not just `result.verdict`) into `parts`, both proven by test rather
-    than argued: (1) a partial run (`OP_WRITE_PARTIAL = "write-partial"`)
-    and a full run (`OP_WRITE = "write"`) of the same chip with identical
-    verdicts/classifications differ here purely because the op strings
-    differ -- no extra code needed. (2) because
-    `tools/parse_devtest_issue.py::count_agreeing` groups SAVED report
-    bodies by this ALREADY-EMBEDDED fingerprint (never re-hashing), a
-    partial run can NEVER land in the same group as a full run, so it can
-    never contribute to that group's N>=2 promotion count. Phase 114's
-    GRAD-01 no-auto-graduate lock therefore holds end to end THROUGH THE
-    FINGERPRINT -- not through the `ladder_state` tag, which is identical
-    for both run shapes (`build_db_diff` below has no op-name branch at
-    all).
+    A non-secret dedup id, not a security control: sha256 is used for its
+    distribution, truncated to 12 hex chars.
 
-    AMENDMENT (quick-devtest-coverage-dedup, follow-up to 260821-wna): the
-    op string ALONE no longer carries property (1) for every reachable run
-    shape. Since 260821-wna, a UV part's write step and a non-UV part's
-    genuine full-device write step can BOTH report `op="write"` -- a UV
-    part's `write_scope="full"` run resolves a small top-anchored slot
-    (`region_policy="uv-slot"`), while a non-UV part's `write_scope="full"`
-    run resolves the whole device (`region_policy="full-device"`); both
-    are the SAME op string with wildly different coverage. `coverage_tag`
-    (`chip_test.py`) is the second mechanism this amendment adds: it reads
-    `StepResult.write_target.region_policy` off the located write step and
-    appends `"cov=full-device"` to `parts` ONLY when that policy is
-    `full-device`, exactly mirroring how `repeat_policy_tag` is wired
-    below. A slot/fixed run is therefore still discriminated from a
-    full-device run of the same chip even where the op string alone can no
-    longer tell them apart -- and, symmetrically to `repeat_policy_tag`,
-    the untagged (slot/fixed) case keeps every ALREADY-FILED fingerprint
-    byte-identical, so no historical `count_agreeing` group is re-keyed.
+    Hashing `result.op` rather than just the verdict is what keeps a partial
+    run out of a full run's dedup group, so a partial run can never contribute
+    to that group's N>=2 promotion count.
+
+    The op string alone is no longer sufficient, though: a UV part's write and a
+    non-UV full-device write can BOTH report `op="write"` with wildly different
+    coverage. `coverage_tag` supplies the missing discriminator, appended only
+    when the policy is full-device -- so every already-filed fingerprint stays
+    byte-identical and no historical group is re-keyed.
     """
     ac = report.auto_capture
     parts = [ac.chip or "", str(ac.protocol or "")]
     for result in report.results:
         cls = result.fingerprint.classification if result.fingerprint else ""
         parts.append(f"{result.op}={result.verdict}:{cls}")
-    # Repeat-policy discriminator (quick task 260822-aq6) -- the same
-    # mechanism property (2) above describes for `write-partial` vs `write`,
-    # applied to the repeat policy. A `--fast` (single-run) report is a
-    # strictly weaker test: nothing can be `marginal` and no read divergence
-    # is computed. Appending the tag keeps such a report out of the group
-    # `count_agreeing` builds, so two fast runs can never promote a chip that
-    # no accurate run ever passed.
-    #
-    # `repeat_policy_tag` returns `""` for the default N>=2 policy and the
-    # append is skipped entirely, so EVERY accurate run's fingerprint is
-    # byte-identical to the ones already filed -- no historical group is
-    # re-keyed and no promotion count resets. That is the deliberate
-    # difference from v1.30 D-11, which accepted a full re-key.
+    # Repeat-policy discriminator. A single-run report is a strictly weaker test:
+    # nothing can be marginal and no read divergence is computed. The tag keeps it
+    # out of the promotion group, so two fast runs can never promote a chip no
+    # accurate run ever passed. The tag is empty for the default policy and the
+    # append is skipped, so accurate runs keep their existing fingerprints.
     policy = repeat_policy_tag(report.results)
     if policy:
         parts.append(policy)
@@ -355,7 +241,7 @@ def dedup_fingerprint(report: DiagnosticReport) -> str:
 
 
 # ---------------------------------------------------------------------------
-# DbDiff (RPT-05, D-07) -- read-only advisory triage text, never a DB write
+# DbDiff -- read-only advisory triage text, never a DB write
 # ---------------------------------------------------------------------------
 
 _DISPOSITION_COMMUNITY_FAIL = (
@@ -365,11 +251,11 @@ _DISPOSITION_CANDIDATE = "suggests: candidate for community-reported (advisory)"
 _DISPOSITION_INCONCLUSIVE = "inconclusive -- needs N>=2 agreement (advisory)"
 _DISPOSITION_NO_CHANGE = "no change suggested (advisory)"
 
-# Graduation-ladder tag names (GRAD-01, Phase 114, D-01/D-02). These are the
+# Graduation-ladder tag names. These are the
 # formalized report-side vocabulary the ladder taxonomy documents (see
 # doc/community-validation.md). `_LADDER_COMMUNITY_CONFIRMED` is the
 # human-gated target reachable only after a maintainer manually promotes a
-# chip (N>=2 agreeing reports, D-03) via the unchanged `build_db.py` write
+# chip (N>=2 agreeing reports) via the unchanged `build_db.py` write
 # locus -- `build_db_diff` below NEVER assigns it.
 _LADDER_COMMUNITY_REPORTED = "community-reported"
 _LADDER_COMMUNITY_FAIL = "community-fail"
@@ -391,7 +277,7 @@ class DbDiff:
     is the human-gated target and is NEVER auto-assigned here. It exists to
     inform a human maintainer; the N>=2 promotion rule and the actual
     `support_status` write remain a manual `build_db.py` edit, entirely out
-    of scope for this module (D-01/D-02/D-07).
+    of scope for this module.
     """
 
     current_support_status: str = "supported"
@@ -402,7 +288,7 @@ class DbDiff:
 def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
     """Read-only transform: current `support_status` + an advisory
     proposed-disposition string + a derived `ladder_state` tag, both computed
-    purely from sweep verdicts (RPT-05/D-07, GRAD-01/D-01).
+    purely from sweep verdicts.
 
     Reads `support_status` via `db.get_eprom_config(name)` -- mirroring the
     exact `chip_resolver.py:54` read site -- and NEVER calls any write/set
@@ -410,7 +296,7 @@ def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
     tuple; only the config dict is used, defensively handling a `None`/absent
     config. Neither the disposition text nor `ladder_state` ever yields a
     concrete `support_status` value, and `ladder_state` never becomes
-    `_LADDER_COMMUNITY_CONFIRMED` -- that state is human-gated only (D-01/D-02).
+    `_LADDER_COMMUNITY_CONFIRMED` -- that state is human-gated only.
     """
     raw_config, _manufacturer = db.get_eprom_config(name)
     current = (raw_config or {}).get("support_status", "supported")
@@ -438,7 +324,7 @@ def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
 
 
 # ---------------------------------------------------------------------------
-# Render-boundary identity helper (PROV-05, D-10/D-11/D-12) -- render() ONLY
+# Render-boundary identity helper -- render() ONLY
 # ---------------------------------------------------------------------------
 
 
@@ -456,7 +342,7 @@ def _identity_cell(value: object) -> str:
     falsy values (e.g. `0`) with no decision behind it. An identity with no
     printable content carries no evidence to preserve, and an empty cell is
     precisely the blank rendering PROV-05 forbids. A PARTIALLY mangled
-    identity is different: `hardware.py`'s `_scrub_identity` (147-02, D-07)
+    identity is different: `hardware.py`'s `_scrub_identity`
     leaves it non-empty with `?` substituted for bad bytes, so it still
     renders here and stays visibly faulty.
     """
@@ -499,30 +385,12 @@ def _hex_cell(value: object, digits: int) -> str:
 
 
 def _state_cell(value: object) -> str:
-    """Render-only truncation of `sdp_hold_state` to its bare state token
-    (mirrors `_hex_cell`/`_identity_cell`: a render-boundary substitution
-    must not leak into the canonical mapping).
+    """Render-only truncation of `sdp_hold_state` to its bare state token.
 
-    HISTORICAL, KEPT DEFENSIVE (quick task 260822-hs supersedes the note
-    this docstring used to carry): `chip_test.sdp_hold_state()` used to
-    return `HELD`, `NOT-HELD`, or `f"{SDP_HOLD_NOT_RUN}: {reason}"` for a
-    non-0x0D part -- a full sentence Rich then word-wrapped across three
-    console lines, which is why this truncation existed in the first
-    place (D-07/LEG-12's console leg, superseded by the operator on
-    2026-08-21). Quick task 260822-hs went further and STRIPPED the
-    reason at the source: `sdp_hold_state()` now returns the bare
-    `SDP_HOLD_NOT_RUN` token with nothing to truncate, so for every
-    CURRENT input this function is a no-op passthrough. It still splits on
-    the first `":"` and is KEPT rather than deleted -- it costs nothing,
-    it stays correct if some other/older caller ever assigns a
-    colon-bearing `sdp_hold_state` value again (e.g. a foreign or
-    historical report dict fed through `render()`), and deleting it would
-    be exactly the kind of "restore what looks unused" mistake that
-    re-opens a closed carrier. `to_dict()` no longer carries any prose
-    under this key either -- the canonical value and the rendered value
-    are identical bare tokens, so there is nothing left for the saved
-    JSON/markdown artifact or the filed issue body to carry beyond the
-    three-valued token itself.
+    Currently a no-op passthrough: `sdp_hold_state()` returns a bare token with
+    nothing to truncate. KEPT defensively -- it costs nothing and stays correct
+    if an older or foreign report dict carrying a colon-bearing value is fed
+    through `render()`.
     """
     text = str(value)
     return text.split(":", 1)[0].strip()
@@ -641,7 +509,7 @@ def _write_coverage_line(result: StepResult, step: Step | None) -> str | None:
             f"slot 0x{start:X} ({length} bytes), "
             f"{target.bits_cleared} bits cleared this cycle"
         )
-        # D-9 rig life. A UV part is a finite regression rig -- one run
+        # Rig life. A UV part is a finite regression rig -- one run
         # saturates one slot -- so "slots left" IS "runs left", and an
         # operator planning a firmware regression pass needs the number
         # without having to work it out from the slot address. Appended only
@@ -667,25 +535,25 @@ def _write_coverage_line(result: StepResult, step: Step | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# DiagnosticReport (RPT-01, RPT-02, XPORT-01) -- single-source dual render
+# DiagnosticReport -- single-source dual render
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class DiagnosticReport:
-    """The single source object every `dev test` run produces (D-01).
+    """The single source object every `dev test` run produces.
 
     Composes the Phase-108/109 `Plan`, `list[StepResult]`, and `BannerCounts`
     objects (never redefined here, never recomputed) plus the new
     `AutoCapture`/`TransportHealth` sub-objects. The measured-voltage slot is
-    split (Phase 111, D-01/D-03/D-04) into destructive-run before/after pairs
+    split into destructive-run before/after pairs
     per rail (`vpp_before_mv`/`vpp_after_mv`/`vpe_before_mv`/`vpe_after_mv`)
     plus standalone non-destructive readings (`vpp_mv`/`vpe_mv`) -- a rail
     that sagged across a write reads very differently from a regulator that
     never reached its target, so the two shapes are never conflated into one
     field.
 
-    `db_diff` (plan 03, RPT-05) is the advisory, read-only DB-diff -- current
+    `db_diff` (plan 03) is the advisory, read-only DB-diff -- current
     `support_status` beside a proposed-disposition string derived purely from
     the sweep verdicts. It is `None` when no `build_db_diff` call has been
     composed in yet.
@@ -696,7 +564,7 @@ class DiagnosticReport:
     plan: Plan
     results: list[StepResult] = field(default_factory=list)
     banner: BannerCounts | None = None
-    # D-01 split / D-03 destructive before-after / D-04 standalone honest-fallback
+    # Split destructive before/after VPP readings, with a standalone honest fallback.
     vpp_before_mv: int | None = None
     vpp_after_mv: int | None = None
     vpe_before_mv: int | None = None
@@ -704,7 +572,7 @@ class DiagnosticReport:
     vpp_mv: int | None = None
     vpe_mv: int | None = None
     db_diff: DbDiff | None = None
-    # LEG-12 (v1.30 Phase 134, plan 134-06, D-10): the carriage half only --
+    # LEG-12: the carriage half only --
     # a plain `str`, NEVER a `bool` and NEVER a key named `locked` or
     # `protection_enabled` (P-06 prevention 3: a JSON `true` on such a key
     # is read as ground truth for a protection state this chip family
@@ -754,7 +622,7 @@ class DiagnosticReport:
         place in this module that knows the sentinel string for a voltage
         reading (mirrors `_transport_dict`, Pitfall 3). Readings land on the
         100 mV grid the sampler reports at; an absent reading is honestly
-        `NOT_MEASURED`, never a fabricated `0` (D-04)."""
+        `NOT_MEASURED`, never a fabricated `0`."""
         return {
             "vpp_before_mv": (
                 NOT_MEASURED if self.vpp_before_mv is None else self.vpp_before_mv
@@ -800,7 +668,7 @@ class DiagnosticReport:
     def _step_dict(
         self, result: StepResult, step: Step | None = None
     ) -> dict[str, Any]:
-        # Schema 1.6 (quick task 260821-wna): the five `write_*` keys below
+        # Schema 1.6: the five `write_*` keys below
         # are read off `StepResult.write_target` -- `None` on every step
         # that isn't a write/verify, and `None` on a write/verify step that
         # was SKIPPED as saturated/refused (there is no resolved target to
@@ -823,10 +691,10 @@ class DiagnosticReport:
         return {
             "op": result.op,
             "verdict": result.verdict,
-            # Schema 1.7 (quick task 260822-aq6): how many times the
+            # Schema 1.7: how many times the
             # underlying operator method actually ran for this step. It has
             # been 2 for every read/write/verify/erase since Phase 121's
-            # N>=2 repeat policy (D-05/D-06) and 1 for the ops that are
+            # N>=2 repeat policy and 1 for the ops that are
             # single-run by design -- but the number reached NO consumer
             # outside the test suite, so an operator watching `read, read,
             # write, write` go past had no way to learn from the report that
@@ -903,7 +771,7 @@ class DiagnosticReport:
 
     def to_dict(self) -> dict[str, Any]:
         """CANONICAL serializable mapping -- the single source both render()
-        and to_json_block() consume (RPT-01, D-01). Hand-written (NOT
+        and to_json_block() consume. Hand-written (NOT
         `dataclasses.asdict()` wholesale, Pitfall 3): this is the ONE place
         `schema_version` is baked in and the ONE place NOT_MEASURED is
         substituted for an absent transport counter.
@@ -998,7 +866,7 @@ class DiagnosticReport:
                 continue
             took = _duration_cell(step_row.get("duration_s"))
             verdict = str(step_row["verdict"])
-            # `xN` (quick task 260822-aq6): the step's own run count, on
+            # `xN`: the step's own run count, on
             # every step that ran, with no conditional. Showing `x1` on the
             # single-run ops is the point rather than noise -- `read x2`
             # sitting beside `blank-check x1` is what tells an operator that
@@ -1033,7 +901,7 @@ class DiagnosticReport:
         # for why the truncation stays rather than being deleted.
         table.add_row("sdp_hold_state", _state_cell(d["sdp_hold_state"]))
 
-        # D-F (quick task 260821-wna): one extra row, only when the write
+        # D-F: one extra row, only when the write
         # did not cover the full device -- the slot range and clearable-bit
         # count for a slot write, the excluded range and reason for a
         # carved-out full-device write, or the saturation reason when
@@ -1066,5 +934,5 @@ class DiagnosticReport:
         return table
 
     def to_json_block(self) -> str:
-        """Fenced ```json block for the self-contained issue body (RPT-01)."""
+        """Fenced ```json block for the self-contained issue body."""
         return "```json\n" + json.dumps(self.to_dict(), indent=2) + "\n```"

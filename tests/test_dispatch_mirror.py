@@ -18,8 +18,13 @@ Coverage:
 
 import pathlib
 import re
+import shutil
+import subprocess
+import sys
 
-from tests.fw_presence import fw_path, requires_fw
+import pytest
+
+from tests.fw_presence import FW_ROOT, fw_path, requires_fw
 from tools import check_dispatch
 
 # ---------------------------------------------------------------------------
@@ -219,4 +224,143 @@ def test_dispatch_mirror_firmware_leg_enumerates_all_protocols() -> None:
         f"firmware leg test_configure_memory.cpp does not enumerate §0 protocol(s): "
         f"{missing_str}"
         " — adding a §0 protocol without a native dispatch test trips this guard"
+    )
+
+
+# ---------------------------------------------------------------------------
+# SWEEP-07 planted-violation controls. `test_dispatch_mirror_firmware_leg_
+# enumerates_all_protocols`'s extraction is a SUPERSET membership test over
+# every `0x[0-9A-Fa-f]+` token in the whole firmware-test file text, with NO
+# comment stripping anywhere -- so it structurally cannot distinguish "a
+# native dispatch test exists for this protocol" from "a comment mentions
+# this protocol". RESEARCH.md's R3 measured no LIVE collision today (no §0
+# protocol's only occurrence in test_configure_memory.cpp is a comment), so
+# both legs below use a purely synthetic plant on protocol 0x10
+# (flash_intel).
+#
+# The seam is the module-level constant `_FW_DISPATCH_TEST`, read INSIDE
+# the test body above -- so `monkeypatch.setattr(sys.modules[__name__],
+# "_FW_DISPATCH_TEST", fixture)` works, identically to the shape
+# `test_json_key_parity.py` uses.
+# ---------------------------------------------------------------------------
+
+_FIXTURES_DIR = pathlib.Path(__file__).parent / "fixtures"
+_FIXTURE_DISPATCH_MISSING_HEX = _FIXTURES_DIR / "planted_dispatch_missing_hex.cpp"
+_FIXTURE_DISPATCH_COMMENT_ONLY_HEX = (
+    _FIXTURES_DIR / "planted_dispatch_comment_only_hex.cpp"
+)
+
+
+def _git_hash_object(path: pathlib.Path) -> str:
+    """Resolve `git` fail-closed and hash-object `path` inside FW_ROOT.
+    Copied from `tests/test_json_key_parity.py` / `tests/test_cap03_ack_layout_parity.py`
+    (not reinvented) per house practice -- see 154-PATTERNS.md.
+    """
+    git_bin = shutil.which("git")
+    assert git_bin is not None, (
+        "`git` binary not found on PATH. This must FAIL the suite, never "
+        "be silently skipped."
+    )
+    result = subprocess.run(
+        [git_bin, "-C", str(FW_ROOT), "hash-object", str(path)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+def _git_porcelain(path: pathlib.Path) -> str:
+    git_bin = shutil.which("git")
+    assert git_bin is not None, (
+        "`git` binary not found on PATH. This must FAIL the suite, never "
+        "be silently skipped."
+    )
+    result = subprocess.run(
+        [git_bin, "-C", str(path), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return result.stdout
+
+
+@requires_fw
+def test_planted_missing_hex_is_detected(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SWEEP-07 RED control: `planted_dispatch_missing_hex.cpp` rewrites
+    every real 0x10 (flash_intel) occurrence to 0xFF and mentions 0x10
+    nowhere, not even in a comment. Calling the SAME live leg
+    (`test_dispatch_mirror_firmware_leg_enumerates_all_protocols`), never a
+    reimplementation, must raise AssertionError naming 0x10 as missing.
+    """
+    assert _FIXTURE_DISPATCH_MISSING_HEX.is_file(), (
+        f"committed fixture missing: {_FIXTURE_DISPATCH_MISSING_HEX}"
+    )
+    real_source = _FW_DISPATCH_TEST
+    before_sha = _git_hash_object(real_source)
+
+    monkeypatch.setattr(
+        sys.modules[__name__], "_FW_DISPATCH_TEST", _FIXTURE_DISPATCH_MISSING_HEX
+    )
+    with pytest.raises(AssertionError) as excinfo:
+        test_dispatch_mirror_firmware_leg_enumerates_all_protocols()
+    message = str(excinfo.value)
+    assert "0x10" in message
+    assert "does not enumerate" in message
+
+    after_sha = _git_hash_object(real_source)
+    assert before_sha == after_sha, (
+        "the real test_configure_memory.cpp's git blob hash changed during "
+        "this planted-violation run -- the plant must never touch the real "
+        "file."
+    )
+    assert _git_porcelain(FW_ROOT) == "", (
+        "the sibling firmware repo is not clean after this "
+        "planted-violation run -- the plant must never write into the "
+        "real firmware checkout."
+    )
+
+
+@requires_fw
+def test_planted_comment_only_hex_is_NOT_detected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SWEEP-07 fail-OPEN control -- the finding, not a bug to fix.
+
+    `planted_dispatch_comment_only_hex.cpp` carries the SAME rewrite as the
+    sibling missing-hex fixture (every real 0x10 usage rewritten to 0xFF),
+    PLUS one comment line mentioning 0x10. The live leg's extraction is a
+    bare `0x[0-9A-Fa-f]+` regex over the WHOLE file text with NO comment
+    stripping, so this comment alone satisfies the gate exactly as well as
+    a real dispatch case would.
+
+    Deliberately carries NO raises-expectation wrapper here -- the live leg
+    must PASS, plainly, uncaught. A reader who "corrects" this leg to
+    expect RED destroys the one committed proof that the gate cannot
+    distinguish "a native dispatch test exists for this protocol" from "a
+    comment mentions this protocol" (fail-open).
+    """
+    assert _FIXTURE_DISPATCH_COMMENT_ONLY_HEX.is_file(), (
+        f"committed fixture missing: {_FIXTURE_DISPATCH_COMMENT_ONLY_HEX}"
+    )
+    real_source = _FW_DISPATCH_TEST
+    before_sha = _git_hash_object(real_source)
+
+    monkeypatch.setattr(
+        sys.modules[__name__], "_FW_DISPATCH_TEST", _FIXTURE_DISPATCH_COMMENT_ONLY_HEX
+    )
+    # No raises-expectation wrapper: this call must complete without
+    # raising. The GREEN is the finding.
+    test_dispatch_mirror_firmware_leg_enumerates_all_protocols()
+
+    after_sha = _git_hash_object(real_source)
+    assert before_sha == after_sha, (
+        "the real test_configure_memory.cpp's git blob hash changed during "
+        "this planted-violation run -- the plant must never touch the real "
+        "file."
+    )
+    assert _git_porcelain(FW_ROOT) == "", (
+        "the sibling firmware repo is not clean after this "
+        "planted-violation run -- the plant must never write into the "
+        "real firmware checkout."
     )

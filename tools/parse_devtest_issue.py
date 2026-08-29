@@ -96,7 +96,7 @@ def _extract_fenced_report(body: str | None) -> dict[str, Any] | None:
         return None
     if not isinstance(obj, dict):
         return None
-    if "schema_version" not in obj:  # D-04 detection marker, presence-only
+    if "schema_version" not in obj:  # detection marker, presence-only
         return None
     return obj
 
@@ -204,7 +204,7 @@ def count_agreeing(bodies: list[str]) -> dict[str, int]:
 # imports both worlds.
 NOT_REPORTED = "not reported"
 
-# D-14/D-17: one action-oriented clause, true under EITHER reading of a
+# One action-oriented clause, true under EITHER reading of a
 # `None` identity (an old report whose host build never captured it, or a
 # post-bump report where capture failed) -- so no schema-version ordering
 # logic is needed here or anywhere else (both parsers accept

@@ -225,7 +225,7 @@ def test_search_chip_id_returns_list(db: EpromDatabase) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase 84 — D-40 label-only CAN_ERASE pinning assertions
+# D-40 label-only CAN_ERASE pinning assertions
 # Proves that the FM1608 SRAM→FRAM relabel (fm-fram-full) and the SST39SF040
 # sst-keep decision do NOT change FLAG_CAN_ERASE.  These tests are the D-40
 # label-only-for-CAN_ERASE proof and should remain green through any subsequent

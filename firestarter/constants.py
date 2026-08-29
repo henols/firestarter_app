@@ -23,12 +23,12 @@ LEONARDO_BUFFER_SIZE = 1024
 
 # Max host->fw DATA chunk (write/verify pull-protocol). LOCKSTEP CONTRACT with the
 # firmware COBS decoder rurp_communication_read_data: it commits at most
-# DATA_BUFFER_SIZE-1 payload bytes (CR-01 guard reserves the NUL-terminator slot;
-# Phase 51 P04). The decoded payload is data_chunk + CRC8, so the data chunk must
+# DATA_BUFFER_SIZE-1 payload bytes (the guard reserves the NUL-terminator slot).
+# The decoded payload is data_chunk + CRC8, so the data chunk must
 # satisfy len(data) + 1 (CRC) <= DATA_BUFFER_SIZE - 1, i.e. len(data) <= BUFFER_SIZE - 2.
 # Sending a full BUFFER_SIZE (512) chunk overflows the decoder -> "Data error: -2"
-# and breaks write/verify on every board (bench-confirmed Phase 53, both Uno + Leonardo).
-# OBSOLETE (Phase 54/EVEN-01): _calculate_buffer_size now reads firmware_max_chunk
+# and breaks write/verify on every board (bench-confirmed on both Uno + Leonardo).
+# OBSOLETE: _calculate_buffer_size now reads firmware_max_chunk
 # directly; this constant is no longer used as the chunk-size default. Retained to
 # avoid breaking external references.
 MAX_DATA_CHUNK = BUFFER_SIZE - 2  # 510
@@ -36,7 +36,7 @@ MAX_DATA_CHUNK = BUFFER_SIZE - 2  # 510
 # Command-channel frame size limit — Firmware sync: firestarter.h CMD_FRAME_MAX
 # Largest legitimate JSON command (~422 B) + headroom = 512; equals BUFFER_SIZE.
 # Firmware parity: firestarter.h #define CMD_FRAME_MAX DATA_BUFFER_SIZE
-# per CLAUDE.md constant-parity rule (FRAME-05 / D-06).
+# per CLAUDE.md constant-parity rule.
 CMD_FRAME_MAX = 512
 
 # IN-02 (Phase 98-03/98-05): <=256K (262144 byte) size boundary for 0x08
@@ -53,7 +53,7 @@ MAX_27C020_SIZE = 262144
 
 # Wire-protocol command codes — Firmware sync: firestarter.h
 # cmd field values sent in JSON commands to the Arduino firmware.
-# Phase 151 (LOCK-02): the ladder now reaches 16 (COMMAND_LOCK_STATUS). Per
+# The ladder now reaches 16 (COMMAND_LOCK_STATUS). Per
 # CLAUDE.md's constants-are-duplicated rule, this ladder and firmware's
 # CMD_* ladder in firestarter.h move together — every addition here must be
 # mirrored there in the same change, and vice versa.
@@ -73,7 +73,7 @@ COMMAND_DEV_REGISTERS = 8
 # COMMAND_NAMES[cmd] is dereferenced by _setup_operation (eprom_operations.py:329)
 # and again by _operation_context (eprom_operations.py:405) — a missing entry
 # is a KeyError at operation setup, not a cosmetic display gap. Corrected
-# 2026-08-03 (RETIRE-08, D-11): a prior milestone's insertion staled the
+# 2026-08-03: a prior milestone's insertion staled the
 # original 301/377 citation, which is why the corrected form names the
 # function first with the line number alongside, not the number alone. See
 # test_command_names_dereferences_both_sdp_commands in
@@ -87,7 +87,7 @@ COMMAND_FW_VERSION = 13
 COMMAND_CONFIG = 14
 COMMAND_HW_VERSION = 15
 
-# Phase 151 (LOCK-02, OD-3): protection-status read. A memory command on the
+# Protection-status read. A memory command on the
 # firmware side (is_memory_cmd()'s ninth arm, firestarter.h) because the
 # read is issued through firestarter_get_data, set only by
 # configure_memory() — no exemption needed in
@@ -129,24 +129,17 @@ FLAG_VERBOSE = 0x80
 
 # Ninth and highest wire flag. Firmware's ctrl_flags is uint32_t, so 0x100 is
 # in range, and firmware's flag block ENDS here (firestarter.h:148) — there is
-# no 0x200 flag, contrary to ROADMAP.md:363 and Phase 120's *Depends on* line
-# (F-120-05, corrected in 120-02-SUMMARY.md).
+# no 0x200 flag, despite older documentation elsewhere claiming one.
 # NOTE: CTRL_VPP_VPE_DROP_ENABLE further below also has the value 0x100, but
 # it lives in the separate control-register namespace (mirror of
 # rurp_pinout.h), is documentary only (Python never writes the control
 # register), and has its own separate parity leg. The two 0x100s are
 # unrelated wire vs. control-register values and must not be conflated.
-# D-14 / RETIRE-07 tripwire (third location): this bit's default-OFF state on
-# every write is what makes the host's SDP auto-unlock effective by default
-# -- the argument RETIRE-01 (Phase 132) relies on to justify deleting the
-# standalone `firestarter dev sdp` subcommand. Changing this bit's semantics,
-# or the default either edit point that sets it defaults to
-# (`cli_handlers.py`'s `_build_op_flags` `skip_sdp_unlock` parameter, or the
-# `--skip-sdp-unlock` Click option on `write`), invalidates that argument.
-# See the decision-site comment at the D-04 auto-set condition in
-# `cli_handlers.py`'s `write()`, and the named test
-# `test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on` in
-# `tests/test_write_skip_sdp_unlock.py`.
+# SDP auto-unlock tripwire. This bit being OFF by default on every write is
+# what makes the host's SDP auto-unlock effective by default -- the argument
+# that justified deleting the standalone `dev sdp` subcommand. Changing this
+# bit's semantics, or either edit point that sets it, invalidates that
+# argument. See test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on.
 FLAG_SKIP_SDP_UNLOCK = 0x100
 
 # Dev sweep knobs — Firmware sync: json_parser.c (key_read_settling, key_read_strobe)
@@ -155,7 +148,7 @@ FLAG_SKIP_SDP_UNLOCK = 0x100
 # Used by consistency_check_eprom() to emit knob values in per-read JSON commands.
 JSON_KEY_READ_SETTLING_DELAY = "read-settling-delay"
 JSON_KEY_READ_STROBE_US = "read-strobe-us"
-# Per-chip page size wire field (PGSZ-01/PGSZ-03). Emitted by database.py's
+# Per-chip page size wire field. Emitted by database.py's
 # convert_to_programmer only when the DB supplies a page_size (curated or,
 # as of Phase 149, provenance-keyed for upstream-native 0x0D rows) --
 # emit-when-present, mirrors the chip-id pattern. When absent, firmware

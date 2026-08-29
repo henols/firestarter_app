@@ -153,7 +153,7 @@ def test_send_json_command_routes_through_send_string(make_comm) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase-51 plan-02: COBS-framed command emission tests (FRAME-05 / T-51-04/05/06)
+# COBS-framed command emission tests (FRAME-05 / T-51-04/05/06)
 # ---------------------------------------------------------------------------
 
 
@@ -245,7 +245,7 @@ def test_send_json_command_version_probe_is_framed(make_comm, fake_serial) -> No
 
 
 # ---------------------------------------------------------------------------
-# Phase-53 Plan 01 Task 2: RED tests for fault-inject hooks + ring-fence
+# RED tests for fault-inject hooks + ring-fence
 #
 # Four tests MUST FAIL until 53-02 adds:
 #   - SerialCommunicator._fault_inject_outgoing attribute
@@ -348,7 +348,7 @@ def test_fault_inject_incoming_subclass(make_comm) -> None:
     comm = FaultInjectingSerialCommunicator.__new__(FaultInjectingSerialCommunicator)
     comm._corrupt_incoming_once = True
     comm._fault_fired = False
-    # Phase-120 (D-15 / HOST-06): bounded per-connection observed-id record,
+    # (D-15 / HOST-06): bounded per-connection observed-id record,
     # normally initialised in __init__ — mirrored here since this test bypasses it.
     comm.seen_message_ids = set()
 

@@ -4,41 +4,24 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Community Chip-Validation Submission Flow (v1.21 Phase 113)
+Submission flow for `firestarter dev test <chip> --submit`.
 
-This module is ORCHESTRATOR-ONLY (SAFE-02, milestone non-regression
-invariant): it sets no VPP, builds no wire/protocol command dict, and adds
-no firmware dispatch entry. Filing a report to the maintainer's tracker --
-via `gh` shell-out or a prefilled browser URL -- is a submission concern,
-not a hardware path. It imports no serial-transport or hardware-manager
-class and calls no `EpromOperator` method.
+ORCHESTRATOR ONLY: sets no VPP, builds no wire dict, adds no firmware dispatch,
+imports no transport or hardware class.
 
-Two-tier `--submit` flow (SUB-01): `gh issue create` (stdin body, no
-length cap) when `gh` is present on PATH and authenticated, else a
-prefilled `issues/new` browser URL whose *encoded* byte length is
-measured and whose fenced JSON block is dropped as it approaches
-GitHub's ~8 KB server cap (D-05). Every submitted report is sanitized
-(SUB-02) -- a recursive scrub of every string leaf in `to_dict()`'s
-output for home-dir paths, serial device names, `/tmp` paths, and the
-current username -- and carries a dedup fingerprint (SUB-03) in its
-issue title.
+Two tiers: `gh issue create` (stdin body, no length cap) when `gh` is present
+and authenticated, else a prefilled `issues/new` browser URL whose ENCODED byte
+length is measured and whose fenced JSON block is dropped as it approaches
+GitHub's ~8 KB cap. Every report is recursively sanitized -- home-dir paths,
+serial device names, /tmp paths and the current username -- and carries a dedup
+fingerprint in its title.
 
-The `gh` tier's create argv is permission-independent by construction
-(D-1, quick task 260728-ahy): it carries only the repo, title, and stdin
-body -- no triage/write-gated argument -- so a community tester with only
-read access on the target repo can file. Maintainer-side triage still
-applies the `gsd-inbox` label post-hoc (`gh issue edit <n> --add-label
-gsd-inbox`); detection continues to rely on the `[dev test]` title marker
-plus the fenced-JSON `schema_version` (D-04, unchanged). A non-zero `gh`
-exit and an unreachable browser both narrate their failure through the
-`console` seam instead of reporting phantom success (D-2).
+The `gh` argv is permission-independent by construction: repo, title and stdin
+body only, no write-gated argument, so a tester with read access can file.
+Labels are applied maintainer-side afterwards.
 
-`SUBMIT_REPO` is a hardcoded module constant (D-01): the target repo is
-NEVER inferred from cwd or a git remote, so a community tester's own fork
-never receives their own report. It names `henols/firestarter_prom`, the
-project-wide tracker -- deliberately NOT the repo this module lives in
-(firestarter_prom#6 centralizes issue creation there and disables it on
-`henols/firestarter` and `henols/firestarter_app`).
+`SUBMIT_REPO` is a hardcoded constant. The target repo is NEVER inferred from
+cwd or a git remote, so a tester's own fork never receives their own report.
 """
 
 from __future__ import annotations
@@ -60,16 +43,16 @@ from rich.prompt import Confirm
 # `chip_test` is already transitively present in this module's import graph
 # via `diagnostic_report` (which imports `_RAN_VERDICTS` etc. from it), and
 # it imports no serial-transport or hardware-manager class -- so importing
-# `VERDICT_NA` from it here does not breach the ORCHESTRATOR-ONLY (SAFE-02)
+# `VERDICT_NA` from it here does not breach the ORCHESTRATOR-ONLY
 # invariant stated in this module's docstring.
 from firestarter.chip_test import VERDICT_NA
 from firestarter.diagnostic_report import is_submittable
 
 # ---------------------------------------------------------------------------
-# Module constants (D-01, D-05)
+# Module constants
 # ---------------------------------------------------------------------------
 
-# D-01: hardcoded, never remote-inferred. Target is the project-wide tracker,
+# Hardcoded, never remote-inferred. Target is the project-wide tracker,
 # NOT the repo this code lives in: `henols/firestarter_prom` is the single
 # repository for issue tracking per firestarter_prom#6 ("New GitHub issues must
 # be allowed only in henols/firestarter_prom"; creation is to be disabled in
@@ -77,20 +60,20 @@ from firestarter.diagnostic_report import is_submittable
 # host + firmware + shield and cannot reliably attribute itself to one layer,
 # so the cross-repository tracker is also the only correct destination for it.
 SUBMIT_REPO = "henols/firestarter_prom"
-# GSD_INBOX_LABEL is a maintainer-side triage tag ONLY (D-1, quick 260728-ahy):
+# GSD_INBOX_LABEL is a maintainer-side triage tag ONLY (quick 260728-ahy):
 # never sent on the `gh issue create` argv (that arg is triage/write-gated and a
 # community tester lacks it); a maintainer applies it post-hoc via
 # `gh issue edit <n> --add-label gsd-inbox`. Detection stays on the `[dev test]`
-# title marker + fenced-JSON `schema_version` (D-04), unaffected by this constant.
+# title marker + fenced-JSON `schema_version`, unaffected by this constant.
 GSD_INBOX_LABEL = "gsd-inbox"
 
-# Encoded-URL byte thresholds (D-05): escalate (drop fenced JSON) past this,
+# Encoded-URL byte thresholds: escalate (drop fenced JSON) past this,
 # hard-stop (never open the browser) past the hard cap.
 _URL_ESCALATE_BYTES = 7500
 _URL_HARD_CAP_BYTES = 8000
 
 # ---------------------------------------------------------------------------
-# PII / path scrub regexes (SUB-02, module constants) -- backstop over the
+# PII / path scrub regexes (module constants) -- backstop over the
 # to_dict() field whitelist. A missed vector fails OPEN (leaks) -- every
 # vector below is proven by its own test in tests/test_submit.py (A3).
 # ---------------------------------------------------------------------------
@@ -130,7 +113,7 @@ def _scrub_value(value: Any, *, user_pattern: re.Pattern[str] | None) -> Any:
 
 
 def sanitize_dict(d: dict[str, Any], *, user: str | None = None) -> dict[str, Any]:
-    """Recursively deep-scrub every string leaf of `d` (SUB-02).
+    """Recursively deep-scrub every string leaf of `d`.
 
     Returns a NEW dict built from a deep copy -- the caller's `d` is never
     mutated. Every string leaf anywhere in the nested dict/list/tuple
@@ -150,12 +133,12 @@ def sanitize_dict(d: dict[str, Any], *, user: str | None = None) -> dict[str, An
 
 
 # ---------------------------------------------------------------------------
-# Overall verdict (title-legibility ordering, D-02) + builders (Task 2)
+# Overall verdict (title-legibility ordering) + builders
 # ---------------------------------------------------------------------------
 
 
 def overall_verdict(results: Any) -> str:
-    """FAIL-dominant title verdict (D-02) -- NOT the handler's exit-code
+    """FAIL-dominant title verdict -- NOT the handler's exit-code
     `max()` ordering (`cli_handlers.py`, where `marginal=2 > BAD=1`).
 
     `FAIL` if any step verdict is `BAD`; else `INCONCLUSIVE` if any is
@@ -170,7 +153,7 @@ def overall_verdict(results: Any) -> str:
 
 
 def build_title(report: Any, chip: str) -> str:
-    """`[dev test] <chip> — <PASS/FAIL/INCONCLUSIVE> (<shorthash>)` (D-02, SUB-03).
+    """`[dev test] <chip> — <PASS/FAIL/INCONCLUSIVE> (<shorthash>)`.
 
     The dedup shorthash is read from `report.to_dict()["dedup_fingerprint"]`
     (the Plan-01 field) -- this is the single-source link between the report
@@ -218,7 +201,7 @@ def _runs_text(run_count: Any) -> str:
 
 
 def _reason_text(verdict: Any, reason: Any) -> str:
-    """`(verdict, reason)` -> a markdown Reason cell (quick task 260822-gxx).
+    """`(verdict, reason)` -> a markdown Reason cell.
 
     Keyed on the VERDICT, never on the reason text: an `NA` verdict always
     renders `-`, regardless of what prose is attached to it. This is a
@@ -245,7 +228,7 @@ def build_body(
     sanitized_dict: dict[str, Any], results: Any, *, include_json: bool = True
 ) -> str:
     """Markdown body: a human results table, then (optionally) the fenced
-    JSON block -- both derived from the SAME sanitized dict (SUB-02).
+    JSON block -- both derived from the SAME sanitized dict.
 
     Mirrors the `dev-test-<chip>.md` table shape (`cli_handlers.py`:
     `| Step | Verdict | Runs | Took | Reason |`), but sources the reason
@@ -258,7 +241,7 @@ def build_body(
     asked for timings to reach GitHub, not just the console. A step that did
     not run has no duration and renders `-`.
 
-    The `Runs` column (schema 1.7, quick task 260822-aq6) carries the step's
+    The `Runs` column (schema 1.7) carries the step's
     `run_count`. A triager reading a filed issue must be able to tell an
     accurate N>=2 run from a `dev test --fast` single-run one WITHOUT
     unfolding the JSON block: a `1` in this column on a write or verify row
@@ -287,21 +270,21 @@ def build_body(
 
 
 def build_issue_url(title: str, body: str) -> str:
-    """`https://github.com/<SUBMIT_REPO>/issues/new?...` (D-01).
+    """`https://github.com/<SUBMIT_REPO>/issues/new?...`.
 
     Percent-encodes `title`/`body` via `urllib.parse.urlencode(quote_via=quote)`.
     Deliberately OMITS the `labels` query param (RESEARCH Pitfall 1): GitHub
     silently drops or 404s the `labels` param for community testers without
     write access on the target repo -- triage relies on the `[dev test]` title
     marker plus the fenced-JSON `schema_version` instead. This mirrors the `gh`
-    tier, whose create argv is likewise permission-independent (D-1).
+    tier, whose create argv is likewise permission-independent.
     """
     query = urlencode({"title": title, "body": body}, quote_via=quote)
     return f"https://github.com/{SUBMIT_REPO}/issues/new?{query}"
 
 
 # ---------------------------------------------------------------------------
-# gh-tier detection + shell-out (Task 3, T-113-01)
+# gh-tier detection + shell-out
 # ---------------------------------------------------------------------------
 
 
@@ -367,7 +350,7 @@ def submit_via_gh(
 
 
 # ---------------------------------------------------------------------------
-# Dedup query + comment path (Task 1, D-09/D-10/D-11) -- both follow
+# Dedup query + comment path -- both follow
 # submit_via_gh's seam discipline exactly: injected run_fn, list argv never a
 # shell string, explicit --repo never cwd-inferred, check=False with an
 # explicit returncode branch, narration on failure.
@@ -379,7 +362,7 @@ _DEDUP_SEARCH_LIMIT = 5
 def find_prior_report(
     fingerprint: str, *, run_fn: Any = subprocess.run
 ) -> tuple[str | None, bool]:
-    """Read-only `gh issue list` dedup query, keyed on `dedup_fingerprint` (D-09).
+    """Read-only `gh issue list` dedup query, keyed on `dedup_fingerprint`.
 
     Returns `(url, check_ran)`: the matched prior issue's URL (or `None`
     when no match), and whether the query actually ran at all.
@@ -468,7 +451,7 @@ def find_prior_report(
 def comment_via_gh(
     issue_url: str, body: str, *, run_fn: Any = subprocess.run, console: Any = None
 ) -> str | None:
-    """Comment `body` onto `issue_url` via `gh issue comment` (D-11).
+    """Comment `body` onto `issue_url` via `gh issue comment`.
 
     Argv is a LIST: the `gh issue comment` subcommand, the target issue,
     the explicit `--repo` argument (always `SUBMIT_REPO`, NEVER
@@ -520,7 +503,7 @@ def comment_via_gh(
 
 
 # ---------------------------------------------------------------------------
-# Browser tier + D-05 oversize escalation (Task 1)
+# Browser tier + D-05 oversize escalation
 # ---------------------------------------------------------------------------
 
 
@@ -559,7 +542,7 @@ def submit_via_browser(
     headless environment) also returns `None` and prints an actionable
     manual-filing message carrying the full issue URL plus the full local
     report path, so the caller can never mistake an unreachable browser
-    for a filed report (D-2, quick task 260728-ahy).
+    for a filed report.
     """
     url = build_issue_url(title, body)
     n = len(url.encode("utf-8"))
@@ -600,7 +583,7 @@ def submit_via_browser(
 
 
 # ---------------------------------------------------------------------------
-# submit_report: D-03 refuse gate + D-04 TTY/off-TTY dispatch (Task 2)
+# submit_report: D-03 refuse gate + D-04 TTY/off-TTY dispatch
 # ---------------------------------------------------------------------------
 
 
@@ -636,7 +619,7 @@ def submit_report(
     Step 3 (D-09 dedup query -- runs BEFORE any ask, on EVERY reached
     path, TTY or not): `find_prior_report_fn(fingerprint, run_fn=run_fn)`
     is called immediately after Step 2 and before the TTY branch, so
-    "the check runs first" (DEVTEST-05) holds universally, not merely on
+    "the check runs first" holds universally, not merely on
     an interactive run.
 
     Step 4 (D-04/D-10 off-TTY): prints the issue URL and returns WITHOUT
@@ -651,14 +634,14 @@ def submit_report(
     caller), so nothing is lost, and `body` still reaches every
     downstream seam sanitized (`build_issue_url`, `gh`, the browser tier).
 
-    Step 5 (the ask -- EVERY interactive run, DEVTEST-05): when Step 3
+    Step 5 (the ask -- EVERY interactive run): when Step 3
     found a duplicate, names it and asks whether to add this run's
     evidence as a comment (worded as "you appear to have already reported
     this", never as a certainty, per F-5's eventually-consistent search
     index caveat), explaining that the fingerprint excludes measured
     voltages/error codes/reasons so a second run can still carry new
     diagnostic detail. Otherwise asks the normal filing question -- and
-    when the dedup check could not run (D-10), an explicit line says so
+    when the dedup check could not run, an explicit line says so
     before the SAME normal question, which is NEVER defaulted to decline
     and is asked exactly as it would be on a clean check.
 

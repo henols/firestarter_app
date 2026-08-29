@@ -1081,8 +1081,8 @@ def emit_defects(findings, ledger, next_n_holder):
 # DEFECT-COV-NN findings where the gap is structural (D-10); deliberate gaps
 # are listed in the Known Gaps subsection.
 #
-# D-11 forbids proposing alternative BENCH chip selections — BENCH-05 /
-# BENCH-06 stay "candidate" until Phase 12 CONTEXT.md decides.
+# Forbids proposing alternative BENCH chip selections — BENCH-05 /
+# BENCH-06 stay "candidate" until CONTEXT.md decides.
 
 
 def _findings_for_pinout(findings, ledger, pinout):

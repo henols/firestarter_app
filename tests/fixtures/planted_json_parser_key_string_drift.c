@@ -42,10 +42,10 @@ const char key_pin_count[] PROGMEM = "pin-count";
 const char key_pulse_delay[] PROGMEM = "pulse-delay";
 const char key_vpp_mv[] PROGMEM = "vpp_mv";
 const char key_algorithm[] PROGMEM = "algorithm";
-/* Phase 44 -- host-tunable read-timing knobs (D-04 sweep params) */
+/* host-tunable read-timing knobs (D-04 sweep params) */
 const char key_read_settling[] PROGMEM = "read-settling-delay";
 const char key_read_strobe[]   PROGMEM = "read-strobe-us";
-/* Phase 149 -- per-chip page-write size delivered by the host (PGSZ-01/PGSZ-02).
+/* per-chip page-write size delivered by the host (PGSZ-01/PGSZ-02).
  * PLANTED VIOLATION -- real firmware spells this "page-size" (the wire's
  * hyphen form); this fixture spells it "page_size" (the internal database
  * key's underscore form), one character different from the wire. */
@@ -60,8 +60,8 @@ static const key_parser_t key_parsers[] PROGMEM = {
     {key_mem_size, get_memory_size}, {key_address, get_address},         {key_flags, get_flags},
     {key_chip_id, get_chip_id},      {key_pin_count, get_pin_count},     {key_pulse_delay, get_delay},
     {key_vpp_mv, get_vpp_mv},        {key_algorithm, get_algorithm},
-    /* Phase 44 -- read-timing sweep knobs (RCA-01 causal proof, D-04) */
+    /* read-timing sweep knobs (RCA-01 causal proof, D-04) */
     {key_read_settling, get_read_settling},                              {key_read_strobe, get_read_strobe},
-    /* Phase 149 -- page-size seam (PGSZ-01/PGSZ-02) */
+    /* page-size seam (PGSZ-01/PGSZ-02) */
     {key_page_size, get_page_size},
 };

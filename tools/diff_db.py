@@ -327,9 +327,9 @@ _RULE_FIELD_PATHS = {
         ("electrical", "vdd_mv"),
     },
     "BUG2_TIMING": {("programming", "pulse_duration_us")},
-    # Phase 148 DATA-01 RULE_VCC_MARGIN_RAIL: scope is exactly the one key the
-    # margin-rail substitution ever touches — electrical.vcc_mv — and nothing
-    # else. vdd_mv is read by the rule, never written; it is not part of this
+    # RULE_VCC_MARGIN_RAIL: scope is exactly the one key the margin-rail
+    # substitution ever touches — electrical.vcc_mv — and nothing else.
+    # vdd_mv is read by the rule, never written; it is not part of this
     # rule's explained field set.
     "RULE_VCC_MARGIN_RAIL": {("electrical", "vcc_mv")},
     "BUG3_VCC_VDD": {("electrical", "vcc_mv"), ("electrical", "vdd_mv")},
@@ -344,7 +344,7 @@ _RULE_FIELD_PATHS = {
     "BUG_B_VPP": {
         ("electrical", "vpp_mv"),  # VPP voltage in mV (0xF0-mask fix)
     },
-    # Phase 66: support_status + unsupported_reason (new top-level keys) + NMOS vpp/vpp_mv corrections.
+    # support_status + unsupported_reason (new top-level keys) + NMOS vpp/vpp_mv corrections.
     # Every existing chip gains support_status=supported (a bare support_status diff);
     # NMOS entries also gain corrected vpp/vpp_mv; non-supported chips gain unsupported_reason.
     # RULE_PHASE66 is placed LAST (least specific) so it does not shadow BUG_A_ETYPE/BUG_B_VPP
@@ -354,7 +354,7 @@ _RULE_FIELD_PATHS = {
         ("unsupported_reason",),
         ("electrical", "vpp_mv"),
     },
-    # Phase 84 cosmetic relabel: FM1608 SRAM→FRAM. Scoped to the relabeled chips'
+    # Cosmetic relabel: FM1608 SRAM→FRAM. Scoped to the relabeled chips'
     # electrical.type field only. No algorithm / pinout / vpp / CAN_ERASE delta.
     # Placed after RULE_PHASE66 (more specific than RULE_PHASE66's support_status scope,
     # but still less specific than BUG_A_ETYPE which also matches type_diff without
@@ -363,25 +363,25 @@ _RULE_FIELD_PATHS = {
     "RULE_PHASE84_RELABEL": {
         ("electrical", "type"),  # only the type string changes for the relabeled chip
     },
-    # Phase 86 variant-decode consolidation: electrical.type-only delta for the
+    # Variant-decode consolidation: electrical.type-only delta for the
     # 5V-EEPROM-pinout (proto 0x0D) chips Flash/EEPROM->EEPROM and X88C64P
     # (proto 0x34) UV-EPROM->EEPROM. No algorithm / pinout / vpp delta.
     "VARIANT_DECODE": {
         ("electrical", "type"),
     },
-    # Phase 94 PGSZ-01 / CR-01: per-chip page_size field added to programming block.
-    # Only chips with a [CITED:] datasheet entry in build_db.py _PAGE_SIZE_BY_PART get
-    # this field. No other field changes. Scoped to programming.page_size additions only.
+    # Per-chip page_size field added to programming block. Only chips with a
+    # [CITED:] datasheet entry in build_db.py _PAGE_SIZE_BY_PART get this field.
+    # No other field changes. Scoped to programming.page_size additions only.
     "PGSZ_PAGE_SIZE": {
         ("programming", "page_size"),
     },
-    # Phase 98 RC-1 fix: DIP32_27C020 pinout assigned to 0x08 ≤256K chips. Pinout-only
+    # RC-1 fix: DIP32_27C020 pinout assigned to 0x08 ≤256K chips. Pinout-only
     # change — no algorithm / VPP / electrical.type delta.
     "RC1_DIP32_27C020": {
         ("pinout",),
     },
-    # Phase 136.1 PROV-01: flags bit 14/15 + raw page_size decode added. Scoped to
-    # exactly these three new programming.* keys — no other field changes.
+    # Flags bit 14/15 + raw page_size decode added. Scoped to exactly these
+    # three new programming.* keys — no other field changes.
     "PROV01_PROTECT_METADATA": {
         ("programming", "protect_off_before"),
         ("programming", "protect_on_after"),
@@ -412,7 +412,7 @@ def _diff_field_paths(bl_chip, cu_chip, prefix=()):
     return paths
 
 
-# Phase 84 RULE_PHASE84_RELABEL scope: the exact part_numbers whose electrical.type
+# RULE_PHASE84_RELABEL scope: the exact part_numbers whose electrical.type
 # was corrected. SST39SF040 is EXCLUDED (sst-keep decision — no code change).
 _PHASE84_RELABEL_PART_NUMBERS = frozenset({"FM1608"})
 
@@ -473,7 +473,7 @@ def _classify_diff(bl_chip, cu_chip):
     pinout_diff = bl_chip.get("pinout") != cu_chip.get("pinout")
     type_diff = bl_elec.get("type") != cu_elec.get("type")
     vpp_diff = bl_elec.get("vpp_mv") != cu_elec.get("vpp_mv")
-    # Phase 66: support_status and/or unsupported_reason added; vpp_mv corrected for NMOS.
+    # support_status and/or unsupported_reason added; vpp_mv corrected for NMOS.
     phase66_diff = (
         bl_chip.get("support_status") != cu_chip.get("support_status")
         or bl_chip.get("unsupported_reason") != cu_chip.get("unsupported_reason")
@@ -528,7 +528,7 @@ def _classify_diff(bl_chip, cu_chip):
         # RC1_DIP32_27C020 (before SRAM_PINOUT): Phase 98 RC-1 fix — 0x08 ≤256K chips
         # reassigned from DIP32_STD to DIP32_27C020. Scoped to the new pinout value so
         # SRAM_PINOUT (which handles 28-pin pm_idx=0 re-routes) is not masked.
-        # WR-03 (98-03): pinout-only scope is now ENFORCED here (not just asserted in
+        # Pinout-only scope is now ENFORCED here (not just asserted in
         # prose) — a co-occurring voltage/type/vpp change on a DIP32_27C020 chip falls
         # through to a more specific/generic rule instead of being absorbed silently.
         label = "RC1_DIP32_27C020"
@@ -634,7 +634,7 @@ def _classify_diff(bl_chip, cu_chip):
     if label is None:
         return None, diff_paths
 
-    # WR-01/WR-02: a diff is fully explained only when every differing field
+    # A diff is fully explained only when every differing field
     # path is claimed by SOME known rule. The primary label explains its own
     # field set; any remaining differing paths are "extra" (secondary) deltas.
     explained = set(_RULE_FIELD_PATHS[label])
@@ -735,9 +735,9 @@ def main():
     bl_db = _load_db(BASELINE_FILE, "baseline")
     cu_db = _load_db(DB_FILE, "current DB")
 
-    # D-11: canonicalize both databases to the numeric schema before any
+    # Canonicalize both databases to the numeric schema before any
     # comparison, so GATE-02 classifies identically whether either side is on
-    # the old string schema or the new numeric schema (Phase 148).
+    # the old string schema or the new numeric schema.
     bl_db = _canonicalize_db(bl_db)
     cu_db = _canonicalize_db(cu_db)
 
@@ -772,7 +772,7 @@ def main():
     # Partition chips into buckets. Keys are composite (mfg, pn[, i]); the
     # displayed value is the projected part_number via _pn().
     changed_by_cause: dict[str, list] = {k: [] for k in _RATIONALES}
-    compound_notes: list[str] = []  # WR-01: surfaced secondary deltas
+    compound_notes: list[str] = []  # surfaced secondary deltas
     unexplained: list = []
     new_chips: list = []
     missing_chips: list = []
@@ -787,13 +787,13 @@ def main():
                 if cause is None:
                     unexplained.append(key)
                 elif extra_paths - _all_rule_paths:
-                    # WR-02: at least one differing field is outside ALL known
+                    # At least one differing field is outside ALL known
                     # rules — the diff is not fully attributable. Escalate.
                     unexplained.append(key)
                 else:
                     changed_by_cause[cause].append(key)
                     if extra_paths:
-                        # WR-01: compound change — primary cause plus secondary
+                        # Compound change — primary cause plus secondary
                         # deltas that ARE explained by other rules. Surface them
                         # so a co-bundled (benign-but-real) change is visible.
                         secondary = ", ".join(".".join(p) for p in sorted(extra_paths))
@@ -830,7 +830,7 @@ def main():
             print(f"    {_pn(key)}")
         print()
 
-    # WR-01: surface compound changes — chips whose primary cause is accompanied
+    # Surface compound changes — chips whose primary cause is accompanied
     # by a secondary (but rule-explained) field delta.
     if compound_notes:
         print(f"--- COMPOUND changes ({len(compound_notes)}) — algo+other deltas ---\n")
@@ -878,7 +878,7 @@ def main():
             )
         print()
 
-    # WR-03: verify (don't just assert) the Rule 1 unblock claim per remaining new chip.
+    # Verify (don't just assert) the Rule 1 unblock claim per remaining new chip.
     print(
         f"--- NEW chips ({len(other_new)}) — expected Rule 1 unblock (DIP24_2816 + algo=0x0D) ---\n"
     )

@@ -405,7 +405,7 @@ def _derive_precedence_row(exc):
 #   - EpromOperationError: caught by the first clause -> BAD, error_code
 #     preserved from the raised exception.
 #   - ChipNotImplementedError: this is ALREADY the latent finding
-#     133-CONTEXT.md D-08 names -- it is a SUBCLASS of EpromOperationError,
+#     D-08 names -- it is a SUBCLASS of EpromOperationError,
 #     so it matches the FIRST except clause (Python matches the first
 #     matching class) and lands on BAD with error_code=None, never reaching
 #     the narrower second clause's SKIPPED mapping. The measurement wins

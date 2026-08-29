@@ -18,7 +18,7 @@ from typing import Optional  # noqa: UP035
 
 from firestarter.cli_handlers import cli
 
-# D-08: preserve `firestarter.main:main` entry-point references via re-export.
+# Preserve `firestarter.main:main` entry-point references via re-export.
 main = cli
 
 

@@ -247,7 +247,7 @@ def test_heuristic_family_chip_omits_page_size() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase 95: Proactive boot-block detect — host --force flag + message catalog
+# Proactive boot-block detect — host --force flag + message catalog
 # ---------------------------------------------------------------------------
 
 

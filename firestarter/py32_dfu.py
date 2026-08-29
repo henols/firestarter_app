@@ -108,25 +108,19 @@ DFUSE_READ_UNPROTECT = 0x92
 DFUSE_VERSION = 0x011A  # bcdDFUVersion that marks the ST dialect
 
 # --------------------------------------------------------------------------
-# PY32F071xB memory map (Puya UM1504 + PY32F071xB_FLASH.ld on the firmware
-# branch). Used only as a safety envelope — geometry comes from the device.
+# PY32F071xB memory map. A safety envelope only -- the real geometry comes from
+# the device's own descriptors.
 #
-# D-13: `FLASH_SIZE` is the physical part size (128 KiB) — kept verbatim,
-# because an existing test writes `FLASH_SIZE + 1` bytes and expects a
-# refusal. It is NOT what `_check_envelope` bounds on. The firmware's own
-# linker script (`platform/py32f071/linker/PY32F071xB_FLASH.ld`) reserves
-# only the bottom 120 KiB (`APP_REGION_SIZE`, ending at `APP_REGION_END`) for
-# the application; the top `CONFIG_REGION_SIZE` (8 KiB, Sector 15) is Phase
-# 126's config-storage reservation (page 256 B / sector 8192 B per
-# `platform/py32f071/CONFIG-STORAGE.md`). `BOOTLOADER` is currently a
-# zero-length NAMED SEAM at the same origin as `FLASH` — Phase 129 giving it
-# a length would move the application's ORIGIN, so the *lower* bound of the
-# accepted span would move too, not just `APP_REGION_END`.
+# FLASH_SIZE is the physical part size and is NOT what `_check_envelope` bounds
+# on: the linker script reserves only the bottom APP_REGION_SIZE for the
+# application, with the top sector reserved for config storage.
 #
-# `tests/test_py32_flash_map_host.py` is the fail-closed gate that keeps
-# these four constants matching the linker script — it parses the script
-# directly rather than trusting this comment.
-# --------------------------------------------------------------------------
+# BOOTLOADER is a zero-length NAMED SEAM at the same origin as FLASH. Giving it
+# a length would move the application's ORIGIN, so the LOWER bound of the
+# accepted span would move too, not just the upper.
+#
+# tests/test_py32_flash_map_host.py parses the linker script directly rather
+# than trusting this comment.
 
 FLASH_BASE = 0x08000000
 FLASH_SIZE = 128 * 1024  # physical part size — do not use for the envelope
@@ -528,7 +522,7 @@ def dfu_device_present() -> bool:
 
 
 class VerifyResult(enum.Enum):
-    """The outcome of the post-write `DFU_UPLOAD` readback verification (D-10).
+    """The outcome of the post-write `DFU_UPLOAD` readback verification.
 
     `flash()` deliberately keeps returning `bool` regardless of which member
     ends up here -- that is a blast-radius choice: widening `flash()`'s
@@ -715,12 +709,12 @@ class Py32DfuFlasher:
         # reason the _finish() comment just below does.
         self._verify_readback(interface, base, payload)
 
-        # D-12 / C-5: _finish() leaves DFU mode and lets the device reset off
+        # _finish() leaves DFU mode and lets the device reset off
         # the bus, so it must be the LAST thing flash() does. Both download
         # strategies used to call _finish() themselves, as their own last
         # statement; it is hoisted to this single call site so the ordering
         # is structural rather than a convention a future edit could break.
-        # D-11: a MISMATCH raises inside _verify_readback(), above this line,
+        # A MISMATCH raises inside _verify_readback(), above this line,
         # so a bad image is never manifested -- the device is deliberately
         # left in DFU mode instead of being told to leave and reset.
         self._finish(finish_base, next_block, dfuse=interface.is_dfuse)
@@ -733,7 +727,7 @@ class Py32DfuFlasher:
 
         Bounded on `APP_REGION_END` (0x0801E000), not the 128 KiB physical
         part size — the top `CONFIG_REGION_SIZE` bytes are the firmware's
-        reserved config storage (D-13) and must never be reachable by an
+        reserved config storage and must never be reachable by an
         installed image, even though DfuSe erase is payload-scoped and a
         legitimate ≤120 KiB image would never touch it anyway.
         """
@@ -880,7 +874,7 @@ class Py32DfuFlasher:
         branches are ordered this way.
         """
         if not interface.is_dfuse:
-            # D-09: plain DFU 1.1 never tells the host what address it
+            # Plain DFU 1.1 never tells the host what address it
             # loaded the image at, so a readback here could not be compared
             # to anything meaningful. This converts flash()'s existing
             # runtime warning (logged just above, in the plain-DFU branch)

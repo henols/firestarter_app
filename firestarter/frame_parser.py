@@ -18,9 +18,9 @@ Response = namedtuple(
     "Response", ["type", "message", "payload", "id"], defaults=[None, None]
 )
 
-# Phase 6: ID-encoded wire frame primitives. MAGIC_PREAMBLE locked by
-# CONTEXT §D-02; LogMessage is the decoded-frame value type per D-06.
-# `payload` carries raw bytes for MSG_DATA_CHUNK (W-04); None for all others.
+# ID-encoded wire frame primitives. MAGIC_PREAMBLE is fixed by the wire
+# protocol; LogMessage is the decoded-frame value type.
+# `payload` carries raw bytes for MSG_DATA_CHUNK; None for all others.
 LogMessage = namedtuple(
     "LogMessage", ["severity", "text", "id", "payload"], defaults=[None]
 )
@@ -75,7 +75,7 @@ def cobs_encode(payload: bytes) -> bytes:
       254 bytes but does NOT consume an implicit zero (Pitfall 2 /
       254-run phantom-zero edge).
 
-    The output contains no ``0x00`` byte by construction (FRAME-04).
+    The output contains no ``0x00`` byte by construction.
     """
     out = bytearray()
     i = 0
@@ -159,7 +159,7 @@ def _decode_param(ptype: str, buf: bytes, cursor: int) -> Tuple[Any, int]:  # no
     if ptype == "i32":
         return struct.unpack_from(">i", buf, cursor)[0], cursor + 4
     if ptype == "ascii_str":
-        # WR-04: bounds-check the length prefix against the remaining buffer
+        # Bounds-check the length prefix against the remaining buffer
         # BEFORE slicing. Python slicing silently truncates when end >
         # len(buf), which would advance the cursor past the end of the buffer
         # and leave a mangled string in the rendered output if ascii_str is

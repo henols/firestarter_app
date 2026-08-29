@@ -77,7 +77,7 @@ FIRESTARTER = _WHICH if _WHICH is not None else None
 # (list/info/search) invoke the real `firestarter` entry point, which merges a
 # developer's ``~/.firestarter/database.json`` user-override. The golden
 # snapshots were pinned WITHOUT any override, so a local override (e.g. the
-# Phase 81 2516 user-override entry) would leak a spurious row into `list`/`info`
+# 2516 user-override entry) would leak a spurious row into `list`/`info`
 # output and break the snapshot on the bench machine while CI (no override)
 # stays green. Pointing ``FIRESTARTER_CONFIG_DIR`` at an empty temp dir applies
 # the same isolation the direct-DB tests get via ``skip_local_override=True``

@@ -212,7 +212,7 @@ class EpromSpecBuilder:
         """
         if protocol_id is not None:
             # 0x35 (ITE EC MCU, 0 DB chips) and 0x39 (phantom, 0 DB chips) removed
-            # in Phase 57 (DEC-05); no DB chip uses either protocol. Firmware still
+            # in Phase 57; no DB chip uses either protocol. Firmware still
             # dispatches both → configure_flash4 for forward-compat (memory.cpp:89);
             # host routes them to not_implemented (excluded from KNOWN_PROTOCOLS).
             if protocol_id in self._PROTOCOL_DISPLAY_NAME:
@@ -343,11 +343,9 @@ class EpromSpecBuilder:
                 ),
             ),
             (
-                # Phase 102 D-04: added — X88C64 (1 DB chip) can surface in
-                # `info`. Bullet is a minimal, non-minipro-heritage placeholder
-                # (Phase 102 D-03/D-05: name-only scope, prose reconciliation
-                # deferred to Phase 103 DOC-01 — see SUMMARY for the exact text
-                # flagged as Phase-103-owned).
+                # X88C64 (1 DB chip) can surface in `info`. The bullet is a
+                # minimal, non-minipro-heritage placeholder: name-only
+                # scope, with prose reconciliation left to the doc.
                 0x34,
                 "EEPROM - XICOR 8051-bus",
                 (
@@ -454,18 +452,17 @@ class EpromSpecBuilder:
             )
         return layout_data
 
-    # Canonical protocol display names (Phase 102 D-01 single source). Both the
+    # Canonical protocol display names -- the single source. Both the
     # get_chip_type_string fallback path (proto_display, legacy user-override
     # entries lacking electrical.type) and _get_protocol_info_structured's
     # `type` field (the `firestarter info` "Protocol:" line) read from this ONE
-    # dict — preventing the two vocabularies from re-diverging (the recurring
-    # IN-01 class of bug). Values are ASCII-normalized copies of
-    # firestarter/doc/PROTOCOLS.md column-2 canonical names (Phase 102 D-02:
-    # em-dash "—" / en-dash "–" rendered as ASCII "-" for terminal/pipe/grep
-    # safety — a documented punctuation deviation from the doc, recorded for
-    # Phase 103's divergence log). 0x34 added / 0x11 dropped / 0x35+0x39 stay
-    # excluded per Phase 102 D-04 (full coverage reconcile vs the 12-protocol
-    # canonical DB set).
+    # dict — preventing the two vocabularies from re-diverging, which is a
+    # recurring class of bug here. Values are ASCII-normalized copies of
+    # firestarter/doc/PROTOCOLS.md column-2 canonical names (em-dash "—" /
+    # en-dash "–" rendered as ASCII "-" for terminal/pipe/grep safety — a
+    # documented punctuation deviation from the doc). 0x34 added / 0x11
+    # dropped / 0x35+0x39 stay excluded per the full-coverage reconcile
+    # against the 12-protocol canonical DB set.
     _PROTOCOL_DISPLAY_NAME = {
         0x05: "Flash - 5V page-write (EEPROM-like)",
         0x06: "Flash - AMD/SST unlock-sequence NOR",
@@ -481,13 +478,13 @@ class EpromSpecBuilder:
         0x34: "EEPROM - XICOR 8051-bus",
     }
 
-    # Curated map from electrical.type DB ground truth to display label (D-01).
+    # Curated map from electrical.type DB ground truth to display label.
     # These are the distinct values present in chip_database.json.
     # Falls back to get_chip_type_string (protocol-based) when electrical_type
     # is absent or empty (legacy user-override entries without electrical.type).
-    # Phase 84 fm-fram-full: "FRAM" added so FM1608 displays "FRAM" (not the
+    # "FRAM" is present so FM1608 displays "FRAM" (not the
     # protocol-based fallback).  CAN_ERASE is unaffected (FRAM ∉ {EEPROM,
-    # Flash/EEPROM} in database.py:605).
+    # Flash/EEPROM} in database.py:630).
     _ELECTRICAL_TYPE_LABEL = {
         "EEPROM": "EEPROM",
         "Flash/EEPROM": "Flash/EEPROM",
@@ -543,15 +540,15 @@ class EpromSpecBuilder:
 
         ``electrical_type`` is the raw ``electrical.type`` string from the DB record
         (e.g. ``"EEPROM"``, ``"UV-EPROM"``, ``"Flash/EEPROM"``, ``"SRAM"``).  When
-        provided it is used as the sole source of the Type label (D-01) and the
-        "Can be erased" derivation (D-02).  Pass ``None`` for legacy user-override
+        provided it is used as the sole source of the Type label and the
+        "Can be erased" derivation.  Pass ``None`` for legacy user-override
         entries that do not carry ``electrical.type``.
         """
         if not eprom_data:
             logger.error("No EPROM data provided to display.")
             return None
 
-        # D-01/D-04: type label via single shared helper (resolve_type_label).
+        # Type label via the single shared helper (resolve_type_label).
         # Falls back to protocol-based label when electrical_type is absent/empty.
         etype = electrical_type or ""
         chip_type_str = self.resolve_type_label(
@@ -559,7 +556,7 @@ class EpromSpecBuilder:
             eprom_data.get("protocol-id"),
         )
 
-        # D-05: verified_str marker removed entirely (no marker shown).
+        # No verified_str marker is shown.
         # The presenter reads chip_data.get("verified_str", "") so omitting the
         # key is safe and produces no visible marker.
         output_data = {
@@ -575,7 +572,7 @@ class EpromSpecBuilder:
             "flags_info": None,
         }
 
-        # D-02: "Can be erased" derived from electrical.type, NOT protocol_id.
+        # "Can be erased" is derived from electrical.type, NOT protocol_id.
         # EEPROM/Flash/EEPROM → electrically erasable; UV-EPROM → UV-only;
         # SRAM → omit row (volatile); absent/unknown → omit row (safe fallback).
         if etype in ("EEPROM", "Flash/EEPROM"):
@@ -584,17 +581,17 @@ class EpromSpecBuilder:
             output_data["can_erase_str"] = "no (UV erase only)"
         # SRAM and absent/unknown: no can_erase_str row
 
-        # D-07-VPP: gate on vpp_mv > 0, not the always-zero flags & 0x08.
+        # Gate on vpp_mv > 0, not the always-zero flags & 0x08.
         # Coerce defensively: user-override entries may supply vpp_mv as a string.
         # Exclude SRAM and FRAM: volatile/no-program-VPP; vpp_mv=12000 is an
         # upstream infoic.xml decode artifact for SRAM/FRAM entries, not a real VPP.
-        # Phase 84 fm-fram-full: FRAM added alongside SRAM (Pitfall-2 guard).
+        # FRAM is gated alongside SRAM.
         try:
             _vpp_mv = int(eprom_data.get("vpp_mv", 0) or 0)
         except (TypeError, ValueError):
             _vpp_mv = 0
         if etype not in {"SRAM", "FRAM"} and _vpp_mv > 0:
-            # WR-02: parity with eprom_info.py's list view is now structural —
+            # Parity with eprom_info.py's list view is structural —
             # both views call format_mv on the same already-coerced _vpp_mv, so
             # they cannot diverge (no more hand-mirrored 'N/A' fallbacks).
             output_data["vpp_str"] = format_mv(_vpp_mv)
