@@ -45,7 +45,7 @@ from firestarter.exceptions import (
 
 # Re-exports for backward compatibility — test_decoder.py imports MAGIC_PREAMBLE,
 # LogMessage, Response, _crc8_ccitt directly from firestarter.serial_comm and must
-# keep passing UNCHANGED (SC#2 / D-07). The canonical definitions now live in
+# keep passing UNCHANGED. The canonical definitions now live in
 # frame_parser.py. _decode_param is also pulled in so _format_message /
 # _decode_id_frame in this module resolve it via the new leaf.
 from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_decoder.py
@@ -142,7 +142,7 @@ class SerialCommunicator:
         # Set only within dev fault-inject scope; cleared after the single corrupted transfer.
         # getattr-guarded in send_json_command; this attribute is the formal default.
         self._fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None
-        # DEPRECATED (Phase 55 CAP-01): firmware_buffer_size was set by the Phase 53
+        # DEPRECATED: firmware_buffer_size was set by the earlier
         # identity-string parse (3rd colon-field). That parse block is removed; capacity
         # now comes from the MSG_OK_READY ack via firmware_max_chunk. Declaration kept
         # so conftest.py make_comm factory mirrors __init__ without breakage.
@@ -241,7 +241,7 @@ class SerialCommunicator:
         firmware's CRC8 verify (RESEARCH Pitfall 2).
 
         The full frame is assembled as a single ``bytes`` object and passed to
-        ``send_bytes()`` in ONE call (SAFE-01 sub-claim B — split-write forbidden).
+        ``send_bytes()`` in ONE call — a split write is forbidden.
         """
         self._log_command_details(command_dict)
         json_bytes = json.dumps(command_dict, separators=(",", ":")).encode("ascii")
@@ -398,7 +398,7 @@ class SerialCommunicator:
                             # in spirit: a hostile or corrupt ack
                             # must not be able to install an unbounded host
                             # timeout. Values outside this range leave
-                            # write_block_budget_s unset so the D-10 fallback
+                            # write_block_budget_s unset so the fallback
                             # applies.
                             if 1 <= value <= WRITE_BUDGET_MAX_S:
                                 self.write_block_budget_s = value
@@ -710,7 +710,7 @@ class SerialCommunicator:
         Option A, parses the major version (``ValueError``/``IndexError`` ->
         ``major=0``), refuses pre-v1.2 (``major < 3``) unless ``allow_pre_v12``,
         then enforces the 2.0.0 floor via ``_is_version_sufficient``. Never
-        reads ``os.environ`` (D-02 — env-var I/O is ``_probe_port``'s job).
+        reads ``os.environ`` — env-var I/O is ``_probe_port``'s job.
         """
         # RESEARCH §7 Option A: strip trailing alpha suffix before parsing so
         # direct callers (and future test harnesses) match production wire
@@ -971,7 +971,7 @@ class SerialCommunicator:
         strict gate; the single production caller that asks is
         ``FirmwareManager.check_current_firmware``.
 
-        ``fault_inject_outgoing`` (Phase 53-04 / XACT-02, dev-only) installs an
+        ``fault_inject_outgoing`` (dev-only) installs an
         outgoing-frame mutation hook on each probed communicator BEFORE the first
         ``send_json_command`` (the setup/handshake command). It defaults to None, so
         the production path is byte-identical. It exists because a READ's
@@ -1063,13 +1063,12 @@ class FaultInjectingSerialCommunicator(SerialCommunicator):
     NOT imported in production code. Used only within the dev fault-inject
     subcommand scope. Overrides _decode_id_frame to corrupt the body bytes
     before codec decode — exercising the host decoder's resync path (bounded-
-    desync + fail-fast per Phase 50 D-01).
+    desync + fail-fast).
 
     The body of _read_and_parse_lines() is UNCHANGED (ring-fence preserved,
-    GATE-1.8d). Only _decode_id_frame is overridden — this is the correct
+    the ring fence). Only _decode_id_frame is overridden — this is the correct
     injection point that does NOT touch the generator body (Pitfall 4 / T-53-04).
 
-    XACT-02 / Phase 53 Plan 02.
     """
 
     def __init__(

@@ -67,7 +67,7 @@ class AutoCapture:
     """Auto-captured identity/protocol fields -- no tester input.
 
     `fw_board_identity` is `str | None` because it is RECEIVED as threaded-in
-    input from Phase 112 (which captures `version:board` off the transient
+    input from the dev test handler (which captures `version:board` off the transient
     per-operation `comm.programmer_info`, when an orchestrator-safe live
     source is reachable) -- this dataclass and this module NEVER fetch it
     themselves and NEVER import the serial-transport class (Pitfall 1).
@@ -77,8 +77,8 @@ class AutoCapture:
 
     `hw_revision` is `str | None` -- the coarse silkscreen-bucket string the
     firmware/codec produce (e.g. a "Rev 2.0-class"-style label), or `None`
-    when not measured. It is ALWAYS auto-captured (Phase 112 Plan 04 reverses
-    the earlier D-05 "always human-asked" precision argument) -- this
+    when not measured. It is ALWAYS auto-captured (reversing an earlier
+    "always human-asked" precision argument) -- this
     dataclass and this module never prompt a human for it, and a coarse or
     absent reading is an accepted, honest outcome rather than a gap.
     """
@@ -120,7 +120,7 @@ class TransportHealth:
 def _is_transport_suspect(th: TransportHealth) -> bool:
     """True only when a counter is PRESENT (not None) AND elevated.
 
-    Absent counters can never fabricate suspicion -- mirrors Phase 108's
+    Absent counters can never fabricate suspicion -- mirrors the
     honest `indeterminate` fingerprint bucket. Since no counter is reachable
     today (RESEARCH §Transport Counter Survey), this always returns False in
     production; it exists so a future counter source activates it without a
@@ -136,7 +136,7 @@ def _is_transport_suspect(th: TransportHealth) -> bool:
 # Submittability -- auto-capture-only, no human gate
 # ---------------------------------------------------------------------------
 #
-# REVERSAL: this section previously held the RPT-04 / D-04/D-05/D-06
+# REVERSAL: this section previously held the
 # interactive tester-input-collection model -- a collector function, a
 # human-input dataclass, and enumerated choice-list constants for shield
 # revision and chip origin. All deleted (operator-approved, 112-UAT.md test
@@ -232,7 +232,7 @@ def dedup_fingerprint(report: DiagnosticReport) -> str:
     # 260822-aq6 applied to `repeat_policy_tag` above ("returns `""` for
     # the default policy and the append is skipped entirely... no
     # historical group is re-keyed"), and the deliberate difference from
-    # v1.30 D-11, which accepted a full re-key.
+    # an accepted full re-key.
     coverage = coverage_tag(report.results)
     if coverage:
         parts.append(coverage)
@@ -330,7 +330,7 @@ def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
 def _identity_cell(value: object) -> str:
     """Render-only substitution for an absent identity value. Used ONLY inside
     `render()` -- never in `to_dict()`, which is
-    where the `NOT_MEASURED` precedent substitutes and where D-10 requires
+    where the `NOT_MEASURED` precedent substitutes and where the contract requires
     the fenced report JSON to keep typed `null` (machine consumers keep
     testing `is None`, so PROV-04's backward-compatibility story stays ONE
     case instead of two).
@@ -367,7 +367,7 @@ def _hex_cell(value: object, digits: int) -> str:
     `TypeError`, never a bare `Exception`). This deliberately does NOT
     reuse `_identity_cell`'s absent-value marker: a live gate
     (test_absent_identity_renders_the_explicit_marker_in_both_rows) asserts
-    `NOT_REPORTED` appears exactly twice in the whole table, and D-12
+    `NOT_REPORTED` appears exactly twice in the whole table, and the
     already records that the chip-ID row legitimately renders `None`/`None`
     on a minimal report -- rendering `NOT_REPORTED` here would both break
     that count and contradict that recorded rationale. The operator asked
@@ -402,7 +402,7 @@ def _rail_cell(before: object, after: object) -> str:
 
     Renders only the bracketed pair. The `vpp_mv`/`vpe_mv` standalone
     slots are deliberately NOT shown: they exist for a non-destructive
-    reading, and since D-04 made every run destructive (the sampler is
+    reading, and since every run is destructive (the sampler is
     always built) NOTHING in the code path assigns them, so they printed
     `not measured` on every single run beside real bracket numbers. They
     stay in `to_dict()` -- this only stops the box repeating two dead
@@ -577,7 +577,7 @@ class DiagnosticReport:
     # is read as ground truth for a protection state this chip family
     # cannot report at all). Defaults to `""` (unassigned); the VALUE is
     # assigned by `cli_handlers.py` from `chip_test.sdp_hold_state(plan,
-    # results)` in plan 134-07, which closes LEG-12 -- this class only
+    # results)` -- this class only
     # carries and serialises whatever string it is given, never derives one
     # (this is a declared non-registry, re-measured every run by
     # `test_non_registry_still_has_no_ops`'s AST inversion guard to carry
@@ -642,7 +642,7 @@ class DiagnosticReport:
     def _write_step_index(self) -> int | None:
         """Structurally locate the shipped write/write-partial step's
         index in `self.plan.steps` -- NEVER by comparing against a
-        specific `OP_*` constant (LEG-15, `tests/test_op_registration_
+        specific `OP_*` constant (`tests/test_op_registration_
         parity.py::test_non_registry_still_has_no_ops`; this class is a
         declared op-vocabulary non-registry, re-measured every run by an
         AST walk over this class's body).
@@ -692,7 +692,7 @@ class DiagnosticReport:
             "verdict": result.verdict,
             # Schema 1.7: how many times the
             # underlying operator method actually ran for this step. It has
-            # been 2 for every read/write/verify/erase since Phase 121's
+            # been 2 for every read/write/verify/erase since the
             # N>=2 repeat policy and 1 for the ops that are
             # single-run by design -- but the number reached NO consumer
             # outside the test suite, so an operator watching `read, read,
@@ -701,7 +701,7 @@ class DiagnosticReport:
             # disclosure surface, and a `--fast` run's `1` is what makes the
             # weaker policy legible instead of silent.
             "run_count": result.run_count,
-            # Quick task 260822-gxx (operator reversal of this plan's D-2):
+            # Operator reversal of an earlier decision:
             # an NA-verdict step reports NO reason anywhere, including this
             # export dict -- and therefore in both the saved
             # `dev-test-<chip>.json` and the fenced JSON block inside the
@@ -815,7 +815,7 @@ class DiagnosticReport:
 
         Quick task 260822-aq6 added ONE cell back to each step row: the
         step's own `run_count` as `xN` (`_runs_cell`), between the verdict
-        and the duration. It is the smallest thing that makes Phase 121's
+        and the duration. It is the smallest thing that makes the
         N>=2 repeat policy legible at the point an operator actually
         notices it -- watching the same op go past twice.
         """
@@ -856,7 +856,7 @@ class DiagnosticReport:
         #
         # Safe to hide: `NA` and `SKIPPED` both map to exit code 0
         # (`cli_handlers._VERDICT_EXIT_CODES`), so no nonzero-exit cause can
-        # hide here. The one non-verdict exit term, D-15's not-run SDP
+        # hide here. The one non-verdict exit term, the not-run SDP
         # oracle floor, stays legible in the `sdp_hold_state` row above.
         # Every step keeps its full entry in `to_dict()["steps"]`, so the
         # JSON, the markdown table and the filed issue body are unchanged.
@@ -910,7 +910,7 @@ class DiagnosticReport:
         #
         # Read straight off `d["steps"]` -- `write_coverage` was already
         # computed once, in `to_dict()`/`_step_dict()`, off the located
-        # write step's OWN row (`_write_step_index`, LEG-15-compliant:
+        # write step's OWN row (`_write_step_index`:
         # never a specific-`OP_*` comparison inside this class). Never a
         # second computation here, and never a re-parse of the JSON string
         # -- single-sourced, same discipline every other render() row uses.

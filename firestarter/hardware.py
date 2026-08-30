@@ -163,7 +163,7 @@ class HardwareManager:
         bucket or an honest None is an accepted outcome
         for either field, never a fabricated value. Opens ONE serial read
         (energize/query only) -- no VPP-set, no wire-dict, no --force
-        (SAFE-02 clean). Does NOT change get_hardware_revision's existing
+        Does NOT change get_hardware_revision's existing
         bool contract -- the `dev hw` CLI command depends on that.
 
         `comm.firmware_identity` is read before `comm.expect_ack()`:

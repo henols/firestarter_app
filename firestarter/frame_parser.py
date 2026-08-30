@@ -30,7 +30,7 @@ MAGIC_PREAMBLE: bytes = b"\xaa\x55\xaa\x55"
 def _build_crc8_table() -> bytes:
     """Precompute the 256-byte CRC8-CCITT lookup table.
 
-    Algorithm pinned by CONTEXT §D-03: polynomial 0x07, seed 0x00,
+    Algorithm: polynomial 0x07, seed 0x00,
     no reflection, no final XOR. Same algorithm the firmware Unity suite
     asserts (firestarter test_messages/test_rurp_log_id.cpp).
     """

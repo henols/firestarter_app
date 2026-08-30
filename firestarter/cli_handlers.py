@@ -474,7 +474,7 @@ def search(app: AppContext, text: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Chip-op commands (Wave 3 / Plan 41-03 / D-12 step 1; Plan 42-02 / D-03/D-05)
+# Chip-op commands
 # Each: resolve chip via resolve_chip(eprom, db=app.db) → call
 # app.eprom_operator.<op> → sys.exit(0 if ok else 1). The @map_typed_errors
 # decorator catches ChipNotFoundError at the Click boundary and re-raises as
@@ -885,7 +885,7 @@ def chip_id(app: AppContext, eprom: str, force: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Voltage commands (Wave 3 / D-12 step 2)
+# Voltage commands
 # ---------------------------------------------------------------------------
 
 
@@ -914,7 +914,7 @@ def vpe(app: AppContext, timeout: Optional[int]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Hardware commands (Wave 3 / D-12 step 3)
+# Hardware commands
 # ---------------------------------------------------------------------------
 
 
@@ -970,11 +970,11 @@ def config(
 
 
 # ---------------------------------------------------------------------------
-# Firmware command (Wave 3 / D-12 step 4)
-# TRAPs #4 (3-way mutex enforced post-parse at top of fw() body — WR-03;
+# Firmware command
+# The 3-way mutex is enforced post-parse at the top of fw()'s body;
 # previously per-option callback _check_install_mutex, now removed)
-# + #5 (_FirmwareVersionType custom ParamType). D-14 (UsageError on --json
-# without --list). D-15 (SimpleNamespace adapter for _maybe_auto_route_to_pre).
+# _FirmwareVersionType is a custom ParamType. UsageError on --json
+# without --list. SimpleNamespace adapter for _maybe_auto_route_to_pre.
 # ---------------------------------------------------------------------------
 
 
@@ -983,10 +983,10 @@ def _maybe_auto_route_to_pre_click(
 ) -> bool:
     """Click-side equivalent of the _maybe_auto_route_to_pre helper.
 
-    D-15 picks the SimpleNamespace adapter approach: build a namespace from
+    Builds a namespace from
     the relevant fw kwargs, hand it to the (now-local) helper. Keeps the
     helper's body untouched (zero churn; relocated from main.py in Wave 4 /
-    Plan 41-04 per D-16).
+    the CLI's own values).
 
     Returns the (possibly-overridden) pre value so the caller can use it
     for channel resolution.
@@ -1254,7 +1254,7 @@ class _DevGroup(click.Group):
 
 
 # ---------------------------------------------------------------------------
-# dev group + 4 sub-commands (Wave 3 / D-12 step 5)
+# dev group + 4 sub-commands
 # ---------------------------------------------------------------------------
 
 
@@ -1713,7 +1713,7 @@ if _DEV_TOOLS_ENABLED:
 
 
 # ---------------------------------------------------------------------------
-# dev validate-family (71-06 / HARN-01 Tier-3 + HARN-02 + HARN-03)
+# dev validate-family (Tier-3 runner)
 # ---------------------------------------------------------------------------
 
 # r1 calibration tolerance band: 270000 ± 25%
@@ -1756,7 +1756,7 @@ def _emit_skip_deferred_artifact(
 ) -> None:
     """Emit validation-matrix.{json,md} with all Tier-3 cells as SKIP-deferred.
 
-    D-06: milestone remains closeable at partial bench coverage.
+    A milestone remains closeable at partial bench coverage.
     Artifact name is validation-matrix.{json,md} (hyphen, NEVER underscore).
     """
     cells: List[Dict[str, Any]] = []  # noqa: UP006
@@ -1801,7 +1801,7 @@ def _write_artifact(
     """Write validation-matrix.json and validation-matrix.md to output_dir.
 
     Artifact name uses hyphens (distinct from authored validation_matrix_spec.json
-    — Pitfall 4 / D-02).
+    ).
     """
     out_path = Path(output_dir) if output_dir else Path(".")
     out_path.mkdir(parents=True, exist_ok=True)
@@ -1955,8 +1955,8 @@ if _DEV_TOOLS_ENABLED:
 
         # r1 precondition: abort before any cycle if r1 is out of band.
         # The r1 value is read from hardware config via the HardwareManager.
-        # In Phase 71 (software scaffold), the hardware path is exercised only
-        # in Phase 73 with real hardware; here we gate on the operator config.
+        # The hardware path is exercised only with real hardware; here we gate
+        # on the operator config.
         r1_raw: Optional[int] = None
         try:
             hw_config = app.config_manager.get_value("r1", None)
@@ -1975,7 +1975,7 @@ if _DEV_TOOLS_ENABLED:
             )
             sys.exit(2)
 
-        # Compose cycle methods for each family (D-10 reuse-not-reimpl).
+        # Compose cycle methods for each family -- reuse, not reimplement.
         hw_cells: List[Dict[str, Any]] = []  # noqa: UP006
         overall_verdict = 0
 
@@ -1989,7 +1989,7 @@ if _DEV_TOOLS_ENABLED:
 
             eprom_data = resolve_chip(rep_chip, db=app.db)
 
-            # Compose write_cycle_eprom (D-10: no re-implementation of write+readback).
+            # Compose write_cycle_eprom -- no re-implementation of write+readback.
             verdict_int = app.eprom_operator.write_cycle_eprom(
                 rep_chip,
                 eprom_data,
@@ -2158,7 +2158,7 @@ def _chip_id_fields(
     `chip_id_expected` is read directly off the DB entry (host-side, never
     from firmware). `chip_id_actual`/`chip_id_mismatch_reason` are recovered
     from the id step's `StepResult.reason` text (the ONLY place
-    `chip_test._dispatch_id` records the detected id, RPT-02) when a mismatch
+    `chip_test._dispatch_id` records the detected id) when a mismatch
     was reported; on a clean/NA/SKIPPED id step there is no actual-id
     disagreement to surface, so both stay `None`.
     """
@@ -2194,14 +2194,14 @@ def _is_interactive() -> bool:
 def _make_sampler(app: "AppContext", report: DiagnosticReport) -> Any:
     """Build the before/after sampler thunk closing over `hardware_manager`.
 
-    Constructed on EVERY run (Phase 121 D-04: `dev test` always writes, so
+    Constructed on EVERY run (`dev test` always writes, so
     there is no non-destructive mode left to distinguish this from -- the
     `--destructive`-only construction this docstring used to describe was
     superseded when that flag was deleted). Reuses the existing
     `sample_vpp_mv`/`sample_vpe_mv` monitor path (COMMAND_READ_VPP/VPE,
-    energize+measure only -- SAFE-02) -- no VPP-set call is made here or
+    energize+measure only) -- no VPP-set call is made here or
     anywhere in this module. `chip_test.run_plan` calls this as an opaque
-    `sampler(phase)` callable and never imports `hardware.py` itself (D-04
+    `sampler(phase)` callable and never imports `hardware.py` itself (
     decoupling, chip_test.py:542-553).
     """
 
@@ -2312,12 +2312,12 @@ _ALWAYS_WRITES_PASS_COUNT = 6
 # `FIRESTARTER_CONFIG_DIR`) and is always handed to `submit_report`
 # (DEVTEST-05/06; Plan 121-11 owns that function's internals).
 #
-# REVERSAL (Phase 121 D-01/D-03/D-04/D-05, operator-specified
+# REVERSAL (operator-specified
 # 2026-07-29): this supersedes v1.21's non-destructive-by-default premise
-# entirely, SAFE-01's CLI-only `--destructive` flag (removed, not merely
-# disabled), and SAFE-03's statement that the destructive confirm was
+# entirely, the CLI-only `--destructive` flag (removed, not merely
+# disabled), and the earlier statement that the destructive confirm was
 # "the ONLY interactive input left in this handler" (superseded by the
-# UV-only ask above). Phase 112 Plan 04's deliberate removal of every
+# UV-only ask above). The deliberate removal of every
 # interactive prompt about tester-supplied identity is PARTIALLY reversed
 # in spirit by that same UV ask -- it is a new interactive prompt, just
 # not an identity-collection one; shield revision, chip origin and
@@ -2359,7 +2359,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     if not app.db.get_eprom(chip):
         raise ChipNotFoundError(f"{chip}: not found in database")
 
-    # The chip must be known to be in the DB (SAFE-04 above) before its
+    # The chip must be known to be in the DB (see above) before its
     # electrical type can be read, so the UV-scope resolution happens here,
     # after the hard-fail.
     interactive = _is_interactive()

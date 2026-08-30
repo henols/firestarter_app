@@ -104,7 +104,7 @@ class FirmwareOperationError(Exception):
 class ChipNotFoundError(Exception):
     """Raised when a chip name cannot be resolved in the database.
 
-    Wired in Phase 39 (chip_resolver.py).
+    Wired in chip_resolver.py.
     """
 
     pass

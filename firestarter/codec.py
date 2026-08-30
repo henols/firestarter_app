@@ -62,7 +62,7 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> Optiona
     Returns the rendered string for sentinel-byte IDs where the catalog
     format string cannot express the conditional (0xFF = no override),
     and for the silkscreen-aware INFO surfaces that share the same
-    revision byte as MSG_OK_REV (Phase 35 D-03 / D-04 — close WR-01 + WR-02).
+    revision byte as MSG_OK_REV.
 
     Returns None for all other IDs (caller falls through to generic rendering).
 
@@ -73,19 +73,19 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> Optiona
     P-03 MSG_OK_CFG  — params[0]=r1 u32, params[1]=r2 u32, params[2]=override u8
       override==0xFF → "R1: {r1}, R2: {r2}"
       override!=0xFF → "R1: {r1}, R2: {r2}, Override HW: {silkscreen_str}"
-      Phase 35 D-04 / WR-02 close: override clause now routes through
+      Override clause now routes through
       _REVISION_SILKSCREEN so the same byte that surfaces as "Rev 2.0-class"
       via MSG_OK_REV no longer surfaces as "Rev2" on the adjacent ack line.
 
     MSG_INFO_HW (0x5B) — single u8 revision byte; renders
       "HW: {silkscreen_str}" via _REVISION_SILKSCREEN.get(byte, "Rev{byte}").
-      Phase 35 D-03 / WR-01 close: was rendering catalog-default
+      Was rendering catalog-default
       "HW: Rev%u" (e.g. "HW: Rev254" for REVISION_UNKNOWN=0xFE) — directly
-      contradicting Phase 34 D-09 (host displays silkscreen strings; wire
+      contradicting the rule that the host displays silkscreen strings while the wire
       carries raw byte).
 
     MSG_INFO_PHYSICAL_HW (0x5C) — same shape as MSG_INFO_HW with the
-      "Physical HW: " prefix. Phase 35 D-03 / WR-01 close.
+      "Physical HW: " prefix.
     """
     if msg_id == MSG_OK_REV and len(params) == 2:
         physical, effective = params[0], params[1]
@@ -171,13 +171,13 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> Optiona
 def decode_id_frame(frame_len: int, body: bytes) -> Optional[LogMessage]:
     """
     Read-path-adjacent — behavior preserved verbatim from serial_comm.py per
-    GATE-1.8d. Do not refactor without re-validating Phase 26 baseline binaries.
+    Ring-fenced. Do not refactor without re-validating the v1.6 baseline binaries.
 
     Decode an ID-encoded wire frame body (the bytes between the length
     byte and the trailing 0x0A re-sync anchor).
 
     `body` carries `id | params | crc` exactly `frame_len` bytes long
-    (length is authoritative per CONTEXT §D-03; CRC8 covers `[id, params]`
+    (length is authoritative; CRC8 covers `[id, params]`
     but not the length byte nor the terminator).
 
     Returns a LogMessage on success. Returns None (with a `logger.warning`)

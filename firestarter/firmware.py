@@ -34,7 +34,7 @@ from firestarter.constants import (
     FLAG_FORCE,
 )
 from firestarter.exceptions import (
-    FirmwareOperationError,  # wired by the USB DFU install path (was D-01 orphan)
+    FirmwareOperationError,  # wired by the USB DFU install path
     FirmwareOutdatedError,
     ProgrammerNotFoundError,
     SerialError,
@@ -56,7 +56,7 @@ _LINK_NEXT_RE = re.compile(r'<([^>]+)>;\s*rel="next"')
 
 
 class ReleaseInfo(TypedDict):
-    """Structured release entry returned by list_releases (D-12 schema)."""
+    """Structured release entry returned by list_releases."""
 
     version: str  # tag_name from GitHub API
     tag: str  # raw tag_name (same as version for firmware releases)
@@ -100,7 +100,7 @@ _PORTLESS_FLASH_METHODS = frozenset({FLASH_METHOD_DFU})
 # `flash_method()` router. That is a deliberate, accepted deviation: it does
 # the same dispatch job with far less new surface, and `_install_with_avrdude`
 # below is left completely untouched — rewriting it into a strategy object is
-# explicitly out of scope for Phase 127 (and for whatever lands next).
+# explicitly out of scope here (and for whatever lands next).
 #
 # The pending todo `avrdude-mcu-detection-fallback` was reviewed during Phase
 # 127 and deliberately not folded into this router, precisely because it
@@ -212,7 +212,7 @@ class FirmwareManager:
             if payload and ":" in payload:
                 # Identity is "<version>:<board>[:<buf>[:<maxchunk>]]". Only the
                 # version and board are user-facing / release-relevant; <buf> and
-                # <maxchunk> are wire-negotiation fields (Phase 53/54) that must
+                # <maxchunk> are wire-negotiation fields that must
                 # not leak into the printout or the firmware-release asset lookup
                 # (firestarter_<board>.hex). Take only the first two fields.
                 parts = payload.split(":")
@@ -324,7 +324,7 @@ class FirmwareManager:
     ) -> Tuple[Optional[str], Optional[str]]:  # noqa: UP006
         """Router: returns (resolved_version, download_url) or (None, None) on failure.
 
-        channel='stable'  → delegates to fetch_latest_release_info (D-15 back-compat shim).
+        channel='stable'  → delegates to fetch_latest_release_info (back-compat shim).
         channel='pre'     → paginates /releases, filters prerelease=True, sorts by PEP 440
                             descending, takes highest; falls back to stable if none.
         channel='pinned'  → fetches /releases/tags/{version} directly.
@@ -415,7 +415,7 @@ class FirmwareManager:
         channel_filter='pre'    → prerelease only.
         channel_filter='stable' → stable only.
 
-        Returns a flat list of ReleaseInfo dicts (D-12 schema: version, tag, channel,
+        Returns a flat list of ReleaseInfo dicts (version, tag, channel,
         published, asset_url).
         """
         try:

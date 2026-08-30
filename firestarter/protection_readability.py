@@ -79,17 +79,17 @@ REASON_NOT_READABLE = "documented as not having a readable protection state"
 REASON_UNDOCUMENTED_ALIAS = "not documented in lockable-proms.md"
 REASON_READ_PERMITTED = "every alias documented-readable; silicon read permitted"
 
-# A **gate** token, not one of D-09's eight output classes — the CLI never
+# A **gate** token, not one of the eight output classes — the CLI never
 # prints this string. `protection_gate_for_entry` returns it
 # internally to mean "proceed to the silicon read"; `lock_status.py` (plan
-# 151-08+) is the only place D-09's eight class tokens are assembled and
+# ) is the only place the eight class tokens are assembled and
 # emitted.
 GATE_TOKEN_READ_PERMITTED: str = "read_permitted"
-# Four of D-09's eight output classes are reachable from THIS module — never
+# Four of the eight output classes are reachable from THIS module — never
 # `protected` and never `unprotected`, both of which require a real silicon
 # read and therefore live only in `lock_status.py`, whose
-# signature accepts a device response and this module's does not (D-12 leg
-# 4). The literals below are the same class tokens D-09 names; this module
+# signature accepts a device response and this module's does not. The
+# literals below are the same class tokens; this module
 # only ever hands one of these five (including GATE_TOKEN_READ_PERMITTED
 # above) back to a caller.
 GATE_TOKEN_NO_MECHANISM: str = "no_mechanism"
@@ -105,28 +105,28 @@ GATE_TOKEN_UNDOCUMENTED_ALIAS: str = "undocumented_alias"
 # `chip_database.json` (`programming.algorithm`, summed per protocol id);
 # 405 + 40 + 84 + 217 == 746, the full row count.
 NO_MECHANISM_PROTOCOL_IDS: frozenset[int] = frozenset({7, 8, 11, 14, 39, 40, 41})
-# 405 rows — D-09's seven named no-mechanism algorithms: UV-EPROM 0x07
+# 405 rows — the seven named no-mechanism algorithms: UV-EPROM 0x07
 # (170) / 0x08 (127) / 0x0B (32); SRAM/NVRAM 0x0E (20) / 0x27 (2) / 0x28
 # (34) / 0x29 (20). 170+127+32+20+2+34+20 == 405.
 
 NOT_IMPLEMENTED_PROTOCOL_IDS: frozenset[int] = frozenset({16, 52})
-# 40 rows — OD-2 / 151-DESIGN.md §4's corrected census, superseding
+# 40 rows — the corrected census, superseding
 # VALIDATION.md's earlier figure of 39:
 #   0x10 (16, 39 rows: Intel/AMD/Catalyst/ST) — documented-readable per
 #   `lockable-proms.md`, but this release deliberately does not implement
 #   the read.
-#   0x34 (52, 1 row: XICOR/X88C64P,X88C64S) — D-09's seven no-mechanism
+#   0x34 (52, 1 row: XICOR/X88C64P,X88C64S) — the seven no-mechanism
 #   algorithms sum to 405, not 406; this row is the 406th and lands in no
-#   class under D-09's prose as written. It carries
+#   class under the prose as written. It carries
 #   `support_status: "protocol-not-implemented"` and
 #   `protect_off_before: true`, so classing it `no_mechanism` would assert
 #   an absence of mechanism upstream directly contradicts — the
-#   fabricated claim LOCK-03/LOCK-04 forbid. `not_implemented` is the
+#   fabricated claim. `not_implemented` is the
 #   honest reading for both members: neither has code in this project that
 #   reads its protection state, for two different reasons.
 
 NOT_READABLE_PROTOCOL_IDS: frozenset[int] = frozenset({13})
-# 84 rows — the 0x0D EEPROM_PARALLEL family LOCK-03 names. No curated
+# 84 rows — the 0x0D EEPROM_PARALLEL family. No curated
 # token table is consulted for this protocol id: every row is documented
 # as not having a readable protection state (`sdp_capability.py`'s SDP
 # lock/unlock capability is a different question — whether the *command*
@@ -550,9 +550,9 @@ DOCUMENTED_NOT_READABLE_TOKENS: frozenset[str] = frozenset(
 # tiebreak rule in words: where the source document's table row and its own
 # restatements disagree about whether a token is covered, the token takes the
 # **more restrictive** readability state -- it is not adjudicated per entry by
-# curator judgement (D-06's rejected alternative; DATA-04 forbids exactly that).
+# curator judgement -- a rejected alternative, and forbidden.
 # Consequence, stated so it cannot be missed: the worked
-# `W29C020,W29C020C,W29C022` DB entry refuses under D-06 regardless of how this
+# `W29C020,W29C020C,W29C022` DB entry refuses regardless of how this
 # tiebreak resolves, because `W29C022` is undocumented either way -- the
 # tiebreak changes only how many offending aliases the refusal names (one vs.
 # two), never the entry's verdict. C-18, recorded alongside: all three aliases

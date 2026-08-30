@@ -27,7 +27,7 @@ def unreadable_state_caveat() -> str:
     """Return the caveat clause alone, byte-identical to the wording
     formerly composed inline in `cli_handlers.py`'s retired `dev sdp`
     subcommand. Exposed separately from `emission_summary` because
-    Phase 134's report rows need the clause without the emission preamble.
+    Report rows need the clause without the emission preamble.
     """
     return (
         "The resulting protection state cannot be read back on this chip "
@@ -44,11 +44,11 @@ def emission_summary(mode: str, chip_name: str) -> str:
     merely a discipline: `get_response()` filters the entire INFO band out
     at `serial_comm.py:424`, so the operation layer literally cannot see the
     firmware's `0x5F`/`0x61` duration frame to plumb one through. No
-    lock/unlock state boolean appears either -- HOST-05's honesty floor.
+    lock/unlock state boolean appears either -- the honesty floor.
 
     Composed by calling `unreadable_state_caveat()` rather than duplicating
     its wording, so the two can never drift. `chip_name` is uppercased here
-    so a Phase 134/135 caller cannot forget to. Never appends a newline --
+    so a caller cannot forget to. Never appends a newline --
     the caller echoes.
     """
     chip_upper = chip_name.upper()
@@ -62,7 +62,7 @@ def map_unknown_cmd_to_outdated(
 ) -> FirmwareOutdatedError | None:
     """Map an unknown-command error to a `FirmwareOutdatedError`, or `None`.
 
-    D-14: an `EpromOperationError` whose `error_code` is
+    An `EpromOperationError` whose `error_code` is
     `MSG_ERR_UNKNOWN_CMD` means the attached firmware predates
     CMD_SDP_LOCK/CMD_SDP_UNLOCK and does not recognise this
     command at all. This exploits the one real asymmetry in the wire surface:
