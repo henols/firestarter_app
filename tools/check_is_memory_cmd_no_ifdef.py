@@ -1,18 +1,17 @@
 """
-LOCK-03 textual oracle: structural scan proving firmware's `is_memory_cmd()`
+Textual oracle: structural scan proving firmware's `is_memory_cmd()`
 admission predicate carries no build-configuration conditional in its body
-and enumerates exactly the expected `CMD_*` memory commands (Phase 119
-Plan 03, D-04's second half; grown from eight to nine names by Phase 151 /
-LOCK-02, which added `CMD_LOCK_STATUS`).
+and enumerates exactly the expected `CMD_*` memory commands (nine names,
+including `CMD_LOCK_STATUS`).
 
-**Why a second oracle is needed at all.** Plan 119-02 already proved
+**Why a second oracle is needed at all.** A native test already proves
 `is_memory_cmd()` *behaves* identically in two build configurations (an
 exhaustive 256-value truth table run in both `[env:native]` and the
 no-`DEV_TOOLS` `[env:native_nodevtools]`). That is a SEMANTIC proof: it can
 never distinguish "the predicate has no conditional" from "the predicate has
 a conditional whose two branches happen to agree" -- a conditional gated on
 some OTHER macro (not `DEV_TOOLS`) could pass that truth table vacuously
-while still defeating D-02's intent. This checker is the TEXTUAL oracle D-04
+while still defeating that intent. This checker is the TEXTUAL oracle
 demands: it reads the predicate's actual source text and asserts the absence
 of any preprocessor conditional, independent of what the predicate computes.
 
@@ -23,7 +22,7 @@ is_memory_cmd(uint8_t cmd)` definition and asserts BOTH:
       `#else`, `#endif`) appears inside the predicate's body. Every kind of
       conditional is checked, not only ones naming `DEV_TOOLS` -- a narrower
       check would be evadable by conditioning on a different macro, which
-      would defeat D-02's purpose just as completely.
+      would defeat the same purpose just as completely.
   (b) The body's `CMD_*` identifiers, as a SET, equal exactly the frozen
       nine-name expected set (`_EXPECTED_CMD_NAMES` below). Missing and
       unexpected names are reported separately, by name. `CMD_DEV_ADDRESS`
@@ -33,7 +32,7 @@ is_memory_cmd(uint8_t cmd)` definition and asserts BOTH:
 
 This is a genuinely-populated structural scan, NOT a hollow declared-empty
 detector -- the exact tech-debt fate this project incurred with v1.12's
-GATE-03 (a checker that could never fail because it asserted nothing
+a hollow checker (one that could never fail because it asserted nothing
 concrete). The paired pytest (`tests/test_check_is_memory_cmd_no_ifdef.py`)
 proves this checker actually flips to non-zero on a committed planted
 violation (`tests/fixtures/planted_ifdef_in_predicate.h`), injected via the
@@ -87,7 +86,7 @@ _DEFAULT_CMD_ADMISSION_SRC = os.path.join(
 
 # Env-override seam: lets the paired pytest point this checker at a
 # deliberately-violating fixture file (tests/fixtures/planted_ifdef_in_predicate.h)
-# without editing the real, clean firestarter.h (anti-hollow contract, D-04).
+# without editing the real, clean firestarter.h (anti-hollow contract).
 # This seam is FAIL-CLOSED: a path that does not exist is an ERROR, never a
 # silent pass -- see main() below.
 FIRESTARTER_CMD_ADMISSION_SRC = os.environ.get(
@@ -97,7 +96,7 @@ FIRESTARTER_CMD_ADMISSION_SRC = os.environ.get(
 # The predicate this gate reads.
 _PREDICATE_FUNC_NAME = "is_memory_cmd"
 
-# The frozen expected command set (D-02/D-04). Adding a memory command is a
+# The frozen expected command set. Adding a memory command is a
 # DELIBERATE act that must edit this line -- it is not auto-derived from the
 # header, because the whole point of this gate is to catch an
 # accidental/unreviewed enumeration drift, not just mirror it.
@@ -136,7 +135,7 @@ def _predicate_def_pattern() -> re.Pattern[str]:
     trailing `\\{` is what excludes a `;`-terminated forward declaration. The
     pattern deliberately pins `static inline` (not just any `bool` return):
     RESEARCH F-F makes header-inline placement load-bearing (a `.cpp`
-    definition would not link into any native test binary, so Plan 119-02's
+    definition would not link into any native test binary, so the native
     two-env truth-table suite could not exist), so a predicate that lost
     `static inline` would already be a regression this gate should refuse to
     silently accept as a match.
@@ -149,7 +148,7 @@ def _predicate_def_pattern() -> re.Pattern[str]:
 
 
 # Preprocessor conditional deny list: any of these directives inside the
-# predicate body defeats D-02's purpose, not only ones conditioned on
+# predicate body defeats the same purpose, not only ones conditioned on
 # DEV_TOOLS. A narrower check (e.g. matching only `#ifdef DEV_TOOLS`) would be
 # evadable by conditioning on a different macro instead, so every conditional
 # directive is checked, regardless of which macro (if any) it names.

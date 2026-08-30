@@ -4,11 +4,11 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-INBOX-01 Community `dev test` Issue Triage Parser (v1.21 Phase 114)
+Community `dev test` Issue Triage Parser
 
 Stdlib-only CLI a maintainer runs during `gsd-inbox` triage against a
 community `dev test` GitHub issue. It does NOT edit the installed
-`.claude/gsd-core/workflows/inbox.md` (D-04) -- that workflow's job is
+`.claude/gsd-core/workflows/inbox.md` -- that workflow's job is
 fetching/labeling issues; this module's job is understanding the ONE
 issue shape `firestarter/submit.py` produces and is INVOKED standalone,
 e.g.:
@@ -17,7 +17,7 @@ e.g.:
     gh issue view <n> --json body  -q .body    # feed to --body-file/stdin
     python tools/parse_devtest_issue.py --title "$TITLE" --body-file body.txt
 
-Detection (D-04) requires BOTH markers, defensive against a stray fenced
+Detection requires BOTH markers, defensive against a stray fenced
 block anywhere else in an issue: the `[dev test]` title marker
 (`submit.py:build_title`) AND a fenced ```json block whose parsed object
 carries a `schema_version` key (`diagnostic_report.py:to_json_block`).
@@ -33,13 +33,13 @@ into a command, bounds the body size before parsing, and wraps every
 fails SOFT (returns `None` / skips the body) -- it never raises out to
 the caller.
 
-Cross-report agreement (GRAD-01, D-03): `count_agreeing` groups SAVED
+Cross-report agreement: `count_agreeing` groups SAVED
 issue bodies by their ALREADY-EMBEDDED `dedup_fingerprint`
 (`diagnostic_report.py:dedup_fingerprint`, never re-hashed here). This is
 the cross-report N>=2 human-decision signal -- explicitly distinct from
 Phase-108's internal per-run N>=2 (a single sweep's own repeat-run
 agreement). Nothing in this module writes `support_status`; it is a
-DISP-01 scan target (Plan 03) and is read-only by construction, matching
+a scan target and is read-only by construction, matching
 `diagnostic_report.py`'s own `db.get_eprom_config` read-only discipline.
 """
 
@@ -53,7 +53,7 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Module constants (D-04) -- the two detection markers + a defensive size bound
+# Module constants -- the two detection markers + a defensive size bound
 # ---------------------------------------------------------------------------
 
 _DEV_TEST_MARKER = "[dev test]"
@@ -70,7 +70,7 @@ _MAX_BODY_BYTES = 131_072
 
 
 # ---------------------------------------------------------------------------
-# Detection + defensive extraction (D-04)
+# Detection + defensive extraction
 # ---------------------------------------------------------------------------
 
 
@@ -102,7 +102,7 @@ def _extract_fenced_report(body: str | None) -> dict[str, Any] | None:
 
 
 def parse_devtest_body(title: str | None, body: str | None) -> dict[str, Any] | None:
-    """Both markers required (D-04): `[dev test]` in `title` AND a fenced
+    """Both markers required: `[dev test]` in `title` AND a fenced
     ```json block in `body` whose parsed object carries `schema_version`.
 
     Returns the parsed report dict, or `None` when either marker is
@@ -115,13 +115,13 @@ def parse_devtest_body(title: str | None, body: str | None) -> dict[str, Any] | 
 
 
 # ---------------------------------------------------------------------------
-# DB-diff surface (RPT-05 consumer) -- current-vs-proposed + ladder_state
+# DB-diff surface -- current-vs-proposed + ladder_state
 # ---------------------------------------------------------------------------
 
 
 def extract_db_diff(report_obj: dict[str, Any]) -> dict[str, Any]:
     """Read-only current-vs-proposed DB-diff surface from an already-parsed
-    report dict (defensive `.get` throughout, D-01/D-02).
+    report dict (defensive `.get` throughout).
 
     Tolerant of a missing `db_diff` (`None`, an older/degenerate report)
     and of a missing `ladder_state` key (schema 1.0, pre-Phase-114) --
@@ -157,13 +157,13 @@ def _read_live_support_status(chip: str | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Cross-report N-agreeing (GRAD-01, D-03) -- dedup_fingerprint grouping ONLY
+# Cross-report N-agreeing -- dedup_fingerprint grouping ONLY
 # ---------------------------------------------------------------------------
 
 
 def count_agreeing(bodies: list[str]) -> dict[str, int]:
     """Group SAVED issue bodies by their embedded `dedup_fingerprint` and
-    return `{fingerprint: count}` (D-03, GRAD-01's cross-report N>=2 signal).
+    return `{fingerprint: count}` (the cross-report N>=2 signal).
 
     Reuses the ALREADY-EMBEDDED `dedup_fingerprint` from each body's fenced
     JSON -- never re-hashes and never reads a per-step run count (that
@@ -185,10 +185,10 @@ def count_agreeing(bodies: list[str]) -> dict[str, int]:
 
 
 # ---------------------------------------------------------------------------
-# Rendering (plain-text; no third-party dependency, D-04)
+# Rendering (plain-text; no third-party dependency)
 # ---------------------------------------------------------------------------
 
-# Literal #2 of three (D-11, v1.32 Phase 147 plan 147-05). Identical in
+# Literal #2 of three. Identical in
 # VALUE to `firestarter/diagnostic_report.py`'s `NOT_REPORTED`, but defined
 # separately here rather than imported: this module is a stdlib-only CLI
 # (module docstring above, `:9-11`) whose module-level imports are exactly
@@ -260,20 +260,20 @@ def render_diff(
     *,
     n_agreeing: int | None = None,
 ) -> str:
-    """Plain-text current-vs-proposed DB-diff render (D-04, no third-party
+    """Plain-text current-vs-proposed DB-diff render (no third-party
     import). Explicitly labels any `n_agreeing` value a maintainer decision
-    input, never an auto-promotion trigger (D-01).
+    input, never an auto-promotion trigger.
 
     Also carries the provenance identity a triager needs before any
     firmware-version claim can rest on this report (PROV-06): a labelled
     `host_version` row and a labelled `fw_board_identity` row that folds in
-    the `_NOT_ATTRIBUTABLE` clause when the identity is absent (D-14). No
-    `hw_revision` row (D-15) -- a write-path finding is attributable only
+    the `_NOT_ATTRIBUTABLE` clause when the identity is absent. No
+    `hw_revision` row -- a write-path finding is attributable only
     when host AND firmware are both known, and `hw_revision` is a coarse
     silkscreen bucket that cannot discriminate the operator's Rev 2.2 /
     Rev 2.0 / modified Rev 0 boards, so a line naming it would look
     authoritative while answering nothing. No derived `attributable`
-    boolean either (D-14) -- dead data with no consumer.
+    boolean either -- dead data with no consumer.
     """
     auto_capture = report_obj.get("auto_capture") or {}
     chip = auto_capture.get("chip", "?")
@@ -282,7 +282,7 @@ def render_diff(
     # coalescing expression -- such an expression also fires on other falsy
     # values with no decision behind them, and a community-authored body can
     # genuinely carry `""`, which must render the marker, never a blank
-    # (mirrors `diagnostic_report.py`'s `_identity_cell`, D-10/D-11/D-12).
+    # (mirrors `diagnostic_report.py`'s `_identity_cell`).
     host_version = auto_capture.get("host_version")
     host_version_cell = (
         NOT_REPORTED
@@ -318,7 +318,7 @@ def render_diff(
 
 
 # ---------------------------------------------------------------------------
-# CLI (argparse, stdlib-only, D-04)
+# CLI (argparse, stdlib-only)
 # ---------------------------------------------------------------------------
 
 

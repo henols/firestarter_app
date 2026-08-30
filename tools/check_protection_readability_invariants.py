@@ -1,6 +1,6 @@
 """
 GATE-02: AST invariant checker over
-`firestarter/protection_readability.py` (Phase 151, LOCK-01, D-05/D-06/D-12).
+`firestarter/protection_readability.py`.
 
 Scans exactly one target file, resolved via
 `FIRESTARTER_PROTECTION_READABILITY_SRC` (default: the real
@@ -17,7 +17,7 @@ resolves to the *checking phase's own directory* and a cross-phase reuse of
 the checker silently scans nothing and exits 0. `tools/` never moves
 relative to `firestarter/` when this gate is reused from a later phase.
 
-Plan 151-02 landed a three-axis, hand-curated table (readability,
+The module holds a three-axis, hand-curated table (readability,
 mechanism, permanence) sourced from `doc/lockable-proms.md`. Nothing
 structurally prevents a future edit from widening the curated readable-token
 set back into inference, or from adding a permit path not dominated by a
@@ -27,7 +27,7 @@ mechanically impossible to land unnoticed:
   Class 1 -- permit-by-default. State the concrete consequence: a permit
   reaching a family whose protection state is not readable would let a
   downstream layer render a state claim the silicon never supplied, which is
-  what LOCK-03 and LOCK-04 exist to prevent.
+  what this gate exists to prevent.
     (a) generalised from `check_sdp_capability_invariants.py`'s Class 1(a).
         That gate flags a `return` of a tuple literal whose first element is
         the constant `True`, only when undominated by a membership test.
@@ -39,7 +39,7 @@ mechanically impossible to land unnoticed:
         these two tokens must never be returned from this pure module at
         all, because `protection_gate_for_entry`'s signature accepts no
         device response -- there is no legitimate dominated case to exempt
-        (D-12 leg 4).
+        .
     (b) any bare exception handler (`except:` with no exception type)
         anywhere in the module, which could swallow a refusal-shaped error
         into a silent permit -- copied unchanged from the analog. This rule
@@ -70,7 +70,7 @@ mechanically impossible to land unnoticed:
 
   Class 3 -- the reporting axes, DELIBERATELY WEAKER. `MECHANISM_BY_TOKEN`
   and `PERMANENCE_BY_TOKEN` are literal dict displays consumed only by
-  prose and do not gate answering anywhere -- D-06 keys the read/refuse
+  prose and do not gate answering anywhere -- the read/refuse decision keys
   decision only on the readability axis (Class 2), never on mechanism or
   permanence. This rule is stated here, in words, as weaker by design: each
   of the two mappings is checked only for (i) exactly one module-level
@@ -86,10 +86,10 @@ mechanically impossible to land unnoticed:
   at least one key. An empty record would mean the C-17 documentation
   disagreement (`lockable-proms.md`'s bare `W29C020` vs. its own
   restatements) had been silently resolved away rather than recorded, which
-  is precisely what D-06 §5's tiebreak rule forbids.
+  is precisely what the tiebreak rule forbids.
 
 Anti-hollow contract (the discipline that closed this project's v1.12
-GATE-03 hollow-checker debt -- a checker that could never fail because it
+hollow-checker debt -- a checker that could never fail because it
 asserted nothing concrete): this is a genuinely-populated `ast.parse` +
 `ast.NodeVisitor` walk, never a declared-empty detector. It is paired with
 `tests/test_check_protection_readability.py`, which plants a REAL
@@ -145,8 +145,8 @@ _TOKEN_SET_NAMES: tuple[str, ...] = (
     "DOCUMENTED_NOT_READABLE_TOKENS",
 )
 
-# The two D-09 output classes that require a real silicon read and must
-# therefore be structurally unreachable from this pure module (D-12 leg 4).
+# The two output classes that require a real silicon read and must
+# therefore be structurally unreachable from this pure module.
 _SILICON_ONLY_TOKENS: frozenset[str] = frozenset({"protected", "unprotected"})
 
 # Class 2(c) method names that widen/mutate a frozenset in place.
@@ -197,7 +197,7 @@ class _SiliconOnlyReturnVisitor(ast.NodeVisitor):
     could reuse them), but `resolve()` flags every `permit_return`
     unconditionally, dominated or not: unlike the analog's `True`,
     `protected`/`unprotected` must never be returned from this pure module
-    at all, because its signature accepts no device response (D-12 leg 4).
+    at all, because its signature accepts no device response.
     """
 
     def __init__(self, filename: str) -> None:
@@ -388,7 +388,7 @@ def _is_literal_str_to_str_dict(value: ast.expr) -> bool:
     """Class 3's deliberately weaker shape check: `value` is an `ast.Dict`
     whose every key and every value is a string `Constant`. No dominance
     analysis, no key-provenance check against the curated token sets --
-    that weakening is intentional (D-06 keys answering only on readability,
+    that weakening is intentional (answering keys only on readability,
     never on mechanism or permanence) and is stated in this gate's module
     docstring."""
     if not isinstance(value, ast.Dict):

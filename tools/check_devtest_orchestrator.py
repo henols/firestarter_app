@@ -1,5 +1,5 @@
 """
-AST-based orchestrator-only gate for `dev test` (SAFE-03, Phase 109 D-02/D-03).
+AST-based orchestrator-only gate for `dev test`.
 
 Scans `firestarter/chip_test.py` (the Phase-108 test-plan engine),
 `firestarter/cli_handlers.py` (the `dev_test` handler, scoped), and
@@ -22,7 +22,7 @@ orchestrator-only contract:
      `chip_resolver.resolve_chip` + `database.convert_to_programmer` only.
   3. `force=True` keyword pass-through, or any `"--force"` string literal.
      `dev test` never forces past a firmware/host refusal.
-  4. Broad exception handlers (Phase 133 D-09/D-14) -- a bare `except:`, an
+  4. Broad exception handlers -- a bare `except:`, an
      `except Exception:`, an `except BaseException:`, or a tuple containing
      either. Bare `except:` is already caught by ruff's E722, but
      `except Exception:`/`except BaseException:` are caught by NOTHING in
@@ -30,7 +30,7 @@ orchestrator-only contract:
      (`["E", "F", "I", "UP"]`), so the `# noqa: BLE001` already sitting on
      `chip_test.py`'s `_sample` sampler handler is INERT. This bucket carries
      one narrow, reasoned exemption for that pre-existing handler
-     (`_BROAD_EXCEPT_EXEMPTIONS`, D-14) -- a best-effort diagnostic hook
+     (`_BROAD_EXCEPT_EXEMPTIONS`) -- a best-effort diagnostic hook
      invoked with an opaque caller-supplied callable, never a blanket
      allowance for the broad form.
 
@@ -42,22 +42,22 @@ implicit.
 
 This is a genuinely-populated AST walk (`ast.parse` + a fresh
 `ast.NodeVisitor`), NOT a hollow declared-empty detector -- the exact
-tech-debt fate this project incurred with v1.12's GATE-03 (a checker that
+tech-debt fate this project incurred with an earlier gate (a checker that
 could never fail because it asserted nothing concrete). The paired pytest
 (`tests/test_check_devtest_orchestrator.py`) proves this checker actually
 flips to non-zero on a planted violation, injected via the
 `FIRESTARTER_DEVTEST_SRC` / `FIRESTARTER_DEVTEST_HANDLER` env-overrides below
-(mirrors `tools/check_dispatch.py`'s `FIRESTARTER_DB_FILE` seam) -- D-03's
+(mirrors `tools/check_dispatch.py`'s `FIRESTARTER_DB_FILE` seam) -- the
 anti-hollow contract.
 
-Handler scan (Phase 112): the `@dev.command("test")` CLI handler landed as a
+Handler scan: the `@dev.command("test")` CLI handler landed as a
 function inside `firestarter/cli_handlers.py` (a sibling of
 `dev_validate_family`), not a standalone module of its own.
 `FIRESTARTER_DEVTEST_HANDLER` (default: `_DEFAULT_DEVTEST_HANDLER`) points at
 the real `cli_handlers.py` file and this checker actually scans it -- but
 `cli_handlers.py` is a large, pre-existing multi-command module with 10
 pre-existing, legitimate `-f`/`--force` flags on UNRELATED commands (`read`,
-`write`, `verify`, `blank`, `erase`, `id`) that long predate Phase 112 and
+`write`, `verify`, `blank`, `erase`, `id`) that long predate it and
 are outside this handler's contract entirely. Scanning the WHOLE file would
 make the gate permanently red on code this phase never touched -- a false
 positive, not a real violation. Instead, `_scan_target_functions` narrows
@@ -68,8 +68,8 @@ exactly the new Phase-112 code, via an AST `FunctionDef`/`AsyncFunctionDef`
 name filter over the parsed module -- never a brittle line-number range. The
 `chip_test.py` leg is unaffected and still scans the ENTIRE file (it has, by
 construction, zero pre-existing `--force` usage). A handler that exists on
-disk but is silently skipped by this checker is the v1.12 hollow-GATE-03
-failure mode (Phase 109 D-02/D-03) -- the missing-file tolerance in
+disk but is silently skipped by this checker is the hollow-checker
+failure mode -- the missing-file tolerance in
 `_scan_file` stays only for a nonexistent test-fixture path, never for the
 real handler target, and `_scan_target_functions` still fails closed if
 `dev_test` itself is ever renamed/removed without updating this checker.
@@ -96,7 +96,7 @@ _DEFAULT_CHIP_TEST = os.path.join(_HERE, "..", "firestarter", "chip_test.py")
 
 # Env-override seam (mirrors check_dispatch.py's FIRESTARTER_DB_FILE): lets
 # the paired pytest point this checker at a deliberately-violating fixture
-# file without editing the real, clean chip_test.py source (D-03).
+# file without editing the real, clean chip_test.py source.
 FIRESTARTER_DEVTEST_SRC = os.environ.get("FIRESTARTER_DEVTEST_SRC", _DEFAULT_CHIP_TEST)
 
 # The Phase-112 `@dev.command("test")` CLI handler -- lands as a function
@@ -165,7 +165,7 @@ _HANDLER_FUNCTION_NAMES = frozenset(
 )
 
 # ---------------------------------------------------------------------------
-# Deny-list vocabularies (D-02)
+# Deny-list vocabularies
 # ---------------------------------------------------------------------------
 
 # VPP-set call sites: attribute/function names that set or enable VPP. There
@@ -208,7 +208,7 @@ _FORCE_KEYWORD_NAME = "force"
 _FORCE_CLI_FLAG = "--force"
 
 # ---------------------------------------------------------------------------
-# Broad-except deny bucket (Phase 133 D-09/D-14)
+# Broad-except deny bucket
 # ---------------------------------------------------------------------------
 #
 # Bare `except:` is already caught by ruff's E722 (this repo's `select` is
@@ -222,7 +222,7 @@ _FORCE_CLI_FLAG = "--force"
 # check.
 _BROAD_EXCEPT_NAMES = frozenset({"Exception", "BaseException"})
 
-# (file basename, enclosing function name) -> non-empty reason (D-14).
+# (file basename, enclosing function name) -> non-empty reason.
 #
 # Follows the house frozenset/name-map-with-rationale idiom
 # (`_HANDLER_FUNCTION_NAMES` above is the in-file precedent;
@@ -241,7 +241,7 @@ _BROAD_EXCEPT_NAMES = frozenset({"Exception", "BaseException"})
 # swallow-all behaviour is its documented contract (see `_sample`'s own
 # docstring), and `_make_sampler` (firestarter/cli_handlers.py) is live in
 # production. Narrowing the handler instead of exempting it would change
-# shipped production behaviour, which criterion 4 of Phase 133 forbids.
+# shipped production behaviour, which is forbidden.
 _BROAD_EXCEPT_EXEMPTIONS: dict[tuple[str, str], str] = {
     (os.path.basename(_DEFAULT_CHIP_TEST), "_sample"): (
         "D-14: _sample (firestarter/chip_test.py) is a best-effort "
@@ -327,7 +327,7 @@ def _stale_exemption_row_violations(
 
 
 class _OrchestratorDenyVisitor(ast.NodeVisitor):
-    """Walk a chip_test.py-shaped AST, collecting SAFE-03 deny-list hits.
+    """Walk a chip_test.py-shaped AST, collecting deny-list hits.
 
     Populates four violation buckets during a single tree walk:
       - `vpp_set_violations`: `ast.Call` sites whose callee name/attribute is
@@ -339,7 +339,7 @@ class _OrchestratorDenyVisitor(ast.NodeVisitor):
       - `broad_except_violations`: a bare `except:`, an `except Exception:`,
         an `except BaseException:`, or a tuple containing either -- unless
         the innermost enclosing function is exempted by
-        `_BROAD_EXCEPT_EXEMPTIONS` (D-14).
+        `_BROAD_EXCEPT_EXEMPTIONS`.
 
     Each violation is recorded as a human-readable `"line N: ..."` string so
     `main()` can print an actionable per-bucket FAIL: summary.
@@ -351,7 +351,7 @@ class _OrchestratorDenyVisitor(ast.NodeVisitor):
         self.raw_wire_dict_violations: list[str] = []
         self.force_violations: list[str] = []
         self.broad_except_violations: list[str] = []
-        # Enclosing-function-name stack (D-09) -- exists ONLY so
+        # Enclosing-function-name stack -- exists ONLY so
         # `visit_ExceptHandler` can consult a (file, function) exemption.
         # Empty when the current node sits at module level.
         self._function_stack: list[str] = []
@@ -479,7 +479,7 @@ def _scan_target_functions(
     `function_names` -- the latter is deliberately treated as "nothing to
     scan" rather than a silent empty-pass, so `main()`'s scanned-empty
     fail-closed guard still fires if `dev_test` (or its helpers) is ever
-    renamed/removed here without updating `_HANDLER_FUNCTION_NAMES` (D-02/D-03
+    renamed/removed here without updating `_HANDLER_FUNCTION_NAMES` (
     anti-hollow: a scoped scan that quietly matches zero functions is exactly
     as hollow as skipping the file outright).
 
@@ -510,7 +510,7 @@ def _scan_target_functions(
 
 
 def _assert_host_only(path: str) -> str | None:
-    """Assert `path` does not resolve into the firmware sub-repo (D-02).
+    """Assert `path` does not resolve into the firmware sub-repo.
 
     Returns an error string if the resolved path falls inside the sibling
     `firestarter/` firmware submodule (a peer of `firestarter_app/` in the
@@ -561,7 +561,7 @@ def main() -> None:
     updating this checker.
 
     Guard (a) runs FIRST, before any scanning: an exemption table with an
-    empty or missing reason fails the build immediately (Phase 133 D-14).
+    empty or missing reason fails the build immediately.
     Guard (b) -- the stale-row check -- runs AFTER scanning, over the files
     actually found, because it needs their parsed source.
     """

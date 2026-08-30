@@ -1,6 +1,6 @@
 """
 GATE-01: AST invariant checker over `firestarter/sdp_capability.py`
-(Phase 121 Plan 03, D-14).
+.
 
 Scans exactly one target file, resolved via `FIRESTARTER_SDP_CAPABILITY_SRC`
 (default: the real `firestarter/sdp_capability.py`, mirrored by
@@ -8,7 +8,7 @@ Scans exactly one target file, resolved via `FIRESTARTER_SDP_CAPABILITY_SRC`
 `tools/check_devtest_orchestrator.py`'s `FIRESTARTER_DEVTEST_SRC` and
 `tools/check_is_memory_cmd_no_ifdef.py`'s `FIRESTARTER_CMD_ADMISSION_SRC`).
 
-Phase 120 derived a static, fail-closed, name-keyed SDP-capability partition
+The host derives a static, fail-closed, name-keyed SDP-capability partition
 (43 ALLOW / 41 REFUSE) from `infoic.xml`'s `INFOIC2PLUS` `flags` bit 15 and
 landed it as `SDP_CAPABLE_TOKENS`, a `frozenset` of string literals. Nothing
 structurally prevents a future edit from widening that allow-list back into
@@ -41,7 +41,7 @@ impossible to land unnoticed:
         or `|=` targeting `SDP_CAPABLE_TOKENS`, anywhere in the scanned file.
 
 Anti-hollow contract (the discipline that closed this project's v1.12
-GATE-03 hollow-checker debt -- a checker that could never fail because it
+hollow-checker debt -- a checker that could never fail because it
 asserted nothing concrete): this is a genuinely-populated `ast.parse` +
 `ast.NodeVisitor` walk, never a declared-empty detector. It is paired with
 `tests/test_check_sdp_capability.py`, which plants a REAL subprocess-level
@@ -80,7 +80,7 @@ _DEFAULT_SDP_CAPABILITY_SRC = os.path.join(
 
 # Env-override seam: lets the paired pytest point this checker at a
 # deliberately-violating fixture file without editing the real, clean
-# sdp_capability.py (D-14 anti-hollow contract). This seam is FAIL-CLOSED --
+# sdp_capability.py (anti-hollow contract). This seam is FAIL-CLOSED --
 # a path that does not exist is an ERROR, never a silent pass (see main()).
 FIRESTARTER_SDP_CAPABILITY_SRC = os.environ.get(
     "FIRESTARTER_SDP_CAPABILITY_SRC", _DEFAULT_SDP_CAPABILITY_SRC
@@ -118,7 +118,7 @@ class _PermitByDefaultVisitor(ast.NodeVisitor):
     Source-order tracking is done by collecting `(lineno, kind)` events
     across the WHOLE function subtree (comprehension `ifs` are `Compare`
     nodes too, so they are covered by the same generic walk) and then
-    resolving dominance with a single ascending-lineno scan, per D-14's
+    resolving dominance with a single ascending-lineno scan, per the
     "ordered walk ... then compare line numbers" instruction -- this avoids
     depending on `ast.walk`'s BFS traversal order, which is not source order.
     """
@@ -188,7 +188,7 @@ def _module_level_token_set_bindings(
     """Every top-level (module-body) statement that binds `SDP_CAPABLE_TOKENS`
     -- `Assign`, `AnnAssign`, or `AugAssign` -- in source order. An `AugAssign`
     counts as a second binding event: it rebinds the name, which is exactly
-    what "bound anywhere other than exactly once" (D-14 Class 2a) means."""
+    what "bound anywhere other than exactly once" means."""
     bindings: list[ast.Assign | ast.AnnAssign | ast.AugAssign] = []
     for stmt in tree.body:
         if isinstance(stmt, ast.Assign):
@@ -222,7 +222,7 @@ def _is_clean_frozenset_of_literals_call(value: ast.expr) -> bool:
     with exactly one positional argument, no keywords, and that argument a
     set/list/tuple display of string literals only -- rejects a
     comprehension, a generator expression, a call, or a bare `Name`
-    reference, per D-14."""
+    reference."""
     if not isinstance(value, ast.Call):
         return False
     if not (isinstance(value.func, ast.Name) and value.func.id == "frozenset"):

@@ -12,7 +12,7 @@ from firestarter.constants import MAX_27C020_SIZE
 # ==========================================
 # Pinned to the SHA recorded in tools/DECODE-NOTES.md §0/§3 (the Phase-86 regen
 # provenance of record) so the fetch is deterministic and the baseline re-pin is
-# reproducible. Was /-/raw/master/ — switched to the pinned commit per D-05
+# reproducible. Was /-/raw/master/ — switched to the pinned commit
 # discretion (DECODE-NOTES.md §3). Short form: a8efaedc.
 MINIPRO_XML_URL = (
     "https://gitlab.com/DavidGriffith/minipro/-/raw/"
@@ -21,7 +21,7 @@ MINIPRO_XML_URL = (
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "firestarter", "data")
 OUTPUT_FILE = os.path.join(_DATA_DIR, "chip_database.json")
 PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
-# VAR-05 / D-10: curated non-upstream chip supplement, merged post-decode (see
+# Curated non-upstream chip supplement, merged post-decode (see
 # the EXTRA_CHIPS block in main()). Physically-real chips absent from infoic.xml.
 EXTRA_CHIPS_FILE = os.path.join(os.path.dirname(__file__), "extra_chips.json")
 # Largest 0x08 32-pin part where pin 31 (A18) is structurally unused, so the
@@ -126,12 +126,12 @@ _PAGE_SIZE_BY_PART: dict[str, int] = {
     # discipline. The shared entry gets W29C020's citation via part-number lookup.
 }
 
-# CR-01 Option A (Phase 66 gap-closure): algorithm sentinel for non-supported chips.
+# Algorithm sentinel for non-supported chips.
 # dispatch(0x00, None) falls into the mem_type fallback chain (protocol==0 path):
 #   _ALGO_MEM_TYPE.get(0x00) → None → {1:..., 4:..., 3:..., 5:...}.get(None, "ERROR")
 #   → "ERROR"
 # No real handler (configure_eprom / configure_eeprom28c / configure_flash* /
-# configure_sram) is ever reached for a non-supported chip. D-03 HARD: do NOT
+# configure_sram) is ever reached for a non-supported chip. HARD: do NOT
 # route any flagged chip to a working handler.
 NON_DISPATCHABLE_ALGO = 0x00
 
@@ -375,7 +375,7 @@ def classify(type_int, proto_id, pm_idx, flags, pinout_key, mem_size):
 def interpret_timing(raw_hex, protocol_id):
     # [VERIFIED: minipro database.c#L866 @ a8efaedc]
     # Raw pulse_delay is microseconds for ALL protocols — no multiplier.
-    # Contract (D-08, Phase 148 Plan 03): returns an int, always microseconds.
+    # Contract: returns an int, always microseconds.
     # `0` means "algorithm-controlled" (protocols that do not consume
     # pulse-delay) -- an unparseable pulse_delay on a protocol that DOES
     # consume it (0x07/0x08/0x0B) is fatal, not a silent 0, so that sentinel
@@ -485,7 +485,7 @@ def main():
                 if proto_id == 0x34:
                     _support_status = "protocol-not-implemented"
                     # DB-04 Approach A (67.1-01): reason string begins with SC-required
-                    # wording so the host can render it verbatim (Plan 02 prints f"{e}").
+                    # wording so the host can render it verbatim.
                     # Must contain "not implemented" substring — existing test
                     # test_read_protocol_not_implemented_typed_refusal asserts it.
                     _unsupported_reason = (
@@ -527,7 +527,7 @@ def main():
                         file=sys.stderr,
                     )
                     # CR-01 Option A: demote to NON_DISPATCHABLE_ALGO so dispatch()
-                    # returns ERROR instead of configure_eprom (D-03 HARD invariant).
+                    # returns ERROR instead of configure_eprom (HARD invariant).
                     proto_id = NON_DISPATCHABLE_ALGO
 
                 # AT28C04/AT28C16 family. Runs after the guard above so its reason
@@ -571,7 +571,7 @@ def main():
 
                 # --- SYNTHESIZE "COMPLETE" DATA ---
 
-                # Step 1: Resolve pinout key (principled — D-02/D-03)
+                # Step 1: Resolve pinout key (principled)
                 pinout_key = resolve_pinout_key(
                     pin_count,
                     variant,
@@ -582,9 +582,9 @@ def main():
                     mem_size=mem_size,
                 )
 
-                # Step 2: D-06 fail-safe — skip unclassifiable chips entirely.
+                # Step 2: fail-safe — skip unclassifiable chips entirely.
                 # No VPP-asserting dispatch is ever emitted for an uncertain chip.
-                # Replaces the old hardcoded 24-pin safety-skip (D-05).
+                # Replaces the old hardcoded 24-pin safety-skip.
                 if pinout_key is None:
                     print(
                         f"WARN: skipping {mfg_name}/{name} — unclassifiable pinout "
@@ -633,21 +633,21 @@ def main():
                         _support_status = "vpp-exceeds-max"
                         # DB-04 Approach A (67.1-01): reason string begins with
                         # "VPP <x>V exceeds programmer max (<ceil>V)" so the host
-                        # can render it verbatim (Plan 02 prints f"{e}").
+                        # can render it verbatim.
                         # Uses "programmer max" (not "RURP ceiling") per SC#2 wording.
                         _unsupported_reason = (
                             f"VPP {_nmos_vpp_mv // 1000}V exceeds programmer max "
                             f"({RURP_VPP_CEILING_MV // 1000}V)"
                         )
                         # CR-01 Option A: demote to NON_DISPATCHABLE_ALGO so dispatch()
-                        # returns ERROR instead of configure_eprom (D-03 HARD invariant).
+                        # returns ERROR instead of configure_eprom (HARD invariant).
                         proto_id = NON_DISPATCHABLE_ALGO
                     # else: leave _support_status as "supported" — M2732A (21V)
                     # is within the RURP ceiling.
 
                 # Canonical part-number key (first alias, @PACKAGE suffix
                 # stripped) — hoisted here because the page_size emit arm
-                # below (PGSZ-01, Phase 149) needs it in both its lookup and
+                # below needs it in both its lookup and
                 # its guard condition; previously recomputed twice inline.
                 _canon = name.split(",")[0].split("@")[0].strip()
 

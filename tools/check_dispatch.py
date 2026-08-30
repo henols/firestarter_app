@@ -1,6 +1,6 @@
 """
 Regression scan: assert every chip in chip_database.json reaches a real
-firmware dispatch path after Phase 12.
+firmware dispatch path.
 
 Mirrors the post-Phase-12 dispatch order documented in
 firestarter/src/proms/memory.cpp::configure_memory and the algorithm→mem_type
@@ -34,7 +34,7 @@ PINOUTS_FILE = os.environ.get(
 
 # Algorithm integer (upstream protocol_id from infoic.xml) → firmware mem_type integer.
 # Must mirror firestarter_app/firestarter/database.py::_ALGO_MEM_TYPE
-# (lands in Plan 03 per CONTEXT.md D3).
+# (lands later).
 _ALGO_MEM_TYPE = {
     0x05: 5,  # FLASH_AMD_STD     → TYPE_FLASH_TYPE_4
     0x06: 3,  # FLASH_AMD_ALT     → TYPE_FLASH_TYPE_3
@@ -54,7 +54,7 @@ _ALGO_MEM_TYPE = {
 # enables the VPP boost regulator on a 5V SRAM part).
 _SRAM_PROTOCOLS = {0x0E, 0x27, 0x28, 0x29}
 
-# Per-family VPP range invariants (Phase 71 HARN-04 / D-09).
+# Per-family VPP range invariants.
 # Maps handler name → (min_vpp_mv, max_vpp_mv).
 #
 # IMPLEMENTATION NOTE: chip_database.json stores vpp_mv in the "electrical" block.
@@ -76,7 +76,7 @@ _SRAM_PROTOCOLS = {0x0E, 0x27, 0x28, 0x29}
 # Range (0, 6000) is the semantically correct invariant for these handlers —
 # proven capable of firing on a synthetic chip with vpp_mv=12000 routed to configure_sram.
 _FAMILY_VPP_INVARIANTS: dict[str, tuple[int, int]] = {
-    "configure_eprom": (0, 25000),  # RURP VPP ceiling 25V (raised Phase 79 from 22V)
+    "configure_eprom": (0, 25000),  # RURP VPP ceiling 25V (raised from 22V)
     "configure_eeprom28c": (0, 6000),  # 5V-only EEPROM — no elevated VPP rail
     "configure_flash_nor_unlock": (
         0,
@@ -92,7 +92,7 @@ _FAMILY_VPP_INVARIANTS: dict[str, tuple[int, int]] = {
 # configure_flash_intel where the mismatch is detectable from the DB. For 5V-only
 # handlers, the DB's electrical.vpp_mv encodes WP-pin voltage (not programming VPP),
 # so checking vpp_mv > 6000 would produce false positives on every AMD/SST flash chip.
-# The 5V handler invariants are proven via synthetic fixture only (D-09).
+# The 5V handler invariants are proven via synthetic fixture only.
 _DB_CHECKED_VPP_INVARIANTS: frozenset[str] = frozenset({"configure_flash_intel"})
 
 # DIP28_2764 + Flash/EEPROM hazard guard (WARNING-5).
@@ -183,9 +183,9 @@ def main():
     # This is loaded once here and used per-chip in the scan loop below.
     no_vpp_pin_pinouts = _build_no_vpp_pin_set(PINOUTS_FILE)
 
-    # WIRE-02 (D-15 Shape A): host-side wire-emit round-trip surface.
+    # Host-side wire-emit round-trip surface.
     # Per-chip we call db.convert_to_programmer(db.get_eprom(part)) and assert
-    # the produced wire dict contains canonical "vpp_mv" (Plan 02-01 contract)
+    # the produced wire dict contains canonical "vpp_mv"
     # and never the legacy "vpp" key.
     db = EpromDatabase()
 
@@ -202,7 +202,7 @@ def main():
     pni_with_known_proto = []
     # Assertion 3: no supported chip resolves to not_implemented (enforced above
     # in the per-chip loop via the reworked not_implemented bucket — no separate list needed).
-    # SC#3 / D-03 HARD inverse guard: non-supported chip wired to a real handler is a
+    # HARD inverse guard: non-supported chip wired to a real handler is a
     # gate failure. check_dispatch previously only checked the regression direction
     # (supported → not_implemented); this bucket catches the dangerous inverse.
     non_supported_dispatchable = []
@@ -219,7 +219,7 @@ def main():
         for chip in chips:
             total += 1
             proto = chip.get("programming", {}).get("algorithm", 0) or 0
-            # Mirror database._map_data's real mem_type derivation exactly (D-12):
+            # Mirror database._map_data's real mem_type derivation exactly:
             # - When proto is a known algorithm, look it up in _ALGO_MEM_TYPE.
             # - When proto is 0 (falsy), fall through to the electrical.type string
             #   heuristic — default TYPE_EPROM(1), "Flash"->2, "SRAM"->4 — because
@@ -228,7 +228,7 @@ def main():
             # proto==0 yielded mt=None and dispatch(0, None)=ERROR (false "safe").
             # The corrected derivation makes the 4 vpp-exceeds-max UV-EPROM chips
             # (etype="UV-EPROM", proto=0) derive mt=1 -> dispatch(0,1)=configure_eprom,
-            # which is the REAL host+firmware outcome (D-12 truthfulness).
+            # which is the REAL host+firmware outcome.
             if proto and proto in _ALGO_MEM_TYPE:
                 mt = _ALGO_MEM_TYPE[proto]
             else:
@@ -256,7 +256,7 @@ def main():
                     pni_with_known_proto.append(
                         f"{mfg}/{part} proto=0x{proto:02X} — protocol IS in KNOWN_PROTOCOLS"
                     )
-                # SC#3 / D-03 HARD inverse guard + D-12 host-guard exemption (CR-02):
+                # HARD inverse guard + host-guard exemption:
                 #
                 # With the realigned _map_data-mirroring mt derivation, the 4
                 # vpp-exceeds-max UV-EPROM chips correctly derive mt=1 ->
@@ -265,10 +265,10 @@ def main():
                 #
                 # SAFETY GUARANTEE: chip_resolver.resolve_chip raises ChipNotImplementedError
                 # for EVERY chip with support_status != "supported" BEFORE any wire dict is
-                # built or serial byte emitted (D-12 / Phase 66 Plan 05).  The host guard is
+                # built or serial byte emitted. The host guard is
                 # the authoritative safety layer; the firmware trusts the wire dict.
                 #
-                # GATE ROLE (D-12 amendment): this gate is GREEN because the HOST GUARD
+                # GATE ROLE: this gate is GREEN because the HOST GUARD
                 # refuses every non-supported chip — NOT because the sim pretends mem_type
                 # is None.  The gate's job is to:
                 #   1. Model the real _map_data mem_type derivation truthfully (done above).
@@ -294,7 +294,8 @@ def main():
                     # A supported chip with no dispatch path is a real gate failure.
                     errors.append(f"{mfg}/{part} proto=0x{proto:02X} mem_type={mt}")
                 # else: non-supported chip dispatching to ERROR is the expected outcome
-                # (NON_DISPATCHABLE_ALGO=0x00 → dispatch returns ERROR; D-03 HARD enforced).
+                # (NON_DISPATCHABLE_ALGO=0x00 → dispatch returns ERROR;
+                # HARD enforced).
                 continue
             if handler == "not_implemented":
                 if chip_ss == "supported":
@@ -322,7 +323,7 @@ def main():
                     # Populate non_supported_dispatchable when this is ALSO a non-supported chip
                     # routing to a real handler with a VPP mismatch — the dangerous dual-violation:
                     # chip classification AND VPP contract are both wrong simultaneously.
-                    # This makes the inverse detector non-hollow per D-09 (proven via synthetic
+                    # This makes the inverse detector non-hollow (proven via synthetic
                     # fixture in test_check_dispatch_invariants.py).
                     if chip_ss != "supported":
                         non_supported_dispatchable.append(
@@ -361,7 +362,7 @@ def main():
                     f"{mfg}/{part} proto=0x{proto:02X} pinout={pinout}"
                 )
 
-            # WIRE-02 (D-15 Shape A): assert wire emits "vpp_mv" and no legacy
+            # Assert wire emits "vpp_mv" and no legacy
             # "vpp" for every chip. Chips not registered in EpromDatabase's
             # index (rare) skip the wire assert; the dispatch scan above still
             # covers them.

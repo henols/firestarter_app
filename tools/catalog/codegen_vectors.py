@@ -22,9 +22,9 @@ Validation (--check): validates the catalog and exits 0/1 without writing
 files. Must not require [[messages]] — this catalog uses [[vectors]].
 
 This script is SEPARATE from codegen.py to avoid entangling the [[messages]]
-validator with the [[vectors]] schema (RESEARCH Open Q3 + Pitfall 6, Phase 52).
+validator with the [[vectors]] schema.
 The host sub-repo keeps a byte-identical copy at
-firestarter_app/tools/catalog/codegen_vectors.py (D-04/D-09).
+firestarter_app/tools/catalog/codegen_vectors.py.
 
 Stdlib only (Python 3.11+ for tomllib).
 """
@@ -42,7 +42,7 @@ from pathlib import Path
 VECTOR_NAME_RE = re.compile(r"^VEC_[A-Z0-9][A-Z0-9_]*$")
 
 # Max payload / frame sizes for the C++ struct array dimensions.
-# Sized to the largest D-05 corpus member: 1024-byte payload, 1031-byte frame.
+# Sized to the largest corpus member: 1024-byte payload, 1031-byte frame.
 MAX_PAYLOAD_LEN = 1024
 MAX_FRAME_LEN   = 1031
 

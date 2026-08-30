@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Firestarter v1.22 SDP bus_config ground truth codegen (TRACE-02 / D-08 / D-09 / D-11).
+SDP bus_config ground-truth codegen.
 
 Derives, validates and emits the `bus_config_t` ground truth the Phase-116 trace
 suites assert against, for five representative AT28C-family chips spanning the
@@ -16,7 +16,7 @@ programmer dict into `bus_config_t` fields exactly the way
 `firestarter/src/json_parser.c`'s `parse_bus_config` does. It never
 reimplements `convert_to_programmer` — a reimplementation is a second thing
 that can be wrong, and the whole point of this generator is that the trace
-ground truth is NOT a transcription (D-08).
+ground truth is NOT a transcription.
 
 Mirrors the established `tools/gen_validation_header.py` shape:
   - Validate-first: validate_rows() raises ValueError on any derivation
@@ -31,7 +31,7 @@ Exit codes:
        measured reference -- pinouts.json moved and the trace goldens are stale)
   2 -- a required chip or its pinout was not found in the chip database
 
-TRACE-02 / D-08 / D-09 / D-11 analog of HARN-02 / D-01.
+The same shape as the validation-header generator.
 """
 
 import argparse
@@ -60,7 +60,7 @@ _PINOUTS_DEFAULT = _APP_ROOT / "firestarter" / "data" / "pinouts.json"
 sys.path.insert(0, str(_APP_ROOT))
 
 # ===========================================================================
-# 2. REPRESENTATIVE CHIP SET (D-09)
+# 2. REPRESENTATIVE CHIP SET
 # ===========================================================================
 
 # One chip per 0x0D pinout, plus a second DIP32_28C512_EEPROM size band.
@@ -94,7 +94,7 @@ BANNER = (
 
 
 # ===========================================================================
-# 3. DERIVATION (D-08) -- mirrors src/json_parser.c's parse_bus_config exactly
+# 3. DERIVATION -- mirrors src/json_parser.c's parse_bus_config exactly
 # ===========================================================================
 
 
@@ -211,7 +211,7 @@ def validate_rows(rows: list) -> None:
     - derived matching_lines / rw_line / address_mask equal the independently
       measured reference values, in the fixed REPRESENTATIVE_CHIPS order
     - the two DIP32 rows (AT28C010, AT28C040) have byte-identical bus_config
-      (the D-09 premise)
+      (the premise)
     """
     if len(rows) != len(REPRESENTATIVE_CHIPS):
         raise ValueError(

@@ -1,5 +1,5 @@
 """
-Phase 11 — Coverage Matrix & DB Inconsistency Audit (Wave 1 — tool skeleton).
+Coverage Matrix & DB Inconsistency Audit.
 
 Emits `.planning/v1.3-COVERAGE-MATRIX.md`: a single-source coverage map of
 every algorithm-0x07 (28-pin DIP CMOS UV-EPROM) and algorithm-0x08 (32-pin
@@ -22,11 +22,11 @@ Output defaults to `<repo-root>/.planning/v1.3-COVERAGE-MATRIX.md` (absolute,
 computed from `__file__` per RESEARCH.md Pitfall 6 — robust against the
 operator's cwd).
 
-Exit codes (D-03):
+Exit codes:
   0 — clean generate, or `--check` with no new findings.
   1 — `--check` would mint a new DEFECT-COV-NN, OR DB parse error.
 
-Idempotence contract (D-02 / Pattern B):
+Idempotence contract:
   - Sorted iteration on every dict.items()
   - No timestamps in output (no datetime.now())
   - Path.write_text(..., encoding="utf-8", newline="\\n")
@@ -45,7 +45,7 @@ from pathlib import Path
 
 from firestarter.database import EpromDatabase  # noqa: F401 — singleton kept available for §3/§4 lookups
 
-# Module-top path constants (lifted verbatim from check_dispatch.py:23-30 per D-01).
+# Module-top path constants (lifted verbatim from check_dispatch.py).
 _DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "firestarter", "data")
 DB_FILE = os.environ.get(
     "FIRESTARTER_DB_FILE",
@@ -104,7 +104,7 @@ def iter_all_rows(db_raw):
 
 
 def pulse_bucket(us):
-    """D-09 bucketing: microseconds-integer input → label string."""
+    """Pulse bucketing: microseconds-integer input → label string."""
     if us < 100:
         return "< 100 us"
     if us < 1000:
@@ -135,13 +135,13 @@ def size_label(size_bytes):
 
 
 # ---------------------------------------------------------------------------
-# BENCH chip map (D-11) — verbatim from REQUIREMENTS.md §BENCH lines 14-19
+# BENCH chip map
 # ---------------------------------------------------------------------------
 #
 # BENCH-01..06 are the six bench chips that v1.3 milestone close cites as the
 # receipt that the algo-0x07 + algo-0x08 families generalize across the 339
-# in-scope DB rows. BENCH-05 and BENCH-06 are candidate-pending — Phase 12
-# CONTEXT.md owns the actual selection decision (D-11). Phase 11's matrix
+# in-scope DB rows. BENCH-05 and BENCH-06 are candidate-pending — the
+# selection decision is owned elsewhere. This matrix
 # records the candidate set neutrally and does NOT propose a swap.
 #
 # Per-chip fields:
@@ -156,7 +156,7 @@ def size_label(size_bytes):
 #               when the chip is "candidate" and no concrete DB row name
 #               is matched).
 #   selection_pending: True for BENCH-05 / BENCH-06 — marks the chip as
-#                      candidate until Phase 12 selects one of the names.
+#                      candidate until one of the names is selected.
 
 BENCH_CHIP_MAP = [
     {
@@ -430,7 +430,7 @@ def emit_summary(summary, severity_counts=None):
     parts.append(md_table(["Algorithm", "True", "False"], cid_rows))
     parts.append("")
 
-    # h. Severity-tier counts (D-12) — populated by Wave 3 detection pass.
+    # h. Severity-tier counts — populated by the detection pass.
     parts.append("### Severity-tier finding counts (D-12)")
     parts.append("")
     if severity_counts is None:
@@ -453,7 +453,7 @@ def emit_summary(summary, severity_counts=None):
 
 
 def _pulse_bucket_sort_key(bucket):
-    """Sort pulse buckets in ascending magnitude (matches D-09 order)."""
+    """Sort pulse buckets in ascending magnitude."""
     order = {
         "< 100 us": 0,
         "100-999 us": 1,
@@ -470,11 +470,11 @@ def _pulse_bucket_sort_key(bucket):
 
 
 def sort_key(mfg, chip):
-    """Pattern F (PATTERNS.md lines 593-601 + RESEARCH.md 564-575) — D-06 sort.
+    """Canonical row sort.
 
     Returns the 5-tuple `(algorithm, pinout, size_bytes, manufacturer,
     first_alias)` used to order every §3 + §5 enumeration. The first_alias
-    is the leading comma-delimited variant in `part_number` (per D-06: rows
+    is the leading comma-delimited variant in `part_number` (rows
     cover the variant set verbatim, but sort by the first alias).
 
     This tuple is the load-bearing contract for byte-identical re-runs
@@ -490,7 +490,7 @@ def sort_key(mfg, chip):
 
 
 # ---------------------------------------------------------------------------
-# §3 — Full Enumeration (per-algorithm sub-tables, D-06 sort)
+# §3 — Full Enumeration (per-algorithm sub-tables)
 # ---------------------------------------------------------------------------
 
 _ENUM_HEADERS = [
@@ -540,7 +540,7 @@ def emit_full_enumeration(rows):
 
     Split into two per-algorithm sub-tables (CONTEXT.md "Claude's Discretion"
     + PATTERNS.md "Multi-table-stacked layout"): algo-0x07 first, then
-    algo-0x08. Rows within each sub-table are sorted by Pattern F (D-06).
+    algo-0x08. Rows within each sub-table use the canonical sort.
 
     `rows` is a list of (mfg, chip) tuples from `iter_in_scope_rows`.
     """
@@ -594,7 +594,7 @@ def emit_full_enumeration(rows):
 def emit_reconciliation(summary):
     """Return the §2 markdown block as a single string.
 
-    Per D-08, §2 is regenerated from live DB on every run so future DB
+    §2 is regenerated from live DB on every run so future DB
     regenerations keep §2 honest.
     """
     parts = ["## §2: DB Count Reconciliation", ""]
@@ -669,14 +669,14 @@ def emit_reconciliation(summary):
 
 
 # ---------------------------------------------------------------------------
-# §4 — Defect findings: hashing, ledger, detection, emit (Wave 3 / Plan 11-04)
+# §4 — Defect findings: hashing, ledger, detection, emit
 # ---------------------------------------------------------------------------
 #
 # Pattern C (PATTERNS.md "Stable defect-ID hash composition" + RESEARCH.md
 # Pattern 4 lines 195-218): every finding has a deterministic 16-hex hash of
 # its (severity, axis, signature) tuple. The hash → DEFECT-COV-NN mapping is
 # persisted in `.planning/v1.3-defect-coverage-ids.json` so IDs survive DB
-# regenerations (D-13 stable identity contract).
+# regenerations (stable identity contract).
 
 
 def finding_hash(severity, axis, signature):
@@ -686,7 +686,7 @@ def finding_hash(severity, axis, signature):
     (sort_keys=True, compact separators) of `{severity, axis, signature}`,
     truncated to 16 hex chars. Truncation is intentional — 16 hex = 64 bits
     of state, more than enough to avoid collisions across the < 100 expected
-    findings while keeping rendered IDs readable (D-13).
+    findings while keeping rendered IDs readable.
 
     `signature` may be a tuple or list; it is coerced to a list for JSON
     serializability (tuples are not JSON-native).
@@ -742,9 +742,9 @@ def mint_or_reuse(ledger, severity, axis, signature, next_n_holder):
 
 
 def detect_resolved_baseline(ledger, next_n_holder):
-    """Seed `DEFECT-COV-00` into the ledger if absent (D-15 RESOLVED baseline).
+    """Seed `DEFECT-COV-00` into the ledger if absent (RESOLVED baseline).
 
-    DEFECT-COV-00 is the v1.0 Phase 13 WARNING-5 override — the
+    DEFECT-COV-00 is the v1.0 WARNING-5 override — the
     `DIP28_2764` HAZARD that was caught and fixed in v1.0. Including it
     in the ledger makes the matrix's §4 narrative complete (the audit
     starts from the last known-good state) and reserves NN=00 forever so
@@ -859,7 +859,7 @@ def detect_correctness(rows):
 
         # One finding per (algo, pinout, size, manufacturer, first_alias) outlier
         # so multi-manufacturer clusters split into per-manufacturer findings
-        # per D-14 signature schema.
+        # per the signature schema.
         per_sig = defaultdict(list)
         for mfg, chip in outlier_rows:
             first_alias = chip["part_number"].split(",")[0]
@@ -897,7 +897,7 @@ def detect_correctness(rows):
 def detect_variance(rows):
     """Yield VARIANCE findings: chip_id_check toggles + chip_id_value drift.
 
-    Per D-14 signature schema, group by (algorithm, pinout, size_bytes,
+    Per the signature schema, group by (algorithm, pinout, size_bytes,
     manufacturer). Two axes:
       (a) chip_id_check_toggle — different members of a cluster have
           different `chip_id_check` boolean values
@@ -985,7 +985,7 @@ def emit_defects(findings, ledger, next_n_holder):
     """Render §4 as a list of markdown lines.
 
     Order: DEFECT-COV-00 RESOLVED baseline first, then HAZARD, then
-    CORRECTNESS, then VARIANCE (D-12 severity-tier order). Within each
+    CORRECTNESS, then VARIANCE (severity-tier order). Within each
     tier, sort by finding hash ascending for stable output.
     """
     lines = ["## §4: DB Inconsistencies / Defect Candidates", ""]
@@ -999,7 +999,7 @@ def emit_defects(findings, ledger, next_n_holder):
     )
     lines.append("")
 
-    # DEFECT-COV-00 RESOLVED block (D-15).
+    # DEFECT-COV-00 RESOLVED block.
     lines.append("### DEFECT-COV-00 — RESOLVED in v1.0 Phase 13 (WARNING-5)")
     lines.append("")
     lines.append(
@@ -1072,17 +1072,17 @@ def emit_defects(findings, ledger, next_n_holder):
 
 
 # ---------------------------------------------------------------------------
-# §5 — BENCH Coverage Proof (D-09 / D-10 / D-11)
+# §5 — BENCH Coverage Proof
 # ---------------------------------------------------------------------------
 #
-# Three per-axis coverage tables (D-09) demonstrate that BENCH-01..06 cover
+# Three per-axis coverage tables demonstrate that BENCH-01..06 cover
 # the algo-0x07 + algo-0x08 family across the axes that matter: pinout-class,
 # pulse-duration bucket, size bucket. Uncovered cells cross-reference §4
-# DEFECT-COV-NN findings where the gap is structural (D-10); deliberate gaps
+# DEFECT-COV-NN findings where the gap is structural; deliberate gaps
 # are listed in the Known Gaps subsection.
 #
 # Forbids proposing alternative BENCH chip selections — BENCH-05 /
-# BENCH-06 stay "candidate" until CONTEXT.md decides.
+# BENCH-06 stay "candidate" until the selection is made.
 
 
 def _findings_for_pinout(findings, ledger, pinout):
@@ -1194,7 +1194,7 @@ def pulse_coverage(rows, findings, ledger, algo):
         bench_bucket_map[b["id"]] = bench_buckets(b)
 
     table_rows = []
-    # Iterate D-09 bucket order over the union of seen + pre-declared buckets.
+    # Iterate bucket order over the union of seen + pre-declared buckets.
     seen = sorted(bucket_rows, key=_pulse_bucket_sort_key)
     for bucket in seen:
         members = bucket_rows[bucket]
@@ -1282,9 +1282,9 @@ def size_coverage(rows, findings, ledger, algo):
 def emit_bench_coverage(rows, findings, ledger):
     """Return §5 as a single markdown string.
 
-    Three per-axis tables (D-09) + Known Gaps subsection (D-10) + milestone-
-    claim closing prose. BENCH chip selection is observational only — D-11
-    forbids swap proposals; BENCH-05 / BENCH-06 stay "candidate".
+    Three per-axis tables + Known Gaps subsection + milestone-claim closing
+    prose. BENCH chip selection is observational only — swap proposals are
+    forbidden; BENCH-05 / BENCH-06 stay "candidate".
     """
     in_scope_count = len(rows)
     parts = ["## §5: BENCH Coverage Proof", ""]
@@ -1366,7 +1366,7 @@ def emit_bench_coverage(rows, findings, ledger):
     )
     parts.append("")
 
-    # Known Gaps subsection (D-10)
+    # Known Gaps subsection
     parts.append("### Known Gaps")
     parts.append("")
     parts.append(
@@ -1457,7 +1457,7 @@ def generate_matrix(output, ledger_path, check=False):
         return 1
 
     # Run detection pass: gather all findings BEFORE deciding to mint or
-    # check. This keeps --check semantics dry-run (D-03).
+    # check. This keeps --check semantics dry-run.
     findings = (
         list(detect_hazard(rows))
         + list(detect_correctness(rows))
@@ -1465,10 +1465,10 @@ def generate_matrix(output, ledger_path, check=False):
     )
 
     # Severity-tier counts for §1 (live detection only — DEFECT-COV-00 is
-    # excluded as a static RESOLVED entry per D-15).
+    # excluded as a static RESOLVED entry).
     severity_counts = Counter(f["severity"] for f in findings)
 
-    # --check semantics (D-03): dry-run drift gate.
+    # --check semantics: dry-run drift gate.
     # 1. Seed the RESOLVED baseline into a copy of the on-disk ledger.
     # 2. Compute hash for each detected finding; if any hash is absent from
     #    that ledger (including the post-seed baseline), exit 1.
@@ -1578,7 +1578,7 @@ def _algo_label(algo):
 def _group_rows_by_algo(rows):
     """Group rows into a dict[algo_int -> sorted list of (mfg, chip)].
 
-    Sort within each algo by the Pattern F (D-06) 5-tuple so output is
+    Sort within each algo by the canonical 5-tuple so output is
     deterministic. The outer dict is iterated via sorted(keys) at emit time.
     """
     groups = defaultdict(list)
@@ -1706,7 +1706,7 @@ def _members_with_parseable_pulse(members):
     self-time internally — 355 rows across 8 algos in the current DB), where
     `0` means algorithm-controlled rather than unparseable — true by
     construction because `interpret_timing` (build_db.py) makes a decode
-    fault fatal (D-08). `detect_correctness` compares pulse magnitudes and so
+    fault fatal. `detect_correctness` compares pulse magnitudes and so
     cannot meaningfully operate on those algorithm-controlled rows.
     """
     return [
@@ -1806,7 +1806,7 @@ def generate_matrix_all(output, ledger_path, check=False):
         print(f"ERROR: ledger {ledger_path} parse failed: {exc}", file=sys.stderr)
         return 1
 
-    # Detection pass per-algo for dry-run drift gate (D-03 semantics).
+    # Detection pass per-algo for the dry-run drift gate.
     all_findings = []
     for algo in sorted(groups):
         members = groups[algo]
