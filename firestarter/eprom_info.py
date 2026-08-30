@@ -118,7 +118,7 @@ class EpromConsolePresenter:
             return None
 
         # Get base specifications from EpromSpecBuilder.
-        # Pass electrical_type from the raw config so D-01/D-02 use ground-truth.
+        # Pass electrical_type from the raw config so both use ground-truth.
         electrical_type = None
         if raw_config_data:
             electrical_type = raw_config_data.get("electrical", {}).get("type") or None
@@ -343,13 +343,13 @@ class EpromConsolePresenter:
 def print_eprom_list_table(eproms_data: list, spec_builder: EpromSpecBuilder):
     """Prints a list of EPROM data in a table format. For CLI/testing.
 
-    Column layout (D-01, D-02, D-03, D-04 — Phase 61):
+    Column layout:
     - Name: dynamic width clamped to [13, 20]; names longer than 20 chars are
       truncated with a trailing ellipsis ('…') that counts toward the 20-char cap.
     - Manufacturer: fixed 17; Pins: fixed 5; Chip ID: fixed 11; Type: fixed 12.
     - VPP: fixed 5 (every voltage string is 5 chars; '-' padded to 5).
     - Type is sourced from electrical-type via spec_builder.resolve_type_label.
-    - VPP shown only when vpp_mv > 0 AND electrical-type != 'SRAM' (D-03 parity gate).
+    - VPP shown only when vpp_mv > 0 AND electrical-type != 'SRAM' (parity gate).
     """
     if not eproms_data:
         logger.info("No EPROMs to display.")

@@ -4,7 +4,7 @@ Deterministic full-size pseudo-random image generator for bench validation.
 Replaces the non-deterministic /dev/urandom approach from write_test.sh with a
 reproducible random.Random(seed) equivalent. A fixed (size_bytes, seed) pair
 always produces byte-identical output, enabling a trustworthy SHA-256 oracle for
-the A->B write-cycle proof (Phase 82 D-03/D-04).
+the A->B write-cycle proof.
 
 CLI usage:
     python tools/gen_test_image.py <size_bytes> <seed> <output_path>
@@ -16,7 +16,7 @@ CLI usage:
 Prints the SHA-256 hex digest of the generated image to stdout.  This is the
 oracle value to record in EVIDENCE.json as sha256_image_A / sha256_image_B.
 
-Storage convention (D-04):
+Storage convention:
     /tmp/firestarter_bench_p82/<chip>_img_A.bin  (seed=1)
     /tmp/firestarter_bench_p82/<chip>_img_B.bin  (seed=2)
 """

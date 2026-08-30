@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Reproducible, fetch-based independent re-derivation of the SDP-capability
-partition (PROV-04, Phase 136.1 Plan 02).
+partition.
 
 Pinned to minipro commit ``a8efaedc236c1d9718bd28299dfbb99536b010ff`` -- the
 same revision ``tools/build_db.py``'s ``MINIPRO_XML_URL`` fetches.
@@ -16,7 +16,7 @@ to ``build_db.py`` itself -- never imported by production code or by the
 pytest suite, and never wired into CI (CI must never depend on a live
 network fetch).
 
-Preserves Phase 120's exact token-matching rules verbatim (origin:
+Preserves the original token-matching rules verbatim (origin:
 ``.planning/phases/120-host-cli-surface-wire-emission-capability-refusal/
 120-derive-sdp-allowset.py``): key on the EXACT ``part_number`` token
 (comma-split, uppercased), strip ONLY the ``@PACKAGE`` suffix, do NOT strip
@@ -31,7 +31,7 @@ Independently cross-checks the freshly-derived partition against BOTH:
       production transcription predicate (imported from the installed
       package, never reimplemented), and
   (b) ``chip_database.json``'s own committed ``protect_on_after`` field
-      (Plan 136.1-01) -- read directly, mirroring
+      -- read directly, mirroring
       ``tests/test_sdp_db_invariant.py``'s
       ``_partition_from_protect_on_after_field`` selection logic,
       DUPLICATED here deliberately (this script must not import from
@@ -86,7 +86,7 @@ def _load_infoic_xml() -> str:
 
 def _build_token_index(xml_text: str) -> dict[str, set[int]]:
     """EXACT ``part_number`` token (comma-split, uppercased, ``@PACKAGE``
-    suffix stripped, parentheticals NOT stripped -- Phase 120 rule 1) ->
+    suffix stripped, parentheticals NOT stripped -- rule 1) ->
     set of ``flags`` ints seen for that token across every
     ``<database type="INFOIC2PLUS">`` ``<ic>`` entry."""
     root = ET.fromstring(xml_text)
@@ -225,7 +225,7 @@ def main() -> int:
         )
 
     # Comparison (b): chip_database.json's own committed protect_on_after
-    # field (Plan 136.1-01).
+    # field.
     field_allow: set[str] = set()
     for mfr, chip in selected:
         part_number = chip["part_number"]

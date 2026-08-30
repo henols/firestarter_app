@@ -87,7 +87,7 @@ def _raise_for_error_response(response, message: str) -> None:
     `message` is the already-composed exception message string (callers may
     prepend a phase-name prefix for EpromOperationError framing; the raw
     firmware text is passed through unchanged for ProtocolNotImplementedError
-    so firmware owns rendering per D-02).
+    so firmware owns rendering).
     """
     from firestarter.messages import MSG_ERR_PROTOCOL_NOT_IMPLEMENTED
 
@@ -118,7 +118,7 @@ _FLASH4_PROTOCOL_ID = 5
 # ~9375 us on an Uno.
 WRITE_BLOCK_TIMEOUT_FALLBACK_S = 120.0
 
-# HOST-03 / D-20: the three per-byte program-budget ids _budget_failure_hint_
+# the three per-byte program-budget ids _budget_failure_hint_
 # message keys on -- MSG_ERR_MAX_PULSES (0xBD), MSG_ERR_ENERGY_CAP (0xBE),
 # MSG_ERR_PULSE_TOO_WIDE (0xAE). Defined as raw ints (not imported names)
 # because this tuple lives in this module-level constant block, while
@@ -287,11 +287,11 @@ def build_flags(
         flags |= FLAG_VERBOSE
     # The FLAG_SKIP_SDP_UNLOCK bit is mapped HERE, inside build_flags, rather
     # than OR-ed in afterwards by a caller the way FLAG_OUTPUT_ENABLE /
-    # FLAG_CHIP_ENABLE are in cli_handlers._build_op_flags — D-19: every wire
+    # FLAG_CHIP_ENABLE are in cli_handlers._build_op_flags -- every wire
     # flag bit stays mapped in the one function that maps wire flags.
     # Emitted unconditionally when requested: firmware never reads this bit on
     # a protocol other than 0x0D, so no per-protocol branch belongs in a
-    # flag-mapping function. D-18's "warn and proceed" for a non-0x0D chip is
+    # flag-mapping function. The "warn and proceed" path for a non-0x0D chip is
     # the handler's job, not this function's.
     if skip_sdp_unlock:
         flags |= FLAG_SKIP_SDP_UNLOCK
@@ -516,7 +516,7 @@ class EpromOperator:
     ):
         """A context manager to handle EPROM operation setup and teardown.
 
-        ``fault_inject_outgoing`` (Phase 53-04 / XACT-02, dev-only) is forwarded to
+        ``fault_inject_outgoing`` (dev-only) is forwarded to
         ``find_and_connect`` so the setup command frame can be corrupted at connection
         time. Default None keeps the production path byte-identical.
         """
@@ -753,12 +753,12 @@ class EpromOperator:
             file_size = os.path.getsize(input_file_path)
             progress.start(file_size)
 
-            # HOST-02 / D-04: _setup_operation sets command_dict["address"]
+            # _setup_operation sets command_dict["address"]
             # ONLY when an --address was supplied, so .get("address", 0) is
             # exactly right for a full-chip write's start address (0) too --
             # write_eprom already forwards eprom_data_dict=cmd_data.
             start_addr = (eprom_data_dict or {}).get("address", 0)
-            # HOST-02 / Pitfall 1: latches True on the first successfully
+            # Latches True on the first successfully
             # -applied mid-block progress frame (_apply_write_progress
             # returning True), so the chunk-handoff update() below stops
             # firing -- see its own comment for why it must not simply be
@@ -773,7 +773,7 @@ class EpromOperator:
                     hint = _boot_block_hint_message(response, protocol, mem_size)
                     budget_hint = _budget_failure_hint_message(response)
                     msg = response.message
-                    # HOST-03 / D-19: the boot-block hint (0xB3, flash4-only)
+                    # the boot-block hint (0xB3, flash4-only)
                     # and the budget-failure hint (0xBD/0xBE/0xAE) are
                     # disjoint by id today, but this composition does not
                     # rely on that -- appending whichever are present still
@@ -784,7 +784,7 @@ class EpromOperator:
                             msg = msg + " -- " + extra_hint
                     _raise_for_error_response(response, msg)
                 if response.type == "DATA":
-                    # HOST-02 / D-05: a mid-block MSG_DATA_PROGRESS frame is
+                    # a mid-block MSG_DATA_PROGRESS frame is
                     # NEVER acked -- the firmware is mid-block waiting for
                     # nothing, and on a Leonardo a stray buffered "OK" makes
                     # op_get_message return OP_MSG_ACK, so
@@ -812,10 +812,10 @@ class EpromOperator:
                     # COBS-decodes in place, verifies CRC8-CCITT over the payload.
                     # Frame layout (ADR §4.3): b"#" + COBS(payload + CRC8) + b"\x00".
                     # Assembled as ONE bytes object and sent in a single send_bytes call
-                    # (atomic-write mandate, ADR §4.1 / T-50-05 SAFE-01 timing guard).
+                    # (atomic-write mandate; timing guard).
                     self.comm.send_bytes(frame)
                     if not firmware_drives_bar:
-                        # HOST-02 / Pitfall 1: the two progress sources measure
+                        # The two progress sources measure
                         # different things -- bytes SENT (this handoff) versus
                         # bytes PROGRAMMED (the firmware's own 0xE0 frames) --
                         # and this one runs first. Without this latch, the bar
@@ -839,7 +839,7 @@ class EpromOperator:
     ):
         """Main phase handler for reading data.
 
-        Phase 8 W-04: the firmware now wraps each chip-byte chunk inside a
+        The firmware wraps each chip-byte chunk inside a
         MSG_DATA_CHUNK ID frame instead of emitting raw bytes after a DATA:
         text prefix.  The response loop distinguishes:
           - DATA response with payload set → MSG_DATA_CHUNK; extract raw bytes.
@@ -1015,7 +1015,7 @@ class EpromOperator:
                 logger.info(f"Run {i}/{runs}: reading {eprom_name} -> {run_path}")
                 start_t = time.time()
 
-                # Reuse the EXACT code path read_eprom uses (D-03 reuse-not-duplicate)
+                # Reuse the EXACT code path read_eprom uses -- do not duplicate
                 try:
                     with self._operation_context(
                         eprom_name,
@@ -1125,7 +1125,7 @@ class EpromOperator:
                     offs_str = ", ".join(f"0x{o:0{width}X}" for o in head)
                     print(f"First {max_diffs} divergent offsets: {offs_str}")
 
-            # Cleanup (D-10 #5)
+            # Cleanup
             if not keep_files:
                 shutil.rmtree(output_dir, ignore_errors=True)
 
@@ -1286,7 +1286,7 @@ class EpromOperator:
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
-        # Build fault hooks for the outgoing path (D-02 fault forms)
+        # Build fault hooks for the outgoing path
         def _corrupt_crc8(frame: bytes) -> bytes:
             """Flip the CRC8 byte (frame[-2]) — frame[-1] is the 0x00 delimiter."""
             return frame[:-2] + bytes([frame[-2] ^ 0x01]) + b"\x00"
@@ -1313,7 +1313,7 @@ class EpromOperator:
         # Incoming: connect cleanly, swap to FaultInjectingSerialCommunicator, run the
         #   read; the host decoder catches the mutated fw->host frame.
         # error_latency_s captures wall-clock from corrupted-attempt start to the
-        #   surfaced error so XACT-02's "sub-second clean error, no 2 s cascade" can be
+        #   surfaced error so the "sub-second clean error, no 2 s cascade" bar can be
         #   measured (the harness reports it; the firmware's actual latency decides it).
         corrupted_ok = False
         error_latency_s: Optional[float] = None
@@ -1398,7 +1398,7 @@ class EpromOperator:
             corrupted_detail = f"{direction}: {type(e).__name__} (expected): {e}"
 
         # Persist the latency + verdict so the operator can confirm the sub-second
-        # clean error (no 2 s cascade) XACT-02 requires.
+        # clean error (no 2 s cascade) the fast-fail bar requires.
         self._write_fault_inject_log(
             output_path,
             direction,
@@ -1477,7 +1477,7 @@ class EpromOperator:
         error_latency_s: Optional[float],
         detail: str,
     ) -> None:
-        """Write the XACT-02 fault-injection log (one per cycle).
+        """Write the fault-injection log (one per cycle).
 
         Records the measured error latency so the operator can confirm the
         sub-second clean error (no 2 s timeout cascade) the acceptance requires.
@@ -1495,7 +1495,7 @@ class EpromOperator:
         try:
             with open(log_path, "w") as fh:
                 fh.write(
-                    f"# XACT-02 fault-injection log ({direction}, {fault_form})\n"
+                    f"# fault-injection log ({direction}, {fault_form})\n"
                     f"corrupted_transfer_surfaced_clean_error: {corrupted_ok}\n"
                     f"error_latency: {latency_str}\n"
                     f"sub_second_clean_error_no_2s_cascade: {cascade}\n"
@@ -1520,7 +1520,7 @@ class EpromOperator:
         output_dir: Optional[str] = None,
         port: Optional[str] = None,
     ) -> bool:
-        """XACT-02 outgoing PER-FRAME latency measurement on an ESTABLISHED single-port
+        """Outgoing PER-FRAME latency measurement on an ESTABLISHED single-port
         connection (53-04 harness refinement).
 
         Unlike fault_inject_cycle (which corrupts the connection-SETUP frame and so
@@ -1647,7 +1647,7 @@ class EpromOperator:
         latency_str = (
             f"{nak_latency_s:.3f}s" if nak_latency_s is not None else "unmeasured"
         )
-        # Sub-second is the XACT-02 fast-fail bar for a complete corrupt frame; a
+        # Sub-second is the fast-fail bar for a complete corrupt frame; a
         # drop-delimiter frame is bounded by the firmware inter-byte deadline (~1 s).
         if nak_latency_s is None:
             verdict = "UNKNOWN"
@@ -1660,7 +1660,7 @@ class EpromOperator:
         try:
             with open(log_path, "w") as fh:
                 fh.write(
-                    "# XACT-02 per-frame NAK latency (established single-port connection)\n"
+                    "# per-frame NAK latency (established single-port connection)\n"
                     f"# port: {port}  fault_form: {fault_form}\n"
                     f"baseline_clean_command_ok: {baseline_ok}\n"
                     f"corrupted_frame_surfaced_error_no_silent_accept: {corrupted_surfaced_error}\n"
@@ -1819,7 +1819,7 @@ class EpromOperator:
         address_str: Optional[str] = None,
         pulse_us: int = 0,  # per-run pulse-width override (us; 0=not supplied, use the database value)
     ) -> bool:
-        # HOST-04 / D-14: per-run pulse override, riding the existing
+        # per-run pulse override, riding the existing
         # "pulse-delay" DB-dict key rather than adding a new wire field or
         # command. Four recorded points:
         # (a) this is consistency_check_eprom's read_settling_us/
@@ -1857,7 +1857,7 @@ class EpromOperator:
             logger.info(f"Writing {input_file_path} to {eprom_name.upper()}")
             start_time = time.time()
 
-            # HOST-01 / D-09-D-10: _write_block_timeout() MUST be read here,
+            # _write_block_timeout() MUST be read here,
             # inside this `with` block -- _operation_context's `finally`
             # disconnects and sets self.comm to None once it exits (same
             # constraint the seen_message_ids check below already relies
@@ -2008,7 +2008,7 @@ class EpromOperator:
 
         This operation is **payload-free**: firmware leaves ``init``/``end``
         NULL for CMD_SDP_UNLOCK, so no ``#`` data
-        frame is written and there is no host ``DONE`` round-trip. Phase 119's
+        frame is written and there is no host ``DONE`` round-trip. The firmware's
         correction still applies here: NULL ``init``/``end`` does NOT skip the
         INIT and END frame pairs themselves — both ``_execute_phase("INIT", ...)``
         and ``_execute_phase("END", ...)`` still run and both ack; only the
@@ -2018,9 +2018,9 @@ class EpromOperator:
 
         A ``True`` return means only that the command sequence was **emitted**
         over the wire — it is never a claim that silicon actually left the
-        protected state. Protection state is not readable on this chip family
-        (Phase 119 D-12, Phase 117 D-05), so no return value from this method
-        can honestly say more than "the sequence was sent and the firmware
+        protected state. Protection state is not readable on this chip family,
+        so no return value from this method can honestly say more than
+        "the sequence was sent and the firmware
         reported OK".
 
         The capability refusal deciding *which* parts may reach this method at
@@ -2056,7 +2056,7 @@ class EpromOperator:
 
         This operation is **payload-free**: firmware leaves ``init``/``end``
         NULL for CMD_SDP_LOCK, so no ``#`` data
-        frame is written and there is no host ``DONE`` round-trip. Phase 119's
+        frame is written and there is no host ``DONE`` round-trip. The firmware's
         correction still applies here: NULL ``init``/``end`` does NOT skip the
         INIT and END frame pairs themselves — both ``_execute_phase("INIT", ...)``
         and ``_execute_phase("END", ...)`` still run and both ack; only the
@@ -2066,9 +2066,9 @@ class EpromOperator:
 
         A ``True`` return means only that the command sequence was **emitted**
         over the wire — it is never a claim that silicon actually entered the
-        protected state. Protection state is not readable on this chip family
-        (Phase 119 D-12, Phase 117 D-05), so no return value from this method
-        can honestly say more than "the sequence was sent and the firmware
+        protected state. Protection state is not readable on this chip family,
+        so no return value from this method can honestly say more than
+        "the sequence was sent and the firmware
         reported OK".
 
         The capability refusal deciding *which* parts may reach this method at
@@ -2096,7 +2096,7 @@ class EpromOperator:
 
     # Protocol IDs whose firmware handler (configure_sram) leaves a NULL
     # firestarter_operation_main for CMD_BLANK_CHECK, causing 0xA4
-    # MSG_ERR_EMPTY_INPUT.  These are all SRAM families (D-30 host-side fix).
+    # MSG_ERR_EMPTY_INPUT. These are all SRAM families (host-side fix).
     _SRAM_PROTO_IDS = frozenset({0x0E, 0x27, 0x28, 0x29})
 
     def check_eprom_blank(
@@ -2228,7 +2228,7 @@ class EpromOperator:
         its own operation, extended here to a query rather than a mutating
         command. It is never a claim that the payload's decode is a
         correct or even a *definite* state -- classification of the raw
-        byte and the decode byte into one of D-09's eight answer classes is
+        byte and the decode byte into one of the eight answer classes is
         `firestarter.lock_status.classify_protection_response`'s job
         entirely; this method makes no claim whatsoever about the chip's
         protection state.

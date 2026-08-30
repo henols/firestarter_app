@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""tools/check_mypy_watermark.py — CI mypy gate (D-10, Phase 37; hardened Phase 131 GATE-01..04).
+"""tools/check_mypy_watermark.py — CI mypy gate (GATE-01..04).
 
 Run mypy, count errors, fail if error count exceeds the watermark.
 Watermark is stored as a comment in [tool.mypy] in pyproject.toml:
@@ -26,7 +26,7 @@ Guard order (in `classify_mypy_result`) is load-bearing, mirroring
 `check_no_exists_proxy.py`'s never-vacuous-before-missing-target discipline:
 each guard is hoisted above the guard it would otherwise be vacuously
 satisfied by. Returncode is consulted BEFORE any error-count regex — this
-single reordering is GATE-01/GATE-02's fix. See `.planning/research/STACK.md`
+single reordering is GATE-01/GATE-02's fix. See
 §1e for the bug this replaces.
 """
 
@@ -36,14 +36,14 @@ import sys
 from pathlib import Path
 
 # Resolve the repo root from this file's location so the gate behaves
-# identically regardless of the caller's working directory (CR-WR-03).
+# identically regardless of the caller's working directory.
 # Layout: <repo>/tools/check_mypy_watermark.py -> repo root is two parents up.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # GATE-03: a floor to be raised when the tree grows, never lowered to
 # accommodate a smaller run. If a legitimate deletion drops the tree below
 # it, lower it in the same commit as that deletion, with the new measured
-# number. Prior value: none -- first value, set by Phase 131 plan 131-01
+# number. Prior value: none -- this is the first value
 # from the measured 120 of the CI-replica run.
 MIN_CHECKED_SOURCE_FILES = 120
 
@@ -92,7 +92,7 @@ def get_watermark() -> int:
     """Read the mypy_error_watermark integer from pyproject.toml."""
     text = (REPO_ROOT / "pyproject.toml").read_text()
     # Anchor to a comment line (optional leading whitespace then '#') so the
-    # watermark is read from its declaration, not an incidental match (WR-04).
+    # watermark is read from its declaration, not an incidental match.
     m = re.search(r"^\s*#\s*mypy_error_watermark\s*=\s*(\d+)", text, flags=re.MULTILINE)
     if not m:
         print(
@@ -118,7 +118,7 @@ def mypy_argv() -> list[str]:
 def run_mypy() -> subprocess.CompletedProcess:
     """Thin runner: invoke mypy and return the raw CompletedProcess.
 
-    Deliberately no env-var seam overriding this argv (D-01): an env var
+    Deliberately no env-var seam overriding this argv: an env var
     that could swap which program runs here would be a bypass added to the
     one gate whose entire sin was being bypassable.
     """

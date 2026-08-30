@@ -2,7 +2,7 @@
 """
 Firestarter v1.13 validation matrix codegen.
 
-Reads tools/validation_matrix_spec.json (authored input, D-01) and emits a
+Reads tools/validation_matrix_spec.json (authored input) and emits a
 deterministic C++ header for the native Unity test suites:
 
   firestarter/test/native/avr/_shared/validation_matrix.h
@@ -19,7 +19,7 @@ Exit codes:
   1 — spec validation failed (schema error)
   2 — spec file not found
 
-HARN-02 / D-01 / LCAT-05 analog.
+The same shape as the SDP bus_config generator.
 """
 
 import argparse

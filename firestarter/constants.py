@@ -39,11 +39,11 @@ MAX_DATA_CHUNK = BUFFER_SIZE - 2  # 510
 # per CLAUDE.md constant-parity rule.
 CMD_FRAME_MAX = 512
 
-# IN-02 (Phase 98-03/98-05): <=256K (262144 byte) size boundary for 0x08
+# <=256K (262144 byte) size boundary for 0x08
 # (EPROM_QUICK) 32-pin parts where pin 31 (A18 on DIP32_STD) is structurally
 # unused as an address line and is safe to repurpose as DIP32_27C020's
 # PGM/RW strobe. Chips above this boundary (512K AM27C040, 1M AM27C080)
-# legitimately use pin 31 = A18 and MUST stay on DIP32_STD (D-04 alias guard).
+# legitimately use pin 31 = A18 and MUST stay on DIP32_STD (alias guard).
 # tools/build_db.py imports this constant (single host-side source of truth)
 # rather than redefining it. Firmware parity: firestarter.h #define
 # MAX_27C020_SIZE 262144 — a divergence is a hardware-damage A18 risk;
@@ -150,11 +150,11 @@ JSON_KEY_READ_SETTLING_DELAY = "read-settling-delay"
 JSON_KEY_READ_STROBE_US = "read-strobe-us"
 # Per-chip page size wire field. Emitted by database.py's
 # convert_to_programmer only when the DB supplies a page_size (curated or,
-# as of Phase 149, provenance-keyed for upstream-native 0x0D rows) --
+# provenance-keyed for upstream-native 0x0D rows) --
 # emit-when-present, mirrors the chip-id pattern. When absent, firmware
 # falls back to its own named AT28C page-size floor constant (algorithm 13
 # / 0x0D only; other algorithms' handlers do not consume this key at all).
-# Firmware sync: json_parser.c (key_page_size). Landed by Phase 149 plan 04
+# Firmware sync: json_parser.c (key_page_size).
 # (firestarter commit 58c6a3c) -- the PROGMEM string exists and is dispatched
 # from key_parsers[]. tests/test_json_key_parity.py (plan 05) is the
 # enforcing test that keeps this string in lockstep with the firmware key.

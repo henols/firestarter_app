@@ -38,8 +38,8 @@ BETA_ONLY_BOARDS: tuple[str, ...] = ("py32f071",)
 
 # The seven `dev` subcommands gated by channel on a stable build
 # (136-CONTEXT.md "Measured baseline": 8 total `dev` subcommands, minus
-# `read`/`test` which stable keeps, PLUS Phase 151 / D-01's `lock-status` —
-# a real silicon read D-01 deliberately overruled the host-only
+# `read`/`test` which stable keeps, PLUS `lock-status` —
+# a real silicon read that deliberately overruled the host-only
 # recommendation to expose, only on a pre-release install — bringing the
 # total to 9 and the gated count to seven, up by one). Consulted for the
 # informative-refusal message ONLY, by `_DevGroup.get_command` in

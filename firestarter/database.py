@@ -336,7 +336,7 @@ class EpromDatabase:
     def map_chip_record(self, ic: dict, manufacturer: str) -> dict:
         """Public alias for `_map_data` — stable surface for callers outside this module.
 
-        Phase 41 / WR-05: the `id` command in cli_handlers.py previously reached into
+        The `id` command in cli_handlers.py previously reached into
         `db._map_data` directly to render `search_chip_id` results. That coupled the CLI
         to a private name; this thin wrapper decouples the surface without changing
         behaviour. Future refactors can rework `_map_data`'s signature freely as long
@@ -400,7 +400,7 @@ class EpromDatabase:
 
         # PGSZ-01 / CR-01: carry per-chip page_size when present. Set by
         # build_db.py either for a datasheet-curated [CITED:] chip or, as
-        # of Phase 149, for a chip whose OWN upstream protocol_id is 0x0D
+        # for a chip whose OWN upstream protocol_id is 0x0D
         # (algorithm 13 / EEPROM_POLL only). This guard is a TRUTHINESS
         # test (`if page_size_val:`), not a presence test -- a page_size of
         # 0 is therefore silently dropped and unreachable on the wire from
@@ -543,7 +543,7 @@ class EpromDatabase:
             programmer_data["bus-config"] = full_eprom_data["bus-config"]
 
         # PGSZ-03 / CR-01: emit page-size wire field only when the DB supplies a
-        # page_size (curated or, as of Phase 149, provenance-keyed for an
+        # page_size (curated or provenance-keyed for an
         # upstream-native 0x0D row) -- emit-when-present, mirrors chip-id.
         # This guard is also a TRUTHINESS test (`.get(...)` is truthy-checked,
         # not `"page_size" in full_eprom_data`), so a page_size of 0 is

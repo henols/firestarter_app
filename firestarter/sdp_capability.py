@@ -116,11 +116,11 @@ SDP_CAPABLE_TOKENS: frozenset[str] = frozenset(
 # Ferroelectric RAM parts. Both carry `electrical.type == "EEPROM"` in the DB
 # (nothing in the DB says FRAM), so the existing `etype in ("SRAM", "FRAM")`
 # idiom (`eprom_operations.py`'s `_SRAM_PROTO_IDS` short-circuit) is blind to
-# them and no structural rule can find them — this is why HOST-04 says
+# them and no structural rule can find them — this is why the contract says
 # "resolved in code".
 FRAM_TOKENS: frozenset[str] = frozenset({"FM28V020", "MB85R256H"})
 
-# HOST-04's named pre-SDP class plus its identical-generation second sources.
+# The named pre-SDP class plus its identical-generation second sources.
 # `2817` sits on `DIP28_28C64` while `2804`/`2816` sit on `DIP24_2816`, so the
 # trio spans two pinouts and no pinout rule can express it (RESEARCH F-03).
 PRE_SDP_NAMED_TOKENS: frozenset[str] = frozenset(
@@ -231,11 +231,11 @@ def sdp_capability_for_entry(
 def sdp_capability(chip_name: str, db: Any) -> tuple[bool, str]:
     """Name-keyed SDP capability predicate: `sdp_capability_for_entry(db.get_eprom(chip_name), chip_name)`.
 
-    D-03 mechanism correction: CONTEXT.md D-03 said "no DB-loader coupling",
+    Mechanism correction: an earlier design said "no DB-loader coupling",
     which is **not achievable** — the predicate needs the part number, and
     `resolve_chip`'s programmer dict carries neither `protocol-id` nor `name`
     nor any part number (RESEARCH F-06, measured). The predicate is therefore
-    **name-keyed** with an injected `db`; D-03's semantics (pure function, no
+    **name-keyed** with an injected `db`; the semantics (pure function, no
     serial, no Click, `-> (allowed, reason)`) are preserved.
 
     The entry this function evaluates is the entry `db.get_eprom` **actually

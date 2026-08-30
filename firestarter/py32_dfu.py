@@ -94,7 +94,7 @@ STATUS_OK = 0x00
 _DFU_FUNCTIONAL_DESCRIPTOR = 0x21
 
 # DFU 1.1 §4.1.3 Table 4.2 offset 2 (bmAttributes) -- bit 1: upload capable
-# (bitCanUpload). HOST-03: `_verify_readback` reads this bit to decide
+# (bitCanUpload). `_verify_readback` reads this bit to decide
 # whether a DFU_UPLOAD readback can even be attempted; `DfuInterface.attributes`
 # was already parsed and stored by `_parse_functional_descriptor` before this
 # constant existed, so this is a consumer of that field, not a new parser.
@@ -548,7 +548,7 @@ class VerifyResult(enum.Enum):
 
     Honesty note: this is the first `enum` import anywhere in this codebase.
     The project's existing result-constant idiom (see `firmware.py`'s
-    `FLASH_METHOD_*`) is module-level strings plus a dict router; D-10 named
+    `FLASH_METHOD_*`) is module-level strings plus a dict router; the
     an enum specifically for this state, and that locked decision -- not a
     change of house style -- is why this class exists in that shape.
     """
@@ -574,7 +574,7 @@ class Py32DfuFlasher:
         self.erase_page_size = erase_page_size
         self.leave = leave
         self._interface: Optional[DfuInterface] = None  # noqa: UP045
-        # HOST-03 / D-10: set by `_verify_readback` once `flash()` has run;
+        # set by `_verify_readback` once `flash()` has run;
         # `None` means verification has not happened yet. See `VerifyResult`.
         self.verify_result: Optional[VerifyResult] = None  # noqa: UP045
         self.verify_reason: Optional[str] = None  # noqa: UP045
@@ -701,7 +701,7 @@ class Py32DfuFlasher:
             )
             finish_base, next_block = self._download_plain(interface, payload)
 
-        # HOST-03 / D-09..D-12: verify what was actually written before ever
+        # Verify what was actually written before ever
         # leaving DFU mode. _verify_readback() raises DfuProtocolError on a
         # genuine MISMATCH (byte difference or truncated read); the two
         # SKIPPED_* outcomes are soft and never raise. Named unqualified
@@ -824,7 +824,7 @@ class Py32DfuFlasher:
         self._dnload(0, bytes(payload))
         self._wait_ready(f"DfuSe command 0x{command:02X}")
 
-    # -- HOST-03: post-write readback verification --------------------------
+    # -- post-write readback verification -----------------------------------
 
     def _read_back(self, interface: DfuInterface, base: int, length: int) -> bytes:
         """Read ``length`` bytes back from ``base`` over ``DFU_UPLOAD``.
@@ -870,7 +870,7 @@ class Py32DfuFlasher:
         Sets `self.verify_result` (and, for anything but a clean `VERIFIED`,
         `self.verify_reason`) in every branch, so a caller can inspect the
         outcome even on the branch that also raises. See `VerifyResult`'s
-        docstring for what each member means and D-09..D-12 for why the
+        docstring for what each member means, and below for why the
         branches are ordered this way.
         """
         if not interface.is_dfuse:

@@ -68,8 +68,6 @@ _REQUIREMENT_RE = re.compile(r'"([^"]*)"')
 # proximity-checked phrase below.
 _D17_PHRASES = (
     "accepted deviation",
-    "D-17",
-    "HOST-01",
     "_install_with_avrdude",
     "avrdude-mcu-detection-fallback",
 )

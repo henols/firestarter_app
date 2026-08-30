@@ -1,13 +1,13 @@
 """
 AST-based no-auto-graduate lock gate for the report/parse path (DISP-01,
-Phase 114 Plan 03).
+the community triage path).
 
 Scans `firestarter/diagnostic_report.py` (the Phase-110/112/114-01
 `DiagnosticReport`/`DbDiff` model) and `tools/parse_devtest_issue.py` (the
 Phase-114-02 INBOX-01 triage parser) and DENIES any WRITE of a chip's
-`support_status` -- the invariant this gate machine-enforces (D-01/D-02):
+`support_status` -- the invariant this gate machine-enforces:
 graduation is flag-only and human-gated, so NO code path that parses a
-community `dev test` report may ever write `support_status`. Per D-02, the
+community `dev test` report may ever write `support_status`. The
 report/parse path only ever READS `support_status` (via
 `EpromDatabase.get_eprom_config` / a plain dict `.get(...)`); the sole
 allowed write locus stays the human-authored `tools/build_db.py:714`
@@ -32,8 +32,8 @@ already READ from the DB) is likewise never flagged, because
 scoping the scan to the report/parse path only, rather than trying to
 whitelist by value, is what the RESEARCH's Pitfall 1 write-up recommends.
 
-Fail-closed (T-114-07, the v1.12 hollow-GATE-03 lesson): BOTH scan targets
-are mandatory here (unlike SAFE-03's optional third-leg tolerance) -- if
+Fail-closed (the hollow-checker lesson): BOTH scan targets
+are mandatory here (unlike the orchestrator gate's optional third leg) -- if
 EITHER is missing from disk, the gate fails closed rather than silently
 scanning only the file that happens to exist. A checker that quietly
 tolerates one missing target is exactly as hollow as scanning nothing.
@@ -44,10 +44,10 @@ This is a genuinely-populated AST walk (`ast.parse` + a fresh
 checker actually flips to non-zero on a planted violation, injected via the
 `FIRESTARTER_DISP01_REPORT` / `FIRESTARTER_DISP01_PARSER` env-overrides
 below (mirrors `tools/check_devtest_orchestrator.py`'s
-`FIRESTARTER_DEVTEST_SRC` seam) -- D-05's anti-hollow contract.
+`FIRESTARTER_DEVTEST_SRC` seam) -- the anti-hollow contract.
 
 Wired via `pytest tests/`, NOT a dedicated `.github/workflows/ci.yml` step
-(mirrors the SAFE-03 convention exactly) -- CI's existing
+(mirrors the orchestrator gate's convention exactly) -- CI's existing
 `pytest tests/ --cov-fail-under=70` step picks up the paired test
 automatically; adding a YAML step would double-run the gate.
 
@@ -74,7 +74,7 @@ _DEFAULT_DISP01_REPORT = os.path.join(
 # Env-override seam (mirrors check_devtest_orchestrator.py's
 # FIRESTARTER_DEVTEST_SRC): lets the paired pytest point this checker at a
 # deliberately-violating fixture file without editing the real, clean
-# diagnostic_report.py source (D-05).
+# diagnostic_report.py source.
 FIRESTARTER_DISP01_REPORT = os.environ.get(
     "FIRESTARTER_DISP01_REPORT", _DEFAULT_DISP01_REPORT
 )
@@ -91,7 +91,7 @@ FIRESTARTER_DISP01_PARSER = os.environ.get(
 )
 
 # ---------------------------------------------------------------------------
-# Deny vocabulary (D-02/D-05): the single write-target identifier.
+# Deny vocabulary: the single write-target identifier.
 # ---------------------------------------------------------------------------
 
 _SUPPORT_STATUS_KEY = "support_status"
@@ -170,7 +170,7 @@ def _scan_file(path: str) -> _SupportStatusWriteVisitor | None:
 
 
 def _assert_host_only(path: str) -> str | None:
-    """Assert `path` does not resolve into the firmware sub-repo (D-02).
+    """Assert `path` does not resolve into the firmware sub-repo.
 
     Returns an error string if the resolved path falls inside the sibling
     `firestarter/` firmware submodule (a peer of `firestarter_app/` in the
@@ -234,7 +234,7 @@ def main() -> None:
     if not scanned:
         # Defense in depth: the missing_targets guard above should already
         # have caught this, but a scanned-empty state must never vacuously
-        # pass regardless of how it was reached (D-05 anti-hollow contract).
+        # pass regardless of how it was reached (anti-hollow contract).
         print(
             "FAIL: no report/parse source files found to scan "
             f"(checked: {targets}) -- the gate cannot vacuously pass with "

@@ -1,22 +1,22 @@
 """
-GATE-02: Per-chip diff of the regenerated chip_database.json against the
+Per-chip diff of the regenerated chip_database.json against the
 pinned pre-milestone baseline (chip_database.baseline.json, 744 chips,
-Phase 70 integrated output).
+integrated output).
 
 Loads both JSONs, builds composite-keyed indexes (one key per record, so
 duplicate part_numbers are never shadowed — CR-01), classifies every changed
-chip by a cited root-cause rule (grouped by cause per D-01), reports new chips
+chip by a cited root-cause rule (grouped by cause), reports new chips
 and any missing chips, and exits with the following codes:
 
 Exit codes:
   0 — all changed chips explained by a cited root-cause rule; N new chips
       confirmed (Rule 1 unblock); 0 chips missing from baseline.
   1 — at least one chip has an unexplained diff OR at least one chip present in
-      the baseline is absent from the current DB (D-03 BLOCK: investigate
+      the baseline is absent from the current DB (BLOCK: investigate
       build_db.py, correct the logic, re-regen, re-diff).
   2 — infrastructure error: a required input file could not be loaded or parsed
       (missing/malformed baseline or current DB). Distinct from 1 so a CI
-      consumer does not confuse a missing input with a real diff BLOCK (WR-04).
+      consumer does not confuse a missing input with a real diff BLOCK.
 """
 
 import copy
@@ -41,7 +41,7 @@ BASELINE_FILE = os.environ.get(
 
 # ---------------------------------------------------------------------------
 # Root-cause labels and their grouped rationale strings
-# Each string embeds a [VERIFIED: minipro ...] citation per Phase 56 D-05/D-06.
+# Each string embeds a [VERIFIED: minipro ...] citation.
 # Permalink base: https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc/src/database.c
 # ---------------------------------------------------------------------------
 _RATIONALES = {
@@ -304,7 +304,7 @@ def _pn(key):
 # ---------------------------------------------------------------------------
 # Field paths each root-cause rule is allowed to "explain". A diff is only
 # fully explained when EVERY differing field path is claimed by the matched
-# rule(s) (WR-02). Anything outside these sets routes to "unexplained" (D-03).
+# rule(s). Anything outside these sets routes to "unexplained".
 #
 # electrical.type is a DERIVED field: build_db.py's Pass-2 protocol-aware
 # re-derivation recomputes electrical.type purely from the (possibly
@@ -396,7 +396,7 @@ def _diff_field_paths(bl_chip, cu_chip, prefix=()):
     Recurses into nested dicts so e.g. a change to electrical.vpp surfaces as
     ("electrical", "vpp"). Non-dict values (and lists) are compared by equality
     at their path. Used by _classify_diff to prove that every differing field is
-    attributable to a known rule (WR-02).
+    attributable to a known rule.
     """
     paths = set()
     keys = set(bl_chip) | set(cu_chip)
@@ -424,11 +424,11 @@ def _classify_diff(bl_chip, cu_chip):
       - (label, extra_paths): label is the primary root-cause rule; extra_paths
         is the (possibly empty) set of differing field paths NOT explained by
         that rule's allowed-field set. A non-empty extra_paths means a compound
-        change (WR-01) — the secondary deltas are surfaced by the caller, and if
+        change — the secondary deltas are surfaced by the caller, and if
         any of them is outside ALL known rules' field sets the chip is escalated
-        to unexplained (WR-02).
+        to unexplained.
       - (None, diff_paths): no rule matched at all — fully unexplained, the
-        caller treats this as a D-03 BLOCK.
+        caller treats this as a BLOCK.
 
     The COMBINED case (BUG2_AND_BUG3) MUST be tested before the single-bug
     buckets — chips with both timing and vcc/vdd changes (Pitfall 2 in
@@ -440,26 +440,26 @@ def _classify_diff(bl_chip, cu_chip):
       1. RULE_ALGO     — algorithm changed (primary dispatch key)
       2. BUG2_AND_BUG3 — timing + voltage changed (combined fix, precedes singles)
       3. BUG2_TIMING   — timing changed only
-      4. RULE_VCC_MARGIN_RAIL — Phase 148 DATA-01 margin-rail substitution: baseline
+      4. RULE_VCC_MARGIN_RAIL — margin-rail substitution: baseline
                          vcc_mv was the 4000 mV verify rail, current vcc_mv now equals
                          current vdd_mv (value-scoped, before BUG3_VCC_VDD — otherwise a
                          mover would be misattributed to the vcc/vdd label-swap rationale)
       5. BUG3_VCC_VDD  — voltage (vcc/vdd) changed only
-      6a. RC1_DIP32_27C020 — pinout changed to DIP32_27C020 (Phase 98 RC-1 fix; before SRAM_PINOUT)
+      6a. RC1_DIP32_27C020 — pinout changed to DIP32_27C020 (before SRAM_PINOUT)
       6b. SRAM_PINOUT  — pinout changed only (other pinout re-routes)
       7. RULE_PHASE84_RELABEL — only electrical.type changed, AND the chip is in
                          _PHASE84_RELABEL_PART_NUMBERS (cosmetic label-only correction;
                          scoped by part_number; MORE SPECIFIC than BUG_A_ETYPE so must
                          precede it — otherwise BUG_A_ETYPE would match first)
       7b. VARIANT_DECODE — only electrical.type changed to 'EEPROM' AND proto in
-                         {0x0D, 0x34} (Phase 86 consolidation: 5V-EEPROM-pinout proto-0x0D
+                         {0x0D, 0x34} (consolidation: 5V-EEPROM-pinout proto-0x0D
                          Flash/EEPROM->EEPROM + X88C64P proto-0x34 UV-EPROM->EEPROM;
                          scoped by new-type+proto so it does NOT shadow BUG_A_ETYPE)
       8. BUG_A_ETYPE   — electrical.type changed (flags-based EEPROM reclassification)
       9. BUG_B_VPP     — electrical.vpp/vpp_mv changed (0xF0-mask fix)
       10. RULE_PHASE66 — only support_status/unsupported_reason/vpp/vpp_mv changed
                          (LAST — least specific; must not shadow BUG_A_ETYPE/BUG_B_VPP)
-      -> None          — no rule matched (UNEXPLAINED = D-03 BLOCK)
+      -> None          — no rule matched (UNEXPLAINED = BLOCK)
     """
     bl_prog = bl_chip.get("programming", {})
     cu_prog = cu_chip.get("programming", {})
@@ -499,7 +499,7 @@ def _classify_diff(bl_chip, cu_chip):
         and not pinout_diff
         and not type_diff
     ):
-        # RULE_VCC_MARGIN_RAIL (before BUG3_VCC_VDD): Phase 148 DATA-01
+        # RULE_VCC_MARGIN_RAIL (before BUG3_VCC_VDD):
         # margin-rail substitution. Scoped on the DECODED VALUES themselves —
         # baseline vcc_mv was the 4000 mV TL866 verify-margin rail (mirrors
         # build_db.py's _VCC_MARGIN_RAIL_MV = VCC_VOLTAGES[0x02]); current
@@ -509,9 +509,9 @@ def _classify_diff(bl_chip, cu_chip):
         # compound change (algo/timing/pinout/type also differing) falls
         # through to a more generic rule instead of being silently absorbed.
         # Placed BEFORE BUG3_VCC_VDD: otherwise a mover whose only other delta
-        # is a secondary field would be misattributed to the Phase 57/58
+        # is a secondary field would be misattributed to the earlier
         # BUG-3 vcc/vdd label-swap rationale, which this substitution is not
-        # (D-01: the vcc/vdd labels are correct; only the margin-rail value
+        # (the vcc/vdd labels are correct; only the margin-rail value
         # is being substituted).
         label = "RULE_VCC_MARGIN_RAIL"
     elif voltage_diff and not timing_diff and not algo_diff:
@@ -525,7 +525,7 @@ def _classify_diff(bl_chip, cu_chip):
         and not vpp_diff
         and cu_chip.get("pinout") == "DIP32_27C020"
     ):
-        # RC1_DIP32_27C020 (before SRAM_PINOUT): Phase 98 RC-1 fix — 0x08 ≤256K chips
+        # RC1_DIP32_27C020 (before SRAM_PINOUT): 0x08 ≤256K chips
         # reassigned from DIP32_STD to DIP32_27C020. Scoped to the new pinout value so
         # SRAM_PINOUT (which handles 28-pin pm_idx=0 re-routes) is not masked.
         # Pinout-only scope is now ENFORCED here (not just asserted in
@@ -547,7 +547,7 @@ def _classify_diff(bl_chip, cu_chip):
         # decision). Placed before BUG_A_ETYPE so the part_number-scoped rule takes
         # priority for the named relabeled chips. The part_number check prevents this
         # rule from silently explaining accidental type drift on unrelated chips
-        # (D-40 requirement: no collateral change to chips sharing the same infoic flags).
+        # (no collateral change to chips sharing the same infoic flags).
         label = "RULE_PHASE84_RELABEL"
     elif (
         type_diff
@@ -558,7 +558,7 @@ def _classify_diff(bl_chip, cu_chip):
         and cu_elec.get("type") == "EEPROM"
         and cu_prog.get("algorithm") in (0x0D, 0x34)
     ):
-        # VARIANT_DECODE (before BUG_A_ETYPE): Phase 86 consolidation electrical.type
+        # VARIANT_DECODE (before BUG_A_ETYPE): consolidation electrical.type
         # delta. The new classify() emits 'EEPROM' for the 5V-EEPROM-pinout proto-0x0D
         # chips (were 'Flash/EEPROM') and for X88C64P proto-0x34 (was 'UV-EPROM').
         # Scoped to new-type=='EEPROM' AND proto in {0x0D, 0x34} so it does NOT shadow
@@ -588,7 +588,8 @@ def _classify_diff(bl_chip, cu_chip):
         and not voltage_diff
         and not pinout_diff
     ):
-        # RULE_PHASE66: only Phase 66 fields changed (support_status, unsupported_reason,
+        # RULE_PHASE66: only the support-status fields changed
+        # (support_status, unsupported_reason,
         # electrical.vpp, electrical.vpp_mv). Placed LAST so it does not shadow
         # BUG_A_ETYPE/BUG_B_VPP (Pitfall 7 in 70-RESEARCH.md).
         label = "RULE_PHASE66"
@@ -601,7 +602,7 @@ def _classify_diff(bl_chip, cu_chip):
         and not type_diff
         and not vpp_diff
     ):
-        # PGSZ_PAGE_SIZE: Phase 94 / CR-01 — only programming.page_size changed
+        # PGSZ_PAGE_SIZE — only programming.page_size changed
         # (datasheet-sourced per-chip page size added for W29C040=256 / W29C020=128).
         # No other field changes. Placed LAST (most specific scope: programming.page_size
         # only) to avoid shadowing any compound changes detected by prior rules.
@@ -621,7 +622,7 @@ def _classify_diff(bl_chip, cu_chip):
         and not vpp_diff
         and bl_prog.get("page_size") == cu_prog.get("page_size")
     ):
-        # PROV01_PROTECT_METADATA: Phase 136.1 PROV-01 — only the three new
+        # PROV01_PROTECT_METADATA — only the three new
         # protect_off_before/protect_on_after/infoic_page_size_raw keys changed
         # (added). No other field changes, including the curated page_size (kept
         # distinct from infoic_page_size_raw by the explicit page_size equality
@@ -643,7 +644,7 @@ def _classify_diff(bl_chip, cu_chip):
 
 
 # ---------------------------------------------------------------------------
-# Schema-normalizing comparator (Phase 148 D-11)
+# Schema-normalizing comparator
 # ---------------------------------------------------------------------------
 def _voltage_str_to_mv(value):
     """Parse a voltage string like "4V" or "3.3V" -> integer millivolts.
@@ -673,11 +674,11 @@ def _canonicalize_db(db):
     """Return a normalized copy of a chip database on the numeric schema.
 
     A pure-representation migration (string voltage/timing fields ->
-    numeric mv/us fields) must produce zero additional GATE-02 diff rows.
+    numeric mv/us fields) must produce zero additional diff rows.
     This function normalizes both the pre-migration string schema and the
     post-migration numeric schema to the same shape before comparison, so
     `_classify_diff`/`_diff_field_paths` always see one schema regardless of
-    which side of the migration either input database is on (D-11: the
+    which side of the migration either input database is on (the
     pinned baseline is never re-pinned).
 
     Per-chip normalization rules (electrical.* / programming.* blocks):
@@ -718,7 +719,7 @@ def _canonicalize_db(db):
 def _load_db(path, label):
     """Load a chip-database JSON, exiting 2 (infra error) on any load failure.
 
-    WR-04: a missing/malformed input is an infrastructure problem, NOT a diff
+    A missing/malformed input is an infrastructure problem, NOT a diff
     BLOCK — it must use a distinct exit code (2) so a CI consumer keying on the
     exit status does not misreport it as a real gate failure (exit 1).
     """
@@ -736,7 +737,7 @@ def main():
     cu_db = _load_db(DB_FILE, "current DB")
 
     # Canonicalize both databases to the numeric schema before any
-    # comparison, so GATE-02 classifies identically whether either side is on
+    # comparison, so the gate classifies identically whether either side is on
     # the old string schema or the new numeric schema.
     bl_db = _canonicalize_db(bl_db)
     cu_db = _canonicalize_db(cu_db)
@@ -748,7 +749,7 @@ def main():
     bl_total = _raw_total(bl_db)
     cu_total = _raw_total(cu_db)
 
-    # CR-01/IN-01: the composite-key index is strictly 1:1 with chip records.
+    # The composite-key index is strictly 1:1 with chip records.
     # Assert it so a future collision regression fails loudly here instead of
     # silently shadowing records (and so the printed header count matches what
     # was actually diffed).
@@ -762,8 +763,8 @@ def main():
     )
 
     # Union of every field path that SOME known rule can explain. Used to decide
-    # whether a compound change's secondary deltas are benign-but-known (WR-01,
-    # just surface them) or truly outside all rules (WR-02, escalate to
+    # whether a compound change's secondary deltas are benign-but-known (just
+    # surface them) or truly outside all rules (escalate to
     # unexplained).
     _all_rule_paths = set()
     for _paths in _RULE_FIELD_PATHS.values():
@@ -808,11 +809,11 @@ def main():
     total_changed = sum(len(v) for v in changed_by_cause.values())
 
     # -----------------------------------------------------------------------
-    # Report: grouped-by-cause (D-01) with embedded citations
+    # Report: grouped-by-cause with embedded citations
     # -----------------------------------------------------------------------
     print("=" * 72)
     print("GATE-02 Per-chip Diff Report")
-    # IN-01: index is now 1:1 with records, so the diffed key count equals the
+    # The index is 1:1 with records, so the diffed key count equals the
     # raw record count — print both to make the reconciliation explicit.
     print(f"  Baseline: {BASELINE_FILE}  ({bl_total} chips, {len(bl_idx)} diffed)")
     print(f"  Current:  {DB_FILE}  ({cu_total} chips, {len(cu_idx)} diffed)")
@@ -844,12 +845,12 @@ def main():
         print()
 
     # New chips fall into two explained categories:
-    #   (a) EXTRA_CHIPS_SUPPLEMENT (Phase 86 VAR-05 / D-10): records carrying the
+    #   (a) EXTRA_CHIPS_SUPPLEMENT: records carrying the
     #       source="non-upstream-supplement" marker (2516/2532). Their presence —
     #       with the cited source marker — IS the explanation (they are absent from
-    #       both infoic.xml and the OLD baseline because the re-pin is Plan 86-03).
+    #       both infoic.xml and the OLD baseline because of the re-pin).
     #   (b) Rule 1 unblock (DIP24_2816 + algo=0x0D): the original new-chip class.
-    # A new chip that is NEITHER is surfaced as a WARN (WR-03).
+    # A new chip that is NEITHER is surfaced as a WARN.
     supplement_new = [
         key
         for key in new_chips
@@ -905,7 +906,7 @@ def main():
         print()
 
     # -----------------------------------------------------------------------
-    # Gate: unexplained diffs or missing chips = D-03 BLOCK (exit 1)
+    # Gate: unexplained diffs or missing chips = BLOCK (exit 1)
     # -----------------------------------------------------------------------
     failures = list(unexplained) + missing_chips
     if failures:

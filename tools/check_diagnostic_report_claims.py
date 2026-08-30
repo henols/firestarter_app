@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """AST-based string-literal claim scanner over `firestarter/diagnostic_report.py`
-(CLOSE-03, v1.30 Phase 137 plan 137-02).
+.
 
 Purpose: `diagnostic_report.py`'s string literals are the `dev test`
 diagnostic report text that reaches a stranger's terminal on every single
@@ -39,7 +39,7 @@ constant set matches the donor byte-for-byte; it is intentionally unused by
 `firestarter/cli_handlers.py` used to carry two named SDP recovery-string
 constants (`_SDP_RECOVERY_LOUD` / `_SDP_RECOVERY_NEUTRAL`) with their own
 committed, scoped wording gate (`tests/test_sdp_recovery_wording.py`, v1.30
-Phase 134 plan 134-09, LEG-14) -- quick task 260821-spg deleted the console
+) -- a later change deleted the console
 echo those constants fed, the constants themselves, and that gate along with
 them, so there is no longer a second scanned surface for this checker to
 defer to. The scan target here remains exactly `diagnostic_report.py`; this
@@ -102,7 +102,7 @@ FIRESTARTER_DIAGREPORT_SRC = os.environ.get(
 # ---------------------------------------------------------------------------
 
 FORBIDDEN_PATTERNS = [
-    # -- forked verbatim from Phase 122's check_permitted_claims.py (via plan 137-01) --
+    # -- forked verbatim from check_permitted_claims.py --
     ("verified-fixed", re.compile(r"verified\s+fixed", re.IGNORECASE)),
     ("confirmed-working", re.compile(r"confirmed\s+working", re.IGNORECASE)),
     ("silicon-verified", re.compile(r"silicon[-\s]verified", re.IGNORECASE)),

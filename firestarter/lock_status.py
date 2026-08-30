@@ -61,7 +61,7 @@ DECODE_INDETERMINATE = 0xFF
 
 # The operational-failure class also covers a truncated or missing payload
 # (see `classify_protection_response` step 3 below) -- this constant names
-# it once so both use sites (the D-04 unknown-command mapping and the
+# it once so both use sites (the unknown-command mapping and the
 # truncated-payload guard) stay in sync with the same token.
 _CLASS_FIRMWARE_OUTDATED = "firmware_outdated"
 _CLASS_UNADJUDICATED_PROBE = "unadjudicated_probe"
@@ -96,7 +96,7 @@ EXIT_BY_CLASS: Mapping[str, int] = {
 def exit_code_for_class(class_token: str) -> int:
     """Look up `class_token`'s exit code. Raises `KeyError` on an unknown
     token -- never `.get(token, 1)`. A silent default here would let a new,
-    unclassed D-09 token silently exit non-zero-but-wrong instead of failing
+    unclassed token silently exit non-zero-but-wrong instead of failing
     loudly the moment it is introduced.
     """
     return EXIT_BY_CLASS[class_token]
@@ -128,8 +128,7 @@ def classify_protection_response(
     if forced and gate_token != GATE_TOKEN_READ_PERMITTED:
         return _CLASS_UNADJUDICATED_PROBE, (
             f"--force ran the read past the table's {gate_token!r} refusal; "
-            "the result is an unadjudicated probe, never a state claim "
-            "(D-07)."
+            "the result is an unadjudicated probe, never a state claim."
         )
 
     if gate_token != GATE_TOKEN_READ_PERMITTED:
@@ -167,7 +166,7 @@ def classify_protection_response(
 
 
 def render_lock_status(class_token: str, reason: str, raw_byte: int | None) -> str:
-    """D-08's rendering surface: the class token first, then the prose.
+    """The rendering surface: the class token first, then the prose.
 
     The class token is always the string's first whitespace-delimited
     field, so a caller or a test can assert on the token alone without
@@ -175,7 +174,7 @@ def render_lock_status(class_token: str, reason: str, raw_byte: int | None) -> s
     by CALLING `sdp_honesty.unreadable_state_caveat()` -- never re-authored
     or re-worded, so the sentence stays byte-identical everywhere it is
     used. `raw_byte`, when not `None`, is always rendered in hex, including
-    on the not-readable-because-unrecognised path: D-03's probe depends on
+    on the not-readable-because-unrecognised path: the probe depends on
     the raw observation surviving even when the decode did not resolve.
     """
     body = reason

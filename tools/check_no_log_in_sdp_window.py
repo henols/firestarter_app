@@ -1,9 +1,8 @@
 """
 TRACE-03 third negative: structural scan proving no logging call sits inside
-the `0x0D` SDP command-sequence timing window (Phase 116 Plan 04, D-04 third
-bullet; window redefined by Phase 118 Plan 01, D-06).
+the `0x0D` SDP command-sequence timing window.
 
-**D-06 window redefinition.** Through Phase 117 this checker brace-matched
+**Window redefinition.** An earlier revision of this checker brace-matched
 `eeprom28c_write_init` and scanned the span *between* the command-emit call
 site and the completion-wait call site. That span never looks inside
 `eeprom28c_emit_command_sequence()` -- the function whose bare `set_data`
@@ -18,7 +17,7 @@ The window is now the union of two brace-matched function bodies:
   * `eeprom28c_wait_for_sdp_completion()` -- the completion poll that
     follows it.
 
-Phase 118's OBS-01 report lines legitimately sit in the OLD between-the-
+The observation report lines legitimately sit in the OLD between-the-
 call-sites span (before the emit call and after the wait call, inside
 `eeprom28c_write_init` but outside both bodies above) -- this rewrite is
 what makes that placement provably legitimate rather than merely convenient.
@@ -30,11 +29,11 @@ secondary rename-tripwire, not the window-resolution mechanism -- if a
 future refactor moves the emitter or the poll out of `write_init` entirely,
 this still fails closed instead of silently scanning nothing meaningful.
 
-**D-11: this checker keeps exactly ONE job -- the no-logging rule.** It does
+**This checker keeps exactly ONE job -- the no-logging rule.** It does
 NOT also assert that `AT28C_TBLC_MAX_US` is cited in a comment anywhere.
 `_strip_comments` below deliberately blanks comment spans before the
 deny-list scan runs, so a citation-presence check would need a second pass
-over uncleaned text -- and Phase 118's runtime t_BLC budget check (D-09) is
+over uncleaned text -- and the runtime t_BLC budget check is
 strictly stronger evidence that the constant is load-bearing than a comment
 citation would be. Do not add a citation scan here or in a sibling checker.
 
@@ -44,7 +43,7 @@ call sites appear in either one.
 
 This is a genuinely-populated structural scan, NOT a hollow declared-empty
 detector -- the exact tech-debt fate this project incurred with v1.12's
-GATE-03 (a checker that could never fail because it asserted nothing
+a hollow checker (one that could never fail because it asserted nothing
 concrete). The paired pytest (`tests/test_check_no_log_in_sdp_window.py`)
 proves this checker actually flips to non-zero on a committed planted
 violation (`tests/fixtures/planted_log_in_window.cpp`, re-planted inside the
@@ -59,7 +58,7 @@ window is resolved via brace-matched structural text extraction, never a
 bare substring grep: `eeprom_28c.cpp` carries prose comments describing this
 exact sequence and its timing (see this function's own docstring above, and
 the sibling checkers' anti-false-positive lessons recorded for Phase-109
-SAFE-02 and Phase-110), and a loose pattern would false-positive on comment
+the safety rules), and a loose pattern would false-positive on comment
 text mentioning a logging macro by name. Comment spans (`//` and `/* */`)
 are blanked out (length- and line-preserving) before the deny-list scan
 runs, so a comment mentioning a logging macro is never mistaken for a call
@@ -71,7 +70,7 @@ comment is now inside the scanned region.
 Fails closed on every degenerate input -- missing/unreadable source path,
 either target function not found (or not brace-balanced), or either
 `eeprom28c_write_init` anchor set matching zero times -- so a later rename
-(e.g. Phase 117's emitter replacement, or a future one) cannot silently
+(e.g. an emitter replacement, now or in future) cannot silently
 hollow this gate; each failure mode names the fix (add the new anchor/name)
 rather than silently passing.
 
@@ -99,10 +98,10 @@ _DEFAULT_SDP_SRC = os.path.join(
 
 # Env-override seam: lets the paired pytest point this checker at a
 # deliberately-violating fixture file (tests/fixtures/planted_log_in_window.cpp)
-# without editing the real, clean eeprom_28c.cpp (anti-hollow contract, D-04).
+# without editing the real, clean eeprom_28c.cpp (anti-hollow contract).
 FIRESTARTER_SDP_SRC = os.environ.get("FIRESTARTER_SDP_SRC", _DEFAULT_SDP_SRC)
 
-# The function whose body IS the real SDP inter-byte timing window (D-06).
+# The function whose body IS the real SDP inter-byte timing window.
 _EMITTER_FUNC_NAME = "eeprom28c_emit_command_sequence"
 # The function whose body is the completion poll that follows the emitter.
 _POLL_FUNC_NAME = "eeprom28c_wait_for_sdp_completion"
@@ -111,14 +110,14 @@ _POLL_FUNC_NAME = "eeprom28c_wait_for_sdp_completion"
 # function to compute the scanned span.
 _FUNC_NAME = "eeprom28c_write_init"
 
-# v1.22 Phase 119 Plan 04 (D-14): eeprom28c_emit_sdp_sequence_timed() -- the
+# eeprom28c_emit_sdp_sequence_timed() -- the
 # shared micros()-bracket-plus-report-pair helper both the SDP-disable
 # (eeprom28c_write_init / eeprom28c_sdp_unlock_execute) and the new SDP-enable
 # (eeprom28c_sdp_lock_execute) sequences call -- MUST NEVER be added as a
 # third scanned window (a third name in _EMITTER_FUNC_NAME/_POLL_FUNC_NAME,
 # or a third _find_function_body call in _resolve_windows/scan). That
 # helper's body contains LOG_ID / LOG_ID_U32 / LOG_WARN_ID_U32 calls BY
-# DESIGN (D-12/D-14) -- it is the report/measurement wrapper AROUND the
+# DESIGN -- it is the report/measurement wrapper AROUND the
 # emit call, not the timing window itself. The real inter-byte SDP timing
 # window this checker exists to protect remains exactly
 # eeprom28c_emit_command_sequence's body (_EMITTER_FUNC_NAME above), which
@@ -146,7 +145,7 @@ def _func_def_pattern(func_name: str) -> re.Pattern[str]:
 
     Two properties are load-bearing and must be preserved by any future
     edit: the leading `\\b` sits before `void`, so this still matches a
-    `static void ...` definition (both D-06 targets are `static`); and the
+    `static void ...` definition (both targets are `static`); and the
     trailing `\\{` is what excludes the `;`-terminated forward declarations
     a few lines above each definition in the real file. `[^)]*` tolerates
     any parameter list, including the emitter's three-argument signature.
@@ -157,11 +156,11 @@ def _func_def_pattern(func_name: str) -> re.Pattern[str]:
 # Command-emit anchors -- the call(s) that kick off the SDP command sequence,
 # used ONLY by the secondary write_init rename-tripwire in _resolve_windows,
 # not by window resolution itself. The first entry matched the pre-Phase-117
-# flash_execute_command(EEPROM_SDP_DISABLE) call site. Phase 117 (FIX-01)
+# flash_execute_command(EEPROM_SDP_DISABLE) call site. A later change
 # replaced that emitter with the 0x0D-local eeprom28c_emit_command_sequence()
 # driven through handle->firestarter_set_data, so the second entry matched
-# eeprom28c_write_init's direct call site through Phase 118. Phase 119 Plan 04
-# (D-14) factored a shared eeprom28c_emit_sdp_sequence_timed() helper that
+# eeprom28c_write_init's direct call site. A shared
+# eeprom28c_emit_sdp_sequence_timed() helper was then factored out, which
 # eeprom28c_write_init now calls instead of eeprom28c_emit_command_sequence
 # directly (the helper itself calls the emitter), so the third entry below is
 # what matches on today's tree. Per the anti-hollow contract this tuple is
@@ -174,7 +173,7 @@ _EMIT_ANCHOR_PATTERNS = (
     re.compile(
         r"eeprom28c_emit_command_sequence\s*\(\s*handle\s*,\s*EEPROM_SDP_DISABLE\b"
     ),
-    # v1.22 Phase 119 D-14: eeprom28c_write_init's call site is now the
+    # eeprom28c_write_init's call site is now the
     # shared timed-emit helper, not the emitter directly.
     re.compile(
         r"eeprom28c_emit_sdp_sequence_timed\s*\(\s*handle\s*,\s*EEPROM_SDP_DISABLE\b"
@@ -183,9 +182,9 @@ _EMIT_ANCHOR_PATTERNS = (
 
 # Completion-wait anchors -- same "secondary tripwire only" role as
 # _EMIT_ANCHOR_PATTERNS above. The first entry matched the pre-Phase-117
-# eeprom28c_wait_for_write( call site; Phase 117 deleted that function
-# outright (FIX-02 replaced its inverted read-back with an unconditional
-# t_WC wait plus a bounded DQ6 toggle poll, and FIX-06 split the page path
+# eeprom28c_wait_for_write( call site; that function was deleted
+# outright (its inverted read-back was replaced with an unconditional
+# t_WC wait plus a bounded DQ6 toggle poll, and the page path was split
 # into eeprom28c_wait_for_page_write), so the second entry is what matches
 # on today's tree. Same append-only anti-hollow contract as
 # _EMIT_ANCHOR_PATTERNS above.
@@ -201,8 +200,8 @@ _WAIT_ANCHOR_PATTERNS = (
 # LOG_OK_ID*, LOG_INIT_ID*, LOG_MAIN_ID*, LOG_END_ID*, LOG_DATA_ID*,
 # LOG_DEBUG_ID_SUB*) -- this single pattern matches every one of them without
 # needing to enumerate each macro name by hand. It also matches the bare
-# unconditional LOG_ID( / LOG_ID_U32( forms Phase 118's report lines use, so
-# no pattern change is needed for D-01's spelling to stay in coverage.
+# unconditional LOG_ID( / LOG_ID_U32( forms the report lines use, so
+# no pattern change is needed for that spelling to stay in coverage.
 _LOG_CALL_PATTERN = re.compile(r"\bLOG_[A-Z][A-Z0-9_]*\s*\(")
 
 
@@ -288,7 +287,7 @@ def _resolve_windows(
     cleaned_text: str,
 ) -> tuple[tuple[int, int], tuple[int, int]]:
     """Resolve the two function bodies that make up the SDP timing window
-    (D-06): the emitter body and the completion-poll body.
+: the emitter body and the completion-poll body.
 
     Also runs a secondary, rename-tripwire assertion: `eeprom28c_write_init`
     must still be brace-matchable and its body must still contain one
@@ -359,7 +358,7 @@ def scan(
     source_text: str,
 ) -> tuple[list[tuple[int, str]], tuple[int, int], tuple[int, int]]:
     """Resolve the SDP timing window (the emitter body plus the
-    completion-poll body, D-06) in `source_text` and scan both for
+    completion-poll body) in `source_text` and scan both for
     logging-macro call sites.
 
     Returns `(violations, emitter_range, poll_range)` on success, where

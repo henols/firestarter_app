@@ -503,7 +503,7 @@ def comment_via_gh(
 
 
 # ---------------------------------------------------------------------------
-# Browser tier + D-05 oversize escalation
+# Browser tier + oversize escalation
 # ---------------------------------------------------------------------------
 
 
@@ -522,7 +522,7 @@ def submit_via_browser(
     browser_open: Any = webbrowser.open,
     console: Any = None,
 ) -> str | None:
-    """Open a prefilled `issues/new` browser URL, degrading past the D-05
+    """Open a prefilled `issues/new` browser URL, degrading past the
     encoded-byte thresholds (RESEARCH §Oversize Handling / §Browser URL Facts).
 
     The byte measurement is ALWAYS on `len(url.encode("utf-8"))` of the
@@ -583,7 +583,7 @@ def submit_via_browser(
 
 
 # ---------------------------------------------------------------------------
-# submit_report: D-03 refuse gate + D-04 TTY/off-TTY dispatch
+# submit_report: refuse gate + TTY/off-TTY dispatch
 # ---------------------------------------------------------------------------
 
 
@@ -605,7 +605,7 @@ def submit_report(
     Plan-02 builder over the ALREADY-COMPLETED `report`/`saved_json_path`;
     it never re-runs the sweep and never re-derives the report.
 
-    Step 1 (D-03 refuse gate): when `is_submittable(report.auto_capture)`
+    Step 1 (refuse gate): when `is_submittable(report.auto_capture)`
     is `False`, prints the specific missing field name(s) among
     `chip`/`protocol`/`host_version` and returns WITHOUT calling
     `browser_open`, `run_fn`, `find_prior_report_fn`, or `confirm_fn`.
@@ -616,16 +616,16 @@ def submit_report(
     create, `gh` comment, browser) receives; a PII vector present in a
     step reason never reaches a seam unscrubbed.
 
-    Step 3 (D-09 dedup query -- runs BEFORE any ask, on EVERY reached
+    Step 3 (dedup query -- runs BEFORE any ask, on EVERY reached
     path, TTY or not): `find_prior_report_fn(fingerprint, run_fn=run_fn)`
     is called immediately after Step 2 and before the TTY branch, so
     "the check runs first" holds universally, not merely on
     an interactive run.
 
-    Step 4 (D-04/D-10 off-TTY): prints the issue URL and returns WITHOUT
+    Step 4 (off-TTY): prints the issue URL and returns WITHOUT
     ever calling `confirm_fn`, `submit_via_gh`, or `comment_via_gh_fn` --
     filing nothing (v1.21 SUB-01's ban on silent off-TTY submission
-    survives D-05's removal of the explicit flag). The Step 3 dedup
+    survives the removal of the explicit flag). The Step 3 dedup
     outcome is included in this output: the existing issue is named when
     one was found, or an explicit line states the check could not run
     when it was not. Quick task 260821-spg stopped echoing the sanitized

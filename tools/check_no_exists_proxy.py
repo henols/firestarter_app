@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""D-09's recurrence lint: forbids the module-level absence-proxy idiom from
-reappearing in this host test suite (Phase 123 Plan 09).
+"""Recurrence lint: forbids the module-level absence-proxy idiom from
+reappearing in this host test suite.
 
 **What this forbids, stated precisely.** A module-level assignment whose
 value is a boolean negation (`not ...`) of a path-existence call, or of a
 boolean combination of such calls -- the exact shape that made a firmware
 **rename** look like a firmware **absence** (RESEARCH's A-7 finding, the
-defect Phase 123 Plans 07/08 removed from all seven proxy-carrying modules).
+defect that was removed from all seven proxy-carrying modules).
 Uses the `ast` module, never a regex: an AST walk over module-level
 assignments looking for a unary `not` whose operand contains a call to an
 `exists` attribute anywhere in its subtree is precise, whereas a regex over
@@ -16,8 +16,8 @@ Both shapes are caught:
 
   - the simple shape: `FW_ABSENT = not some_path.exists()`
   - the compound shape: `FW_ABSENT = not (a.exists() and b.exists())` --
-    exactly what `tests/test_dispatch_mirror.py` used before its Phase 123
-    Plan 08 rekey onto `tests/fw_presence.py`.
+    exactly what `tests/test_dispatch_mirror.py` used before its rekey onto
+    `tests/fw_presence.py`.
 
 **What this must NOT forbid.** A path-existence check inside a FUNCTION
 BODY, used for ordinary control flow (e.g. `if not resolved.exists(): raise
@@ -82,7 +82,7 @@ instead).
 violating fixture, injected via the `FIRESTARTER_PROXY_LINT_TARGETS` seam
 above) -- the mandatory anti-hollow contract every source-scanning gate in
 this project carries, tracing back to the tech debt this project incurred
-with v1.12's GATE-03 (a checker that could never fail because it asserted
+with an earlier hollow gate (a checker that could never fail because it asserted
 nothing concrete).
 
 **Explicit non-claim (load-bearing).** A green run of this gate proves this
@@ -118,7 +118,7 @@ _APP_ROOT = os.path.dirname(_HERE)
 # ---------------------------------------------------------------------------
 # Explicit, non-pattern default target list -- see the module docstring's
 # "Explicit non-pattern default target list" section for the rationale.
-# Every top-level tests/*.py module as of Phase 123 Plan 09. tests/fixtures/
+# Every top-level tests/*.py module. tests/fixtures/
 # and tests/golden/ are subdirectories and are therefore never reachable from
 # this literal enumeration.
 # ---------------------------------------------------------------------------

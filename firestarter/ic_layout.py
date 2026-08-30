@@ -212,7 +212,7 @@ class EpromSpecBuilder:
         """
         if protocol_id is not None:
             # 0x35 (ITE EC MCU, 0 DB chips) and 0x39 (phantom, 0 DB chips) removed
-            # in Phase 57; no DB chip uses either protocol. Firmware still
+            # earlier; no DB chip uses either protocol. Firmware still
             # dispatches both → configure_flash4 for forward-compat (memory.cpp:89);
             # host routes them to not_implemented (excluded from KNOWN_PROTOCOLS).
             if protocol_id in self._PROTOCOL_DISPLAY_NAME:
@@ -498,12 +498,12 @@ class EpromSpecBuilder:
         electrical_type: Optional[str],  # noqa: UP006
         protocol_id: Optional[int] = None,  # noqa: UP006
     ) -> str:
-        """Return the user-facing chip-type display label (D-04 single source of truth).
+        """Return the user-facing chip-type display label (single source of truth).
 
         Looks up ``electrical_type`` in ``_ELECTRICAL_TYPE_LABEL`` (the curated
         ground-truth map from the DB ``electrical.type`` field).  When
         ``electrical_type`` is absent or empty — e.g. legacy user-override DB
-        entries that predate the ``electrical.type`` field (D-05 fallback) — falls
+        entries that predate the ``electrical.type`` field (fallback) — falls
         back to the protocol-based label via ``get_chip_type_string``.
 
         Both ``build_specifications`` (info view) and ``print_eprom_list_table``
