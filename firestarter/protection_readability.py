@@ -184,7 +184,7 @@ def protection_gate_for_entry(
             f"protection_gate_for_entry: no entry for {display_name.upper()!r}. "
             "The caller must resolve the chip before asking about its "
             "protection state -- a falsy/None entry means the caller did "
-            "not. None of D-09's eight output classes means 'chip "
+            "not. None of the eight output classes means 'chip "
             "unknown', so this function never invents one; the CLI must "
             "resolve the chip via db.get_eprom() and raise "
             "ChipNotFoundError before ever reaching this predicate."
@@ -214,7 +214,7 @@ def protection_gate_for_entry(
         if protocol_id == 0x10:
             detail = (
                 "documented readable per lockable-proms.md, but this "
-                "release implements no read for protocol 0x10 (D-02)"
+                "release implements no read for protocol 0x10"
             )
         else:
             detail = (
@@ -265,7 +265,7 @@ def protection_gate_for_entry(
         "NOT_IMPLEMENTED_PROTOCOL_IDS, NOT_READABLE_PROTOCOL_IDS or "
         "CURATION_PROTOCOL_IDS -- a synthetic or newly-added algorithm "
         "must be classed there before this row can be answered. No "
-        "default branch exists; a silent fallback would make D-12 leg 6's "
+        "default branch exists; a silent fallback would make the "
         "exhaustiveness walk unwritable."
     )
 

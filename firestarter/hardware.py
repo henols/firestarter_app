@@ -159,8 +159,8 @@ class HardwareManager:
         -> disconnect handshake but returns data rather than printing (same
         relationship sample_vpp_mv/_sample_one_voltage bears to
         read_vpp_voltage). This is the auto-capture source for both
-        AutoCapture.hw_revision and AutoCapture.fw_board_identity (D-01,
-        D-02) -- a coarse bucket or an honest None is an accepted outcome
+        AutoCapture.hw_revision and AutoCapture.fw_board_identity -- a coarse
+        bucket or an honest None is an accepted outcome
         for either field, never a fabricated value. Opens ONE serial read
         (energize/query only) -- no VPP-set, no wire-dict, no --force
         (SAFE-02 clean). Does NOT change get_hardware_revision's existing

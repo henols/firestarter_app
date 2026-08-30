@@ -118,7 +118,7 @@ _FLASH4_PROTOCOL_ID = 5
 # ~9375 us on an Uno.
 WRITE_BLOCK_TIMEOUT_FALLBACK_S = 120.0
 
-# HOST-03 / D-20: the three per-byte program-budget ids _budget_failure_hint_
+# the three per-byte program-budget ids _budget_failure_hint_
 # message keys on -- MSG_ERR_MAX_PULSES (0xBD), MSG_ERR_ENERGY_CAP (0xBE),
 # MSG_ERR_PULSE_TOO_WIDE (0xAE). Defined as raw ints (not imported names)
 # because this tuple lives in this module-level constant block, while
@@ -753,7 +753,7 @@ class EpromOperator:
             file_size = os.path.getsize(input_file_path)
             progress.start(file_size)
 
-            # HOST-02 / D-04: _setup_operation sets command_dict["address"]
+            # _setup_operation sets command_dict["address"]
             # ONLY when an --address was supplied, so .get("address", 0) is
             # exactly right for a full-chip write's start address (0) too --
             # write_eprom already forwards eprom_data_dict=cmd_data.
@@ -773,7 +773,7 @@ class EpromOperator:
                     hint = _boot_block_hint_message(response, protocol, mem_size)
                     budget_hint = _budget_failure_hint_message(response)
                     msg = response.message
-                    # HOST-03 / D-19: the boot-block hint (0xB3, flash4-only)
+                    # the boot-block hint (0xB3, flash4-only)
                     # and the budget-failure hint (0xBD/0xBE/0xAE) are
                     # disjoint by id today, but this composition does not
                     # rely on that -- appending whichever are present still
@@ -784,7 +784,7 @@ class EpromOperator:
                             msg = msg + " -- " + extra_hint
                     _raise_for_error_response(response, msg)
                 if response.type == "DATA":
-                    # HOST-02 / D-05: a mid-block MSG_DATA_PROGRESS frame is
+                    # a mid-block MSG_DATA_PROGRESS frame is
                     # NEVER acked -- the firmware is mid-block waiting for
                     # nothing, and on a Leonardo a stray buffered "OK" makes
                     # op_get_message return OP_MSG_ACK, so
@@ -1495,7 +1495,7 @@ class EpromOperator:
         try:
             with open(log_path, "w") as fh:
                 fh.write(
-                    f"# XACT-02 fault-injection log ({direction}, {fault_form})\n"
+                    f"# fault-injection log ({direction}, {fault_form})\n"
                     f"corrupted_transfer_surfaced_clean_error: {corrupted_ok}\n"
                     f"error_latency: {latency_str}\n"
                     f"sub_second_clean_error_no_2s_cascade: {cascade}\n"
@@ -1660,7 +1660,7 @@ class EpromOperator:
         try:
             with open(log_path, "w") as fh:
                 fh.write(
-                    "# XACT-02 per-frame NAK latency (established single-port connection)\n"
+                    "# per-frame NAK latency (established single-port connection)\n"
                     f"# port: {port}  fault_form: {fault_form}\n"
                     f"baseline_clean_command_ok: {baseline_ok}\n"
                     f"corrupted_frame_surfaced_error_no_silent_accept: {corrupted_surfaced_error}\n"
@@ -1819,7 +1819,7 @@ class EpromOperator:
         address_str: Optional[str] = None,
         pulse_us: int = 0,  # per-run pulse-width override (us; 0=not supplied, use the database value)
     ) -> bool:
-        # HOST-04 / D-14: per-run pulse override, riding the existing
+        # per-run pulse override, riding the existing
         # "pulse-delay" DB-dict key rather than adding a new wire field or
         # command. Four recorded points:
         # (a) this is consistency_check_eprom's read_settling_us/
@@ -2018,9 +2018,9 @@ class EpromOperator:
 
         A ``True`` return means only that the command sequence was **emitted**
         over the wire — it is never a claim that silicon actually left the
-        protected state. Protection state is not readable on this chip family
-        (Phase 119 D-12, Phase 117 D-05), so no return value from this method
-        can honestly say more than "the sequence was sent and the firmware
+        protected state. Protection state is not readable on this chip family,
+        so no return value from this method can honestly say more than
+        "the sequence was sent and the firmware
         reported OK".
 
         The capability refusal deciding *which* parts may reach this method at
@@ -2066,9 +2066,9 @@ class EpromOperator:
 
         A ``True`` return means only that the command sequence was **emitted**
         over the wire — it is never a claim that silicon actually entered the
-        protected state. Protection state is not readable on this chip family
-        (Phase 119 D-12, Phase 117 D-05), so no return value from this method
-        can honestly say more than "the sequence was sent and the firmware
+        protected state. Protection state is not readable on this chip family,
+        so no return value from this method can honestly say more than
+        "the sequence was sent and the firmware
         reported OK".
 
         The capability refusal deciding *which* parts may reach this method at

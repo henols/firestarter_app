@@ -128,8 +128,7 @@ def classify_protection_response(
     if forced and gate_token != GATE_TOKEN_READ_PERMITTED:
         return _CLASS_UNADJUDICATED_PROBE, (
             f"--force ran the read past the table's {gate_token!r} refusal; "
-            "the result is an unadjudicated probe, never a state claim "
-            "(D-07)."
+            "the result is an unadjudicated probe, never a state claim."
         )
 
     if gate_token != GATE_TOKEN_READ_PERMITTED:

@@ -265,9 +265,8 @@ _LADDER_NONE = ""
 
 @dataclass
 class DbDiff:
-    """Current DB `support_status` beside an ADVISORY proposed-disposition
-    (RPT-05, D-07) plus a derived report-side `ladder_state` tag (GRAD-01,
-    D-01/D-02).
+    """Current DB `support_status` beside an ADVISORY proposed-disposition plus
+    a derived report-side `ladder_state` tag.
 
     `proposed_disposition` is always plainly-labeled descriptive triage
     text -- it is NEVER a concrete `support_status` value and this module
@@ -329,8 +328,8 @@ def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
 
 
 def _identity_cell(value: object) -> str:
-    """Render-only substitution for an absent identity value (D-10, D-11,
-    D-12). Used ONLY inside `render()` -- never in `to_dict()`, which is
+    """Render-only substitution for an absent identity value. Used ONLY inside
+    `render()` -- never in `to_dict()`, which is
     where the `NOT_MEASURED` precedent substitutes and where D-10 requires
     the fenced report JSON to keep typed `null` (machine consumers keep
     testing `is None`, so PROV-04's backward-compatibility story stays ONE
@@ -572,7 +571,7 @@ class DiagnosticReport:
     vpp_mv: int | None = None
     vpe_mv: int | None = None
     db_diff: DbDiff | None = None
-    # LEG-12: the carriage half only --
+    # the carriage half only --
     # a plain `str`, NEVER a `bool` and NEVER a key named `locked` or
     # `protection_enabled` (P-06 prevention 3: a JSON `true` on such a key
     # is read as ground truth for a protection state this chip family
@@ -791,8 +790,8 @@ class DiagnosticReport:
         }
 
     def render(self, console: Any = None) -> Any:
-        """Human `rich` table built from the SAME dict `to_dict()` produces
-        (RPT-01, D-01) -- never a second hand-maintained field list, never a
+        """Human `rich` table built from the SAME dict `to_dict()` produces --
+        never a second hand-maintained field list, never a
         re-parse of the JSON string produced by `to_json_block()`.
 
         Quick task 260821-spg trimmed this table to what a tester actually
@@ -894,7 +893,7 @@ class DiagnosticReport:
         if total:
             table.add_row("steps total", _duration_cell(total))
 
-        # LEG-12: its own console row, never folded into a step's `reason`.
+        # its own console row, never folded into a step's `reason`.
         # Rendered via `_state_cell` -- a no-op passthrough today, since
         # quick task 260822-hs stripped the NOT-RUN reason at its source
         # (`chip_test.sdp_hold_state()`); see `_state_cell`'s own docstring

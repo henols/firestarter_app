@@ -405,7 +405,7 @@ class SerialCommunicator:
         return result
 
     # =================================================================
-    # DO NOT MODIFY — v1.9 RCA territory (GATE-1.8d)
+    # DO NOT MODIFY — v1.9 RCA territory
     # The body of this generator is the host-side baseline for v1.9's
     # read-bug RCA. Phase 26 baseline binaries (.planning/v1.6/
     # consistency-check-runs/W27C512-leonardo-20260526-*-v2*/) were
@@ -1088,7 +1088,7 @@ class FaultInjectingSerialCommunicator(SerialCommunicator):
         After the first call, _fault_fired is set and subsequent calls pass
         through unmodified (one-shot guard). This causes codec.decode_id_frame's
         CRC8 check to fail on the first call, which surfaces as None →
-        _read_and_parse_lines re-syncs without touching its body (GATE-1.8d).
+        _read_and_parse_lines re-syncs without touching its body.
         """
         if self._corrupt_incoming_once and not self._fault_fired:
             self._fault_fired = True

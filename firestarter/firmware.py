@@ -92,7 +92,7 @@ _BOARD_FLASH_METHODS = {
 _PORTLESS_FLASH_METHODS = frozenset({FLASH_METHOD_DFU})
 
 
-# HOST-01 / D-17 — accepted deviation, not a defect to fix.
+# accepted deviation, not a defect to fix.
 #
 # The milestone plan prescribed extracting a flasher-strategy class hierarchy
 # (one strategy per install mechanism) when the py32 DFU install path landed.
@@ -648,7 +648,7 @@ class FirmwareManager:
             # bootloader, or how to install pyusb) — surface it as the module's
             # own error type rather than leaking a USB-layer exception.
             #
-            # HOST-03 / D-11: a genuine MISMATCH never reaches this `if ok:`
+            # a genuine MISMATCH never reaches this `if ok:`
             # branch below — _verify_readback() raises DfuProtocolError (a
             # DfuError), which lands here and is converted to
             # FirmwareOperationError, which the CLI's map_typed_errors

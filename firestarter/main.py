@@ -5,7 +5,7 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Entry-point stub for the `firestarter` console script (Phase 41 / D-08, D-16).
+Entry-point stub for the `firestarter` console script.
 Re-exports Click's ``cli`` as ``main`` so the ``firestarter.main:main`` entry
 point declared in pyproject.toml keeps resolving without churn after the
 argparse -> Click migration.

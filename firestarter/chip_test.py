@@ -367,7 +367,7 @@ _SDP_LEG_STEP_ORDER: tuple[str, ...] = (
 # erase `locked_destructive` reasons already use above -- naming the SDP
 # leg's own governing decision rather than reusing D-01's tag on a
 # reason it does not own.
-_SDP_LOCKED_REASON = 'write_scope="none": {op} omitted (D-18)'
+_SDP_LOCKED_REASON = 'write_scope="none": {op} omitted'
 
 # Region-policy vocabulary. Plain
 # module-level strings mirroring how this module already carries its op
@@ -704,9 +704,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
             )
         )
     else:
-        locked_destructive.append(
-            (OP_WRITE, 'write_scope="none": write omitted (D-01)')
-        )
+        locked_destructive.append((OP_WRITE, 'write_scope="none": write omitted'))
 
     # verify: always supported, but only executable on a write-executing
     # plan -- it follows the same D-01 write/erase gating (there is no
@@ -732,9 +730,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
             )
         )
     else:
-        locked_destructive.append(
-            (OP_VERIFY, 'write_scope="none": verify omitted (D-01)')
-        )
+        locked_destructive.append((OP_VERIFY, 'write_scope="none": verify omitted'))
 
     # erase: supported only if FLAG_CAN_ERASE is set AND protocol != 0x05
     # (flash4 auto-erases per page; the flag is deliberately clear for it --
@@ -752,9 +748,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
             # appended below -- the leg stays a contiguous terminal block.
             steps.append(blank_check_step)
         else:
-            locked_destructive.append(
-                (OP_ERASE, 'write_scope="none": erase omitted (D-01)')
-            )
+            locked_destructive.append((OP_ERASE, 'write_scope="none": erase omitted'))
     else:
         if protocol == _PROTOCOL_FLASH4:
             reason = "flash4 (0x05) auto-erases per page; no separate erase op"
@@ -869,7 +863,7 @@ def _top_anchored_or_default(full: dict) -> tuple[int, int]:
     default `(_WRITE_REGION_START, _WRITE_REGION_LENGTH)` when `memory-size`
     is missing or too small (a fallback that would otherwise produce a
     negative start). The WIDTH always comes from the `_UV_WRITE_REGION_LENGTH`
-    module constant -- never from any DB field (SC4); `memory-size` only
+    module constant -- never from any DB field; `memory-size` only
     bounds WHERE the window sits. Never returns `None` -- both callers
     (`write_scope="full"` for a UV part, `write_scope="partial"`
     unconditionally) want a concrete region, not "use the engine default"
@@ -1033,7 +1027,7 @@ class StepResult:
 
     `verdict` is one of OK/BAD/NA/SKIPPED/marginal. `error_code` carries the
     exact firmware `response.id` captured off `EpromOperationError.error_code`
-    (RPT-03) when the step raised; `None` otherwise. `fingerprint` is attached
+    when the step raised; `None` otherwise. `fingerprint` is attached
     only for the write/verify step (Task 3, PATT-02 wiring). `run_count` is
     the number of times the underlying operator method was actually invoked
     for this step (1 for single-run steps; N for multi-run destructive/verify
@@ -1318,7 +1312,7 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
     verdicts = {r.verdict for r in ran}
     if len(verdicts) > 1:
         verdict = VERDICT_MARGINAL
-        reason = f"{len(ran)} cycles disagreed on outcome (D-06 marginal policy)"
+        reason = f"{len(ran)} cycles disagreed on outcome"
     else:
         verdict = ran[0].verdict
         reason = next((r.reason for r in ran if r.reason), "")
@@ -1641,7 +1635,7 @@ def run_plan(
                 verdict=VERDICT_BAD,
                 reason=(
                     f"runs must be >= 2 (got {runs}); a destructive/verify "
-                    "step requires at least 2 runs to compare (D-05) -- "
+                    "step requires at least 2 runs to compare -- "
                     "pass allow_single_run=True to run a deliberately "
                     "weaker single-run plan"
                 ),
@@ -1996,7 +1990,7 @@ def sdp_left_writable(results: list[StepResult]) -> bool:
 _WRITE_REGION_START = 0
 _WRITE_REGION_LENGTH = 256
 
-# UV-EPROM write-region WIDTH (SC4). This is an ENGINE MODULE
+# UV-EPROM write-region WIDTH. This is an ENGINE MODULE
 # CONSTANT, never sourced from any DB field -- a malicious/misconfigured DB
 # entry must not be able to widen the write window. `memory-size` is only a
 # top-anchor PLACEMENT bound (where the window sits), never a WIDTH input.
@@ -2344,7 +2338,7 @@ def _write_region_for(step: Step | None, eprom_data: dict[str, Any]) -> tuple[in
     call-site symmetry with `_dispatch_multi_run`'s existing signature but is
     otherwise unused by this function: the WIDTH always comes from a module
     constant (`_WRITE_REGION_LENGTH` / `_UV_WRITE_REGION_LENGTH`), never from
-    any DB field (SC4) -- `eprom_data`/`memory-size` play no role here
+    any DB field -- `eprom_data`/`memory-size` play no role here
     because `derive_plan` already resolved the concrete region.
     """
     if step is not None and step.write_region is not None:
@@ -3140,7 +3134,7 @@ def _dispatch_multi_run(
     error_code, error_message = _firmware_error(operator)
     if diverged:
         verdict = VERDICT_MARGINAL
-        reason = f"{runs} runs disagreed on outcome (D-06 marginal policy)"
+        reason = f"{runs} runs disagreed on outcome"
     else:
         verdict = VERDICT_OK if outcomes and outcomes[0] else VERDICT_BAD
         # The firmware's text becomes the step's reason ONLY on a non-OK
@@ -3250,8 +3244,8 @@ def _dispatch_sdp_leg(
     `True` is reachable only when the state machine succeeded AND (for the
     inhibited-write op) the ack was observed internally by
     `eprom_operations.py`'s own check (`:1654-1662`) -- so `True` proves the
-    experiment ran as designed. `False` NEVER means BAD by itself (D-01/
-    D-02) -- it routes to `marginal`, naming both candidate causes (the
+    experiment ran as designed. `False` NEVER means BAD by itself -- it routes
+    to `marginal`, naming both candidate causes (the
     opt-out not honoured by older firmware, or a transport fault).
 
     ⚠ D-03's full 2x2 polarity proof holds for `OP_WRITE_INHIBITED`:
@@ -3383,7 +3377,7 @@ def _dispatch_sdp_leg(
                 "correct-length but degenerate read-back content "
                 f"(classification={fingerprint.classification!r}) — a "
                 "loose socket or blank/unresponsive chip reads as a contact "
-                "fault, not a chip finding (D-04)"
+                "fault, not a chip finding"
             ),
             fingerprint=fingerprint,
             run_count=1,
@@ -3420,7 +3414,7 @@ def _dispatch_sdp_leg(
                 (
                     "write_eprom reported failure on the inhibited-write "
                     "precondition — this is a PRECONDITION signal, not the "
-                    "verdict (D-01). Most likely causes: (1) the 0x86 opt-out "
+                    "verdict. Most likely causes: (1) the 0x86 opt-out "
                     "ack was not honoured — the connected firmware may predate "
                     "FLAG_SKIP_SDP_UNLOCK support, run `firestarter fw "
                     "--install` to update it and retry; or (2) a transport "
@@ -3438,8 +3432,8 @@ def _dispatch_sdp_leg(
                 (
                     "write_eprom reported success but the read-back does not "
                     "match what was written — the write path did not "
-                    "transition (LEG-16's dead-write-path shape) or changed "
-                    "only part of the region (LEG-07)"
+                    "transition (a dead write path) or changed "
+                    "only part of the region"
                 ),
             )
         elif (not wrote_ok) and equal:

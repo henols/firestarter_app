@@ -627,9 +627,9 @@ def test_derive_plan_destructive_flag_strips_not_annotates():
         "M8720 is REFUSE -- its six SDP-leg steps must all be unsupported/NA"
     )
     assert plan_default.locked_destructive == [
-        (OP_WRITE, 'write_scope="none": write omitted (D-01)'),
-        (OP_VERIFY, 'write_scope="none": verify omitted (D-01)'),
-        (OP_ERASE, 'write_scope="none": erase omitted (D-01)'),
+        (OP_WRITE, 'write_scope="none": write omitted'),
+        (OP_VERIFY, 'write_scope="none": verify omitted'),
+        (OP_ERASE, 'write_scope="none": erase omitted'),
     ]
     assert plan_destructive.locked_destructive == []
     ops_default_set = set(ops_default)

@@ -65,8 +65,8 @@ def map_unknown_cmd_to_outdated(
     D-14: an `EpromOperationError` whose `error_code` is
     `MSG_ERR_UNKNOWN_CMD` means the attached firmware predates
     CMD_SDP_LOCK/CMD_SDP_UNLOCK and does not recognise this
-    command at all. This exploits the one real asymmetry in the wire surface
-    (HOST-06): an unknown COMMAND produces an error and is therefore
+    command at all. This exploits the one real asymmetry in the wire surface:
+    an unknown COMMAND produces an error and is therefore
     detectable after the fact, whereas an unknown flag BIT produces silence.
     Keyed on the message **id**, never the message text.
 
@@ -88,8 +88,8 @@ def map_unknown_cmd_to_outdated(
 def map_unknown_cmd_to_outdated_for_operation(
     exc: EpromOperationError, operation_label: str, chip_name: str
 ) -> FirmwareOutdatedError | None:
-    """Generalised sibling of `map_unknown_cmd_to_outdated` (Phase 151,
-    D-04): same contract, but the message names whatever `operation_label`
+    """Generalised sibling of `map_unknown_cmd_to_outdated`: same contract, but
+    the message names whatever `operation_label`
     it is given instead of the hard-coded literal `"SDP"`.
 
     Added rather than folding into `map_unknown_cmd_to_outdated` itself,

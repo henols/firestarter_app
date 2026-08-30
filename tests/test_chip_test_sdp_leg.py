@@ -2117,9 +2117,9 @@ def test_refuse_write_scope_none_is_byte_identical_to_pre_phase134():
     plan = derive_plan(name, _REAL_DB, write_scope="none")
     assert [s.op for s in plan.steps] == ["id", "read", "blank-check"]
     assert plan.locked_destructive == [
-        (OP_WRITE, 'write_scope="none": write omitted (D-01)'),
-        (OP_VERIFY, 'write_scope="none": verify omitted (D-01)'),
-        (OP_ERASE, 'write_scope="none": erase omitted (D-01)'),
+        (OP_WRITE, 'write_scope="none": write omitted'),
+        (OP_VERIFY, 'write_scope="none": verify omitted'),
+        (OP_ERASE, 'write_scope="none": erase omitted'),
     ]
 
 

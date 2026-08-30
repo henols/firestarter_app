@@ -574,7 +574,7 @@ class Py32DfuFlasher:
         self.erase_page_size = erase_page_size
         self.leave = leave
         self._interface: Optional[DfuInterface] = None  # noqa: UP045
-        # HOST-03 / D-10: set by `_verify_readback` once `flash()` has run;
+        # set by `_verify_readback` once `flash()` has run;
         # `None` means verification has not happened yet. See `VerifyResult`.
         self.verify_result: Optional[VerifyResult] = None  # noqa: UP045
         self.verify_reason: Optional[str] = None  # noqa: UP045
