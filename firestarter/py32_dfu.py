@@ -24,7 +24,7 @@ descriptors — nothing about the geometry is hardcoded:
 so which dialect the Puya bootloader speaks — and what USB VID/PID it presents —
 is unconfirmed. That is why discovery scans for the DFU *interface class* rather
 than a hardcoded ID, and why `probe()` exists: run it first on real hardware and
-it prints exactly what was found. See `doc/PY32F071-FIRMWARE-INSTALL.md`.
+it prints exactly what was found.
 """
 
 from __future__ import annotations
@@ -602,8 +602,8 @@ class Py32DfuFlasher:
             raise DfuDeviceNotFoundError(
                 "No USB DFU device found. The PY32F071 must be in bootloader "
                 "mode: strap BOOT0 high with nBOOT1 = 1 and power-cycle the "
-                "board (see doc/PY32F071-FIRMWARE-INSTALL.md), or ask a running "
-                "firmware to reboot into the bootloader."
+                "board, or ask a running firmware to reboot into the "
+                "bootloader."
             )
 
         for candidate in interfaces:
