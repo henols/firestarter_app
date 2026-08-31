@@ -175,7 +175,7 @@ v1.4 introduces an opt-in beta channel for both the app (via PyPI pre-releases) 
 (via GitHub Pre-releases). App and firmware beta versions use matching `X.Y.ZbN` lockstep identifiers
 so you always know both components are from the same beta cut.
 
-> **New to the beta channel?** See [`doc/beta-testing-install.md`](doc/beta-testing-install.md)
+> **New to the beta channel?** See [Beta Testing Install](https://github.com/henols/firestarter_prom/wiki/Beta-Testing-Install)
 > for a full stranger-friendly walkthrough: install the beta app, flash the matching beta firmware
 > to your specific board, run a smoke check, then hand off into `firestarter dev test <chip>`.
 >
@@ -752,7 +752,7 @@ Firestarter will use the `M2716-adapter` definition, look up the `pin-map` ID `2
 
 The Firestarter firmware reports the detected RURP shield silkscreen revision on every handshake (`MSG_OK_REV`). For the per-revision capability matrix, silkscreen → code alias table, and per-rev expected ADC band table, see the firmware sub-repo doc:
 
-https://github.com/henols/firestarter/blob/main/doc/SHIELD-REVISIONS.md
+https://github.com/henols/firestarter_prom/wiki/Shield-Revisions
 
 If detection reports `rev_unknown` (pre-detect-resistor boards or guard-gap landing), set the EEPROM override byte: `firestarter rev <N>` where `<N>` is the silkscreen-rev byte:
 
