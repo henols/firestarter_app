@@ -1,22 +1,24 @@
-"""Prove every curated protection-readability citation resolves (LOCK-01, Task 3).
-
-Shape mirrors `test_lockable_proms_doc_claims.py`: module-level `_FA_DIR`,
-`_DOC_FILE`, a `_read_doc_text()` helper, pre-compiled `re` patterns as module
-constants each with a comment explaining why the pattern is a real checkable
-negative, and per-leg docstrings that assert on text rather than line number.
+"""Prove every curated protection-readability citation is well-formed (LOCK-01, Task 3).
 
 No leg in this file asserts that any readability verdict is *correct* -- no
 test in this phase can establish that (`151-DESIGN.md` §8's evidence ceiling).
-Every leg here asserts only that a verdict carries a citation, and that the
-citation resolves to text actually present in `doc/lockable-proms.md`.
+Every leg here asserts only that a verdict carries a citation naming a line
+and a section reference.
+
+**168-09 note (2026-08-31):** this module originally also asserted that a
+citation's quoted row-key fragment resolved verbatim in the app repository's
+own copy of the Lockable PROMs reference (`test_every_quoted_citation_fragment_resolves_in_the_doc`,
+plus its non-vacuity control `test_citation_resolution_non_vacuity_control`).
+Both legs are deleted together here, since the file they read is deleted as
+part of MIGRATE-02 and the second leg is only a control for the first. The
+citation-resolves-in-the-doc property they proved is not replaced in this
+phase -- see 168-09-SUMMARY.md.
 """
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
-
-import pytest
 
 from firestarter.protection_readability import (
     AMBIGUOUS_DOC_CITATIONS,
@@ -30,14 +32,6 @@ from firestarter.protection_readability import (
 
 _FA_DIR = Path(__file__).parent.parent
 _MODULE_FILE = _FA_DIR / "firestarter" / "protection_readability.py"
-_DOC_FILE = _FA_DIR / "doc" / "lockable-proms.md"
-
-# A citation comment quotes its lockable-proms.md row-key fragment inside a
-# pair of double quotes, e.g. `"W29C020 / W29C020C"`. This is a real
-# checkable negative: if a row is edited out from under a citation, or a
-# citation is fabricated, the quoted fragment stops resolving as a substring
-# of the document and the search below fails loudly instead of silently.
-_QUOTED_FRAGMENT_RE = re.compile(r'"([^"]{3,})"')
 
 # A `lockable-proms.md:NNN` style line reference. Real checkable negative:
 # a citation missing this entirely cannot be traced back to a specific row.
@@ -59,10 +53,6 @@ _TOKEN_ON_LINE_RE = re.compile(r'"([A-Z0-9]+)"')
 
 def _read_module_text() -> str:
     return _MODULE_FILE.read_text()
-
-
-def _read_doc_text() -> str:
-    return _DOC_FILE.read_text()
 
 
 def _extract_citation_groups(
@@ -98,24 +88,6 @@ def _extract_citation_groups(
     if current_tokens:
         groups.append((" ".join(current_comment), current_tokens))
     return groups
-
-
-def _assert_all_fragments_resolve(
-    groups: list[tuple[str, list[str]]], doc_text: str
-) -> None:
-    """Leg 2's real checkable negative, reused by leg 5's non-vacuity control.
-
-    For every citation comment, every double-quoted fragment inside it must
-    appear verbatim, as a plain substring, in `doc_text`. Raises naming the
-    offending fragment and the tokens it cites -- never the control.
-    """
-    for comment_text, tokens in groups:
-        for fragment in _QUOTED_FRAGMENT_RE.findall(comment_text):
-            if fragment not in doc_text:
-                raise AssertionError(
-                    f"citation fragment {fragment!r} (tokens {tokens}) not found "
-                    "verbatim in lockable-proms.md"
-                )
 
 
 def _readable_groups() -> list[tuple[str, list[str]]]:
@@ -158,13 +130,6 @@ def test_every_curated_token_has_a_citation_comment() -> None:
     )
 
 
-def test_every_quoted_citation_fragment_resolves_in_the_doc() -> None:
-    """Leg 2: every quoted row-key fragment is present verbatim in the doc."""
-    doc_text = _read_doc_text()
-    _assert_all_fragments_resolve(_readable_groups(), doc_text)
-    _assert_all_fragments_resolve(_not_readable_groups(), doc_text)
-
-
 def test_every_readable_citation_has_line_and_section_reference() -> None:
     """Leg 3: a documented-readable citation names both a line and a §section."""
     for comment_text, tokens in _readable_groups():
@@ -200,60 +165,6 @@ def test_mechanism_and_permanence_keys_and_values_are_well_formed() -> None:
     )
     assert not bad_perm_values, (
         f"PERMANENCE_BY_TOKEN values outside PERMANENCE_STATES: {bad_perm_values}"
-    )
-
-
-def test_citation_resolution_non_vacuity_control() -> None:
-    """Leg 5: the leg-2 checker actually fails on a fabricated fragment.
-
-    Mirrors `test_sdp_db_invariant.py::
-    test_partition_flags_a_moved_chip_via_db_field_non_vacuous`'s shape: build
-    a synthetic two-row citation text -- one fabricated row that is not in
-    the document, one untouched control -- and prove the checker raises
-    naming the fabricated fragment and not the control.
-    """
-    fixture_text = """
-FIXTURE_TOKENS: frozenset[str] = frozenset(
-    {
-        # CONTROL -- lockable-proms.md:21 §1 "W29C020 / W29C020C"
-        "CONTROLTOKEN",
-        # FABRICATED -- lockable-proms.md:999 §1 "THIS ROW KEY DOES NOT EXIST ANYWHERE"
-        "FABRICATEDTOKEN",
-    }
-)
-"""
-    groups = _extract_citation_groups(
-        fixture_text, "FIXTURE_TOKENS: frozenset[str] = frozenset("
-    )
-
-    # Fixture setup assertion, checked first per the plan's instruction.
-    assert groups == [
-        ('CONTROL -- lockable-proms.md:21 §1 "W29C020 / W29C020C"', ["CONTROLTOKEN"]),
-        (
-            'FABRICATED -- lockable-proms.md:999 §1 "THIS ROW KEY DOES NOT EXIST ANYWHERE"',
-            ["FABRICATEDTOKEN"],
-        ),
-    ], f"Fixture setup error: unexpected groups {groups!r}"
-
-    doc_text = _read_doc_text()
-    # The control fragment must actually resolve, or this control proves
-    # nothing about the checker distinguishing fabricated from real.
-    assert "W29C020 / W29C020C" in doc_text, (
-        "Fixture setup error: control fragment not in doc"
-    )
-    assert "THIS ROW KEY DOES NOT EXIST ANYWHERE" not in doc_text, (
-        "Fixture setup error: fabricated fragment unexpectedly present in doc"
-    )
-
-    with pytest.raises(AssertionError) as exc_info:
-        _assert_all_fragments_resolve(groups, doc_text)
-
-    message = str(exc_info.value)
-    assert "THIS ROW KEY DOES NOT EXIST ANYWHERE" in message, (
-        f"non-vacuity control did not name the fabricated fragment: {message!r}"
-    )
-    assert "W29C020 / W29C020C" not in message, (
-        f"non-vacuity control wrongly implicated the control fragment: {message!r}"
     )
 
 
