@@ -540,7 +540,6 @@ def main():
                 # before any wire dict is built. This arm therefore sets only
                 # support_status + reason and must NOT touch proto_id.
                 #
-                # The DIP24→DIP32 remap lives in firestarter/doc/AT28C04-ADAPTER.md.
                 # The reason string must start with "adapter required:" —
                 # test_adapter_required_reason_starts_with_adapter_required.
                 _AT28C_DIP24_NAMES = {
@@ -566,7 +565,7 @@ def main():
                     _support_status = "adapter-required"
                     _unsupported_reason = (
                         "adapter required: AT28C04/AT28C16 DIP24 chip — requires a physical "
-                        "DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
+                        "DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
                     )
 
                 # --- SYNTHESIZE "COMPLETE" DATA ---
