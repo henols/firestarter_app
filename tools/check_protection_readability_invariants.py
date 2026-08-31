@@ -18,7 +18,7 @@ the checker silently scans nothing and exits 0. `tools/` never moves
 relative to `firestarter/` when this gate is reused from a later phase.
 
 The module holds a three-axis, hand-curated table (readability,
-mechanism, permanence) sourced from `doc/lockable-proms.md`. Nothing
+mechanism, permanence) sourced from the wiki page `Lockable PROMs`. Nothing
 structurally prevents a future edit from widening the curated readable-token
 set back into inference, or from adding a permit path not dominated by a
 membership test. This gate denies four violation classes to make each

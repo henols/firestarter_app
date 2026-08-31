@@ -247,7 +247,7 @@ _RATIONALES = {
         "  unchanged.\n"
         "  [VERIFIED: minipro src/database.c#L39-L50 @ a8efaedc236c1d9718bd28299dfbb99536b010ff —\n"
         "   https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c#L39]\n"
-        "  [CITED: doc/infoic-field-dictionary.md CONFIRMED bit 14/15 row;\n"
+        "  [CITED: Infoic Field Dictionary CONFIRMED bit 14/15 row;\n"
         "   .planning/phases/136.1-sdp-partition-provenance/136.1-01-PLAN.md;\n"
         "   .planning/phases/136.1-sdp-partition-provenance/136.1-01-BLAST-RADIUS.md]"
     ),
