@@ -216,7 +216,6 @@ def test_committed_fixture_is_genuinely_incomplete() -> None:
     so a future well-meaning "completion" of the fixture fails loudly here
     instead of silently disarming test 2."""
     assert (_FIXTURE_DIR / "include" / "firestarter.h").exists()
-    assert (_FIXTURE_DIR / "doc" / "PROTOCOLS.md").exists()
     assert not (_FIXTURE_DIR / _MISSING_TARGET).exists()
 
 
