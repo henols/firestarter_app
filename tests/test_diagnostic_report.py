@@ -841,11 +841,11 @@ def test_report_composes_db_diff_from_single_source():
     """RPT-01 single-source: `render()` reads `self.to_dict()`, never a
     parallel field list or a re-parse of the JSON string. Quick task
     260821-spg removed `db_diff`'s console row entirely (it now reaches
-    only `to_json_block()`, doc'd in `doc/community-validation.md`), so
-    this test no longer asserts `db_diff` content appears in the RENDERED
-    table -- it asserts the payload (`to_dict()`) and the single-source
-    mechanism (`render()`'s own source calling `to_dict()`, never
-    `json.load(s)`), which is what the claim actually needs."""
+    only `to_json_block()`), so this test no longer asserts `db_diff`
+    content appears in the RENDERED table -- it asserts the payload
+    (`to_dict()`) and the single-source mechanism (`render()`'s own source
+    calling `to_dict()`, never `json.load(s)`), which is what the claim
+    actually needs."""
     from firestarter.diagnostic_report import build_db_diff
 
     report = _build_report()

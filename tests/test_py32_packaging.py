@@ -19,6 +19,27 @@ file that a future refactor could silently drift without any test noticing:
      is expected to move the flash map, and this is what turns that move
      into a red test here instead of a stale doc there.
 
+     **168-09 note (2026-08-31):** family 3's install guide
+     (`PY32F071-FIRMWARE-INSTALL.md`) is deferred, not migrated, and is
+     deleted here along with the rest of `firestarter_app/doc/`
+     (MIGRATE-02) -- an install guide for silicon that does not exist yet
+     would promise a capability the project cannot back. Its five
+     real-doc-reading legs (`test_install_doc_is_non_vacuous`,
+     `test_install_doc_app_region_end_matches_host_constant`,
+     `test_install_doc_flash_base_matches_host_constant`,
+     `test_install_doc_documents_all_three_readback_outcomes`,
+     `test_install_doc_pyusb_floor_matches_pyproject`) are removed below.
+     This deletion removes the only parity gate between the host's
+     flash-map constants, its minimum USB-library version, and a written
+     description of them -- restoring it is owed to whichever phase finally
+     publishes the install guide; until then `py32_dfu.APP_REGION_END` /
+     `py32_dfu.FLASH_BASE` and the `[py32]` pyusb floor have no external
+     cross-check. The sixth family-3 leg,
+     `test_install_doc_address_parity_fails_closed_on_a_planted_file_missing_the_address`,
+     survives unchanged: it exercises the parity helper's fail-closed
+     behaviour against a planted `tmp_path` file, never the real deleted
+     doc, so it needs no oracle change.
+
 **Why a regex scan, not a TOML parse.** tomllib is py3.11+ and this
 project's declared floor is py3.9 (ruff target-version = "py39", mypy
 python_version = "3.9"); tomli is not a dependency this project carries and
@@ -78,16 +99,6 @@ _D17_PROXIMITY_LINES = 25
 # D-15: the install doc's non-vacuity anchor -- the same
 # section header the doc's own text calls "§3".
 _INSTALL_DOC_SECTION_3_HEADING = "## 3. What the host does during an install"
-
-# the doc must name all three non-VERIFIED outcomes using the
-# exact words the flasher/CLI actually print (or the flasher's own attribute
-# name), so a future edit cannot quietly drop the honest half of the
-# install's outcome vocabulary.
-_READBACK_OUTCOME_PHRASES = (
-    "bitCanUpload",
-    "load address not under host control",
-    "written but NOT verified",
-)
 
 
 def _py32_extra_requirements(text: str) -> list[str]:
@@ -271,67 +282,6 @@ def _assert_doc_states_app_region_end() -> None:
         f"(py32_dfu.APP_REGION_END == 0x{py32_dfu.APP_REGION_END:08X}) inside "
         f"{_INSTALL_DOC}, but it was not found"
     )
-
-
-def _assert_doc_states_flash_base() -> None:
-    """Assert the install doc's flash-base figure matches
-    `py32_dfu.FLASH_BASE` exactly, built the same way as
-    `_assert_doc_states_app_region_end`."""
-    text = _read_install_doc()
-    expected = f"0x{py32_dfu.FLASH_BASE:08X}"
-    assert expected in text, (
-        f"doc figure and host constant have diverged: expected the flash "
-        f"base figure {expected!r} (py32_dfu.FLASH_BASE == "
-        f"0x{py32_dfu.FLASH_BASE:08X}) inside {_INSTALL_DOC}, but it was "
-        "not found"
-    )
-
-
-def test_install_doc_is_non_vacuous() -> None:
-    """`_read_install_doc` over the real install doc must return non-empty
-    text containing the §3 heading -- otherwise every parity assertion
-    below would be comparing against nothing (research finding A-7)."""
-    text = _read_install_doc()
-    assert text
-
-
-def test_install_doc_app_region_end_matches_host_constant() -> None:
-    """The doc's application-region-end figure (§3 step 5) must not
-    silently outlive `py32_dfu.APP_REGION_END` -- a Phase-129 map move
-    turns this red instead of leaving the doc stale."""
-    _assert_doc_states_app_region_end()
-
-
-def test_install_doc_flash_base_matches_host_constant() -> None:
-    """The doc's flash-base figure must likewise track
-    `py32_dfu.FLASH_BASE`."""
-    _assert_doc_states_flash_base()
-
-
-def test_install_doc_documents_all_three_readback_outcomes() -> None:
-    """All three non-VERIFIED readback outcomes must be named in the doc
-    using the words the flasher/CLI actually use, so a future edit cannot
-    quietly drop the honest half of the install's outcome vocabulary."""
-    text = _read_install_doc()
-    missing = [phrase for phrase in _READBACK_OUTCOME_PHRASES if phrase not in text]
-    assert not missing, (
-        f"install doc is missing readback outcome phrase(s) {missing!r} in "
-        f"{_INSTALL_DOC}"
-    )
-
-
-def test_install_doc_pyusb_floor_matches_pyproject() -> None:
-    """The `[py32]` extra's requirement string(s) in `pyproject.toml` must
-    also appear in the install doc -- one comparison, both sources, so the
-    two cannot drift apart."""
-    requirements = _read_py32_requirements()
-    text = _read_install_doc()
-    for requirement in requirements:
-        assert requirement in text, (
-            f"pyproject.toml's py32 extra requirement {requirement!r} is "
-            f"not stated in {_INSTALL_DOC} -- the doc and pyproject.toml "
-            "have drifted"
-        )
 
 
 def test_install_doc_address_parity_fails_closed_on_a_planted_file_missing_the_address(
