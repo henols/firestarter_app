@@ -252,8 +252,8 @@ _DISPOSITION_INCONCLUSIVE = "inconclusive -- needs N>=2 agreement (advisory)"
 _DISPOSITION_NO_CHANGE = "no change suggested (advisory)"
 
 # Graduation-ladder tag names. These are the
-# formalized report-side vocabulary the ladder taxonomy documents (see
-# doc/community-validation.md). `_LADDER_COMMUNITY_CONFIRMED` is the
+# formalized report-side vocabulary the ladder taxonomy documents.
+# `_LADDER_COMMUNITY_CONFIRMED` is the
 # human-gated target reachable only after a maintainer manually promotes a
 # chip (N>=2 agreeing reports) via the unchanged `build_db.py` write
 # locus -- `build_db_diff` below NEVER assigns it.

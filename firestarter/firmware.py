@@ -626,8 +626,9 @@ class FirmwareManager:
 
         No external flashing binary is involved — the DFU transfer is
         implemented in `firestarter/py32_dfu.py` on top of pyusb. The board must
-        already be in bootloader mode; see `doc/PY32F071-FIRMWARE-INSTALL.md` for
-        the three ways to get it there.
+        already be in bootloader mode: strap BOOT0 high with nBOOT1 = 1 and
+        power-cycle it, or ask a running firmware to reboot into the
+        bootloader.
         """
         # Channel gate enforced here, not only in the CLI: this is the single
         # choke point every DFU install passes through, including library callers

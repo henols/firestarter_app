@@ -457,12 +457,9 @@ class EpromSpecBuilder:
     # entries lacking electrical.type) and _get_protocol_info_structured's
     # `type` field (the `firestarter info` "Protocol:" line) read from this ONE
     # dict — preventing the two vocabularies from re-diverging, which is a
-    # recurring class of bug here. Values are ASCII-normalized copies of
-    # firestarter/doc/PROTOCOLS.md column-2 canonical names (em-dash "—" /
-    # en-dash "–" rendered as ASCII "-" for terminal/pipe/grep safety — a
-    # documented punctuation deviation from the doc). 0x34 added / 0x11
-    # dropped / 0x35+0x39 stay excluded per the full-coverage reconcile
-    # against the 12-protocol canonical DB set.
+    # recurring class of bug here. 0x34 added / 0x11 dropped / 0x35+0x39 stay
+    # excluded per the full-coverage reconcile against the 12-protocol
+    # canonical DB set.
     _PROTOCOL_DISPLAY_NAME = {
         0x05: "Flash - 5V page-write (EEPROM-like)",
         0x06: "Flash - AMD/SST unlock-sequence NOR",

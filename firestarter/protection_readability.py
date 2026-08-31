@@ -8,9 +8,9 @@ Autoselect-readable group carries no protection bits of its own. With no
 machine-derivable axis, a cited transcription of the one document that does
 state readability is the honest option.
 
-The source is `doc/lockable-proms.md`, whose `## Key` section defines the
-Yes-sector / Yes-global / Yes-special / Indirect / No / Permanent vocabulary
-this module reads off row by row.
+The source is the wiki page `Lockable PROMs`, whose `## Key` section defines
+the Yes-sector / Yes-global / Yes-special / Indirect / No / Permanent
+vocabulary this module reads off row by row.
 
 Coverage is algorithms 0x05 and 0x06 only; the remaining rows are
 algorithm-derivable and need no curated token.

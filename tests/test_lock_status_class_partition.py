@@ -41,12 +41,22 @@ Coverage (task numbering matches `151-12-PLAN.md`):
   Task 2 (this file's second half):
     4. Structural unreachability of `protected`/`unprotected`, paired with
        the planted fixture routed through the subprocess gate seam.
-    5. Citation presence -- deliberately overlapping
-       `tests/test_protection_table_citations.py` (that file gates the
-       table's authoring; this one gates the partition's inputs).
     6. Robustness: the two key-less TEXAS INSTRUMENTS rows, the ten
        non-`"supported"` rows, and a synthetic novel-algorithm control.
     7. `AMBIGUOUS_DOC_CITATIONS` is live over the real corpus.
+
+**168-09 note (2026-08-31):** this file originally also carried a "Leg 5"
+citation-presence gate asserting that a `DOCUMENTED_READABLE_TOKENS`
+citation's quoted row-key fragment resolved verbatim in the app repository's
+own copy of the Lockable PROMs reference
+(`test_every_readable_token_has_a_citation_that_resolves_in_the_doc`). That
+leg is deleted here, since the file it read is deleted as part of
+MIGRATE-02; the doc-resolution half of the property it proved is not
+replaced in this phase -- see 168-09-SUMMARY.md. The citation-presence half
+of leg 5 (every documented-readable token has SOME citation comment) is
+still covered by `tests/test_protection_table_citations.py`'s own
+`test_every_curated_token_has_a_citation_comment`, which asserts the same
+property over both curated frozensets.
 """
 
 from __future__ import annotations
@@ -54,7 +64,6 @@ from __future__ import annotations
 import ast
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -63,7 +72,6 @@ from typing import NamedTuple
 from firestarter.lock_status import SILICON_ONLY_TOKENS
 from firestarter.protection_readability import (
     AMBIGUOUS_DOC_CITATIONS,
-    DOCUMENTED_READABLE_TOKENS,
     GATE_TOKEN_NO_MECHANISM,
     GATE_TOKEN_NOT_IMPLEMENTED,
     GATE_TOKEN_NOT_READABLE,
@@ -78,7 +86,6 @@ from firestarter.sdp_capability import split_part_number_tokens
 _FA_DIR = Path(__file__).parent.parent
 _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
 _MODULE_FILE = _FA_DIR / "firestarter" / "protection_readability.py"
-_DOC_FILE = _FA_DIR / "doc" / "lockable-proms.md"
 
 _ALL_GATE_TOKENS = frozenset(
     {
@@ -636,92 +643,6 @@ def test_real_module_passes_the_same_gate_seam() -> None:
         f"the gate. stdout: {result.stdout!r} stderr: {result.stderr!r}"
     )
     assert "PASS" in result.stdout
-
-
-# ---------------------------------------------------------------------------
-# Leg 5: citation presence, and that the citations resolve.
-# ---------------------------------------------------------------------------
-
-# A citation comment quotes its lockable-proms.md row-key fragment inside a
-# pair of double quotes -- mirrors
-# test_protection_table_citations.py:_QUOTED_FRAGMENT_RE exactly.
-_QUOTED_FRAGMENT_RE = re.compile(r'"([^"]{3,})"')
-# A bare quoted alias token inside a frozenset display line, e.g.
-# `"AM29F010",` -- mirrors
-# test_protection_table_citations.py:_TOKEN_ON_LINE_RE.
-_TOKEN_ON_LINE_RE = re.compile(r'"([A-Z0-9]+)"')
-
-_READABLE_BLOCK_START = "DOCUMENTED_READABLE_TOKENS: frozenset[str] = frozenset("
-
-
-def _read_module_text() -> str:
-    return _MODULE_FILE.read_text(encoding="utf-8")
-
-
-def _read_doc_text() -> str:
-    return _DOC_FILE.read_text(encoding="utf-8")
-
-
-def _extract_readable_citation_groups() -> list[tuple[str, list[str]]]:
-    """Mirrors `test_protection_table_citations.py`'s
-    `_extract_citation_groups` shape, scoped to `DOCUMENTED_READABLE_TOKENS`
-    only: splits the frozenset display block into `(comment_text, [tokens])`
-    groups -- a run of consecutive `#`-comment lines followed by the
-    token-literal lines it covers."""
-    lines = _read_module_text().splitlines()
-    start = next(i for i, line in enumerate(lines) if _READABLE_BLOCK_START in line)
-    end = next(i for i in range(start + 1, len(lines)) if lines[i].strip() == ")")
-    block = lines[start:end]
-
-    groups: list[tuple[str, list[str]]] = []
-    current_comment: list[str] = []
-    current_tokens: list[str] = []
-    for line in block:
-        stripped = line.strip()
-        if stripped.startswith("#"):
-            if current_tokens:
-                groups.append((" ".join(current_comment), current_tokens))
-                current_comment, current_tokens = [], []
-            current_comment.append(stripped.lstrip("#").strip())
-        else:
-            found = _TOKEN_ON_LINE_RE.findall(line)
-            if found:
-                current_tokens.extend(found)
-    if current_tokens:
-        groups.append((" ".join(current_comment), current_tokens))
-    return groups
-
-
-def test_every_readable_token_has_a_citation_that_resolves_in_the_doc() -> None:
-    """D-12 leg 5: every token in `DOCUMENTED_READABLE_TOKENS` carries a
-    citation comment in the module source, and the `lockable-proms.md`
-    row-key fragment quoted in that comment is present verbatim in
-    `doc/lockable-proms.md`.
-
-    Deliberately overlaps `tests/test_protection_table_citations.py`'s own
-    legs 1/2 by design: that file gates the CURATED TABLE'S AUTHORING
-    (every curated token, both frozensets); this leg gates the
-    PARTITION'S INPUTS specifically (the tokens D-12's own walk exercises
-    via `GATE_TOKEN_READ_PERMITTED`). `151-VALIDATION.md`'s "Required
-    Assertion Set" names citation presence as one of D-12's own six
-    required legs, independent of whether another file already checks it
-    -- the overlap is deliberate, not duplicated.
-    """
-    groups = _extract_readable_citation_groups()
-    cited_tokens = {t for _, toks in groups for t in toks}
-    uncited = DOCUMENTED_READABLE_TOKENS - cited_tokens
-    assert not uncited, (
-        f"D-12 leg 5: documented-readable tokens with no citation comment: "
-        f"{sorted(uncited)}"
-    )
-
-    doc_text = _read_doc_text()
-    for comment_text, tokens in groups:
-        for fragment in _QUOTED_FRAGMENT_RE.findall(comment_text):
-            assert fragment in doc_text, (
-                f"D-12 leg 5: citation fragment {fragment!r} (tokens "
-                f"{tokens}) is not present verbatim in lockable-proms.md"
-            )
 
 
 # ---------------------------------------------------------------------------

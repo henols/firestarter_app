@@ -157,7 +157,6 @@ _DEFAULT_TARGETS = [
         "tests/test_dev_test_cmd.py",
         "tests/test_diagnostic_report.py",
         "tests/test_diff_db_gate.py",
-        "tests/test_dispatch_mirror.py",
         "tests/test_eprom_database.py",
         "tests/test_eprom_info.py",
         "tests/test_eprom_operations.py",

@@ -160,9 +160,18 @@ class TestDiffDbVccMarginRailBucketInvariance:
     baseline, and asserts the exact measured bucket distribution: the
     margin-rail substitution moved exactly 56 chips into their own labelled
     bucket, every pre-existing bucket count is unchanged except
-    PROV01_PROTECT_METADATA (which drops by exactly those 56 chips,
-    742 -> 686), the changed-chip total stays 744, and there are 0 NEW / 0
-    MISSING chips.
+    PROV01_PROTECT_METADATA, the changed-chip total stays 744, and there are
+    0 NEW / 0 MISSING chips.
+
+    PROV01_PROTECT_METADATA started at 742, dropped to 686 for the 56
+    margin-rail movers, and dropped again to 682 at Phase 168 (MIGRATE-04
+    D-14): build_db.py's AT28C DIP24 adapter unsupported_reason string was
+    repointed from a firestarter/doc/ path to a wiki page name, which no
+    longer coincidentally matches the Phase-98 baseline's stored text for
+    28C04A/28C04AF/28C16A/28C16AF. Those 4 chips' support_status fields now
+    also differ from baseline, reclassifying their PRIMARY label from
+    PROV01_PROTECT_METADATA to RULE_PHASE66 (a bucket this test previously
+    never saw at 0 chips).
 
     What a count change here means (never argue it, re-measure it): a
     different changed-chip TOTAL means a chip entered or left the database.
@@ -200,9 +209,15 @@ class TestDiffDbVccMarginRailBucketInvariance:
             "must be re-measured against the four-way split table (148-CONTEXT.md "
             f"D-03: 55/16/12/1), never argued; got:\n{stdout}"
         )
-        assert "[PROV01_PROTECT_METADATA] (686 chips)" in stdout, (
-            "PROV01_PROTECT_METADATA must drop by exactly the 56 movers "
-            f"(742 -> 686); got:\n{stdout}"
+        assert "[RULE_PHASE66] (4 chips)" in stdout, (
+            "RULE_PHASE66 must explain exactly 4 chips (28C04A/28C04AF/28C16A/"
+            "28C16AF) since Phase 168's build_db.py wiki-page repoint made "
+            f"their unsupported_reason diverge from the Phase-98 baseline; got:\n{stdout}"
+        )
+        assert "[PROV01_PROTECT_METADATA] (682 chips)" in stdout, (
+            "PROV01_PROTECT_METADATA must drop by exactly the 56 margin-rail "
+            "movers plus the 4 chips Phase 168 reclassified into RULE_PHASE66 "
+            f"(742 -> 686 -> 682); got:\n{stdout}"
         )
         assert "[PGSZ_PAGE_SIZE] (2 chips)" in stdout, (
             f"PGSZ_PAGE_SIZE must stay 2 chips (pre-existing, unaffected); got:\n{stdout}"

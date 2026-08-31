@@ -37,7 +37,6 @@ firestarter_app/
 ├── .github/
 │   ├── workflows/            # CI/CD workflow definitions
 │   └── scripts/              # GitHub Actions helper scripts
-├── doc/                      # User-facing documentation
 ├── images/                   # README images
 ├── pyproject.toml            # Build config; dependencies; entry point declaration
 ├── requirements.txt          # Development dependencies

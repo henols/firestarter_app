@@ -12,15 +12,14 @@ what is under test — not an implementation detail to work around:
 
 - **Present** (tiny stub content, never real firmware source):
   - `include/firestarter.h`
-  - `doc/PROTOCOLS.md`
 - **Deliberately ABSENT**: `src/proms/eeprom_28c.cpp` — a path that
   `tests/test_check_no_log_in_sdp_window.py` and `tests/test_sdp_table_parity.py`
   both resolve against the real sibling repo. Its absence here, under a
   repo that otherwise reports "present", is exactly the condition BASE-02
   turns into a hard failure (`MissingScanTargetError`) rather than a skip.
 
-Both present files carry a header comment marking them as fixture input so
-nobody mistakes them for real firmware source. Neither is byte-identical to
+The present file carries a header comment marking it as fixture input so
+nobody mistakes it for real firmware source. It is not byte-identical to
 any file in `/workspaces/firestarter`.
 
 This incompleteness is committed and reviewable in the diff like any other
@@ -71,8 +70,7 @@ Fixture presence is confirmed with:
 git ls-files tests/fixtures/fake_firestarter/
 ```
 
-which must list `README.md`, `include/firestarter.h` and
-`doc/PROTOCOLS.md`, and must **not** list `src/proms/eeprom_28c.cpp` (it
-does not exist in the working tree either). Never trust `git add`'s exit
-code for anything under this directory — see the measured git behaviour
-above.
+which must list `README.md` and `include/firestarter.h`, and must **not**
+list `src/proms/eeprom_28c.cpp` (it does not exist in the working tree
+either). Never trust `git add`'s exit code for anything under this
+directory — see the measured git behaviour above.
