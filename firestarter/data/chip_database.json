@@ -2060,7 +2060,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
     },
     {
       "electrical": {
@@ -2083,7 +2083,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
     },
     {
       "electrical": {
@@ -2129,7 +2129,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
     },
     {
       "electrical": {
@@ -2152,7 +2152,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
     },
     {
       "electrical": {
@@ -9102,7 +9102,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
     },
     {
       "electrical": {
@@ -9125,7 +9125,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
     },
     {
       "electrical": {
@@ -9148,7 +9148,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
     },
     {
       "electrical": {
@@ -9171,7 +9171,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
     },
     {
       "electrical": {
@@ -10036,7 +10036,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see firestarter/doc/AT28C04-ADAPTER.md"
+      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
     },
     {
       "electrical": {
