@@ -103,9 +103,7 @@ against real hardware.
 
 ## Contributing
 
-Issues and pull requests are welcome.
-**[Report a problem here](https://github.com/henols/firestarter_prom/issues)** — the tracker for
-all three Firestarter repositories.
+See the [Contributing](https://github.com/henols/firestarter_prom/wiki/Contributing) wiki page for where to report a problem and where to open a pull request.
 
 ## License
 
