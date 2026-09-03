@@ -1,0 +1,6847 @@
+{
+  "_generated_by": "tools/measure_part_number_delta.py, via chip_resolver.resolve_chip + EpromDatabase.get_eprom_config over the shipped chip_database.json, with --issues devtest_issue_corpus.json",
+  "aggregate": {
+    "aliases_chip_not_found": 0,
+    "aliases_chip_not_implemented": 16,
+    "aliases_resolving_to_comma_joined": 514,
+    "aliases_token_differs_from_part_number": 942,
+    "aliases_token_equals_part_number": 11,
+    "distinct_aliases": 953,
+    "distinct_part_numbers": 677,
+    "part_numbers_not_lowercase_published_proxy": 732,
+    "part_numbers_with_comma": 234,
+    "rows": 746,
+    "vendors": 59
+  },
+  "aliases": [
+    {
+      "differs": false,
+      "resolve_status": "ok",
+      "resolved_part_number": "2516",
+      "resolves_to_comma_joined": false,
+      "token": "2516"
+    },
+    {
+      "differs": false,
+      "resolve_status": "ok",
+      "resolved_part_number": "2532",
+      "resolves_to_comma_joined": false,
+      "token": "2532"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27128,D27128",
+      "resolves_to_comma_joined": true,
+      "token": "27128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27128A,D27128A,D27128B",
+      "resolves_to_comma_joined": true,
+      "token": "27128a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "2732,2732A,M2732,M2732A",
+      "resolves_to_comma_joined": true,
+      "token": "2732"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "2732,2732A,M2732,M2732A",
+      "resolves_to_comma_joined": true,
+      "token": "2732a"
+    },
+    {
+      "differs": false,
+      "resolve_status": "ok",
+      "resolved_part_number": "27512",
+      "resolves_to_comma_joined": false,
+      "token": "27512"
+    },
+    {
+      "differs": false,
+      "resolve_status": "ok",
+      "resolved_part_number": "2764",
+      "resolves_to_comma_joined": false,
+      "token": "2764"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "2764A",
+      "resolves_to_comma_joined": false,
+      "token": "2764a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27C010,27C010A",
+      "resolves_to_comma_joined": true,
+      "token": "27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27C010,27C010A",
+      "resolves_to_comma_joined": true,
+      "token": "27c010a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27C020",
+      "resolves_to_comma_joined": false,
+      "token": "27c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27C040",
+      "resolves_to_comma_joined": false,
+      "token": "27c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27C128",
+      "resolves_to_comma_joined": false,
+      "token": "27c128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27C256",
+      "resolves_to_comma_joined": false,
+      "token": "27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27C32A",
+      "resolves_to_comma_joined": false,
+      "token": "27c32a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27C512",
+      "resolves_to_comma_joined": false,
+      "token": "27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27C512A",
+      "resolves_to_comma_joined": false,
+      "token": "27c512a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27C64,27LV64",
+      "resolves_to_comma_joined": true,
+      "token": "27c64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27CX010",
+      "resolves_to_comma_joined": false,
+      "token": "27cx010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27CX256",
+      "resolves_to_comma_joined": false,
+      "token": "27cx256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27HC256,27HC256L",
+      "resolves_to_comma_joined": true,
+      "token": "27hc256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27HC256,27HC256L",
+      "resolves_to_comma_joined": true,
+      "token": "27hc256l"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27HC64",
+      "resolves_to_comma_joined": false,
+      "token": "27hc64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27C256,27LV256",
+      "resolves_to_comma_joined": true,
+      "token": "27lv256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27C64,27LV64",
+      "resolves_to_comma_joined": true,
+      "token": "27lv64"
+    },
+    {
+      "differs": false,
+      "resolve_status": "ok",
+      "resolved_part_number": "2804",
+      "resolves_to_comma_joined": false,
+      "token": "2804"
+    },
+    {
+      "differs": false,
+      "resolve_status": "ok",
+      "resolved_part_number": "2816",
+      "resolves_to_comma_joined": false,
+      "token": "2816"
+    },
+    {
+      "differs": false,
+      "resolve_status": "ok",
+      "resolved_part_number": "2817",
+      "resolves_to_comma_joined": false,
+      "token": "2817"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "28C010,28C010T,28C011,28C011T",
+      "resolves_to_comma_joined": true,
+      "token": "28c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "28C010,28C010T,28C011,28C011T",
+      "resolves_to_comma_joined": true,
+      "token": "28c010t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "28C010,28C010T,28C011,28C011T",
+      "resolves_to_comma_joined": true,
+      "token": "28c011"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "28C010,28C010T,28C011,28C011T",
+      "resolves_to_comma_joined": true,
+      "token": "28c011t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "28C04A",
+      "resolves_to_comma_joined": false,
+      "token": "28c04a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "28C04AF",
+      "resolves_to_comma_joined": false,
+      "token": "28c04af"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "28C16A",
+      "resolves_to_comma_joined": false,
+      "token": "28c16a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "28C16AF",
+      "resolves_to_comma_joined": false,
+      "token": "28c16af"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "28C17A",
+      "resolves_to_comma_joined": false,
+      "token": "28c17a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "28C17AF",
+      "resolves_to_comma_joined": false,
+      "token": "28c17af"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "28C256,28C256F",
+      "resolves_to_comma_joined": true,
+      "token": "28c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "28C256,28C256F",
+      "resolves_to_comma_joined": true,
+      "token": "28c256f"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "28C64A",
+      "resolves_to_comma_joined": false,
+      "token": "28c64a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "28C64AF",
+      "resolves_to_comma_joined": false,
+      "token": "28c64af"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "28C64B",
+      "resolves_to_comma_joined": false,
+      "token": "28c64b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "28LV64A",
+      "resolves_to_comma_joined": false,
+      "token": "28lv64a"
+    },
+    {
+      "differs": false,
+      "resolve_status": "ok",
+      "resolved_part_number": "6116",
+      "resolves_to_comma_joined": false,
+      "token": "6116"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "61256,62256",
+      "resolves_to_comma_joined": true,
+      "token": "61256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "61512,62512",
+      "resolves_to_comma_joined": true,
+      "token": "61512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "6164,6264",
+      "resolves_to_comma_joined": true,
+      "token": "6164"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "61256,62256",
+      "resolves_to_comma_joined": true,
+      "token": "62256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "61512,62512",
+      "resolves_to_comma_joined": true,
+      "token": "62512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "6164,6264",
+      "resolves_to_comma_joined": true,
+      "token": "6264"
+    },
+    {
+      "differs": false,
+      "resolve_status": "ok",
+      "resolved_part_number": "628128",
+      "resolves_to_comma_joined": false,
+      "token": "628128"
+    },
+    {
+      "differs": false,
+      "resolve_status": "ok",
+      "resolved_part_number": "628256",
+      "resolves_to_comma_joined": false,
+      "token": "628256"
+    },
+    {
+      "differs": false,
+      "resolve_status": "ok",
+      "resolved_part_number": "628512",
+      "resolves_to_comma_joined": false,
+      "token": "628512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "87C257",
+      "resolves_to_comma_joined": false,
+      "token": "87c257"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A27020",
+      "resolves_to_comma_joined": false,
+      "token": "a27020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A276308",
+      "resolves_to_comma_joined": false,
+      "token": "a276308"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A276308A",
+      "resolves_to_comma_joined": false,
+      "token": "a276308a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A278308",
+      "resolves_to_comma_joined": false,
+      "token": "a278308"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A278308A",
+      "resolves_to_comma_joined": false,
+      "token": "a278308a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A290011T",
+      "resolves_to_comma_joined": false,
+      "token": "a290011t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A290011U",
+      "resolves_to_comma_joined": false,
+      "token": "a290011u"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29001T",
+      "resolves_to_comma_joined": false,
+      "token": "a29001t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29001U",
+      "resolves_to_comma_joined": false,
+      "token": "a29001u"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A290021T",
+      "resolves_to_comma_joined": false,
+      "token": "a290021t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A290021U",
+      "resolves_to_comma_joined": false,
+      "token": "a290021u"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29002T",
+      "resolves_to_comma_joined": false,
+      "token": "a29002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29002U",
+      "resolves_to_comma_joined": false,
+      "token": "a29002u"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29010",
+      "resolves_to_comma_joined": false,
+      "token": "a29010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29040,A29040A,A29040B,A29040C",
+      "resolves_to_comma_joined": true,
+      "token": "a29040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29040,A29040A,A29040B,A29040C",
+      "resolves_to_comma_joined": true,
+      "token": "a29040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29040,A29040A,A29040B,A29040C",
+      "resolves_to_comma_joined": true,
+      "token": "a29040b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29040,A29040A,A29040B,A29040C",
+      "resolves_to_comma_joined": true,
+      "token": "a29040c"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29512",
+      "resolves_to_comma_joined": false,
+      "token": "a29512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29512A",
+      "resolves_to_comma_joined": false,
+      "token": "a29512a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29L040,A29L040A",
+      "resolves_to_comma_joined": true,
+      "token": "a29l040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "A29L040,A29L040A",
+      "resolves_to_comma_joined": true,
+      "token": "a29l040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AE29F1008",
+      "resolves_to_comma_joined": false,
+      "token": "ae29f1008"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AE29F2008",
+      "resolves_to_comma_joined": false,
+      "token": "ae29f2008"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AE29F4008",
+      "resolves_to_comma_joined": false,
+      "token": "ae29f4008"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AE49F2008",
+      "resolves_to_comma_joined": false,
+      "token": "ae49f2008"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27128A",
+      "resolves_to_comma_joined": false,
+      "token": "am27128a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM2716",
+      "resolves_to_comma_joined": false,
+      "token": "am2716"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM2716B",
+      "resolves_to_comma_joined": false,
+      "token": "am2716b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27256",
+      "resolves_to_comma_joined": false,
+      "token": "am27256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM2732,AM2732A",
+      "resolves_to_comma_joined": true,
+      "token": "am2732"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM2732,AM2732A",
+      "resolves_to_comma_joined": true,
+      "token": "am2732a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM2732B",
+      "resolves_to_comma_joined": false,
+      "token": "am2732b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27512",
+      "resolves_to_comma_joined": false,
+      "token": "am27512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM2764A",
+      "resolves_to_comma_joined": false,
+      "token": "am2764a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27C010",
+      "resolves_to_comma_joined": false,
+      "token": "am27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27C020",
+      "resolves_to_comma_joined": false,
+      "token": "am27c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27C040",
+      "resolves_to_comma_joined": false,
+      "token": "am27c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27C080",
+      "resolves_to_comma_joined": false,
+      "token": "am27c080"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27C128",
+      "resolves_to_comma_joined": false,
+      "token": "am27c128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27C256",
+      "resolves_to_comma_joined": false,
+      "token": "am27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27C512",
+      "resolves_to_comma_joined": false,
+      "token": "am27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27C64",
+      "resolves_to_comma_joined": false,
+      "token": "am27c64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27H010,AM27HB010",
+      "resolves_to_comma_joined": true,
+      "token": "am27h010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27H256",
+      "resolves_to_comma_joined": false,
+      "token": "am27h256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27H010,AM27HB010",
+      "resolves_to_comma_joined": true,
+      "token": "am27hb010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27LV010",
+      "resolves_to_comma_joined": false,
+      "token": "am27lv010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27LV020,AM27LV020B",
+      "resolves_to_comma_joined": true,
+      "token": "am27lv020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27LV020,AM27LV020B",
+      "resolves_to_comma_joined": true,
+      "token": "am27lv020b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27LV040",
+      "resolves_to_comma_joined": false,
+      "token": "am27lv040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM27LV080",
+      "resolves_to_comma_joined": false,
+      "token": "am27lv080"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM28C16A",
+      "resolves_to_comma_joined": false,
+      "token": "am28c16a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM28C17A",
+      "resolves_to_comma_joined": false,
+      "token": "am28c17a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM28C64A,AM28C64AE,AM28C64B,AM28C64BE",
+      "resolves_to_comma_joined": true,
+      "token": "am28c64a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM28C64A,AM28C64AE,AM28C64B,AM28C64BE",
+      "resolves_to_comma_joined": true,
+      "token": "am28c64ae"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM28C64A,AM28C64AE,AM28C64B,AM28C64BE",
+      "resolves_to_comma_joined": true,
+      "token": "am28c64b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM28C64A,AM28C64AE,AM28C64B,AM28C64BE",
+      "resolves_to_comma_joined": true,
+      "token": "am28c64be"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM28F010",
+      "resolves_to_comma_joined": false,
+      "token": "am28f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM28F010A",
+      "resolves_to_comma_joined": false,
+      "token": "am28f010a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM28F020",
+      "resolves_to_comma_joined": false,
+      "token": "am28f020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM28F020A",
+      "resolves_to_comma_joined": false,
+      "token": "am28f020a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM28F256",
+      "resolves_to_comma_joined": false,
+      "token": "am28f256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM28F512",
+      "resolves_to_comma_joined": false,
+      "token": "am28f512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM29F002B,AM29F002BB",
+      "resolves_to_comma_joined": true,
+      "token": "am29f002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM29F002B,AM29F002BB",
+      "resolves_to_comma_joined": true,
+      "token": "am29f002bb"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM29F002BT,AM29F002T",
+      "resolves_to_comma_joined": true,
+      "token": "am29f002bt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM29F002NB,AM29F002NBB",
+      "resolves_to_comma_joined": true,
+      "token": "am29f002nb"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM29F002NB,AM29F002NBB",
+      "resolves_to_comma_joined": true,
+      "token": "am29f002nbb"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM29F002NBT,AM29F002NT",
+      "resolves_to_comma_joined": true,
+      "token": "am29f002nbt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM29F002NBT,AM29F002NT",
+      "resolves_to_comma_joined": true,
+      "token": "am29f002nt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM29F002BT,AM29F002T",
+      "resolves_to_comma_joined": true,
+      "token": "am29f002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM29F010,AM29F010B",
+      "resolves_to_comma_joined": true,
+      "token": "am29f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM29F010,AM29F010B",
+      "resolves_to_comma_joined": true,
+      "token": "am29f010b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM29F040,AM29F040B",
+      "resolves_to_comma_joined": true,
+      "token": "am29f040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AM29F040,AM29F040B",
+      "resolves_to_comma_joined": true,
+      "token": "am29f040b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AS29F002B",
+      "resolves_to_comma_joined": false,
+      "token": "as29f002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AS29F002T",
+      "resolves_to_comma_joined": false,
+      "token": "as29f002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27256",
+      "resolves_to_comma_joined": false,
+      "token": "at27256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT2732A",
+      "resolves_to_comma_joined": false,
+      "token": "at2732a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV010,AT27LV010,AT27LV010A",
+      "resolves_to_comma_joined": true,
+      "token": "at27bv010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV020,AT27LV020,AT27LV020A",
+      "resolves_to_comma_joined": true,
+      "token": "at27bv020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV040,AT27LV040,AT27LV040A",
+      "resolves_to_comma_joined": true,
+      "token": "at27bv040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV256,AT27LV256A,AT27LV256R",
+      "resolves_to_comma_joined": true,
+      "token": "at27bv256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV512,AT27LV512A,AT27LV512R",
+      "resolves_to_comma_joined": true,
+      "token": "at27bv512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27C010,AT27C010L",
+      "resolves_to_comma_joined": true,
+      "token": "at27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27C010,AT27C010L",
+      "resolves_to_comma_joined": true,
+      "token": "at27c010l"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27C011",
+      "resolves_to_comma_joined": false,
+      "token": "at27c011"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27C020",
+      "resolves_to_comma_joined": false,
+      "token": "at27c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27C040",
+      "resolves_to_comma_joined": false,
+      "token": "at27c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27C080",
+      "resolves_to_comma_joined": false,
+      "token": "at27c080"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27C128",
+      "resolves_to_comma_joined": false,
+      "token": "at27c128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27C256",
+      "resolves_to_comma_joined": false,
+      "token": "at27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27C256R",
+      "resolves_to_comma_joined": false,
+      "token": "at27c256r"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27C512",
+      "resolves_to_comma_joined": false,
+      "token": "at27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27C512R",
+      "resolves_to_comma_joined": false,
+      "token": "at27c512r"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27HC256,AT27HC256L",
+      "resolves_to_comma_joined": true,
+      "token": "at27hc256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27HC256,AT27HC256L",
+      "resolves_to_comma_joined": true,
+      "token": "at27hc256l"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27HC256R,AT27HC256RL",
+      "resolves_to_comma_joined": true,
+      "token": "at27hc256r"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27HC256R,AT27HC256RL",
+      "resolves_to_comma_joined": true,
+      "token": "at27hc256rl"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV010,AT27LV010,AT27LV010A",
+      "resolves_to_comma_joined": true,
+      "token": "at27lv010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV010,AT27LV010,AT27LV010A",
+      "resolves_to_comma_joined": true,
+      "token": "at27lv010a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV020,AT27LV020,AT27LV020A",
+      "resolves_to_comma_joined": true,
+      "token": "at27lv020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV020,AT27LV020,AT27LV020A",
+      "resolves_to_comma_joined": true,
+      "token": "at27lv020a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV040,AT27LV040,AT27LV040A",
+      "resolves_to_comma_joined": true,
+      "token": "at27lv040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV040,AT27LV040,AT27LV040A",
+      "resolves_to_comma_joined": true,
+      "token": "at27lv040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV256,AT27LV256A,AT27LV256R",
+      "resolves_to_comma_joined": true,
+      "token": "at27lv256a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV256,AT27LV256A,AT27LV256R",
+      "resolves_to_comma_joined": true,
+      "token": "at27lv256r"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV512,AT27LV512A,AT27LV512R",
+      "resolves_to_comma_joined": true,
+      "token": "at27lv512a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT27BV512,AT27LV512A,AT27LV512R",
+      "resolves_to_comma_joined": true,
+      "token": "at27lv512r"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28BV256,AT28LV256",
+      "resolves_to_comma_joined": true,
+      "token": "at28bv256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28BV64,AT28LV64",
+      "resolves_to_comma_joined": true,
+      "token": "at28bv64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28BV64B,AT28LV64B",
+      "resolves_to_comma_joined": true,
+      "token": "at28bv64b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C010,AT28C010E",
+      "resolves_to_comma_joined": true,
+      "token": "at28c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C010,AT28C010E",
+      "resolves_to_comma_joined": true,
+      "token": "at28c010e"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "AT28C04,AT28HC04",
+      "resolves_to_comma_joined": true,
+      "token": "at28c04"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C040,AT28C040E",
+      "resolves_to_comma_joined": true,
+      "token": "at28c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C040,AT28C040E",
+      "resolves_to_comma_joined": true,
+      "token": "at28c040e"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "AT28C04E,AT28C04F",
+      "resolves_to_comma_joined": true,
+      "token": "at28c04e"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "AT28C04E,AT28C04F",
+      "resolves_to_comma_joined": true,
+      "token": "at28c04f"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "AT28C16,AT28HC16,AT28HC16L",
+      "resolves_to_comma_joined": true,
+      "token": "at28c16"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "AT28C16E,AT28C16F",
+      "resolves_to_comma_joined": true,
+      "token": "at28c16e"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "AT28C16E,AT28C16F",
+      "resolves_to_comma_joined": true,
+      "token": "at28c16f"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C17",
+      "resolves_to_comma_joined": false,
+      "token": "at28c17"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C17E,AT28C17F",
+      "resolves_to_comma_joined": true,
+      "token": "at28c17e"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C17E,AT28C17F",
+      "resolves_to_comma_joined": true,
+      "token": "at28c17f"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L",
+      "resolves_to_comma_joined": true,
+      "token": "at28c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L",
+      "resolves_to_comma_joined": true,
+      "token": "at28c256e"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L",
+      "resolves_to_comma_joined": true,
+      "token": "at28c256f"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C64,AT28C64B(Non-Standard),AT28HC64,AT28HC64L",
+      "resolves_to_comma_joined": true,
+      "token": "at28c64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C64,AT28C64B(Non-Standard),AT28HC64,AT28HC64L",
+      "resolves_to_comma_joined": true,
+      "token": "at28c64b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C64,AT28C64B(Non-Standard),AT28HC64,AT28HC64L",
+      "resolves_to_comma_joined": true,
+      "token": "at28c64b(non-standard)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C64E,AT28C64F",
+      "resolves_to_comma_joined": true,
+      "token": "at28c64e"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C64E,AT28C64F",
+      "resolves_to_comma_joined": true,
+      "token": "at28c64f"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "AT28C04,AT28HC04",
+      "resolves_to_comma_joined": true,
+      "token": "at28hc04"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "AT28C16,AT28HC16,AT28HC16L",
+      "resolves_to_comma_joined": true,
+      "token": "at28hc16"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "AT28C16,AT28HC16,AT28HC16L",
+      "resolves_to_comma_joined": true,
+      "token": "at28hc16l"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L",
+      "resolves_to_comma_joined": true,
+      "token": "at28hc256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L",
+      "resolves_to_comma_joined": true,
+      "token": "at28hc256e"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L",
+      "resolves_to_comma_joined": true,
+      "token": "at28hc256f"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L",
+      "resolves_to_comma_joined": true,
+      "token": "at28hc256l"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C64,AT28C64B(Non-Standard),AT28HC64,AT28HC64L",
+      "resolves_to_comma_joined": true,
+      "token": "at28hc64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C64B,AT28HC64B,AT28HC64BF",
+      "resolves_to_comma_joined": true,
+      "token": "at28hc64b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C64B,AT28HC64B,AT28HC64BF",
+      "resolves_to_comma_joined": true,
+      "token": "at28hc64bf"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28C64,AT28C64B(Non-Standard),AT28HC64,AT28HC64L",
+      "resolves_to_comma_joined": true,
+      "token": "at28hc64l"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28LV010",
+      "resolves_to_comma_joined": false,
+      "token": "at28lv010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28BV256,AT28LV256",
+      "resolves_to_comma_joined": true,
+      "token": "at28lv256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28BV64,AT28LV64",
+      "resolves_to_comma_joined": true,
+      "token": "at28lv64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28BV64B,AT28LV64B",
+      "resolves_to_comma_joined": true,
+      "token": "at28lv64b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28MC010",
+      "resolves_to_comma_joined": false,
+      "token": "at28mc010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28MC020",
+      "resolves_to_comma_joined": false,
+      "token": "at28mc020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28MC040",
+      "resolves_to_comma_joined": false,
+      "token": "at28mc040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28PC64,AT28PC64E",
+      "resolves_to_comma_joined": true,
+      "token": "at28pc64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT28PC64,AT28PC64E",
+      "resolves_to_comma_joined": true,
+      "token": "at28pc64e"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29BV010A,AT29LV010A",
+      "resolves_to_comma_joined": true,
+      "token": "at29bv010a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29BV020,AT29LV020",
+      "resolves_to_comma_joined": true,
+      "token": "at29bv020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29BV040,AT29LV040",
+      "resolves_to_comma_joined": true,
+      "token": "at29bv040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29BV040A,AT29LV040A",
+      "resolves_to_comma_joined": true,
+      "token": "at29bv040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29C010A",
+      "resolves_to_comma_joined": false,
+      "token": "at29c010a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29C020",
+      "resolves_to_comma_joined": false,
+      "token": "at29c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29C040",
+      "resolves_to_comma_joined": false,
+      "token": "at29c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29C040A",
+      "resolves_to_comma_joined": false,
+      "token": "at29c040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29C256",
+      "resolves_to_comma_joined": false,
+      "token": "at29c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29C257",
+      "resolves_to_comma_joined": false,
+      "token": "at29c257"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29C512",
+      "resolves_to_comma_joined": false,
+      "token": "at29c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29BV010A,AT29LV010A",
+      "resolves_to_comma_joined": true,
+      "token": "at29lv010a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29BV020,AT29LV020",
+      "resolves_to_comma_joined": true,
+      "token": "at29lv020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29BV040,AT29LV040",
+      "resolves_to_comma_joined": true,
+      "token": "at29lv040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29BV040A,AT29LV040A",
+      "resolves_to_comma_joined": true,
+      "token": "at29lv040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29LV256",
+      "resolves_to_comma_joined": false,
+      "token": "at29lv256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT29LV512",
+      "resolves_to_comma_joined": false,
+      "token": "at29lv512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV001,AT49BV001A,AT49LV001",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV001,AT49BV001A,AT49LV001",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv001a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV001AN,AT49BV001N,AT49LV001N",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv001an"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV001ANT,AT49BV001NT,AT49LV001NT",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv001ant"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV001AT,AT49BV001T,AT49LV001T",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv001at"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV001AN,AT49BV001N,AT49LV001N",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv001n"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV001ANT,AT49BV001NT,AT49LV001NT",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv001nt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV001AT,AT49BV001T,AT49LV001T",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv001t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV002,AT49BV002A,AT49LV002",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv002"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV002,AT49BV002A,AT49LV002",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv002a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV002AN,AT49BV002N,AT49LV002N",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv002an"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV002ANT,AT49BV002NT,AT49LV002NT",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv002ant"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV002AT,AT49BV002T,AT49LV002T",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv002at"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV002AN,AT49BV002N,AT49LV002N",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv002n"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV002ANT,AT49BV002NT,AT49LV002NT",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv002nt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV002AT,AT49BV002T,AT49LV002T",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV010,AT49HBV010,AT49HLV010,AT49LV010",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV020,AT49LV020",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV040,AT49BV040A,AT49BV040B,AT49LV040",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV040,AT49BV040A,AT49BV040B,AT49LV040",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV040,AT49BV040A,AT49BV040B,AT49LV040",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv040b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV040T,AT49LV040T",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv040t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV512,AT49LV512",
+      "resolves_to_comma_joined": true,
+      "token": "at49bv512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F001,AT49F001A",
+      "resolves_to_comma_joined": true,
+      "token": "at49f001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F001,AT49F001A",
+      "resolves_to_comma_joined": true,
+      "token": "at49f001a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F001AN,AT49F001N",
+      "resolves_to_comma_joined": true,
+      "token": "at49f001an"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F001ANT,AT49F001NT",
+      "resolves_to_comma_joined": true,
+      "token": "at49f001ant"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F001AT,AT49F001T",
+      "resolves_to_comma_joined": true,
+      "token": "at49f001at"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F001AN,AT49F001N",
+      "resolves_to_comma_joined": true,
+      "token": "at49f001n"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F001ANT,AT49F001NT",
+      "resolves_to_comma_joined": true,
+      "token": "at49f001nt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F001AT,AT49F001T",
+      "resolves_to_comma_joined": true,
+      "token": "at49f001t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F002,AT49F002A",
+      "resolves_to_comma_joined": true,
+      "token": "at49f002"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F002,AT49F002A",
+      "resolves_to_comma_joined": true,
+      "token": "at49f002a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F002AN,AT49F002N",
+      "resolves_to_comma_joined": true,
+      "token": "at49f002an"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F002ANT,AT49F002NT",
+      "resolves_to_comma_joined": true,
+      "token": "at49f002ant"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F002AT,AT49F002T",
+      "resolves_to_comma_joined": true,
+      "token": "at49f002at"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F002AN,AT49F002N",
+      "resolves_to_comma_joined": true,
+      "token": "at49f002n"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F002ANT,AT49F002NT",
+      "resolves_to_comma_joined": true,
+      "token": "at49f002nt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F002AT,AT49F002T",
+      "resolves_to_comma_joined": true,
+      "token": "at49f002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F010,AT49HF010",
+      "resolves_to_comma_joined": true,
+      "token": "at49f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F020",
+      "resolves_to_comma_joined": false,
+      "token": "at49f020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F040,AT49F040A",
+      "resolves_to_comma_joined": true,
+      "token": "at49f040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F040,AT49F040A",
+      "resolves_to_comma_joined": true,
+      "token": "at49f040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F040T",
+      "resolves_to_comma_joined": false,
+      "token": "at49f040t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F512",
+      "resolves_to_comma_joined": false,
+      "token": "at49f512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV010,AT49HBV010,AT49HLV010,AT49LV010",
+      "resolves_to_comma_joined": true,
+      "token": "at49hbv010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49F010,AT49HF010",
+      "resolves_to_comma_joined": true,
+      "token": "at49hf010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV010,AT49HBV010,AT49HLV010,AT49LV010",
+      "resolves_to_comma_joined": true,
+      "token": "at49hlv010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV001,AT49BV001A,AT49LV001",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV001AN,AT49BV001N,AT49LV001N",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv001n"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV001ANT,AT49BV001NT,AT49LV001NT",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv001nt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV001AT,AT49BV001T,AT49LV001T",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv001t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV002,AT49BV002A,AT49LV002",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv002"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV002AN,AT49BV002N,AT49LV002N",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv002n"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV002ANT,AT49BV002NT,AT49LV002NT",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv002nt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV002AT,AT49BV002T,AT49LV002T",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV010,AT49HBV010,AT49HLV010,AT49LV010",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV020,AT49LV020",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV040,AT49BV040A,AT49BV040B,AT49LV040",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV040T,AT49LV040T",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv040t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "AT49BV512,AT49LV512",
+      "resolves_to_comma_joined": true,
+      "token": "at49lv512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4010YMA(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4010yma(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4010YMA(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4010yma(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4011LYMA(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4011lyma(rw3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4011LYMA(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4011lyma(test3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4011YMA(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4011yma(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4011YMA(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4011yma(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4013LYMA(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4013lyma(rw3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4013LYMA(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4013lyma(test3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4013YMA(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4013yma(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4013YMA(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4013yma(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4014LYMA(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4014lyma(rw3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4014LYMA(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4014lyma(test3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4014YMA(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4014yma(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4014YMA(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4014yma(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4015LYMA(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4015lyma(rw3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4015LYMA(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4015lyma(test3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4015YMA(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4015yma(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "BQ4015YMA(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "bq4015yma(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT27010",
+      "resolves_to_comma_joined": false,
+      "token": "cat27010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT27128A",
+      "resolves_to_comma_joined": false,
+      "token": "cat27128a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT27256,CAT27HC256I",
+      "resolves_to_comma_joined": true,
+      "token": "cat27256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT27512",
+      "resolves_to_comma_joined": false,
+      "token": "cat27512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT2764A",
+      "resolves_to_comma_joined": false,
+      "token": "cat2764a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT27C16",
+      "resolves_to_comma_joined": false,
+      "token": "cat27c16"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT27HC256",
+      "resolves_to_comma_joined": false,
+      "token": "cat27hc256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT27256,CAT27HC256I",
+      "resolves_to_comma_joined": true,
+      "token": "cat27hc256i"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28C010",
+      "resolves_to_comma_joined": false,
+      "token": "cat28c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28C020",
+      "resolves_to_comma_joined": false,
+      "token": "cat28c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28C040",
+      "resolves_to_comma_joined": false,
+      "token": "cat28c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28C16A,CAT28C16AI",
+      "resolves_to_comma_joined": true,
+      "token": "cat28c16a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28C16A,CAT28C16AI",
+      "resolves_to_comma_joined": true,
+      "token": "cat28c16ai"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28C17A",
+      "resolves_to_comma_joined": false,
+      "token": "cat28c17a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28C256,CAT28C257",
+      "resolves_to_comma_joined": true,
+      "token": "cat28c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28C256,CAT28C257",
+      "resolves_to_comma_joined": true,
+      "token": "cat28c257"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28C512",
+      "resolves_to_comma_joined": false,
+      "token": "cat28c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28C64A,CAT28C65",
+      "resolves_to_comma_joined": true,
+      "token": "cat28c64a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28C64B",
+      "resolves_to_comma_joined": false,
+      "token": "cat28c64b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28C64A,CAT28C65",
+      "resolves_to_comma_joined": true,
+      "token": "cat28c65"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28F001P-B",
+      "resolves_to_comma_joined": false,
+      "token": "cat28f001p-b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28F001P-T",
+      "resolves_to_comma_joined": false,
+      "token": "cat28f001p-t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28F010",
+      "resolves_to_comma_joined": false,
+      "token": "cat28f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28F020",
+      "resolves_to_comma_joined": false,
+      "token": "cat28f020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28F256",
+      "resolves_to_comma_joined": false,
+      "token": "cat28f256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28F512",
+      "resolves_to_comma_joined": false,
+      "token": "cat28f512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28LV256",
+      "resolves_to_comma_joined": false,
+      "token": "cat28lv256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28LV64,CAT28LV65",
+      "resolves_to_comma_joined": true,
+      "token": "cat28lv64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CAT28LV64,CAT28LV65",
+      "resolves_to_comma_joined": true,
+      "token": "cat28lv65"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CY27C010,CY27H010",
+      "resolves_to_comma_joined": true,
+      "token": "cy27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CY27C020",
+      "resolves_to_comma_joined": false,
+      "token": "cy27c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CY27C040",
+      "resolves_to_comma_joined": false,
+      "token": "cy27c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CY27C128",
+      "resolves_to_comma_joined": false,
+      "token": "cy27c128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CY27C256",
+      "resolves_to_comma_joined": false,
+      "token": "cy27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CY27C512",
+      "resolves_to_comma_joined": false,
+      "token": "cy27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CY27C010,CY27H010",
+      "resolves_to_comma_joined": true,
+      "token": "cy27h010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CY27H256",
+      "resolves_to_comma_joined": false,
+      "token": "cy27h256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "CY27H512",
+      "resolves_to_comma_joined": false,
+      "token": "cy27h512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "D27011",
+      "resolves_to_comma_joined": false,
+      "token": "d27011"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27128,D27128",
+      "resolves_to_comma_joined": true,
+      "token": "d27128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27128A,D27128A,D27128B",
+      "resolves_to_comma_joined": true,
+      "token": "d27128a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "27128A,D27128A,D27128B",
+      "resolves_to_comma_joined": true,
+      "token": "d27128b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "D27256,M27256",
+      "resolves_to_comma_joined": true,
+      "token": "d27256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "D27C011",
+      "resolves_to_comma_joined": false,
+      "token": "d27c011"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DPV27C101",
+      "resolves_to_comma_joined": false,
+      "token": "dpv27c101"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DPV27C256",
+      "resolves_to_comma_joined": false,
+      "token": "dpv27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DPV27C512",
+      "resolves_to_comma_joined": false,
+      "token": "dpv27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1220(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "ds1220(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1220(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "ds1220(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1225(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "ds1225(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1225(RW)",
+      "resolves_to_comma_joined": false,
+      "token": "ds1225(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1230AB(RW),DS1230Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1230ab(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1230AB(RW),DS1230Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1230ab(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1230W(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "ds1230w(rw3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1230W(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "ds1230w(test3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1230AB(RW),DS1230Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1230y(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1230AB(RW),DS1230Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1230y(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1245AB(RW),DS1245Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1245ab(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1245AB(RW),DS1245Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1245ab(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1245W(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "ds1245w(rw3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1245W(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "ds1245w(test3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1245AB(RW),DS1245Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1245y(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1245AB(RW),DS1245Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1245y(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1249AB(RW),DS1249Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1249ab(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1249AB(RW),DS1249Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1249ab(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1249W(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "ds1249w(rw3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1249W(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "ds1249w(test3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1249AB(RW),DS1249Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1249y(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1249AB(RW),DS1249Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1249y(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1250AB(RW),DS1250Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1250ab(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1250AB(RW),DS1250Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1250ab(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1250W(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "ds1250w(rw3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1250W(RW3.3V)",
+      "resolves_to_comma_joined": false,
+      "token": "ds1250w(test3.3v)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1250AB(RW),DS1250Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1250y(rw)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "DS1250AB(RW),DS1250Y(RW)",
+      "resolves_to_comma_joined": true,
+      "token": "ds1250y(test)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN27C010",
+      "resolves_to_comma_joined": false,
+      "token": "en27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN27C512",
+      "resolves_to_comma_joined": false,
+      "token": "en27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29F002AB,EN29F002B",
+      "resolves_to_comma_joined": true,
+      "token": "en29f002ab"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29F002ANB,EN29F002NB",
+      "resolves_to_comma_joined": true,
+      "token": "en29f002anb"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29F002ANT,EN29F002NT",
+      "resolves_to_comma_joined": true,
+      "token": "en29f002ant"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29F002AT,EN29F002T",
+      "resolves_to_comma_joined": true,
+      "token": "en29f002at"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29F002AB,EN29F002B",
+      "resolves_to_comma_joined": true,
+      "token": "en29f002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29F002ANB,EN29F002NB",
+      "resolves_to_comma_joined": true,
+      "token": "en29f002nb"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29F002ANT,EN29F002NT",
+      "resolves_to_comma_joined": true,
+      "token": "en29f002nt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29F002AT,EN29F002T",
+      "resolves_to_comma_joined": true,
+      "token": "en29f002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29F010",
+      "resolves_to_comma_joined": false,
+      "token": "en29f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29F040,EN29F040A",
+      "resolves_to_comma_joined": true,
+      "token": "en29f040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29F040,EN29F040A",
+      "resolves_to_comma_joined": true,
+      "token": "en29f040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29F512",
+      "resolves_to_comma_joined": false,
+      "token": "en29f512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "EN29LV040A",
+      "resolves_to_comma_joined": false,
+      "token": "en29lv040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ETC2716,M2716",
+      "resolves_to_comma_joined": true,
+      "token": "etc2716"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ETC2732",
+      "resolves_to_comma_joined": false,
+      "token": "etc2732"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C31004B,S29C31004B",
+      "resolves_to_comma_joined": true,
+      "token": "f29c31004b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C31004T,S29C31004T",
+      "resolves_to_comma_joined": true,
+      "token": "f29c31004t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C51001B,S29C51001B",
+      "resolves_to_comma_joined": true,
+      "token": "f29c51001b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C51001T,S29C51001T",
+      "resolves_to_comma_joined": true,
+      "token": "f29c51001t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C51002B,S29C51002B",
+      "resolves_to_comma_joined": true,
+      "token": "f29c51002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C51002T,S29C51002T",
+      "resolves_to_comma_joined": true,
+      "token": "f29c51002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C51004B,S29C51004B",
+      "resolves_to_comma_joined": true,
+      "token": "f29c51004b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C51004T,S29C51004T",
+      "resolves_to_comma_joined": true,
+      "token": "f29c51004t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29LC51000",
+      "resolves_to_comma_joined": false,
+      "token": "f29lc51000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29LC51001",
+      "resolves_to_comma_joined": false,
+      "token": "f29lc51001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29LC51002",
+      "resolves_to_comma_joined": false,
+      "token": "f29lc51002"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F49B002UA",
+      "resolves_to_comma_joined": false,
+      "token": "f49b002ua"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM1208",
+      "resolves_to_comma_joined": false,
+      "token": "fm1208"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM1608",
+      "resolves_to_comma_joined": false,
+      "token": "fm1608"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM16W08",
+      "resolves_to_comma_joined": false,
+      "token": "fm16w08"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM1808,FM1808B,FM18W08",
+      "resolves_to_comma_joined": true,
+      "token": "fm1808"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM1808,FM1808B,FM18W08",
+      "resolves_to_comma_joined": true,
+      "token": "fm1808b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM18L08",
+      "resolves_to_comma_joined": false,
+      "token": "fm18l08"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM1808,FM1808B,FM18W08",
+      "resolves_to_comma_joined": true,
+      "token": "fm18w08"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C010",
+      "resolves_to_comma_joined": false,
+      "token": "fm27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C040",
+      "resolves_to_comma_joined": false,
+      "token": "fm27c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C256,NM27C256,NM27LC256,NMC27C256B,NMC27C256Q,NMC87C257Q,NMC87C257V",
+      "resolves_to_comma_joined": true,
+      "token": "fm27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C512,NM27C512,NM27LC512,NM27LV512,NM27P512,NMC27C512A,NMC27C512Q",
+      "resolves_to_comma_joined": true,
+      "token": "fm27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM28V020",
+      "resolves_to_comma_joined": false,
+      "token": "fm28v020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "GR27128",
+      "resolves_to_comma_joined": false,
+      "token": "gr27128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "GR27256",
+      "resolves_to_comma_joined": false,
+      "token": "gr27256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "GR27512",
+      "resolves_to_comma_joined": false,
+      "token": "gr27512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "GR2764",
+      "resolves_to_comma_joined": false,
+      "token": "gr2764"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27128AG,HN27128AP",
+      "resolves_to_comma_joined": true,
+      "token": "hn27128ag"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27128AG,HN27128AP",
+      "resolves_to_comma_joined": true,
+      "token": "hn27128ap"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27256G,HN27256P",
+      "resolves_to_comma_joined": true,
+      "token": "hn27256g"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27256G,HN27256P",
+      "resolves_to_comma_joined": true,
+      "token": "hn27256p"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27512G,HN27512P",
+      "resolves_to_comma_joined": true,
+      "token": "hn27512g"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27512G,HN27512P",
+      "resolves_to_comma_joined": true,
+      "token": "hn27512p"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C101AG,HN27C101AP,HN27C101AFP,HN27C101ATT,HN27C101G,HN27C101P",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c101afp"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C101AG,HN27C101AP,HN27C101AFP,HN27C101ATT,HN27C101G,HN27C101P",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c101ag"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C101AG,HN27C101AP,HN27C101AFP,HN27C101ATT,HN27C101G,HN27C101P",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c101ap"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C101AG,HN27C101AP,HN27C101AFP,HN27C101ATT,HN27C101G,HN27C101P",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c101att"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C101AG,HN27C101AP,HN27C101AFP,HN27C101ATT,HN27C101G,HN27C101P",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c101g"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C101AG,HN27C101AP,HN27C101AFP,HN27C101ATT,HN27C101G,HN27C101P",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c101p"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C256AG,HN27C256AFP,HN27C256AP,HN27C256HG,HN27C256HP,HN27C256HFP",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c256afp"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C256AG,HN27C256AFP,HN27C256AP,HN27C256HG,HN27C256HP,HN27C256HFP",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c256ag"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C256AG,HN27C256AFP,HN27C256AP,HN27C256HG,HN27C256HP,HN27C256HFP",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c256ap"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C256G",
+      "resolves_to_comma_joined": false,
+      "token": "hn27c256g"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C256AG,HN27C256AFP,HN27C256AP,HN27C256HG,HN27C256HP,HN27C256HFP",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c256hfp"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C256AG,HN27C256AFP,HN27C256AP,HN27C256HG,HN27C256HP,HN27C256HFP",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c256hg"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C256AG,HN27C256AFP,HN27C256AP,HN27C256HG,HN27C256HP,HN27C256HFP",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c256hp"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C301AG,HN27C301AP,HN27C301AFP",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c301afp"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C301AG,HN27C301AP,HN27C301AFP",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c301ag"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C301AG,HN27C301AP,HN27C301AFP",
+      "resolves_to_comma_joined": true,
+      "token": "hn27c301ap"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C301G",
+      "resolves_to_comma_joined": false,
+      "token": "hn27c301g"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C4001G",
+      "resolves_to_comma_joined": false,
+      "token": "hn27c4001g"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C512G",
+      "resolves_to_comma_joined": false,
+      "token": "hn27c512g"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C64FP",
+      "resolves_to_comma_joined": false,
+      "token": "hn27c64fp"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN27C64G",
+      "resolves_to_comma_joined": false,
+      "token": "hn27c64g"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN28F101P,HN28F101FP",
+      "resolves_to_comma_joined": true,
+      "token": "hn28f101fp"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN28F101P,HN28F101FP",
+      "resolves_to_comma_joined": true,
+      "token": "hn28f101p"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HN58C256AP",
+      "resolves_to_comma_joined": false,
+      "token": "hn58c256ap"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HT27C010",
+      "resolves_to_comma_joined": false,
+      "token": "ht27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HT27C020",
+      "resolves_to_comma_joined": false,
+      "token": "ht27c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HT27C040",
+      "resolves_to_comma_joined": false,
+      "token": "ht27c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HT27C512",
+      "resolves_to_comma_joined": false,
+      "token": "ht27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HT27LC010",
+      "resolves_to_comma_joined": false,
+      "token": "ht27lc010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HT27LC020",
+      "resolves_to_comma_joined": false,
+      "token": "ht27lc020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HT27LC040",
+      "resolves_to_comma_joined": false,
+      "token": "ht27lc040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HT27LC512",
+      "resolves_to_comma_joined": false,
+      "token": "ht27lc512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HY27C64",
+      "resolves_to_comma_joined": false,
+      "token": "hy27c64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HY29F002T",
+      "resolves_to_comma_joined": false,
+      "token": "hy29f002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HY29F040",
+      "resolves_to_comma_joined": false,
+      "token": "hy29f040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HY29F040A,HY29F040T",
+      "resolves_to_comma_joined": true,
+      "token": "hy29f040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "HY29F040A,HY29F040T",
+      "resolves_to_comma_joined": true,
+      "token": "hy29f040t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ICE27C010,ICE27LC010",
+      "resolves_to_comma_joined": true,
+      "token": "ice27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ICE27C020,ICE27LC020",
+      "resolves_to_comma_joined": true,
+      "token": "ice27c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ICE27C512,ICE27LC512",
+      "resolves_to_comma_joined": true,
+      "token": "ice27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ICE27C010,ICE27LC010",
+      "resolves_to_comma_joined": true,
+      "token": "ice27lc010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ICE27C020,ICE27LC020",
+      "resolves_to_comma_joined": true,
+      "token": "ice27lc020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ICE27C512,ICE27LC512",
+      "resolves_to_comma_joined": true,
+      "token": "ice27lc512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IM29F001B",
+      "resolves_to_comma_joined": false,
+      "token": "im29f001b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IM29F001T",
+      "resolves_to_comma_joined": false,
+      "token": "im29f001t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IM29F002B",
+      "resolves_to_comma_joined": false,
+      "token": "im29f002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IM29F002T",
+      "resolves_to_comma_joined": false,
+      "token": "im29f002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IM29LV004B",
+      "resolves_to_comma_joined": false,
+      "token": "im29lv004b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IM29LV004T",
+      "resolves_to_comma_joined": false,
+      "token": "im29lv004t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS27C010,IS27HC010",
+      "resolves_to_comma_joined": true,
+      "token": "is27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS27C020,IS27HC020",
+      "resolves_to_comma_joined": true,
+      "token": "is27c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS27C256,IS27HC256",
+      "resolves_to_comma_joined": true,
+      "token": "is27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS27C512,IS27HC512",
+      "resolves_to_comma_joined": true,
+      "token": "is27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS27C010,IS27HC010",
+      "resolves_to_comma_joined": true,
+      "token": "is27hc010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS27C020,IS27HC020",
+      "resolves_to_comma_joined": true,
+      "token": "is27hc020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS27C256,IS27HC256",
+      "resolves_to_comma_joined": true,
+      "token": "is27hc256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS27C512,IS27HC512",
+      "resolves_to_comma_joined": true,
+      "token": "is27hc512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS27LV010",
+      "resolves_to_comma_joined": false,
+      "token": "is27lv010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS27LV020",
+      "resolves_to_comma_joined": false,
+      "token": "is27lv020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS27LV256",
+      "resolves_to_comma_joined": false,
+      "token": "is27lv256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS27LV512",
+      "resolves_to_comma_joined": false,
+      "token": "is27lv512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS28F010",
+      "resolves_to_comma_joined": false,
+      "token": "is28f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "IS28F020",
+      "resolves_to_comma_joined": false,
+      "token": "is28f020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "KM28C64",
+      "resolves_to_comma_joined": false,
+      "token": "km28c64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "KM28C64A,KM28C65A",
+      "resolves_to_comma_joined": true,
+      "token": "km28c64a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "KM28C64A,KM28C65A",
+      "resolves_to_comma_joined": true,
+      "token": "km28c65a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "LG28C010",
+      "resolves_to_comma_joined": false,
+      "token": "lg28c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "LG28C020",
+      "resolves_to_comma_joined": false,
+      "token": "lg28c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "LG28C040",
+      "resolves_to_comma_joined": false,
+      "token": "lg28c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "LST28001",
+      "resolves_to_comma_joined": false,
+      "token": "lst28001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "LST28002",
+      "resolves_to_comma_joined": false,
+      "token": "lst28002"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "LST28004",
+      "resolves_to_comma_joined": false,
+      "token": "lst28004"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M23C1001",
+      "resolves_to_comma_joined": false,
+      "token": "m23c1001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M23C2001",
+      "resolves_to_comma_joined": false,
+      "token": "m23c2001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M23C4001",
+      "resolves_to_comma_joined": false,
+      "token": "m23c4001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27128A",
+      "resolves_to_comma_joined": false,
+      "token": "m27128a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M2716,M2716M",
+      "resolves_to_comma_joined": true,
+      "token": "m2716"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M2716,M2716M",
+      "resolves_to_comma_joined": true,
+      "token": "m2716m"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "D27256,M27256",
+      "resolves_to_comma_joined": true,
+      "token": "m27256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "2732,2732A,M2732,M2732A",
+      "resolves_to_comma_joined": true,
+      "token": "m2732"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "2732,2732A,M2732,M2732A",
+      "resolves_to_comma_joined": true,
+      "token": "m2732a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27512",
+      "resolves_to_comma_joined": false,
+      "token": "m27512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M2764A",
+      "resolves_to_comma_joined": false,
+      "token": "m2764a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C1000",
+      "resolves_to_comma_joined": false,
+      "token": "m27c1000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C1001,M27V101",
+      "resolves_to_comma_joined": true,
+      "token": "m27c1001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C2001,M27V201,M27W201",
+      "resolves_to_comma_joined": true,
+      "token": "m27c2001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C256B",
+      "resolves_to_comma_joined": false,
+      "token": "m27c256b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C256B(2)",
+      "resolves_to_comma_joined": false,
+      "token": "m27c256b(2)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C4001,M27V401",
+      "resolves_to_comma_joined": true,
+      "token": "m27c4001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C512,M27V512",
+      "resolves_to_comma_joined": true,
+      "token": "m27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C64A",
+      "resolves_to_comma_joined": false,
+      "token": "m27c64a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C801",
+      "resolves_to_comma_joined": false,
+      "token": "m27c801"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C1001,M27V101",
+      "resolves_to_comma_joined": true,
+      "token": "m27v101"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C2001,M27V201,M27W201",
+      "resolves_to_comma_joined": true,
+      "token": "m27v201"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C4001,M27V401",
+      "resolves_to_comma_joined": true,
+      "token": "m27v401"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C512,M27V512",
+      "resolves_to_comma_joined": true,
+      "token": "m27v512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C1001,M27V101,M27W101",
+      "resolves_to_comma_joined": true,
+      "token": "m27w101"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C2001,M27V201,M27W201",
+      "resolves_to_comma_joined": true,
+      "token": "m27w201"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C4001,M27V401,M27W401",
+      "resolves_to_comma_joined": true,
+      "token": "m27w401"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M27C512,M27V512,M27W512",
+      "resolves_to_comma_joined": true,
+      "token": "m27w512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M28010",
+      "resolves_to_comma_joined": false,
+      "token": "m28010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M28256",
+      "resolves_to_comma_joined": false,
+      "token": "m28256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M28C64,M28C64A",
+      "resolves_to_comma_joined": true,
+      "token": "m28c64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M28C64-xxW",
+      "resolves_to_comma_joined": false,
+      "token": "m28c64-xxw"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M28C64,M28C64A",
+      "resolves_to_comma_joined": true,
+      "token": "m28c64a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M28F512,M28F512B,M28F010",
+      "resolves_to_comma_joined": true,
+      "token": "m28f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M28F101",
+      "resolves_to_comma_joined": false,
+      "token": "m28f101"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M28F201",
+      "resolves_to_comma_joined": false,
+      "token": "m28f201"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M28F256",
+      "resolves_to_comma_joined": false,
+      "token": "m28f256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M28F512,M28F512B,M28F010",
+      "resolves_to_comma_joined": true,
+      "token": "m28f512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M28F512,M28F512B,M28F010",
+      "resolves_to_comma_joined": true,
+      "token": "m28f512b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M28LV64",
+      "resolves_to_comma_joined": false,
+      "token": "m28lv64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M29F002B,M29F002BB",
+      "resolves_to_comma_joined": true,
+      "token": "m29f002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M29F002B,M29F002BB",
+      "resolves_to_comma_joined": true,
+      "token": "m29f002bb"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M29F002BNB",
+      "resolves_to_comma_joined": false,
+      "token": "m29f002bnb"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M29F002BNT,M29F002NT",
+      "resolves_to_comma_joined": true,
+      "token": "m29f002bnt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M29F002BT,M29F002T",
+      "resolves_to_comma_joined": true,
+      "token": "m29f002bt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M29F002BNT,M29F002NT",
+      "resolves_to_comma_joined": true,
+      "token": "m29f002nt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M29F002BT,M29F002T",
+      "resolves_to_comma_joined": true,
+      "token": "m29f002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M29F010B",
+      "resolves_to_comma_joined": false,
+      "token": "m29f010b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M29F040B",
+      "resolves_to_comma_joined": false,
+      "token": "m29f040b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M29F512B",
+      "resolves_to_comma_joined": false,
+      "token": "m29f512b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T02,M48T12,M48Z02,M48Z12",
+      "resolves_to_comma_joined": true,
+      "token": "m48t02"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48t08"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48t08y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T02,M48T12,M48Z02,M48Z12",
+      "resolves_to_comma_joined": true,
+      "token": "m48t12"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T128V,M48T129V,M48Z128V,M48Z129V",
+      "resolves_to_comma_joined": true,
+      "token": "m48t128v"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T128Y,M48T129Y,M48Z128Y,M48Z129Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48t128y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T128V,M48T129V,M48Z128V,M48Z129V",
+      "resolves_to_comma_joined": true,
+      "token": "m48t129v"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T128Y,M48T129Y,M48Z128Y,M48Z129Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48t129y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48t18"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T35AV,M48Z35V,M48Z35AV",
+      "resolves_to_comma_joined": true,
+      "token": "m48t35av"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T35AY,M48Z35,M48Z35Y,M48Z35AY",
+      "resolves_to_comma_joined": true,
+      "token": "m48t35ay"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T512V,M48T513V,M48Z512V",
+      "resolves_to_comma_joined": true,
+      "token": "m48t512v"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T512Y,M48T513Y,M48Z512Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48t512y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T512V,M48T513V,M48Z512V",
+      "resolves_to_comma_joined": true,
+      "token": "m48t513v"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T512Y,M48T513Y,M48Z512Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48t513y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48t58"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48t58y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T59,M48T59Y,M48Z59,M48Z59Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48t59"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T59V,M48Z59V",
+      "resolves_to_comma_joined": true,
+      "token": "m48t59v"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T59,M48T59Y,M48Z59,M48Z59Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48t59y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T02,M48T12,M48Z02,M48Z12",
+      "resolves_to_comma_joined": true,
+      "token": "m48z02"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48z08"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48z08y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T02,M48T12,M48Z02,M48Z12",
+      "resolves_to_comma_joined": true,
+      "token": "m48z12"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T128V,M48T129V,M48Z128V,M48Z129V",
+      "resolves_to_comma_joined": true,
+      "token": "m48z128v"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T128Y,M48T129Y,M48Z128Y,M48Z129Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48z128y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T128V,M48T129V,M48Z128V,M48Z129V",
+      "resolves_to_comma_joined": true,
+      "token": "m48z129v"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T128Y,M48T129Y,M48Z128Y,M48Z129Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48z129y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48z18"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T35AY,M48Z35,M48Z35Y,M48Z35AY",
+      "resolves_to_comma_joined": true,
+      "token": "m48z35"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T35AV,M48Z35V,M48Z35AV",
+      "resolves_to_comma_joined": true,
+      "token": "m48z35av"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T35AY,M48Z35,M48Z35Y,M48Z35AY",
+      "resolves_to_comma_joined": true,
+      "token": "m48z35ay"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T35AV,M48Z35V,M48Z35AV",
+      "resolves_to_comma_joined": true,
+      "token": "m48z35v"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T35AY,M48Z35,M48Z35Y,M48Z35AY",
+      "resolves_to_comma_joined": true,
+      "token": "m48z35y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T512V,M48T513V,M48Z512V",
+      "resolves_to_comma_joined": true,
+      "token": "m48z512v"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T512Y,M48T513Y,M48Z512Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48z512y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48z58"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T08,M48T08Y,M48T18,M48T58,M48T58Y,M48Z08,M48Z08Y,M48Z18,M48Z58,M48Z58Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48z58y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T59,M48T59Y,M48Z59,M48Z59Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48z59"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T59V,M48Z59V",
+      "resolves_to_comma_joined": true,
+      "token": "m48z59v"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M48T59,M48T59Y,M48Z59,M48Z59Y",
+      "resolves_to_comma_joined": true,
+      "token": "m48z59y"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M5L27256K",
+      "resolves_to_comma_joined": false,
+      "token": "m5l27256k"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M5M27C101K",
+      "resolves_to_comma_joined": false,
+      "token": "m5m27c101k"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M5M27C128",
+      "resolves_to_comma_joined": false,
+      "token": "m5m27c128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M5M27C256K",
+      "resolves_to_comma_joined": false,
+      "token": "m5m27c256k"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M5M28F101,M5M28F101A",
+      "resolves_to_comma_joined": true,
+      "token": "m5m28f101"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M5M28F101,M5M28F101A",
+      "resolves_to_comma_joined": true,
+      "token": "m5m28f101a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M8720",
+      "resolves_to_comma_joined": false,
+      "token": "m8720"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M87C257",
+      "resolves_to_comma_joined": false,
+      "token": "m87c257"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "M87C257(8D)",
+      "resolves_to_comma_joined": false,
+      "token": "m87c257(8d)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MB85R256H",
+      "resolves_to_comma_joined": false,
+      "token": "mb85r256h"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27128",
+      "resolves_to_comma_joined": false,
+      "token": "mbm27128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM2716",
+      "resolves_to_comma_joined": false,
+      "token": "mbm2716"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27256",
+      "resolves_to_comma_joined": false,
+      "token": "mbm27256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM2732,MBM2732A,MBM27C32,MBM27C32A",
+      "resolves_to_comma_joined": true,
+      "token": "mbm2732"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM2732,MBM2732A,MBM27C32,MBM27C32A",
+      "resolves_to_comma_joined": true,
+      "token": "mbm2732a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM2764",
+      "resolves_to_comma_joined": false,
+      "token": "mbm2764"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27C1000P,MBM27C1000",
+      "resolves_to_comma_joined": true,
+      "token": "mbm27c1000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27C1000P,MBM27C1000",
+      "resolves_to_comma_joined": true,
+      "token": "mbm27c1000p"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27C1001",
+      "resolves_to_comma_joined": false,
+      "token": "mbm27c1001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27C128P",
+      "resolves_to_comma_joined": false,
+      "token": "mbm27c128p"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27C2000P,MBM27C2000",
+      "resolves_to_comma_joined": true,
+      "token": "mbm27c2000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27C2000P,MBM27C2000",
+      "resolves_to_comma_joined": true,
+      "token": "mbm27c2000p"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27C2001",
+      "resolves_to_comma_joined": false,
+      "token": "mbm27c2001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27C256A",
+      "resolves_to_comma_joined": false,
+      "token": "mbm27c256a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM2732,MBM2732A,MBM27C32,MBM27C32A",
+      "resolves_to_comma_joined": true,
+      "token": "mbm27c32"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM2732,MBM2732A,MBM27C32,MBM27C32A",
+      "resolves_to_comma_joined": true,
+      "token": "mbm27c32a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27C4001",
+      "resolves_to_comma_joined": false,
+      "token": "mbm27c4001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27C512",
+      "resolves_to_comma_joined": false,
+      "token": "mbm27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM27C64",
+      "resolves_to_comma_joined": false,
+      "token": "mbm27c64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM28F010",
+      "resolves_to_comma_joined": false,
+      "token": "mbm28f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM29F002B",
+      "resolves_to_comma_joined": false,
+      "token": "mbm29f002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM29F002T",
+      "resolves_to_comma_joined": false,
+      "token": "mbm29f002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MBM29F040",
+      "resolves_to_comma_joined": false,
+      "token": "mbm29f040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MSM27C1000",
+      "resolves_to_comma_joined": false,
+      "token": "msm27c1000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MSM27C2000",
+      "resolves_to_comma_joined": false,
+      "token": "msm27c2000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MSM27C201",
+      "resolves_to_comma_joined": false,
+      "token": "msm27c201"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MSM27C401",
+      "resolves_to_comma_joined": false,
+      "token": "msm27c401"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MSM27C512",
+      "resolves_to_comma_joined": false,
+      "token": "msm27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX26C1000",
+      "resolves_to_comma_joined": false,
+      "token": "mx26c1000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX26C2000",
+      "resolves_to_comma_joined": false,
+      "token": "mx26c2000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX26C4000",
+      "resolves_to_comma_joined": false,
+      "token": "mx26c4000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX26LV004B",
+      "resolves_to_comma_joined": false,
+      "token": "mx26lv004b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX26LV004T",
+      "resolves_to_comma_joined": false,
+      "token": "mx26lv004t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX26LV040",
+      "resolves_to_comma_joined": false,
+      "token": "mx26lv040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27C1000",
+      "resolves_to_comma_joined": false,
+      "token": "mx27c1000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27C1000A",
+      "resolves_to_comma_joined": false,
+      "token": "mx27c1000a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27C2000",
+      "resolves_to_comma_joined": false,
+      "token": "mx27c2000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27C2000A",
+      "resolves_to_comma_joined": false,
+      "token": "mx27c2000a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27C256",
+      "resolves_to_comma_joined": false,
+      "token": "mx27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27C4000",
+      "resolves_to_comma_joined": false,
+      "token": "mx27c4000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27C4000A",
+      "resolves_to_comma_joined": false,
+      "token": "mx27c4000a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27C512",
+      "resolves_to_comma_joined": false,
+      "token": "mx27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27C8000",
+      "resolves_to_comma_joined": false,
+      "token": "mx27c8000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27C8000A",
+      "resolves_to_comma_joined": false,
+      "token": "mx27c8000a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27L1000",
+      "resolves_to_comma_joined": false,
+      "token": "mx27l1000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27L2000",
+      "resolves_to_comma_joined": false,
+      "token": "mx27l2000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27L256",
+      "resolves_to_comma_joined": false,
+      "token": "mx27l256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27L4000",
+      "resolves_to_comma_joined": false,
+      "token": "mx27l4000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX27L512",
+      "resolves_to_comma_joined": false,
+      "token": "mx27l512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX28F1000P",
+      "resolves_to_comma_joined": false,
+      "token": "mx28f1000p"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX28F2000P",
+      "resolves_to_comma_joined": false,
+      "token": "mx28f2000p"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX28F2000T",
+      "resolves_to_comma_joined": false,
+      "token": "mx28f2000t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F001B",
+      "resolves_to_comma_joined": false,
+      "token": "mx29f001b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F001T",
+      "resolves_to_comma_joined": false,
+      "token": "mx29f001t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F002B",
+      "resolves_to_comma_joined": false,
+      "token": "mx29f002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F002NB",
+      "resolves_to_comma_joined": false,
+      "token": "mx29f002nb"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F002NT",
+      "resolves_to_comma_joined": false,
+      "token": "mx29f002nt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F002T",
+      "resolves_to_comma_joined": false,
+      "token": "mx29f002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F004B",
+      "resolves_to_comma_joined": false,
+      "token": "mx29f004b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F004T",
+      "resolves_to_comma_joined": false,
+      "token": "mx29f004t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F022B",
+      "resolves_to_comma_joined": false,
+      "token": "mx29f022b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F022NB",
+      "resolves_to_comma_joined": false,
+      "token": "mx29f022nb"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F022NT",
+      "resolves_to_comma_joined": false,
+      "token": "mx29f022nt"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F022T",
+      "resolves_to_comma_joined": false,
+      "token": "mx29f022t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F040,MX29F040C",
+      "resolves_to_comma_joined": true,
+      "token": "mx29f040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29F040,MX29F040C",
+      "resolves_to_comma_joined": true,
+      "token": "mx29f040c"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29LV002CB",
+      "resolves_to_comma_joined": false,
+      "token": "mx29lv002cb"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29LV002CT",
+      "resolves_to_comma_joined": false,
+      "token": "mx29lv002ct"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29LV002NCB",
+      "resolves_to_comma_joined": false,
+      "token": "mx29lv002ncb"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "MX29LV002NCT",
+      "resolves_to_comma_joined": false,
+      "token": "mx29lv002nct"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C010,NM27LC010,NM27LV010,NM27P010,NMC27C010",
+      "resolves_to_comma_joined": true,
+      "token": "nm27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C020,NM27LV020,NM27P020",
+      "resolves_to_comma_joined": true,
+      "token": "nm27c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C040,NM27LV040,NM27P040",
+      "resolves_to_comma_joined": true,
+      "token": "nm27c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C128,NMC27C128B,NMC27C128C",
+      "resolves_to_comma_joined": true,
+      "token": "nm27c128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C256,NM27C256,NM27LC256,NMC27C256B,NMC27C256Q,NMC87C257Q,NMC87C257V",
+      "resolves_to_comma_joined": true,
+      "token": "nm27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C512,NM27C512,NM27LC512,NM27LV512,NM27P512,NMC27C512A,NMC27C512Q",
+      "resolves_to_comma_joined": true,
+      "token": "nm27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C64Q,NM27LC64,NMC27C64Q",
+      "resolves_to_comma_joined": true,
+      "token": "nm27c64q"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C010,NM27LC010,NM27LV010,NM27P010,NMC27C010",
+      "resolves_to_comma_joined": true,
+      "token": "nm27lc010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C256,NM27C256,NM27LC256,NMC27C256B,NMC27C256Q,NMC87C257Q,NMC87C257V",
+      "resolves_to_comma_joined": true,
+      "token": "nm27lc256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C512,NM27C512,NM27LC512,NM27LV512,NM27P512,NMC27C512A,NMC27C512Q",
+      "resolves_to_comma_joined": true,
+      "token": "nm27lc512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C64Q,NM27LC64,NMC27C64Q",
+      "resolves_to_comma_joined": true,
+      "token": "nm27lc64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C010,NM27LC010,NM27LV010,NM27P010,NMC27C010",
+      "resolves_to_comma_joined": true,
+      "token": "nm27lv010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C020,NM27LV020,NM27P020",
+      "resolves_to_comma_joined": true,
+      "token": "nm27lv020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C040,NM27LV040,NM27P040",
+      "resolves_to_comma_joined": true,
+      "token": "nm27lv040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C512,NM27C512,NM27LC512,NM27LV512,NM27P512,NMC27C512A,NMC27C512Q",
+      "resolves_to_comma_joined": true,
+      "token": "nm27lv512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C010,NM27LC010,NM27LV010,NM27P010,NMC27C010",
+      "resolves_to_comma_joined": true,
+      "token": "nm27p010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C020,NM27LV020,NM27P020",
+      "resolves_to_comma_joined": true,
+      "token": "nm27p020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C040,NM27LV040,NM27P040",
+      "resolves_to_comma_joined": true,
+      "token": "nm27p040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C512,NM27C512,NM27LC512,NM27LV512,NM27P512,NMC27C512A,NMC27C512Q",
+      "resolves_to_comma_joined": true,
+      "token": "nm27p512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NMC2732",
+      "resolves_to_comma_joined": false,
+      "token": "nmc2732"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C010,NM27LC010,NM27LV010,NM27P010,NMC27C010",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C128,NMC27C128B,NMC27C128C",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c128b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C128,NMC27C128B,NMC27C128C",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c128c"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NMC27C16",
+      "resolves_to_comma_joined": false,
+      "token": "nmc27c16"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NMC27C16B,NMC27C16BQ",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c16b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NMC27C16B,NMC27C16BQ",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c16bq"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NMC27C16Q",
+      "resolves_to_comma_joined": false,
+      "token": "nmc27c16q"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C256,NM27C256,NM27LC256,NMC27C256B,NMC27C256Q,NMC87C257Q,NMC87C257V",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c256b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C256,NM27C256,NM27LC256,NMC27C256B,NMC27C256Q,NMC87C257Q,NMC87C257V",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c256q"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NMC27C32,NMC27C32E,NMC27C32EH,NMC27C32H,NMC27C32Q",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c32"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NMC27C32B,NMC27C32BQ",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c32b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NMC27C32B,NMC27C32BQ",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c32bq"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NMC27C32,NMC27C32E,NMC27C32EH,NMC27C32H,NMC27C32Q",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c32e"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NMC27C32,NMC27C32E,NMC27C32EH,NMC27C32H,NMC27C32Q",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c32eh"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NMC27C32,NMC27C32E,NMC27C32EH,NMC27C32H,NMC27C32Q",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c32h"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NMC27C32,NMC27C32E,NMC27C32EH,NMC27C32H,NMC27C32Q",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c32q"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C512,NM27C512,NM27LC512,NM27LV512,NM27P512,NMC27C512A,NMC27C512Q",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c512a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C512,NM27C512,NM27LC512,NM27LV512,NM27P512,NMC27C512A,NMC27C512Q",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c512q"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NM27C64Q,NM27LC64,NMC27C64Q",
+      "resolves_to_comma_joined": true,
+      "token": "nmc27c64q"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C256,NM27C256,NM27LC256,NMC27C256B,NMC27C256Q,NMC87C257Q,NMC87C257V",
+      "resolves_to_comma_joined": true,
+      "token": "nmc87c257q"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "FM27C256,NM27C256,NM27LC256,NMC27C256B,NMC27C256Q,NMC87C257Q,NMC87C257V",
+      "resolves_to_comma_joined": true,
+      "token": "nmc87c257v"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "NX29F010",
+      "resolves_to_comma_joined": false,
+      "token": "nx29f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "P27256",
+      "resolves_to_comma_joined": false,
+      "token": "p27256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "P28F001BX-B",
+      "resolves_to_comma_joined": false,
+      "token": "p28f001bx-b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "P28F001BX-T",
+      "resolves_to_comma_joined": false,
+      "token": "p28f001bx-t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "P28F010",
+      "resolves_to_comma_joined": false,
+      "token": "p28f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "P28F020",
+      "resolves_to_comma_joined": false,
+      "token": "p28f020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "P28F256A",
+      "resolves_to_comma_joined": false,
+      "token": "p28f256a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "P28F512",
+      "resolves_to_comma_joined": false,
+      "token": "p28f512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "PM29F002B",
+      "resolves_to_comma_joined": false,
+      "token": "pm29f002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "PM29F002T",
+      "resolves_to_comma_joined": false,
+      "token": "pm29f002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "PM29F004B",
+      "resolves_to_comma_joined": false,
+      "token": "pm29f004b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "PM29F004T",
+      "resolves_to_comma_joined": false,
+      "token": "pm29f004t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "PM39F010",
+      "resolves_to_comma_joined": false,
+      "token": "pm39f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "PM39F020",
+      "resolves_to_comma_joined": false,
+      "token": "pm39f020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "PM39F040",
+      "resolves_to_comma_joined": false,
+      "token": "pm39f040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "PT28C010",
+      "resolves_to_comma_joined": false,
+      "token": "pt28c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "PT28C020",
+      "resolves_to_comma_joined": false,
+      "token": "pt28c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "PT28C040",
+      "resolves_to_comma_joined": false,
+      "token": "pt28c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "S29C31001B",
+      "resolves_to_comma_joined": false,
+      "token": "s29c31001b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "S29C31001T",
+      "resolves_to_comma_joined": false,
+      "token": "s29c31001t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "S29C31002B",
+      "resolves_to_comma_joined": false,
+      "token": "s29c31002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "S29C31002T",
+      "resolves_to_comma_joined": false,
+      "token": "s29c31002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C31004B,S29C31004B",
+      "resolves_to_comma_joined": true,
+      "token": "s29c31004b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C31004T,S29C31004T",
+      "resolves_to_comma_joined": true,
+      "token": "s29c31004t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C51001B,S29C51001B",
+      "resolves_to_comma_joined": true,
+      "token": "s29c51001b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C51001T,S29C51001T",
+      "resolves_to_comma_joined": true,
+      "token": "s29c51001t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C51002B,S29C51002B",
+      "resolves_to_comma_joined": true,
+      "token": "s29c51002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C51002T,S29C51002T",
+      "resolves_to_comma_joined": true,
+      "token": "s29c51002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C51004B,S29C51004B",
+      "resolves_to_comma_joined": true,
+      "token": "s29c51004b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "F29C51004T,S29C51004T",
+      "resolves_to_comma_joined": true,
+      "token": "s29c51004t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SMJ27C010A",
+      "resolves_to_comma_joined": false,
+      "token": "smj27c010a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SMJ27C040",
+      "resolves_to_comma_joined": false,
+      "token": "smj27c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SMJ27C128",
+      "resolves_to_comma_joined": false,
+      "token": "smj27c128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SMJ27C256",
+      "resolves_to_comma_joined": false,
+      "token": "smj27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SMJ27C512",
+      "resolves_to_comma_joined": false,
+      "token": "smj27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST27SF010",
+      "resolves_to_comma_joined": false,
+      "token": "sst27sf010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST27SF020",
+      "resolves_to_comma_joined": false,
+      "token": "sst27sf020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST27SF256",
+      "resolves_to_comma_joined": false,
+      "token": "sst27sf256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST27SF512",
+      "resolves_to_comma_joined": false,
+      "token": "sst27sf512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST27VF010",
+      "resolves_to_comma_joined": false,
+      "token": "sst27vf010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST27VF020",
+      "resolves_to_comma_joined": false,
+      "token": "sst27vf020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST27VF256",
+      "resolves_to_comma_joined": false,
+      "token": "sst27vf256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST27VF512",
+      "resolves_to_comma_joined": false,
+      "token": "sst27vf512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST28LF040,SST28LF040A,SST28VF040,SST28VF040A",
+      "resolves_to_comma_joined": true,
+      "token": "sst28lf040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST28LF040,SST28LF040A,SST28VF040,SST28VF040A",
+      "resolves_to_comma_joined": true,
+      "token": "sst28lf040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST28SF040,SST28SF040A",
+      "resolves_to_comma_joined": true,
+      "token": "sst28sf040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST28SF040,SST28SF040A",
+      "resolves_to_comma_joined": true,
+      "token": "sst28sf040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST28LF040,SST28LF040A,SST28VF040,SST28VF040A",
+      "resolves_to_comma_joined": true,
+      "token": "sst28vf040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST28LF040,SST28LF040A,SST28VF040,SST28VF040A",
+      "resolves_to_comma_joined": true,
+      "token": "sst28vf040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29EE010",
+      "resolves_to_comma_joined": false,
+      "token": "sst29ee010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29EE020",
+      "resolves_to_comma_joined": false,
+      "token": "sst29ee020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29EE512",
+      "resolves_to_comma_joined": false,
+      "token": "sst29ee512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29LE010,SST29VE010",
+      "resolves_to_comma_joined": true,
+      "token": "sst29le010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29LE020,SST29VE020",
+      "resolves_to_comma_joined": true,
+      "token": "sst29le020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29LE512,SST29VE512",
+      "resolves_to_comma_joined": true,
+      "token": "sst29le512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29SF010",
+      "resolves_to_comma_joined": false,
+      "token": "sst29sf010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29SF020",
+      "resolves_to_comma_joined": false,
+      "token": "sst29sf020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29SF040",
+      "resolves_to_comma_joined": false,
+      "token": "sst29sf040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29SF512",
+      "resolves_to_comma_joined": false,
+      "token": "sst29sf512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29LE010,SST29VE010",
+      "resolves_to_comma_joined": true,
+      "token": "sst29ve010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29LE020,SST29VE020",
+      "resolves_to_comma_joined": true,
+      "token": "sst29ve020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29LE512,SST29VE512",
+      "resolves_to_comma_joined": true,
+      "token": "sst29ve512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29VF010",
+      "resolves_to_comma_joined": false,
+      "token": "sst29vf010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29VF020",
+      "resolves_to_comma_joined": false,
+      "token": "sst29vf020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29VF040",
+      "resolves_to_comma_joined": false,
+      "token": "sst29vf040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST29VF512",
+      "resolves_to_comma_joined": false,
+      "token": "sst29vf512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST37VF010",
+      "resolves_to_comma_joined": false,
+      "token": "sst37vf010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST37VF020",
+      "resolves_to_comma_joined": false,
+      "token": "sst37vf020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST37VF040",
+      "resolves_to_comma_joined": false,
+      "token": "sst37vf040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST37VF512",
+      "resolves_to_comma_joined": false,
+      "token": "sst37vf512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39LH010,SST39VF010",
+      "resolves_to_comma_joined": true,
+      "token": "sst39lh010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39LH020,SST39VF020",
+      "resolves_to_comma_joined": true,
+      "token": "sst39lh020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39LH040",
+      "resolves_to_comma_joined": false,
+      "token": "sst39lh040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39LH512,SST39VF512",
+      "resolves_to_comma_joined": true,
+      "token": "sst39lh512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39SF010,SST39SF010A",
+      "resolves_to_comma_joined": true,
+      "token": "sst39sf010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39SF010,SST39SF010A",
+      "resolves_to_comma_joined": true,
+      "token": "sst39sf010a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39SF020,SST39SF020A",
+      "resolves_to_comma_joined": true,
+      "token": "sst39sf020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39SF020,SST39SF020A",
+      "resolves_to_comma_joined": true,
+      "token": "sst39sf020a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39SF040",
+      "resolves_to_comma_joined": false,
+      "token": "sst39sf040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39SF512,SST39SF512A",
+      "resolves_to_comma_joined": true,
+      "token": "sst39sf512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39SF512,SST39SF512A",
+      "resolves_to_comma_joined": true,
+      "token": "sst39sf512a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39LH010,SST39VF010",
+      "resolves_to_comma_joined": true,
+      "token": "sst39vf010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39LH020,SST39VF020",
+      "resolves_to_comma_joined": true,
+      "token": "sst39vf020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39VF040,SST39VF040A",
+      "resolves_to_comma_joined": true,
+      "token": "sst39vf040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39VF040,SST39VF040A",
+      "resolves_to_comma_joined": true,
+      "token": "sst39vf040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SST39LH512,SST39VF512",
+      "resolves_to_comma_joined": true,
+      "token": "sst39vf512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ST27128A",
+      "resolves_to_comma_joined": false,
+      "token": "st27128a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ST27256",
+      "resolves_to_comma_joined": false,
+      "token": "st27256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ST2764A",
+      "resolves_to_comma_joined": false,
+      "token": "st2764a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ST27C256,TS27C256",
+      "resolves_to_comma_joined": true,
+      "token": "st27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TC54256AF,TC54256AP",
+      "resolves_to_comma_joined": true,
+      "token": "tc54256af"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TC54256AF,TC54256AP",
+      "resolves_to_comma_joined": true,
+      "token": "tc54256ap"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TC57256D",
+      "resolves_to_comma_joined": false,
+      "token": "tc57256d"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TC57512AD",
+      "resolves_to_comma_joined": false,
+      "token": "tc57512ad"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS2716",
+      "resolves_to_comma_joined": false,
+      "token": "tms2716"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS2732A",
+      "resolves_to_comma_joined": false,
+      "token": "tms2732a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS2764",
+      "resolves_to_comma_joined": false,
+      "token": "tms2764"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS27C010",
+      "resolves_to_comma_joined": false,
+      "token": "tms27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS27C010A,TMS27PC010A",
+      "resolves_to_comma_joined": true,
+      "token": "tms27c010a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS27C020,TMS27PC020",
+      "resolves_to_comma_joined": true,
+      "token": "tms27c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS27C040,TMS27PC040",
+      "resolves_to_comma_joined": true,
+      "token": "tms27c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SMJ27C128,TMS27C128,TMS27PC128",
+      "resolves_to_comma_joined": true,
+      "token": "tms27c128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SMJ27C256,TMS27C256,TMS27PC256",
+      "resolves_to_comma_joined": true,
+      "token": "tms27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SMJ27C512,TMS27C512,TMS27PC512",
+      "resolves_to_comma_joined": true,
+      "token": "tms27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS27C64,TMS27PC64",
+      "resolves_to_comma_joined": true,
+      "token": "tms27c64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS27C010A,TMS27PC010A",
+      "resolves_to_comma_joined": true,
+      "token": "tms27pc010a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS27C020,TMS27PC020",
+      "resolves_to_comma_joined": true,
+      "token": "tms27pc020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS27C040,TMS27PC040",
+      "resolves_to_comma_joined": true,
+      "token": "tms27pc040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SMJ27C128,TMS27C128,TMS27PC128",
+      "resolves_to_comma_joined": true,
+      "token": "tms27pc128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SMJ27C256,TMS27C256,TMS27PC256",
+      "resolves_to_comma_joined": true,
+      "token": "tms27pc256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "SMJ27C512,TMS27C512,TMS27PC512",
+      "resolves_to_comma_joined": true,
+      "token": "tms27pc512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS27C64,TMS27PC64",
+      "resolves_to_comma_joined": true,
+      "token": "tms27pc64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS28F010,TMS28F010A,TMS28F010B",
+      "resolves_to_comma_joined": true,
+      "token": "tms28f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS28F010,TMS28F010A,TMS28F010B",
+      "resolves_to_comma_joined": true,
+      "token": "tms28f010a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS28F010,TMS28F010A,TMS28F010B",
+      "resolves_to_comma_joined": true,
+      "token": "tms28f010b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS28F020",
+      "resolves_to_comma_joined": false,
+      "token": "tms28f020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TMS87C257",
+      "resolves_to_comma_joined": false,
+      "token": "tms87c257"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "ST27C256,TS27C256",
+      "resolves_to_comma_joined": true,
+      "token": "ts27c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "TS27C64A",
+      "resolves_to_comma_joined": false,
+      "token": "ts27c64a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD27128",
+      "resolves_to_comma_joined": false,
+      "token": "upd27128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD27256",
+      "resolves_to_comma_joined": false,
+      "token": "upd27256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD27512",
+      "resolves_to_comma_joined": false,
+      "token": "upd27512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD2764,UPD2764C,UPD2764D",
+      "resolves_to_comma_joined": true,
+      "token": "upd2764"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD2764,UPD2764C,UPD2764D",
+      "resolves_to_comma_joined": true,
+      "token": "upd2764c"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD2764,UPD2764C,UPD2764D",
+      "resolves_to_comma_joined": true,
+      "token": "upd2764d"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD27C1001A",
+      "resolves_to_comma_joined": false,
+      "token": "upd27c1001a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD27C128",
+      "resolves_to_comma_joined": false,
+      "token": "upd27c128"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD27C2001",
+      "resolves_to_comma_joined": false,
+      "token": "upd27c2001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD27C256A",
+      "resolves_to_comma_joined": false,
+      "token": "upd27c256a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD27C4001",
+      "resolves_to_comma_joined": false,
+      "token": "upd27c4001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD27C512",
+      "resolves_to_comma_joined": false,
+      "token": "upd27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD27C8001",
+      "resolves_to_comma_joined": false,
+      "token": "upd27c8001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "UPD28C04",
+      "resolves_to_comma_joined": false,
+      "token": "upd28c04"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD28C256",
+      "resolves_to_comma_joined": false,
+      "token": "upd28c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "UPD28C64",
+      "resolves_to_comma_joined": false,
+      "token": "upd28c64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29C31001B",
+      "resolves_to_comma_joined": false,
+      "token": "v29c31001b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29C31001T",
+      "resolves_to_comma_joined": false,
+      "token": "v29c31001t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29C31002B",
+      "resolves_to_comma_joined": false,
+      "token": "v29c31002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29C31002T",
+      "resolves_to_comma_joined": false,
+      "token": "v29c31002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29C31004B",
+      "resolves_to_comma_joined": false,
+      "token": "v29c31004b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29C31004T",
+      "resolves_to_comma_joined": false,
+      "token": "v29c31004t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29C51001B",
+      "resolves_to_comma_joined": false,
+      "token": "v29c51001b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29C51001T",
+      "resolves_to_comma_joined": false,
+      "token": "v29c51001t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29C51002B",
+      "resolves_to_comma_joined": false,
+      "token": "v29c51002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29C51002T",
+      "resolves_to_comma_joined": false,
+      "token": "v29c51002t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29C51004B",
+      "resolves_to_comma_joined": false,
+      "token": "v29c51004b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29C51004T",
+      "resolves_to_comma_joined": false,
+      "token": "v29c51004t"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29LC51000",
+      "resolves_to_comma_joined": false,
+      "token": "v29lc51000"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29LC51001",
+      "resolves_to_comma_joined": false,
+      "token": "v29lc51001"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "V29LC51002",
+      "resolves_to_comma_joined": false,
+      "token": "v29lc51002"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W24010",
+      "resolves_to_comma_joined": false,
+      "token": "w24010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W24020",
+      "resolves_to_comma_joined": false,
+      "token": "w24020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W24040",
+      "resolves_to_comma_joined": false,
+      "token": "w24040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W24256,W24257A",
+      "resolves_to_comma_joined": true,
+      "token": "w24256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W24256,W24257A",
+      "resolves_to_comma_joined": true,
+      "token": "w24257a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W24512",
+      "resolves_to_comma_joined": false,
+      "token": "w24512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W2464,W2465",
+      "resolves_to_comma_joined": true,
+      "token": "w2464"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W2464,W2465",
+      "resolves_to_comma_joined": true,
+      "token": "w2465"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C01,W27C010,W27E01,W27E010,W27L01,W27L010",
+      "resolves_to_comma_joined": true,
+      "token": "w27c01"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C01,W27C010,W27E01,W27E010,W27L01,W27L010",
+      "resolves_to_comma_joined": true,
+      "token": "w27c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C02,W27C020,W27E02,W27E020,W27L02",
+      "resolves_to_comma_joined": true,
+      "token": "w27c02"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C02,W27C020,W27E02,W27E020,W27L02",
+      "resolves_to_comma_joined": true,
+      "token": "w27c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C04,W27C040,W27E040",
+      "resolves_to_comma_joined": true,
+      "token": "w27c04"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C04,W27C040,W27E040",
+      "resolves_to_comma_joined": true,
+      "token": "w27c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C257",
+      "resolves_to_comma_joined": false,
+      "token": "w27c257"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C512,W27E512",
+      "resolves_to_comma_joined": true,
+      "token": "w27c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C01,W27C010,W27E01,W27E010,W27L01,W27L010",
+      "resolves_to_comma_joined": true,
+      "token": "w27e01"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C01,W27C010,W27E01,W27E010,W27L01,W27L010",
+      "resolves_to_comma_joined": true,
+      "token": "w27e010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C02,W27C020,W27E02,W27E020,W27L02",
+      "resolves_to_comma_joined": true,
+      "token": "w27e02"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C02,W27C020,W27E02,W27E020,W27L02",
+      "resolves_to_comma_joined": true,
+      "token": "w27e020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C04,W27C040,W27E040",
+      "resolves_to_comma_joined": true,
+      "token": "w27e040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27E257",
+      "resolves_to_comma_joined": false,
+      "token": "w27e257"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C512,W27E512",
+      "resolves_to_comma_joined": true,
+      "token": "w27e512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C01,W27C010,W27E01,W27E010,W27L01,W27L010",
+      "resolves_to_comma_joined": true,
+      "token": "w27l01"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C01,W27C010,W27E01,W27E010,W27L01,W27L010",
+      "resolves_to_comma_joined": true,
+      "token": "w27l010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W27C02,W27C020,W27E02,W27E020,W27L02",
+      "resolves_to_comma_joined": true,
+      "token": "w27l02"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29C010,W29C011,W29C011A,W29EE010,W29EE012",
+      "resolves_to_comma_joined": true,
+      "token": "w29c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29C010,W29C011,W29C011A,W29EE010,W29EE012",
+      "resolves_to_comma_joined": true,
+      "token": "w29c011"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29C010,W29C011,W29C011A,W29EE010,W29EE012",
+      "resolves_to_comma_joined": true,
+      "token": "w29c011a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29C020,W29C020C,W29C022",
+      "resolves_to_comma_joined": true,
+      "token": "w29c020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29C020,W29C020C,W29C022",
+      "resolves_to_comma_joined": true,
+      "token": "w29c020c"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29C020,W29C020C,W29C022",
+      "resolves_to_comma_joined": true,
+      "token": "w29c022"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29C040,W29C042",
+      "resolves_to_comma_joined": true,
+      "token": "w29c040"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29C040,W29C042",
+      "resolves_to_comma_joined": true,
+      "token": "w29c042"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29C512,W29EE512",
+      "resolves_to_comma_joined": true,
+      "token": "w29c512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29C010,W29C011,W29C011A,W29EE010,W29EE012",
+      "resolves_to_comma_joined": true,
+      "token": "w29ee010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29EE011",
+      "resolves_to_comma_joined": false,
+      "token": "w29ee011"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29C010,W29C011,W29C011A,W29EE010,W29EE012",
+      "resolves_to_comma_joined": true,
+      "token": "w29ee012"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W29C512,W29EE512",
+      "resolves_to_comma_joined": true,
+      "token": "w29ee512"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W39F010",
+      "resolves_to_comma_joined": false,
+      "token": "w39f010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W39L040A",
+      "resolves_to_comma_joined": false,
+      "token": "w39l040a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W49F002,W49F002A,W49F002B,W49F002U",
+      "resolves_to_comma_joined": true,
+      "token": "w49f002"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W49F002,W49F002A,W49F002B,W49F002U",
+      "resolves_to_comma_joined": true,
+      "token": "w49f002a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W49F002,W49F002A,W49F002B,W49F002U",
+      "resolves_to_comma_joined": true,
+      "token": "w49f002b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W49F002,W49F002A,W49F002B,W49F002U",
+      "resolves_to_comma_joined": true,
+      "token": "w49f002u"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "W49F020",
+      "resolves_to_comma_joined": false,
+      "token": "w49f020"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WE128K8",
+      "resolves_to_comma_joined": false,
+      "token": "we128k8"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WE256K8",
+      "resolves_to_comma_joined": false,
+      "token": "we256k8"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WE512K8",
+      "resolves_to_comma_joined": false,
+      "token": "we512k8"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WME128K8",
+      "resolves_to_comma_joined": false,
+      "token": "wme128k8"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WS27C010F",
+      "resolves_to_comma_joined": false,
+      "token": "ws27c010f"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WS27C010L",
+      "resolves_to_comma_joined": false,
+      "token": "ws27c010l"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WS27C128F",
+      "resolves_to_comma_joined": false,
+      "token": "ws27c128f"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WS27C256L",
+      "resolves_to_comma_joined": false,
+      "token": "ws27c256l"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WS27C512F,WS27C512L",
+      "resolves_to_comma_joined": true,
+      "token": "ws27c512f"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WS27C512F,WS27C512L",
+      "resolves_to_comma_joined": true,
+      "token": "ws27c512l"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WS27C64",
+      "resolves_to_comma_joined": false,
+      "token": "ws27c64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WS57C128FB",
+      "resolves_to_comma_joined": false,
+      "token": "ws57c128fb"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "WS57C256F",
+      "resolves_to_comma_joined": false,
+      "token": "ws57c256f"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X2804A,X2804AI",
+      "resolves_to_comma_joined": true,
+      "token": "x2804a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X2804A,X2804AI",
+      "resolves_to_comma_joined": true,
+      "token": "x2804ai"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X2816A",
+      "resolves_to_comma_joined": false,
+      "token": "x2816a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X2816B,X2816C",
+      "resolves_to_comma_joined": true,
+      "token": "x2816b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X2816B,X2816C",
+      "resolves_to_comma_joined": true,
+      "token": "x2816c"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X28256,X28C256",
+      "resolves_to_comma_joined": true,
+      "token": "x28256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X2864AP",
+      "resolves_to_comma_joined": false,
+      "token": "x2864ap"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X28C010",
+      "resolves_to_comma_joined": false,
+      "token": "x28c010"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X28256,X28C256",
+      "resolves_to_comma_joined": true,
+      "token": "x28c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X28C64,X28HC64",
+      "resolves_to_comma_joined": true,
+      "token": "x28c64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X28C64,X28HC64",
+      "resolves_to_comma_joined": true,
+      "token": "x28c64(nonstandard)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X28C64,X28HC64",
+      "resolves_to_comma_joined": true,
+      "token": "x28hc64"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "X28C64,X28HC64",
+      "resolves_to_comma_joined": true,
+      "token": "x28hc64(nonstandard)"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "X88C64P,X88C64S",
+      "resolves_to_comma_joined": true,
+      "token": "x88c64p"
+    },
+    {
+      "differs": true,
+      "resolve_status": "not-implemented",
+      "resolved_part_number": "X88C64P,X88C64S",
+      "resolves_to_comma_joined": true,
+      "token": "x88c64s"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XL2804A",
+      "resolves_to_comma_joined": false,
+      "token": "xl2804a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XL2816A,XLE28C16A,XLS28C16A",
+      "resolves_to_comma_joined": true,
+      "token": "xl2816a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XLE2865A,XLS2865A",
+      "resolves_to_comma_joined": true,
+      "token": "xle2865a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XL2816A,XLE28C16A,XLS28C16A",
+      "resolves_to_comma_joined": true,
+      "token": "xle28c16a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XLE28C16B,XLS28C16B",
+      "resolves_to_comma_joined": true,
+      "token": "xle28c16b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XLE28C256,XLS28C256",
+      "resolves_to_comma_joined": true,
+      "token": "xle28c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XLE28C64A,XLS28C64A",
+      "resolves_to_comma_joined": true,
+      "token": "xle28c64a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XLE28C64B,XLS28C64B",
+      "resolves_to_comma_joined": true,
+      "token": "xle28c64b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XLE2865A,XLS2865A",
+      "resolves_to_comma_joined": true,
+      "token": "xls2865a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XL2816A,XLE28C16A,XLS28C16A",
+      "resolves_to_comma_joined": true,
+      "token": "xls28c16a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XLE28C16B,XLS28C16B",
+      "resolves_to_comma_joined": true,
+      "token": "xls28c16b"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XLE28C256,XLS28C256",
+      "resolves_to_comma_joined": true,
+      "token": "xls28c256"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XLE28C64A,XLS28C64A",
+      "resolves_to_comma_joined": true,
+      "token": "xls28c64a"
+    },
+    {
+      "differs": true,
+      "resolve_status": "ok",
+      "resolved_part_number": "XLE28C64B,XLS28C64B",
+      "resolves_to_comma_joined": true,
+      "token": "xls28c64b"
+    }
+  ],
+  "filed_issues": [
+    {
+      "differs": true,
+      "issue": 18,
+      "raw_token": "fm1608",
+      "resolved_part_number": "FM1608"
+    },
+    {
+      "differs": true,
+      "issue": 20,
+      "raw_token": "at28c256",
+      "resolved_part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L"
+    },
+    {
+      "differs": true,
+      "issue": 21,
+      "raw_token": "at28c256",
+      "resolved_part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L"
+    },
+    {
+      "differs": true,
+      "issue": 22,
+      "raw_token": "w27c512",
+      "resolved_part_number": "W27C512,W27E512"
+    },
+    {
+      "differs": true,
+      "issue": 23,
+      "raw_token": "w27e257",
+      "resolved_part_number": "W27E257"
+    },
+    {
+      "differs": true,
+      "issue": 24,
+      "raw_token": "w27e257",
+      "resolved_part_number": "W27E257"
+    },
+    {
+      "differs": true,
+      "issue": 25,
+      "raw_token": "sst39sf020",
+      "resolved_part_number": "SST39SF020,SST39SF020A"
+    },
+    {
+      "differs": true,
+      "issue": 26,
+      "raw_token": "w27c020",
+      "resolved_part_number": "W27C02,W27C020,W27E02,W27E020,W27L02"
+    },
+    {
+      "differs": true,
+      "issue": 27,
+      "raw_token": "w27c020",
+      "resolved_part_number": "W27C02,W27C020,W27E02,W27E020,W27L02"
+    },
+    {
+      "differs": true,
+      "issue": 28,
+      "raw_token": "m27c512",
+      "resolved_part_number": "M27C512,M27V512"
+    },
+    {
+      "differs": true,
+      "issue": 29,
+      "raw_token": "m27c512",
+      "resolved_part_number": "M27C512,M27V512"
+    },
+    {
+      "differs": true,
+      "issue": 30,
+      "raw_token": "m27c1001",
+      "resolved_part_number": "M27C1001,M27V101"
+    },
+    {
+      "differs": true,
+      "issue": 31,
+      "raw_token": "m27c1001",
+      "resolved_part_number": "M27C1001,M27V101"
+    },
+    {
+      "differs": true,
+      "issue": 32,
+      "raw_token": "at28c256",
+      "resolved_part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L"
+    },
+    {
+      "differs": true,
+      "issue": 39,
+      "raw_token": "at28c256",
+      "resolved_part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L"
+    },
+    {
+      "differs": true,
+      "issue": 40,
+      "raw_token": "at28c256",
+      "resolved_part_number": "AT28C256,AT28C256E,AT28C256F,AT28HC256,AT28HC256E,AT28HC256F,AT28HC256L"
+    },
+    {
+      "differs": true,
+      "issue": 41,
+      "raw_token": "w27c512",
+      "resolved_part_number": "W27C512,W27E512"
+    },
+    {
+      "differs": true,
+      "issue": 42,
+      "raw_token": "w27c512",
+      "resolved_part_number": "W27C512,W27E512"
+    },
+    {
+      "differs": true,
+      "issue": 45,
+      "raw_token": "W27E040",
+      "resolved_part_number": "W27C04,W27C040,W27E040"
+    },
+    {
+      "differs": true,
+      "issue": 46,
+      "raw_token": "W27E512",
+      "resolved_part_number": "W27C512,W27E512"
+    },
+    {
+      "differs": true,
+      "issue": 47,
+      "raw_token": "sst27sf512",
+      "resolved_part_number": "SST27SF512"
+    },
+    {
+      "differs": true,
+      "issue": 48,
+      "raw_token": "W29c040",
+      "resolved_part_number": "W29C040,W29C042"
+    },
+    {
+      "differs": true,
+      "issue": 49,
+      "raw_token": "fm1608",
+      "resolved_part_number": "FM1608"
+    },
+    {
+      "differs": true,
+      "issue": 50,
+      "raw_token": "sst39sf040",
+      "resolved_part_number": "SST39SF040"
+    },
+    {
+      "differs": true,
+      "issue": 51,
+      "raw_token": "W27E020",
+      "resolved_part_number": "W27C02,W27C020,W27E02,W27E020,W27L02"
+    },
+    {
+      "differs": true,
+      "issue": 52,
+      "raw_token": "W29c020",
+      "resolved_part_number": "W29C020,W29C020C,W29C022"
+    }
+  ]
+}
