@@ -56,15 +56,21 @@ CLI token, `protocol` is `str(prog["algorithm"])` read off
 `_REAL_DB.convert_to_programmer(_REAL_DB.get_eprom(chip))`. These are the
 shapes research actually measured a generator regeneration or a plan-shape
 change (SDP-step pruning, canonical naming) would move. Each real-path
-builder is cached with `functools.lru_cache` -- `derive_plan`/`run_plan`
-are paid once per shape rather than once per call site -- which is safe
-here because nothing in this plan mutates a real-path shape's `results`
-after construction (the tracer's hand-specified builder, which IS mutated
-by the planted-mutation tests, stays uncached).
+builder that is called directly is cached with `functools.cache` --
+`derive_plan`/`run_plan` are paid once per shape rather than once per call
+site. The two canonical-naming derivatives (`m27c512-full-canonical-name`,
+`m27c512-full-comma-joined-name`) are built through
+`_clone_with_chip_override`, which deep-copies the cached base's `results`
+and `plan` (CR-01) rather than sharing them -- a mutation through either
+derivative therefore cannot move the cached base's frozen hash, and the
+derivatives themselves stay uncached so a mutation leg on one never leaks
+into the other. The tracer's hand-specified builder, which IS mutated by
+the planted-mutation tests, stays uncached for the same reason.
 """
 
 from __future__ import annotations
 
+import copy
 import functools
 from collections.abc import Callable
 from dataclasses import replace as _dataclass_replace
@@ -478,19 +484,23 @@ def _build_real_path_report(
 def _clone_with_chip_override(
     report: DiagnosticReport, chip_override: str
 ) -> DiagnosticReport:
-    """A shallow clone of `report` with `auto_capture.chip` replaced --
-    reused by the two D-2 canonical-naming alternatives, which stamp a
-    different `auto_capture.chip` onto the SAME `plan`/`results` the
-    all-OK real-path builder already computed, rather than paying
-    `derive_plan`/`run_plan` a second time for an identical plan. Sharing
-    `results` is safe: `dedup_fingerprint` and `build_db_diff` only READ
-    it."""
+    """A clone of `report` with `auto_capture.chip` replaced -- reused by
+    the two D-2 canonical-naming alternatives, which stamp a different
+    `auto_capture.chip` onto a plan/results pair DERIVED from the all-OK
+    real-path builder's output, rather than paying `derive_plan`/`run_plan`
+    a second time for an identical plan. The clone owns its own `results`
+    and `plan` via `copy.deepcopy` (CR-01): the prior shallow share meant a
+    mutation leg on this clone silently wrote through to
+    `m27c512-full-all-ok`'s cached `results`, moving its frozen hash. Both
+    `report.results` and `report.plan` deep-copy cleanly and a report
+    rebuilt from the copies fingerprints identically to the shared-object
+    version, so the fix cannot move a frozen hash."""
     auto_capture = _dataclass_replace(report.auto_capture, chip=chip_override)
     return DiagnosticReport(
         auto_capture=auto_capture,
         transport=report.transport,
-        plan=report.plan,
-        results=report.results,
+        plan=copy.deepcopy(report.plan),
+        results=copy.deepcopy(report.results),
     )
 
 
