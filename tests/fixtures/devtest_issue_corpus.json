@@ -1,0 +1,1717 @@
+{
+  "_generated_by": "tools/build_devtest_issue_corpus.py, via 'gh issue list --repo henols/firestarter_prom --state all --limit 300 --json number,title,state,body'",
+  "rows": [
+    {
+      "chip": "fm1608",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "a6915f4437ee",
+      "host_version": "3.0.0b11",
+      "issue": 18,
+      "protocol": "40",
+      "raw_token": "fm1608",
+      "recomputed_hash": "a6915f4437ee",
+      "repeat_policy_tag": "",
+      "schema_version": "1.1",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "NA",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "NA",
+          null
+        ],
+        [
+          "erase",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "chip": "at28c256",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "00e121446ceb",
+      "host_version": "3.0.0b14",
+      "issue": 20,
+      "protocol": "13",
+      "raw_token": "at28c256",
+      "recomputed_hash": "00e121446ceb",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "NA",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "BAD",
+          null
+        ],
+        [
+          "write",
+          "BAD",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "BAD",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "chip": "at28c256",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "00e121446ceb",
+      "host_version": "3.0.0b15",
+      "issue": 21,
+      "protocol": "13",
+      "raw_token": "at28c256",
+      "recomputed_hash": "00e121446ceb",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "OPEN",
+      "steps": [
+        [
+          "id",
+          "NA",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "BAD",
+          null
+        ],
+        [
+          "write",
+          "BAD",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "BAD",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "chip": "w27c512",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "0eec03f6821b",
+      "host_version": "3.0.0b15",
+      "issue": 22,
+      "protocol": "7",
+      "raw_token": "w27c512",
+      "recomputed_hash": "0eec03f6821b",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "BAD",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ]
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "chip": "w27e257",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "7a89fcea856a",
+      "host_version": "3.0.0b15",
+      "issue": 23,
+      "protocol": "7",
+      "raw_token": "w27e257",
+      "recomputed_hash": "7a89fcea856a",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "OPEN",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "BAD",
+          "blank/contact"
+        ],
+        [
+          "verify",
+          "BAD",
+          "blank/contact"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ]
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "chip": "w27e257",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "3870f9b5f6ca",
+      "host_version": "3.0.0b15",
+      "issue": 24,
+      "protocol": "7",
+      "raw_token": "w27e257",
+      "recomputed_hash": "3870f9b5f6ca",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "BAD",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ]
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "chip": "sst39sf020",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "ed1b5dc79022",
+      "host_version": "3.0.0b15",
+      "issue": 25,
+      "protocol": "6",
+      "raw_token": "sst39sf020",
+      "recomputed_hash": "ed1b5dc79022",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ]
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "chip": "w27c020",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "f8cb30c62aac",
+      "host_version": "3.0.0b15",
+      "issue": 26,
+      "protocol": "8",
+      "raw_token": "w27c020",
+      "recomputed_hash": "f8cb30c62aac",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "BAD",
+          null
+        ],
+        [
+          "write",
+          "marginal",
+          "transport"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ]
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "chip": "w27c020",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "ea556a61c3db",
+      "host_version": "3.0.0b15",
+      "issue": 27,
+      "protocol": "8",
+      "raw_token": "w27c020",
+      "recomputed_hash": "ea556a61c3db",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ]
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "chip": "m27c512",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "31547956e56b",
+      "host_version": "3.0.0b15",
+      "issue": 28,
+      "protocol": "7",
+      "raw_token": "m27c512",
+      "recomputed_hash": "31547956e56b",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "OPEN",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "BAD",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "BAD",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "chip": "m27c512",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "7c6997788e25",
+      "host_version": "3.0.0b15",
+      "issue": 29,
+      "protocol": "7",
+      "raw_token": "m27c512",
+      "recomputed_hash": "7c6997788e25",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "marginal",
+          "transport"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "INCONCLUSIVE"
+    },
+    {
+      "chip": "m27c1001",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "317d6b1e6e18",
+      "host_version": "3.0.0b15",
+      "issue": 30,
+      "protocol": "8",
+      "raw_token": "m27c1001",
+      "recomputed_hash": "317d6b1e6e18",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "BAD",
+          "blank/contact"
+        ],
+        [
+          "verify",
+          "BAD",
+          "blank/contact"
+        ],
+        [
+          "erase",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "chip": "m27c1001",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "d8771536cb43",
+      "host_version": "3.0.0b15",
+      "issue": 31,
+      "protocol": "8",
+      "raw_token": "m27c1001",
+      "recomputed_hash": "d8771536cb43",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "OPEN",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "marginal",
+          "transport"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "INCONCLUSIVE"
+    },
+    {
+      "chip": "at28c256",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "00e121446ceb",
+      "host_version": "3.0.0b15",
+      "issue": 32,
+      "protocol": "13",
+      "raw_token": "at28c256",
+      "recomputed_hash": "00e121446ceb",
+      "repeat_policy_tag": "",
+      "schema_version": "1.2",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "NA",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "BAD",
+          null
+        ],
+        [
+          "write",
+          "BAD",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "BAD",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "chip": "at28c256",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "334c3fa198bf",
+      "host_version": "3.0.0b27",
+      "issue": 39,
+      "protocol": "13",
+      "raw_token": "at28c256",
+      "recomputed_hash": "334c3fa198bf",
+      "repeat_policy_tag": "",
+      "schema_version": "1.6",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "NA",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-b",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "write-baseline-a",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "sdp-lock",
+          "OK",
+          null
+        ],
+        [
+          "write-inhibited",
+          "marginal",
+          "indeterminate"
+        ],
+        [
+          "sdp-unlock",
+          "OK",
+          null
+        ],
+        [
+          "write-restored",
+          "OK",
+          "indeterminate"
+        ]
+      ],
+      "verdict": "INCONCLUSIVE"
+    },
+    {
+      "chip": "at28c256",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "334c3fa198bf",
+      "host_version": "3.0.0b27",
+      "issue": 40,
+      "protocol": "13",
+      "raw_token": "at28c256",
+      "recomputed_hash": "334c3fa198bf",
+      "repeat_policy_tag": "",
+      "schema_version": "1.6",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "NA",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-b",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "write-baseline-a",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "sdp-lock",
+          "OK",
+          null
+        ],
+        [
+          "write-inhibited",
+          "marginal",
+          "indeterminate"
+        ],
+        [
+          "sdp-unlock",
+          "OK",
+          null
+        ],
+        [
+          "write-restored",
+          "OK",
+          "indeterminate"
+        ]
+      ],
+      "verdict": "INCONCLUSIVE"
+    },
+    {
+      "chip": "w27c512",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "137e93501512",
+      "host_version": "3.0.0b27",
+      "issue": 41,
+      "protocol": "7",
+      "raw_token": "w27c512",
+      "recomputed_hash": "137e93501512",
+      "repeat_policy_tag": "",
+      "run_counts": {
+        "blank-check": 2,
+        "erase": 2,
+        "id": 1,
+        "read": 2,
+        "sdp-lock": 0,
+        "sdp-unlock": 0,
+        "verify": 2,
+        "write": 2,
+        "write-baseline-a": 0,
+        "write-baseline-b": 0,
+        "write-inhibited": 0,
+        "write-restored": 0
+      },
+      "schema_version": "1.7",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "BAD",
+          "blank/contact"
+        ],
+        [
+          "verify",
+          "BAD",
+          "blank/contact"
+        ],
+        [
+          "erase",
+          "BAD",
+          null
+        ],
+        [
+          "blank-check",
+          "BAD",
+          null
+        ],
+        [
+          "write-baseline-b",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-a",
+          "NA",
+          null
+        ],
+        [
+          "sdp-lock",
+          "NA",
+          null
+        ],
+        [
+          "write-inhibited",
+          "NA",
+          null
+        ],
+        [
+          "sdp-unlock",
+          "NA",
+          null
+        ],
+        [
+          "write-restored",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "chip": "w27c512",
+      "coverage_tag": "",
+      "coverage_tag_source": "solved",
+      "filed_hash": "8236361b75a5",
+      "host_version": "3.0.0b28",
+      "issue": 42,
+      "protocol": "7",
+      "raw_token": "w27c512",
+      "recomputed_hash": "8236361b75a5",
+      "repeat_policy_tag": "runs=1",
+      "run_counts": {
+        "blank-check": 1,
+        "erase": 1,
+        "id": 1,
+        "read": 1,
+        "sdp-lock": 0,
+        "sdp-unlock": 0,
+        "verify": 1,
+        "write": 1,
+        "write-baseline-a": 0,
+        "write-baseline-b": 0,
+        "write-inhibited": 0,
+        "write-restored": 0
+      },
+      "schema_version": "1.7",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "OK",
+          null
+        ],
+        [
+          "write-baseline-b",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-a",
+          "NA",
+          null
+        ],
+        [
+          "sdp-lock",
+          "NA",
+          null
+        ],
+        [
+          "write-inhibited",
+          "NA",
+          null
+        ],
+        [
+          "sdp-unlock",
+          "NA",
+          null
+        ],
+        [
+          "write-restored",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "chip": "W27E040",
+      "coverage_tag": "cov=full-device",
+      "coverage_tag_source": "solved",
+      "filed_hash": "957307f7b750",
+      "host_version": "3.0.0b33",
+      "issue": 45,
+      "protocol": "8",
+      "raw_token": "W27E040",
+      "recomputed_hash": "957307f7b750",
+      "repeat_policy_tag": "runs=1",
+      "run_counts": {
+        "blank-check": 1,
+        "erase": 1,
+        "id": 1,
+        "read": 1,
+        "sdp-lock": 0,
+        "sdp-unlock": 0,
+        "verify": 1,
+        "write": 1,
+        "write-baseline-a": 0,
+        "write-baseline-b": 0,
+        "write-inhibited": 0,
+        "write-restored": 0
+      },
+      "schema_version": "1.7",
+      "state": "OPEN",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "BAD",
+          null
+        ],
+        [
+          "write-baseline-b",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-a",
+          "NA",
+          null
+        ],
+        [
+          "sdp-lock",
+          "NA",
+          null
+        ],
+        [
+          "write-inhibited",
+          "NA",
+          null
+        ],
+        [
+          "sdp-unlock",
+          "NA",
+          null
+        ],
+        [
+          "write-restored",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "chip": "W27E512",
+      "coverage_tag": "cov=full-device",
+      "coverage_tag_source": "solved",
+      "filed_hash": "2f4fb4f62ff3",
+      "host_version": "3.0.0b33",
+      "issue": 46,
+      "protocol": "7",
+      "raw_token": "W27E512",
+      "recomputed_hash": "2f4fb4f62ff3",
+      "repeat_policy_tag": "runs=1",
+      "run_counts": {
+        "blank-check": 1,
+        "erase": 1,
+        "id": 1,
+        "read": 1,
+        "sdp-lock": 0,
+        "sdp-unlock": 0,
+        "verify": 1,
+        "write": 1,
+        "write-baseline-a": 0,
+        "write-baseline-b": 0,
+        "write-inhibited": 0,
+        "write-restored": 0
+      },
+      "schema_version": "1.7",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "OK",
+          null
+        ],
+        [
+          "write-baseline-b",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-a",
+          "NA",
+          null
+        ],
+        [
+          "sdp-lock",
+          "NA",
+          null
+        ],
+        [
+          "write-inhibited",
+          "NA",
+          null
+        ],
+        [
+          "sdp-unlock",
+          "NA",
+          null
+        ],
+        [
+          "write-restored",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "chip": "sst27sf512",
+      "coverage_tag": "cov=full-device",
+      "coverage_tag_source": "solved",
+      "filed_hash": "f9dbc31dcd27",
+      "host_version": "3.0.0b33",
+      "issue": 47,
+      "protocol": "7",
+      "raw_token": "sst27sf512",
+      "recomputed_hash": "f9dbc31dcd27",
+      "repeat_policy_tag": "runs=1",
+      "run_counts": {
+        "blank-check": 1,
+        "erase": 1,
+        "id": 1,
+        "read": 1,
+        "sdp-lock": 0,
+        "sdp-unlock": 0,
+        "verify": 1,
+        "write": 1,
+        "write-baseline-a": 0,
+        "write-baseline-b": 0,
+        "write-inhibited": 0,
+        "write-restored": 0
+      },
+      "schema_version": "1.7",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "OK",
+          null
+        ],
+        [
+          "write-baseline-b",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-a",
+          "NA",
+          null
+        ],
+        [
+          "sdp-lock",
+          "NA",
+          null
+        ],
+        [
+          "write-inhibited",
+          "NA",
+          null
+        ],
+        [
+          "sdp-unlock",
+          "NA",
+          null
+        ],
+        [
+          "write-restored",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "chip": "W29c040",
+      "coverage_tag": "cov=full-device",
+      "coverage_tag_source": "solved",
+      "filed_hash": "969aa43f48c3",
+      "host_version": "3.0.0b33",
+      "issue": 48,
+      "protocol": "5",
+      "raw_token": "W29c040",
+      "recomputed_hash": "969aa43f48c3",
+      "repeat_policy_tag": "runs=1",
+      "run_counts": {
+        "blank-check": 0,
+        "erase": 0,
+        "id": 1,
+        "read": 1,
+        "sdp-lock": 0,
+        "sdp-unlock": 0,
+        "verify": 1,
+        "write": 1,
+        "write-baseline-a": 0,
+        "write-baseline-b": 0,
+        "write-inhibited": 0,
+        "write-restored": 0
+      },
+      "schema_version": "1.7",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "NA",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          null
+        ],
+        [
+          "erase",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-b",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-a",
+          "NA",
+          null
+        ],
+        [
+          "sdp-lock",
+          "NA",
+          null
+        ],
+        [
+          "write-inhibited",
+          "NA",
+          null
+        ],
+        [
+          "sdp-unlock",
+          "NA",
+          null
+        ],
+        [
+          "write-restored",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "chip": "fm1608",
+      "coverage_tag": "cov=full-device",
+      "coverage_tag_source": "solved",
+      "filed_hash": "0e86f636df87",
+      "host_version": "3.0.0b33",
+      "issue": 49,
+      "protocol": "40",
+      "raw_token": "fm1608",
+      "recomputed_hash": "0e86f636df87",
+      "repeat_policy_tag": "",
+      "run_counts": {
+        "blank-check": 0,
+        "erase": 0,
+        "id": 0,
+        "read": 2,
+        "sdp-lock": 0,
+        "sdp-unlock": 0,
+        "verify": 2,
+        "write": 2,
+        "write-baseline-a": 0,
+        "write-baseline-b": 0,
+        "write-inhibited": 0,
+        "write-restored": 0
+      },
+      "schema_version": "1.7",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "NA",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "NA",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-b",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-a",
+          "NA",
+          null
+        ],
+        [
+          "sdp-lock",
+          "NA",
+          null
+        ],
+        [
+          "write-inhibited",
+          "NA",
+          null
+        ],
+        [
+          "sdp-unlock",
+          "NA",
+          null
+        ],
+        [
+          "write-restored",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "chip": "sst39sf040",
+      "coverage_tag": "cov=full-device",
+      "coverage_tag_source": "solved",
+      "filed_hash": "52af74c52f2c",
+      "host_version": "3.0.0b33",
+      "issue": 50,
+      "protocol": "6",
+      "raw_token": "sst39sf040",
+      "recomputed_hash": "52af74c52f2c",
+      "repeat_policy_tag": "runs=1",
+      "run_counts": {
+        "blank-check": 1,
+        "erase": 1,
+        "id": 1,
+        "read": 1,
+        "sdp-lock": 0,
+        "sdp-unlock": 0,
+        "verify": 1,
+        "write": 1,
+        "write-baseline-a": 0,
+        "write-baseline-b": 0,
+        "write-inhibited": 0,
+        "write-restored": 0
+      },
+      "schema_version": "1.7",
+      "state": "OPEN",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "BAD",
+          null
+        ],
+        [
+          "write-baseline-b",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-a",
+          "NA",
+          null
+        ],
+        [
+          "sdp-lock",
+          "NA",
+          null
+        ],
+        [
+          "write-inhibited",
+          "NA",
+          null
+        ],
+        [
+          "sdp-unlock",
+          "NA",
+          null
+        ],
+        [
+          "write-restored",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "chip": "W27E020",
+      "coverage_tag": "cov=full-device",
+      "coverage_tag_source": "solved",
+      "filed_hash": "e62e68e1c93a",
+      "host_version": "3.0.0b33",
+      "issue": 51,
+      "protocol": "8",
+      "raw_token": "W27E020",
+      "recomputed_hash": "e62e68e1c93a",
+      "repeat_policy_tag": "",
+      "run_counts": {
+        "blank-check": 2,
+        "erase": 2,
+        "id": 1,
+        "read": 2,
+        "sdp-lock": 0,
+        "sdp-unlock": 0,
+        "verify": 2,
+        "write": 2,
+        "write-baseline-a": 0,
+        "write-baseline-b": 0,
+        "write-inhibited": 0,
+        "write-restored": 0
+      },
+      "schema_version": "1.7",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "OK",
+          null
+        ],
+        [
+          "write-baseline-b",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-a",
+          "NA",
+          null
+        ],
+        [
+          "sdp-lock",
+          "NA",
+          null
+        ],
+        [
+          "write-inhibited",
+          "NA",
+          null
+        ],
+        [
+          "sdp-unlock",
+          "NA",
+          null
+        ],
+        [
+          "write-restored",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "chip": "W29c020",
+      "coverage_tag": "cov=full-device",
+      "coverage_tag_source": "solved",
+      "filed_hash": "e09213a69a71",
+      "host_version": "3.0.0b33",
+      "issue": 52,
+      "protocol": "5",
+      "raw_token": "W29c020",
+      "recomputed_hash": "e09213a69a71",
+      "repeat_policy_tag": "",
+      "run_counts": {
+        "blank-check": 0,
+        "erase": 0,
+        "id": 1,
+        "read": 2,
+        "sdp-lock": 0,
+        "sdp-unlock": 0,
+        "verify": 2,
+        "write": 2,
+        "write-baseline-a": 0,
+        "write-baseline-b": 0,
+        "write-inhibited": 0,
+        "write-restored": 0
+      },
+      "schema_version": "1.7",
+      "state": "CLOSED",
+      "steps": [
+        [
+          "id",
+          "OK",
+          null
+        ],
+        [
+          "read",
+          "OK",
+          null
+        ],
+        [
+          "blank-check",
+          "NA",
+          null
+        ],
+        [
+          "write",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "verify",
+          "OK",
+          "indeterminate"
+        ],
+        [
+          "erase",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-b",
+          "NA",
+          null
+        ],
+        [
+          "write-baseline-a",
+          "NA",
+          null
+        ],
+        [
+          "sdp-lock",
+          "NA",
+          null
+        ],
+        [
+          "write-inhibited",
+          "NA",
+          null
+        ],
+        [
+          "sdp-unlock",
+          "NA",
+          null
+        ],
+        [
+          "write-restored",
+          "NA",
+          null
+        ]
+      ],
+      "verdict": "PASS"
+    }
+  ]
+}
