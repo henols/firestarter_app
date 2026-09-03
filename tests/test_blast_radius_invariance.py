@@ -558,15 +558,26 @@ def test_gh20_shape_reproduces_the_shared_three_issue_fingerprint() -> None:
     )
 
 
-def test_committed_snapshot_matches_a_fresh_regeneration() -> None:
+@pytest.mark.parametrize("shape_id", sorted(SHAPE_IDS))
+def test_committed_snapshot_matches_a_fresh_regeneration(shape_id: str) -> None:
+    """WR-01: every committed snapshot is byte-compared against a fresh
+    regeneration, not just the tracer. The other fifteen were previously
+    checked for filename-stem existence only, so a builder or `to_dict()`
+    change moving a non-`dedup_fingerprint` field on any of them went
+    undetected under `pytest` -- `snapshot_report_shapes.py --check` did catch
+    it, but nothing in the suite or in CI invoked that script."""
     from tools.snapshot_report_shapes import render_shape
 
-    target = Path(__file__).parent / "fixtures" / "reports" / f"{_TRACER_SHAPE_ID}.json"
+    target = Path(__file__).parent / "fixtures" / "reports" / f"{shape_id}.json"
     committed = json.loads(target.read_text(encoding="utf-8"))
     assert committed["_generated_by"] == "tools/snapshot_report_shapes.py"
     assert committed["generated"] == "1970-01-01T00:00:00Z"
-    fresh = json.loads(render_shape(_TRACER_SHAPE_ID))
-    assert committed == fresh
+    fresh = json.loads(render_shape(shape_id))
+    assert committed == fresh, (
+        f"committed snapshot for {shape_id!r} drifted from a fresh "
+        f"regeneration; re-run tools/snapshot_report_shapes.py if the change "
+        f"is declared, or revert the builder change if it is not"
+    )
 
 
 def test_planted_mutation_clearing_write_fingerprint_reddens_the_gate() -> None:
@@ -600,6 +611,31 @@ _ALIASED_SHAPE_IDS = (
     "m27c512-full-canonical-name",
     "m27c512-full-comma-joined-name",
 )
+
+
+@pytest.mark.parametrize("shape_id", sorted(SHAPE_IDS))
+def test_composing_a_db_diff_never_leaks_onto_a_cached_build_shape(
+    shape_id: str,
+) -> None:
+    """CR-01, second aliasing path: composing a `DbDiff` must land on a copy,
+    never on the object `build_shape()` returns. Six builders are
+    `functools.cache`-decorated, so that object is shared by every call for
+    the same id -- an in-place `report.db_diff =` assignment persists into
+    every later `build_shape(shape_id)` and breaks the documented
+    `db_diff is None`-on-a-bare-build invariant. The ordering is the whole
+    point: both composing call sites run FIRST, then a bare build is
+    inspected, which is exactly the sequence that previously masked the bug
+    behind test ordering. Swept over all sixteen shape ids rather than the
+    six currently cached, so the leg cannot go stale if a cache decorator is
+    added to or removed from a builder."""
+    from tools.snapshot_report_shapes import render_shape
+
+    render_shape(shape_id)
+    _to_dict_with_db_diff(shape_id)
+    assert build_shape(shape_id).db_diff is None, (
+        f"composing a DbDiff leaked onto the cached build_shape({shape_id!r}) "
+        f"object; a bare build must always carry db_diff=None"
+    )
 
 
 def test_build_shape_never_shares_results_or_plan_between_shape_ids() -> None:
