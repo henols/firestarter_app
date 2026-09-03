@@ -71,6 +71,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from dataclasses import replace as _dataclass_replace
 from pathlib import Path
 
 import pytest
@@ -401,8 +402,11 @@ def _to_dict_with_db_diff(shape_id: str) -> dict:
 
     report = build_shape(shape_id)
     db = EpromDatabase(skip_local_override=True)
-    report.db_diff = build_db_diff(report.auto_capture.chip, db, report.results)
-    return report.to_dict()
+    composed = _dataclass_replace(
+        report,
+        db_diff=build_db_diff(report.auto_capture.chip, db, report.results),
+    )
+    return composed.to_dict()
 
 
 def test_to_dict_voltage_key_list_is_pinned() -> None:

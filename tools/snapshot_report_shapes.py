@@ -31,6 +31,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace as _dataclass_replace
 from pathlib import Path
 
 _TOOLS_DIR = Path(__file__).resolve().parent
@@ -87,10 +88,19 @@ def normalise_snapshot(payload: dict) -> dict:
 def render_shape(shape_id: str) -> str:
     """Build `shape_id`, compose a real `DbDiff`, normalise, and render as
     the byte-identical JSON text this script writes and the drift test
-    compares against."""
+    compares against.
+
+    The `DbDiff` is composed onto a `_dataclass_replace` copy, never onto the
+    object `build_shape()` hands back (CR-01): six builders are
+    `functools.cache`-decorated, so assigning `db_diff` in place would persist
+    into every later `build_shape()` for the same id and break the documented
+    `db_diff is None`-on-a-bare-build invariant."""
     report = build_shape(shape_id)
-    report.db_diff = build_db_diff(report.auto_capture.chip, _DB, report.results)
-    payload = normalise_snapshot(report.to_dict())
+    composed = _dataclass_replace(
+        report,
+        db_diff=build_db_diff(report.auto_capture.chip, _DB, report.results),
+    )
+    payload = normalise_snapshot(composed.to_dict())
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
 
