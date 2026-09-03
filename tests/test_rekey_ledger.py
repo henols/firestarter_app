@@ -13,7 +13,12 @@ Reachability: see
 `.planning/phases/174-blast-radius-invariance-harness/evidence/
 174-01-anti-vacuity-red-green.txt` for the transcribed RED output of the
 meta-side checker's fail-closed legs, and 174-01-SUMMARY.md for the
-recorded proof.
+recorded proof. Plan 174-03's reverse-direction leg
+(`test_check_rekey_ledger_orphan_milestones_row_exits_one`) was likewise
+observed RED against a `MILESTONES.md` copy carrying a planted
+`RK-174-97-orphan-row` before being trusted -- transcribed verbatim in
+`.planning/phases/174-blast-radius-invariance-harness/evidence/
+174-03-ledger-closure.txt`.
 """
 
 from __future__ import annotations
@@ -119,3 +124,107 @@ def test_check_rekey_ledger_fails_closed_on_unparsable_ledger(tmp_path: Path) ->
     bad.write_text("OTHER = 1\n", encoding="utf-8")
     result = _run_checker(["--ledger", str(bad)])
     assert result.returncode == 2, result.stdout + result.stderr
+
+
+def test_check_rekey_ledger_orphan_milestones_row_exits_one(tmp_path: Path) -> None:
+    """Reverse-direction anti-vacuity leg (plan 174-03): a `MILESTONES.md`
+    copy carrying an EXTRA `RK-174-` row for a `ledger_id` the app ledger
+    does not have must fail, naming that orphan `ledger_id` -- proving the
+    direction D-13 does not spell out (MILESTONES.md -> ledger, not just
+    ledger -> MILESTONES.md) is enforced too, not merely the forward
+    direction the clean-input and planted-input legs above already
+    exercise."""
+    real_milestones = _REPO_ROOT / ".planning" / "MILESTONES.md"
+    orphan = tmp_path / "orphan.md"
+    orphan.write_text(
+        real_milestones.read_text(encoding="utf-8")
+        + "| RK-174-97-orphan-row | sst27sf512-six-step | planted orphan | "
+        "rejected | 4dc282a5d596 | 000000000001 | 2026-09-03 |\n",
+        encoding="utf-8",
+    )
+    result = _run_checker(["--milestones", str(orphan)])
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "RK-174-97-orphan-row" in result.stdout
+
+
+def test_ledger_has_exactly_six_pre_seeded_rows() -> None:
+    assert len(LEDGER) == 6, (
+        f"LEDGER has {len(LEDGER)} rows, expected the six rows Phase 174 "
+        "pre-seeded (D-12) -- a silent deletion or an unreviewed addition "
+        "both change this count"
+    )
+
+
+def test_ledger_id_values_are_unique() -> None:
+    ledger_ids = [row[3] for row in LEDGER]
+    assert len(set(ledger_ids)) == len(ledger_ids), (
+        f"LEDGER carries a duplicate ledger_id: {ledger_ids}"
+    )
+
+
+def test_shape_id_ledger_id_pairs_are_unique() -> None:
+    """Two rows MAY legitimately name the same `shape_id` -- a shape can be
+    re-keyed twice by two different phases -- and they must not merge;
+    what must never repeat is the `ledger_id`, asserted above. This also
+    checks the `(shape_id, ledger_id)` PAIR is unique, so a copy-paste row
+    with a matching `shape_id` and a colliding `ledger_id` is caught by
+    two independent assertions, not one."""
+    pairs = [(row[0], row[3]) for row in LEDGER]
+    assert len(set(pairs)) == len(pairs), (
+        f"LEDGER carries a duplicate (shape_id, ledger_id) pair: {pairs}"
+    )
+
+
+def test_no_declared_row_has_after_hash_equal_to_before_hash() -> None:
+    for shape_id, before_hash, after_hash, ledger_id in LEDGER:
+        if after_hash is not None:
+            assert after_hash != before_hash, (
+                f"{ledger_id}: after_hash equals before_hash "
+                f"({before_hash!r}) -- a declared re-key that moved "
+                "nothing is a bookkeeping error, not a re-key"
+            )
+
+
+def test_ledger_sweep_is_well_defined_on_a_single_row_tuple() -> None:
+    """Structural legality of a one-row ledger (D-09): the same sweep every
+    other test in this module applies to the full six-row `LEDGER`,
+    applied here to a LOCALLY-constructed single-row tuple, never to
+    `LEDGER` itself."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    single = (LEDGER[0],)
+    assert len(single) == 1
+    shape_id, before_hash, after_hash, ledger_id = single[0]
+    expected = after_hash if after_hash is not None else before_hash
+    computed = dedup_fingerprint(build_shape(shape_id))
+    assert computed == expected, (
+        f"{ledger_id}: single-row sweep expected {expected}, got {computed}"
+    )
+
+
+def test_undeclared_after_hash_routes_to_before_hash_and_never_abstains() -> None:
+    """An `after_hash` of `None` is the UN-DECLARED case, not a missing
+    value -- it asserts against `before_hash` and never abstains. Every
+    row in the pre-seeded ledger is undeclared today, so this sweeps all
+    six rows rather than constructing a synthetic one."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    for shape_id, before_hash, after_hash, ledger_id in LEDGER:
+        assert after_hash is None, (
+            f"{ledger_id} is declared; this test only covers the "
+            "undeclared case -- update it when a row is first declared"
+        )
+        computed = dedup_fingerprint(build_shape(shape_id))
+        assert computed == before_hash, (
+            f"{ledger_id}: undeclared row's before_hash {before_hash!r} "
+            f"no longer matches a fresh build ({computed!r})"
+        )
+
+
+def test_ledger_id_order_is_ascending() -> None:
+    ledger_ids = [row[3] for row in LEDGER]
+    assert ledger_ids == sorted(ledger_ids), (
+        f"LEDGER's ledger_id order is not ascending: {ledger_ids} != "
+        f"{sorted(ledger_ids)} -- append-only order is specified and "
+        "stable, so a row inserted out of sequence must fail here"
+    )
