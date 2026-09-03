@@ -43,20 +43,44 @@ from tests.fixtures.report_shapes import SHAPE_IDS, build_shape
 
 _GENERATED_BY = "tools/snapshot_report_shapes.py"
 _GENERATED_SENTINEL = "1970-01-01T00:00:00Z"
+_DURATION_SENTINEL = 0.0
 _TARGET_DIR_DEFAULT = _APP_ROOT / "tests" / "fixtures" / "reports"
 
 _DB = EpromDatabase(skip_local_override=True)
 
 
 def normalise_snapshot(payload: dict) -> dict:
-    """Replace the live `generated` timestamp with the fixed sentinel and
-    stamp `_generated_by`. The ONE normaliser both this script and the
-    drift test in `tests/test_blast_radius_invariance.py` apply, by calling
-    `render_shape` directly -- there must be exactly one, or the two could
-    silently diverge."""
+    """Replace the live `generated` timestamp with the fixed sentinel,
+    replace every step's real wall-clock `duration_s` with a second fixed
+    sentinel, and stamp `_generated_by`. The ONE normaliser both this
+    script and the drift test in `tests/test_blast_radius_invariance.py`
+    apply, by calling `render_shape` directly -- there must be exactly
+    one, or the two could silently diverge.
+
+    `duration_s` is volatile for exactly the same reason `generated` is
+    (`StepResult.duration_s`'s own docstring: "Deliberately NOT part of
+    dedup_fingerprint"), but Phase 174's plan 174-01 tracer shape never
+    surfaced it -- every hand-specified shape leaves `duration_s` at its
+    `None` default, since `build_shape_from_step_specs` never stamps a
+    timing. Plan 174-02's D-02 table 2 real-path shapes run through the
+    REAL `run_plan` -> `_run_step` timing wrapper, which stamps actual
+    elapsed wall-clock seconds on every step that ran -- non-`None` and
+    non-deterministic between regenerations. Left unnormalised, EVERY
+    real-path snapshot would drift on every `--check` run, making GATE-05's
+    byte-identical committed-snapshot contract impossible for those eight
+    shapes; only a `None` `duration_s` (a step that never ran) is left
+    alone, since normalising an already-honest absence to `0.0` would
+    misrepresent it as "ran, took no time"."""
     normalised = dict(payload)
     normalised["generated"] = _GENERATED_SENTINEL
     normalised["_generated_by"] = _GENERATED_BY
+    steps = []
+    for step in normalised.get("steps", []):
+        step = dict(step)
+        if step.get("duration_s") is not None:
+            step["duration_s"] = _DURATION_SENTINEL
+        steps.append(step)
+    normalised["steps"] = steps
     return normalised
 
 
@@ -113,7 +137,9 @@ def main() -> int:
 
     for shape_id in shapes:
         if shape_id not in SHAPE_IDS:
-            print(f"ERROR: {shape_id!r} is not in SHAPE_IDS {SHAPE_IDS}", file=sys.stderr)
+            print(
+                f"ERROR: {shape_id!r} is not in SHAPE_IDS {SHAPE_IDS}", file=sys.stderr
+            )
             return 2
 
     if args.check:

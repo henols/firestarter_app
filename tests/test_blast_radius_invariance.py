@@ -75,6 +75,57 @@ _TRACER_CANONICAL = (
     "verify=OK:indeterminate|erase=OK:|blank-check=OK:"
 )
 
+"""The literal disposition strings, per `firestarter/diagnostic_report.py`'s
+four `_DISPOSITION_*` constants -- kept as bare literals here (not
+imports) so LADDER_PINS is a plain module-level constant, matching the
+style of FROZEN_HASHES/_PINNED_SHAPE_ID_SET above. The paired test below
+imports the constants themselves and asserts the triple equality
+(computed == constant == literal), the idiom at
+`tests/test_diagnostic_report.py:734`."""
+_DISPOSITION_COMMUNITY_FAIL_LITERAL = (
+    "suggests: community-fail signal (advisory -- human triage required)"
+)
+_DISPOSITION_CANDIDATE_LITERAL = "suggests: candidate for community-reported (advisory)"
+_DISPOSITION_INCONCLUSIVE_LITERAL = "inconclusive -- needs N>=2 agreement (advisory)"
+_DISPOSITION_NO_CHANGE_LITERAL = "no change suggested (advisory)"
+
+"""GATE-03/D-08: `build_db_diff`'s (proposed_disposition, ladder_state) pair
+for every one of the sixteen frozen shapes, measured this session. All
+four `build_db_diff` arms appear -- the coverage sentinel below asserts
+exactly four distinct pairs, so neither a shape addition that widens the
+table nor a deletion that empties an arm can pass silently (D-08, D-10's
+element-wise idiom applied to arm coverage)."""
+LADDER_PINS: dict[str, tuple[str, str]] = {
+    "at28c256-full-all-ok-sdp": (_DISPOSITION_INCONCLUSIVE_LITERAL, ""),
+    "gh20-at28c256-fail": (_DISPOSITION_COMMUNITY_FAIL_LITERAL, "community-fail"),
+    "gh23-w27e257-fail": (_DISPOSITION_COMMUNITY_FAIL_LITERAL, "community-fail"),
+    "gh28-m27c512-fail": (_DISPOSITION_COMMUNITY_FAIL_LITERAL, "community-fail"),
+    "gh47-sst27sf512-pass": (_DISPOSITION_INCONCLUSIVE_LITERAL, ""),
+    "m27c512-full-all-ok": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
+    "m27c512-full-blank-check-bad": (
+        _DISPOSITION_COMMUNITY_FAIL_LITERAL,
+        "community-fail",
+    ),
+    "m27c512-full-canonical-name": (
+        _DISPOSITION_CANDIDATE_LITERAL,
+        "community-reported",
+    ),
+    "m27c512-full-comma-joined-name": (
+        _DISPOSITION_CANDIDATE_LITERAL,
+        "community-reported",
+    ),
+    "m27c512-full-runs-1": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
+    "sst27sf512-full-all-ok": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
+    "sst27sf512-six-step": (_DISPOSITION_INCONCLUSIVE_LITERAL, ""),
+    "sst27sf512-six-step-readback-gated": (
+        _DISPOSITION_CANDIDATE_LITERAL,
+        "community-reported",
+    ),
+    "synthetic-arm4-empty-results": (_DISPOSITION_NO_CHANGE_LITERAL, ""),
+    "synthetic-arm4-no-ok": (_DISPOSITION_NO_CHANGE_LITERAL, ""),
+    "w27e257-full-all-ok": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
+}
+
 
 @pytest.mark.parametrize("shape_id,expected", sorted(FROZEN_HASHES.items()))
 def test_dedup_fingerprint_is_frozen(shape_id: str, expected: str) -> None:
@@ -158,7 +209,64 @@ def test_build_db_diff_ladder_pin_for_tracer_shape() -> None:
     report = build_shape(_TRACER_SHAPE_ID)
     diff = build_db_diff(report.auto_capture.chip, db, report.results)
     assert diff.proposed_disposition == _DISPOSITION_INCONCLUSIVE
-    assert diff.proposed_disposition == "inconclusive -- needs N>=2 agreement (advisory)"
+    assert (
+        diff.proposed_disposition == "inconclusive -- needs N>=2 agreement (advisory)"
+    )
+
+
+@pytest.mark.parametrize("shape_id,expected", sorted(LADDER_PINS.items()))
+def test_build_db_diff_ladder_pin_for_all_shapes(
+    shape_id: str, expected: tuple[str, str]
+) -> None:
+    """GATE-03/D-08's new work beside the pre-existing
+    `test_ladder_state_verdict_mapping` (`tests/test_diagnostic_report.py:715`,
+    which already pins all four `ladder_state` values absolutely against
+    the module constants): the `proposed_disposition` TEXT, bound to a
+    `shape_id`. Never restates the ladder-state-only assertions that test
+    already makes."""
+    from firestarter.database import EpromDatabase
+    from firestarter.diagnostic_report import (
+        _DISPOSITION_CANDIDATE,
+        _DISPOSITION_COMMUNITY_FAIL,
+        _DISPOSITION_INCONCLUSIVE,
+        _DISPOSITION_NO_CHANGE,
+        build_db_diff,
+    )
+
+    constants_by_literal = {
+        _DISPOSITION_COMMUNITY_FAIL_LITERAL: _DISPOSITION_COMMUNITY_FAIL,
+        _DISPOSITION_INCONCLUSIVE_LITERAL: _DISPOSITION_INCONCLUSIVE,
+        _DISPOSITION_CANDIDATE_LITERAL: _DISPOSITION_CANDIDATE,
+        _DISPOSITION_NO_CHANGE_LITERAL: _DISPOSITION_NO_CHANGE,
+    }
+    expected_disposition, expected_ladder = expected
+    constant = constants_by_literal[expected_disposition]
+
+    db = EpromDatabase(skip_local_override=True)
+    report = build_shape(shape_id)
+    diff = build_db_diff(report.auto_capture.chip, db, report.results)
+
+    assert diff.proposed_disposition == expected_disposition == constant, (
+        f"{shape_id}'s proposed_disposition drifted: expected "
+        f"{expected_disposition!r}, got {diff.proposed_disposition!r}"
+    )
+    assert diff.ladder_state == expected_ladder, (
+        f"{shape_id}'s ladder_state drifted: expected {expected_ladder!r}, "
+        f"got {diff.ladder_state!r}"
+    )
+
+
+def test_ladder_pins_cover_all_four_build_db_diff_arms() -> None:
+    """A coverage sentinel: the set of distinct (disposition, ladder_state)
+    pairs across LADDER_PINS must have exactly four members, so a future
+    shape addition cannot quietly leave an arm unexercised and a shape
+    deletion cannot quietly drop the last member of an arm."""
+    distinct = set(LADDER_PINS.values())
+    assert len(distinct) == 4, (
+        f"LADDER_PINS covers {len(distinct)} distinct (disposition, "
+        f"ladder_state) pairs, expected all four build_db_diff arms; got "
+        f"{sorted(distinct)}"
+    )
 
 
 def test_to_dict_top_level_key_list_is_pinned() -> None:
@@ -171,14 +279,22 @@ def test_to_dict_top_level_key_list_is_pinned() -> None:
 
 
 _PINNED_SHAPE_ID_SET = [
+    "at28c256-full-all-ok-sdp",
     "gh20-at28c256-fail",
     "gh23-w27e257-fail",
     "gh28-m27c512-fail",
     "gh47-sst27sf512-pass",
+    "m27c512-full-all-ok",
+    "m27c512-full-blank-check-bad",
+    "m27c512-full-canonical-name",
+    "m27c512-full-comma-joined-name",
+    "m27c512-full-runs-1",
+    "sst27sf512-full-all-ok",
     "sst27sf512-six-step",
     "sst27sf512-six-step-readback-gated",
     "synthetic-arm4-empty-results",
     "synthetic-arm4-no-ok",
+    "w27e257-full-all-ok",
 ]
 
 
@@ -201,7 +317,11 @@ def test_gh20_shape_reproduces_the_shared_three_issue_fingerprint() -> None:
     from firestarter.diagnostic_report import dedup_fingerprint
 
     report = build_shape("gh20-at28c256-fail")
-    assert dedup_fingerprint(report) == "00e121446ceb" == FROZEN_HASHES["gh20-at28c256-fail"], (
+    assert (
+        dedup_fingerprint(report)
+        == "00e121446ceb"
+        == FROZEN_HASHES["gh20-at28c256-fail"]
+    ), (
         "gh20-at28c256-fail no longer reproduces the fingerprint shared by "
         "gh#20, gh#21 and gh#32 -- a re-key here resets that three-member "
         "dedup group's count_agreeing promotion count permanently"
