@@ -584,6 +584,51 @@ def test_planted_mutation_lowering_chip_name_reddens_the_gate() -> None:
     assert dedup_fingerprint(report) != FROZEN_HASHES[_TRACER_SHAPE_ID]
 
 
+_ALIASED_SHAPE_IDS = (
+    "m27c512-full-all-ok",
+    "m27c512-full-canonical-name",
+    "m27c512-full-comma-joined-name",
+)
+
+
+def test_build_shape_never_shares_results_or_plan_between_shape_ids() -> None:
+    """CR-01: `_clone_with_chip_override` (used by the two D-2
+    canonical-naming alternatives) must not hand two different
+    `shape_id`s the same `results` or `plan` object -- a mutation leg on
+    one shape must not be silently writing to another. Swept over every
+    ordered pair of the three affected shape_ids on both attributes."""
+    reports = {sid: build_shape(sid) for sid in _ALIASED_SHAPE_IDS}
+    for sid_a in _ALIASED_SHAPE_IDS:
+        for sid_b in _ALIASED_SHAPE_IDS:
+            if sid_a == sid_b:
+                continue
+            assert reports[sid_a].results is not reports[sid_b].results, (
+                f"{sid_a!r} and {sid_b!r} share the same results object"
+            )
+            assert reports[sid_a].plan is not reports[sid_b].plan, (
+                f"{sid_a!r} and {sid_b!r} share the same plan object"
+            )
+
+
+def test_mutation_through_a_derived_shape_does_not_move_the_base_shapes_frozen_hash() -> (
+    None
+):
+    """CR-01's collateral false-RED risk: mutating a freshly built
+    `m27c512-full-canonical-name` clone's first `StepResult.verdict` must
+    not move `m27c512-full-all-ok`'s frozen hash. Mutates only through the
+    UNCACHED derivative, never through the cached base builder itself, and
+    reads the expected literal off FROZEN_HASHES rather than hand-typing
+    it."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    clone = build_shape("m27c512-full-canonical-name")
+    clone.results[0].verdict = "BAD"
+    assert (
+        dedup_fingerprint(build_shape("m27c512-full-all-ok"))
+        == FROZEN_HASHES["m27c512-full-all-ok"]
+    )
+
+
 _SHAPE_IDS_JSON = Path(__file__).parent / "fixtures" / "shape_ids.json"
 
 
