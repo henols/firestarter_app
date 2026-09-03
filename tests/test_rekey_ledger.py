@@ -147,6 +147,34 @@ def test_check_rekey_ledger_orphan_milestones_row_exits_one(tmp_path: Path) -> N
     assert "RK-174-97-orphan-row" in result.stdout
 
 
+def test_duplicate_milestones_row_for_one_ledger_id_fails_closed(
+    tmp_path: Path,
+) -> None:
+    """CR-02 leg (a): a fabricated, fully-declared row for
+    `RK-174-01-p177-readback-gating` inserted immediately BEFORE the real
+    row for the same id is invisible to the pre-fix checker -- the last
+    row silently wins and the fabrication is never seen. The fixed checker
+    must instead collide on the duplicate and exit 2, naming the id."""
+    real_milestones = _REPO_ROOT / ".planning" / "MILESTONES.md"
+    src = real_milestones.read_text(encoding="utf-8")
+    fabricated = (
+        "| RK-174-01-p177-readback-gating | sst27sf512-six-step | "
+        "fabricated declared re-key | Phase 177 | 4dc282a5d596 | "
+        "ffffffffffff | 2026-09-03 |"
+    )
+    lines = []
+    for line in src.splitlines():
+        if line.startswith("| RK-174-01-p177-readback-gating |"):
+            lines.append(fabricated)
+        lines.append(line)
+    dup = tmp_path / "dup.md"
+    dup.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    result = _run_checker(["--milestones", str(dup)])
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "RK-174-01-p177-readback-gating" in result.stdout + result.stderr
+
+
 def test_ledger_has_exactly_six_pre_seeded_rows() -> None:
     assert len(LEDGER) == 6, (
         f"LEDGER has {len(LEDGER)} rows, expected the six rows Phase 174 "
