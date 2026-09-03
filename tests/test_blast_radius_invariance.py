@@ -170,9 +170,42 @@ def test_to_dict_top_level_key_list_is_pinned() -> None:
     )
 
 
+_PINNED_SHAPE_ID_SET = [
+    "gh20-at28c256-fail",
+    "gh23-w27e257-fail",
+    "gh28-m27c512-fail",
+    "gh47-sst27sf512-pass",
+    "sst27sf512-six-step",
+    "sst27sf512-six-step-readback-gated",
+    "synthetic-arm4-empty-results",
+    "synthetic-arm4-no-ok",
+]
+
+
 def test_shape_id_set_is_pinned_and_disjoint_from_reserved() -> None:
-    assert sorted(SHAPE_IDS) == ["sst27sf512-six-step"]
+    assert sorted(SHAPE_IDS) == _PINNED_SHAPE_ID_SET, (
+        f"SHAPE_IDS drifted from the D-10 pinned set; expected "
+        f"{_PINNED_SHAPE_ID_SET}, got {sorted(SHAPE_IDS)}"
+    )
     assert not (set(SHAPE_IDS) & RESERVED_SHAPE_IDS)
+
+
+def test_gh20_shape_reproduces_the_shared_three_issue_fingerprint() -> None:
+    """`00e121446ceb` is a REAL three-member dedup group in the wild --
+    gh#20, gh#21 and gh#32, all at28c256 -- and `count_agreeing`
+    (`tools/parse_devtest_issue.py:164`) reads the embedded hash and NEVER
+    re-hashes. A re-key of `gh20-at28c256-fail` therefore does not merely
+    change a string; it resets that group's promotion count permanently.
+    This deserves to fail by name rather than as one row of the frozen
+    table."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    report = build_shape("gh20-at28c256-fail")
+    assert dedup_fingerprint(report) == "00e121446ceb" == FROZEN_HASHES["gh20-at28c256-fail"], (
+        "gh20-at28c256-fail no longer reproduces the fingerprint shared by "
+        "gh#20, gh#21 and gh#32 -- a re-key here resets that three-member "
+        "dedup group's count_agreeing promotion count permanently"
+    )
 
 
 def test_committed_snapshot_matches_a_fresh_regeneration() -> None:

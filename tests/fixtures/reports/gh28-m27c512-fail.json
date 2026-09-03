@@ -1,0 +1,135 @@
+{
+  "_generated_by": "tools/snapshot_report_shapes.py",
+  "auto_capture": {
+    "chip": "m27c512",
+    "chip_id_actual": null,
+    "chip_id_expected": null,
+    "chip_id_mismatch_reason": null,
+    "fw_board_identity": null,
+    "host_version": "3.0.0b10",
+    "hw_revision": null,
+    "protocol": "7"
+  },
+  "banner": {
+    "locked_steps": [],
+    "m_applicable": null,
+    "n_ran": null
+  },
+  "db_diff": {
+    "current_support_status": "supported",
+    "ladder_state": "community-fail",
+    "proposed_disposition": "suggests: community-fail signal (advisory -- human triage required)"
+  },
+  "dedup_fingerprint": "31547956e56b",
+  "generated": "1970-01-01T00:00:00Z",
+  "is_submittable": true,
+  "schema_version": "1.7",
+  "sdp_hold_state": "",
+  "steps": [
+    {
+      "duration_s": null,
+      "error_code": null,
+      "fingerprint": null,
+      "op": "id",
+      "reason": "",
+      "run_count": 0,
+      "verdict": "OK",
+      "write_bits_cleared": null,
+      "write_bits_retained": null,
+      "write_coverage": null,
+      "write_current_source": null,
+      "write_region_length": null,
+      "write_region_start": null
+    },
+    {
+      "duration_s": null,
+      "error_code": null,
+      "fingerprint": null,
+      "op": "read",
+      "reason": "",
+      "run_count": 0,
+      "verdict": "OK",
+      "write_bits_cleared": null,
+      "write_bits_retained": null,
+      "write_coverage": null,
+      "write_current_source": null,
+      "write_region_length": null,
+      "write_region_start": null
+    },
+    {
+      "duration_s": null,
+      "error_code": null,
+      "fingerprint": null,
+      "op": "blank-check",
+      "reason": "",
+      "run_count": 0,
+      "verdict": "OK",
+      "write_bits_cleared": null,
+      "write_bits_retained": null,
+      "write_coverage": null,
+      "write_current_source": null,
+      "write_region_length": null,
+      "write_region_start": null
+    },
+    {
+      "duration_s": null,
+      "error_code": null,
+      "fingerprint": "indeterminate",
+      "op": "write",
+      "reason": "",
+      "run_count": 0,
+      "verdict": "BAD",
+      "write_bits_cleared": null,
+      "write_bits_retained": null,
+      "write_coverage": null,
+      "write_current_source": null,
+      "write_region_length": null,
+      "write_region_start": null
+    },
+    {
+      "duration_s": null,
+      "error_code": null,
+      "fingerprint": "indeterminate",
+      "op": "verify",
+      "reason": "",
+      "run_count": 0,
+      "verdict": "BAD",
+      "write_bits_cleared": null,
+      "write_bits_retained": null,
+      "write_coverage": null,
+      "write_current_source": null,
+      "write_region_length": null,
+      "write_region_start": null
+    },
+    {
+      "duration_s": null,
+      "error_code": null,
+      "fingerprint": null,
+      "op": "erase",
+      "reason": "",
+      "run_count": 0,
+      "verdict": "NA",
+      "write_bits_cleared": null,
+      "write_bits_retained": null,
+      "write_coverage": null,
+      "write_current_source": null,
+      "write_region_length": null,
+      "write_region_start": null
+    }
+  ],
+  "transport_health": {
+    "cobs_errors": "not measured",
+    "crc_failures": "not measured",
+    "retries": "not measured",
+    "timeouts": "not measured",
+    "transport_suspect": false
+  },
+  "voltage": {
+    "vpe_after_mv": "not measured",
+    "vpe_before_mv": "not measured",
+    "vpe_mv": "not measured",
+    "vpp_after_mv": "not measured",
+    "vpp_before_mv": "not measured",
+    "vpp_mv": "not measured"
+  }
+}
