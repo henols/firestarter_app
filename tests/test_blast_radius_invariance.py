@@ -53,6 +53,17 @@ anchor moved it away from `sorted(SHAPE_IDS)` (16 entries -> 15, no longer
 equal), and appending a synthetic `bogus-added-shape-id` entry moved it
 away the other direction (16 entries -> 17, no longer equal) -- neither
 mutation touched the committed file on disk.
+
+CR-01's two regression legs
+(`test_build_shape_never_shares_results_or_plan_between_shape_ids`,
+`test_mutation_through_a_derived_shape_does_not_move_the_base_shapes_frozen_hash`,
+plan 174-06) were likewise observed RED against the pinned pre-fix
+`report_shapes.py` blob `dc7e40a` before being trusted: the aliasing
+comparison read `True` and a poke through `m27c512-full-canonical-name`
+moved `m27c512-full-all-ok`'s fingerprint from `6d3afbc52315` to
+`e9df6ca4627c` -- transcribed verbatim in
+`.planning/phases/174-blast-radius-invariance-harness/evidence/
+174-06-shape-aliasing-red-green.txt`.
 """
 
 from __future__ import annotations

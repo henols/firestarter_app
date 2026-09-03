@@ -272,9 +272,7 @@ def test_milestones_with_zero_rekey_rows_exits_one(tmp_path: Path) -> None:
     src = real_milestones.read_text(encoding="utf-8")
     emptied = tmp_path / "emptytable.md"
     emptied.write_text(
-        "\n".join(
-            line for line in src.splitlines() if not line.startswith("| RK-174-")
-        )
+        "\n".join(line for line in src.splitlines() if not line.startswith("| RK-174-"))
         + "\n",
         encoding="utf-8",
     )
