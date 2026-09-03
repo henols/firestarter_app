@@ -34,6 +34,16 @@ and its one planted-mismatch leg were likewise observed RED in
 `tests/test_rekey_ledger.py`'s subprocess legs before being trusted -- see
 the same evidence file for all five checker invocations' transcribed
 output.
+
+D-07's seven element-wise `to_dict()` key-list pins (plan 174-03) got their
+own anti-vacuity leg,
+`test_to_dict_key_list_pins_are_sensitive_to_added_and_removed_keys`:
+deleting `voltage` from a real `to_dict()` mapping and separately adding a
+`canonical_part_number` key were both observed to move the sorted top-level
+key list away from `_TO_DICT_KEYS` before these seven pins were trusted --
+transcribed verbatim in
+`.planning/phases/174-blast-radius-invariance-harness/evidence/
+174-03-schema-pins.txt`.
 """
 
 from __future__ import annotations
@@ -55,6 +65,9 @@ from .fixtures.report_shapes import (
 
 _HEX12_RE = re.compile(r"^[0-9a-f]{12}$")
 
+"""D-07's first pin: `DiagnosticReport.to_dict()`
+(`firestarter/diagnostic_report.py:771-790`) emits eleven top-level keys
+today."""
 _TO_DICT_KEYS = [
     "auto_capture",
     "banner",
@@ -67,6 +80,85 @@ _TO_DICT_KEYS = [
     "steps",
     "transport_health",
     "voltage",
+]
+
+"""D-07's second pin: `_voltage_dict()` (`:619-640`) emits six keys today.
+`vpp_mv` and `vpe_mv` are RPT-B1's two deletes -- present now, pinned now,
+so Phase 181's deletion has to argue with a gate that predates it rather
+than landing in the same phase as its own gate."""
+_VOLTAGE_KEYS = [
+    "vpe_after_mv",
+    "vpe_before_mv",
+    "vpe_mv",
+    "vpp_after_mv",
+    "vpp_before_mv",
+    "vpp_mv",
+]
+
+"""D-07's third pin: `_banner_dict()` (`:731-738`) emits three keys today.
+`locked_steps` is RPT-B2's delete -- present now, pinned now."""
+_BANNER_KEYS = [
+    "locked_steps",
+    "m_applicable",
+    "n_ran",
+]
+
+"""D-07's fourth pin: `_auto_capture_dict()` (`:592-603`) emits eight keys
+today, with NO `canonical_part_number` key -- RPT-F1 adds one. The
+absence is pinned as an absence: an addition surfaces here as a pin
+failure on this exact list, not as a silent widening."""
+_AUTO_CAPTURE_KEYS = [
+    "chip",
+    "chip_id_actual",
+    "chip_id_expected",
+    "chip_id_mismatch_reason",
+    "fw_board_identity",
+    "host_version",
+    "hw_revision",
+    "protocol",
+]
+
+"""D-07's fifth pin: `_transport_dict()` (`:605-617`) emits five keys
+today."""
+_TRANSPORT_HEALTH_KEYS = [
+    "cobs_errors",
+    "crc_failures",
+    "retries",
+    "timeouts",
+    "transport_suspect",
+]
+
+"""D-07's sixth pin: `_db_diff_dict()` (`:740-748`) emits three keys today,
+populated only after `build_db_diff` is composed onto a report -- `None`
+on a bare `build_shape()` result. The paired test below composes it the
+same way `tools/snapshot_report_shapes.py:render_shape` does, so there is
+exactly one place that composition happens, not two independently
+maintained copies."""
+_DB_DIFF_KEYS = [
+    "current_support_status",
+    "ladder_state",
+    "proposed_disposition",
+]
+
+"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits thirteen keys per
+step, UNCONDITIONALLY -- taken from `sst27sf512-six-step`'s first (`id`)
+step, whose five `write_*` fields stay `None` because `id` carries no
+write target, but all thirteen KEYS are present regardless. The pin is
+over the key SET, not over which values are non-`None`."""
+_STEPS_ELEMENT_0_KEYS = [
+    "duration_s",
+    "error_code",
+    "fingerprint",
+    "op",
+    "reason",
+    "run_count",
+    "verdict",
+    "write_bits_cleared",
+    "write_bits_retained",
+    "write_coverage",
+    "write_current_source",
+    "write_region_length",
+    "write_region_start",
 ]
 
 _TRACER_SHAPE_ID = "sst27sf512-six-step"
@@ -275,6 +367,124 @@ def test_to_dict_top_level_key_list_is_pinned() -> None:
     assert keys == _TO_DICT_KEYS, (
         f"to_dict() top-level keys drifted from the pinned D-07 shape; "
         f"expected {_TO_DICT_KEYS}, got {keys}"
+    )
+
+
+def _to_dict_with_db_diff(shape_id: str) -> dict:
+    """`db_diff` is `None` on a bare `build_shape()` report -- populated
+    only after `build_db_diff` is composed onto it, exactly as
+    `tools/snapshot_report_shapes.py:render_shape` does. The D-07 db_diff
+    key-list pin needs a populated `db_diff`, so this helper mirrors that
+    composition rather than maintaining a second copy of it."""
+    from firestarter.database import EpromDatabase
+    from firestarter.diagnostic_report import build_db_diff
+
+    report = build_shape(shape_id)
+    db = EpromDatabase(skip_local_override=True)
+    report.db_diff = build_db_diff(report.auto_capture.chip, db, report.results)
+    return report.to_dict()
+
+
+def test_to_dict_voltage_key_list_is_pinned() -> None:
+    d = build_shape(_TRACER_SHAPE_ID).to_dict()
+    keys = sorted(d["voltage"])
+    assert keys == _VOLTAGE_KEYS, (
+        f"to_dict()['voltage'] keys drifted from the pinned D-07 shape; "
+        f"expected {_VOLTAGE_KEYS}, got {keys}"
+    )
+
+
+def test_to_dict_banner_key_list_is_pinned() -> None:
+    d = build_shape(_TRACER_SHAPE_ID).to_dict()
+    keys = sorted(d["banner"])
+    assert keys == _BANNER_KEYS, (
+        f"to_dict()['banner'] keys drifted from the pinned D-07 shape; "
+        f"expected {_BANNER_KEYS}, got {keys}"
+    )
+
+
+def test_to_dict_auto_capture_key_list_is_pinned() -> None:
+    d = build_shape(_TRACER_SHAPE_ID).to_dict()
+    keys = sorted(d["auto_capture"])
+    assert keys == _AUTO_CAPTURE_KEYS, (
+        f"to_dict()['auto_capture'] keys drifted from the pinned D-07 shape; "
+        f"expected {_AUTO_CAPTURE_KEYS}, got {keys}"
+    )
+    assert "canonical_part_number" not in keys, (
+        "auto_capture gained canonical_part_number -- RPT-F1 landed; "
+        "update _AUTO_CAPTURE_KEYS deliberately in the same commit"
+    )
+
+
+def test_to_dict_transport_health_key_list_is_pinned() -> None:
+    d = build_shape(_TRACER_SHAPE_ID).to_dict()
+    keys = sorted(d["transport_health"])
+    assert keys == _TRANSPORT_HEALTH_KEYS, (
+        f"to_dict()['transport_health'] keys drifted from the pinned D-07 "
+        f"shape; expected {_TRANSPORT_HEALTH_KEYS}, got {keys}"
+    )
+
+
+def test_to_dict_db_diff_key_list_is_pinned() -> None:
+    d = _to_dict_with_db_diff(_TRACER_SHAPE_ID)
+    keys = sorted(d["db_diff"])
+    assert keys == _DB_DIFF_KEYS, (
+        f"to_dict()['db_diff'] keys drifted from the pinned D-07 shape; "
+        f"expected {_DB_DIFF_KEYS}, got {keys}"
+    )
+
+
+def test_to_dict_steps_element_0_key_list_is_pinned() -> None:
+    d = build_shape(_TRACER_SHAPE_ID).to_dict()
+    keys = sorted(d["steps"][0])
+    assert keys == _STEPS_ELEMENT_0_KEYS, (
+        f"to_dict()['steps'][0] keys drifted from the pinned D-07 shape; "
+        f"expected {_STEPS_ELEMENT_0_KEYS}, got {keys}"
+    )
+
+
+def test_schema_version_is_pinned() -> None:
+    """The triple-equality idiom (`tests/test_diagnostic_report.py:734`):
+    the imported constant, the literal, and the value `to_dict()` actually
+    bakes in, all in one expression, so a constant rename and a value
+    change are both caught. Phase 181 moves this to `2.0` per D-3/RPT-E1,
+    and it has to move this line to do it."""
+    from firestarter.diagnostic_report import SCHEMA_VERSION
+
+    report = build_shape(_TRACER_SHAPE_ID)
+    baked = report.to_dict()["schema_version"]
+    assert SCHEMA_VERSION == "1.7" == baked, (
+        f"SCHEMA_VERSION drifted: constant={SCHEMA_VERSION!r}, baked="
+        f"{baked!r}, expected '1.7' (RPT-E1 moves this to '2.0' in Phase 181)"
+    )
+
+
+def test_to_dict_key_list_pins_are_sensitive_to_added_and_removed_keys() -> None:
+    """The anti-vacuity leg for the seven D-07 pins above: an in-process
+    mutation of a real `to_dict()` mapping, never a change to production
+    code. Deleting one key must move the sorted key list away from the
+    pinned constant, and adding one must too -- proving the element-wise
+    comparisons above are sensitive in both directions, not merely
+    coincidentally correct on the shape as built. Observed output
+    transcribed in
+    `.planning/phases/174-blast-radius-invariance-harness/evidence/
+    174-03-schema-pins.txt`."""
+    report = build_shape(_TRACER_SHAPE_ID)
+    d = report.to_dict()
+    assert sorted(d) == _TO_DICT_KEYS
+
+    removed = dict(d)
+    del removed["voltage"]
+    assert sorted(removed) != _TO_DICT_KEYS, (
+        "deleting a top-level key did not move the sorted key list away "
+        "from the pinned constant -- the pin is vacuous"
+    )
+
+    added = dict(d)
+    added["canonical_part_number"] = None
+    assert sorted(added) != _TO_DICT_KEYS, (
+        "adding a top-level key did not move the sorted key list away "
+        "from the pinned constant -- the pin is vacuous"
     )
 
 
