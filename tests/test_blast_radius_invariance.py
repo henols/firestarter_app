@@ -15,11 +15,25 @@ value, so a re-key is visible here instead of silently forking every
 historical `count_agreeing` promotion group a maintainer has already
 promoted a chip through.
 
-Reachability: every gate in this module must be observed to fail against a
-deliberate, temporary planted mutation before it is trusted -- see
+Reachability: every gate in this module was observed to fail against a
+deliberate, temporary planted mutation before it was trusted -- see
 `.planning/phases/174-blast-radius-invariance-harness/evidence/
 174-01-anti-vacuity-red-green.txt` for the transcribed RED output and
-174-01-SUMMARY.md for the recorded proof.
+174-01-SUMMARY.md for the recorded proof. Concretely: clearing the write
+step's `fingerprint` on `sst27sf512-six-step` (below,
+`test_planted_mutation_clearing_write_fingerprint_reddens_the_gate`) was
+observed to move `dedup_fingerprint`'s output away from `4dc282a5d596`
+before this test was trusted, and lowering the same shape's `auto_capture`
+chip name to `sst27sf512` (below,
+`test_planted_mutation_lowering_chip_name_reddens_the_gate`) was
+independently observed to move it too -- proving the gate is sensitive on
+both axes `dedup_fingerprint` reads, not merely coincidentally correct on
+the frozen shape as built. The three `tools/rekey/check_rekey_ledger.py`
+fail-closed legs (missing ledger, missing MILESTONES.md, unparsable ledger)
+and its one planted-mismatch leg were likewise observed RED in
+`tests/test_rekey_ledger.py`'s subprocess legs before being trusted -- see
+the same evidence file for all five checker invocations' transcribed
+output.
 """
 
 from __future__ import annotations
@@ -170,3 +184,29 @@ def test_committed_snapshot_matches_a_fresh_regeneration() -> None:
     assert committed["generated"] == "1970-01-01T00:00:00Z"
     fresh = json.loads(render_shape(_TRACER_SHAPE_ID))
     assert committed == fresh
+
+
+def test_planted_mutation_clearing_write_fingerprint_reddens_the_gate() -> None:
+    """Leg 2 of the anti-vacuity contract, in-process axis 1: clearing the
+    write step's fingerprint is the exact change Phase 177 will make when it
+    gates the read-back on failure, so this is a rehearsal of the declared
+    re-key, not a synthetic poke. Asserts inequality against the frozen
+    literal, never against a second computed value."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    report = build_shape(_TRACER_SHAPE_ID)
+    write_result = next(r for r in report.results if r.op == "write")
+    write_result.fingerprint = None
+    assert dedup_fingerprint(report) != FROZEN_HASHES[_TRACER_SHAPE_ID]
+
+
+def test_planted_mutation_lowering_chip_name_reddens_the_gate() -> None:
+    """Leg 2, in-process axis 2: mutating `auto_capture.chip` shows the gate
+    sensitive on the OTHER axis `dedup_fingerprint` reads, not only the
+    per-step axis the sibling test above exercises. Asserts inequality
+    against the frozen literal, never against a second computed value."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    report = build_shape(_TRACER_SHAPE_ID)
+    report.auto_capture.chip = "sst27sf512"
+    assert dedup_fingerprint(report) != FROZEN_HASHES[_TRACER_SHAPE_ID]

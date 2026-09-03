@@ -19,11 +19,29 @@ recorded proof.
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
+from pathlib import Path
 
 from .fixtures.rekey_ledger import LEDGER
 from .fixtures.report_shapes import SHAPE_IDS, build_shape
 
 _LEDGER_ID_RE = re.compile(r"^RK-174-\d+-[A-Za-z0-9]+-[A-Za-z0-9-]+$")
+
+_REPO_ROOT = Path(__file__).parent.parent.parent
+_CHECKER = _REPO_ROOT / "tools" / "rekey" / "check_rekey_ledger.py"
+_PLANTED_LEDGER = Path(__file__).parent / "fixtures" / "planted_rekey_mutation.py"
+
+
+def _run_checker(extra_args: list[str] | None = None) -> subprocess.CompletedProcess:
+    """Invoke the meta-side checker as a real subprocess -- the same
+    env-override/subprocess seam `check_diagnostic_report_claims.py`'s own
+    paired test uses -- resolving the repository root explicitly rather than
+    relying on the checker's own cwd default."""
+    args = [sys.executable, str(_CHECKER), "--repo-root", str(_REPO_ROOT)]
+    if extra_args:
+        args.extend(extra_args)
+    return subprocess.run(args, capture_output=True, text=True)
 
 
 def test_every_ledger_row_is_a_well_formed_four_tuple() -> None:
@@ -61,3 +79,43 @@ def test_every_ledger_row_ledger_id_matches_grammar() -> None:
             f"ledger_id {ledger_id!r} does not match the "
             "RK-174-<NN>-<owner>-<slug> grammar"
         )
+
+
+def test_check_rekey_ledger_clean_input_exits_zero() -> None:
+    """Leg 1 of the anti-vacuity contract: the checker on the real ledger and
+    the real MILESTONES.md succeeds, proving the gate is not accidentally
+    always-red."""
+    result = _run_checker()
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "OK:" in result.stdout
+
+
+def test_check_rekey_ledger_planted_input_exits_one() -> None:
+    """Leg 2: pointing the checker at a ledger declaring an undeclared
+    re-key nobody recorded in MILESTONES.md must fail, naming the offending
+    ledger_id."""
+    result = _run_checker(["--ledger", str(_PLANTED_LEDGER)])
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "RK-174-99-planted-undeclared" in result.stdout
+
+
+def test_check_rekey_ledger_fails_closed_on_missing_ledger(tmp_path: Path) -> None:
+    """Leg 3a: a nonexistent --ledger path must fail closed, never silently
+    pass with a target quietly skipped."""
+    result = _run_checker(["--ledger", str(tmp_path / "nope.py")])
+    assert result.returncode == 2, result.stdout + result.stderr
+
+
+def test_check_rekey_ledger_fails_closed_on_missing_milestones(tmp_path: Path) -> None:
+    """Leg 3b: a nonexistent --milestones path must fail closed."""
+    result = _run_checker(["--milestones", str(tmp_path / "nope.md")])
+    assert result.returncode == 2, result.stdout + result.stderr
+
+
+def test_check_rekey_ledger_fails_closed_on_unparsable_ledger(tmp_path: Path) -> None:
+    """Leg 3c: a ledger file that parses as valid Python but declares no
+    LEDGER assignment must fail closed, not silently produce zero rows."""
+    bad = tmp_path / "noledger.py"
+    bad.write_text("OTHER = 1\n", encoding="utf-8")
+    result = _run_checker(["--ledger", str(bad)])
+    assert result.returncode == 2, result.stdout + result.stderr
