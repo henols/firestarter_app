@@ -1,0 +1,21 @@
+{
+  "_note": "The committed sorted anchor D-10 pins tests/fixtures/report_shapes.py's SHAPE_IDS against, element-wise. Edited only in the same commit that adds or removes a builder in report_shapes.py -- never on its own.",
+  "shape_ids": [
+    "at28c256-full-all-ok-sdp",
+    "gh20-at28c256-fail",
+    "gh23-w27e257-fail",
+    "gh28-m27c512-fail",
+    "gh47-sst27sf512-pass",
+    "m27c512-full-all-ok",
+    "m27c512-full-blank-check-bad",
+    "m27c512-full-canonical-name",
+    "m27c512-full-comma-joined-name",
+    "m27c512-full-runs-1",
+    "sst27sf512-full-all-ok",
+    "sst27sf512-six-step",
+    "sst27sf512-six-step-readback-gated",
+    "synthetic-arm4-empty-results",
+    "synthetic-arm4-no-ok",
+    "w27e257-full-all-ok"
+  ]
+}

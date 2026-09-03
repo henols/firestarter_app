@@ -44,6 +44,15 @@ key list away from `_TO_DICT_KEYS` before these seven pins were trusted --
 transcribed verbatim in
 `.planning/phases/174-blast-radius-invariance-harness/evidence/
 174-03-schema-pins.txt`.
+
+D-10's four-way `shape_id` closure (plan 174-03,
+`test_shape_ids_closure_is_sensitive_to_removed_and_added_entries`) was
+likewise observed RED both ways before being trusted: popping the last
+entry from a local copy of the committed `tests/fixtures/shape_ids.json`
+anchor moved it away from `sorted(SHAPE_IDS)` (16 entries -> 15, no longer
+equal), and appending a synthetic `bogus-added-shape-id` entry moved it
+away the other direction (16 entries -> 17, no longer equal) -- neither
+mutation touched the committed file on disk.
 """
 
 from __future__ import annotations
@@ -573,3 +582,84 @@ def test_planted_mutation_lowering_chip_name_reddens_the_gate() -> None:
     report = build_shape(_TRACER_SHAPE_ID)
     report.auto_capture.chip = "sst27sf512"
     assert dedup_fingerprint(report) != FROZEN_HASHES[_TRACER_SHAPE_ID]
+
+
+_SHAPE_IDS_JSON = Path(__file__).parent / "fixtures" / "shape_ids.json"
+
+
+def _committed_shape_ids() -> list[str]:
+    return json.loads(_SHAPE_IDS_JSON.read_text(encoding="utf-8"))["shape_ids"]
+
+
+def test_shape_ids_committed_anchor_matches_the_registry() -> None:
+    """D-10's element-wise pin against the committed sorted anchor in
+    `tests/fixtures/shape_ids.json` -- LIST equality, not set equality, so
+    a DUPLICATE entry in the committed list is also caught, the same
+    reason `test_to_dict_top_level_key_list_is_pinned` never uses a
+    membership check."""
+    committed = _committed_shape_ids()
+    assert committed == sorted(SHAPE_IDS), (
+        f"tests/fixtures/shape_ids.json drifted from SHAPE_IDS; expected "
+        f"{sorted(SHAPE_IDS)}, committed anchor has {committed}"
+    )
+
+
+def test_shape_ids_frozen_hashes_ladder_pins_and_snapshots_agree() -> None:
+    """D-10's four-way closure, modelled on
+    `tests/test_chip_test_sdp_leg.py:827`
+    (`test_shipped_ops_never_reach_sdp_arm`): the committed anchor pinned
+    above is the hand-written enumeration half; these three set-equality
+    checks are the derivations -- copying BOTH halves of that idiom,
+    since either alone is escapable. Seven of this milestone's eight
+    phases re-key something, which makes deleting a row the cheapest
+    route past a RED; this test is what makes that route closed. Each
+    assertion's message names the symmetric difference in both
+    directions, so it says which names were added and which were
+    dropped, not merely that the sets differ."""
+    reports_dir = Path(__file__).parent / "fixtures" / "reports"
+    snapshot_stems = {p.stem for p in reports_dir.glob("*.json")}
+    shape_id_set = set(SHAPE_IDS)
+
+    assert shape_id_set == set(FROZEN_HASHES), (
+        "SHAPE_IDS and FROZEN_HASHES disagree; symmetric difference: "
+        f"{sorted(shape_id_set.symmetric_difference(FROZEN_HASHES))}"
+    )
+    assert shape_id_set == set(LADDER_PINS), (
+        "SHAPE_IDS and LADDER_PINS disagree; symmetric difference: "
+        f"{sorted(shape_id_set.symmetric_difference(LADDER_PINS))}"
+    )
+    assert shape_id_set == snapshot_stems, (
+        "SHAPE_IDS and the committed snapshot filenames under "
+        "tests/fixtures/reports/ disagree; symmetric difference: "
+        f"{sorted(shape_id_set.symmetric_difference(snapshot_stems))}"
+    )
+
+
+def test_build_shape_raises_for_every_reserved_shape_id() -> None:
+    """A reserved name must not silently return an empty report -- that is
+    how a placeholder becomes a frozen value by accident (D-04). Probed
+    against all three `RESERVED_SHAPE_IDS` names, not just one."""
+    for reserved_id in sorted(RESERVED_SHAPE_IDS):
+        with pytest.raises(KeyError):
+            build_shape(reserved_id)
+
+
+def test_shape_ids_closure_is_sensitive_to_removed_and_added_entries() -> None:
+    """The anti-vacuity leg for D-10's four-way closure: an in-process
+    mutation of a local copy of the committed anchor, never a change to
+    the committed file on disk. Removing one entry and separately adding
+    one must both move the mutated list away from `sorted(SHAPE_IDS)`."""
+    committed = _committed_shape_ids()
+
+    removed = list(committed)
+    removed.pop()
+    assert removed != sorted(SHAPE_IDS), (
+        "removing one entry from a copy of the committed anchor did not "
+        "move it away from sorted(SHAPE_IDS) -- the closure pin is vacuous"
+    )
+
+    added = sorted([*committed, "bogus-added-shape-id"])
+    assert added != sorted(SHAPE_IDS), (
+        "appending one entry to a copy of the committed anchor did not "
+        "move it away from sorted(SHAPE_IDS) -- the closure pin is vacuous"
+    )
