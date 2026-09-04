@@ -142,7 +142,9 @@ def test_d06_named_chips_are_covered_by_dedicated_corpus_rows():
     by_issue = {row["issue"]: row for row in _ROWS}
     for chip, issues in _D06_NAMED_CHIP_ISSUES.items():
         for issue in issues:
-            assert issue in by_issue, f"D-06 chip {chip!r}: issue #{issue} missing from corpus"
+            assert issue in by_issue, (
+                f"D-06 chip {chip!r}: issue #{issue} missing from corpus"
+            )
             assert by_issue[issue]["chip"] == chip, (
                 f"D-06 chip {chip!r}: issue #{issue} has chip "
                 f"{by_issue[issue]['chip']!r} instead"
