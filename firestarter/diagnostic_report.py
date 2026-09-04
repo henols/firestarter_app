@@ -147,6 +147,18 @@ def _is_transport_suspect(th: TransportHealth) -> bool:
     `_SUSPECT_SCANNED_FIELDS`: port-discovery failures are ordinary on a
     multi-board rig and are not link sickness, so counting them toward
     suspicion would report a healthy rig as sick.
+
+    `_SUSPECT_THRESHOLD` stays `5`. Its basis: the counter that would have
+    inflated it is `timeouts`, which pays one timeout per wrong candidate
+    port on every connect that has to walk past one -- at the 32 connects a
+    single at28c256 run costs, an unscoped global counter would cross `5` by
+    the sixth wrong-port probe and report a healthy three-board rig as
+    transport-suspect. Scoping those into `probe_timeouts` (Phase 176 plan
+    02) is what justifies `5` against how the remaining scanned counters
+    actually behave, rather than leaving it as the untouched default chosen
+    while every counter was still dormant. A per-counter threshold was
+    considered and rejected: it is more work for a distinction the scoping
+    above already draws.
     """
     for name in _SUSPECT_SCANNED_FIELDS:
         value = getattr(th, name)

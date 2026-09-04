@@ -45,10 +45,19 @@ References:
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 from firestarter import transport_counters
-from firestarter.diagnostic_report import NOT_MEASURED
+from firestarter.diagnostic_report import (
+    _SUSPECT_EXCLUDED_FIELDS,
+    _SUSPECT_SCANNED_FIELDS,
+    _SUSPECT_THRESHOLD,
+    NOT_MEASURED,
+    TransportHealth,
+    _is_transport_suspect,
+)
 from firestarter.exceptions import SerialTimeoutError
 from firestarter.frame_parser import _crc8_ccitt
 from firestarter.messages import MSG_OK_READY
@@ -255,3 +264,65 @@ def test_find_and_connect_wraps_probe_port_call_in_probe_scope(monkeypatch) -> N
     snap = transport_counters.snapshot()
     assert snap["probe_timeouts"] == 1
     assert snap["timeouts"] == 0
+
+
+def _health_with(**counters: int | None) -> TransportHealth:
+    th = TransportHealth()
+    for name, value in counters.items():
+        setattr(th, name, value)
+    return th
+
+
+@pytest.mark.parametrize("field_name", _SUSPECT_SCANNED_FIELDS)
+def test_none_field_never_contributes_to_suspicion(field_name: str) -> None:
+    all_none = {name: None for name in _SUSPECT_SCANNED_FIELDS}
+    assert _is_transport_suspect(_health_with(**all_none)) is False
+
+    others_elevated: dict[str, int | None] = {
+        name: _SUSPECT_THRESHOLD for name in _SUSPECT_SCANNED_FIELDS
+    }
+    others_elevated[field_name] = None
+    assert _is_transport_suspect(_health_with(**others_elevated)) is True
+
+
+def test_zero_is_present_and_not_elevated_while_threshold_is() -> None:
+    assert _is_transport_suspect(TransportHealth(timeouts=0)) is False
+    assert _is_transport_suspect(TransportHealth(timeouts=_SUSPECT_THRESHOLD)) is True
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (_SUSPECT_THRESHOLD - 1, False),
+        (_SUSPECT_THRESHOLD, True),
+        (_SUSPECT_THRESHOLD + 1, True),
+    ],
+)
+def test_threshold_boundary_stays_greater_or_equal(value: int, expected: bool) -> None:
+    assert _is_transport_suspect(TransportHealth(timeouts=value)) is expected
+
+
+@pytest.mark.parametrize("field_name", _SUSPECT_SCANNED_FIELDS)
+def test_any_single_scanned_field_alone_at_threshold_suffices(field_name: str) -> None:
+    assert (
+        _is_transport_suspect(_health_with(**{field_name: _SUSPECT_THRESHOLD})) is True
+    )
+
+
+def test_probe_timeouts_excluded_from_suspicion_domain() -> None:
+    assert _is_transport_suspect(TransportHealth(probe_timeouts=1000)) is False
+
+
+def test_suspicion_domain_is_closed_against_a_silently_added_counter() -> None:
+    counters = {
+        f.name
+        for f in dataclasses.fields(TransportHealth)
+        if f.name != "transport_suspect"
+    }
+    assert counters == set(_SUSPECT_SCANNED_FIELDS) | set(_SUSPECT_EXCLUDED_FIELDS)
+
+
+def test_meas02_basis_is_recorded_and_pinned_in_docstring() -> None:
+    doc = _is_transport_suspect.__doc__ or ""
+    assert "probe_timeouts" in doc
+    assert "32" in doc
