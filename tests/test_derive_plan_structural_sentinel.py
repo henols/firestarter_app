@@ -78,8 +78,11 @@ run, is committed at
 from __future__ import annotations
 
 import dataclasses
+from unittest.mock import Mock
 
 import firestarter.chip_test as chip_test
+from firestarter.cli_handlers import _resolve_write_scope
+from tests.conftest import make_app_context
 from tests.plan_corpus import (
     PART_NUMBERS,
     REAL_DB,
@@ -832,3 +835,203 @@ def test_a_blank_check_ahead_of_the_erase_is_not_its_oracle():
 
     violations = erase_blank_check_violations(plan)
     assert violations == [(3, "erase sits outside the cycle block")], violations
+
+
+def uv_policy_violations(plan):
+    """Phase 175 Plan 02 (D-12): `(index, op, reason)` tuples for every
+    step that breaks the `aq6` UV write-scope ceiling in either direction --
+    a UV plan claiming the full-device region policy, or a non-UV plan
+    claiming the uv-slot region policy. Both directions live in one helper
+    because D-12 requires the implication AND its converse: a
+    one-directional check would leave a non-UV plan free to claim the
+    uv-slot policy unguarded, which is exactly what
+    `test_uv_policy_violations_flags_both_directions` below proves is
+    reachable without this arm."""
+    violations = []
+    for index, candidate_step in enumerate(plan.steps):
+        if (
+            plan.is_uv
+            and candidate_step.region_policy == chip_test.REGION_POLICY_FULL_DEVICE
+        ):
+            violations.append(
+                (
+                    index,
+                    candidate_step.op,
+                    "a UV plan claimed the full-device region policy",
+                )
+            )
+        if (
+            candidate_step.region_policy == chip_test.REGION_POLICY_UV_SLOT
+            and not plan.is_uv
+        ):
+            violations.append(
+                (
+                    index,
+                    candidate_step.op,
+                    "a non-UV plan claimed the uv-slot region policy",
+                )
+            )
+    return violations
+
+
+def uv_blank_check_order_violations(plan):
+    """Phase 175 Plan 02 (D-12): `(index, reason)` tuples proving a UV
+    plan's write step has an `OP_BLANK_CHECK` step at a strictly lower
+    index. `derive_plan` emits the UV blank-check BEFORE the write
+    deliberately (`chip_test.py:653-655`): the UV write is irrecoverable,
+    so the blank-check is the pre-write, operator-actionable finding, and a
+    non-blank part probes candidate slots top-down (`uv_slot_starts`,
+    `chip_test.py:2171`) and takes the first clearing the bit floors --
+    there is nothing left to check once the write has run. Returns an
+    empty list for a non-UV plan, or a UV plan with no write step at all,
+    both vacuously clean by the same reasoning `test_plans_with_no_write_
+    are_vacuously_clean` above already applies to the write-verify leg."""
+    if not plan.is_uv:
+        return []
+    write_index = next(
+        (i for i, s in enumerate(plan.steps) if s.op in REQUIRES_VERIFY),
+        None,
+    )
+    if write_index is None:
+        return []
+    if any(s.op == chip_test.OP_BLANK_CHECK for s in plan.steps[:write_index]):
+        return []
+    return [(write_index, "a UV write has no blank-check ahead of it")]
+
+
+def test_no_uv_plan_claims_the_full_device_region_policy():
+    corpus = plan_corpus()
+    uv_plans = [key for key, plan in corpus.items() if plan.is_uv]
+    assert len(uv_plans) == 540, (
+        f"UV plan count drifted to {len(uv_plans)}, expected 540"
+    )
+    offenders = [
+        (key, violations)
+        for key, plan in corpus.items()
+        if (violations := uv_policy_violations(plan))
+    ]
+    assert not offenders, (
+        f"{len(offenders)} plans violate the UV write-scope ceiling "
+        f"(D-12); first ten: {offenders[:10]}"
+    )
+
+
+def test_the_uv_slot_policy_is_claimed_only_by_uv_plans():
+    """The converse half of D-12's ceiling. The absolute count is the
+    anti-empty floor: a converse assertion over an empty set of uv-slot
+    steps would pass vacuously."""
+    corpus = plan_corpus()
+    slot_steps = [
+        (key, s)
+        for key, plan in corpus.items()
+        for s in plan.steps
+        if s.region_policy == chip_test.REGION_POLICY_UV_SLOT
+    ]
+    assert len(slot_steps) == 1080, (
+        f"uv-slot step count drifted to {len(slot_steps)}, expected 1080"
+    )
+    offenders = [key for key, _s in slot_steps if not corpus[key].is_uv]
+    assert not offenders, (
+        f"{len(offenders)} uv-slot steps belong to a non-UV plan; first "
+        f"ten: {offenders[:10]}"
+    )
+
+
+def test_a_uv_write_has_a_blank_check_ahead_of_it():
+    corpus = plan_corpus()
+    uv_plans = {key: plan for key, plan in corpus.items() if plan.is_uv}
+    assert len(uv_plans) == 540, (
+        f"UV plan count drifted to {len(uv_plans)}, expected 540"
+    )
+    offenders = [
+        (key, violations)
+        for key, plan in uv_plans.items()
+        if (violations := uv_blank_check_order_violations(plan))
+    ]
+    assert not offenders, (
+        f"{len(offenders)} UV plans have no blank-check ahead of their "
+        f"write; first ten: {offenders[:10]}"
+    )
+
+
+def test_uv_policy_violations_flags_both_directions():
+    """The anti-vacuity leg for the two `derive_plan`-level D-12 pins
+    above, each a hand-built plan `uv_policy_violations` cannot reach
+    vacuously on the shipped corpus."""
+    uv_plan_claiming_full_device = plan_with_steps(
+        step(chip_test.OP_ID),
+        step(
+            chip_test.OP_WRITE_PARTIAL,
+            region_policy=chip_test.REGION_POLICY_FULL_DEVICE,
+        ),
+        is_uv=True,
+    )
+    violations = uv_policy_violations(uv_plan_claiming_full_device)
+    assert len(violations) == 1, violations
+    assert violations[0][2] == "a UV plan claimed the full-device region policy", (
+        violations
+    )
+
+    non_uv_plan_claiming_uv_slot = plan_with_steps(
+        step(chip_test.OP_ID),
+        step(chip_test.OP_WRITE, region_policy=chip_test.REGION_POLICY_UV_SLOT),
+        is_uv=False,
+    )
+    violations = uv_policy_violations(non_uv_plan_claiming_uv_slot)
+    assert len(violations) == 1, violations
+    assert violations[0][2] == "a non-UV plan claimed the uv-slot region policy", (
+        violations
+    )
+
+
+def test_resolve_write_scope_returns_partial_for_every_uv_row():
+    """The handler-level leg D-12 says matters most: the `derive_plan`-
+    level pins above stay true even if `_resolve_write_scope`
+    (`cli_handlers.py:2236`) is changed to return `"full"` for UV tomorrow,
+    so without this leg the operator-agreed ceiling is unguarded at the
+    only level that actually decides it.
+
+    Generalizes `TestUVWriteHasNoPrompt`
+    (`tests/test_dev_test_cmd.py:708-801`) from two named chips to the
+    whole database, and from the report's rendered op string to the
+    resolver's own return value -- `TestUVWriteHasNoPrompt` never calls
+    `_resolve_write_scope` for its return value at all, so this leg is not
+    a restatement of it. Does not repeat that class's absence-of-`Confirm`
+    assertion, its parameter-name-set assertion, or its TTY-invariance
+    assertions; the both-`interactive`-values comparison here is a
+    by-product of the sweep, not a restatement of that TTY-invariance
+    claim.
+
+    Builds the context ONCE with `make_app_context(db=REAL_DB,
+    config_manager=Mock())`: `db=REAL_DB` reuses the corpus module's single
+    database instance instead of building a second one that could
+    desynchronise from the corpus (D-07); `config_manager=Mock()` avoids
+    constructing a real `ConfigManager`, which is where this project's
+    documented `~/.firestarter/config.json` write leak lives and which
+    `_resolve_write_scope` never touches."""
+    corpus = plan_corpus()
+    app = make_app_context(db=REAL_DB, config_manager=Mock())
+    offenders = []
+    partial_count = 0
+    full_count = 0
+    for name in PART_NUMBERS:
+        want = "partial" if corpus[(name, "full")].is_uv else "full"
+        if want == "partial":
+            partial_count += 1
+        else:
+            full_count += 1
+        for interactive in (False, True):
+            got = _resolve_write_scope(app, name, interactive=interactive)
+            if got != want:
+                offenders.append((name, interactive, want, got))
+
+    assert partial_count == 270, (
+        f"UV (partial-scope) name count drifted to {partial_count}, expected 270"
+    )
+    assert full_count == 407, (
+        f"non-UV (full-scope) name count drifted to {full_count}, expected 407"
+    )
+    assert not offenders, (
+        f"{len(offenders)} of {len(PART_NUMBERS)} names disagree between "
+        f"_resolve_write_scope and Plan.is_uv; first ten: {offenders[:10]}"
+    )
