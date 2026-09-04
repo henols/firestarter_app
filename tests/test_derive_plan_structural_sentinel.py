@@ -613,3 +613,222 @@ def test_a_region_skewed_verify_flags_every_write_bearing_plan():
         f"NOT flagged after their verify step's write_region start was "
         f"skewed by one; first ten: {unflagged[:10]}"
     )
+
+
+_28C_CARVE_OUT_REASON = (
+    "protocol 0x0D (28C family) auto-erases per page during write; no "
+    "step in this plan can ever leave the device blank"
+)
+
+
+def erase_blank_check_violations(plan):
+    """Phase 175 Plan 02 (D-05): every executable erase step in
+    `plan.steps` with no `OP_BLANK_CHECK` step at a higher index inside the
+    same production-defined cycle block.
+
+    Calls `chip_test.cycle_block_bounds` exactly once, precisely as
+    `write_verify_violations` above does, so the two legs cannot drift on
+    what a cycle block is. D-05 keeps this leg separately named and
+    separately reasoned from `write_verify_violations` rather than folding
+    both into one "every mutating op has an oracle" predicate, because
+    Phase 177 cites this sentinel as its licence and needs a leg that maps
+    1:1 onto PRUNE-06's wording.
+
+    An erase whose index is not inside the returned half-open `[start,
+    stop)` range is a VIOLATION, never a skip. The shipped corpus never
+    reaches this arm -- an executable erase always follows a write, because
+    `erase_is_executable` (`chip_test.py:639`) is gated by the same
+    `write_execute` conjunct that gates the write step's own emission -- so
+    it is exercised by two hand-built counter-plans instead
+    (`test_an_erase_with_no_blank_check_at_all_is_flagged` and
+    `test_a_blank_check_ahead_of_the_erase_is_not_its_oracle`).
+
+    **This function asserts PRESENCE at a higher index, never
+    supportedness, and that is deliberate.** Read literally as "an
+    executable erase has a *working* blank-check behind it", the leg is
+    RED on 81 chips at two scopes each -- 162 plans -- on the shipped,
+    unmodified database: Phase 153 restored `FLAG_CAN_ERASE` on all 84
+    algorithm-13 rows, so `erase_is_executable` is True for protocol
+    `0x0D`, while `blank_check_step`'s case 3 (`chip_test.py:665-676`)
+    marks the blank-check NA because that protocol auto-erases per page
+    during write -- the exact reason string is pinned as
+    `_28C_CARVE_OUT_REASON` above. Requiring `supported=True` is not an
+    available option -- this phase cannot change product code -- so the
+    leg is worded as presence, and the NA population is carved out,
+    counted and reason-matched instead, by
+    `test_the_28c_family_na_blank_check_carve_out_is_pinned` below.
+
+    `tests/test_chip_test_blank_check_order.py`'s
+    `test_at28c256_blank_check_moves_after_erase_but_stays_na` already
+    pins this exact case for ONE chip with absolute index assertions (index
+    5 and index 4). This module generalizes the pairing to the whole
+    database, scoped to the production cycle block, and does not restate
+    those index assertions.
+    """
+    bounds = chip_test.cycle_block_bounds(plan.steps)
+    violations = []
+    for index, candidate_step in enumerate(plan.steps):
+        if candidate_step.op != chip_test.OP_ERASE or not candidate_step.supported:
+            continue
+        if bounds is None or not (bounds[0] <= index < bounds[1]):
+            violations.append((index, "erase sits outside the cycle block"))
+            continue
+        _start, stop = bounds
+        behind = any(
+            later_step.op == chip_test.OP_BLANK_CHECK
+            for later_step in plan.steps[index + 1 : stop]
+        )
+        if not behind:
+            violations.append((index, "no blank-check behind the erase in the block"))
+    return violations
+
+
+def test_every_executable_erase_has_a_blank_check_behind_it_in_the_block():
+    """Roadmap-adjacent D-05 leg. Generalizes
+    `tests/test_chip_test_blank_check_order.py:130`
+    (`test_at28c256_blank_check_moves_after_erase_but_stays_na`) from one
+    hand-pinned chip's absolute Plan.steps indexes to all 677 chips at both
+    scopes, scoped to the production cycle block rather than to raw
+    positions. Does not restate that module's index-5/index-4 assertions."""
+    corpus = plan_corpus()
+    assert len(corpus) == 1354, (
+        f"corpus size drifted to {len(corpus)} before this sweep could run "
+        "-- a sweep that visits the wrong number of rows proves nothing"
+    )
+    offenders = [
+        (key, violations)
+        for key, plan in corpus.items()
+        if (violations := erase_blank_check_violations(plan))
+    ]
+    assert not offenders, (
+        f"{len(offenders)} of {len(corpus)} shipped plans carry a live "
+        f"erase with no blank-check behind it in the block; first ten: "
+        f"{offenders[:10]}"
+    )
+
+
+def test_live_erase_population_is_pinned():
+    """The anti-empty floor the next two legs rest on."""
+    corpus = plan_corpus()
+    live_erase_plans = [
+        key
+        for key, plan in corpus.items()
+        if any(s.op == chip_test.OP_ERASE and s.supported for s in plan.steps)
+    ]
+    assert len(live_erase_plans) == 608, (
+        f"live-erase plan count drifted to {len(live_erase_plans)}, expected 608"
+    )
+
+
+def test_removing_the_blank_check_flags_every_live_erase_plan():
+    """D-05's mutated-corpus sensitivity leg, the erase-leg counterpart to
+    `test_removing_the_verify_flags_every_write_bearing_plan` above. Copy
+    rule follows `_write_bearing_plans`' own docstring:
+    `dataclasses.replace` on the steps list, never `copy.copy` and never an
+    in-place `Step` mutation -- the corpus is module-cached and shared
+    across every test in the process."""
+    corpus = plan_corpus()
+    live_erase = {
+        key: plan
+        for key, plan in corpus.items()
+        if any(s.op == chip_test.OP_ERASE and s.supported for s in plan.steps)
+    }
+    assert len(live_erase) == 608, (
+        f"live-erase plan count drifted to {len(live_erase)} -- a sweep "
+        "that visits zero rows must not pass"
+    )
+
+    unflagged = []
+    for key, plan in live_erase.items():
+        mutant = dataclasses.replace(
+            plan,
+            steps=[s for s in plan.steps if s.op != chip_test.OP_BLANK_CHECK],
+        )
+        if not erase_blank_check_violations(mutant):
+            unflagged.append(key)
+    assert not unflagged, (
+        f"{len(unflagged)} of {len(live_erase)} live-erase plans were NOT "
+        f"flagged after their blank-check step was removed; first ten: "
+        f"{unflagged[:10]}"
+    )
+
+
+def test_the_28c_family_na_blank_check_carve_out_is_pinned():
+    """Phase 153's `FLAG_CAN_ERASE` restoration on all 84 algorithm-13 rows
+    is the cause -- named here so an executor who re-derives the "obvious"
+    stronger supportedness reading meets this docstring before meeting a
+    162-plan RED they cannot fix. This is a pinned fact about the shipped
+    database, not a defect. Pinned by absolute count AND reason string
+    together, per D-05: the reason match says the population is the one we
+    understand, and the absolute count is what catches a silent
+    widening -- asserted as three separate assertions, not folded into
+    one, so each can name its own drift."""
+    corpus = plan_corpus()
+    carveout_plans = []
+    reasons = set()
+    for key, plan in corpus.items():
+        bounds = chip_test.cycle_block_bounds(plan.steps)
+        if bounds is None:
+            continue
+        start, stop = bounds
+        for index, candidate_step in enumerate(plan.steps):
+            if (
+                candidate_step.op != chip_test.OP_ERASE
+                or not candidate_step.supported
+                or not (start <= index < stop)
+            ):
+                continue
+            behind = [
+                s
+                for s in plan.steps[index + 1 : stop]
+                if s.op == chip_test.OP_BLANK_CHECK
+            ]
+            if behind and not any(s.supported for s in behind):
+                carveout_plans.append(key)
+                reasons.add(behind[0].reason)
+
+    assert len(carveout_plans) == 162, (
+        f"28C-family NA blank-check carve-out plan count drifted to "
+        f"{len(carveout_plans)}, expected 162"
+    )
+    carveout_chips = {name for name, _scope in carveout_plans}
+    assert len(carveout_chips) == 81, (
+        f"28C-family NA blank-check carve-out chip count drifted to "
+        f"{len(carveout_chips)}, expected 81"
+    )
+    assert reasons == {_28C_CARVE_OUT_REASON}, reasons
+
+
+def test_an_erase_with_no_blank_check_at_all_is_flagged():
+    plan = plan_with_steps(
+        step(chip_test.OP_ID),
+        step(chip_test.OP_READ),
+        step(chip_test.OP_ERASE),
+        step(chip_test.OP_VERIFY),
+    )
+    violations = erase_blank_check_violations(plan)
+    assert len(violations) == 1, violations
+
+
+def test_a_blank_check_ahead_of_the_erase_is_not_its_oracle():
+    """The exact regression D-05 exists to catch: a future edit moving the
+    blank-check back ahead of the erase. This fixture carries no write
+    step, so `cycle_block_bounds` (which can only open on a write) returns
+    `None` and the erase is flagged as sitting outside the cycle block --
+    the same fail-closed arm `test_a_second_write_outside_the_block_is_a_
+    violation_not_a_skip` exercises for the write leg, above."""
+    plan = plan_with_steps(
+        step(chip_test.OP_ID),
+        step(chip_test.OP_READ),
+        step(chip_test.OP_BLANK_CHECK),
+        step(chip_test.OP_ERASE),
+        step(chip_test.OP_VERIFY),
+    )
+    bounds = chip_test.cycle_block_bounds(plan.steps)
+    assert bounds is None, (
+        f"fixture setup error: expected bounds None (no write step opens "
+        f"a cycle block), got {bounds}"
+    )
+
+    violations = erase_blank_check_violations(plan)
+    assert violations == [(3, "erase sits outside the cycle block")], violations
