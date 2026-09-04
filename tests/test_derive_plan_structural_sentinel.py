@@ -817,9 +817,11 @@ def test_a_blank_check_ahead_of_the_erase_is_not_its_oracle():
     """The exact regression D-05 exists to catch: a future edit moving the
     blank-check back ahead of the erase. This fixture carries no write
     step, so `cycle_block_bounds` (which can only open on a write) returns
-    `None` and the erase is flagged as sitting outside the cycle block --
-    the same fail-closed arm `test_a_second_write_outside_the_block_is_a_
-    violation_not_a_skip` exercises for the write leg, above."""
+    `None`, and the erase is flagged via the `bounds is None` arm of the
+    outside-the-block check -- the no-cycle-at-all case, distinct from
+    `test_a_second_erase_outside_the_block_is_a_violation_not_a_skip`
+    below, which pins the same outside-the-block reason via a REAL,
+    non-`None` block a second erase sits past."""
     plan = plan_with_steps(
         step(chip_test.OP_ID),
         step(chip_test.OP_READ),
@@ -831,6 +833,35 @@ def test_a_blank_check_ahead_of_the_erase_is_not_its_oracle():
     assert bounds is None, (
         f"fixture setup error: expected bounds None (no write step opens "
         f"a cycle block), got {bounds}"
+    )
+
+    violations = erase_blank_check_violations(plan)
+    assert violations == [(3, "erase sits outside the cycle block")], violations
+
+
+def test_a_second_erase_outside_the_block_is_a_violation_not_a_skip():
+    """The load-bearing analog to
+    `test_a_second_write_outside_the_block_is_a_violation_not_a_skip`
+    above, for the erase leg, and the only fixture in this module that
+    exercises the outside-the-block check against a REAL (non-`None`)
+    bounds tuple rather than the `bounds is None` short-circuit: without
+    it, dropping the upper-bound half of `not (bounds[0] <= index <
+    bounds[1])` -- turning it into `index < bounds[0]` -- is invisible to
+    every other leg in this module, because every real corpus erase sits
+    strictly inside its own block and the two `bounds is None` fixtures
+    above never reach the `bounds[1]` comparison at all. `cycle_block_
+    bounds` finds only the FIRST maximal run, so an erase past the end of
+    that run (here, after an `sdp-lock` step that is not itself a
+    cycle-block op) must still be flagged, never silently passed over."""
+    plan = plan_with_steps(
+        step(chip_test.OP_WRITE),
+        step(chip_test.OP_VERIFY),
+        step(chip_test.OP_SDP_LOCK),
+        step(chip_test.OP_ERASE),
+    )
+    bounds = chip_test.cycle_block_bounds(plan.steps)
+    assert bounds == (0, 2), (
+        f"fixture setup error: expected bounds (0, 2), got {bounds}"
     )
 
     violations = erase_blank_check_violations(plan)
