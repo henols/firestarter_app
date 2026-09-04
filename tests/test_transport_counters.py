@@ -326,3 +326,11 @@ def test_meas02_basis_is_recorded_and_pinned_in_docstring() -> None:
     doc = _is_transport_suspect.__doc__ or ""
     assert "probe_timeouts" in doc
     assert "32" in doc
+
+
+def test_unwired_counter_reasons_are_recorded_and_pinned_in_docstring() -> None:
+    doc = (TransportHealth.__doc__ or "").lower()
+    assert "outbound" in doc
+    assert "five" in doc
+    assert "write-pulse" in doc
+    assert "none exist" not in doc

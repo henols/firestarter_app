@@ -51,9 +51,6 @@ NOT_MEASURED = "not measured"  # honest fallback, never a false 0
 # empty. Reusing NOT_MEASURED would conflate the two.
 NOT_REPORTED = "not reported"
 
-# Elevated-counter threshold for `transport_suspect` (dormant today -- no
-# transport counter is reachable per RESEARCH §Transport Counter Survey; a
-# future phase that adds real counters activates this without a redesign).
 _SUSPECT_THRESHOLD = 5
 
 
@@ -103,13 +100,39 @@ class TransportHealth:
     """Best-effort transport-health counters.
 
     Every counter defaults to `None` -- "not measured". `decode_failures`,
-    `timeouts` and `probe_timeouts` are now wired from
+    `timeouts` and `probe_timeouts` are wired from
     `firestarter.transport_counters` (Phase 176 plans 01 and 02); once a run
     has happened each carries a real integer, and reads `not measured` only
-    before one has. `cobs_errors`, `crc_failures` and `retries` remain
-    reachable-but-unwired, each with its own recorded reason (RESEARCH
-    §Transport Counter Survey; MEAS-03's full recorded trace lands in plan
-    176-03).
+    before one has. The remaining three stay `not measured` for good reason,
+    each recorded here so a future phase looking to "fix" them reads why it
+    should not:
+
+    `cobs_errors` -- COBS on this link is OUTBOUND ONLY. `cobs_encode` is
+    called from `send_json_command` and the data-chunk path; `cobs_decode`
+    exists but has zero production call sites, verified tree-wide -- every
+    caller is a test module. The inbound path is magic-preamble plus length
+    plus CRC8 framing, not COBS, so a COBS decode error is an event the host
+    cannot have.
+
+    `crc_failures` -- `codec.decode_id_frame` does detect a CRC mismatch
+    specifically, but it returns the same `None` for five distinct causes
+    (short/truncated frame, CRC mismatch, unknown message id, a text-only
+    catalog entry arriving as an id frame, and a param-shape mismatch), so
+    the counter at that seam is `decode_failures` and naming it
+    `crc_failures` would claim a precision it does not have. Reaching a true
+    CRC count requires changing `codec.decode_id_frame`'s return type, which
+    is out of this phase's scope.
+
+    `retries` -- there is NO host-side transport retry loop anywhere.
+    `_read_and_parse_lines` re-syncs by continuing the byte loop and never
+    re-requests anything; `expect_ack` loops waiting for the next frame,
+    which is not a re-send. The only retries in this system are the firmware
+    write-pulse counts carried by `MSG_INFO_RETRIES` and
+    `MSG_ERR_WRITE_FAILED`. Routing those here would report a marginal chip
+    needing extra write-pulse retries as a LINK fault, and at five would
+    flip `transport_suspect`, sending a triager hunting a cable while the
+    chip is the actual finding.
+
     `transport_suspect` defaults `False` and can only be set `True` by
     `_is_transport_suspect` below -- never inferred from absent data.
     """
