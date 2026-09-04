@@ -211,6 +211,7 @@
     "cobs_errors": "not measured",
     "crc_failures": "not measured",
     "decode_failures": "not measured",
+    "probe_timeouts": "not measured",
     "retries": "not measured",
     "timeouts": "not measured",
     "transport_suspect": false

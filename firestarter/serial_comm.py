@@ -556,6 +556,7 @@ class SerialCommunicator:
                 return response
 
         # If the generator finishes without yielding a significant response, it's a timeout.  # noqa: E501
+        transport_counters.record_response_timeout()
         logger.warning(f"Timeout waiting for a response from {self.port_name}.")
         raise SerialTimeoutError(
             f"Timeout waiting for a significant response from {self.port_name}."
@@ -1010,14 +1011,15 @@ class SerialCommunicator:
 
         for port_name in potential_ports:
             try:
-                communicator = cls._probe_port(
-                    port_name,
-                    baud_rate,
-                    command_to_send,
-                    config_manager,
-                    fault_inject_outgoing=fault_inject_outgoing,
-                    allow_outdated_firmware=allow_outdated_firmware,
-                )
+                with transport_counters.probe_scope():
+                    communicator = cls._probe_port(
+                        port_name,
+                        baud_rate,
+                        command_to_send,
+                        config_manager,
+                        fault_inject_outgoing=fault_inject_outgoing,
+                        allow_outdated_firmware=allow_outdated_firmware,
+                    )
                 if communicator:
                     if status_update_active:
                         logger.info("Connecting... OK      ", extra={"status": "end"})

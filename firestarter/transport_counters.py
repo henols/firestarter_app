@@ -22,13 +22,31 @@ Import purity: this module imports nothing from `firestarter.serial_comm` and
 nothing from `firestarter.diagnostic_report` -- that is what keeps the import
 graph acyclic and the `diagnostic_report.py` orchestrator-only contract
 intact.
+
+`record_response_timeout()` routes a single `get_response` timeout to one of
+two counters depending on whether the sink is currently inside `probe_scope()`:
+`probe_timeouts` while scoped, `timeouts` otherwise. The routing exists because
+`get_response`'s timeout fires once per wrong candidate port on every ordinary
+connect that has to walk past one -- at the 32 connects a single at28c256 run
+costs, an unscoped global counter would cross a threshold of 5 by the sixth
+wrong-port probe and report a healthy multi-board rig as transport-suspect.
+`probe_scope()` wraps only the single `_probe_port` call inside
+`find_and_connect`, so the scope exits the instant probing succeeds and every
+`get_response` on the connection handed back is correctly outside probe scope.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 _counters: dict[str, int] = {
     "decode_failures": 0,
+    "probe_timeouts": 0,
+    "timeouts": 0,
 }
+
+_in_probe_scope = False
 
 
 def record_decode_failure() -> None:
@@ -39,6 +57,38 @@ def record_decode_failure() -> None:
     received and could not decode.
     """
     _counters["decode_failures"] += 1
+
+
+def record_response_timeout() -> None:
+    """Increment `probe_timeouts` while inside `probe_scope()`, `timeouts`
+    otherwise.
+
+    Called from `SerialCommunicator.get_response` immediately before it
+    raises `SerialTimeoutError`. The routing is what keeps `timeouts` a
+    genuine established-connection signal and keeps ordinary port-discovery
+    misses from ever contributing to `transport_suspect`.
+    """
+    key = "probe_timeouts" if _in_probe_scope else "timeouts"
+    _counters[key] += 1
+
+
+@contextmanager
+def probe_scope() -> Iterator[None]:
+    """Mark the sink as "inside a port-discovery probe" for the duration of
+    the `with` block, restoring the PREVIOUS state on exit -- including when
+    the body raises -- rather than a hard `False`.
+
+    Restoring the previous value rather than clearing it is what keeps a
+    probe scope entered from inside another probe scope, or one that exits
+    via an exception, from ever leaving the sink stuck in probe mode.
+    """
+    global _in_probe_scope
+    previous = _in_probe_scope
+    _in_probe_scope = True
+    try:
+        yield
+    finally:
+        _in_probe_scope = previous
 
 
 def reset() -> None:

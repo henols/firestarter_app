@@ -45,12 +45,19 @@ References:
 
 from __future__ import annotations
 
+import pytest
+
 from firestarter import transport_counters
 from firestarter.diagnostic_report import NOT_MEASURED
+from firestarter.exceptions import SerialTimeoutError
 from firestarter.frame_parser import _crc8_ccitt
 from firestarter.messages import MSG_OK_READY
 from tests.conftest import build_frame
 from tests.test_diagnostic_report import _build_report
+
+
+def _others(snapshot: dict[str, int], target: str) -> int:
+    return sum(v for k, v in snapshot.items() if k != target)
 
 
 def _corrupted_ok_ready_body() -> bytes:
@@ -73,7 +80,7 @@ def test_snapshot_after_reset_returns_wired_keys_sorted_zeroed() -> None:
     transport_counters.reset()
     result = transport_counters.snapshot()
     assert list(result) == sorted(result)
-    assert list(result) == ["decode_failures"]
+    assert list(result) == ["decode_failures", "probe_timeouts", "timeouts"]
     assert all(value == 0 for value in result.values())
 
 
@@ -152,3 +159,99 @@ def test_to_dict_decode_failures_reflects_assigned_integer() -> None:
     report.transport.decode_failures = 3
     d = report.to_dict()
     assert d["transport_health"]["decode_failures"] == 3
+
+
+def test_established_timeout_raises_timeouts_and_nothing_else(make_comm) -> None:
+    transport_counters.reset()
+    comm = make_comm()
+    with pytest.raises(SerialTimeoutError):
+        comm.get_response(timeout=0.02)
+    snap = transport_counters.snapshot()
+    assert snap["timeouts"] == 1
+    assert snap["probe_timeouts"] == 0
+    assert _others(snap, "timeouts") == 0
+
+
+def test_probe_scoped_timeout_raises_probe_timeouts_and_nothing_else(
+    make_comm,
+) -> None:
+    transport_counters.reset()
+    comm = make_comm()
+    with transport_counters.probe_scope():
+        with pytest.raises(SerialTimeoutError):
+            comm.get_response(timeout=0.02)
+    snap = transport_counters.snapshot()
+    assert snap["probe_timeouts"] == 1
+    assert snap["timeouts"] == 0
+    assert _others(snap, "probe_timeouts") == 0
+
+
+def test_timeout_after_scope_exit_counts_as_established_timeout(make_comm) -> None:
+    transport_counters.reset()
+    comm = make_comm()
+    with transport_counters.probe_scope():
+        pass
+    with pytest.raises(SerialTimeoutError):
+        comm.get_response(timeout=0.02)
+    snap = transport_counters.snapshot()
+    assert snap["timeouts"] == 1
+    assert _others(snap, "timeouts") == 0
+
+
+def test_nested_probe_scope_restores_previous_value_not_hard_false() -> None:
+    transport_counters.reset()
+    with transport_counters.probe_scope():
+        with transport_counters.probe_scope():
+            pass
+        transport_counters.record_response_timeout()
+    snap = transport_counters.snapshot()
+    assert snap["probe_timeouts"] == 1
+    assert snap["timeouts"] == 0
+
+
+def test_probe_scope_restores_previous_state_when_body_raises() -> None:
+    transport_counters.reset()
+    try:
+        with transport_counters.probe_scope():
+            raise RuntimeError("boom")
+    except RuntimeError:
+        pass
+    transport_counters.record_response_timeout()
+    snap = transport_counters.snapshot()
+    assert snap["timeouts"] == 1
+    assert _others(snap, "timeouts") == 0
+
+
+def test_to_dict_carries_integers_for_timeouts_and_probe_timeouts() -> None:
+    report = _build_report()
+    report.transport.timeouts = 2
+    report.transport.probe_timeouts = 1
+    d = report.to_dict()
+    assert d["transport_health"]["timeouts"] == 2
+    assert d["transport_health"]["probe_timeouts"] == 1
+
+
+def test_find_and_connect_wraps_probe_port_call_in_probe_scope(monkeypatch) -> None:
+    from firestarter.config import ConfigManager
+    from firestarter.exceptions import ProgrammerNotFoundError
+    from firestarter.serial_comm import SerialCommunicator
+
+    transport_counters.reset()
+
+    def fake_probe(port_name, baud_rate, command_to_send, config_manager, **kwargs):
+        transport_counters.record_response_timeout()
+        return None
+
+    monkeypatch.setattr(
+        SerialCommunicator,
+        "_list_potential_ports",
+        staticmethod(lambda p=None, **_kw: ["/dev/fake0"]),
+    )
+    monkeypatch.setattr(SerialCommunicator, "_probe_port", staticmethod(fake_probe))
+
+    with pytest.raises(ProgrammerNotFoundError):
+        SerialCommunicator.find_and_connect({"cmd": 1}, ConfigManager())
+
+    snap = transport_counters.snapshot()
+    assert snap["probe_timeouts"] == 1
+    assert snap["timeouts"] == 0

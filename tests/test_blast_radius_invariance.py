@@ -145,6 +145,7 @@ _TRANSPORT_HEALTH_KEYS = [
     "cobs_errors",
     "crc_failures",
     "decode_failures",
+    "probe_timeouts",
     "retries",
     "timeouts",
     "transport_suspect",
@@ -448,8 +449,8 @@ def test_to_dict_transport_health_key_list_is_pinned() -> None:
         f"to_dict()['transport_health'] keys drifted from the pinned D-07 "
         f"shape; expected {_TRANSPORT_HEALTH_KEYS}, got {keys}"
     )
-    assert "probe_timeouts" not in keys, (
-        "transport_health gained probe_timeouts -- plan 176-02 landed; "
+    assert "resync_body_truncated" not in keys, (
+        "transport_health gained resync_body_truncated -- plan 176-03 landed; "
         "update _TRANSPORT_HEALTH_KEYS deliberately in the same commit"
     )
 

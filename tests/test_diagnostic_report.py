@@ -558,6 +558,7 @@ def test_transport_not_measured():
         "cobs_errors",
         "crc_failures",
         "decode_failures",
+        "probe_timeouts",
         "retries",
         "timeouts",
     ):

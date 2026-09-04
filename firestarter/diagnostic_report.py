@@ -102,10 +102,14 @@ class AutoCapture:
 class TransportHealth:
     """Best-effort transport-health counters.
 
-    Every counter defaults to `None` -- "not measured". `decode_failures` is
-    now wired from `firestarter.transport_counters` (Phase 176 plan 01);
-    `cobs_errors`, `crc_failures` and `retries` remain reachable-but-unwired,
-    each with its own recorded reason (RESEARCH §Transport Counter Survey).
+    Every counter defaults to `None` -- "not measured". `decode_failures`,
+    `timeouts` and `probe_timeouts` are now wired from
+    `firestarter.transport_counters` (Phase 176 plans 01 and 02); once a run
+    has happened each carries a real integer, and reads `not measured` only
+    before one has. `cobs_errors`, `crc_failures` and `retries` remain
+    reachable-but-unwired, each with its own recorded reason (RESEARCH
+    §Transport Counter Survey; MEAS-03's full recorded trace lands in plan
+    176-03).
     `transport_suspect` defaults `False` and can only be set `True` by
     `_is_transport_suspect` below -- never inferred from absent data.
     """
@@ -113,6 +117,7 @@ class TransportHealth:
     cobs_errors: int | None = None
     crc_failures: int | None = None
     decode_failures: int | None = None
+    probe_timeouts: int | None = None
     retries: int | None = None
     timeouts: int | None = None
     transport_suspect: bool = False
@@ -126,6 +131,8 @@ _SUSPECT_SCANNED_FIELDS: tuple[str, ...] = (
     "timeouts",
 )
 
+_SUSPECT_EXCLUDED_FIELDS: tuple[str, ...] = ("probe_timeouts",)
+
 
 def _is_transport_suspect(th: TransportHealth) -> bool:
     """True only when a counter is PRESENT (not None) AND elevated.
@@ -135,6 +142,11 @@ def _is_transport_suspect(th: TransportHealth) -> bool:
     by name rather than a hard-coded tuple, so extending the scanned domain
     (as `decode_failures` does here) is a data change, not a rule change --
     the guard clause itself, both conjuncts and their order, is unchanged.
+
+    `probe_timeouts` is deliberately in `_SUSPECT_EXCLUDED_FIELDS`, never in
+    `_SUSPECT_SCANNED_FIELDS`: port-discovery failures are ordinary on a
+    multi-board rig and are not link sickness, so counting them toward
+    suspicion would report a healthy rig as sick.
     """
     for name in _SUSPECT_SCANNED_FIELDS:
         value = getattr(th, name)
@@ -624,6 +636,9 @@ class DiagnosticReport:
             ),
             "decode_failures": (
                 NOT_MEASURED if th.decode_failures is None else th.decode_failures
+            ),
+            "probe_timeouts": (
+                NOT_MEASURED if th.probe_timeouts is None else th.probe_timeouts
             ),
             "retries": NOT_MEASURED if th.retries is None else th.retries,
             "timeouts": NOT_MEASURED if th.timeouts is None else th.timeouts,
