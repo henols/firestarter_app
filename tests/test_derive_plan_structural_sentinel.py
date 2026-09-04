@@ -353,17 +353,15 @@ def test_one_chip_run_plan_alignment_smoke():
     )
 
 
-# ---------------------------------------------------------------------------
-# Part A -- nine hand-built counter-plans. Each proves the predicate is
-# sensitive on a shape the shipped corpus either cannot reach at all, or
-# reaches only by coincidence. Every one that has a clean sibling shape
-# asserts the clean case is genuinely a premise, following the discipline
-# `test_op_registration_parity.py:821` establishes.
-# ---------------------------------------------------------------------------
-
-
 def test_planted_counter_plan_with_no_verify_is_flagged():
-    """Roadmap success criterion 1."""
+    """The first of nine hand-built counter-plans (Part A): each proves
+    `write_verify_violations` is sensitive on a shape the shipped corpus
+    either cannot reach at all, or reaches only by coincidence. Every one
+    that has a clean sibling shape asserts the clean case is genuinely a
+    premise, following the discipline `test_op_registration_parity.py:821`
+    establishes.
+
+    Roadmap success criterion 1."""
     plan = plan_with_steps(
         step(chip_test.OP_ID),
         step(chip_test.OP_READ),
@@ -517,23 +515,20 @@ def test_an_unsupported_write_is_skipped_by_decision():
     assert violations == [], violations
 
 
-# ---------------------------------------------------------------------------
-# Part B -- three mutated-corpus legs (D-09). Each proves the predicate is
-# sensitive on all 1,354 shipped plans, not merely on one hand-built
-# example, and each asserts the write-bearing corpus size as an absolute
-# number before mutating anything, so a sweep that silently visits zero
-# rows cannot pass.
-#
-# Copy rule: `dataclasses.replace(plan, steps=[...])` yields a fresh list
-# while sharing the untouched `Step` objects. `copy.copy(plan)` SHARES
-# `plan.steps` and is forbidden -- the corpus is module-cached, so an
-# in-place edit would corrupt every later test in the process. A per-field
-# mutation goes through `dataclasses.replace(step, ...)`, never an
-# attribute assignment on a live `Step`.
-# ---------------------------------------------------------------------------
-
-
 def _write_bearing_plans():
+    """Shared selector for Part B's three mutated-corpus legs (D-09). Each
+    of those legs proves `write_verify_violations` is sensitive on all
+    1,354 shipped plans, not merely on one hand-built example, and each
+    asserts this selector's size as an absolute number before mutating
+    anything, so a sweep that silently visits zero rows cannot pass.
+
+    Copy rule every one of those legs follows:
+    `dataclasses.replace(plan, steps=[...])` yields a fresh list while
+    sharing the untouched `Step` objects. `copy.copy(plan)` SHARES
+    `plan.steps` and is forbidden -- the corpus is module-cached, so an
+    in-place edit would corrupt every later test in the process. A
+    per-field mutation goes through `dataclasses.replace(step, ...)`,
+    never an attribute assignment on a live `Step`."""
     corpus = plan_corpus()
     return {
         key: plan
