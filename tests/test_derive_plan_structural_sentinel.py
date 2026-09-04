@@ -618,10 +618,7 @@ def test_a_region_skewed_verify_flags_every_write_bearing_plan():
     )
 
 
-_28C_CARVE_OUT_REASON = (
-    "protocol 0x0D (28C family) auto-erases per page during write; no "
-    "step in this plan can ever leave the device blank"
-)
+_28C_CARVE_OUT_REASON = "protocol 0x0D (28C family) auto-erases per page during write; no step in this plan can ever leave the device blank"
 
 
 def erase_blank_check_violations(plan):
