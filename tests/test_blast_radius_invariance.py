@@ -139,11 +139,12 @@ _AUTO_CAPTURE_KEYS = [
     "protocol",
 ]
 
-"""D-07's fifth pin: `_transport_dict()` (`:605-617`) emits five keys
-today."""
+"""D-07's fifth pin: `_transport_dict()` (`:605-617`) emits six keys today
+(Phase 176 plan 01 wired `decode_failures`)."""
 _TRANSPORT_HEALTH_KEYS = [
     "cobs_errors",
     "crc_failures",
+    "decode_failures",
     "retries",
     "timeouts",
     "transport_suspect",
@@ -446,6 +447,10 @@ def test_to_dict_transport_health_key_list_is_pinned() -> None:
     assert keys == _TRANSPORT_HEALTH_KEYS, (
         f"to_dict()['transport_health'] keys drifted from the pinned D-07 "
         f"shape; expected {_TRANSPORT_HEALTH_KEYS}, got {keys}"
+    )
+    assert "probe_timeouts" not in keys, (
+        "transport_health gained probe_timeouts -- plan 176-02 landed; "
+        "update _TRANSPORT_HEALTH_KEYS deliberately in the same commit"
     )
 
 
