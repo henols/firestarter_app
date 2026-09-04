@@ -1579,10 +1579,12 @@ if _DEV_TOOLS_ENABLED:
     )
     @click.option(
         "--mode",
-        type=click.Choice(["cycle", "latency"]),
+        type=click.Choice(["cycle", "latency", "connect-cost"]),
         default="cycle",
         help="cycle = read-cycle resync demo (default); latency = per-frame firmware NAK "
-        "latency on an established single-port connection (53-04 refinement; no chip needed).",
+        "latency on an established single-port connection (53-04 refinement; no chip needed); "
+        "connect-cost = per-connect cost harness, N pinned-port connect/disconnect cycles "
+        "(MEAS-01; no chip needed).",
     )
     @click.option(
         "--output-dir",
@@ -1590,6 +1592,13 @@ if _DEV_TOOLS_ENABLED:
         type=str,
         default=None,
         help="Output dir for transfer binaries.",
+    )
+    @click.option(
+        "--samples",
+        "samples",
+        type=int,
+        default=10,
+        help="connect-cost mode only: number of connect/disconnect cycles to time.",
     )
     @click.pass_obj
     @map_typed_errors
@@ -1600,6 +1609,7 @@ if _DEV_TOOLS_ENABLED:
         fault_form: str,
         mode: str,
         output_dir: Optional[str],
+        samples: int,
     ) -> None:
         """Demonstrate COBS resync: inject a corrupted frame and assert recovery on the next.
 
@@ -1610,10 +1620,22 @@ if _DEV_TOOLS_ENABLED:
         corrupt CMD_FW_VERSION frame. Use it with ``-p <port>``; an already-established
         connection avoids the multi-port connect-retry that inflates cycle mode's
         outgoing latency.
+
+        connect-cost mode opens and closes one pinned port ``--samples`` times (default 10),
+        timing each connect, and reports min/median/max seconds to three decimals plus the
+        board-independent structural floor. Use it with ``-p <port>``; the port is pinned
+        explicitly so port discovery never inflates the figure.
         """
         if mode == "latency":
             ok = app.eprom_operator.measure_command_nak_latency(
                 fault_form=fault_form,
+                output_dir=output_dir,
+            )
+            sys.exit(0 if ok else 1)
+
+        if mode == "connect-cost":
+            ok = app.eprom_operator.measure_connect_cost(
+                samples=samples,
                 output_dir=output_dir,
             )
             sys.exit(0 if ok else 1)

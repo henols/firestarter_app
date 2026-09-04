@@ -12,6 +12,7 @@ import logging
 import os
 import re
 import shutil
+import statistics
 import time
 from contextlib import contextmanager
 from datetime import datetime
@@ -21,6 +22,7 @@ from typing import Callable, Dict, Optional, Tuple  # noqa: UP035
 import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
+from firestarter import transport_counters
 from firestarter.address_parser import parse_address, parse_size
 from firestarter.config import ConfigManager
 from firestarter.constants import (
@@ -58,6 +60,7 @@ from firestarter.frame_parser import _crc8_ccitt, cobs_encode
 from firestarter.messages import MSG_DATA_PROTECTION_STATUS, MSG_WARN_SDP_UNLOCK_SKIPPED
 from firestarter.sdp_capability import SDP_PROTOCOL_ID
 from firestarter.serial_comm import (
+    CONNECTION_STABILIZE_DELAY,
     DEFAULT_RESPONSE_TIMEOUT,
     WRITE_BUDGET_MAX_S,
     SerialCommunicator,
@@ -75,6 +78,11 @@ bar_format = "{l_bar}{bar}| {n:#06x}/{total:#06x} bytes "
 # (e.g. ./firestarter-runs/consistency-check-<chip>-<board>-<TS>/) instead of
 # scattering timestamped folders directly in the launch directory.
 DEFAULT_RUN_OUTPUT_DIR = "firestarter-runs"
+
+_CONSUME_REMAINING_INPUT_WINDOW_S = 0.5
+CONNECT_COST_STRUCTURAL_FLOOR_S = (
+    CONNECTION_STABILIZE_DELAY + _CONSUME_REMAINING_INPUT_WINDOW_S
+)
 
 
 def _raise_for_error_response(response, message: str) -> None:
@@ -1671,6 +1679,152 @@ class EpromOperator:
                 )
         except IOError as e:  # noqa: UP024
             logger.error(f"measure_command_nak_latency: could not write log: {e}")
+
+    @staticmethod
+    def _summarize_connect_samples(samples: list) -> Dict[str, str]:  # noqa: UP006
+        """Aggregate a list of observed connect durations (MEAS-01 numeric contract).
+
+        Pure: no clock read, no file I/O, fully testable without a board.
+
+        Every reported figure is a duration that was actually observed. The
+        median is `statistics.median_low`, never `statistics.median` --  on an
+        even sample count that is the LOWER of the two middle values, never an
+        interpolated average of two that were. No mean is computed or reported
+        anywhere: a blended average is not a duration anyone observed.
+
+        `structural_floor` is the constant `CONNECT_COST_STRUCTURAL_FLOOR_S`
+        (2.5s), and `remainder` is the median minus that floor, so a reader can
+        see whether the board-independent floor dominates the figure rather
+        than having to infer it.
+
+        An empty `samples` list reports the literal string `unmeasured` for
+        every duration figure and `0` for the count. It must not raise and
+        must not report a zero that would read as a real measurement.
+        """
+        floor_str = f"{CONNECT_COST_STRUCTURAL_FLOOR_S:.3f}s"
+        if not samples:
+            return {
+                "samples": "0",
+                "min": "unmeasured",
+                "median": "unmeasured",
+                "max": "unmeasured",
+                "structural_floor": floor_str,
+                "remainder": "unmeasured",
+            }
+        median = statistics.median_low(samples)
+        return {
+            "samples": str(len(samples)),
+            "min": f"{min(samples):.3f}s",
+            "median": f"{median:.3f}s",
+            "max": f"{max(samples):.3f}s",
+            "structural_floor": floor_str,
+            "remainder": f"{median - CONNECT_COST_STRUCTURAL_FLOOR_S:.3f}s",
+        }
+
+    def measure_connect_cost(
+        self,
+        samples: int = 10,
+        port: Optional[str] = None,
+        output_dir: Optional[str] = None,
+    ) -> bool:
+        """Per-connect cost measurement harness (MEAS-01 instrument).
+
+        No serial device is required to build or unit-test this method --
+        `_summarize_connect_samples` above is pure and covers the numeric
+        contract on hand-built sample lists. This method is the bench half:
+        it opens and closes ONE pinned port `samples` times, timing each
+        connect with `time.monotonic()`.
+
+        Pinning ONE port is load-bearing: `restrict_to_port=True` is passed
+        explicitly to `find_and_connect` regardless of the config's transient
+        port marker, so this measurement can never let port discovery walk
+        the port list -- the exact inflation trap `measure_command_nak_latency`'s
+        own docstring above documents about `fault_inject_cycle`.
+
+        Refuses rather than guesses: with no port resolved, this logs and
+        returns False without opening anything. Returns True only when at
+        least one sample was collected; a run that collected zero samples
+        reports `unmeasured` in the artifact rather than fabricating a number.
+
+        Also records `transport_counters.snapshot()['probe_timeouts']` (and
+        the other eight counters) observed during the run -- MEAS-02's
+        corroborating empirical evidence, which comes free from the counter
+        wiring plans 176-01 to 176-03 already completed.
+        """
+        if port is None:
+            port = self.config.get_value("port")
+        if not port:
+            logger.error(
+                "measure_connect_cost: no serial port resolved "
+                "(pass -p <port> or set config.port)."
+            )
+            return False
+
+        if output_dir is None:
+            timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+            output_dir = f"connect-cost-{timestamp}"
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        fw_cmd = {"state": COMMAND_FW_VERSION}
+        elapsed_samples: list = []
+        controller_identity = ""
+        transport_counters.reset()
+        for _ in range(samples):
+            comm = None
+            try:
+                _t0 = time.monotonic()
+                comm = SerialCommunicator.find_and_connect(
+                    fw_cmd,
+                    self.config,
+                    preferred_port=port,
+                    restrict_to_port=True,
+                )
+                elapsed_samples.append(time.monotonic() - _t0)
+                if not controller_identity and comm.programmer_info:
+                    controller_identity = comm.programmer_info
+            except (ProgrammerNotFoundError, SerialError) as e:
+                logger.error(f"measure_connect_cost: connect attempt failed: {e}")
+            finally:
+                if comm is not None:
+                    comm.disconnect()
+
+        counters = transport_counters.snapshot()
+        summary = self._summarize_connect_samples(elapsed_samples)
+        self._write_connect_cost_log(
+            output_path, port, controller_identity, elapsed_samples, summary, counters
+        )
+        return len(elapsed_samples) > 0
+
+    @staticmethod
+    def _write_connect_cost_log(
+        output_path: Path,
+        port: str,
+        controller_identity: str,
+        samples: list,
+        summary: Dict[str, str],  # noqa: UP006
+        counters: Dict[str, int],  # noqa: UP006
+    ) -> None:
+        """Write the connect-cost artifact (MEAS-01 bench harness)."""
+        log_path = output_path / "connect-cost-log.txt"
+        sample_lines = "\n".join(f"sample_{i}: {s:.3f}s" for i, s in enumerate(samples))
+        counter_lines = "\n".join(f"{k}: {v}" for k, v in sorted(counters.items()))
+        try:
+            with open(log_path, "w") as fh:
+                fh.write(
+                    "# per-connect cost (one pinned port, restrict_to_port=True)\n"
+                    f"port: {port}  controller_identity: {controller_identity or 'unknown'}\n"
+                    f"samples_collected: {summary['samples']}\n"
+                    f"{sample_lines}\n"
+                    f"min: {summary['min']}\n"
+                    f"median: {summary['median']}\n"
+                    f"max: {summary['max']}\n"
+                    f"structural_floor: {summary['structural_floor']}\n"
+                    f"remainder: {summary['remainder']}\n"
+                    f"{counter_lines}\n"
+                )
+        except IOError as e:  # noqa: UP024
+            logger.error(f"measure_connect_cost: could not write log: {e}")
 
     def dev_read_eprom(
         self,
