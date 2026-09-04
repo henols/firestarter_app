@@ -54,9 +54,30 @@ carry a real, three-step cycle block of `write, verify, erase(NA)`, not the
 two-step shape the helper's docstring family list describes. A rule built
 by reading that docstring, rather than by calling the helper, would be
 wrong on all 540 of them.
+
+**Reachability.** A gate authored before the content it guards can be
+unreachable and prove nothing, so every anti-vacuity leg below was
+observed to fail before this module was trusted. Nine hand-built
+counter-plans (`test_planted_counter_plan_with_no_verify_is_flagged`
+through `test_an_unsupported_write_is_skipped_by_decision`) prove
+`write_verify_violations` is sensitive on shapes the shipped corpus cannot
+reach; three mutated-corpus legs
+(`test_removing_the_verify_flags_every_write_bearing_plan`,
+`test_an_unsupported_verify_flags_every_write_bearing_plan`,
+`test_a_region_skewed_verify_flags_every_write_bearing_plan`) prove it is
+sensitive on all 1,354 shipped plans, not on one hand-picked example. On
+top of both, four deliberate weakenings of `write_verify_violations`
+itself (return nothing; drop the `supported` conjunct; drop the three
+field-equality conjuncts; turn the out-of-block violation into a skip)
+were each applied in turn and each observed to turn this module RED before
+being reverted -- the raw transcript of all four, plus the restored clean
+run, is committed at
+`.planning/phases/175-structural-sentinel-over-derive-plan/evidence/175-01-anti-vacuity-red-green.txt`.
 """
 
 from __future__ import annotations
+
+import dataclasses
 
 import firestarter.chip_test as chip_test
 from tests.plan_corpus import (
@@ -65,6 +86,8 @@ from tests.plan_corpus import (
     all_rows,
     mock_operator,
     plan_corpus,
+    plan_with_steps,
+    step,
 )
 
 REQUIRES_VERIFY: frozenset[str] = frozenset(
@@ -327,4 +350,271 @@ def test_one_chip_run_plan_alignment_smoke():
     assert len(results) == len(plan.steps), (
         f"run_plan returned {len(results)} results for {len(plan.steps)} "
         "steps -- a step was silently dropped or added"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Part A -- nine hand-built counter-plans. Each proves the predicate is
+# sensitive on a shape the shipped corpus either cannot reach at all, or
+# reaches only by coincidence. Every one that has a clean sibling shape
+# asserts the clean case is genuinely a premise, following the discipline
+# `test_op_registration_parity.py:821` establishes.
+# ---------------------------------------------------------------------------
+
+
+def test_planted_counter_plan_with_no_verify_is_flagged():
+    """Roadmap success criterion 1."""
+    plan = plan_with_steps(
+        step(chip_test.OP_ID),
+        step(chip_test.OP_READ),
+        step(chip_test.OP_WRITE),
+        step(chip_test.OP_ERASE),
+    )
+    violations = write_verify_violations(plan)
+    assert len(violations) == 1, violations
+    assert violations[0][2] == "no supported, field-matching verify in the block", (
+        violations
+    )
+
+
+def test_a_second_write_outside_the_block_is_a_violation_not_a_skip():
+    """`cycle_block_bounds` returns only the FIRST maximal run, so a second
+    write past the end of that run must be a VIOLATION, never silently
+    skipped -- this arm is unreachable on the shipped corpus, where every
+    plan carries exactly one write, and is coded fail-closed for exactly
+    that reason."""
+    plan = plan_with_steps(
+        step(chip_test.OP_WRITE),
+        step(chip_test.OP_VERIFY),
+        step(chip_test.OP_SDP_LOCK),
+        step(chip_test.OP_WRITE),
+        step(chip_test.OP_VERIFY),
+    )
+    bounds = chip_test.cycle_block_bounds(plan.steps)
+    assert bounds == (0, 2), (
+        f"fixture setup error: expected bounds (0, 2), got {bounds}"
+    )
+
+    violations = write_verify_violations(plan)
+    assert violations == [
+        (3, chip_test.OP_WRITE, "write sits outside the cycle block")
+    ], violations
+
+
+def test_a_verify_at_a_lower_index_is_not_an_oracle():
+    plan = plan_with_steps(step(chip_test.OP_VERIFY), step(chip_test.OP_WRITE))
+    violations = write_verify_violations(plan)
+    assert len(violations) == 1, violations
+    assert violations[0][0] == 1, violations
+
+
+def test_a_verify_outside_the_block_is_not_an_oracle():
+    """`(0, 1)` is what makes D-02's same-cycle-block reading stronger than
+    anywhere-later-in-the-list: the verify here sits right after the write
+    in `plan.steps`, but `sdp-lock` closes the block first."""
+    plan = plan_with_steps(
+        step(chip_test.OP_WRITE), step(chip_test.OP_SDP_LOCK), step(chip_test.OP_VERIFY)
+    )
+    bounds = chip_test.cycle_block_bounds(plan.steps)
+    assert bounds == (0, 1), (
+        f"fixture setup error: expected bounds (0, 1), got {bounds}"
+    )
+
+    violations = write_verify_violations(plan)
+    assert len(violations) == 1, violations
+
+
+def test_a_lone_write_is_flagged():
+    plan = plan_with_steps(step(chip_test.OP_WRITE))
+    bounds = chip_test.cycle_block_bounds(plan.steps)
+    assert bounds == (0, 1), (
+        f"fixture setup error: expected bounds (0, 1), got {bounds}"
+    )
+
+    violations = write_verify_violations(plan)
+    assert len(violations) == 1, violations
+
+
+def test_an_unsupported_verify_is_not_an_oracle():
+    """D-03: a `supported=False` verify behind a live write IS a write with
+    no oracle and must not pass merely because a step with the right op
+    string is present."""
+    plan = plan_with_steps(
+        step(chip_test.OP_WRITE), step(chip_test.OP_VERIFY, supported=False)
+    )
+    violations = write_verify_violations(plan)
+    assert len(violations) == 1, violations
+
+
+def test_a_field_skewed_verify_is_not_an_oracle():
+    """D-04: the verify must match the write on `write_region`,
+    `region_policy` and `cycle_payload`. Three sub-cases, each a
+    `write, verify` pair identical except for one field."""
+    region_skewed = plan_with_steps(
+        step(chip_test.OP_WRITE, write_region=(0, 10)),
+        step(chip_test.OP_VERIFY, write_region=(1, 10)),
+    )
+    assert len(write_verify_violations(region_skewed)) == 1, (
+        "write_region mismatch not flagged"
+    )
+
+    policy_skewed = plan_with_steps(
+        step(chip_test.OP_WRITE, region_policy="fixed"),
+        step(chip_test.OP_VERIFY, region_policy="uv-slot"),
+    )
+    assert len(write_verify_violations(policy_skewed)) == 1, (
+        "region_policy mismatch not flagged"
+    )
+
+    payload_skewed = plan_with_steps(
+        step(chip_test.OP_WRITE, cycle_payload="same"),
+        step(chip_test.OP_VERIFY, cycle_payload="alternate"),
+    )
+    assert len(write_verify_violations(payload_skewed)) == 1, (
+        "cycle_payload mismatch not flagged"
+    )
+
+
+def test_plans_with_no_write_are_vacuously_clean():
+    empty_plan = plan_with_steps()
+    assert chip_test.cycle_block_bounds(empty_plan.steps) is None
+    assert write_verify_violations(empty_plan) == []
+
+    no_write_plan = plan_with_steps(
+        step(chip_test.OP_ID), step(chip_test.OP_READ), step(chip_test.OP_BLANK_CHECK)
+    )
+    assert chip_test.cycle_block_bounds(no_write_plan.steps) is None
+    assert write_verify_violations(no_write_plan) == []
+
+    real_plan = chip_test.derive_plan(PART_NUMBERS[0], REAL_DB, write_scope="none")
+    assert not any(s.op in REQUIRES_VERIFY for s in real_plan.steps), (
+        f"fixture setup error: {PART_NUMBERS[0]!r} at write_scope='none' "
+        "must carry no step in REQUIRES_VERIFY"
+    )
+    assert chip_test.cycle_block_bounds(real_plan.steps) is None
+    assert write_verify_violations(real_plan) == []
+
+
+def test_an_unsupported_write_is_skipped_by_decision():
+    """A decision, not an omission: a step that never calls the operator
+    cannot be "a write with no oracle" in any observable sense. The shipped
+    corpus carries zero unsupported write steps
+    (`test_no_shipped_plan_carries_an_unsupported_write`), so this arm is
+    currently unreachable on it."""
+    plan = plan_with_steps(
+        step(chip_test.OP_ID),
+        step(chip_test.OP_READ),
+        step(chip_test.OP_WRITE, supported=False),
+        step(chip_test.OP_VERIFY),
+        step(chip_test.OP_ERASE),
+    )
+    bounds = chip_test.cycle_block_bounds(plan.steps)
+    assert bounds == (2, 5), (
+        f"fixture setup error: expected bounds (2, 5), got {bounds}"
+    )
+
+    violations = write_verify_violations(plan)
+    assert violations == [], violations
+
+
+# ---------------------------------------------------------------------------
+# Part B -- three mutated-corpus legs (D-09). Each proves the predicate is
+# sensitive on all 1,354 shipped plans, not merely on one hand-built
+# example, and each asserts the write-bearing corpus size as an absolute
+# number before mutating anything, so a sweep that silently visits zero
+# rows cannot pass.
+#
+# Copy rule: `dataclasses.replace(plan, steps=[...])` yields a fresh list
+# while sharing the untouched `Step` objects. `copy.copy(plan)` SHARES
+# `plan.steps` and is forbidden -- the corpus is module-cached, so an
+# in-place edit would corrupt every later test in the process. A per-field
+# mutation goes through `dataclasses.replace(step, ...)`, never an
+# attribute assignment on a live `Step`.
+# ---------------------------------------------------------------------------
+
+
+def _write_bearing_plans():
+    corpus = plan_corpus()
+    return {
+        key: plan
+        for key, plan in corpus.items()
+        if any(s.op in REQUIRES_VERIFY and s.supported for s in plan.steps)
+    }
+
+
+def test_removing_the_verify_flags_every_write_bearing_plan():
+    write_bearing = _write_bearing_plans()
+    assert len(write_bearing) == 1354, (
+        f"write-bearing corpus size drifted to {len(write_bearing)} -- a "
+        "sweep that visits zero rows must not pass"
+    )
+
+    unflagged = []
+    for key, plan in write_bearing.items():
+        mutant = dataclasses.replace(
+            plan, steps=[s for s in plan.steps if s.op != chip_test.OP_VERIFY]
+        )
+        if not write_verify_violations(mutant):
+            unflagged.append(key)
+    assert not unflagged, (
+        f"{len(unflagged)} of {len(write_bearing)} write-bearing plans were "
+        f"NOT flagged after their verify step was removed; first ten: "
+        f"{unflagged[:10]}"
+    )
+
+
+def test_an_unsupported_verify_flags_every_write_bearing_plan():
+    """D-03, generalized across the whole corpus."""
+    write_bearing = _write_bearing_plans()
+    assert len(write_bearing) == 1354, (
+        f"write-bearing corpus size drifted to {len(write_bearing)} -- a "
+        "sweep that visits zero rows must not pass"
+    )
+
+    unflagged = []
+    for key, plan in write_bearing.items():
+        mutated_steps = [
+            dataclasses.replace(s, supported=False)
+            if s.op == chip_test.OP_VERIFY
+            else s
+            for s in plan.steps
+        ]
+        mutant = dataclasses.replace(plan, steps=mutated_steps)
+        if not write_verify_violations(mutant):
+            unflagged.append(key)
+    assert not unflagged, (
+        f"{len(unflagged)} of {len(write_bearing)} write-bearing plans were "
+        f"NOT flagged after their verify step was marked unsupported; "
+        f"first ten: {unflagged[:10]}"
+    )
+
+
+def test_a_region_skewed_verify_flags_every_write_bearing_plan():
+    """D-04, generalized across the whole corpus."""
+    write_bearing = _write_bearing_plans()
+    assert len(write_bearing) == 1354, (
+        f"write-bearing corpus size drifted to {len(write_bearing)} -- a "
+        "sweep that visits zero rows must not pass"
+    )
+
+    unflagged = []
+    for key, plan in write_bearing.items():
+        mutated_steps = []
+        for s in plan.steps:
+            if s.op == chip_test.OP_VERIFY and s.write_region is not None:
+                skewed_start = s.write_region[0] + 1
+                mutated_steps.append(
+                    dataclasses.replace(
+                        s, write_region=(skewed_start, s.write_region[1])
+                    )
+                )
+            else:
+                mutated_steps.append(s)
+        mutant = dataclasses.replace(plan, steps=mutated_steps)
+        if not write_verify_violations(mutant):
+            unflagged.append(key)
+    assert not unflagged, (
+        f"{len(unflagged)} of {len(write_bearing)} write-bearing plans were "
+        f"NOT flagged after their verify step's write_region start was "
+        f"skewed by one; first ten: {unflagged[:10]}"
     )
