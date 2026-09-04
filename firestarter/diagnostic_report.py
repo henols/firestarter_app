@@ -102,31 +102,42 @@ class AutoCapture:
 class TransportHealth:
     """Best-effort transport-health counters.
 
-    Every counter defaults to `None` -- "not measured" -- because no
-    COBS-decode-error / CRC-failure / retry / timeout counter is reachable
-    from the operator or serial-transport layer today (RESEARCH §Transport
-    Counter Survey: verified NONE exist). `transport_suspect` defaults
-    `False` and can only be set `True` by `_is_transport_suspect` below --
-    never inferred from absent data.
+    Every counter defaults to `None` -- "not measured". `decode_failures` is
+    now wired from `firestarter.transport_counters` (Phase 176 plan 01);
+    `cobs_errors`, `crc_failures` and `retries` remain reachable-but-unwired,
+    each with its own recorded reason (RESEARCH §Transport Counter Survey).
+    `transport_suspect` defaults `False` and can only be set `True` by
+    `_is_transport_suspect` below -- never inferred from absent data.
     """
 
     cobs_errors: int | None = None
     crc_failures: int | None = None
+    decode_failures: int | None = None
     retries: int | None = None
     timeouts: int | None = None
     transport_suspect: bool = False
+
+
+_SUSPECT_SCANNED_FIELDS: tuple[str, ...] = (
+    "cobs_errors",
+    "crc_failures",
+    "decode_failures",
+    "retries",
+    "timeouts",
+)
 
 
 def _is_transport_suspect(th: TransportHealth) -> bool:
     """True only when a counter is PRESENT (not None) AND elevated.
 
     Absent counters can never fabricate suspicion -- mirrors the
-    honest `indeterminate` fingerprint bucket. Since no counter is reachable
-    today (RESEARCH §Transport Counter Survey), this always returns False in
-    production; it exists so a future counter source activates it without a
-    redesign.
+    honest `indeterminate` fingerprint bucket. Scans `_SUSPECT_SCANNED_FIELDS`
+    by name rather than a hard-coded tuple, so extending the scanned domain
+    (as `decode_failures` does here) is a data change, not a rule change --
+    the guard clause itself, both conjuncts and their order, is unchanged.
     """
-    for value in (th.cobs_errors, th.crc_failures, th.retries, th.timeouts):
+    for name in _SUSPECT_SCANNED_FIELDS:
+        value = getattr(th, name)
         if value is not None and value >= _SUSPECT_THRESHOLD:
             return True
     return False
@@ -610,6 +621,9 @@ class DiagnosticReport:
             "cobs_errors": NOT_MEASURED if th.cobs_errors is None else th.cobs_errors,
             "crc_failures": (
                 NOT_MEASURED if th.crc_failures is None else th.crc_failures
+            ),
+            "decode_failures": (
+                NOT_MEASURED if th.decode_failures is None else th.decode_failures
             ),
             "retries": NOT_MEASURED if th.retries is None else th.retries,
             "timeouts": NOT_MEASURED if th.timeouts is None else th.timeouts,

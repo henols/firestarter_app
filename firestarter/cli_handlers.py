@@ -20,7 +20,10 @@ import click.shell_completion
 from rich.console import Console
 
 from firestarter import __version__ as version
-from firestarter import sdp_honesty  # unreadable_state_caveat(), called not re-authored
+from firestarter import (
+    sdp_honesty,  # unreadable_state_caveat(), called not re-authored
+    transport_counters,
+)
 from firestarter.channel import (
     BETA_ONLY_DEV_COMMANDS,
     available_boards,
@@ -2376,6 +2379,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # comm.firmware_identity before the HARDWARE_REVISION dispatch even
     # runs, so one orchestrator-safe energize/query read (Part A,
     # hardware.py) yields both fields with zero extra connections.
+    transport_counters.reset()
     identity = app.hardware_manager.read_programmer_identity()
     auto_capture = AutoCapture(
         host_version=version,
@@ -2411,6 +2415,8 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     )
     report.results = results
     report.banner = count_applicable(plan, results)
+    transport_snapshot: dict[str, int] = transport_counters.snapshot()
+    report.transport.decode_failures = transport_snapshot["decode_failures"]
     # the derive-in-engine / assign-in-handler seam. `sdp_hold_state`
     # is computed in chip_test.py (the engine); this line only ASSIGNS it,
     # matching every other derived field above and below (never computed

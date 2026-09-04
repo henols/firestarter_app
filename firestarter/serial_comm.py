@@ -20,6 +20,7 @@ import serial.serialutil
 import serial.tools.list_ports
 
 import firestarter.codec as codec
+import firestarter.transport_counters as transport_counters
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
 from firestarter.constants import (
     BAUD_RATE,
@@ -347,6 +348,8 @@ class SerialCommunicator:
         override seam is used.
         """
         result = codec.decode_id_frame(frame_len, body)
+        if result is None:
+            transport_counters.record_decode_failure()
         # body layout: [id_byte][params_bytes...][crc_byte]
         if result is not None and len(body) >= 2:
             msg_id = body[0]

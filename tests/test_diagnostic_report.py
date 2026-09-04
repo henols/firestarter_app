@@ -554,7 +554,13 @@ def test_transport_not_measured():
     d = report.to_dict()
 
     transport = d["transport_health"]
-    for key in ("cobs_errors", "crc_failures", "retries", "timeouts"):
+    for key in (
+        "cobs_errors",
+        "crc_failures",
+        "decode_failures",
+        "retries",
+        "timeouts",
+    ):
         assert transport[key] == NOT_MEASURED
         assert transport[key] != 0
 
