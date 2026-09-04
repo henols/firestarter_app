@@ -62,6 +62,8 @@
     "crc_failures": "not measured",
     "decode_failures": "not measured",
     "probe_timeouts": "not measured",
+    "resync_body_truncated": "not measured",
+    "resync_length_missing": "not measured",
     "retries": "not measured",
     "timeouts": "not measured",
     "transport_suspect": false

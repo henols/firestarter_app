@@ -100,12 +100,12 @@ class TransportHealth:
     """Best-effort transport-health counters.
 
     Every counter defaults to `None` -- "not measured". `decode_failures`,
-    `timeouts` and `probe_timeouts` are wired from
-    `firestarter.transport_counters` (Phase 176 plans 01 and 02); once a run
-    has happened each carries a real integer, and reads `not measured` only
-    before one has. The remaining three stay `not measured` for good reason,
-    each recorded here so a future phase looking to "fix" them reads why it
-    should not:
+    `timeouts`, `probe_timeouts`, `resync_length_missing` and
+    `resync_body_truncated` are wired from `firestarter.transport_counters`
+    (Phase 176 plans 01, 02 and 03); once a run has happened each carries a
+    real integer, and reads `not measured` only before one has. The
+    remaining three stay `not measured` for good reason, each recorded here
+    so a future phase looking to "fix" them reads why it should not:
 
     `cobs_errors` -- COBS on this link is OUTBOUND ONLY. `cobs_encode` is
     called from `send_json_command` and the data-chunk path; `cobs_decode`
@@ -141,6 +141,8 @@ class TransportHealth:
     crc_failures: int | None = None
     decode_failures: int | None = None
     probe_timeouts: int | None = None
+    resync_body_truncated: int | None = None
+    resync_length_missing: int | None = None
     retries: int | None = None
     timeouts: int | None = None
     transport_suspect: bool = False
@@ -150,6 +152,8 @@ _SUSPECT_SCANNED_FIELDS: tuple[str, ...] = (
     "cobs_errors",
     "crc_failures",
     "decode_failures",
+    "resync_body_truncated",
+    "resync_length_missing",
     "retries",
     "timeouts",
 )
@@ -674,6 +678,16 @@ class DiagnosticReport:
             ),
             "probe_timeouts": (
                 NOT_MEASURED if th.probe_timeouts is None else th.probe_timeouts
+            ),
+            "resync_body_truncated": (
+                NOT_MEASURED
+                if th.resync_body_truncated is None
+                else th.resync_body_truncated
+            ),
+            "resync_length_missing": (
+                NOT_MEASURED
+                if th.resync_length_missing is None
+                else th.resync_length_missing
             ),
             "retries": NOT_MEASURED if th.retries is None else th.retries,
             "timeouts": NOT_MEASURED if th.timeouts is None else th.timeouts,

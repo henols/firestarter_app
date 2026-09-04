@@ -2419,6 +2419,8 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     report.transport.decode_failures = transport_snapshot["decode_failures"]
     report.transport.timeouts = transport_snapshot["timeouts"]
     report.transport.probe_timeouts = transport_snapshot["probe_timeouts"]
+    report.transport.resync_length_missing = transport_snapshot["resync_length_missing"]
+    report.transport.resync_body_truncated = transport_snapshot["resync_body_truncated"]
     # the derive-in-engine / assign-in-handler seam. `sdp_hold_state`
     # is computed in chip_test.py (the engine); this line only ASSIGNS it,
     # matching every other derived field above and below (never computed

@@ -490,6 +490,7 @@ class SerialCommunicator:
                         "Magic preamble seen but length bytes not received "
                         "before timeout — re-syncing."
                     )
+                    transport_counters.record_resync_length_missing()
                     continue
                 frame_len = struct.unpack_from(">H", len_bytes)[0]
 
@@ -505,6 +506,7 @@ class SerialCommunicator:
                         f"Frame body truncated: expected {frame_len} bytes, "
                         f"got {len(body)} — re-syncing."
                     )
+                    transport_counters.record_resync_body_truncated()
                     continue
 
                 # Consume the trailing terminator (D-04: anchor, not

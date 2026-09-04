@@ -559,6 +559,8 @@ def test_transport_not_measured():
         "crc_failures",
         "decode_failures",
         "probe_timeouts",
+        "resync_body_truncated",
+        "resync_length_missing",
         "retries",
         "timeouts",
     ):

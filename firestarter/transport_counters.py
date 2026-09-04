@@ -33,6 +33,14 @@ wrong-port probe and report a healthy multi-board rig as transport-suspect.
 `probe_scope()` wraps only the single `_probe_port` call inside
 `find_and_connect`, so the scope exits the instant probing succeeds and every
 `get_response` on the connection handed back is correctly outside probe scope.
+
+`record_resync_length_missing()` and `record_resync_body_truncated()` are
+unconditional increments -- unlike `record_response_timeout()`, neither is
+routed by `probe_scope()`. A re-sync inside `_read_and_parse_lines` is a
+wire-level event whose meaning does not depend on whether a probe is in
+progress: a magic preamble with no valid frame behind it is exactly as
+abnormal during port discovery as on an established connection, so both
+counters are wired to fire the same way in either context.
 """
 
 from __future__ import annotations
@@ -43,6 +51,8 @@ from contextlib import contextmanager
 _counters: dict[str, int] = {
     "decode_failures": 0,
     "probe_timeouts": 0,
+    "resync_body_truncated": 0,
+    "resync_length_missing": 0,
     "timeouts": 0,
 }
 
@@ -57,6 +67,26 @@ def record_decode_failure() -> None:
     received and could not decode.
     """
     _counters["decode_failures"] += 1
+
+
+def record_resync_length_missing() -> None:
+    """Increment `resync_length_missing` by one.
+
+    Called from `SerialCommunicator._read_and_parse_lines` when a magic
+    preamble is seen but fewer than two length bytes arrive before the
+    generator's timeout. Unconditional -- see the module docstring.
+    """
+    _counters["resync_length_missing"] += 1
+
+
+def record_resync_body_truncated() -> None:
+    """Increment `resync_body_truncated` by one.
+
+    Called from `SerialCommunicator._read_and_parse_lines` when the declared
+    frame body does not arrive in full before the generator's timeout.
+    Unconditional -- see the module docstring.
+    """
+    _counters["resync_body_truncated"] += 1
 
 
 def record_response_timeout() -> None:

@@ -37,8 +37,22 @@ Test taxonomy:
         assigned onto transport.decode_failures round-trips through
         to_dict()
 
+  Ring-fenced re-sync sites (Phase 176 plan 03, the plus-one-and-nothing-
+  else-moved leg applied to the two sites inside the v1.9 ring fence)
+    test_magic_preamble_with_no_length_bytes_raises_resync_length_missing_and_nothing_else
+        -> a bare magic preamble, driven directly through
+           _read_and_parse_lines
+    test_declared_length_longer_than_body_raises_resync_body_truncated_and_nothing_else
+        -> a declared frame length longer than the bytes actually sent,
+           driven directly through _read_and_parse_lines
+    test_truncated_frame_then_timeout_raises_both_resync_body_truncated_and_timeouts
+        -> the adjacency case: the same truncated-frame byte sequence
+           driven through get_response, where BOTH the re-sync and the
+           timeout fire on a single call
+
 References:
   - .planning/phases/176-transport-instrumentation-connect-cost-measurement-partially/176-01-PLAN.md
+  - .planning/phases/176-transport-instrumentation-connect-cost-measurement-partially/176-03-PLAN.md
   - .planning/phases/176-transport-instrumentation-connect-cost-measurement-partially/176-RESEARCH.md
   - .planning/phases/176-transport-instrumentation-connect-cost-measurement-partially/176-PATTERNS.md
 """
@@ -46,6 +60,7 @@ References:
 from __future__ import annotations
 
 import dataclasses
+import struct
 
 import pytest
 
@@ -61,7 +76,7 @@ from firestarter.diagnostic_report import (
 from firestarter.exceptions import SerialTimeoutError
 from firestarter.frame_parser import _crc8_ccitt
 from firestarter.messages import MSG_OK_READY
-from tests.conftest import build_frame
+from tests.conftest import MAGIC_PREAMBLE_REF, build_frame
 from tests.test_diagnostic_report import _build_report
 
 
@@ -89,7 +104,13 @@ def test_snapshot_after_reset_returns_wired_keys_sorted_zeroed() -> None:
     transport_counters.reset()
     result = transport_counters.snapshot()
     assert list(result) == sorted(result)
-    assert list(result) == ["decode_failures", "probe_timeouts", "timeouts"]
+    assert list(result) == [
+        "decode_failures",
+        "probe_timeouts",
+        "resync_body_truncated",
+        "resync_length_missing",
+        "timeouts",
+    ]
     assert all(value == 0 for value in result.values())
 
 
@@ -229,6 +250,55 @@ def test_probe_scope_restores_previous_state_when_body_raises() -> None:
     snap = transport_counters.snapshot()
     assert snap["timeouts"] == 1
     assert _others(snap, "timeouts") == 0
+
+
+def test_magic_preamble_with_no_length_bytes_raises_resync_length_missing_and_nothing_else(
+    make_comm, fake_serial
+) -> None:
+    transport_counters.reset()
+    comm = make_comm()
+    fake_serial.feed(MAGIC_PREAMBLE_REF)
+
+    list(comm._read_and_parse_lines(0.05))
+
+    snap = transport_counters.snapshot()
+    assert snap["resync_length_missing"] == 1
+    assert _others(snap, "resync_length_missing") == 0
+
+
+def test_declared_length_longer_than_body_raises_resync_body_truncated_and_nothing_else(
+    make_comm, fake_serial
+) -> None:
+    transport_counters.reset()
+    comm = make_comm()
+    fake_serial.feed(MAGIC_PREAMBLE_REF + struct.pack(">H", 8) + b"\x01\x02")
+
+    list(comm._read_and_parse_lines(0.05))
+
+    snap = transport_counters.snapshot()
+    assert snap["resync_body_truncated"] == 1
+    assert _others(snap, "resync_body_truncated") == 0
+
+
+def test_truncated_frame_then_timeout_raises_both_resync_body_truncated_and_timeouts(
+    make_comm, fake_serial
+) -> None:
+    """The adjacency leg: a single get_response call whose stream re-syncs on
+    a truncated frame and then runs out of time must raise BOTH
+    resync_body_truncated and timeouts by exactly one each -- two distinct
+    events on one call, neither merged into one counter nor suppressing the
+    other."""
+    transport_counters.reset()
+    comm = make_comm()
+    fake_serial.feed(MAGIC_PREAMBLE_REF + struct.pack(">H", 8) + b"\x01\x02")
+
+    with pytest.raises(SerialTimeoutError):
+        comm.get_response(timeout=0.05)
+
+    snap = transport_counters.snapshot()
+    assert snap["resync_body_truncated"] == 1
+    assert snap["timeouts"] == 1
+    assert snap["probe_timeouts"] == 0
 
 
 def test_to_dict_carries_integers_for_timeouts_and_probe_timeouts() -> None:

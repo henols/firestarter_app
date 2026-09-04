@@ -139,13 +139,16 @@ _AUTO_CAPTURE_KEYS = [
     "protocol",
 ]
 
-"""D-07's fifth pin: `_transport_dict()` (`:605-617`) emits six keys today
-(Phase 176 plan 01 wired `decode_failures`)."""
+"""D-07's fifth pin: `_transport_dict()` (`:605-617`) emits nine keys today
+(Phase 176 plans 01-03 wired `decode_failures`, `timeouts`, `probe_timeouts`,
+`resync_length_missing` and `resync_body_truncated`)."""
 _TRANSPORT_HEALTH_KEYS = [
     "cobs_errors",
     "crc_failures",
     "decode_failures",
     "probe_timeouts",
+    "resync_body_truncated",
+    "resync_length_missing",
     "retries",
     "timeouts",
     "transport_suspect",
@@ -449,8 +452,8 @@ def test_to_dict_transport_health_key_list_is_pinned() -> None:
         f"to_dict()['transport_health'] keys drifted from the pinned D-07 "
         f"shape; expected {_TRANSPORT_HEALTH_KEYS}, got {keys}"
     )
-    assert "resync_body_truncated" not in keys, (
-        "transport_health gained resync_body_truncated -- plan 176-03 landed; "
+    assert len(_TRANSPORT_HEALTH_KEYS) == 9, (
+        "transport_health key count drifted from nine -- "
         "update _TRANSPORT_HEALTH_KEYS deliberately in the same commit"
     )
 
