@@ -394,3 +394,41 @@ def test_help_describes_the_repeat_as_a_cycle_and_a_rig_check() -> None:
     doc = (cli_handlers_mod.dev_test.__doc__ or "").lower()
     assert "cycle" in doc
     assert "rig-health" in doc or "rig health" in doc
+
+
+def test_a_failing_first_cycle_keeps_the_fingerprint_read_back() -> None:
+    """Evidence-gated fingerprint read-back across cycles (PRUNE-02).
+
+    Cycle 1 fails, cycle 2 passes -- the gate still consults `per_step[i]`
+    across ALL prior cycles, not just the final cycle's own one-element
+    `outcomes` list, so the read-back is kept. Built on `_cycle_operator`,
+    not `test_chip_test.py`'s plain `_mock_operator`: its `read_eprom` side
+    effect seeks to the ABSOLUTE address before writing, which
+    `_read_region` depends on -- a double that writes at offset 0 makes
+    every region slice come back short and this test would pass for the
+    wrong reason. `derive_plan`'s own unconditional `read` step (present on
+    every protocol, a separate read-repeatability diagnostic) contributes a
+    fixed baseline of `runs` calls regardless of the fingerprint gate; the
+    gate's own contribution is measured as the DELTA above that baseline."""
+    operator, _writes = _cycle_operator(_ERASABLE)
+    operator.write_eprom.side_effect = [False, True]
+    plan = ct.derive_plan(_ERASABLE, _REAL_DB, write_scope="full")
+    runs = 2
+
+    ct.run_plan(plan, operator, _REAL_DB, runs=runs)
+
+    assert operator.read_eprom.call_count > runs
+
+
+def test_an_all_passing_two_cycle_run_performs_zero_fingerprint_read_backs() -> None:
+    """The adjacency edge's neighbour: no failure injected anywhere in the
+    two-cycle run, so the fingerprint is synthesized with zero device
+    reads and `read_eprom.call_count` stays at exactly the `read` step's
+    own fixed baseline of `runs` calls -- zero ADDED by the gate."""
+    operator, _writes = _cycle_operator(_ERASABLE)
+    plan = ct.derive_plan(_ERASABLE, _REAL_DB, write_scope="full")
+    runs = 2
+
+    ct.run_plan(plan, operator, _REAL_DB, runs=runs)
+
+    assert operator.read_eprom.call_count == runs

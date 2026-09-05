@@ -139,6 +139,7 @@ FP_BLANK_CONTACT = "blank/contact"
 FP_ADDRESS_LINE = "address-line"
 FP_TRANSPORT = "transport"
 FP_INDETERMINATE = "indeterminate"
+FP_MATCH = "match"
 
 # Candidate thresholds (Claude's discretion) -- direction is
 # HIGH-confidence, exact numbers are tunable/bench-informed later. A wrong
@@ -166,7 +167,7 @@ def classify_fingerprint(
     repeat_divergent: bool | None = None,
     addr_base: int = 0,
 ) -> Fingerprint:
-    """Classify a byte-mismatch pattern into one of four honest buckets.
+    """Classify a byte-mismatch pattern into one of five honest buckets.
 
     Consumes the shared `_diff_offsets` divergence primitive (the
     same math `consistency_check_eprom` uses for run1-vs-run2 divergence,
@@ -177,8 +178,11 @@ def classify_fingerprint(
       1. blank/contact  -- cheapest, most common false-PASS source
       2. address-line   -- power-of-two high-bit clustering (needs addr_base
                             to map offsets to ABSOLUTE addresses, Pitfall 3)
-      3. transport       -- scattered + non-repeatable across N>=2 runs
-      4. indeterminate   -- fallback; NEVER coerce an ambiguous distribution
+      3. match          -- zero mismatches, checked AFTER buckets 1 and 2 so
+                            an all-0xFF perfect compare stays blank/contact
+                            rather than silently re-keying that population.
+      4. transport       -- scattered + non-repeatable across N>=2 runs
+      5. indeterminate   -- fallback; NEVER coerce an ambiguous distribution
                             into a confident label.
     """
     cmp_len, diff_offsets, bad_pct, first_offset = _diff_offsets(expected, actual)
@@ -238,6 +242,15 @@ def classify_fingerprint(
             evidence=evidence,
         )
 
+    if bad == 0:
+        return Fingerprint(
+            total=cmp_len,
+            bad=bad,
+            bad_pct=bad_pct,
+            classification=FP_MATCH,
+            evidence=evidence,
+        )
+
     # 3. transport: scattered (no dominant high bit, checked above) AND
     # non-repeatable across the N>=2 runs (caller-supplied signal from
     # run1-vs-run2 divergence -- the uno328pb signature).
@@ -257,6 +270,35 @@ def classify_fingerprint(
         bad_pct=bad_pct,
         classification=FP_INDETERMINATE,
         evidence=evidence,
+    )
+
+
+def _synthesized_match_fingerprint(region_length: int) -> Fingerprint:
+    """Build a `match` `Fingerprint` with ZERO device I/O.
+
+    The gate at `_dispatch_multi_run`'s fingerprint site only pays for a real
+    `_read_region` read-back when a step failed somewhere in this cycle
+    block; a step that passed cleanly needs no evidence beyond the fact that
+    it passed, so this constructor performs no read and takes no operator.
+
+    `evidence` mirrors `classify_fingerprint`'s key set exactly --
+    `ff_ratio`, `repeat_divergent`, `first_offset`, `bit_clustering` -- so a
+    later consumer cannot tell a synthesized fingerprint apart from a
+    measured one by a MISSING key, only by a stated value. `ff_ratio` is
+    `None`, not `0.0`: it was never measured, and reporting `0.0` would
+    present a fabricated measurement as if it were real evidence.
+    """
+    return Fingerprint(
+        total=region_length,
+        bad=0,
+        bad_pct=0.0,
+        classification=FP_MATCH,
+        evidence={
+            "ff_ratio": None,
+            "repeat_divergent": None,
+            "first_offset": None,
+            "bit_clustering": {},
+        },
     )
 
 
@@ -1501,6 +1543,16 @@ def _run_cycle_block(
     turning the fingerprint's one extra read into N -- real cost on a
     full-device region, for a fingerprint that only ever describes the
     device's final state anyway.
+
+    On that final cycle, `prior_cycles_failed` is computed from
+    `per_step[i]` -- which at that point already holds cycles 1..N-1 for
+    step `i` -- and forwarded to `_run_step`. The predicate cannot be
+    `not all(outcomes)` alone at the call site inside `_dispatch_multi_run`:
+    this loop calls `_run_step` with `runs=1`, so the final cycle's own
+    `outcomes` is a one-element list describing that cycle only, blind to
+    every prior cycle. Filtered on `_RAN_VERDICTS` -- the same
+    discrimination `_aggregate_cycle_results` makes -- so a SKIPPED or NA
+    prior cycle is never counted as a failure.
     """
     pre: list[StepResult | None] = []
     for step in steps:
@@ -1547,6 +1599,11 @@ def _run_cycle_block(
                     sampler=sampler,
                     write_context=write_context,
                     collect_fingerprint=final,
+                    prior_cycles_failed=any(
+                        r.verdict != VERDICT_OK
+                        for r in per_step[i]
+                        if r.verdict in _RAN_VERDICTS
+                    ),
                 )
                 per_step[i].append(result)
                 # The same two context assignments `run_plan`'s per-step path
@@ -2356,6 +2413,7 @@ def _run_step(
     sampler: Any = None,
     write_context: WriteContext | None = None,
     collect_fingerprint: bool = True,
+    prior_cycles_failed: bool = False,
 ) -> StepResult:
     """Time `_run_step_untimed` and stamp `duration_s` on its result.
 
@@ -2373,7 +2431,9 @@ def _run_step(
     `write_context` is threaded through
     unchanged to `_run_step_untimed`; `None` is the default (the SDP
     lock/unlock cleanup callable in `run_plan` calls this function without
-    one, since neither op is write-shaped).
+    one, since neither op is write-shaped). `prior_cycles_failed` rides the
+    same unchanged-threading contract; `False` is the default because a
+    single-cycle caller has no prior cycles to have failed.
     """
     start = time.monotonic()
     result = _run_step_untimed(
@@ -2385,6 +2445,7 @@ def _run_step(
         sampler=sampler,
         write_context=write_context,
         collect_fingerprint=collect_fingerprint,
+        prior_cycles_failed=prior_cycles_failed,
     )
     if result.duration_s is None and result.verdict in _RAN_VERDICTS:
         result.duration_s = round(time.monotonic() - start, 3)
@@ -2401,6 +2462,7 @@ def _run_step_untimed(
     sampler: Any = None,
     write_context: WriteContext | None = None,
     collect_fingerprint: bool = True,
+    prior_cycles_failed: bool = False,
 ) -> StepResult:
     """Execute a single supported step through the guard-honoring resolver.
 
@@ -2418,7 +2480,7 @@ def _run_step_untimed(
 
     `sampler` is threaded through unchanged to `_dispatch_step`;
     `None` is the default and a proven no-op. `write_context` is
-    likewise threaded through unchanged.
+    likewise threaded through unchanged, and so is `prior_cycles_failed`.
     """
     eprom_data, skip_stub, reason = _resolve_or_none(name, db)
     if skip_stub is not None or eprom_data is None:
@@ -2437,6 +2499,7 @@ def _run_step_untimed(
             sampler=sampler,
             write_context=write_context,
             collect_fingerprint=collect_fingerprint,
+            prior_cycles_failed=prior_cycles_failed,
         )
     except (
         ProgrammerNotFoundError,
@@ -2500,6 +2563,7 @@ def _dispatch_step(
     sampler: Any = None,
     write_context: WriteContext | None = None,
     collect_fingerprint: bool = True,
+    prior_cycles_failed: bool = False,
 ) -> StepResult:
     """Dispatch `step.op` to its matching existing `EpromOperator` method.
 
@@ -2520,7 +2584,9 @@ def _dispatch_step(
     proven no-op for every other op. `write_context` is likewise threaded
     through to `_dispatch_multi_run` ONLY --
     deliberately NOT to `_dispatch_sdp`/`_dispatch_sdp_leg`, which keep
-    `_write_region_for` and the fixed leg region unchanged.
+    `_write_region_for` and the fixed leg region unchanged. `prior_cycles_failed`
+    rides the identical path to `_dispatch_multi_run` only, for the same
+    reason -- only a write/verify/erase step's fingerprint gate consults it.
     """
     if step.op == OP_ID:
         return _dispatch_id(name, eprom_data, operator)
@@ -2560,6 +2626,7 @@ def _dispatch_step(
             step=step,
             write_context=write_context,
             collect_fingerprint=collect_fingerprint,
+            prior_cycles_failed=prior_cycles_failed,
         )
     # Arm 5, LAST -- immediately above the
     # terminal fail-closed `return` below. The measured arm order above is
@@ -2930,16 +2997,30 @@ def _dispatch_multi_run(
     step: Step | None = None,
     write_context: WriteContext | None = None,
     collect_fingerprint: bool = True,
+    prior_cycles_failed: bool = False,
 ) -> StepResult:
     """Run a destructive/verify op `runs` times; `marginal` on disagreement.
 
     Collects a per-run bool outcome (the operator method's own return value)
-    for write/write-partial/erase; write/write-partial/verify ALSO builds
-    the expected address-derived pattern and reads back via
-    `operator.verify_eprom`'s outcome plus a fresh `read_eprom` to compute
-    the `Fingerprint`. Disagreement across the N per-run outcomes
-    -> `marginal`, never coerced to a confident OK/BAD (the AM27C020
-    structural case). The write/verify region is READ from `step.
+    for write/write-partial/erase; write/write-partial/verify ALSO attaches a
+    `Fingerprint` (addr_base-aware). A verify's per-run outcomes already
+    decide pass/fail; the fingerprint's job is to DIAGNOSE, not to decide, so
+    it is only worth its device I/O when something in this cycle block needs
+    diagnosing. When THIS step's own runs all agreed AND no earlier cycle in
+    this block failed (`prior_cycles_failed`, computed by `_run_cycle_block`
+    from `per_step[i]`), the fingerprint is synthesized by
+    `_synthesized_match_fingerprint` with zero device I/O, because a clean
+    step needs no read-back to know it is clean. Otherwise the real
+    read-back runs: it is best-effort, region-scoped via `_read_region`
+    (finding M-2) rather than a whole-device read, and a readback failure
+    (e.g. the SAME boot-block-locked condition that failed the write/verify
+    runs themselves) must NOT convert an otherwise successful write/verify
+    outcome into BAD (Pitfall 1 extends to this internal readback call too)
+    -- it only means no `Fingerprint` could be attached, and
+    `classify_fingerprint` names why. Disagreement
+    across the N per-run outcomes -> `marginal`, never coerced to a
+    confident OK/BAD (the AM27C020 structural case). The write/verify region
+    is READ from `step.
     write_region` via `_write_region_for(step, eprom_data)` (
     Plan 06) -- `derive_plan` already decided it; this function never
     re-derives UV-ness.
@@ -3098,25 +3179,24 @@ def _dispatch_multi_run(
                 )
 
         if collect_fingerprint and op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY):
-            # Readback for the fingerprint is best-effort: a readback failure
-            # (e.g. the SAME boot-block-locked condition that failed the
-            # write/verify runs themselves) must NOT convert an otherwise
-            # successful write/verify outcome into BAD (Pitfall 1 extends to
-            # this internal readback call too) -- it only means no
-            # Fingerprint could be attached. Region-scoped via `_read_region`
-            # (finding M-2) rather than a whole-device read.
-            actual = _read_region(
-                operator, name, eprom_data, region_start, region_length
+            step_failed = prior_cycles_failed or (
+                not all(outcomes) if outcomes else False
             )
-
-            if actual:
-                diverged = len(set(outcomes)) != 1 if outcomes else False
-                fingerprint = classify_fingerprint(
-                    expected,
-                    actual,
-                    repeat_divergent=diverged,
-                    addr_base=region_start,
+            if step_failed:
+                actual = _read_region(
+                    operator, name, eprom_data, region_start, region_length
                 )
+
+                if actual:
+                    diverged = len(set(outcomes)) != 1 if outcomes else False
+                    fingerprint = classify_fingerprint(
+                        expected,
+                        actual,
+                        repeat_divergent=diverged,
+                        addr_base=region_start,
+                    )
+            else:
+                fingerprint = _synthesized_match_fingerprint(region_length)
     finally:
         if tmp_source_path is not None:
             try:

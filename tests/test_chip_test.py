@@ -77,6 +77,7 @@ from firestarter.chip_test import (
     _diff_offsets,  # test-internal: the shared divergence primitive (D-04)
     _dispatch_multi_run,  # test-internal: fail-closed dispatch proof (121-02)
     _dispatch_step,  # test-internal: fail-closed dispatch proof (121-02)
+    _synthesized_match_fingerprint,  # test-internal: PRUNE-03 zero-I/O fingerprint (177-01)
     _write_region_for,  # test-internal: UV small-region selector (PATT-03)
     address_fold_byte,
     classify_fingerprint,
@@ -1504,11 +1505,13 @@ def test_cycle_loop_reports_one_result_per_step_with_run_count_n():
     assert operator.verify_eprom.call_count == 2
 
 
-def test_fingerprint_readback_happens_once_not_once_per_cycle():
-    """`collect_fingerprint` is True only on the final cycle. Without that
-    gate the write and verify steps would each add a region read-back per
-    cycle -- real cost on a full-device region, for a fingerprint that only
-    ever describes the device's FINAL state."""
+def test_a_passing_run_performs_zero_fingerprint_read_backs():
+    """`collect_fingerprint` is True only on the final cycle, and a step
+    whose runs all agreed -- with no earlier cycle in the block having
+    failed -- needs no read-back at all to know it is clean: the
+    fingerprint is synthesized instead. A fingerprint only ever describes
+    the device's FINAL state, and on an all-passing run that final state
+    needs zero additional device reads to report as `match`."""
     operator = _mock_operator()
     plan = _plan_with_steps(
         Step(op=OP_WRITE, supported=True, reason="", destructive=True),
@@ -1516,8 +1519,87 @@ def test_fingerprint_readback_happens_once_not_once_per_cycle():
     )
     run_plan(plan, operator, _REAL_DB, runs=3)
 
-    # One read-back for the write step, one for the verify step. NOT 3 + 3.
-    assert operator.read_eprom.call_count == 2
+    assert operator.read_eprom.call_count == 0
+
+
+def test_a_passing_write_reports_a_synthesized_match_fingerprint():
+    """The zero-read-back path still attaches a `Fingerprint` -- never
+    `None` -- and it classifies `match` with `bad == 0`."""
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+        Step(op=OP_VERIFY, supported=True, reason=""),
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=3)
+
+    write_result = _result(results, OP_WRITE)
+    verify_result = _result(results, OP_VERIFY)
+    assert write_result.fingerprint is not None
+    assert write_result.fingerprint.classification == "match"
+    assert write_result.fingerprint.bad == 0
+    assert verify_result.fingerprint is not None
+    assert verify_result.fingerprint.classification == "match"
+    assert verify_result.fingerprint.bad == 0
+
+
+def test_synthesized_and_measured_fingerprints_share_one_evidence_key_set():
+    """The synthesized cheap-path fingerprint and a real measured one must
+    carry the IDENTICAL `evidence` key set, so a later consumer cannot tell
+    the two apart by a missing key rather than by a stated value."""
+    synthesized = _synthesized_match_fingerprint(4096)
+    measured = classify_fingerprint(b"\xa5" * 4096, b"\xa5" * 4096)
+
+    assert sorted(synthesized.evidence) == sorted(measured.evidence)
+
+
+def test_a_bad_blank_check_does_not_force_a_read_back_on_a_passing_write():
+    """The gate is PER STEP, not per run: a `blank-check` step reporting BAD
+    must not force a fingerprint read-back on an unrelated passing `write`
+    step in the same plan."""
+    operator = _mock_operator(check_eprom_blank=False)
+    plan = _plan_with_steps(
+        Step(op=OP_BLANK_CHECK, supported=True, reason=""),
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+        Step(op=OP_VERIFY, supported=True, reason=""),
+    )
+    run_plan(plan, operator, _REAL_DB, runs=2)
+
+    assert operator.read_eprom.call_count == 0
+
+
+def test_a_failing_step_still_performs_its_fingerprint_read_back():
+    """A single-cycle failure (both runs disagreeing, so the write reports
+    `marginal`) keeps the real fingerprint read-back -- the diagnostic this
+    gate exists to preserve for anything that did not cleanly pass."""
+    operator = _mock_operator()
+    operator.write_eprom.side_effect = [True, False]
+    plan = _plan_with_steps(
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True)
+    )
+    run_plan(plan, operator, _REAL_DB, runs=2)
+
+    assert operator.read_eprom.call_count > 0
+
+
+def test_classify_fingerprint_still_returns_blank_contact_for_an_all_ff_perfect_compare():
+    """A bit-perfect all-0xFF compare has `bad == 0` too, but it must stay
+    `blank/contact`, never `match`: the `ff_ratio >= 0.98` test keeps its
+    position as the FIRST bucket in `classify_fingerprint`."""
+    fp = classify_fingerprint(b"\xff" * 4096, b"\xff" * 4096)
+
+    assert fp.classification == "blank/contact"
+
+
+def test_a_zero_length_write_region_synthesizes_a_match_with_no_read():
+    """`_synthesized_match_fingerprint(0)` must not raise and must still
+    report `match` -- a zero-length write region is a degenerate case the
+    cheap path has to handle exactly like any other."""
+    fp = _synthesized_match_fingerprint(0)
+
+    assert fp.total == 0
+    assert fp.bad == 0
+    assert fp.bad_pct == 0.0
+    assert fp.classification == "match"
 
 
 def test_cycle_disagreement_still_reports_marginal():
@@ -1545,6 +1627,15 @@ def test_allow_single_run_admits_runs_1_and_reports_run_count_1():
     detector. This one proves the deliberate opt-in works and that the
     forfeit is RECORDED: `run_count == 1` is what every disclosure surface
     and `repeat_policy_tag` read to say so.
+
+    ONE `read_eprom` call, not two (Phase 177, PRUNE-01/PRUNE-02): the
+    single policy-governed read from `_dispatch_read` is the only call --
+    the write step's OWN cycle passed cleanly (a single run with nothing to
+    disagree with, and no prior cycle to have failed), so its fingerprint
+    is synthesized with no additional device I/O. The read-back has never
+    been part of the repeat policy and `--fast` does not remove it for a
+    step that FAILS; a passing `--fast` write now costs exactly what a
+    passing full-repeat write costs -- zero extra reads.
     """
     operator = _mock_operator()
     plan = _plan_with_steps(
@@ -1556,13 +1647,9 @@ def test_allow_single_run_admits_runs_1_and_reports_run_count_1():
     assert _result(results, OP_READ).run_count == 1
     assert _result(results, OP_WRITE).run_count == 1
     assert operator.write_eprom.call_count == 1
-    # TWO read_eprom calls, not one: `_dispatch_read` made the single
-    # policy-governed read, and `_dispatch_multi_run` made its own
-    # region-scoped read-back for the write step's `Fingerprint`. The
-    # read-back has never been part of the repeat policy and `--fast` does
-    # not remove it -- pinned here so a future change to either cannot be
-    # mistaken for the other.
-    assert operator.read_eprom.call_count == 2
+    assert _result(results, OP_WRITE).fingerprint is not None
+    assert _result(results, OP_WRITE).fingerprint.classification == "match"
+    assert operator.read_eprom.call_count == 1
 
 
 def test_allow_single_run_still_rejects_runs_below_1():
@@ -2704,32 +2791,27 @@ def test_devtest01_0x0d_all_ok_sweep_no_longer_tags_community_fail():
     all twelve steps (six shipped + six SDP-leg) is genuinely all-OK. The
     `VERDICT_BAD not in verdicts` assertion is UNCHANGED and still passes.
 
-    ⚠ SECOND, DEEPER MEASURED FINDING (not predicted by 134-CONTEXT.md/
-    134-PATTERNS.md, discovered while repairing this test): with the leg
-    now genuinely reachable end to end, a real all-OK run attaches an
-    `"indeterminate"`-classified `Fingerprint` on write-baseline-b,
-    write-baseline-a and write-restored (and write-inhibited too, when
-    OK) -- `classify_fingerprint` (D-03/D-04, Phase 108) has exactly four
-    buckets (blank/contact, address-line, transport, indeterminate) and NO
-    dedicated "perfect match" bucket, so a genuinely-equal read-back
-    (bad=0) always falls through to the `indeterminate` fallback.
-    `_dispatch_sdp_leg` attaches a Fingerprint "in every arm" (134-02's own
-    design, unchanged by this plan), so `build_db_diff`'s
-    `has_indeterminate_fingerprint` check (Phase 114 GRAD-01) now ALWAYS
-    trips true for a genuinely-successful ALLOW-chip SDP leg, routing
-    `ladder_state` to `_LADDER_NONE` ("") rather than
-    `_LADDER_COMMUNITY_REPORTED` -- this is a real, chip-content-
-    independent consequence of two already-shipped mechanisms meeting for
-    the first time, NOT an artifact of this fixture (no double could avoid
-    it without either faking a non-length-matching read-back, which would
-    make the leg itself report BAD, or editing `classify_fingerprint`/
-    `build_db_diff`, both outside this plan's `files_modified`). DEVTEST-01
-    's ORIGINAL claim (Phase 121) -- that a fabricated erase-NA no longer
-    poisons the ladder state to `community-fail` -- still holds and is
-    what the first assertion below proves; the stronger, incidental
-    "== community-reported" claim this test also made before this phase
-    is recorded here as MEASURED-SUPERSEDED, not silently dropped. See
-    134-03-SUMMARY.md for the full finding."""
+    ⚠ SECOND, DEEPER MEASURED FINDING, NOW SUPERSEDED AGAIN (Phase 177,
+    D-177-2/RK-174-05-p177-match-bucket-d4d6): v1.30 Phase 134 (plan 134-03)
+    measured that a genuinely-equal SDP-leg read-back (bad=0) fell through
+    `classify_fingerprint`'s then-four buckets to `indeterminate` (no
+    dedicated "perfect match" bucket existed), which tripped
+    `build_db_diff`'s `has_indeterminate_fingerprint` check (Phase 114
+    GRAD-01) and routed `ladder_state` to `_LADDER_NONE` ("") instead of
+    `_LADDER_COMMUNITY_REPORTED`. Phase 177 adds a `bad == 0 -> match`
+    bucket to `classify_fingerprint` (D-177-2), placed after the
+    `ff_ratio`/address-line tests so `blank/contact` stays unmoved. A
+    genuinely-equal SDP-leg read-back now classifies `match`, not
+    `indeterminate`, so `has_indeterminate_fingerprint` no longer trips for
+    a genuinely-successful ALLOW-chip run and `ladder_state` returns to
+    `_LADDER_COMMUNITY_REPORTED` -- the value this test asserted BEFORE
+    134-03's measured finding. DEVTEST-01's ORIGINAL claim (Phase 121) --
+    that a fabricated erase-NA no longer poisons the ladder state to
+    `community-fail` -- still holds and is what the first assertion below
+    proves; the intervening MEASURED-SUPERSEDED note from 134-03 is itself
+    now superseded, recorded here rather than silently dropped. See
+    177-01-SUMMARY.md and `MILESTONES.md`'s `RK-174-05` row for the
+    declared re-key this finding is measured against."""
     from firestarter.diagnostic_report import build_db_diff
 
     name = "AT28C256"
@@ -2742,13 +2824,7 @@ def test_devtest01_0x0d_all_ok_sweep_no_longer_tags_community_fail():
 
     db_diff = build_db_diff(name, _REAL_DB, results)
     assert db_diff.ladder_state != "community-fail"
-    # MEASURED-SUPERSEDED (v1.30 Phase 134, plan 134-03): see the finding
-    # in this test's docstring above -- the SDP leg's own "indeterminate"
-    # fingerprints (attached on a genuine match, 134-02's design) now
-    # route a real all-OK ALLOW-chip run to _LADDER_NONE, not
-    # _LADDER_COMMUNITY_REPORTED. This is the CORRECTLY-measured value,
-    # not a weakened assertion.
-    assert db_diff.ladder_state == ""
+    assert db_diff.ladder_state == "community-reported"
 
 
 # ---------------------------------------------------------------------------
