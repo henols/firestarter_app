@@ -279,7 +279,7 @@ def test_milestones_with_zero_rekey_rows_exits_one(tmp_path: Path) -> None:
     result = _run_checker(["--milestones", str(emptied)])
     assert result.returncode == 1, result.stdout + result.stderr
     assert "0 RK-174-" in result.stdout
-    assert "6 row(s)" in result.stdout
+    assert f"{len(LEDGER)} row(s)" in result.stdout
 
 
 def test_checker_error_output_is_order_stable(tmp_path: Path) -> None:
@@ -294,11 +294,18 @@ def test_checker_error_output_is_order_stable(tmp_path: Path) -> None:
     assert first.stdout == second.stdout
 
 
-def test_ledger_has_exactly_six_pre_seeded_rows() -> None:
-    assert len(LEDGER) == 6, (
-        f"LEDGER has {len(LEDGER)} rows, expected the six rows Phase 174 "
-        "pre-seeded (D-12) -- a silent deletion or an unreviewed addition "
-        "both change this count"
+def test_ledger_has_exactly_eight_rows_after_the_177_declaration() -> None:
+    """Phase 174 pre-seeded six rows (D-12); Phase 177 appended
+    `RK-174-07-p177-w27e257-all-ok-synthesized-match` (a shape Phase 174
+    owned no row for) and `RK-174-09-p178-status-axis-must-not-rekey-
+    reanchored` (re-anchoring `RK-174-06` at its post-177 value), for
+    eight total. A silent deletion or an unreviewed addition both change
+    this count."""
+    assert len(LEDGER) == 8, (
+        f"LEDGER has {len(LEDGER)} rows, expected the eight rows standing "
+        "after Phase 174's six pre-seeded rows (D-12) plus Phase 177's two "
+        "appended rows -- a silent deletion or an unreviewed addition both "
+        "change this count"
     )
 
 
@@ -334,9 +341,8 @@ def test_no_declared_row_has_after_hash_equal_to_before_hash() -> None:
 
 def test_ledger_sweep_is_well_defined_on_a_single_row_tuple() -> None:
     """Structural legality of a one-row ledger (D-09): the same sweep every
-    other test in this module applies to the full six-row `LEDGER`,
-    applied here to a LOCALLY-constructed single-row tuple, never to
-    `LEDGER` itself."""
+    other test in this module applies to the full `LEDGER`, applied here
+    to a LOCALLY-constructed single-row tuple, never to `LEDGER` itself."""
     from firestarter.diagnostic_report import dedup_fingerprint
 
     single = (LEDGER[0],)
@@ -351,12 +357,20 @@ def test_ledger_sweep_is_well_defined_on_a_single_row_tuple() -> None:
 
 def test_undeclared_after_hash_routes_to_before_hash_and_never_abstains() -> None:
     """An `after_hash` of `None` is the UN-DECLARED case, not a missing
-    value -- it asserts against `before_hash` and never abstains. Every
-    row in the pre-seeded ledger is undeclared today, so this sweeps all
-    six rows rather than constructing a synthetic one."""
+    value -- it asserts against `before_hash` and never abstains. Updated
+    when Phase 177 first declared three rows (`RK-174-01`, `RK-174-05`,
+    `RK-174-06`): narrowed to sweep only the still-undeclared subset
+    rather than the full `LEDGER`, with a guard so an empty subset fails
+    rather than passing vacuously -- the same failure mode a bare
+    `assert all(...)` over an empty sequence would otherwise hide."""
     from firestarter.diagnostic_report import dedup_fingerprint
 
-    for shape_id, before_hash, after_hash, ledger_id in LEDGER:
+    undeclared = [row for row in LEDGER if row[2] is None]
+    assert undeclared, (
+        "no undeclared row remains in LEDGER -- this test's sweep would "
+        "pass vacuously; every row got declared, or the ledger emptied"
+    )
+    for shape_id, before_hash, after_hash, ledger_id in undeclared:
         assert after_hash is None, (
             f"{ledger_id} is declared; this test only covers the "
             "undeclared case -- update it when a row is first declared"

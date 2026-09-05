@@ -26,11 +26,19 @@ Row provenance:
 
   RK-174-01-p177-readback-gating -- shape_id `sst27sf512-six-step`. Owner:
   Phase 177. Mechanism: gating the fingerprint read-back on step failure
-  empties the `write`/`verify` steps' `indeterminate` fingerprint
-  classification. Measured PROJECTED `after_hash` (not yet declared):
-  `60a031573aab`. A projected value belongs here in prose and in
-  `MILESTONES.md`'s prose, never in the `after_hash` column -- a filled
-  `after_hash` means "declared", and Phase 177 has not landed.
+  moves the `write`/`verify` steps' `indeterminate` fingerprint
+  classification to `match`. DECLARED this phase: `after_hash`
+  `7fb88e0b07d6`, measured in `firestarter_app/.venv311` off the re-pointed
+  `_build_sst27sf512_six_step` builder. The value this row's provenance
+  previously carried as the projected `after_hash`, `60a031573aab`, is
+  FALSIFIED and kept here as the superseded claim rather than deleted:
+  that projection modelled the fingerprint being DROPPED entirely on a
+  pass (`step_specs` classification `None`), which PRUNE-03 forbids -- a
+  passing write/verify step always reports a `match` fingerprint, real or
+  synthesized, never an absent one. `evidence/177-01-red-capture.txt`'s
+  `collapse_finding` measured that the dropped-fingerprint projection
+  collapses onto this row's own re-pointed value instead of producing a
+  genuinely distinct shape, which is what falsified it.
 
   RK-174-02-rejected-sdp-step-pruning -- shape_id `m27c512-full-all-ok`.
   Owner: `rejected` -- dropping unsupported SDP steps from `Plan.steps` is
@@ -60,22 +68,72 @@ Row provenance:
   fingerprint classifier, so an all-OK AT28C256 run's `indeterminate`
   classifications become `match` and the run becomes promotable. This is
   the deliberate one-time re-key REQUIREMENTS.md already declares, and
-  this is the row it lands on.
+  this is the row it lands on. DECLARED this phase: `after_hash`
+  `050ad3830704`, measured in `firestarter_app/.venv311` off the
+  unmodified real-path builder -- the classifier's own new bucket is the
+  whole mechanism, no builder edit was needed.
 
   RK-174-06-p178-status-axis-must-not-rekey -- shape_id
   `sst27sf512-full-all-ok`. Owner: Phase 178. The inverse of every row
   above: ATTR-04 requires the status axis to be additive and excluded from
   the hash, and ATTR-01's acceptance criterion is that this phase's oracle
   reports zero unexpected hash changes when the status axis is exercised.
-  An `after_hash` of `None` on a row Phase 178 owns IS the assertion
-  "Phase 178 declared no re-key here" -- the same shape D-09's un-declared
-  case already gives, used deliberately here rather than incidentally.
-  Without this row, ATTR-04 would have nothing to confirm against, which
-  is the reason D-05 rejected the roadmap's floor of four rows.
+  DECLARED this phase, NOT by Phase 178: `after_hash` `14d306256076`,
+  because Phase 177's own match-bucket mechanism moved this shape's
+  fingerprint too (it is a non-SDP all-OK run reaching the classifier's
+  new bucket exactly like `at28c256-full-all-ok-sdp` above) and
+  `test_every_ledger_row_shape_id_resolves_and_recomputes` asserts an
+  undeclared row's `before_hash` still reproduces from a fresh build --
+  leaving this row undeclared after its shape moved would make that
+  assertion permanently false. This does NOT satisfy ATTR-04: Phase 177's
+  re-key is a DIFFERENT mechanism (the classifier's `match` bucket) from
+  the one ATTR-04 exists to gate (the status axis), so Phase 178 still has
+  nothing to confirm against at the OLD anchor. `RK-174-09-p178-status-
+  axis-must-not-rekey-reanchored` (below) re-anchors ATTR-04's assertion
+  at this row's new `after_hash`, so Phase 178 measures from the value its
+  own mechanism must not move, not from a value Phase 177 already moved
+  for an unrelated reason.
+
+  RK-174-07-p177-w27e257-all-ok-synthesized-match -- shape_id
+  `w27e257-full-all-ok`. Owner: Phase 177. Not seeded by Phase 174 (no row
+  existed for this shape). Mechanism: identical to RK-174-05 -- a non-SDP
+  all-OK run reaching the classifier's new `match` bucket. Appended,
+  never inserted out of ledger_id order, per D-09. DECLARED this phase:
+  `after_hash` `3a9f95aba65e`, measured in `firestarter_app/.venv311`.
+
+  RK-174-09-p178-status-axis-must-not-rekey-reanchored -- shape_id
+  `sst27sf512-full-all-ok`. Owner: Phase 178. Re-anchors
+  `RK-174-06-p178-status-axis-must-not-rekey`'s ATTR-04 assertion at the
+  value Phase 177's fingerprint re-key left it at (`14d306256076`), since
+  Phase 177 moved the baseline that row was anchored to for a reason
+  unrelated to the status axis. `before_hash` is `RK-174-06`'s newly
+  declared `after_hash`, not its original one -- Phase 178 measures
+  whether exercising the status axis moves the fingerprint FROM HERE, the
+  post-177 value, never from `RK-174-06`'s superseded pre-177 anchor.
+  `after_hash` stays `None` until Phase 178 lands its own confirmation
+  that no further re-key occurred. Two rows legitimately naming the same
+  `shape_id` is expressly permitted -- `test_shape_id_ledger_id_pairs_are_
+  unique`'s own docstring states a shape can be re-keyed twice by two
+  different phases, and only the `ledger_id` must stay unique, which this
+  row's own distinct id satisfies.
+
+`gh47-sst27sf512-pass`'s filed hash (`f9dbc31dcd27`) is named nowhere in
+this ledger and deliberately gets no row: D-177-6 rules it stays inside
+D-177-3's stated re-pointing scope (the two `sst27sf512-six-step*`
+builders only), its hand-specified `step_specs` are untouched by this
+phase, and its `FROZEN_HASHES` entry does not move -- so there is no
+re-key to declare. `177-REKEY-MAPPING.md` and `MILESTONES.md`'s
+corrections table record the falsified `1f812aae49ca` projection for it
+as a superseded claim, not as a declared row here.
 """
 
 LEDGER = (
-    ("sst27sf512-six-step", "4dc282a5d596", None, "RK-174-01-p177-readback-gating"),
+    (
+        "sst27sf512-six-step",
+        "4dc282a5d596",
+        "7fb88e0b07d6",
+        "RK-174-01-p177-readback-gating",
+    ),
     (
         "m27c512-full-all-ok",
         "6d3afbc52315",
@@ -97,13 +155,25 @@ LEDGER = (
     (
         "at28c256-full-all-ok-sdp",
         "52fb759dc48c",
-        None,
+        "050ad3830704",
         "RK-174-05-p177-match-bucket-d4d6",
     ),
     (
         "sst27sf512-full-all-ok",
         "4b3e52cab987",
-        None,
+        "14d306256076",
         "RK-174-06-p178-status-axis-must-not-rekey",
+    ),
+    (
+        "w27e257-full-all-ok",
+        "22908e2954c3",
+        "3a9f95aba65e",
+        "RK-174-07-p177-w27e257-all-ok-synthesized-match",
+    ),
+    (
+        "sst27sf512-full-all-ok",
+        "14d306256076",
+        None,
+        "RK-174-09-p178-status-axis-must-not-rekey-reanchored",
     ),
 )
