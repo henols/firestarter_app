@@ -177,17 +177,17 @@ def test_duplicate_milestones_row_for_one_ledger_id_fails_closed(
     assert "RK-174-01-p177-readback-gating" in result.stdout + result.stderr
 
 
-def _mutated_row_01_milestones(tmp_path: Path, cells: list[str]) -> Path:
-    """Rebuild row 01's line cell-by-cell off the REAL MILESTONES.md table,
-    never by hand-typing a replacement row, so the mutation stays anchored
-    to whatever the real row's `change` prose currently reads."""
+def _mutated_row_milestones(
+    tmp_path: Path, cells: list[str], ledger_id: str = "RK-174-01-p177-readback-gating"
+) -> Path:
+    """Rebuild `ledger_id`'s line cell-by-cell off the REAL MILESTONES.md
+    table, never by hand-typing a replacement row, so the mutation stays
+    anchored to whatever the real row's `change` prose currently reads.
+    Defaults to row 01 for the legs that mutate a structural cell
+    (shape_id, before_hash) regardless of declared state."""
     real_milestones = _REPO_ROOT / ".planning" / "MILESTONES.md"
     src = real_milestones.read_text(encoding="utf-8")
-    row = next(
-        line
-        for line in src.splitlines()
-        if line.startswith("| RK-174-01-p177-readback-gating |")
-    )
+    row = next(line for line in src.splitlines() if line.startswith(f"| {ledger_id} |"))
     mutated = tmp_path / "mutated.md"
     mutated.write_text(
         src.replace(row, "| " + " | ".join(cells) + " |", 1), encoding="utf-8"
@@ -195,14 +195,10 @@ def _mutated_row_01_milestones(tmp_path: Path, cells: list[str]) -> Path:
     return mutated
 
 
-def _row_01_cells() -> list[str]:
+def _row_cells(ledger_id: str = "RK-174-01-p177-readback-gating") -> list[str]:
     real_milestones = _REPO_ROOT / ".planning" / "MILESTONES.md"
     src = real_milestones.read_text(encoding="utf-8")
-    row = next(
-        line
-        for line in src.splitlines()
-        if line.startswith("| RK-174-01-p177-readback-gating |")
-    )
+    row = next(line for line in src.splitlines() if line.startswith(f"| {ledger_id} |"))
     return [cell.strip() for cell in row.strip().strip("|").split("|")]
 
 
@@ -210,8 +206,8 @@ def test_corrupted_undeclared_row_shape_id_exits_one(tmp_path: Path) -> None:
     """WR-01 / CR-02 leg (b): row 01's shape_id corrupted to a value that
     resolves to no builder must fail closed, naming both the corrupted
     value and the ledger's real shape_id."""
-    c = _row_01_cells()
-    mutated = _mutated_row_01_milestones(
+    c = _row_cells()
+    mutated = _mutated_row_milestones(
         tmp_path, [c[0], "TOTALLY-WRONG-SHAPE", c[2], c[3], c[4], c[5], c[6]]
     )
     result = _run_checker(["--milestones", str(mutated)])
@@ -224,8 +220,8 @@ def test_corrupted_undeclared_row_before_hash_exits_one(tmp_path: Path) -> None:
     """WR-01 / CR-02 leg (b): row 01's before cell corrupted to an
     all-zero hash must fail closed, naming both the corrupted and the real
     before_hash."""
-    c = _row_01_cells()
-    mutated = _mutated_row_01_milestones(
+    c = _row_cells()
+    mutated = _mutated_row_milestones(
         tmp_path, [c[0], c[1], c[2], c[3], "000000000000", c[5], c[6]]
     )
     result = _run_checker(["--milestones", str(mutated)])
@@ -237,8 +233,8 @@ def test_corrupted_undeclared_row_before_hash_exits_one(tmp_path: Path) -> None:
 def test_uppercased_before_hash_exits_one(tmp_path: Path) -> None:
     """Comparison is case-sensitive and exact, not folded: uppercasing the
     real before_hash must still fail closed."""
-    c = _row_01_cells()
-    mutated = _mutated_row_01_milestones(
+    c = _row_cells()
+    mutated = _mutated_row_milestones(
         tmp_path, [c[0], c[1], c[2], c[3], c[4].upper(), c[5], c[6]]
     )
     result = _run_checker(["--milestones", str(mutated)])
@@ -255,10 +251,14 @@ def test_after_cell_that_is_not_the_undeclared_literal_exits_one(
 ) -> None:
     """The boundary one character either side of twelve hex characters, and
     the empty-cell edge, are all rejected: only the exact literal
-    `(undeclared)` is legal for an undeclared row's after cell."""
-    c = _row_01_cells()
-    mutated = _mutated_row_01_milestones(
-        tmp_path, [c[0], c[1], c[2], c[3], c[4], after_cell, c[6]]
+    `(undeclared)` is legal for an undeclared row's after cell. Targets
+    `RK-174-02-rejected-sdp-step-pruning` -- still undeclared after Phase
+    177 declared RK-174-01, RK-174-05 and RK-174-06 -- rather than row 01,
+    which this leg can no longer use now that it is declared."""
+    ledger_id = "RK-174-02-rejected-sdp-step-pruning"
+    c = _row_cells(ledger_id)
+    mutated = _mutated_row_milestones(
+        tmp_path, [c[0], c[1], c[2], c[3], c[4], after_cell, c[6]], ledger_id
     )
     result = _run_checker(["--milestones", str(mutated)])
     assert result.returncode == 1, result.stdout + result.stderr
@@ -285,8 +285,8 @@ def test_milestones_with_zero_rekey_rows_exits_one(tmp_path: Path) -> None:
 def test_checker_error_output_is_order_stable(tmp_path: Path) -> None:
     """The `ordering` edge: two consecutive runs of the fixed checker over
     byte-identical inputs produce byte-identical output."""
-    c = _row_01_cells()
-    mutated = _mutated_row_01_milestones(
+    c = _row_cells()
+    mutated = _mutated_row_milestones(
         tmp_path, [c[0], "TOTALLY-WRONG-SHAPE", c[2], c[3], c[4], c[5], c[6]]
     )
     first = _run_checker(["--milestones", str(mutated)])
