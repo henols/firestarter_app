@@ -189,8 +189,8 @@ _STEPS_ELEMENT_0_KEYS = [
 
 _TRACER_SHAPE_ID = "sst27sf512-six-step"
 _TRACER_CANONICAL = (
-    "SST27SF512|7|id=OK:|read=OK:|write=OK:indeterminate|"
-    "verify=OK:indeterminate|erase=OK:|blank-check=OK:"
+    "SST27SF512|7|id=OK:|read=OK:|write=OK:match|"
+    "verify=OK:match|erase=OK:|blank-check=OK:"
 )
 
 """The literal disposition strings, per `firestarter/diagnostic_report.py`'s
@@ -208,13 +208,19 @@ _DISPOSITION_INCONCLUSIVE_LITERAL = "inconclusive -- needs N>=2 agreement (advis
 _DISPOSITION_NO_CHANGE_LITERAL = "no change suggested (advisory)"
 
 """GATE-03/D-08: `build_db_diff`'s (proposed_disposition, ladder_state) pair
-for every one of the sixteen frozen shapes, measured this session. All
-four `build_db_diff` arms appear -- the coverage sentinel below asserts
-exactly four distinct pairs, so neither a shape addition that widens the
-table nor a deletion that empties an arm can pass silently (D-08, D-10's
-element-wise idiom applied to arm coverage)."""
+for every one of the seventeen frozen shapes, re-measured after Phase
+177's D-4/D-6 match-bucket-and-read-back-gating flip. All four
+`build_db_diff` arms appear -- the coverage sentinel below asserts exactly
+four distinct pairs, so neither a shape addition that widens the table
+nor a deletion that empties an arm can pass silently (D-08, D-10's
+element-wise idiom applied to arm coverage). The flip moves
+`at28c256-full-all-ok-sdp` and `sst27sf512-six-step` off the INCONCLUSIVE
+arm onto the CANDIDATE arm; the re-pointed
+`sst27sf512-six-step-readback-gated` (D-177-3) re-populates INCONCLUSIVE
+alongside the still-unmoved `gh47-sst27sf512-pass`, so the arm is never
+empty."""
 LADDER_PINS: dict[str, tuple[str, str]] = {
-    "at28c256-full-all-ok-sdp": (_DISPOSITION_INCONCLUSIVE_LITERAL, ""),
+    "at28c256-full-all-ok-sdp": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
     "gh20-at28c256-fail": (_DISPOSITION_COMMUNITY_FAIL_LITERAL, "community-fail"),
     "gh23-w27e257-fail": (_DISPOSITION_COMMUNITY_FAIL_LITERAL, "community-fail"),
     "gh28-m27c512-fail": (_DISPOSITION_COMMUNITY_FAIL_LITERAL, "community-fail"),
@@ -233,12 +239,13 @@ LADDER_PINS: dict[str, tuple[str, str]] = {
         "community-reported",
     ),
     "m27c512-full-runs-1": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
-    "sst27sf512-full-all-ok": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
-    "sst27sf512-six-step": (_DISPOSITION_INCONCLUSIVE_LITERAL, ""),
-    "sst27sf512-six-step-readback-gated": (
+    "prune03-synthesized-fingerprint-match": (
         _DISPOSITION_CANDIDATE_LITERAL,
         "community-reported",
     ),
+    "sst27sf512-full-all-ok": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
+    "sst27sf512-six-step": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
+    "sst27sf512-six-step-readback-gated": (_DISPOSITION_INCONCLUSIVE_LITERAL, ""),
     "synthetic-arm4-empty-results": (_DISPOSITION_NO_CHANGE_LITERAL, ""),
     "synthetic-arm4-no-ok": (_DISPOSITION_NO_CHANGE_LITERAL, ""),
     "w27e257-full-all-ok": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
@@ -320,15 +327,22 @@ def test_dedup_fingerprint_moves_one_step_either_side_of_the_frozen_shape() -> N
 
 
 def test_build_db_diff_ladder_pin_for_tracer_shape() -> None:
+    """Post-Phase-177 arm: D-4/D-6's match bucket moves the tracer's own
+    `write`/`verify` classification from `indeterminate` to `match`
+    (`RK-174-01-p177-readback-gating`), which moves it off the
+    INCONCLUSIVE arm onto CANDIDATE. The paired
+    `sst27sf512-six-step-readback-gated` shape (D-177-3) now carries the
+    INCONCLUSIVE pin this test asserted before the re-key."""
     from firestarter.database import EpromDatabase
-    from firestarter.diagnostic_report import _DISPOSITION_INCONCLUSIVE, build_db_diff
+    from firestarter.diagnostic_report import _DISPOSITION_CANDIDATE, build_db_diff
 
     db = EpromDatabase(skip_local_override=True)
     report = build_shape(_TRACER_SHAPE_ID)
     diff = build_db_diff(report.auto_capture.chip, db, report.results)
-    assert diff.proposed_disposition == _DISPOSITION_INCONCLUSIVE
+    assert diff.proposed_disposition == _DISPOSITION_CANDIDATE
     assert (
-        diff.proposed_disposition == "inconclusive -- needs N>=2 agreement (advisory)"
+        diff.proposed_disposition
+        == "suggests: candidate for community-reported (advisory)"
     )
 
 
@@ -532,6 +546,7 @@ _PINNED_SHAPE_ID_SET = [
     "m27c512-full-canonical-name",
     "m27c512-full-comma-joined-name",
     "m27c512-full-runs-1",
+    "prune03-synthesized-fingerprint-match",
     "sst27sf512-full-all-ok",
     "sst27sf512-six-step",
     "sst27sf512-six-step-readback-gated",
@@ -638,9 +653,9 @@ def test_composing_a_db_diff_never_leaks_onto_a_cached_build_shape(
     `db_diff is None`-on-a-bare-build invariant. The ordering is the whole
     point: both composing call sites run FIRST, then a bare build is
     inspected, which is exactly the sequence that previously masked the bug
-    behind test ordering. Swept over all sixteen shape ids rather than the
-    six currently cached, so the leg cannot go stale if a cache decorator is
-    added to or removed from a builder."""
+    behind test ordering. Swept over every registered shape id rather than
+    the six currently cached, so the leg cannot go stale if a cache
+    decorator is added to or removed from a builder."""
     from tools.snapshot_report_shapes import render_shape
 
     render_shape(shape_id)

@@ -17,10 +17,10 @@
   },
   "db_diff": {
     "current_support_status": "supported",
-    "ladder_state": "community-reported",
-    "proposed_disposition": "suggests: candidate for community-reported (advisory)"
+    "ladder_state": "",
+    "proposed_disposition": "inconclusive -- needs N>=2 agreement (advisory)"
   },
-  "dedup_fingerprint": "60a031573aab",
+  "dedup_fingerprint": "ff974e416dca",
   "generated": "1970-01-01T00:00:00Z",
   "is_submittable": true,
   "schema_version": "1.7",
@@ -59,11 +59,11 @@
     {
       "duration_s": null,
       "error_code": null,
-      "fingerprint": null,
+      "fingerprint": "indeterminate",
       "op": "write",
       "reason": "",
       "run_count": 0,
-      "verdict": "OK",
+      "verdict": "marginal",
       "write_bits_cleared": null,
       "write_bits_retained": null,
       "write_coverage": null,
@@ -74,11 +74,11 @@
     {
       "duration_s": null,
       "error_code": null,
-      "fingerprint": null,
+      "fingerprint": "indeterminate",
       "op": "verify",
       "reason": "",
       "run_count": 0,
-      "verdict": "OK",
+      "verdict": "marginal",
       "write_bits_cleared": null,
       "write_bits_retained": null,
       "write_coverage": null,

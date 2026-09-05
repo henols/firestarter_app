@@ -11,6 +11,7 @@
     "m27c512-full-canonical-name",
     "m27c512-full-comma-joined-name",
     "m27c512-full-runs-1",
+    "prune03-synthesized-fingerprint-match",
     "sst27sf512-full-all-ok",
     "sst27sf512-six-step",
     "sst27sf512-six-step-readback-gated",

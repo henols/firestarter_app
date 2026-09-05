@@ -17,10 +17,10 @@
   },
   "db_diff": {
     "current_support_status": "supported",
-    "ladder_state": "",
-    "proposed_disposition": "inconclusive -- needs N>=2 agreement (advisory)"
+    "ladder_state": "community-reported",
+    "proposed_disposition": "suggests: candidate for community-reported (advisory)"
   },
-  "dedup_fingerprint": "4dc282a5d596",
+  "dedup_fingerprint": "7fb88e0b07d6",
   "generated": "1970-01-01T00:00:00Z",
   "is_submittable": true,
   "schema_version": "1.7",
@@ -59,7 +59,7 @@
     {
       "duration_s": null,
       "error_code": null,
-      "fingerprint": "indeterminate",
+      "fingerprint": "match",
       "op": "write",
       "reason": "",
       "run_count": 0,
@@ -74,7 +74,7 @@
     {
       "duration_s": null,
       "error_code": null,
-      "fingerprint": "indeterminate",
+      "fingerprint": "match",
       "op": "verify",
       "reason": "",
       "run_count": 0,

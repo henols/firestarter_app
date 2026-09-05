@@ -19,13 +19,17 @@ match any real `run_plan` output for this chip. It pins the hash FUNCTION
 itself, immune to `chip_database.json` regeneration, at the frozen literal
 `4dc282a5d596`.
 
-`RESERVED_SHAPE_IDS` claims three `shape_id` names ahead of the phases that
-will freeze them -- `prune03-synthesized-fingerprint-match` (Phase 177),
-`attr01-status-axis-transport-fault` (Phase 178), `uv-slot-write-pass`
-(Phase 179) -- without giving any of them a hash yet. The module-level
-assertion below keeps that reservation from ever silently colliding with a
-frozen `shape_id`; D-10's completeness pin over `SHAPE_IDS` stays exact
-because a reserved name never enters that set.
+`RESERVED_SHAPE_IDS` claims `shape_id` names ahead of the phases that will
+freeze them -- `attr01-status-axis-transport-fault` (Phase 178),
+`uv-slot-write-pass` (Phase 179) -- without giving either of them a hash
+yet. `prune03-synthesized-fingerprint-match` (Phase 177) was the third
+reserved name; it is now registered below (in `_BUILDERS`, `FROZEN_HASHES`,
+`LADDER_PINS` and `tests/fixtures/shape_ids.json`) and removed from this
+set, per this module's own rule that a reserved name never enters
+`SHAPE_IDS`. The module-level assertion below keeps the remaining
+reservation from ever silently colliding with a frozen `shape_id`; D-10's
+completeness pin over `SHAPE_IDS` stays exact because a reserved name
+never enters that set.
 
 `_REAL_DB` is `EpromDatabase(skip_local_override=True)`: without
 `skip_local_override=True`, a developer's own `~/.firestarter/database.json`
@@ -177,17 +181,24 @@ def build_shape_from_step_specs(
 
 
 def _build_sst27sf512_six_step() -> DiagnosticReport:
-    """The hand-specified tracer shape (D-02 table 1). See the module
-    docstring for its recovered canonical pre-image and why it is not
-    `derive_plan`-derived."""
+    """The hand-specified tracer shape (D-02 table 1), RE-POINTED by
+    `RK-174-01-p177-readback-gating` (D-177-3 Option A): a passing write can
+    no longer produce `indeterminate` after PRUNE-03's evidence-gated
+    read-back lands (the step's own outcome is the evidence; nothing
+    disagrees, so its fingerprint is synthesized `match`, never a device
+    read result). The pre-177 canonical pre-image (`...write=OK:indeterminate|
+    verify=OK:indeterminate...`) is superseded; the declared `after_hash` in
+    `tests/fixtures/rekey_ledger.py` is measured off THIS step vector, never
+    transcribed. Still not `derive_plan`-derived -- see the module docstring
+    for why."""
     return build_shape_from_step_specs(
         chip="SST27SF512",
         protocol="7",
         step_specs=[
             ("id", "OK", None, ""),
             ("read", "OK", None, ""),
-            ("write", "OK", "indeterminate", ""),
-            ("verify", "OK", "indeterminate", ""),
+            ("write", "OK", "match", ""),
+            ("verify", "OK", "match", ""),
             ("erase", "OK", None, ""),
             ("blank-check", "OK", None, ""),
         ],
@@ -195,23 +206,31 @@ def _build_sst27sf512_six_step() -> DiagnosticReport:
 
 
 def _build_sst27sf512_six_step_readback_gated() -> DiagnosticReport:
-    """The PROJECTED after-shape of `RK-174-01-p177-readback-gating`
-    (`tests/fixtures/rekey_ledger.py`) -- Phase 177 gates the fingerprint
-    read-back on step failure, which empties the write/verify steps'
-    `indeterminate` classification. Hand-specified for the same reason as
-    the tracer shape it is paired with: freezing both halves of the pair
-    means Phase 177's target is pinned from both sides, so a change that
-    lands on neither value is as visible as one that lands on the wrong
-    one. This is NOT yet the declared after_hash -- the ledger row's
-    `after_hash` stays `None` until Phase 177 actually lands (D-11)."""
+    """The gate's OTHER branch (D-177-3 Option A), re-pointed after the
+    inherited fingerprint-dropped projection was measured falsified:
+    applying PRUNE-03's rule to that projection's `None`-classified write/
+    verify steps converged on the SAME value as the re-pointed tracer
+    above (`7fb88e0b07d6`), collapsing this shape onto its own pair rather
+    than pinning a genuinely distinct one (see `evidence/177-01-red-capture.txt`'s
+    `collapse_finding` and `MILESTONES.md`'s corrections table). This shape
+    now pins the branch PRUNE-03 does NOT prune away: a step whose own
+    cycle FAILED (verdict `marginal`, never `BAD` -- `BAD` routes
+    `build_db_diff` to the community-fail arm, not the inconclusive one)
+    keeps its real device read-back and its real `indeterminate`
+    classification, because the evidence-gated read-back only elides the
+    read for a step nothing disagrees with. Paired with the tracer above
+    for the same reason as before: freezing both halves means a change
+    landing on neither value is as visible as one landing on the wrong
+    one, and this shape re-populates `LADDER_PINS`' INCONCLUSIVE arm that
+    the tracer's own re-point vacates."""
     return build_shape_from_step_specs(
         chip="SST27SF512",
         protocol="7",
         step_specs=[
             ("id", "OK", None, ""),
             ("read", "OK", None, ""),
-            ("write", "OK", None, ""),
-            ("verify", "OK", None, ""),
+            ("write", "marginal", "indeterminate", ""),
+            ("verify", "marginal", "indeterminate", ""),
             ("erase", "OK", None, ""),
             ("blank-check", "OK", None, ""),
         ],
@@ -459,7 +478,7 @@ def _build_real_path_report(
     arbitrary placeholder id (harmless for at28c256, whose `chip-id` is
     the falsy `0`) would silently turn every OTHER chip's `id` step BAD
     and cascade into every destructive step reading SKIPPED under the
-    gate -- none of the sixteen shapes wants a deliberate id mismatch."""
+    gate -- none of the registered shapes wants a deliberate id mismatch."""
     plan = derive_plan(chip, _REAL_DB, write_scope=write_scope)
     full = _REAL_DB.get_eprom(chip)
     expected_chip_id = (full or {}).get("chip-id")
@@ -596,6 +615,29 @@ def _build_w27e257_full_all_ok() -> DiagnosticReport:
     )
 
 
+def _build_prune03_synthesized_fingerprint_match() -> DiagnosticReport:
+    """The shape D-04 reserved this name for (Phase 177). Pins the exact
+    lowercase `match` literal inside `dedup_fingerprint`'s pre-image
+    grammar directly, independent of the engine that produces it, so a
+    later phase that respells the bucket (a typo, a case change, a rename)
+    reddens here first rather than only inside `chip_test.py`'s own
+    behaviour tests. Hand-specified with a chip/protocol pair no other
+    registered shape uses (`PRUNE03-SYNTH-CHIP`/`0`), so this hash cannot
+    collide with any real-path or hand-specified builder above."""
+    return build_shape_from_step_specs(
+        chip="PRUNE03-SYNTH-CHIP",
+        protocol="0",
+        step_specs=[
+            ("id", "OK", None, ""),
+            ("read", "OK", None, ""),
+            ("write", "OK", "match", ""),
+            ("verify", "OK", "match", ""),
+            ("erase", "OK", None, ""),
+            ("blank-check", "OK", None, ""),
+        ],
+    )
+
+
 _BUILDERS: dict[str, Callable[[], DiagnosticReport]] = {
     "sst27sf512-six-step": _build_sst27sf512_six_step,
     "sst27sf512-six-step-readback-gated": _build_sst27sf512_six_step_readback_gated,
@@ -613,13 +655,14 @@ _BUILDERS: dict[str, Callable[[], DiagnosticReport]] = {
     "at28c256-full-all-ok-sdp": _build_at28c256_full_all_ok_sdp,
     "sst27sf512-full-all-ok": _build_sst27sf512_full_all_ok,
     "w27e257-full-all-ok": _build_w27e257_full_all_ok,
+    "prune03-synthesized-fingerprint-match": _build_prune03_synthesized_fingerprint_match,
 }
 
 SHAPE_IDS: tuple[str, ...] = tuple(sorted(_BUILDERS))
 
 FROZEN_HASHES: dict[str, str] = {
-    "sst27sf512-six-step": "4dc282a5d596",
-    "sst27sf512-six-step-readback-gated": "60a031573aab",
+    "sst27sf512-six-step": "7fb88e0b07d6",
+    "sst27sf512-six-step-readback-gated": "ff974e416dca",
     "gh47-sst27sf512-pass": "f9dbc31dcd27",
     "gh28-m27c512-fail": "31547956e56b",
     "gh20-at28c256-fail": "00e121446ceb",
@@ -631,14 +674,14 @@ FROZEN_HASHES: dict[str, str] = {
     "m27c512-full-canonical-name": "776846bf2dc8",
     "m27c512-full-comma-joined-name": "37ad34d39a19",
     "m27c512-full-runs-1": "e4838f7bb1d3",
-    "at28c256-full-all-ok-sdp": "52fb759dc48c",
-    "sst27sf512-full-all-ok": "4b3e52cab987",
-    "w27e257-full-all-ok": "22908e2954c3",
+    "at28c256-full-all-ok-sdp": "050ad3830704",
+    "sst27sf512-full-all-ok": "14d306256076",
+    "w27e257-full-all-ok": "3a9f95aba65e",
+    "prune03-synthesized-fingerprint-match": "3b83a55efb3a",
 }
 
 RESERVED_SHAPE_IDS: frozenset[str] = frozenset(
     {
-        "prune03-synthesized-fingerprint-match",
         "attr01-status-axis-transport-fault",
         "uv-slot-write-pass",
     }
