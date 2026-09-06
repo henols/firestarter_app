@@ -971,10 +971,6 @@ class DiagnosticReport:
         # `n_ran` -- so the number of step rows here is exactly the banner's
         # N by construction, never a second hand-maintained notion of "ran".
         #
-        # Safe to hide: `NA` and `SKIPPED` both map to exit code 0
-        # (`cli_handlers._VERDICT_EXIT_CODES`), so no nonzero-exit cause can
-        # hide here. The one non-verdict exit term, the not-run SDP
-        # oracle floor, stays legible in the `sdp_hold_state` row above.
         # Every step keeps its full entry in `to_dict()["steps"]`, so the
         # JSON, the markdown table and the filed issue body are unchanged.
         for step_row in d["steps"]:

@@ -944,7 +944,7 @@ package is installed and no new runtime dependency of any kind is added
 (D-03). `STATUS_*` is a run-validity axis, held separately from the
 `VERDICT_*` chip-verdict axis immediately above, and is disambiguated from
 the database's own `support_status` field (the one colliding read site is
-`diagnostic_report.py:364`) in the carrying field's docstring, never in
+`diagnostic_report.py:378`) in the carrying field's docstring, never in
 its own name (D-02). These are report VALUES, not op strings -- they
 carry no `OP_` prefix and must never join `_ALL_OPS`/`_MULTIWORD_OP_VALUES`
 in tests/test_op_registration_parity.py; a later reader must not
@@ -1094,7 +1094,7 @@ class StepResult:
     `status` is one of COMPLETE/ERROR/SKIP -- the run-validity axis, held
     separately from the `verdict` chip-verdict axis above, and distinct
     from the database's own `support_status` field (the one colliding read
-    site is `diagnostic_report.py:364`). Deliberately NOT part of
+    site is `diagnostic_report.py:378`). Deliberately NOT part of
     `dedup_fingerprint`, which excludes every volatile field so two runs of
     the same chip still dedup.
     """
