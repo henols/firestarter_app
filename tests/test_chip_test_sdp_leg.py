@@ -170,6 +170,7 @@ from firestarter.chip_test import (
     SDP_HOLD_HELD,
     SDP_HOLD_NOT_HELD,
     SDP_HOLD_NOT_RUN,
+    STATUS_ERROR,
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
@@ -426,24 +427,27 @@ _PRE_EDIT_PRECEDENCE_MATRIX = {
     "AssertionError": ("AssertionError", None, None),
 }
 
-# CURRENT expectation -- advanced by plan 133-02 (D-08) for EXACTLY the
-# three rows measured to change against the edited `_run_step`:
-# SerialError, SerialTimeoutError, and HardwareOperationError now escape
-# ONLY as far as `_run_step`'s new `except (SerialError,
-# HardwareOperationError)` clause and land on BAD/error_code=None --
-# neither class carries `.error_code`. ProgrammerNotFoundError and
-# FirmwareOutdatedError still ESCAPE (re-raised by the new first clause,
-# unchanged from the pre-edit row). EpromOperationError,
-# ChipNotImplementedError, ChipNotFoundError, and AssertionError are all
-# untouched -- their rows are byte-identical to _PRE_EDIT_PRECEDENCE_MATRIX,
-# proving the existing `except EpromOperationError` and `except
-# (ChipNotImplementedError, ChipNotFoundError)` clauses were neither moved
-# nor reworded. Measured live against the post-133-02-edit engine, never
-# hand-derived.
+"""CURRENT expectation -- advanced by plan 133-02 (D-08), then re-pointed
+by plan 178-01 (D-01/D-12), for EXACTLY the three rows measured to change
+against the edited `_run_step`: SerialError, SerialTimeoutError, and
+HardwareOperationError now escape ONLY as far as `_run_step`'s `except
+(SerialError, HardwareOperationError)` clause and land on
+SKIPPED/error_code=None -- neither class carries `.error_code`, and the
+chip-verdict axis reads SKIPPED (not BAD) so the destructive gate still
+closes while the fault reason still renders (the status-axis proof for
+these three rows is authored separately in plan 178-02).
+ProgrammerNotFoundError and FirmwareOutdatedError still ESCAPE (re-raised
+by the new first clause, unchanged from the pre-edit row).
+EpromOperationError, ChipNotImplementedError, ChipNotFoundError, and
+AssertionError are all untouched -- their rows are byte-identical to
+_PRE_EDIT_PRECEDENCE_MATRIX, proving the existing `except
+EpromOperationError` and `except (ChipNotImplementedError,
+ChipNotFoundError)` clauses were neither moved nor reworded. Measured live
+against the post-edit engine, never hand-derived."""
 _EXPECTED_PRECEDENCE_MATRIX = dict(_PRE_EDIT_PRECEDENCE_MATRIX)
-_EXPECTED_PRECEDENCE_MATRIX["SerialError"] = (None, "BAD", None)
-_EXPECTED_PRECEDENCE_MATRIX["SerialTimeoutError"] = (None, "BAD", None)
-_EXPECTED_PRECEDENCE_MATRIX["HardwareOperationError"] = (None, "BAD", None)
+_EXPECTED_PRECEDENCE_MATRIX["SerialError"] = (None, "SKIPPED", None)
+_EXPECTED_PRECEDENCE_MATRIX["SerialTimeoutError"] = (None, "SKIPPED", None)
+_EXPECTED_PRECEDENCE_MATRIX["HardwareOperationError"] = (None, "SKIPPED", None)
 
 # Named by plan 133-02 in the SAME commit as the _EXPECTED_PRECEDENCE_MATRIX
 # edit above (133-CONTEXT.md D-08; 133-01-PLAN.md must_haves) -- exactly the
@@ -563,8 +567,9 @@ def test_precedence_matrix_deriver_is_non_vacuous():
 
 def test_serial_timeout_degrades_one_step():
     """A SerialTimeoutError raised by the "read" step's operator method
-    degrades THAT ONE step to a recorded BAD result; run_plan still returns
-    a full report for every other step (LEG-11, criterion 2)."""
+    degrades THAT ONE step to a recorded SKIPPED/ERROR result; run_plan
+    still returns a full report for every other step (LEG-11, criterion
+    2)."""
     operator = _mock_operator()
     operator.read_eprom.side_effect = SerialTimeoutError(
         "133-02 injected half-seated-cable probe"
@@ -578,7 +583,8 @@ def test_serial_timeout_degrades_one_step():
 
     read_result = _result(results, OP_READ)
     blank_check_result = _result(results, OP_BLANK_CHECK)
-    assert read_result.verdict == VERDICT_BAD
+    assert read_result.verdict == VERDICT_SKIPPED
+    assert read_result.status == STATUS_ERROR
     # The later step still ran -- this is what distinguishes "degraded one
     # step" from "aborted the run" (D-08, T-133-10).
     assert blank_check_result.verdict == VERDICT_OK
@@ -603,7 +609,8 @@ def test_hardware_error_degrades_one_step():
 
     read_result = _result(results, OP_READ)
     blank_check_result = _result(results, OP_BLANK_CHECK)
-    assert read_result.verdict == VERDICT_BAD
+    assert read_result.verdict == VERDICT_SKIPPED
+    assert read_result.status == STATUS_ERROR
     # Observable consequence of the new clause omitting error_code: neither
     # SerialError nor HardwareOperationError carries that attribute.
     assert read_result.error_code is None

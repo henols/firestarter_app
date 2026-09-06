@@ -1709,8 +1709,12 @@ class TestExitFloorD15:
             StepResult(op="read", verdict=VERDICT_OK, run_count=1),
             StepResult(op="write-baseline-b", verdict=VERDICT_OK, run_count=1),
         ]
-        exit_clean = _dev_test_exit_code(results, sdp_oracle_not_run=False)
-        exit_notrun = _dev_test_exit_code(results, sdp_oracle_not_run=True)
+        exit_clean = _dev_test_exit_code(
+            results, sdp_oracle_not_run=False, run_status_error=False
+        )
+        exit_notrun = _dev_test_exit_code(
+            results, sdp_oracle_not_run=True, run_status_error=False
+        )
         assert exit_clean == 0, exit_clean
         assert exit_notrun == 2, exit_notrun
         assert exit_clean != exit_notrun
@@ -2016,9 +2020,10 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
     ) -> None:
         """R2b: a transport fault raised BY the id check (a half-seated
         cable, not a firmware-reported disagreement) degrades the id step
-        to BAD via `_run_step`'s `(SerialError, HardwareOperationError)`
-        handler -- separately proving the gate closes on this id-check
-        failure mode too, not only on `is_ok=False`."""
+        to SKIPPED/ERROR via `_run_step`'s `(SerialError,
+        HardwareOperationError)` handler -- separately proving the gate
+        closes on this id-check failure mode too, not only on
+        `is_ok=False`."""
         operator = make_clean_operator()
         operator.check_eprom_id.side_effect = SerialError("half-seated cable")
         app = make_app_context(
@@ -2030,7 +2035,8 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
             result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
         data = _load_report(SYNTHETIC_CHIP_NAME)
         steps = {s["op"]: s for s in data["steps"]}
-        assert steps["id"]["verdict"] == "BAD", steps["id"]
+        assert steps["id"]["verdict"] == "SKIPPED", steps["id"]
+        assert steps["id"]["status"] == "ERROR", steps["id"]
         operator.sdp_lock.assert_not_called()
         hold_state = data["sdp_hold_state"]
         assert hold_state == SDP_HOLD_NOT_RUN, hold_state

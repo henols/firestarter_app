@@ -32,6 +32,8 @@ from typing import Any
 from firestarter.chip_test import (
     _RAN_VERDICTS,
     REGION_POLICY_FULL_DEVICE,
+    STATUS_COMPLETE,
+    STATUS_ERROR,
     VERDICT_NA,
     BannerCounts,
     Plan,
@@ -45,7 +47,7 @@ from firestarter.chip_test import (
 # Module constants -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.7"  # baked into to_dict() output
+SCHEMA_VERSION = "1.8"  # baked into to_dict() output
 NOT_MEASURED = "not measured"  # honest fallback, never a false 0
 # Distinct from NOT_MEASURED: this field was never ASKED, rather than asked and
 # empty. Reusing NOT_MEASURED would conflate the two.
@@ -367,8 +369,20 @@ def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
         r.fingerprint is not None and r.fingerprint.classification == "indeterminate"
         for r in results
     )
+    """D-04's ladder guard: a run whose status axis reads ERROR did not
+    execute validly, so it must never be proposed for `community-reported`
+    graduation regardless of how clean its verdicts otherwise look. Read
+    via `getattr` with the COMPLETE default so a duck-typed result object
+    without the field folds to COMPLETE rather than raising. Ahead of
+    every other arm below."""
+    run_errored = any(
+        getattr(r, "status", STATUS_COMPLETE) == STATUS_ERROR for r in results
+    )
 
-    if "BAD" in verdicts:
+    if run_errored:
+        proposed = _DISPOSITION_INCONCLUSIVE
+        ladder_state = _LADDER_NONE
+    elif "BAD" in verdicts:
         proposed = _DISPOSITION_COMMUNITY_FAIL
         ladder_state = _LADDER_COMMUNITY_FAIL
     elif "marginal" in verdicts or has_indeterminate_fingerprint:
@@ -645,6 +659,15 @@ class DiagnosticReport:
     # `test_non_registry_still_has_no_ops`'s AST inversion guard to carry
     # zero op vocabulary).
     sdp_hold_state: str = ""
+    """The carriage half only -- a plain `str`, declared and serialised
+    here, never derived here. Defaults to `""` (unassigned); the VALUE is
+    assigned by `cli_handlers.py` from `chip_test.run_status(results)`,
+    beside the `sdp_hold_state` assignment above. Deliberately excluded
+    from `dedup_fingerprint`'s hash input (D-08) -- that function builds
+    its hash from an explicit allow-list with no reflection over dataclass
+    fields, so this field's absence from that list is the whole exclusion
+    mechanism."""
+    run_status: str = ""
 
     def _utc_now(self) -> str:
         return datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -768,6 +791,7 @@ class DiagnosticReport:
         return {
             "op": result.op,
             "verdict": result.verdict,
+            "status": result.status,
             # Schema 1.7: how many times the
             # underlying operator method actually ran for this step. It has
             # been 2 for every read/write/verify/erase since the
@@ -865,6 +889,7 @@ class DiagnosticReport:
             "dedup_fingerprint": dedup_fingerprint(self),
             "db_diff": self._db_diff_dict(),
             "sdp_hold_state": self.sdp_hold_state,
+            "run_status": self.run_status,
         }
 
     def render(self, console: Any = None) -> Any:

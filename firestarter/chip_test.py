@@ -938,6 +938,21 @@ VERDICT_NA = "NA"
 VERDICT_SKIPPED = "SKIPPED"
 VERDICT_MARGINAL = "marginal"
 
+"""Status vocabulary, following the OCP Test & Validation project's own
+`TestStatus` field name and enum -- adopted by NAME ONLY: no `ocptv`
+package is installed and no new runtime dependency of any kind is added
+(D-03). `STATUS_*` is a run-validity axis, held separately from the
+`VERDICT_*` chip-verdict axis immediately above, and is disambiguated from
+the database's own `support_status` field (the one colliding read site is
+`diagnostic_report.py:364`) in the carrying field's docstring, never in
+its own name (D-02). These are report VALUES, not op strings -- they
+carry no `OP_` prefix and must never join `_ALL_OPS`/`_MULTIWORD_OP_VALUES`
+in tests/test_op_registration_parity.py; a later reader must not
+"helpfully" register them there."""
+STATUS_COMPLETE = "COMPLETE"
+STATUS_ERROR = "ERROR"
+STATUS_SKIP = "SKIP"
+
 # Ops that mutate the chip. This is the ONLY live safety use of either frozenset
 # here: it is the exact set the chip-ID destructive gate consults before
 # admitting a step. A write-shaped op missing from it would write to a
@@ -1076,6 +1091,12 @@ class StepResult:
     steps). `divergence` carries the read-step byte-level divergence
     metric when the step's `runs` disagreed -- a metric only, never a
     verdict flip and never `marginal` (marginal is destructive/verify-only).
+    `status` is one of COMPLETE/ERROR/SKIP -- the run-validity axis, held
+    separately from the `verdict` chip-verdict axis above, and distinct
+    from the database's own `support_status` field (the one colliding read
+    site is `diagnostic_report.py:364`). Deliberately NOT part of
+    `dedup_fingerprint`, which excludes every volatile field so two runs of
+    the same chip still dedup.
     """
 
     op: str
@@ -1100,10 +1121,13 @@ class StepResult:
     # time) -- it never appears on a verify step's OWN `StepResult` (verify
     # reads the context, it does not set this field on itself).
     write_target: WriteTarget | None = None
+    status: str = STATUS_COMPLETE
 
 
 def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> StepResult:
-    return StepResult(op=op, verdict=verdict, reason=reason, run_count=0)
+    return StepResult(
+        op=op, verdict=verdict, reason=reason, run_count=0, status=STATUS_SKIP
+    )
 
 
 # The ops whose `StepResult.run_count` is EXACTLY `run_plan`'s `runs` kwarg
@@ -2022,6 +2046,25 @@ def sdp_hold_state(plan: Plan, results: list[StepResult]) -> str:
     return SDP_HOLD_NOT_RUN
 
 
+def run_status(results: list[StepResult]) -> str:
+    """Two-valued run-level status fold: `STATUS_ERROR` if any step's
+    `status` reads `STATUS_ERROR`, else `STATUS_COMPLETE`.
+
+    Deliberately two-valued at the run level, by design: `STATUS_SKIP`
+    never propagates upward, because a plan carrying an unsupported step is
+    not an invalid run. Mirrors the honesty rule `_is_transport_suspect`'s
+    docstring states (`diagnostic_report.py`): a status is read only where
+    it is PRESENT on a step, never fabricated from an absent counter.
+    `transport_suspect` is reported and never folded into this status
+    (D-12) -- three of its seven scanned counters are permanently `None`,
+    so deriving a status from it would fabricate confidence this fold
+    never claims.
+    """
+    if any(r.status == STATUS_ERROR for r in results):
+        return STATUS_ERROR
+    return STATUS_COMPLETE
+
+
 def sdp_left_writable(results: list[StepResult]) -> bool:
     """True iff `results` itself demonstrates the part still accepts a write --
     the `write-restored` step present AND OK.
@@ -2522,20 +2565,10 @@ def _run_step_untimed(
         # false-green no-board trap, reproduced structurally.
         raise
     except (SerialError, HardwareOperationError) as exc:
-        # A half-seated cable or other transport-level fault
-        # (SerialError itself, SerialTimeoutError, or HardwareOperationError
-        # -- a sibling of Exception, not an EpromOperationError subclass, so
-        # the existing `except EpromOperationError` clause below never
-        # reaches it) degrades THIS ONE step to a recorded BAD result;
-        # `run_plan` still returns a full report for every other step.
-        # `error_code` is deliberately omitted: neither SerialError nor
-        # HardwareOperationError carries that attribute -- only
-        # EpromOperationError does -- so copying the existing handler
-        # wholesale would raise AttributeError at the moment this handler is
-        # supposed to be recovering.
         return StepResult(
             op=step.op,
-            verdict=VERDICT_BAD,
+            verdict=VERDICT_SKIPPED,
+            status=STATUS_ERROR,
             reason=str(exc),
             run_count=1,
         )
@@ -3108,6 +3141,7 @@ def _dispatch_multi_run(
                 reason=refusal,
                 run_count=0,
                 write_target=None,
+                status=STATUS_SKIP,
             )
         region_start, region_length = resolved_target.region
         expected = resolved_target.pattern
@@ -3124,7 +3158,11 @@ def _dispatch_multi_run(
                     else "no write target available for verify"
                 )
                 return StepResult(
-                    op=op, verdict=VERDICT_SKIPPED, reason=refusal, run_count=0
+                    op=op,
+                    verdict=VERDICT_SKIPPED,
+                    reason=refusal,
+                    run_count=0,
+                    status=STATUS_SKIP,
                 )
             resolved_target = inherited
             region_start, region_length = inherited.region

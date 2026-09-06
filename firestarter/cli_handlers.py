@@ -34,6 +34,7 @@ from firestarter.chip_resolver import resolve_chip
 from firestarter.chip_test import (
     OP_ID,
     SDP_HOLD_NOT_RUN,
+    STATUS_ERROR,
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
@@ -44,6 +45,7 @@ from firestarter.chip_test import (
     derive_plan,
     is_uv_eprom,
     run_plan,
+    run_status,
     sdp_hold_state,
     sdp_oracle_applicable,
 )
@@ -2127,7 +2129,9 @@ def _overall_exit_code(results: list[StepResult]) -> int:
     return 0
 
 
-def _dev_test_exit_code(results: list[StepResult], *, sdp_oracle_not_run: bool) -> int:
+def _dev_test_exit_code(
+    results: list[StepResult], *, sdp_oracle_not_run: bool, run_status_error: bool
+) -> int:
     """Exit floor for an ALLOW-chip run whose SDP oracle did not run, so
     `dev test` cannot return 0 on a run that never exercised the oracle at all.
 
@@ -2138,7 +2142,12 @@ def _dev_test_exit_code(results: list[StepResult], *, sdp_oracle_not_run: bool) 
     exits 1.
 
     Cost, stated: `dev test`'s exit code is no longer a pure function of step
-    verdicts -- it gains exactly this one non-verdict term.
+    verdicts -- it gains two non-verdict terms, not exactly one:
+    `sdp_oracle_not_run` (above) and `run_status_error` (D-06), each added
+    into the SAME candidate set via `codes.add(2)`, decided by the single
+    unchanged `_EXIT_CODE_PRECEDENCE` walk. A run that is both BAD and
+    `run_status_error` still exits 1 -- that asymmetry against the title's
+    status-axis-first ordering (`submit.overall_verdict`) is deliberate.
 
     The not-run oracle stays SKIPPED rather than becoming `marginal`, because
     `marginal` counts as *ran* and would hold N == M in the applicable ratio,
@@ -2150,6 +2159,8 @@ def _dev_test_exit_code(results: list[StepResult], *, sdp_oracle_not_run: bool) 
     """
     codes = {_verdict_code(r.verdict) for r in results}
     if sdp_oracle_not_run:
+        codes.add(2)
+    if run_status_error:
         codes.add(2)
     for code in _EXIT_CODE_PRECEDENCE:
         if code in codes:
@@ -2448,6 +2459,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # matching every other derived field above and below (never computed
     # inline here).
     report.sdp_hold_state = sdp_hold_state(plan, results)
+    report.run_status = run_status(results)
 
     full = app.db.get_eprom(chip)
     if full:
@@ -2527,5 +2539,6 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
         results,
         sdp_oracle_not_run=sdp_oracle_applicable(plan)
         and report.sdp_hold_state.startswith(SDP_HOLD_NOT_RUN),
+        run_status_error=(report.run_status == STATUS_ERROR),
     )
     sys.exit(code)

@@ -87,8 +87,8 @@ from .fixtures.report_shapes import (
 _HEX12_RE = re.compile(r"^[0-9a-f]{12}$")
 
 """D-07's first pin: `DiagnosticReport.to_dict()`
-(`firestarter/diagnostic_report.py:771-790`) emits eleven top-level keys
-today."""
+(`firestarter/diagnostic_report.py:771-790`) emits twelve top-level keys
+today (Phase 178 plan 01 adds `run_status`, schema 1.8)."""
 _TO_DICT_KEYS = [
     "auto_capture",
     "banner",
@@ -96,6 +96,7 @@ _TO_DICT_KEYS = [
     "dedup_fingerprint",
     "generated",
     "is_submittable",
+    "run_status",
     "schema_version",
     "sdp_hold_state",
     "steps",
@@ -166,11 +167,12 @@ _DB_DIFF_KEYS = [
     "proposed_disposition",
 ]
 
-"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits thirteen keys per
-step, UNCONDITIONALLY -- taken from `sst27sf512-six-step`'s first (`id`)
-step, whose five `write_*` fields stay `None` because `id` carries no
-write target, but all thirteen KEYS are present regardless. The pin is
-over the key SET, not over which values are non-`None`."""
+"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits fourteen keys per
+step, UNCONDITIONALLY (Phase 178 plan 01 adds `status`, schema 1.8) --
+taken from `sst27sf512-six-step`'s first (`id`) step, whose five `write_*`
+fields stay `None` because `id` carries no write target, but all fourteen
+KEYS are present regardless. The pin is over the key SET, not over which
+values are non-`None`."""
 _STEPS_ELEMENT_0_KEYS = [
     "duration_s",
     "error_code",
@@ -178,6 +180,7 @@ _STEPS_ELEMENT_0_KEYS = [
     "op",
     "reason",
     "run_count",
+    "status",
     "verdict",
     "write_bits_cleared",
     "write_bits_retained",
@@ -494,15 +497,16 @@ def test_schema_version_is_pinned() -> None:
     """The triple-equality idiom (`tests/test_diagnostic_report.py:734`):
     the imported constant, the literal, and the value `to_dict()` actually
     bakes in, all in one expression, so a constant rename and a value
-    change are both caught. Phase 181 moves this to `2.0` per D-3/RPT-E1,
+    change are both caught. Phase 178 plan 01 moved this to `1.8` (D-07,
+    the `run_status` export). Phase 181 moves this to `2.0` per D-3/RPT-E1,
     and it has to move this line to do it."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
     report = build_shape(_TRACER_SHAPE_ID)
     baked = report.to_dict()["schema_version"]
-    assert SCHEMA_VERSION == "1.7" == baked, (
+    assert SCHEMA_VERSION == "1.8" == baked, (
         f"SCHEMA_VERSION drifted: constant={SCHEMA_VERSION!r}, baked="
-        f"{baked!r}, expected '1.7' (RPT-E1 moves this to '2.0' in Phase 181)"
+        f"{baked!r}, expected '1.8' (RPT-E1 moves this to '2.0' in Phase 181)"
     )
 
 

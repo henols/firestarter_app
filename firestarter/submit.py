@@ -45,7 +45,7 @@ from rich.prompt import Confirm
 # it imports no serial-transport or hardware-manager class -- so importing
 # `VERDICT_NA` from it here does not breach the ORCHESTRATOR-ONLY
 # invariant stated in this module's docstring.
-from firestarter.chip_test import VERDICT_NA
+from firestarter.chip_test import STATUS_COMPLETE, STATUS_ERROR, VERDICT_NA
 from firestarter.diagnostic_report import is_submittable
 
 # ---------------------------------------------------------------------------
@@ -136,14 +136,33 @@ def sanitize_dict(d: dict[str, Any], *, user: str | None = None) -> dict[str, An
 # Overall verdict (title-legibility ordering) + builders
 # ---------------------------------------------------------------------------
 
+"""The title's fourth return value (D-05): a run whose status axis reads
+ERROR did not execute validly at all, so its title must never read as a
+chip verdict (a `FAIL` filed against a manufacturer's part for a
+half-seated cable). Reuses the existing bare `INCONCLUSIVE` token with the
+cause parenthesized in the body, so `devtest_issues.py`'s `TITLE_RE` still
+captures the bare token and its `SOFT` set still classifies it, with zero
+triage-tooling change. No new title token is introduced."""
+_TITLE_VERDICT_HARNESS = "INCONCLUSIVE (harness)"
+
 
 def overall_verdict(results: Any) -> str:
     """FAIL-dominant title verdict -- NOT the handler's exit-code
     `max()` ordering (`cli_handlers.py`, where `marginal=2 > BAD=1`).
 
-    `FAIL` if any step verdict is `BAD`; else `INCONCLUSIVE` if any is
-    `marginal`; else `PASS`. Human-legible ordering for the issue title.
+    Returns `_TITLE_VERDICT_HARNESS` if any result's status axis reads
+    `STATUS_ERROR` (read via `getattr` with the COMPLETE default, so the
+    status-less `SimpleNamespace` doubles this function has always taken
+    keep returning PASS/FAIL/INCONCLUSIVE exactly as before); else `FAIL`
+    if any step verdict is `BAD`; else `INCONCLUSIVE` if any is
+    `marginal`; else `PASS`. The status guard is deliberately AHEAD of the
+    verdict fold -- this status-axis-first ordering is NOT the exit
+    code's: a run that is both BAD and ERROR titles harness-inconclusive
+    but still exits 1 (`cli_handlers.py`). Human-legible ordering for the
+    issue title.
     """
+    if any(getattr(r, "status", STATUS_COMPLETE) == STATUS_ERROR for r in results):
+        return _TITLE_VERDICT_HARNESS
     verdicts = {r.verdict for r in results}
     if "BAD" in verdicts:
         return "FAIL"
