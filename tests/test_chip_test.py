@@ -43,6 +43,8 @@ References:
     D-01/D-02/D-03/D-04
 """
 
+import ast
+import inspect
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -65,6 +67,9 @@ from firestarter.chip_test import (
     REGION_POLICY_FIXED,  # test-internal: 260821-wna region-policy vocab
     REGION_POLICY_FULL_DEVICE,  # test-internal: 260821-wna region-policy vocab
     REGION_POLICY_UV_SLOT,  # test-internal: 260821-wna region-policy vocab
+    STATUS_COMPLETE,
+    STATUS_ERROR,
+    STATUS_SKIP,
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
@@ -73,10 +78,12 @@ from firestarter.chip_test import (
     BannerCounts,
     Plan,
     Step,
+    StepResult,
     WriteTarget,
     _diff_offsets,  # test-internal: the shared divergence primitive (D-04)
     _dispatch_multi_run,  # test-internal: fail-closed dispatch proof (121-02)
     _dispatch_step,  # test-internal: fail-closed dispatch proof (121-02)
+    _id_step_closes_gate,  # test-internal: destructive-write safety gate (178-02)
     _synthesized_match_fingerprint,  # test-internal: PRUNE-03 zero-I/O fingerprint (177-01)
     _write_region_for,  # test-internal: UV small-region selector (PATT-03)
     address_fold_byte,
@@ -88,12 +95,14 @@ from firestarter.chip_test import (
     mask_write_pattern,  # test-internal: 260821-wna D-A masking arithmetic
     prepass_images,
     run_plan,
+    run_status,
 )
 from firestarter.database import EpromDatabase
 from firestarter.exceptions import (
     ChipNotFoundError,
     ChipNotImplementedError,
     EpromOperationError,
+    SerialError,
 )
 from firestarter.sdp_capability import sdp_capability_for_entry
 
@@ -1308,6 +1317,106 @@ def test_id_mismatch_does_not_gate_non_destructive_steps():
     assert _result(results, OP_BLANK_CHECK).verdict == VERDICT_OK
     operator.read_eprom.assert_called()
     operator.check_eprom_blank.assert_called_once()
+
+
+"""The two-axis status vocabulary (178-CONTEXT.md D-01/D-02/D-12, 178-02):
+the measured non-changes -- the destructive-write gate, the `_skip_result`
+bypass, and the run-level fold -- plus the transport-fault arm's own
+verdict/status shape."""
+
+
+def test_transport_fault_carries_skipped_verdict_and_error_status():
+    """A `SerialError` raised by the "read" step's operator method produces
+    a `StepResult` carrying `verdict == VERDICT_SKIPPED`,
+    `status == STATUS_ERROR`, a non-empty `reason`, and `error_code is
+    None` -- the D-01 shape: the chip-verdict axis never spends a `BAD` on
+    a fault that was never the chip's, while the run-validity axis still
+    records that this run did not execute validly."""
+    operator = _mock_operator()
+    operator.read_eprom.side_effect = SerialError("half-seated cable")
+    plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    result = _result(results, OP_READ)
+    assert result.verdict == VERDICT_SKIPPED
+    assert result.status == STATUS_ERROR
+    assert result.reason
+    assert result.error_code is None
+
+
+def test_id_step_closes_gate_predicate_is_unchanged_by_the_status_axis():
+    """D-01: `_id_step_closes_gate` returns True for a `StepResult` carrying
+    `verdict=VERDICT_SKIPPED, status=STATUS_ERROR`, and its source text
+    still reads the two-element `(VERDICT_BAD, VERDICT_SKIPPED)` tuple and
+    mentions neither `status` nor `STATUS_`. `marginal` and `NA` both leave
+    this gate OPEN, which would admit a destructive write against a chip
+    whose identity was never confirmed -- `SKIPPED` was chosen precisely so
+    this predicate needs no edit at all."""
+    result = StepResult(
+        op=OP_ID,
+        verdict=VERDICT_SKIPPED,
+        status=STATUS_ERROR,
+        reason="half-seated cable",
+    )
+    assert _id_step_closes_gate(result) is True
+
+    source = inspect.getsource(_id_step_closes_gate)
+    assert "VERDICT_BAD, VERDICT_SKIPPED" in source
+    assert "status" not in source
+    assert "STATUS_" not in source
+
+
+def test_the_transport_arm_does_not_route_through_skip_result():
+    """An AST walk over `chip_test.py` finds the `(SerialError,
+    HardwareOperationError)` handler body constructing `StepResult`
+    directly, with zero `_skip_result` calls inside that handler.
+    `_skip_result` stamps `STATUS_SKIP`; routing the transport arm through
+    it would silently erase the ERROR discrimination this phase exists to
+    create."""
+    import firestarter.chip_test as chip_test_mod
+
+    source = Path(chip_test_mod.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    handlers = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ExceptHandler) and isinstance(node.type, ast.Tuple):
+            names = {n.id for n in node.type.elts if isinstance(n, ast.Name)}
+            if {"SerialError", "HardwareOperationError"} <= names:
+                handlers.append(node)
+
+    assert len(handlers) == 1, handlers
+    calls = [
+        call.func.id
+        for call in ast.walk(handlers[0])
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+    ]
+    assert calls.count("StepResult") == 1
+    assert calls.count("_skip_result") == 0
+
+
+def test_run_status_folds_error_when_any_step_errored():
+    ok = StepResult(op=OP_ID, verdict=VERDICT_OK)
+    errored = StepResult(op=OP_READ, verdict=VERDICT_SKIPPED, status=STATUS_ERROR)
+    assert run_status([ok, errored]) == STATUS_ERROR
+
+
+def test_run_status_is_complete_when_no_step_errored():
+    """The fold's other leg, including the empty-list case, plus D-02's
+    disjointness proof: none of the three `STATUS_*` values is a member of
+    `_ALL_OPS` or `_MULTIWORD_OP_VALUES` -- mirroring the `SDP_HOLD_*`
+    precedent -- so a later reader cannot "helpfully" register a report
+    value as an op string."""
+    from tests.test_op_registration_parity import _ALL_OPS, _MULTIWORD_OP_VALUES
+
+    ok = StepResult(op=OP_ID, verdict=VERDICT_OK)
+    assert run_status([ok]) == STATUS_COMPLETE
+    assert run_status([]) == STATUS_COMPLETE
+
+    status_values = {STATUS_COMPLETE, STATUS_ERROR, STATUS_SKIP}
+    assert not (status_values & set(_ALL_OPS))
+    assert not (status_values & set(_MULTIWORD_OP_VALUES))
 
 
 # ---------------------------------------------------------------------------

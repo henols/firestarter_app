@@ -170,6 +170,7 @@ from firestarter.chip_test import (
     SDP_HOLD_HELD,
     SDP_HOLD_NOT_HELD,
     SDP_HOLD_NOT_RUN,
+    STATUS_COMPLETE,
     STATUS_ERROR,
     VERDICT_BAD,
     VERDICT_MARGINAL,
@@ -691,6 +692,41 @@ def test_assertion_error_propagates():
         "criterion 2 requires the deliberate signal to propagate unchanged, "
         "not be re-wrapped or reconstructed"
     )
+
+
+def test_the_transport_precedence_rows_carry_the_error_status():
+    """The status proof for the three re-pointed precedence rows, added
+    BESIDE the three-tuple matrix above rather than by widening it (that
+    tuple has no status slot, and widening it would force a rewrite of the
+    frozen Phase-133 before-image matrix).
+
+    Injects each exception exactly as `_derive_precedence_row` does --
+    `check_eprom_blank`'s side_effect -- and reads the actual blank-check
+    `StepResult.status`. `SerialError`, `SerialTimeoutError` and
+    `HardwareOperationError` all carry `status == STATUS_ERROR`; a genuine
+    chip/firmware finding (`EpromOperationError`) must NOT have acquired an
+    error status, so its row stays `STATUS_COMPLETE`."""
+    for name in ("SerialError", "SerialTimeoutError", "HardwareOperationError"):
+        exc_cls = _PRECEDENCE_EXCEPTION_CLASSES[name]
+        operator = _mock_operator()
+        operator.check_eprom_blank.side_effect = _make_injected_exception(exc_cls)
+        plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+        results = run_plan(plan, operator, _REAL_DB)
+
+        result = _result(results, OP_BLANK_CHECK)
+        assert result.status == STATUS_ERROR, (name, result.status)
+
+    operator = _mock_operator()
+    operator.check_eprom_blank.side_effect = _make_injected_exception(
+        EpromOperationError
+    )
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    result = _result(results, OP_BLANK_CHECK)
+    assert result.status == STATUS_COMPLETE
 
 
 # ---------------------------------------------------------------------------
