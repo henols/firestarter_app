@@ -21,7 +21,9 @@ from firestarter.chip_test import (
     _UV_MIN_CLEARED_BITS,  # test-internal
     _UV_MIN_RETAINED_BITS,  # test-internal
     _UV_WRITE_REGION_LENGTH,  # test-internal: the UV slot width
+    OP_BLANK_CHECK,
     REGION_POLICY_FIXED,  # test-internal: coverage-tag dedup wiring
+    Step,
     WriteTarget,
     bits_cleared_by,
     bits_retained_by,
@@ -200,6 +202,27 @@ def test_write_target_region_policy_defaults_to_fixed():
     working unchanged, landing on the pre-existing engine-default policy."""
     target = _valid_target()
     assert target.region_policy == REGION_POLICY_FIXED
+
+
+def test_write_target_current_is_probe_read_defaults_to_false():
+    """Additive field (Phase 179, UV-03): fail-closed in a stronger sense
+    than `region_policy` above -- `_valid_target()` names no such field at
+    all, and every direct `WriteTarget(...)` construction already in this
+    suite keeps working AND keeps `FLAG_SKIP_BLANK_CHECK` off, because the
+    monotonicity witness the flag is derived from defaults to absent."""
+    target = _valid_target()
+    assert target.current_is_probe_read is False
+
+
+def test_step_uv_prewrite_defaults_to_false():
+    """Additive field (Phase 179, UV-02/Q1b): `Step` is imported directly
+    into this module, so the sibling pin to
+    `test_write_target_current_is_probe_read_defaults_to_false` lives here
+    rather than in `test_chip_test_cycle.py`. Every direct `Step(...)`
+    construction that predates `uv_prewrite` keeps working unchanged,
+    landing on the pre-existing non-UV-adjudicated behaviour."""
+    step = Step(op=OP_BLANK_CHECK, supported=True, reason="")
+    assert step.uv_prewrite is False
 
 
 def test_write_target_refuses_pattern_length_mismatch():
