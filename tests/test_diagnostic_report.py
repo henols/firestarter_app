@@ -73,6 +73,7 @@ from firestarter.chip_test import (
     SDP_HOLD_HELD,
     SDP_HOLD_NOT_HELD,
     SDP_HOLD_NOT_RUN,
+    STATUS_COMPLETE,
     STATUS_ERROR,
     VERDICT_BAD,
     VERDICT_NA,
@@ -1746,6 +1747,128 @@ def test_durations_do_not_perturb_dedup_fingerprint():
     slow.results[0].duration_s = 987.654
 
     assert dedup_fingerprint(fast) == dedup_fingerprint(slow)
+
+
+def test_status_axis_does_not_perturb_dedup_fingerprint():
+    """D-10, Leg B: two reports built from the SAME `step_specs`, differing
+    ONLY in `results[0].status` (`STATUS_COMPLETE` default vs
+    `STATUS_ERROR`), MUST produce the SAME `dedup_fingerprint`.
+
+    Both reports hold the identical `verdict` on every step -- exactly the
+    constraint `test_durations_do_not_perturb_dedup_fingerprint` above
+    carries for `duration_s`. Varying the verdict alongside the status
+    would make the equality trivially true for the wrong reason (the
+    verdict match alone would already force the hashes equal), emptying
+    the proof. This is the POSITIVE leg ATTR-04's confirmation needs: a
+    green invariance oracle alone proves only that nothing already-frozen
+    moved -- it cannot prove the new field is actually excluded, because no
+    frozen shape carried a status before plan 178-03."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    step_specs = [("id", VERDICT_OK, None, ""), ("read", VERDICT_OK, None, "")]
+    complete_report = _minimal_report(step_specs=step_specs)
+    error_report = _minimal_report(step_specs=step_specs)
+    error_report.results[0].status = STATUS_ERROR
+
+    assert dedup_fingerprint(complete_report) == dedup_fingerprint(error_report)
+
+
+def test_a_verdict_change_still_perturbs_dedup_fingerprint():
+    """The anti-vacuity sibling to the Leg B test immediately above: with
+    both reports' statuses held EQUAL, moving one report's
+    `results[0].verdict` from `VERDICT_OK` to `VERDICT_BAD` MUST still
+    perturb `dedup_fingerprint`. Without this leg, Leg B's equality is
+    satisfiable by a hash function that reads nothing at all -- this is
+    what proves it is not."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    step_specs = [("id", VERDICT_OK, None, ""), ("read", VERDICT_OK, None, "")]
+    ok_report = _minimal_report(step_specs=step_specs)
+    bad_report = _minimal_report(step_specs=step_specs)
+    bad_report.results[0].verdict = VERDICT_BAD
+
+    assert dedup_fingerprint(ok_report) != dedup_fingerprint(bad_report)
+
+
+def test_status_axis_does_not_perturb_an_empty_results_fingerprint():
+    """ATTR-04's empty edge: a report with `results == []` hashes
+    identically regardless of the status axis, because the per-step loop
+    that builds `parts` never runs; a single-element `results` list behaves
+    the same way when its one step's status is flipped. The
+    directly-constructed empty reports below deliberately do NOT go through
+    `_minimal_report` -- its `step_specs = step_specs or [...]` fallback
+    treats a passed-in `[]` as falsy and silently substitutes the two-step
+    default, which would make an "empty results" test build a two-step
+    report instead.
+
+    The frozen `synthetic-arm4-empty-results` shape's hash is read from the
+    registry (`FROZEN_HASHES`), never transcribed, and cross-checked
+    against a fresh `build_shape` reproduction -- if either moved, ATTR-04
+    was violated."""
+    from firestarter.diagnostic_report import (
+        AutoCapture,
+        DiagnosticReport,
+        TransportHealth,
+        dedup_fingerprint,
+    )
+    from tests.fixtures.report_shapes import FROZEN_HASHES, build_shape
+
+    def _report_with_results(results):
+        return DiagnosticReport(
+            auto_capture=AutoCapture(
+                host_version="3.0.0b10", chip="M8720", protocol="0x08"
+            ),
+            transport=TransportHealth(),
+            plan=Plan(name="M8720"),
+            results=results,
+        )
+
+    empty_a = _report_with_results([])
+    empty_b = _report_with_results([])
+    assert dedup_fingerprint(empty_a) == dedup_fingerprint(empty_b)
+
+    single_a = _minimal_report(step_specs=[("id", VERDICT_OK, None, "")])
+    single_b = _minimal_report(step_specs=[("id", VERDICT_OK, None, "")])
+    single_b.results[0].status = STATUS_ERROR
+    assert dedup_fingerprint(single_a) == dedup_fingerprint(single_b)
+
+    frozen_shape = build_shape("synthetic-arm4-empty-results")
+    assert (
+        dedup_fingerprint(frozen_shape) == FROZEN_HASHES["synthetic-arm4-empty-results"]
+    )
+    assert FROZEN_HASHES["synthetic-arm4-empty-results"] == "8d6208d00be7"
+
+
+def test_status_axis_does_not_reorder_the_fingerprint_pre_image():
+    """ATTR-04's ordering edge: `dedup_fingerprint` builds `parts` in
+    `report.results` order and the status axis appends nothing, so
+    permuting which step carries `STATUS_ERROR`, across a fixed verdict
+    sequence, leaves the hash invariant across all three permutations.
+
+    `inspect.getsource` then proves the structural half of D-08 directly:
+    the function still contains exactly three `parts.append` call sites
+    and the substring `status` never appears in its body -- so a future
+    append for the status axis would fail this even where some shape
+    happens to collide on the hash value alone."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    step_specs = [
+        ("id", VERDICT_OK, None, ""),
+        ("read", VERDICT_OK, None, ""),
+        ("write", VERDICT_OK, None, ""),
+    ]
+    baseline = _minimal_report(step_specs=step_specs)
+    base_hash = dedup_fingerprint(baseline)
+
+    for error_index in range(3):
+        permuted = _minimal_report(step_specs=step_specs)
+        for i, result in enumerate(permuted.results):
+            result.status = STATUS_ERROR if i == error_index else STATUS_COMPLETE
+        assert dedup_fingerprint(permuted) == base_hash
+
+    source = inspect.getsource(dedup_fingerprint)
+    assert source.count("parts.append") == 3
+    assert "status" not in source
 
 
 def test_duration_cell_formatting_boundaries():
