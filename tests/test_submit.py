@@ -20,6 +20,7 @@ assertion it replaces would have missed the short `-l` form.
 
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -151,9 +152,18 @@ def test_sanitize_uses_getpass_default_when_user_omitted(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _step(op: str, verdict: str, fingerprint_cls: str | None = None):
+def _step(
+    op: str,
+    verdict: str,
+    fingerprint_cls: str | None = None,
+    *,
+    status: str | None = None,
+):
     fp = SimpleNamespace(classification=fingerprint_cls) if fingerprint_cls else None
-    return SimpleNamespace(op=op, verdict=verdict, fingerprint=fp)
+    kwargs = {"op": op, "verdict": verdict, "fingerprint": fp}
+    if status is not None:
+        kwargs["status"] = status
+    return SimpleNamespace(**kwargs)
 
 
 def test_overall_verdict_all_ok_is_pass():
@@ -176,6 +186,41 @@ def test_overall_verdict_bad_dominates_marginal():
 def test_overall_verdict_bad_alone_is_fail():
     results = [_step("id", "BAD")]
     assert submit.overall_verdict(results) == "FAIL"
+
+
+def test_overall_verdict_error_status_is_inconclusive_harness():
+    results = [_step("id", "BAD"), _step("read", "OK", status="ERROR")]
+    assert submit.overall_verdict(results) == "INCONCLUSIVE (harness)"
+
+
+def test_overall_verdict_defaults_to_complete_for_a_status_less_result():
+    assert submit.overall_verdict([_step("id", "OK"), _step("read", "OK")]) == "PASS"
+    assert (
+        submit.overall_verdict([_step("id", "OK"), _step("write", "marginal")])
+        == "INCONCLUSIVE"
+    )
+    assert (
+        submit.overall_verdict([_step("write", "marginal"), _step("verify", "BAD")])
+        == "FAIL"
+    )
+    assert submit.overall_verdict([_step("id", "BAD")]) == "FAIL"
+
+
+_TITLE_RE = re.compile(r"^\[dev test\]\s+(?P<chip>\S+)\s+[—-]\s+(?P<verdict>[A-Za-z]+)")
+
+
+def test_build_title_for_a_transport_fault_is_not_fail():
+    report = Mock()
+    report.to_dict.return_value = {"dedup_fingerprint": "abc123def456"}
+    report.results = [_step("id", "SKIPPED", status="ERROR")]
+    title = submit.build_title(report, "sst27sf512")
+    match = _TITLE_RE.match(title)
+    assert match is not None, title
+    assert match.group("verdict") == "INCONCLUSIVE", title
+
+
+def test_a_transport_fault_reason_survives_the_markdown_reason_cell():
+    assert submit._reason_text("SKIPPED", "half-seated cable") == "half-seated cable"
 
 
 def test_title_contains_shorthash_and_chip():

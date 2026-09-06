@@ -2043,6 +2043,25 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
         normalized = _normalize_console_text(result.output)
         assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
 
+    def test_transport_fault_exits_two_and_titles_inconclusive_harness(
+        self, runner: CliRunner
+    ) -> None:
+        """D-06/D-05 end-to-end: the same transport fault R2b exercises
+        also exits 2 (the status-axis exit floor) and writes a report whose
+        top-level `run_status` reads `ERROR`."""
+        operator = make_clean_operator()
+        operator.check_eprom_id.side_effect = SerialError("half-seated cable")
+        app = make_app_context(
+            db=SyntheticNonzeroChipIdDatabase(),
+            eprom_operator=operator,
+            hardware_manager=make_hardware_manager(),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
+        assert result.exit_code == 2, result.output
+        data = _load_report(SYNTHETIC_CHIP_NAME)
+        assert data["run_status"] == "ERROR", data
+
 
 class TestLaunderingRoutesR3R4:
     """R3/R4: reachable in production today, unlike R1/R2 above -- neither

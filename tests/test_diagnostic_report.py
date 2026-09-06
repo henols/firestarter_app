@@ -73,6 +73,7 @@ from firestarter.chip_test import (
     SDP_HOLD_HELD,
     SDP_HOLD_NOT_HELD,
     SDP_HOLD_NOT_RUN,
+    STATUS_ERROR,
     VERDICT_BAD,
     VERDICT_NA,
     VERDICT_OK,
@@ -787,6 +788,36 @@ def test_ladder_state_verdict_mapping():
     ):
         assert diff.ladder_state != _LADDER_COMMUNITY_CONFIRMED
         assert diff.ladder_state != "community-confirmed"
+
+
+def test_error_run_status_routes_the_ladder_to_inconclusive():
+    """D-04's ladder guard: a run whose status axis reads ERROR on any step
+    lands on the inconclusive disposition with an empty ladder_state, never
+    on community-reported -- even though every step's verdict is otherwise
+    clean. Anti-vacuity sibling included: the identical verdict shape at
+    the default status lands on community-reported instead, proving the
+    guard is doing the work rather than the ladder already landing on
+    inconclusive regardless."""
+    from firestarter.diagnostic_report import _DISPOSITION_INCONCLUSIVE, build_db_diff
+
+    db = _mock_db()
+
+    ok_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_OK),
+    ]
+    errored_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_SKIPPED, status=STATUS_ERROR),
+    ]
+
+    diff_errored = build_db_diff("X", db, errored_results)
+    assert diff_errored.ladder_state == ""
+    assert diff_errored.proposed_disposition == _DISPOSITION_INCONCLUSIVE
+
+    diff_clean = build_db_diff("X", db, ok_results)
+    assert diff_clean.ladder_state == "community-reported"
+    assert diff_clean.proposed_disposition != _DISPOSITION_INCONCLUSIVE
 
 
 def test_ladder_state_single_source_in_to_dict():
