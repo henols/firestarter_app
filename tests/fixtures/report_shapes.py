@@ -20,16 +20,17 @@ itself, immune to `chip_database.json` regeneration, at the frozen literal
 `4dc282a5d596`.
 
 `RESERVED_SHAPE_IDS` claims `shape_id` names ahead of the phases that will
-freeze them -- `uv-slot-write-pass` (Phase 179) is now the only one left.
-`prune03-synthesized-fingerprint-match` (Phase 177) and
-`attr01-status-axis-transport-fault` (Phase 178) were the other two
-reserved names; both are now registered below (in `_BUILDERS`,
-`FROZEN_HASHES`, `LADDER_PINS` and `tests/fixtures/shape_ids.json`) and
-removed from this set, per this module's own rule that a reserved name
-never enters `SHAPE_IDS`. The module-level assertion below keeps the
-remaining reservation from ever silently colliding with a frozen
-`shape_id`; D-10's completeness pin over `SHAPE_IDS` stays exact because a
-reserved name never enters that set.
+freeze them. All three names it ever held --
+`prune03-synthesized-fingerprint-match` (Phase 177),
+`attr01-status-axis-transport-fault` (Phase 178) and `uv-slot-write-pass`
+(Phase 179) -- are now registered below (in `_BUILDERS`, `FROZEN_HASHES`,
+`LADDER_PINS` and `tests/fixtures/shape_ids.json`) and removed from this
+set, per this module's own rule that a reserved name never enters
+`SHAPE_IDS`. The reservation namespace is therefore fully drawn down to
+EMPTY. The module-level assertion below costs nothing over an empty set
+and re-arms automatically the day a future phase reserves a name; D-10's
+completeness pin over `SHAPE_IDS` stays exact because a reserved name
+never enters that set.
 
 `_REAL_DB` is `EpromDatabase(skip_local_override=True)`: without
 `skip_local_override=True`, a developer's own `~/.firestarter/database.json`
@@ -93,6 +94,8 @@ from firestarter.chip_test import (
 from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import AutoCapture, DiagnosticReport, TransportHealth
 from firestarter.exceptions import SerialError
+
+from ..fake_chip import WriteInitPreflightChip
 
 _REAL_DB = EpromDatabase(skip_local_override=True)
 
@@ -616,6 +619,44 @@ def _build_w27e257_full_all_ok() -> DiagnosticReport:
     )
 
 
+def _build_uv_slot_write_pass() -> DiagnosticReport:
+    """The shape D-04 reserved this name for (Phase 179, decided
+    D-179-2 Option A). The FIRST shape in this corpus that exercises a
+    real UV masked slot write: `_fixed_return_operator`'s `read_eprom`
+    returns `True` while writing no file, so `_read_region` gets `b""`,
+    every UV slot is unevaluable and `_resolve_write_target` refuses --
+    which is why `m27c512-full-all-ok`'s write and verify are `SKIPPED`
+    with `run_count=0` despite its name. This builder needs a
+    chip-modelling double instead, and is firmware-faithful in the sense
+    that matters: `WriteInitPreflightChip` returns `False` and records
+    `last_firmware_error_code` exactly as `eprom_operations.
+    _run_state_machine` does, rather than raising, on a firmware write-init
+    refusal.
+
+    The double is constructed at the `m27c512` memory size read off
+    `_REAL_DB` (never a hard-coded literal) and seeded with data at
+    `[0x0000:0x0100]` -- OUTSIDE `uv_slot_starts`' top-down first slot,
+    which sits at the HIGH end of the device -- so the part holds prior
+    content while its write target slot stays virgin. That is UV-01's
+    precondition, and it is the same shape as Phase 83's bench-proven
+    16-byte write at `0x0000`.
+
+    Real-path (D-02 table 2), same as every other registered real-path
+    shape: `_build_real_path_report(chip="m27c512", write_scope="full",
+    operator=<the seeded double>, runs=2)` so the frozen hash is a hash
+    of what the engine actually produces -- the real witness, the real
+    positional `FLAG_SKIP_BLANK_CHECK`, the real firmware pre-flight
+    refusal it now clears, and the real adjudicated blank-check verdict.
+    """
+    full = _REAL_DB.get_eprom("m27c512") or {}
+    mem_size = int(full.get("memory-size", 0) or 0)
+    chip = WriteInitPreflightChip(mem_size, uv=True)
+    chip.data[0x0000:0x0100] = bytes(range(256))
+    return _build_real_path_report(
+        chip="m27c512", write_scope="full", operator=chip, runs=2
+    )
+
+
 def _build_prune03_synthesized_fingerprint_match() -> DiagnosticReport:
     """The shape D-04 reserved this name for (Phase 177). Pins the exact
     lowercase `match` literal inside `dedup_fingerprint`'s pre-image
@@ -681,6 +722,7 @@ _BUILDERS: dict[str, Callable[[], DiagnosticReport]] = {
     "w27e257-full-all-ok": _build_w27e257_full_all_ok,
     "prune03-synthesized-fingerprint-match": _build_prune03_synthesized_fingerprint_match,
     "attr01-status-axis-transport-fault": _build_attr01_status_axis_transport_fault,
+    "uv-slot-write-pass": _build_uv_slot_write_pass,
 }
 
 SHAPE_IDS: tuple[str, ...] = tuple(sorted(_BUILDERS))
@@ -695,7 +737,7 @@ FROZEN_HASHES: dict[str, str] = {
     "synthetic-arm4-no-ok": "f90dfe1a44f7",
     "synthetic-arm4-empty-results": "8d6208d00be7",
     "m27c512-full-all-ok": "6d3afbc52315",
-    "m27c512-full-blank-check-bad": "077a32d1a5c4",
+    "m27c512-full-blank-check-bad": "e42f1567967a",
     "m27c512-full-canonical-name": "776846bf2dc8",
     "m27c512-full-comma-joined-name": "37ad34d39a19",
     "m27c512-full-runs-1": "e4838f7bb1d3",
@@ -704,13 +746,10 @@ FROZEN_HASHES: dict[str, str] = {
     "w27e257-full-all-ok": "3a9f95aba65e",
     "prune03-synthesized-fingerprint-match": "3b83a55efb3a",
     "attr01-status-axis-transport-fault": "93cef8030c40",
+    "uv-slot-write-pass": "927571e5110f",
 }
 
-RESERVED_SHAPE_IDS: frozenset[str] = frozenset(
-    {
-        "uv-slot-write-pass",
-    }
-)
+RESERVED_SHAPE_IDS: frozenset[str] = frozenset()
 
 assert not (set(SHAPE_IDS) & RESERVED_SHAPE_IDS), (
     "a shape_id was frozen under a name D-04 reserved for a later phase; "

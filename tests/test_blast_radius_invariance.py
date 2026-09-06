@@ -213,7 +213,7 @@ _DISPOSITION_INCONCLUSIVE_LITERAL = "inconclusive -- needs N>=2 agreement (advis
 _DISPOSITION_NO_CHANGE_LITERAL = "no change suggested (advisory)"
 
 """GATE-03/D-08: `build_db_diff`'s (proposed_disposition, ladder_state) pair
-for every one of the seventeen frozen shapes, re-measured after Phase
+for every one of the nineteen frozen shapes, re-measured after Phase
 177's D-4/D-6 match-bucket-and-read-back-gating flip. All four
 `build_db_diff` arms appear -- the coverage sentinel below asserts exactly
 four distinct pairs, so neither a shape addition that widens the table
@@ -223,7 +223,12 @@ element-wise idiom applied to arm coverage). The flip moves
 arm onto the CANDIDATE arm; the re-pointed
 `sst27sf512-six-step-readback-gated` (D-177-3) re-populates INCONCLUSIVE
 alongside the still-unmoved `gh47-sst27sf512-pass`, so the arm is never
-empty."""
+empty. Phase 179 moves `m27c512-full-blank-check-bad` a second time: its
+pre-write UV blank-check now adjudicates to `SKIPPED` instead of `BAD`, so
+the row no longer spends a chip `BAD` and clears `build_db_diff`'s
+`"BAD" in verdicts` arm identically to `NA`/`SKIPPED`, landing on the same
+CANDIDATE/community-reported pair as `uv-slot-write-pass`, the new shape
+this phase registers."""
 LADDER_PINS: dict[str, tuple[str, str]] = {
     "at28c256-full-all-ok-sdp": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
     "attr01-status-axis-transport-fault": (_DISPOSITION_INCONCLUSIVE_LITERAL, ""),
@@ -233,8 +238,8 @@ LADDER_PINS: dict[str, tuple[str, str]] = {
     "gh47-sst27sf512-pass": (_DISPOSITION_INCONCLUSIVE_LITERAL, ""),
     "m27c512-full-all-ok": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
     "m27c512-full-blank-check-bad": (
-        _DISPOSITION_COMMUNITY_FAIL_LITERAL,
-        "community-fail",
+        _DISPOSITION_CANDIDATE_LITERAL,
+        "community-reported",
     ),
     "m27c512-full-canonical-name": (
         _DISPOSITION_CANDIDATE_LITERAL,
@@ -254,6 +259,7 @@ LADDER_PINS: dict[str, tuple[str, str]] = {
     "sst27sf512-six-step-readback-gated": (_DISPOSITION_INCONCLUSIVE_LITERAL, ""),
     "synthetic-arm4-empty-results": (_DISPOSITION_NO_CHANGE_LITERAL, ""),
     "synthetic-arm4-no-ok": (_DISPOSITION_NO_CHANGE_LITERAL, ""),
+    "uv-slot-write-pass": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
     "w27e257-full-all-ok": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
 }
 
@@ -560,6 +566,7 @@ _PINNED_SHAPE_ID_SET = [
     "sst27sf512-six-step-readback-gated",
     "synthetic-arm4-empty-results",
     "synthetic-arm4-no-ok",
+    "uv-slot-write-pass",
     "w27e257-full-all-ok",
 ]
 
@@ -765,13 +772,25 @@ def test_shape_ids_frozen_hashes_ladder_pins_and_snapshots_agree() -> None:
 
 def test_build_shape_raises_for_every_reserved_shape_id() -> None:
     """A reserved name must not silently return an empty report -- that is
-    how a placeholder becomes a frozen value by accident (D-04). Probed
-    against every remaining `RESERVED_SHAPE_IDS` name -- one, after Phase
-    177 registered `prune03-synthesized-fingerprint-match` and Phase 178
-    registered `attr01-status-axis-transport-fault`."""
+    how a placeholder becomes a frozen value by accident (D-04). Phases
+    177, 178 and 179 registered all three names `RESERVED_SHAPE_IDS` ever
+    held (`prune03-synthesized-fingerprint-match`,
+    `attr01-status-axis-transport-fault`, `uv-slot-write-pass`), so the set
+    is now EMPTY -- asserted explicitly here rather than left to the loop
+    below, which would otherwise pass over zero iterations and assert
+    nothing, a pre-authored gate leg silently gone unreachable. The loop
+    stays so a future phase re-populating the set is still probed
+    automatically, and an explicit unregistered sentinel keeps
+    `build_shape`'s `KeyError` property alive in the meantime."""
+    assert RESERVED_SHAPE_IDS == frozenset(), (
+        "RESERVED_SHAPE_IDS is no longer empty -- a new name was reserved "
+        "without updating this test's docstring"
+    )
     for reserved_id in sorted(RESERVED_SHAPE_IDS):
         with pytest.raises(KeyError):
             build_shape(reserved_id)
+    with pytest.raises(KeyError):
+        build_shape("unregistered-sentinel-shape-id-179")
 
 
 def test_shape_ids_closure_is_sensitive_to_removed_and_added_entries() -> None:

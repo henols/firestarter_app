@@ -18,6 +18,7 @@
     "sst27sf512-six-step-readback-gated",
     "synthetic-arm4-empty-results",
     "synthetic-arm4-no-ok",
+    "uv-slot-write-pass",
     "w27e257-full-all-ok"
   ]
 }
