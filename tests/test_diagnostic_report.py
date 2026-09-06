@@ -1000,6 +1000,56 @@ def test_voltage_split_fields_serialize():
     assert table.row_count > 0
 
 
+"""ATTR-06 (Phase 178 plan 04, D-14) -- the honesty sentence about the rail
+reading itself: `hw_read_voltage` measures the regulator rail, never the
+socket, so the disclosure must reach both the exported dict AND the
+rendered console text, unconditionally -- even when no rail was measured."""
+
+
+def test_rail_reading_disclosure_is_exported_and_rendered():
+    from firestarter.diagnostic_report import (
+        _RAIL_READING_DISCLOSURE,
+        DiagnosticReport,
+    )
+
+    report = _minimal_report(vpp_before_mv=11800, vpe_before_mv=12100)
+    report.vpp_after_mv = 11750
+    report.vpe_after_mv = 12050
+
+    d = report.to_dict()
+    disclosure = d["rail_reading_disclosure"]
+    assert disclosure == _RAIL_READING_DISCLOSURE
+    assert isinstance(disclosure, str) and disclosure.strip()
+    assert "socket" in disclosure.lower()
+
+    assert isinstance(report, DiagnosticReport)
+    table = report.render()
+    rendered_cells = [str(cell) for column in table.columns for cell in column.cells]
+    rendered_text = " ".join(rendered_cells)
+    assert disclosure in rendered_text
+
+
+def test_rail_reading_disclosure_renders_when_no_rail_was_measured():
+    """The ATTR-06 empty edge: all four rail fields `None`, so
+    `_voltage_dict` substitutes `NOT_MEASURED` -- the disclosure must still
+    be exported and rendered, unconditionally."""
+    from firestarter.diagnostic_report import _RAIL_READING_DISCLOSURE
+
+    report = _minimal_report()
+    assert report.vpp_before_mv is None
+    assert report.vpe_before_mv is None
+
+    d = report.to_dict()
+    disclosure = d["rail_reading_disclosure"]
+    assert disclosure == _RAIL_READING_DISCLOSURE
+    assert isinstance(disclosure, str) and disclosure.strip()
+
+    table = report.render()
+    rendered_cells = [str(cell) for column in table.columns for cell in column.cells]
+    rendered_text = " ".join(rendered_cells)
+    assert disclosure in rendered_text
+
+
 # ---------------------------------------------------------------------------
 # LEG-12's carriage half (v1.30 Phase 134, plan 134-06, D-10/D-11) --
 # `sdp_hold_state`, its no-boolean gate, the schema bump, and the D-11 re-key

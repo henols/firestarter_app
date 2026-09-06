@@ -87,8 +87,9 @@ from .fixtures.report_shapes import (
 _HEX12_RE = re.compile(r"^[0-9a-f]{12}$")
 
 """D-07's first pin: `DiagnosticReport.to_dict()`
-(`firestarter/diagnostic_report.py:771-790`) emits twelve top-level keys
-today (Phase 178 plan 01 adds `run_status`, schema 1.8)."""
+(`firestarter/diagnostic_report.py:771-790`) emits thirteen top-level keys
+today (Phase 178 plan 01 added `run_status`, schema 1.8; Phase 178 plan 04
+adds `rail_reading_disclosure`, the ATTR-06 sentence)."""
 _TO_DICT_KEYS = [
     "auto_capture",
     "banner",
@@ -96,6 +97,7 @@ _TO_DICT_KEYS = [
     "dedup_fingerprint",
     "generated",
     "is_submittable",
+    "rail_reading_disclosure",
     "run_status",
     "schema_version",
     "sdp_hold_state",

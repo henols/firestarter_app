@@ -53,6 +53,19 @@ NOT_MEASURED = "not measured"  # honest fallback, never a false 0
 # empty. Reusing NOT_MEASURED would conflate the two.
 NOT_REPORTED = "not reported"
 
+"""ATTR-06 (D-14): the sentence the report says about its own rail readings.
+`hw_read_voltage` energizes and measures the boost-regulator rail only -- it
+asserts no socket-routing bit, so a rig with VPP unhooked still reads a
+healthy rail. Computed ONCE here, exported by `to_dict()` under
+`rail_reading_disclosure`, and read by `render()` off the exported dict --
+the same single-sourcing discipline `write_coverage`/`sdp_hold_state` use.
+States what the reading does NOT show; never a claim that it proves
+anything (advisory voice, matching `_DISPOSITION_*` below)."""
+_RAIL_READING_DISCLOSURE = (
+    "vpp/vpe readings measure the regulator rail only -- they do not show "
+    "whether the eprom socket is connected (advisory)"
+)
+
 _SUSPECT_THRESHOLD = 5
 
 
@@ -890,6 +903,7 @@ class DiagnosticReport:
             "db_diff": self._db_diff_dict(),
             "sdp_hold_state": self.sdp_hold_state,
             "run_status": self.run_status,
+            "rail_reading_disclosure": _RAIL_READING_DISCLOSURE,
         }
 
     def render(self, console: Any = None) -> Any:
@@ -1030,6 +1044,7 @@ class DiagnosticReport:
         table.add_row(
             "vpe (before/after)", _rail_cell(v["vpe_before_mv"], v["vpe_after_mv"])
         )
+        table.add_row("rail reading", d["rail_reading_disclosure"])
 
         if console is not None:
             console.print(table)

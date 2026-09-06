@@ -147,6 +147,18 @@ def test_sanitize_uses_getpass_default_when_user_omitted(monkeypatch):
     assert out["reason"] == "run by <user> here"
 
 
+def test_sanitize_leaves_the_rail_reading_disclosure_byte_identical():
+    """ATTR-06 / T-178-01: `rail_reading_disclosure` rides `to_dict()`, the
+    only input the sanitizer deep-scrubs -- proving the new string key
+    contains none of the scrubbable vectors (no home dir, no device path, no
+    username) that `_SCRUBS` would otherwise have had to rewrite."""
+    from firestarter.diagnostic_report import _RAIL_READING_DISCLOSURE
+
+    d = {"rail_reading_disclosure": _RAIL_READING_DISCLOSURE}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert out["rail_reading_disclosure"] == _RAIL_READING_DISCLOSURE
+
+
 # ---------------------------------------------------------------------------
 # overall_verdict / build_title / build_body / build_issue_url
 # ---------------------------------------------------------------------------
