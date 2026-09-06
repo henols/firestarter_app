@@ -21,7 +21,11 @@ Test taxonomy:
   Operator-double harness
     _REAL_DB, _OPERATOR_METHODS, _result -- copied in shape from
     tests/test_chip_test_sdp_leg.py:219-262, not imported (these names are
-    module-private in a large sibling test module).
+    module-private in a large sibling test module). `_OPERATOR_METHODS`
+    backs leg 12's `Mock(spec=_OPERATOR_METHODS)` -- no chip state is
+    needed there, and `spec=` is what makes a typo'd method raise
+    `AttributeError` rather than silently answering truthy, the
+    absent-chip false-green family this project refuses.
 
   The double is not theatre (legs 1-2)
     test_the_double_refuses_a_non_blank_write_without_the_flag
@@ -66,6 +70,7 @@ import copy
 import re
 import tempfile
 from pathlib import Path
+from unittest.mock import Mock
 
 from firestarter import chip_test as ct
 from firestarter import submit as sub
@@ -76,6 +81,17 @@ from firestarter.diagnostic_report import AutoCapture, DiagnosticReport, Transpo
 from .fake_chip import WriteInitPreflightChip
 
 _REAL_DB = EpromDatabase(skip_local_override=True)
+
+_OPERATOR_METHODS = [
+    "check_eprom_id",
+    "read_eprom",
+    "check_eprom_blank",
+    "write_eprom",
+    "verify_eprom",
+    "erase_eprom",
+    "sdp_lock",
+    "sdp_unlock",
+]
 
 
 def _result(results, op):
@@ -221,3 +237,199 @@ def test_uv_slot_write_preserves_the_not_blank_finding() -> None:
     assert sub._reason_text(blank_check.verdict, blank_check.reason) == (
         blank_check.reason
     )
+
+
+def test_uv_slot_policy_without_the_witness_does_not_set_the_flag() -> None:
+    """Direction A of ROADMAP criterion 3's disagreement: `region_policy ==
+    "uv-slot"` and the mask came from a probe read are CURRENTLY coextensive
+    but are NOT the same predicate, and were provably not coextensive one
+    design iteration ago. Injects a hand-built, UNMASKED target via the
+    public `WriteContext.cycle_targets` seam -- which short-circuits
+    `_resolve_write_target` (`_cycle_target`, `chip_test.py:1330-1345`) --
+    so the policy says uv-slot while the witness is absent. Asserts on THE
+    FLAGS THE DOUBLE RECORDED, never on the verdict, which is `OK` in both
+    directions and would prove nothing; and on ZERO `read_eprom` calls, so
+    the leg is proven to test the witness rather than the resolver."""
+    step = ct.Step(
+        op=ct.OP_WRITE,
+        supported=True,
+        reason="",
+        destructive=True,
+        write_region=(0xFF00, 256),
+        region_policy=ct.REGION_POLICY_UV_SLOT,
+        full_device_permitted=False,
+        cycle_payload=ct.CYCLE_PAYLOAD_UV_TRANCHE,
+    )
+    target = ct.WriteTarget(
+        region=(0xFF00, 256),
+        pattern=ct.generate_pattern(0xFF00, 256),
+        masked=False,
+        bits_cleared=0,
+        bits_retained=0,
+        current_source="address-derived pattern (unmasked)",
+        region_policy=ct.REGION_POLICY_UV_SLOT,
+    )
+    write_context = ct.WriteContext()
+    write_context.cycle_targets = [target]
+    write_context.cycle_index = 0
+    ed = ct.resolve_chip("m27c512", db=_REAL_DB)
+    chip = WriteInitPreflightChip(65536, uv=True)
+    ct._dispatch_multi_run(
+        ct.OP_WRITE,
+        "m27c512",
+        ed,
+        chip,
+        runs=1,
+        step=step,
+        write_context=write_context,
+    )
+    assert chip.write_flags_seen == [0]
+    assert sum(1 for call in chip.calls if call[0] == "read_eprom") == 0
+
+
+def test_fixed_policy_with_the_witness_sets_the_flag() -> None:
+    """Direction B, the converse: a `fixed`-policy `Step` with a hand-built,
+    MASKED, probe-read-witnessed target injected via the same
+    `WriteContext.cycle_targets` seam. The policy says fixed; the witness
+    is present; the flag must go ON regardless. Legs 7 and 8 together are
+    ROADMAP criterion 3's "constructed so the two signals disagree and the
+    witness wins" -- one direction alone would be satisfiable by a flag
+    that is simply always off."""
+    current = b"\xff" * 256
+    desired = ct.generate_pattern(0x1000, 256)
+    step = ct.Step(
+        op=ct.OP_WRITE,
+        supported=True,
+        reason="",
+        destructive=True,
+        write_region=(0x1000, 256),
+        region_policy=ct.REGION_POLICY_FIXED,
+        full_device_permitted=False,
+    )
+    target = ct.WriteTarget(
+        region=(0x1000, 256),
+        pattern=ct.mask_write_pattern(current, desired),
+        masked=True,
+        bits_cleared=ct.bits_cleared_by(current, desired),
+        bits_retained=ct.bits_retained_by(current, desired),
+        current_source="probe read",
+        current=current,
+        current_is_probe_read=True,
+        region_policy=ct.REGION_POLICY_FIXED,
+    )
+    write_context = ct.WriteContext()
+    write_context.cycle_targets = [target]
+    write_context.cycle_index = 0
+    ed = ct.resolve_chip("m27c512", db=_REAL_DB)
+    chip = WriteInitPreflightChip(65536, uv=True)
+    ct._dispatch_multi_run(
+        ct.OP_WRITE,
+        "m27c512",
+        ed,
+        chip,
+        runs=1,
+        step=step,
+        write_context=write_context,
+    )
+    assert chip.write_flags_seen == [8]
+    assert sum(1 for call in chip.calls if call[0] == "read_eprom") == 0
+
+
+def test_the_witness_is_false_for_absent_empty_and_unmasked_targets() -> None:
+    """The probe-surfaced `UV-03 / empty` edge, committed:
+    `_is_monotonic_masked_target` is `False` for `None`, for a `masked=False`
+    target, and for a `masked=True` target whose `current` is empty -- the
+    fail-closed cases -- and `True` only when all three conjuncts hold, so
+    this leg is not vacuously satisfied by a predicate that returns `False`
+    for everything."""
+    current = b"\xff" * 256
+    desired = ct.generate_pattern(0x1000, 256)
+    unmasked = ct.WriteTarget(
+        region=(0x1000, 256),
+        pattern=desired,
+        masked=False,
+        bits_cleared=0,
+        bits_retained=0,
+        current_source="address-derived pattern (unmasked)",
+    )
+    empty_current = ct.WriteTarget(
+        region=(0x1000, 256),
+        pattern=ct.mask_write_pattern(current, desired),
+        masked=True,
+        bits_cleared=ct.bits_cleared_by(current, desired),
+        bits_retained=ct.bits_retained_by(current, desired),
+        current_source="probe read",
+        current=b"",
+        current_is_probe_read=True,
+    )
+    full_witness = ct.WriteTarget(
+        region=(0x1000, 256),
+        pattern=ct.mask_write_pattern(current, desired),
+        masked=True,
+        bits_cleared=ct.bits_cleared_by(current, desired),
+        bits_retained=ct.bits_retained_by(current, desired),
+        current_source="probe read",
+        current=current,
+        current_is_probe_read=True,
+    )
+    assert ct._is_monotonic_masked_target(None) is False
+    assert ct._is_monotonic_masked_target(unmasked) is False
+    assert ct._is_monotonic_masked_target(empty_current) is False
+    assert ct._is_monotonic_masked_target(full_witness) is True
+
+
+def test_the_prescribed_probe_read_string_equality_would_never_match() -> None:
+    """`.planning/research/SUMMARY.md:89` prescribes the witness as
+    `target.current_source == "probe read"`. MEASURED, every target
+    `_plan_cycle_targets`/`_uv_cycle_targets` stages for a probed UV part
+    over a two-cycle run carries `current_source` reading
+    `"probe read (tranche N/2)"` (`chip_test.py:1518`) -- the equality
+    NEVER matches, while the prefix always holds. A witness written as that
+    equality would ship green and do nothing; this leg turns a future
+    "simplification" back to it into a RED instead of a silent no-op."""
+    current = b"\xff" * 256
+    desired = ct.generate_pattern(0xFF00, 256)
+    probe = ct.WriteTarget(
+        region=(0xFF00, 256),
+        pattern=ct.mask_write_pattern(current, desired),
+        masked=True,
+        bits_cleared=ct.bits_cleared_by(current, desired),
+        bits_retained=ct.bits_retained_by(current, desired),
+        current_source="probe read",
+        current=current,
+        current_is_probe_read=True,
+        region_policy=ct.REGION_POLICY_UV_SLOT,
+    )
+    staged = ct._uv_cycle_targets(probe, 2)
+    assert len(staged) == 2
+    for target in staged:
+        assert target.current_source != "probe read"
+        assert target.current_source.startswith("probe read ")
+
+
+def test_a_non_uv_plan_never_sets_the_skip_blank_check_flag() -> None:
+    """Without this leg an always-on flag would satisfy legs 3, 4 and 8
+    equally well. A full-scope two-cycle run on `at28c256` (non-UV) against
+    a `WriteInitPreflightChip` constructed with `uv=False` records only `0`
+    in `write_flags_seen`."""
+    full = _REAL_DB.get_eprom("at28c256") or {}
+    mem_size = int(full.get("memory-size", 0) or 0)
+    chip = WriteInitPreflightChip(mem_size, uv=False)
+    plan = ct.derive_plan("at28c256", _REAL_DB, write_scope="full")
+    ct.run_plan(plan, chip, _REAL_DB, runs=2)
+    assert set(chip.write_flags_seen) == {0}
+
+
+def test_a_non_uv_blank_check_failure_is_still_bad() -> None:
+    """The adjudication must fire ONLY on a UV plan's pre-write blank-check
+    (`Step.uv_prewrite` at its `False` default here) -- a non-UV part that
+    is not blank after an erase is still a real tool-health failure. Uses
+    `Mock(spec=_OPERATOR_METHODS)` rather than a chip-modelling double: no
+    chip state is needed, and `spec=` keeps a typo'd operator method an
+    `AttributeError` rather than a silently-truthy `Mock`."""
+    operator = Mock(spec=_OPERATOR_METHODS)
+    operator.check_eprom_blank.return_value = False
+    step = ct.Step(op=ct.OP_BLANK_CHECK, supported=True, reason="")
+    ed = ct.resolve_chip("m27c512", db=_REAL_DB)
+    result = ct._dispatch_step("m27c512", step, ed, operator, runs=1)
+    assert result.verdict == ct.VERDICT_BAD
