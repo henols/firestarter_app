@@ -224,6 +224,7 @@ alongside the still-unmoved `gh47-sst27sf512-pass`, so the arm is never
 empty."""
 LADDER_PINS: dict[str, tuple[str, str]] = {
     "at28c256-full-all-ok-sdp": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
+    "attr01-status-axis-transport-fault": (_DISPOSITION_INCONCLUSIVE_LITERAL, ""),
     "gh20-at28c256-fail": (_DISPOSITION_COMMUNITY_FAIL_LITERAL, "community-fail"),
     "gh23-w27e257-fail": (_DISPOSITION_COMMUNITY_FAIL_LITERAL, "community-fail"),
     "gh28-m27c512-fail": (_DISPOSITION_COMMUNITY_FAIL_LITERAL, "community-fail"),
@@ -541,6 +542,7 @@ def test_to_dict_key_list_pins_are_sensitive_to_added_and_removed_keys() -> None
 
 _PINNED_SHAPE_ID_SET = [
     "at28c256-full-all-ok-sdp",
+    "attr01-status-axis-transport-fault",
     "gh20-at28c256-fail",
     "gh23-w27e257-fail",
     "gh28-m27c512-fail",
@@ -762,7 +764,9 @@ def test_shape_ids_frozen_hashes_ladder_pins_and_snapshots_agree() -> None:
 def test_build_shape_raises_for_every_reserved_shape_id() -> None:
     """A reserved name must not silently return an empty report -- that is
     how a placeholder becomes a frozen value by accident (D-04). Probed
-    against all three `RESERVED_SHAPE_IDS` names, not just one."""
+    against every remaining `RESERVED_SHAPE_IDS` name -- one, after Phase
+    177 registered `prune03-synthesized-fingerprint-match` and Phase 178
+    registered `attr01-status-axis-transport-fault`."""
     for reserved_id in sorted(RESERVED_SHAPE_IDS):
         with pytest.raises(KeyError):
             build_shape(reserved_id)

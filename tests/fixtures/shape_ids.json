@@ -2,6 +2,7 @@
   "_note": "The committed sorted anchor D-10 pins tests/fixtures/report_shapes.py's SHAPE_IDS against, element-wise. Edited only in the same commit that adds or removes a builder in report_shapes.py -- never on its own.",
   "shape_ids": [
     "at28c256-full-all-ok-sdp",
+    "attr01-status-axis-transport-fault",
     "gh20-at28c256-fail",
     "gh23-w27e257-fail",
     "gh28-m27c512-fail",

@@ -20,16 +20,16 @@ itself, immune to `chip_database.json` regeneration, at the frozen literal
 `4dc282a5d596`.
 
 `RESERVED_SHAPE_IDS` claims `shape_id` names ahead of the phases that will
-freeze them -- `attr01-status-axis-transport-fault` (Phase 178),
-`uv-slot-write-pass` (Phase 179) -- without giving either of them a hash
-yet. `prune03-synthesized-fingerprint-match` (Phase 177) was the third
-reserved name; it is now registered below (in `_BUILDERS`, `FROZEN_HASHES`,
-`LADDER_PINS` and `tests/fixtures/shape_ids.json`) and removed from this
-set, per this module's own rule that a reserved name never enters
-`SHAPE_IDS`. The module-level assertion below keeps the remaining
-reservation from ever silently colliding with a frozen `shape_id`; D-10's
-completeness pin over `SHAPE_IDS` stays exact because a reserved name
-never enters that set.
+freeze them -- `uv-slot-write-pass` (Phase 179) is now the only one left.
+`prune03-synthesized-fingerprint-match` (Phase 177) and
+`attr01-status-axis-transport-fault` (Phase 178) were the other two
+reserved names; both are now registered below (in `_BUILDERS`,
+`FROZEN_HASHES`, `LADDER_PINS` and `tests/fixtures/shape_ids.json`) and
+removed from this set, per this module's own rule that a reserved name
+never enters `SHAPE_IDS`. The module-level assertion below keeps the
+remaining reservation from ever silently colliding with a frozen
+`shape_id`; D-10's completeness pin over `SHAPE_IDS` stays exact because a
+reserved name never enters that set.
 
 `_REAL_DB` is `EpromDatabase(skip_local_override=True)`: without
 `skip_local_override=True`, a developer's own `~/.firestarter/database.json`
@@ -92,6 +92,7 @@ from firestarter.chip_test import (
 )
 from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import AutoCapture, DiagnosticReport, TransportHealth
+from firestarter.exceptions import SerialError
 
 _REAL_DB = EpromDatabase(skip_local_override=True)
 
@@ -638,6 +639,29 @@ def _build_prune03_synthesized_fingerprint_match() -> DiagnosticReport:
     )
 
 
+def _build_attr01_status_axis_transport_fault() -> DiagnosticReport:
+    """The shape D-04 reserved this name for (Phase 178, decided
+    D-178-1 Option A). Pins the exported `status` key at the literal
+    `ERROR` on a real transport-faulted step, and pins the result axis at
+    `VERDICT_SKIPPED` -- never a chip `BAD` -- so a later phase that
+    respells either value, or re-points the transport arm's verdict, or
+    reopens the destructive-write gate on this path, reddens in the frozen
+    corpus first rather than only inside `chip_test.py`'s own behaviour
+    tests. Real-path (D-02 table 2): the operator double's
+    `check_eprom_id.side_effect` is set to a `SerialError` AFTER the double
+    is built, which `unittest.mock.Mock` resolves ahead of the
+    `return_value` `_build_real_path_report` stamps onto that same
+    attribute -- `side_effect` takes precedence over `return_value`
+    whenever both are set, so that helper needs no edit. Uses chip
+    `m27c512`, already exercised by a registered all-OK real-path shape
+    above, so `derive_plan` coverage is understood rather than novel."""
+    operator = _fixed_return_operator()
+    operator.check_eprom_id.side_effect = SerialError("synthetic transport fault")
+    return _build_real_path_report(
+        chip="m27c512", write_scope="full", operator=operator, runs=2
+    )
+
+
 _BUILDERS: dict[str, Callable[[], DiagnosticReport]] = {
     "sst27sf512-six-step": _build_sst27sf512_six_step,
     "sst27sf512-six-step-readback-gated": _build_sst27sf512_six_step_readback_gated,
@@ -656,6 +680,7 @@ _BUILDERS: dict[str, Callable[[], DiagnosticReport]] = {
     "sst27sf512-full-all-ok": _build_sst27sf512_full_all_ok,
     "w27e257-full-all-ok": _build_w27e257_full_all_ok,
     "prune03-synthesized-fingerprint-match": _build_prune03_synthesized_fingerprint_match,
+    "attr01-status-axis-transport-fault": _build_attr01_status_axis_transport_fault,
 }
 
 SHAPE_IDS: tuple[str, ...] = tuple(sorted(_BUILDERS))
@@ -678,11 +703,11 @@ FROZEN_HASHES: dict[str, str] = {
     "sst27sf512-full-all-ok": "14d306256076",
     "w27e257-full-all-ok": "3a9f95aba65e",
     "prune03-synthesized-fingerprint-match": "3b83a55efb3a",
+    "attr01-status-axis-transport-fault": "93cef8030c40",
 }
 
 RESERVED_SHAPE_IDS: frozenset[str] = frozenset(
     {
-        "attr01-status-axis-transport-fault",
         "uv-slot-write-pass",
     }
 )
