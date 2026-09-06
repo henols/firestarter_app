@@ -56,12 +56,24 @@ Row provenance:
   RK-174-04-p179-uv-blank-check-abort -- shape_id
   `m27c512-full-blank-check-bad`. Owner: Phase 179. Mechanism, stated
   correctly (RESEARCH correction C3): the collapse rides the `blank-check`
-  verdict triple moving from OK to BAD. It does NOT ride
-  `repeat_policy_tag` -- the collapsed `write`/`verify` steps carry
-  `run_count == 0`, not `1`, so that tag never fires. CONTEXT.md D-12 row 4
-  and the milestone research both named the tag; measurement found it
-  stays empty, and this row's provenance carries the correction so Phase
-  179 is measured against the mechanism that actually operates.
+  verdict triple moving, NOT `repeat_policy_tag` -- the collapsed
+  `write`/`verify` steps carry `run_count == 0`, not `1`, so that tag never
+  fires. CONTEXT.md D-12 row 4 and the milestone research both named the
+  tag; measurement found it stays empty, and this row's provenance carries
+  the correction so Phase 179 is measured against the mechanism that
+  actually operates. DECLARED this phase: `after_hash` `e42f1567967a`,
+  measured off the committed `_build_m27c512_full_blank_check_bad` builder
+  after Phase 179 landed `FLAG_SKIP_BLANK_CHECK` and the UV blank-check's
+  execution-time verdict adjudication. The triple moves `BAD -> SKIPPED`,
+  not the `OK -> BAD` direction this row was seeded under -- the pre-write
+  UV blank-check now reports a finding rather than a chip fault, so it no
+  longer spends a `BAD` verdict. `.planning/research/PITFALLS.md:186-188`
+  step 2's claim that this step's `error_code` trips `hardware_refused` and
+  aborts cycle 2 is FALSIFIED, recorded rather than deleted (as
+  `RK-174-01`'s note keeps its own falsified `60a031573aab`): a UV plan's
+  `cycle_block_bounds` is `(3, 6)` and the standalone blank-check step sits
+  OUTSIDE that block, so the abort actually measured came from the WRITE
+  step's own firmware refusal, not from this step at all.
 
   RK-174-05-p177-match-bucket-d4d6 -- shape_id `at28c256-full-all-ok-sdp`.
   Owner: Phase 177. Mechanism: D-4/D-6 add a `match` bucket to the
@@ -149,7 +161,7 @@ LEDGER = (
     (
         "m27c512-full-blank-check-bad",
         "077a32d1a5c4",
-        None,
+        "e42f1567967a",
         "RK-174-04-p179-uv-blank-check-abort",
     ),
     (
