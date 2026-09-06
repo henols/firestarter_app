@@ -2252,7 +2252,16 @@ class TestWriteCoverageProvenanceD_F:
         "partial" (D-01/D-03), so the execution-time resolver probes and
         masks rather than taking the D-C full-device shortcut. The saved
         JSON's write step carries the resolved slot region/bit counts, and
-        the console shows the D-F "write coverage" row."""
+        the console shows the D-F "write coverage" row.
+
+        Exit 0, not 1 (Phase 179): a used chip is genuinely NOT all-0xFF, so
+        `check_eprom_blank` (real, chip-content-derived, not stubbed)
+        honestly reports the chip is not blank -- but on a UV plan that is
+        now an expected, operator-actionable pre-write FINDING
+        (`Step.uv_prewrite`), adjudicated to `SKIPPED` rather than `BAD`, so
+        it no longer dominates the exit-code fold. It still does not stop
+        the write/verify steps from running and succeeding, which is what
+        this test actually pins."""
         from .fake_chip import FakeChip
 
         chip = FakeChip.uv_with_content(65536, b"\xf0" * 256, start=65280)
@@ -2261,12 +2270,7 @@ class TestWriteCoverageProvenanceD_F:
         )
         with _off_tty():
             result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
-        # exit 1, not 0: a used chip is genuinely NOT all-0xFF, so
-        # `check_eprom_blank` (real, chip-content-derived, not stubbed)
-        # honestly reports BAD -- that BAD is what makes this a "used chip"
-        # scenario at all, and it does not stop the write/verify steps from
-        # running and succeeding, which is what this test actually pins.
-        assert result.exit_code == 1, result.output
+        assert result.exit_code == 0, result.output
 
         data = _load_report(_CHIP_UV)
         steps = {s["op"]: s for s in data["steps"]}

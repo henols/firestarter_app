@@ -74,7 +74,7 @@ def _cycle_operator(name: str, *, blank: bool = False):
             handle.write(b"\xff" * size)
         return True
 
-    def _write(_name, _data, path, address_str=None, **_kw):
+    def _write(_name, _data, path, operation_flags=0, address_str=None, **_kw):
         with open(path, "rb") as handle:
             writes.append((address_str, handle.read()))
         return True

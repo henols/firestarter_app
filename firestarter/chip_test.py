@@ -31,6 +31,7 @@ from typing import Any
 from firestarter.chip_resolver import resolve_chip
 from firestarter.constants import (
     FLAG_CAN_ERASE,  # 0x02 -- do NOT redefine; import
+    FLAG_SKIP_BLANK_CHECK,
     FLAG_SKIP_SDP_UNLOCK,  # 0x100 -- passed on OP_WRITE_INHIBITED ONLY.
     # Do NOT redefine; import.
 )
@@ -464,6 +465,16 @@ class Step:
 
     `full_device_permitted` is True only for `write_scope="full"`, which is
     what lets `_resolve_write_target` decide without a new parameter.
+
+    `uv_prewrite` is set ONCE by `derive_plan`, ONLY on the `OP_BLANK_CHECK`
+    step of a UV plan, and it means "a `not blank` result here is an
+    expected, operator-actionable FINDING about a used UV part, not a chip
+    fault" -- the write is irrecoverable and only UV light erases, so the
+    step keeps its pre-write position and its diagnostic while ceasing to
+    dominate the verdict fold. It follows the same derive-once/read-many
+    discipline `region_policy` and `write_region` already carry;
+    `_dispatch_step` receives `step`, never `plan`, which is why the signal
+    rides here rather than on `Plan.is_uv`.
     """
 
     op: str
@@ -477,6 +488,7 @@ class Step:
     cycle_payload: str = CYCLE_PAYLOAD_SAME
     region_policy: str = REGION_POLICY_FIXED
     full_device_permitted: bool = False
+    uv_prewrite: bool = False
 
 
 @dataclass
@@ -717,7 +729,9 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
             ),
         )
     else:
-        blank_check_step = Step(op=OP_BLANK_CHECK, supported=True, reason="")
+        blank_check_step = Step(
+            op=OP_BLANK_CHECK, supported=True, reason="", uv_prewrite=is_uv
+        )
 
     if not erase_is_executable:
         # Cases 1/3/4 above: no erase step will run, so blank-check keeps
@@ -1517,6 +1531,7 @@ def _uv_cycle_targets(target: WriteTarget, cycles: int) -> list[WriteTarget]:
                     bits_retained=sum(byte.bit_count() for byte in image),
                     current_source=f"{target.current_source} (tranche {cycle}/{cycles})",
                     current=target.current,
+                    current_is_probe_read=target.current_is_probe_read,
                     # Carried through from the probe target, NOT dropped: the
                     # staged copies describe the SAME slot, and these are the
                     # only targets that ever reach the report -- leaving them
@@ -2344,6 +2359,13 @@ class WriteTarget:
     names where the "current chip content" came from for a masked target
     (a probe read, or the blank-check for D-C) -- provenance for the report,
 
+    `current_is_probe_read` is `True` only when `current` was read off the
+    DEVICE for the EXACT region being written; it is the monotonicity
+    witness the `FLAG_SKIP_BLANK_CHECK` pass is derived from. It exists as a
+    boolean rather than a `current_source` compare because the staged
+    tranche targets that actually reach `write_eprom` carry
+    `"probe read (tranche 1/2)"`, so a string equality against `"probe
+    read"` never matches on a real run.
     """
 
     region: tuple[int, int]
@@ -2386,6 +2408,7 @@ class WriteTarget:
     # genuine full-device run could both report `op="write"` while
     # covering wildly different amounts of the device.
     region_policy: str = REGION_POLICY_FIXED
+    current_is_probe_read: bool = False
 
     def __post_init__(self) -> None:
         _start, length = self.region
@@ -2620,6 +2643,18 @@ def _dispatch_step(
     `_write_region_for` and the fixed leg region unchanged. `prior_cycles_failed`
     rides the identical path to `_dispatch_multi_run` only, for the same
     reason -- only a write/verify/erase step's fingerprint gate consults it.
+
+    A non-blank UV part's `blank-check` step is adjudicated to `SKIPPED`,
+    never `VERDICT_OK` or `VERDICT_NA`. `VERDICT_OK` is structurally
+    unavailable for this case: it collides with the frozen
+    `m27c512-full-all-ok` hash `6d3afbc52315`, which would make two distinct
+    corpus shapes hash-identical. `VERDICT_NA` is rejected because
+    `submit._reason_text` suppresses the Reason cell to `-` for `NA` only,
+    which would destroy the very finding this step exists to surface.
+    `SKIPPED` preserves `reason` and `error_code` verbatim. The non-`None`
+    `error_code` on a non-`BAD` step is safe here because a UV plan's
+    `cycle_block_bounds` puts the pre-write blank-check OUTSIDE the cycle
+    block, where `_run_cycle_block`'s `hardware_refused` break lives.
     """
     if step.op == OP_ID:
         return _dispatch_id(name, eprom_data, operator)
@@ -2632,9 +2667,15 @@ def _dispatch_step(
         # the single most useful datum in a `dev test` failure and was being
         # dropped on the floor.
         code, message = (None, "") if is_ok else _firmware_error(operator)
+        if is_ok:
+            verdict = VERDICT_OK
+        elif step.uv_prewrite:
+            verdict = VERDICT_SKIPPED
+        else:
+            verdict = VERDICT_BAD
         return StepResult(
             op=step.op,
-            verdict=VERDICT_OK if is_ok else VERDICT_BAD,
+            verdict=verdict,
             reason=message,
             error_code=code,
             run_count=1,
@@ -2961,6 +3002,7 @@ def _resolve_write_target(
                     bits_retained=retained,
                     current_source="probe read",
                     current=current,
+                    current_is_probe_read=True,
                     # Rig life, at ZERO extra I/O. `all_starts` is
                     # top-down and this loop takes the FIRST acceptable slot,
                     # so every slot above `slot_index` is already spent and
@@ -3017,6 +3059,33 @@ def _firmware_error(operator: Any) -> tuple[int | None, str]:
     code = getattr(operator, "last_firmware_error_code", None)
     message = getattr(operator, "last_firmware_error_message", None) or ""
     return code, message
+
+
+def _is_monotonic_masked_target(target: WriteTarget | None) -> bool:
+    """`True` only when it is SAFE to skip the firmware's write-init
+    blank-check for this target.
+
+    The safety argument is monotonicity: `mask_write_pattern` computes
+    `current & desired` per byte, which can only clear `1 -> 0`, and that
+    property holds ONLY because `current` is a real probe read of the exact
+    target region. `region_policy == "uv-slot"` and "the mask came from a
+    probe read" are currently coextensive but are NOT the same predicate,
+    and were provably not coextensive one design iteration ago (the retired
+    D-C branch whose removal is recorded at `chip_test.py:2905-2917`) --
+    that branch took a chip-reported-blank result, assumed the mask was
+    all-`0xFF`, and never read the device again. This predicate structurally
+    refuses that shape: it requires all three of `target is not None`,
+    `target.masked`, and `target.current_is_probe_read` with a non-empty
+    `target.current`. Every empty/absent case -- `None`, `current == b""`,
+    `masked=False` -- returns `False`, so the firmware pre-flight runs
+    exactly as it does today.
+    """
+    return (
+        target is not None
+        and target.masked
+        and bool(target.current)
+        and target.current_is_probe_read
+    )
 
 
 def _dispatch_multi_run(
@@ -3181,6 +3250,9 @@ def _dispatch_multi_run(
             tmp_fh.close()
         tmp_source_path = tmp_fh.name
 
+    write_flags = (
+        FLAG_SKIP_BLANK_CHECK if _is_monotonic_masked_target(resolved_target) else 0
+    )
     try:
         for _ in range(runs):
             if op in (OP_WRITE, OP_WRITE_PARTIAL):
@@ -3190,6 +3262,7 @@ def _dispatch_multi_run(
                         name,
                         eprom_data,
                         tmp_source_path,
+                        write_flags,
                         address_str=_address_arg(region_start),
                     )
                 )
