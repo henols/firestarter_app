@@ -28,12 +28,13 @@ chip name to `sst27sf512` (below,
 `test_planted_mutation_lowering_chip_name_reddens_the_gate`) was
 independently observed to move it too -- proving the gate is sensitive on
 both axes `dedup_fingerprint` reads, not merely coincidentally correct on
-the frozen shape as built. The three `tools/rekey/check_rekey_ledger.py`
-fail-closed legs (missing ledger, missing MILESTONES.md, unparsable ledger)
-and its one planted-mismatch leg were likewise observed RED in
-`tests/test_rekey_ledger.py`'s subprocess legs before being trusted -- see
-the same evidence file for all five checker invocations' transcribed
-output.
+the frozen shape as built. The meta-side cross-tree re-key checker whose
+fail-closed legs this paragraph used to cite was retired on 2026-09-08
+along with `tests/test_rekey_ledger.py`: it policed a `.planning` record
+from CI, and its coupling to the meta tree both reddened this repository's
+own CI on a bare checkout and made three of its fail-closed proofs
+tautological, since `python3` on a missing script exits `2` exactly as the
+checker's fail-closed path did.
 
 D-07's seven element-wise `to_dict()` key-list pins (plan 174-03) got their
 own anti-vacuity leg,
@@ -275,8 +276,8 @@ def test_dedup_fingerprint_is_frozen(shape_id: str, expected: str) -> None:
     computed = dedup_fingerprint(report)
     assert computed == expected, (
         f"{shape_id} re-keyed: expected {expected}, got {computed}. If "
-        "deliberate, declare it in tests/fixtures/rekey_ledger.py and "
-        ".planning/MILESTONES.md in a SEPARATE commit (D-11)."
+        "deliberate, land the behaviour change and the re-key of this "
+        "literal as SEPARATE commits, so the re-key stays a reviewable unit."
     )
 
 

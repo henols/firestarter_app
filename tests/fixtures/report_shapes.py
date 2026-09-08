@@ -191,10 +191,9 @@ def _build_sst27sf512_six_step() -> DiagnosticReport:
     read-back lands (the step's own outcome is the evidence; nothing
     disagrees, so its fingerprint is synthesized `match`, never a device
     read result). The pre-177 canonical pre-image (`...write=OK:indeterminate|
-    verify=OK:indeterminate...`) is superseded; the declared `after_hash` in
-    `tests/fixtures/rekey_ledger.py` is measured off THIS step vector, never
-    transcribed. Still not `derive_plan`-derived -- see the module docstring
-    for why."""
+    verify=OK:indeterminate...`) is superseded; this shape's frozen hash is
+    measured off THIS step vector, never transcribed. Still not
+    `derive_plan`-derived -- see the module docstring for why."""
     return build_shape_from_step_specs(
         chip="SST27SF512",
         protocol="7",

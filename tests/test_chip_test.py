@@ -2919,8 +2919,10 @@ def test_devtest01_0x0d_all_ok_sweep_no_longer_tags_community_fail():
     `community-fail` -- still holds and is what the first assertion below
     proves; the intervening MEASURED-SUPERSEDED note from 134-03 is itself
     now superseded, recorded here rather than silently dropped. See
-    177-01-SUMMARY.md and `MILESTONES.md`'s `RK-174-05` row for the
-    declared re-key this finding is measured against."""
+    177-01-SUMMARY.md for the re-key this finding is measured against; the
+    `MILESTONES.md` ledger row that recorded it was retired with the
+    cross-tree checker on 2026-09-08, and Phase 177's own archived record is
+    now the reference."""
     from firestarter.diagnostic_report import build_db_diff
 
     name = "AT28C256"
