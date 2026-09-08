@@ -426,7 +426,11 @@ def _last_ok_assignment_shape(source: str) -> dict[str, object]:
             target = n.targets[0]
         elif isinstance(n, (ast.AugAssign, ast.AnnAssign, ast.NamedExpr)):
             target = n.target
-        if isinstance(target, ast.Name) and target.id == "last_ok":
+        if (
+            isinstance(target, ast.Name)
+            and target.id == "last_ok"
+            and isinstance(n, (ast.Assign, ast.AugAssign, ast.AnnAssign, ast.NamedExpr))
+        ):
             targets.append((n.lineno, n.col_offset, n))
     targets.sort(key=lambda t: (t[0], t[1]))
 
