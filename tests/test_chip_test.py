@@ -2174,6 +2174,68 @@ def test_read_step_agreement_no_divergence_recorded():
     assert not read_result.divergence
 
 
+def test_read_step_last_run_failure_yields_bad():
+    """Roadmap criterion 3's positive half, leg 1: a failing LAST full read
+    yields VERDICT_BAD, proven through the real `run_plan` -- `_dispatch_read`
+    is never called directly, since Phase 178's transport arm keys on
+    exceptions rather than a `False` return and nothing else would
+    intercept it. `test_read_step_disagreement_is_divergence_metric_not_marginal`
+    and `test_read_step_agreement_no_divergence_recorded` already cover
+    criterion 3's negative half (two diverging or two agreeing reads never
+    flip the verdict to MARGINAL); this leg and its sibling below are the
+    positive half neither one covers. Alone, this leg only shows a failing
+    last read gives a bad verdict -- it takes the sibling leg to show WHICH
+    run's result the verdict actually reads.
+    """
+    operator = _mock_operator()
+    call_returns = [True, False]
+    call_count = {"n": 0}
+
+    def _read_side_effect(_name, _eprom_data, output_file=None, **_kwargs):
+        ok = call_returns[call_count["n"] % len(call_returns)]
+        call_count["n"] += 1
+        if output_file:
+            Path(output_file).write_bytes(b"\x00" * 64)
+        return ok
+
+    operator.read_eprom.side_effect = _read_side_effect
+    plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    read_result = _result(results, OP_READ)
+    assert read_result.verdict == VERDICT_BAD
+    assert read_result.run_count == 2
+
+
+def test_read_step_first_run_failure_with_passing_last_run_yields_ok():
+    """Roadmap criterion 3's positive half, leg 2: a failing FIRST read
+    with a passing LAST read yields VERDICT_OK, proven through the real
+    `run_plan` -- `_dispatch_read` is never called directly. This is the
+    leg that discriminates "the last full read" from "the first read" or
+    from any fold across runs: together with the sibling leg above, it
+    proves the read step's verdict is the last full read's return value
+    and nothing else.
+    """
+    operator = _mock_operator()
+    call_returns = [False, True]
+    call_count = {"n": 0}
+
+    def _read_side_effect(_name, _eprom_data, output_file=None, **_kwargs):
+        ok = call_returns[call_count["n"] % len(call_returns)]
+        call_count["n"] += 1
+        if output_file:
+            Path(output_file).write_bytes(b"\x00" * 64)
+        return ok
+
+    operator.read_eprom.side_effect = _read_side_effect
+    plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    read_result = _result(results, OP_READ)
+    assert read_result.verdict == VERDICT_OK
+    assert read_result.run_count == 2
+
+
 def test_write_step_attaches_fingerprint_with_region_start_addr_base():
     operator = _mock_operator()
     # Read-back matches the expected address-derived pattern exactly for
