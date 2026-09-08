@@ -23,11 +23,25 @@ from `firestarter.chip_test.__file__`, never from this test file's own
 directory, and the parsed source is asserted non-empty so the census
 cannot pass on a file it never actually read.
 
-Two anti-vacuity legs prove the gate is a gate, not a claim: one plants a
+Four anti-vacuity legs prove the gates are gates, not claims: one plants a
 third `operator.read_eprom(...)` call site into an in-memory copy of the
-source and asserts the census reports three, and one asserts an emptied
+source and asserts the census reports three; one asserts an emptied
 expected enclosing-function allow-list fails rather than passing
-vacuously. Both operate on strings only; neither writes a file.
+vacuously; one plants a divergence term into `_dispatch_read`'s verdict
+expression and asserts the verdict-source pin reddens; and one plants a
+second `_operation_context` item into `read_eprom`'s `with` header and
+asserts the one-connect pin reddens. All four operate on strings only;
+none writes a file.
+
+Two further pins close PRUNE-08 (Phase 180, plan 180-01): a structural
+assertion that `_dispatch_read`'s `verdict=` expression resolves to
+exactly `last_ok` and the two verdict constants -- never anything derived
+from the read-vs-read divergence comparison (D-06 leg 3, roadmap
+criterion 3) -- and a structural, STATIC pin (it proves the code's shape,
+not a runtime trace) that one `operator.read_eprom` call costs exactly
+one full connect, because `_operation_context` connects through
+`_setup_operation`/`find_and_connect` on entry and disconnects inside a
+non-empty `finally` block on exit (Ruling 1, D-02's structural half).
 """
 
 import ast
@@ -118,6 +132,83 @@ def test_a_planted_third_call_site_reddens_the_census():
 def test_an_empty_enclosing_allow_list_fails_rather_than_passing_vacuously():
     with pytest.raises(AssertionError):
         _assert_census(_engine_source(), expected_count=2, expected_enclosing=set())
+
+
+_VERDICT_ANCHOR = "        verdict=VERDICT_OK if last_ok else VERDICT_BAD,\n"
+
+
+def _verdict_expression_names(source: str) -> list[str]:
+    """Return the sorted `ast.Name` ids reachable from `_dispatch_read`'s
+    `StepResult(...)` `verdict=` keyword value.
+
+    Extraction is unambiguous: `_dispatch_read` contains exactly one
+    `StepResult(...)` call, so there is exactly one `verdict` keyword to
+    resolve.
+    """
+    tree = ast.parse(source)
+    fn = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef) and n.name == "_dispatch_read"
+    )
+    call = next(
+        c
+        for c in ast.walk(fn)
+        if isinstance(c, ast.Call)
+        and isinstance(c.func, ast.Name)
+        and c.func.id == "StepResult"
+    )
+    kw = next(k for k in call.keywords if k.arg == "verdict")
+    return sorted({n.id for n in ast.walk(kw.value) if isinstance(n, ast.Name)})
+
+
+def test_read_verdict_expression_reads_only_the_last_full_read_result():
+    """Pins D-06 leg 3 / roadmap criterion 3: the read step's verdict
+    source is the LAST full read's return value, and nothing derived from
+    the read-vs-read divergence comparison. `tests/test_chip_test.py`'s
+    `test_read_step_last_run_failure_yields_bad` (:2141 sibling range) and
+    `test_read_step_first_run_failure_with_passing_last_run_yields_ok`
+    already prove this behaviourally through the real `run_plan`; this pin
+    is the structural half that catches a future change a behavioural test
+    alone cannot -- if the last full read is silently replaced by a
+    sample, both behavioural legs above could still pass while the
+    verdict quietly became the sample's. Its ceiling: this is a static
+    claim about the shape of the verdict expression, asserted as full-set
+    equality, never membership -- a pin checking only that `last_ok` is
+    present would stay green on a verdict that also consults the
+    divergence term.
+    """
+    source = _engine_source()
+    assert _verdict_expression_names(source) == [
+        "VERDICT_BAD",
+        "VERDICT_OK",
+        "last_ok",
+    ]
+
+
+def test_a_planted_divergence_term_in_the_verdict_reddens_the_pin():
+    """Anti-vacuity leg (D-07) for the verdict-source pin. Plants the
+    literal counter-example roadmap criterion 3 names -- a verdict
+    expression that also consults the read-vs-read divergence term --
+    into an in-memory copy of `_dispatch_read`'s verdict line, and asserts
+    that the pin's own equality claim raises `AssertionError` against it.
+    Strings only; no fixture file is written.
+    """
+    source = _engine_source()
+    assert source.count(_VERDICT_ANCHOR) == 1
+    mutated_anchor = (
+        "        verdict=VERDICT_OK if last_ok and not divergence else VERDICT_BAD,\n"
+    )
+    mutant = source.replace(_VERDICT_ANCHOR, mutated_anchor, 1)
+    mutant_names = _verdict_expression_names(mutant)
+    assert mutant_names == [
+        "VERDICT_BAD",
+        "VERDICT_OK",
+        "divergence",
+        "last_ok",
+    ]
+    with pytest.raises(AssertionError):
+        assert mutant_names == ["VERDICT_BAD", "VERDICT_OK", "last_ok"]
 
 
 def test_verify_eprom_signature_names_the_replacement_primitive():
