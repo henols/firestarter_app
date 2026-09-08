@@ -1471,6 +1471,29 @@ def _writes_fill_at_requested_region(fill: int = 0xFF):
     return _side_effect
 
 
+def _alternating_read_side_effect(*call_returns: bool):
+    """Build a `read_eprom` side_effect returning `call_returns[n % len(call_returns)]`
+    on the n-th call, so the caller's argument order IS the run order. Every call that
+    writes to `output_file` writes the SAME 64 zero bytes regardless of which element of
+    `call_returns` it returns -- the two runs never diverge, `_dispatch_read` records no
+    divergence, and the leg isolates the verdict source from the divergence metric
+    (`test_read_step_disagreement_is_divergence_metric_not_marginal` owns that job, with
+    its own `_read_side_effect` that varies the payload per call and must stay separate
+    from this builder). `_writes_bytes_to_output_file` could not be reused here because
+    it always returns `True` and cannot express an alternating pass/fail sequence.
+    """
+    call_count = {"n": 0}
+
+    def _side_effect(_name, _eprom_data, output_file=None, **_kwargs):
+        ok = call_returns[call_count["n"] % len(call_returns)]
+        call_count["n"] += 1
+        if output_file:
+            Path(output_file).write_bytes(b"\x00" * 64)
+        return ok
+
+    return _side_effect
+
+
 def test_runs_boundary_rejects_below_2_before_any_operator_call():
     operator = _mock_operator()
     plan = _plan_with_steps(
@@ -2188,17 +2211,7 @@ def test_read_step_last_run_failure_yields_bad():
     run's result the verdict actually reads.
     """
     operator = _mock_operator()
-    call_returns = [True, False]
-    call_count = {"n": 0}
-
-    def _read_side_effect(_name, _eprom_data, output_file=None, **_kwargs):
-        ok = call_returns[call_count["n"] % len(call_returns)]
-        call_count["n"] += 1
-        if output_file:
-            Path(output_file).write_bytes(b"\x00" * 64)
-        return ok
-
-    operator.read_eprom.side_effect = _read_side_effect
+    operator.read_eprom.side_effect = _alternating_read_side_effect(True, False)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
     results = run_plan(plan, operator, _REAL_DB, runs=2)
 
@@ -2217,17 +2230,7 @@ def test_read_step_first_run_failure_with_passing_last_run_yields_ok():
     and nothing else.
     """
     operator = _mock_operator()
-    call_returns = [False, True]
-    call_count = {"n": 0}
-
-    def _read_side_effect(_name, _eprom_data, output_file=None, **_kwargs):
-        ok = call_returns[call_count["n"] % len(call_returns)]
-        call_count["n"] += 1
-        if output_file:
-            Path(output_file).write_bytes(b"\x00" * 64)
-        return ok
-
-    operator.read_eprom.side_effect = _read_side_effect
+    operator.read_eprom.side_effect = _alternating_read_side_effect(False, True)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
     results = run_plan(plan, operator, _REAL_DB, runs=2)
 
