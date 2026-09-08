@@ -37,7 +37,7 @@ Two further pins close PRUNE-08 (Phase 180, plan 180-01): a structural
 assertion that `_dispatch_read`'s `verdict=` expression resolves to
 exactly `last_ok` and the two verdict constants -- never anything derived
 from the read-vs-read divergence comparison (D-06 leg 3, roadmap
-criterion 3) -- and a structural, STATIC pin (it proves the code's shape,
+criterion 3) -- and a structural, static pin (it proves the code's shape,
 not a runtime trace) that one `operator.read_eprom` call costs exactly
 one full connect, because `_operation_context` connects through
 `_setup_operation`/`find_and_connect` on entry and disconnects inside a
@@ -51,6 +51,7 @@ import pathlib
 import pytest
 
 from firestarter import chip_test as ct
+from firestarter import eprom_operations as eo
 from firestarter.eprom_operations import EpromOperator
 
 _TARGET_ATTR = "read_eprom"
@@ -228,3 +229,108 @@ def test_read_region_docstring_still_pins_the_one_slice_site():
 
 def test_dispatch_sdp_leg_docstring_still_pins_the_verdict():
     assert "verdict" in (ct._dispatch_sdp_leg.__doc__ or "").lower()
+
+
+_CONTEXT_ANCHOR = "            size_str,\n" "        ) as (cmd_data, _, op_name):\n"
+
+
+def _operations_source() -> str:
+    source = pathlib.Path(eo.__file__).read_text(encoding="utf-8")
+    assert len(source) > 1000
+    return source
+
+
+def _read_eprom_connect_shape(source: str) -> dict[str, object]:
+    """Parse `source` and return the three structural clauses the
+    one-connect-per-read premise rests on: how many `_operation_context`
+    items `read_eprom`'s `with` header opens, whether `_operation_context`
+    connects through `_setup_operation`/`find_and_connect` on entry, and
+    whether `_disconnect_programmer` is called from within a non-empty
+    `finalbody` -- scanning the `finalbody` nodes specifically, not the
+    whole function, is what makes clause 3 a real pin rather than a
+    decorative one.
+    """
+    tree = ast.parse(source)
+    functions = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    read_eprom = functions["read_eprom"]
+    context_count = sum(
+        1
+        for with_node in ast.walk(read_eprom)
+        if isinstance(with_node, ast.With)
+        for item in with_node.items
+        if isinstance(item.context_expr, ast.Call)
+        and isinstance(item.context_expr.func, ast.Attribute)
+        and item.context_expr.func.attr == "_operation_context"
+    )
+    operation_context = functions["_operation_context"]
+    setup_operation = functions["_setup_operation"]
+    calls_setup_operation = any(
+        isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr == "_setup_operation"
+        for n in ast.walk(operation_context)
+    )
+    calls_find_and_connect = any(
+        isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr == "find_and_connect"
+        for n in ast.walk(setup_operation)
+    )
+    disconnect_in_finalbody = False
+    for try_node in ast.walk(operation_context):
+        if isinstance(try_node, ast.Try) and try_node.finalbody:
+            for final_stmt in try_node.finalbody:
+                for sub in ast.walk(final_stmt):
+                    if (
+                        isinstance(sub, ast.Call)
+                        and isinstance(sub.func, ast.Attribute)
+                        and sub.func.attr == "_disconnect_programmer"
+                    ):
+                        disconnect_in_finalbody = True
+    return {
+        "context_count": context_count,
+        "connect_chain": calls_setup_operation and calls_find_and_connect,
+        "disconnect_in_finalbody": disconnect_in_finalbody,
+    }
+
+
+def test_one_read_eprom_call_costs_exactly_one_connect():
+    """Pins Ruling 1 / D-02's structural half: one `read_eprom` call pays
+    exactly one full connect, which is the premise the connect arithmetic
+    in `180-PRUNE-08-CLOSURE.md` rests on -- an N-block sample therefore
+    pays N connects, not one.
+
+    Honest ceiling, stated plainly: this is a static pin. It proves the
+    code is shaped so one call opens one context that connects and
+    disconnects; it does not prove at runtime that exactly one serial open
+    occurred, and it says nothing about the retry-across-ports walk inside
+    `find_and_connect`. That ceiling is sufficient because the closing
+    argument needs a statement about shape, not about a runtime trace.
+    """
+    shape = _read_eprom_connect_shape(_operations_source())
+    assert shape["context_count"] == 1
+    assert shape["connect_chain"] is True
+    assert shape["disconnect_in_finalbody"] is True
+
+
+def test_a_planted_second_operation_context_in_read_eprom_reddens_the_pin():
+    """Anti-vacuity leg (D-07) for the one-connect pin. Plants the literal
+    counter-example the connect arithmetic cares about -- a read that pays
+    two connects instead of one -- by extending `read_eprom`'s `with`
+    header with a second `_operation_context` item bound to a throwaway
+    name, and asserts the mutated clause-1 count reddens the pin's claim.
+    Strings only; no fixture file is written.
+    """
+    source = _operations_source()
+    assert source.count(_CONTEXT_ANCHOR) == 1
+    mutated_anchor = (
+        "            size_str,\n"
+        "        ) as (cmd_data, _, op_name), self._operation_context(\n"
+        "            eprom_name, eprom_data_dict, cmd\n"
+        "        ) as _extra_context:\n"
+    )
+    mutant = source.replace(_CONTEXT_ANCHOR, mutated_anchor, 1)
+    mutant_shape = _read_eprom_connect_shape(mutant)
+    assert mutant_shape["context_count"] == 2
+    with pytest.raises(AssertionError):
+        assert mutant_shape["context_count"] == 1
