@@ -23,25 +23,35 @@ from `firestarter.chip_test.__file__`, never from this test file's own
 directory, and the parsed source is asserted non-empty so the census
 cannot pass on a file it never actually read.
 
-Four anti-vacuity legs prove the gates are gates, not claims: one plants a
+Six anti-vacuity legs prove the gates are gates, not claims: one plants a
 third `operator.read_eprom(...)` call site into an in-memory copy of the
 source and asserts the census reports three; one asserts an emptied
 expected enclosing-function allow-list fails rather than passing
 vacuously; one plants a divergence term into `_dispatch_read`'s verdict
-expression and asserts the verdict-source pin reddens; and one plants a
+expression and asserts the verdict-source pin reddens; one plants a
 second `_operation_context` item into `read_eprom`'s `with` header and
-asserts the one-connect pin reddens. All four operate on strings only;
-none writes a file.
+asserts the one-connect pin reddens; one plants a stray direct connect
+call into `read_eprom`'s body and asserts the hardened one-connect pin
+reddens while the pre-hardening claim still holds (WR-01, Phase 180, plan
+180-04); and one plants a `last_ok` reassignment after `_dispatch_read`'s
+run loop and asserts the hardened verdict-shape pin reddens while the
+pre-hardening verdict-name pin still holds (WR-02, Phase 180, plan
+180-04). All six operate on strings only; none writes a file.
 
-Two further pins close PRUNE-08 (Phase 180, plan 180-01): a structural
-assertion that `_dispatch_read`'s `verdict=` expression resolves to
-exactly `last_ok` and the two verdict constants -- never anything derived
-from the read-vs-read divergence comparison (D-06 leg 3, roadmap
-criterion 3) -- and a structural, static pin (it proves the code's shape,
-not a runtime trace) that one `operator.read_eprom` call costs exactly
-one full connect, because `_operation_context` connects through
+Two further pins close PRUNE-08 (Phase 180, plan 180-01), each hardened in
+plan 180-04: a structural assertion that `_dispatch_read`'s `verdict=`
+expression resolves to exactly `last_ok` and the two verdict constants --
+never anything derived from the read-vs-read divergence comparison (D-06
+leg 3, roadmap criterion 3) -- extended to assert that `last_ok` is
+assigned exactly twice inside `_dispatch_read`, once from a `True`
+constant and once from the whole-device read inside its run loop; and a
+structural, static pin (it proves the code's shape, not a runtime trace)
+that one `operator.read_eprom` call costs exactly one full connect,
+because `_operation_context` connects through
 `_setup_operation`/`find_and_connect` on entry and disconnects inside a
-non-empty `finally` block on exit (Ruling 1, D-02's structural half).
+non-empty `finally` block on exit (Ruling 1, D-02's structural half),
+extended to count every connect-shaped call anywhere in `read_eprom`'s
+body, not only the ones opened by its `with` header.
 """
 
 import ast
@@ -164,20 +174,19 @@ def _verdict_expression_names(source: str) -> list[str]:
 
 
 def test_read_verdict_expression_reads_only_the_last_full_read_result():
-    """Pins D-06 leg 3 / roadmap criterion 3: the read step's verdict
-    source is the LAST full read's return value, and nothing derived from
-    the read-vs-read divergence comparison. `tests/test_chip_test.py`'s
-    `test_read_step_last_run_failure_yields_bad` (:2141 sibling range) and
-    `test_read_step_first_run_failure_with_passing_last_run_yields_ok`
-    already prove this behaviourally through the real `run_plan`; this pin
-    is the structural half that catches a future change a behavioural test
-    alone cannot -- if the last full read is silently replaced by a
-    sample, both behavioural legs above could still pass while the
-    verdict quietly became the sample's. Its ceiling: this is a static
-    claim about the shape of the verdict expression, asserted as full-set
-    equality, never membership -- a pin checking only that `last_ok` is
-    present would stay green on a verdict that also consults the
-    divergence term.
+    """Pins D-06 leg 3 / roadmap criterion 3, hardened in plan 180-04
+    (WR-02). `tests/test_chip_test.py`'s `test_read_step_last_run_failure_yields_bad`
+    and `test_read_step_first_run_failure_with_passing_last_run_yields_ok`
+    already prove this behaviourally through the real `run_plan`. Two
+    claims, both static, are what this pin proves that those two cannot:
+    the `verdict=` expression resolves to exactly the three-name set
+    `VERDICT_BAD`, `VERDICT_OK`, `last_ok` and nothing derived from the
+    read-vs-read divergence comparison; and within `_dispatch_read`,
+    `last_ok` is assigned exactly twice -- once from a `True` constant and
+    once from the whole-device read inside the run loop -- so a later
+    rebinding is caught structurally too. Its ceiling: both claims are
+    static, neither observes a run, and neither says anything about what
+    `read_eprom` itself returns.
     """
     source = _engine_source()
     assert _verdict_expression_names(source) == [
@@ -185,6 +194,10 @@ def test_read_verdict_expression_reads_only_the_last_full_read_result():
         "VERDICT_OK",
         "last_ok",
     ]
+    shape = _last_ok_assignment_shape(source)
+    assert shape["tags"] == ["const_true", "read_eprom_call"]
+    assert shape["for_loop_count"] == 1
+    assert shape["read_assign_in_for_loop"] is True
 
 
 def test_a_planted_divergence_term_in_the_verdict_reddens_the_pin():
@@ -241,14 +254,20 @@ def _operations_source() -> str:
 
 
 def _read_eprom_connect_shape(source: str) -> dict[str, object]:
-    """Parse `source` and return the three structural clauses the
+    """Parse `source` and return the four structural clauses the
     one-connect-per-read premise rests on: how many `_operation_context`
     items `read_eprom`'s `with` header opens, whether `_operation_context`
-    connects through `_setup_operation`/`find_and_connect` on entry, and
+    connects through `_setup_operation`/`find_and_connect` on entry,
     whether `_disconnect_programmer` is called from within a non-empty
     `finalbody` -- scanning the `finalbody` nodes specifically, not the
     whole function, is what makes clause 3 a real pin rather than a
-    decorative one.
+    decorative one -- and, hardened in plan 180-04 (WR-01),
+    `connect_route_calls`: every `ast.Call` anywhere in `read_eprom`'s own
+    body whose attribute is `_operation_context`, `_setup_operation` or
+    `find_and_connect`, scoped to `read_eprom`'s own `FunctionDef` node
+    rather than the module -- scoping to the module would count
+    `_operation_context`'s own legitimate `_setup_operation` call as a
+    stray and make the pin false at HEAD.
     """
     tree = ast.parse(source)
     functions = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
@@ -261,6 +280,14 @@ def _read_eprom_connect_shape(source: str) -> dict[str, object]:
         if isinstance(item.context_expr, ast.Call)
         and isinstance(item.context_expr.func, ast.Attribute)
         and item.context_expr.func.attr == "_operation_context"
+    )
+    connect_route_calls = sum(
+        1
+        for n in ast.walk(read_eprom)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr
+        in ("_operation_context", "_setup_operation", "find_and_connect")
     )
     operation_context = functions["_operation_context"]
     setup_operation = functions["_setup_operation"]
@@ -289,6 +316,7 @@ def _read_eprom_connect_shape(source: str) -> dict[str, object]:
                         disconnect_in_finalbody = True
     return {
         "context_count": context_count,
+        "connect_route_calls": connect_route_calls,
         "connect_chain": calls_setup_operation and calls_find_and_connect,
         "disconnect_in_finalbody": disconnect_in_finalbody,
     }
@@ -298,7 +326,11 @@ def test_one_read_eprom_call_costs_exactly_one_connect():
     """Pins Ruling 1 / D-02's structural half: one `read_eprom` call pays
     exactly one full connect, which is the premise the connect arithmetic
     in `180-PRUNE-08-CLOSURE.md` rests on -- an N-block sample therefore
-    pays N connects, not one.
+    pays N connects, not one. Hardened in plan 180-04 (WR-01):
+    `connect_route_calls` extends the claim from the `with` header alone
+    to every connect-shaped call anywhere in `read_eprom`'s body, so a
+    stray direct connect call outside the `with` header is now caught
+    statically too.
 
     Honest ceiling, stated plainly: this is a static pin. It proves the
     code is shaped so one call opens one context that connects and
@@ -309,6 +341,7 @@ def test_one_read_eprom_call_costs_exactly_one_connect():
     """
     shape = _read_eprom_connect_shape(_operations_source())
     assert shape["context_count"] == 1
+    assert shape["connect_route_calls"] == 1
     assert shape["connect_chain"] is True
     assert shape["disconnect_in_finalbody"] is True
 
@@ -334,3 +367,122 @@ def test_a_planted_second_operation_context_in_read_eprom_reddens_the_pin():
     assert mutant_shape["context_count"] == 2
     with pytest.raises(AssertionError):
         assert mutant_shape["context_count"] == 1
+
+
+_STRAY_CONNECT_ANCHOR = (
+    '            actual_output_file = output_file or f"{eprom_name.upper()}.bin"\n'
+)
+
+
+def test_a_planted_stray_setup_operation_call_in_read_eprom_reddens_the_hardened_pin():
+    """Anti-vacuity leg (D-07) for WR-01. Plants a direct
+    `self._setup_operation(...)` call into `read_eprom`'s body, outside
+    its `with` header, so the mutant is invisible to `context_count` --
+    the pre-hardening pin's whole claim, unmoved -- and visible only to
+    the body-wide `connect_route_calls` count the hardened pin adds.
+    Strings only; no fixture file is written.
+    """
+    source = _operations_source()
+    assert source.count(_STRAY_CONNECT_ANCHOR) == 1
+    mutated_anchor = _STRAY_CONNECT_ANCHOR + (
+        "            self._setup_operation(eprom_name, eprom_data_dict, COMMAND_READ)\n"
+    )
+    mutant = source.replace(_STRAY_CONNECT_ANCHOR, mutated_anchor, 1)
+    mutant_shape = _read_eprom_connect_shape(mutant)
+    assert mutant_shape["context_count"] == 1
+    assert mutant_shape["connect_route_calls"] == 2
+    with pytest.raises(AssertionError):
+        assert mutant_shape["connect_route_calls"] == 1
+
+
+_LAST_OK_REASSIGN_ANCHOR = '    reason = "read runs diverged" if divergence else ""\n'
+
+
+def _last_ok_assignment_shape(source: str) -> dict[str, object]:
+    """Parse `source` and return `_dispatch_read`'s assignment shape for
+    `last_ok`: one `tags` entry per node targeting `last_ok`, in source
+    order, plus whether the run loop is where the read-eprom assignment
+    lives.
+
+    `tags` classifies each assignment node: `const_true` for a plain
+    `ast.Assign` whose value is the constant `True`, `read_eprom_call` for
+    an `ast.Assign` whose value is a call to `.read_eprom(...)`, and
+    `other` for anything else -- an augmented assignment, an annotated
+    assignment, a walrus, or a reassignment to any other value. `other` is
+    what makes the list a closed claim: any third assignment, any
+    augmented assignment and any walrus on `last_ok` changes the list and
+    reddens a pin asserting it.
+    """
+    tree = ast.parse(source)
+    fn = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef) and n.name == "_dispatch_read"
+    )
+    targets: list[tuple[int, int, ast.AST]] = []
+    for n in ast.walk(fn):
+        target: ast.AST | None = None
+        if isinstance(n, ast.Assign) and len(n.targets) == 1:
+            target = n.targets[0]
+        elif isinstance(n, (ast.AugAssign, ast.AnnAssign, ast.NamedExpr)):
+            target = n.target
+        if isinstance(target, ast.Name) and target.id == "last_ok":
+            targets.append((n.lineno, n.col_offset, n))
+    targets.sort(key=lambda t: (t[0], t[1]))
+
+    def _tag(node: ast.AST) -> str:
+        if (
+            isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Constant)
+            and node.value.value is True
+        ):
+            return "const_true"
+        if (
+            isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Attribute)
+            and node.value.func.attr == "read_eprom"
+        ):
+            return "read_eprom_call"
+        return "other"
+
+    tagged = [(_tag(node), node) for _, _, node in targets]
+    tags = [tag for tag, _ in tagged]
+    for_loops = [n for n in ast.walk(fn) if isinstance(n, ast.For)]
+    read_assign_node = next(
+        (node for tag, node in tagged if tag == "read_eprom_call"), None
+    )
+    read_assign_in_for_loop = read_assign_node is not None and any(
+        any(sub is read_assign_node for sub in ast.walk(for_loop))
+        for for_loop in for_loops
+    )
+    return {
+        "tags": tags,
+        "for_loop_count": len(for_loops),
+        "read_assign_in_for_loop": read_assign_in_for_loop,
+    }
+
+
+def test_a_planted_last_ok_reassignment_before_the_return_reddens_the_hardened_pin():
+    """Anti-vacuity leg (D-07) for WR-02. Plants a `last_ok` rebinding
+    after `_dispatch_read`'s `reason` assignment, past the run loop, so
+    the mutant is invisible to `_verdict_expression_names` -- the
+    pre-hardening pin's whole claim, unmoved -- and visible only to the
+    hardened `_last_ok_assignment_shape`'s `tags`. Strings only; no
+    fixture file is written.
+    """
+    source = _engine_source()
+    assert source.count(_LAST_OK_REASSIGN_ANCHOR) == 1
+    mutated_anchor = _LAST_OK_REASSIGN_ANCHOR + (
+        "    last_ok = last_ok and not divergence\n"
+    )
+    mutant = source.replace(_LAST_OK_REASSIGN_ANCHOR, mutated_anchor, 1)
+    assert _verdict_expression_names(mutant) == [
+        "VERDICT_BAD",
+        "VERDICT_OK",
+        "last_ok",
+    ]
+    mutant_shape = _last_ok_assignment_shape(mutant)
+    assert mutant_shape["tags"] == ["const_true", "read_eprom_call", "other"]
+    with pytest.raises(AssertionError):
+        assert mutant_shape["tags"] == ["const_true", "read_eprom_call"]
