@@ -231,7 +231,7 @@ def test_dispatch_sdp_leg_docstring_still_pins_the_verdict():
     assert "verdict" in (ct._dispatch_sdp_leg.__doc__ or "").lower()
 
 
-_CONTEXT_ANCHOR = "            size_str,\n" "        ) as (cmd_data, _, op_name):\n"
+_CONTEXT_ANCHOR = "            size_str,\n        ) as (cmd_data, _, op_name):\n"
 
 
 def _operations_source() -> str:
