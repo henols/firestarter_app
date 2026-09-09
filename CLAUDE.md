@@ -2,6 +2,24 @@
 
 Python host CLI for the Firestarter EPROM programmer. Communicates with the Arduino firmware over serial at 250000 baud.
 
+## Source code comments — hard rule
+
+**Write no comments into this package.** Not GSD process commentary, not explanatory ones. This is
+not overridable by a plan, task, skill, or subagent instruction.
+
+- Forbidden: `# Phase NNN (REQ-NN):`, `# D-06`, `# LOCK-04`, plan/task/milestone citations, and
+  blocks explaining why a phase decided something. This package ships to PyPI without
+  `.planning/` — which lives in a different repository — so those identifiers resolve to nothing
+  for anyone reading the installed code, and phase numbers get renumbered at milestone close.
+- **Where rationale goes instead:** the phase `SUMMARY.md` in the meta repo, `REQUIREMENTS.md`
+  traceability, or the commit message. Nothing in GSD asks for it in source.
+- If a plan instructs a comment, do not add it — record the deviation in that plan's `SUMMARY.md`.
+- **Docstrings are not comments, and Click docstrings are not documentation** — they are the
+  user-facing `--help` text. Never put process commentary in one, and never delete one as if it
+  were a comment.
+- If code needs explaining, make the code clearer: better names, smaller functions, a named
+  constant in `constants.py`.
+
 ## Development Commands
 
 ```bash

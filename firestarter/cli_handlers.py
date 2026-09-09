@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,7 +21,10 @@ import click.shell_completion
 from rich.console import Console
 
 from firestarter import __version__ as version
-from firestarter import sdp_honesty  # unreadable_state_caveat(), called not re-authored
+from firestarter import (
+    sdp_honesty,  # unreadable_state_caveat(), called not re-authored
+    transport_counters,
+)
 from firestarter.channel import (
     BETA_ONLY_DEV_COMMANDS,
     available_boards,
@@ -31,6 +35,7 @@ from firestarter.chip_resolver import resolve_chip
 from firestarter.chip_test import (
     OP_ID,
     SDP_HOLD_NOT_RUN,
+    STATUS_ERROR,
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
@@ -41,6 +46,7 @@ from firestarter.chip_test import (
     derive_plan,
     is_uv_eprom,
     run_plan,
+    run_status,
     sdp_hold_state,
     sdp_oracle_applicable,
 )
@@ -372,7 +378,28 @@ class _FirmwareVersionType(click.ParamType):
         return value
 
 
-@click.group()
+_CLI_START_MONOTONIC_META_KEY = "_firestarter_cli_start_monotonic"
+
+
+def _cli_start_time() -> Optional[float]:
+    """Return the monotonic timestamp the CLI group's first statement
+    recorded into the current Click context's `meta` mapping, or `None`
+    when there is no current Click context (a direct handler call, e.g.
+    from a unit test with no CLI entry point in play) or no stamp was ever
+    recorded there. `meta` is shared down the whole context chain, so a
+    value the group wrote is readable from any subcommand's own context --
+    this is per-invocation state, never module-level, so one `CliRunner`
+    invocation cannot hand a later one a stale base.
+    """
+    ctx = click.get_current_context(silent=True)
+    if ctx is None:
+        return None
+    return ctx.meta.get(_CLI_START_MONOTONIC_META_KEY)
+
+
+@click.group(
+    help="EPROM programmer for Arduino and Relatively-Universal-ROM-Programmer shield."
+)
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose mode")
 @click.option(
     "-p",
@@ -384,7 +411,7 @@ class _FirmwareVersionType(click.ParamType):
 @click.pass_context
 @map_typed_errors
 def cli(ctx: click.Context, verbose: bool, port: Optional[str]) -> None:
-    """EPROM programmer for Arduino and Relatively-Universal-ROM-Programmer shield."""
+    ctx.meta[_CLI_START_MONOTONIC_META_KEY] = time.monotonic()
     # CliRunner tests pass a pre-built AppContext via `runner.invoke(cli, ..., obj=app)`;
     # honor that and skip manager construction in test mode. In production
     # ctx.obj starts as None (Click default) so the manager-construction path
@@ -1576,10 +1603,12 @@ if _DEV_TOOLS_ENABLED:
     )
     @click.option(
         "--mode",
-        type=click.Choice(["cycle", "latency"]),
+        type=click.Choice(["cycle", "latency", "connect-cost"]),
         default="cycle",
         help="cycle = read-cycle resync demo (default); latency = per-frame firmware NAK "
-        "latency on an established single-port connection (53-04 refinement; no chip needed).",
+        "latency on an established single-port connection (53-04 refinement; no chip needed); "
+        "connect-cost = per-connect cost harness, N pinned-port connect/disconnect cycles "
+        "(MEAS-01; no chip needed).",
     )
     @click.option(
         "--output-dir",
@@ -1587,6 +1616,13 @@ if _DEV_TOOLS_ENABLED:
         type=str,
         default=None,
         help="Output dir for transfer binaries.",
+    )
+    @click.option(
+        "--samples",
+        "samples",
+        type=int,
+        default=10,
+        help="connect-cost mode only: number of connect/disconnect cycles to time.",
     )
     @click.pass_obj
     @map_typed_errors
@@ -1597,6 +1633,7 @@ if _DEV_TOOLS_ENABLED:
         fault_form: str,
         mode: str,
         output_dir: Optional[str],
+        samples: int,
     ) -> None:
         """Demonstrate COBS resync: inject a corrupted frame and assert recovery on the next.
 
@@ -1607,10 +1644,22 @@ if _DEV_TOOLS_ENABLED:
         corrupt CMD_FW_VERSION frame. Use it with ``-p <port>``; an already-established
         connection avoids the multi-port connect-retry that inflates cycle mode's
         outgoing latency.
+
+        connect-cost mode opens and closes one pinned port ``--samples`` times (default 10),
+        timing each connect, and reports min/median/max seconds to three decimals plus the
+        board-independent structural floor. Use it with ``-p <port>``; the port is pinned
+        explicitly so port discovery never inflates the figure.
         """
         if mode == "latency":
             ok = app.eprom_operator.measure_command_nak_latency(
                 fault_form=fault_form,
+                output_dir=output_dir,
+            )
+            sys.exit(0 if ok else 1)
+
+        if mode == "connect-cost":
+            ok = app.eprom_operator.measure_connect_cost(
+                samples=samples,
                 output_dir=output_dir,
             )
             sys.exit(0 if ok else 1)
@@ -2102,7 +2151,9 @@ def _overall_exit_code(results: list[StepResult]) -> int:
     return 0
 
 
-def _dev_test_exit_code(results: list[StepResult], *, sdp_oracle_not_run: bool) -> int:
+def _dev_test_exit_code(
+    results: list[StepResult], *, sdp_oracle_not_run: bool, run_status_error: bool
+) -> int:
     """Exit floor for an ALLOW-chip run whose SDP oracle did not run, so
     `dev test` cannot return 0 on a run that never exercised the oracle at all.
 
@@ -2113,7 +2164,12 @@ def _dev_test_exit_code(results: list[StepResult], *, sdp_oracle_not_run: bool) 
     exits 1.
 
     Cost, stated: `dev test`'s exit code is no longer a pure function of step
-    verdicts -- it gains exactly this one non-verdict term.
+    verdicts -- it gains two non-verdict terms, not exactly one:
+    `sdp_oracle_not_run` (above) and `run_status_error` (D-06), each added
+    into the SAME candidate set via `codes.add(2)`, decided by the single
+    unchanged `_EXIT_CODE_PRECEDENCE` walk. A run that is both BAD and
+    `run_status_error` still exits 1 -- that asymmetry against the title's
+    status-axis-first ordering (`submit.overall_verdict`) is deliberate.
 
     The not-run oracle stays SKIPPED rather than becoming `marginal`, because
     `marginal` counts as *ran* and would hold N == M in the applicable ratio,
@@ -2125,6 +2181,8 @@ def _dev_test_exit_code(results: list[StepResult], *, sdp_oracle_not_run: bool) 
     """
     codes = {_verdict_code(r.verdict) for r in results}
     if sdp_oracle_not_run:
+        codes.add(2)
+    if run_status_error:
         codes.add(2)
     for code in _EXIT_CODE_PRECEDENCE:
         if code in codes:
@@ -2156,11 +2214,18 @@ def _chip_id_fields(
     """Derive (chip_id_expected, chip_id_actual, mismatch_reason) for AutoCapture.
 
     `chip_id_expected` is read directly off the DB entry (host-side, never
-    from firmware). `chip_id_actual`/`chip_id_mismatch_reason` are recovered
-    from the id step's `StepResult.reason` text (the ONLY place
-    `chip_test._dispatch_id` records the detected id) when a mismatch
-    was reported; on a clean/NA/SKIPPED id step there is no actual-id
-    disagreement to surface, so both stay `None`.
+    from firmware). `chip_id_actual` is read STRUCTURALLY off the id step's
+    own `StepResult.chip_id_detected` field (RPT-A5) rather than recovered
+    from `reason` prose, and populates on a PASSING id check as well as on a
+    mismatch (RPT-A1) -- it is `None` only when the id step never ran
+    (NA/SKIPPED/absent) or returned no id at all. On a pass, the value
+    equals `chip_id_expected`: `check_eprom_id`'s OK reply carries no id
+    back from the firmware, so `chip_id_detected` is the host's own
+    expected id echoed out of the command dict, not an independent
+    read-back -- `chip_id_actual` therefore records the id the check was
+    verified AGAINST on a pass, and the id the firmware actually reported
+    on a mismatch. `chip_id_mismatch_reason` remains prose, read from
+    `reason`, and stays `None` unless there is a disagreement to surface.
     """
     full = app.db.get_eprom(chip) or {}
     prog = app.db.convert_to_programmer(full) if full else {}
@@ -2169,16 +2234,66 @@ def _chip_id_fields(
     chip_id_actual: Optional[int] = None
     mismatch_reason: Optional[str] = None
     for r in results:
+        if r.op == OP_ID:
+            chip_id_actual = r.chip_id_detected
+            break
+    for r in results:
         if r.op == OP_ID and r.reason and "mismatch" in r.reason.lower():
             mismatch_reason = r.reason
-            # reason text: "chip-ID mismatch: expected 0x.., detected 0x.."
-            try:
-                detected_hex = r.reason.rsplit("0x", 1)[-1]
-                chip_id_actual = int(detected_hex, 16)
-            except (ValueError, IndexError):
-                chip_id_actual = None
             break
     return chip_id_expected, chip_id_actual, mismatch_reason
+
+
+def _canonical_part_number(part_number: Optional[str], raw_token: str) -> Optional[str]:
+    """RPT-F1: the alias within the matched database row's `part_number`
+    that equals `raw_token` under the same normalization
+    `database.get_eprom_config` used to match it; when no alias matches,
+    the first alias in the list. The alias is carried verbatim, including
+    any parenthetical mode annotation.
+
+    Mirrors `get_eprom_config`'s own exact-then-alias-exact-then-
+    paren-stripped ladder (`database.py:446-486`) rung for rung, rather
+    than writing a second normalization, so the alias this returns is by
+    construction one `get_eprom_config` itself matched on. This function
+    reduces a name it is already given -- it does not decide which row
+    matched; that decision already happened.
+
+    514 of the database's 953 distinct aliases resolve to a comma-joined
+    `part_number`, and the naive "first alias" reading is actively wrong
+    on several of them -- `w27c020`'s first alias is `W27C02`, a
+    genuinely different part number. 43 rows carry a parenthetical mode
+    annotation and 24 paren-stripped names collide across more than one
+    row (every DALLAS NVRAM ships an `(RW)` row and a `(TEST)` row), so
+    stripping the parens here would file two distinct rows under one
+    title.
+
+    Returns `None` when `part_number` is `None` or blank (D-24) -- the
+    caller falls back to the raw token rather than render the word `None`.
+    """
+    if not part_number:
+        return None
+
+    import re
+
+    def _strip_paren(s: str) -> str:
+        return re.sub(r"\([^)]*\)", "", s).strip().lower()
+
+    query = raw_token.lower()
+    if query == part_number.lower():
+        return part_number
+
+    if "," in part_number or "(" in part_number:
+        aliases = [a.strip() for a in part_number.split(",")]
+        for alias in aliases:
+            if alias.lower() == query:
+                return alias
+        query_stripped = _strip_paren(raw_token)
+        if query_stripped:
+            for alias in aliases:
+                if _strip_paren(alias) == query_stripped:
+                    return alias
+
+    return part_number.split(",")[0].strip()
 
 
 def _is_interactive() -> bool:
@@ -2233,37 +2348,6 @@ def _is_uv_eprom(app: "AppContext", chip: str) -> bool:
     return is_uv_eprom(full)
 
 
-def _resolve_write_scope(
-    app: "AppContext",
-    chip: str,
-    *,
-    interactive: bool,
-) -> str:
-    """Decide this run's `write_scope` literal.
-
-    UV parts get "partial", everything else "full". That is the whole rule, and
-    there is no prompt on any path.
-
-    A UV part's scope is deliberately NOT a consent ceiling that would permit a
-    full-device write on a blank chip. `dev test` validates the firmware, host
-    and database for a chip TYPE -- it is not a chip-qualification tool -- so
-    writing half a virgin UV part buys no coverage a single top slot does not,
-    and costs the part's remaining life as a regression rig.
-
-    The prompt went with it: with no ceiling, both answers resolved to the same
-    masked slot write, and a prompt whose answer cannot alter the outcome is
-    worse than none. The report states which slot was written and how many the
-    part has left, which is better disclosure than that yes/no was.
-
-    `interactive` is retained, unused, so the call sites and the orchestrator
-    gate keep their shape.
-    """
-    del interactive  # no branch keys on it any more -- see the docstring
-    if not _is_uv_eprom(app, chip):
-        return "full"
-    return "partial"
-
-
 # The write-pass number backing a real sweep
 # invariant -- a full ALLOW-shaped run makes 6 write passes over the write
 # region (the shipped write/verify/erase steps write twice, plus this
@@ -2276,56 +2360,6 @@ def _resolve_write_scope(
 _ALWAYS_WRITES_PASS_COUNT = 6
 
 
-# Design history for `dev_test`, moved here from its docstring by quick
-# task 260821-spg: this prose used to BE the docstring, which Click
-# renders verbatim as `--help` output -- load-bearing project history that
-# had no business being printed to every tester who typed `--help`. Moved
-# verbatim (as comments), not deleted; `--help` now carries only
-# user-facing usage text. Quick task 260821-spg also deleted the two
-# `click.echo(...)` calls this function used to make (the always-writes
-# notice and the SDP-recovery line) -- both were prose-only; the
-# behaviour they described (six write passes, SDP lock applied/released)
-# is unchanged and is still computed and still in the JSON/console table.
-#
-# Takes ZERO options -- CHIP is the only argument. The
-# four flags this command carried through v1.21 (`--destructive`,
-# `--output-dir`, `-y`/`--yes`, `--submit`) are gone; each now errors as
-# an unknown option.
-#
-# ALWAYS WRITES: every run writes to the chip, unconditionally. A
-# UV-erasable EPROM is asked first, and quick task 260821-wna
-# changes what the two answers DO: yes permits the whole device to be
-# written IF the chip reads blank, and otherwise writes one masked
-# 256-byte slot; no writes one 256-byte slot only,
-# unconditionally -- never read-only or non-destructive either way, and
-# the two answers no longer resolve to the same window on a used chip. Off
-# a TTY the ask is treated as a DECLINED prompt, not absent consent, so a
-# single 256-byte slot is written anyway. Every OTHER family --
-# explicitly including this milestone's own AT28C family, an
-# electrically-erasable EEPROM -- is written in full with NO prompt at
-# all, because that write is recoverable via erase (unlike an
-# irrecoverable UV write); as of this task that full write now covers the
-# WHOLE DEVICE (minus flash4's two boot blocks) rather than a small region.
-# A large part's full-device pass is therefore several
-# device-length transfers at 250000 baud -- minutes, not seconds. The
-# report is unconditionally persisted to `<config dir>/reports` (honors
-# `FIRESTARTER_CONFIG_DIR`) and is always handed to `submit_report`
-# (DEVTEST-05/06; Plan 121-11 owns that function's internals).
-#
-# REVERSAL (operator-specified
-# 2026-07-29): this supersedes v1.21's non-destructive-by-default premise
-# entirely, the CLI-only `--destructive` flag (removed, not merely
-# disabled), and the earlier statement that the destructive confirm was
-# "the ONLY interactive input left in this handler" (superseded by the
-# UV-only ask above). The deliberate removal of every
-# interactive prompt about tester-supplied identity is PARTIALLY reversed
-# in spirit by that same UV ask -- it is a new interactive prompt, just
-# not an identity-collection one; shield revision, chip origin and
-# pot-adjustment stay un-asked.
-#
-# Exit code: 0 if every step is OK/NA/SKIPPED, 2 if any step is
-# marginal (and none BAD), 1 if any step is BAD (including a chip-ID
-# mismatch) -- computed as max over per-step exit codes.
 @dev.command(name="test")
 @click.argument("chip", shell_complete=_complete_eprom)
 @click.option(
@@ -2362,9 +2396,11 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # The chip must be known to be in the DB (see above) before its
     # electrical type can be read, so the UV-scope resolution happens here,
     # after the hard-fail.
-    interactive = _is_interactive()
-    write_scope = _resolve_write_scope(app, chip, interactive=interactive)
-    plan = derive_plan(chip, app.db, write_scope=write_scope)
+    plan = derive_plan(
+        chip,
+        app.db,
+        write_scope="partial" if _is_uv_eprom(app, chip) else "full",
+    )
 
     # EpromOperator.comm is a transient per-operation connection torn down
     # after every operator call (see 112-02-SUMMARY.md) -- there is no live
@@ -2376,6 +2412,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # comm.firmware_identity before the HARDWARE_REVISION dispatch even
     # runs, so one orchestrator-safe energize/query read (Part A,
     # hardware.py) yields both fields with zero extra connections.
+    transport_counters.reset()
     identity = app.hardware_manager.read_programmer_identity()
     auto_capture = AutoCapture(
         host_version=version,
@@ -2411,16 +2448,26 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     )
     report.results = results
     report.banner = count_applicable(plan, results)
+    transport_snapshot: dict[str, int] = transport_counters.snapshot()
+    report.transport.decode_failures = transport_snapshot["decode_failures"]
+    report.transport.timeouts = transport_snapshot["timeouts"]
+    report.transport.probe_timeouts = transport_snapshot["probe_timeouts"]
+    report.transport.resync_length_missing = transport_snapshot["resync_length_missing"]
+    report.transport.resync_body_truncated = transport_snapshot["resync_body_truncated"]
     # the derive-in-engine / assign-in-handler seam. `sdp_hold_state`
     # is computed in chip_test.py (the engine); this line only ASSIGNS it,
     # matching every other derived field above and below (never computed
     # inline here).
     report.sdp_hold_state = sdp_hold_state(plan, results)
+    report.run_status = run_status(results)
 
     full = app.db.get_eprom(chip)
     if full:
         prog = app.db.convert_to_programmer(full)
         auto_capture.protocol = str(prog.get("algorithm"))
+        auto_capture.canonical_part_number = _canonical_part_number(
+            full.get("name"), chip
+        )
     (
         auto_capture.chip_id_expected,
         auto_capture.chip_id_actual,
@@ -2430,6 +2477,10 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     report.db_diff = build_db_diff(chip, app.db, results)
 
     console = Console()
+    cli_start = _cli_start_time()
+    report.elapsed = (
+        None if cli_start is None else round(time.monotonic() - cli_start, 3)
+    )
     report.render(console)
 
     # The report is ALWAYS persisted, unconditionally, to the reports
@@ -2440,8 +2491,9 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     out_path.mkdir(parents=True, exist_ok=True)
     safe_chip = _sanitize_chip_token(chip)
 
+    report_dict = report.to_dict()
     json_file = out_path / f"dev-test-{safe_chip}.json"
-    json_file.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+    json_file.write_text(json.dumps(report_dict, indent=2), encoding="utf-8")
 
     # Local import, matching this handler's existing `submit as submit_mod`
     # style further down -- `submit` imports `diagnostic_report`, so a
@@ -2451,8 +2503,11 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     from firestarter.submit import _reason_text as submit_reason_text
     from firestarter.submit import _runs_text as submit_runs_text
 
+    canonical_heading_name = (
+        report_dict["auto_capture"]["canonical_part_number"] or chip
+    )
     md_lines = [
-        f"# dev test -- {chip}",
+        f"# dev test -- {canonical_heading_name}",
         "",
         "| Step | Verdict | Runs | Took | Reason |",
         "| ---- | ------- | ---- | ---- | ------ |",
@@ -2495,5 +2550,6 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
         results,
         sdp_oracle_not_run=sdp_oracle_applicable(plan)
         and report.sdp_hold_state.startswith(SDP_HOLD_NOT_RUN),
+        run_status_error=(report.run_status == STATUS_ERROR),
     )
     sys.exit(code)

@@ -20,6 +20,7 @@ assertion it replaces would have missed the short `-l` form.
 
 from __future__ import annotations
 
+import re
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -146,14 +147,35 @@ def test_sanitize_uses_getpass_default_when_user_omitted(monkeypatch):
     assert out["reason"] == "run by <user> here"
 
 
+def test_sanitize_leaves_the_rail_reading_disclosure_byte_identical():
+    """ATTR-06 / T-178-01: `rail_reading_disclosure` rides `to_dict()`, the
+    only input the sanitizer deep-scrubs -- proving the new string key
+    contains none of the scrubbable vectors (no home dir, no device path, no
+    username) that `_SCRUBS` would otherwise have had to rewrite."""
+    from firestarter.diagnostic_report import _RAIL_READING_DISCLOSURE
+
+    d = {"rail_reading_disclosure": _RAIL_READING_DISCLOSURE}
+    out = submit.sanitize_dict(d, user="somebody")
+    assert out["rail_reading_disclosure"] == _RAIL_READING_DISCLOSURE
+
+
 # ---------------------------------------------------------------------------
 # overall_verdict / build_title / build_body / build_issue_url
 # ---------------------------------------------------------------------------
 
 
-def _step(op: str, verdict: str, fingerprint_cls: str | None = None):
+def _step(
+    op: str,
+    verdict: str,
+    fingerprint_cls: str | None = None,
+    *,
+    status: str | None = None,
+):
     fp = SimpleNamespace(classification=fingerprint_cls) if fingerprint_cls else None
-    return SimpleNamespace(op=op, verdict=verdict, fingerprint=fp)
+    kwargs = {"op": op, "verdict": verdict, "fingerprint": fp}
+    if status is not None:
+        kwargs["status"] = status
+    return SimpleNamespace(**kwargs)
 
 
 def test_overall_verdict_all_ok_is_pass():
@@ -178,6 +200,111 @@ def test_overall_verdict_bad_alone_is_fail():
     assert submit.overall_verdict(results) == "FAIL"
 
 
+def test_overall_verdict_error_status_is_inconclusive_harness():
+    results = [_step("id", "BAD"), _step("read", "OK", status="ERROR")]
+    assert submit.overall_verdict(results) == "INCONCLUSIVE (harness)"
+
+
+def test_overall_verdict_defaults_to_complete_for_a_status_less_result():
+    assert submit.overall_verdict([_step("id", "OK"), _step("read", "OK")]) == "PASS"
+    assert (
+        submit.overall_verdict([_step("id", "OK"), _step("write", "marginal")])
+        == "INCONCLUSIVE"
+    )
+    assert (
+        submit.overall_verdict([_step("write", "marginal"), _step("verify", "BAD")])
+        == "FAIL"
+    )
+    assert submit.overall_verdict([_step("id", "BAD")]) == "FAIL"
+
+
+_TITLE_RE = re.compile(r"^\[dev test\]\s+(?P<chip>\S+)\s+[—-]\s+(?P<verdict>[A-Za-z]+)")
+
+
+def test_build_title_for_a_transport_fault_is_not_fail():
+    report = Mock()
+    report.to_dict.return_value = {"dedup_fingerprint": "abc123def456"}
+    report.results = [_step("id", "SKIPPED", status="ERROR")]
+    title = submit.build_title(report, "sst27sf512")
+    match = _TITLE_RE.match(title)
+    assert match is not None, title
+    assert match.group("verdict") == "INCONCLUSIVE", title
+
+
+def test_a_transport_fault_reason_survives_the_markdown_reason_cell():
+    assert submit._reason_text("SKIPPED", "half-seated cable") == "half-seated cable"
+
+
+def test_is_submittable_is_unchanged_by_the_status_axis():
+    """D-11: `is_submittable` is left byte-unchanged. The milestone
+    research (`.planning/research/SUMMARY.md:132`, `FEATURES.md:348`)
+    listed a run-validity term on `is_submittable` as a Phase 178
+    deliverable (T3); ATTR-05 and ROADMAP criterion 4 forbid it. ATTR-05
+    wins and T3 is recorded VOID here: its source mentions none of the
+    four run-validity tokens, and its truth table is unchanged -- True only
+    when `chip`, `protocol` and `host_version` are all truthy, irrespective
+    of the report's status axis (which `is_submittable` never even
+    receives -- it takes only `AutoCapture`)."""
+    import inspect
+
+    from firestarter.diagnostic_report import AutoCapture, is_submittable
+
+    source = inspect.getsource(is_submittable)
+    for token in ("status", "run_status", "STATUS_ERROR", "run_valid"):
+        assert token not in source, token
+
+    full = AutoCapture(host_version="1", chip="x", protocol="7")
+    assert is_submittable(full) is True
+    assert is_submittable(AutoCapture(host_version="1", chip="", protocol="7")) is False
+    assert is_submittable(AutoCapture(host_version="1", chip="x", protocol="")) is False
+    assert is_submittable(AutoCapture(host_version="", chip="x", protocol="7")) is False
+
+
+def test_a_transport_faulted_report_still_reaches_the_confirm_prompt():
+    """D-11/ATTR-05: a transport-faulted report still reaches `confirm_fn`
+    -- auto-classification changes the title and disposition only, never
+    the offer to file. Calling `submit_report` a SECOND time on the same
+    report reaches a fresh `confirm_fn` mock once again (the idempotency
+    edge): nothing in the status axis is consumed, cached, or one-shot."""
+    report = _make_report()
+    report.run_status = "ERROR"
+    report.results = [_step("id", "SKIPPED", status="ERROR")]
+    saved = SimpleNamespace(name="dev-test-w27c512.json")
+
+    confirm_fn = Mock(return_value=False)
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=Mock(return_value=(None, True)),
+    )
+    confirm_fn.assert_called_once()
+
+    second_confirm_fn = Mock(return_value=False)
+    submit.submit_report(
+        report,
+        "W27C512",
+        saved,
+        which_fn=Mock(),
+        run_fn=Mock(),
+        browser_open=Mock(),
+        isatty_fn=Mock(return_value=True),
+        confirm_fn=second_confirm_fn,
+        console=Mock(),
+        find_prior_report_fn=Mock(return_value=(None, True)),
+    )
+    second_confirm_fn.assert_called_once()
+
+    title = submit.build_title(report, "W27C512")
+    assert "INCONCLUSIVE (harness)" in title
+
+
 def test_title_contains_shorthash_and_chip():
     report = Mock()
     report.to_dict.return_value = {"dedup_fingerprint": "abc123def456"}
@@ -196,6 +323,22 @@ def test_title_reflects_fail_verdict():
     title = submit.build_title(report, "AM27C020")
     assert "FAIL" in title
     assert "deadbeef0000" in title
+
+
+def test_title_shows_the_canonical_part_number_when_it_differs_from_the_raw_token():
+    """RPT-F1/D-01/D-03: when `auto_capture.canonical_part_number` is set
+    and differs from the raw `chip` argument, the title shows the
+    canonical, not the raw token -- single-sourced off `report.to_dict()`,
+    never re-selected."""
+    report = Mock()
+    report.to_dict.return_value = {
+        "dedup_fingerprint": "abc123def456",
+        "auto_capture": {"canonical_part_number": "W27C020"},
+    }
+    report.results = [_step("id", "OK")]
+    title = submit.build_title(report, "w27c020")
+    assert "W27C020" in title
+    assert "w27c020" not in title
 
 
 def test_build_body_table_from_sanitized_steps():

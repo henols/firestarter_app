@@ -7,8 +7,8 @@ Permission is hereby granted under MIT license.
 Quick task 260807-kaq: `dev test` blank-check must run AFTER erase.
 
 Unit-level ordering proof for `derive_plan`'s conditional blank-check
-placement rule (see `<placement_rule>` in the quick task's PLAN.md). All
-four placement cases are covered against the REAL on-disk chip database
+placement rule (see `<placement_rule>` in the quick task's PLAN.md). Three
+placement cases are covered against the REAL on-disk chip database
 (the same `EpromDatabase(skip_local_override=True)` idiom
 `tests/test_chip_test.py`'s `_REAL_DB` fixture uses -- no serial I/O, no
 mocking of the database itself):
@@ -16,9 +16,6 @@ mocking of the database itself):
   1. M8720 (protocol 0x08, EEPROM, FLAG_CAN_ERASE set) -- an executable
      erase step exists, so blank-check moves to AFTER erase and BEFORE the
      SDP leg's six-op contiguous terminal block.
-  2. M8720, write_scope="none" -- untouched: no erase step is ever
-     executable at write_scope="none" (case 2 requires write_execute), so
-     blank-check stays at its historic position.
   3. AM27512 (UV-EPROM) -- untouched: a pre-write blank-check is genuinely
      actionable on an irrecoverable UV write, so case 4 applies regardless
      of write_scope.
@@ -39,8 +36,6 @@ from firestarter.chip_test import (
     _SDP_LEG_STEP_ORDER,  # test-internal: the D-06 six-op order (v1.30 Phase 134)
     OP_BLANK_CHECK,
     OP_ERASE,
-    OP_ID,
-    OP_READ,
     derive_plan,
 )
 from firestarter.database import EpromDatabase
@@ -101,18 +96,6 @@ def test_m8720_full_blank_check_moves_after_erase_before_sdp_leg():
             f"after blank-check (index {blank_check_index}) -- the leg must "
             "remain a contiguous terminal block"
         )
-
-
-def test_m8720_write_scope_none_is_unchanged():
-    """Case 2 requires write_execute (an erase step is only ever
-    'executable' when it was actually appended as a real step) -- at
-    write_scope="none" no erase step runs, so blank-check stays at its
-    historic position and the untouched-scope proof holds byte-for-byte."""
-    plan = derive_plan(_CHIP_ERASABLE, _REAL_DB, write_scope="none")
-    assert [s.op for s in plan.steps] == [OP_ID, OP_READ, OP_BLANK_CHECK]
-
-    locked_ops = {op for op, _reason in plan.locked_destructive}
-    assert locked_ops == {"write", "verify", "erase"}
 
 
 def test_am27512_uv_blank_check_position_is_unchanged():

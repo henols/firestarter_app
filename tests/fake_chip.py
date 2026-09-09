@@ -28,6 +28,10 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import Mock
+
+from firestarter.constants import FLAG_SKIP_BLANK_CHECK
+from firestarter.messages import MSG_ERR_NOT_BLANK
 
 
 def _parse_addr_or_size(s: str | None) -> int | None:
@@ -234,3 +238,71 @@ class FakeChip:
     ) -> bool:
         self.calls.append(("sdp_unlock", {}))
         return self.sdp_unlock_ok
+
+
+class WriteInitPreflightChip(FakeChip):
+    """A `FakeChip` subclass modelling the firmware write-init blank-check
+    pre-flight (`firestarter/src/proms/eprom.cpp:143-145`), with the REAL
+    host contract: `EpromOperator.write_eprom` does NOT raise on a firmware
+    refusal -- `eprom_operations._run_state_machine` catches the
+    `EpromOperationError` and returns `(False, str(e))`, stamping
+    `last_firmware_error_code`/`last_firmware_error_message` on itself, and
+    `chip_test._firmware_error` is what reads them back. A double that
+    raises is NOT firmware-faithful and would exercise a code path real
+    hardware never reaches.
+
+    `write_flags_seen` records every `operation_flags` value this instance
+    is handed, which is what the UV-03 legs assert on.
+    """
+
+    def __init__(self, memory_size: int, *, uv: bool = False):
+        super().__init__(memory_size, uv=uv)
+        self.last_firmware_error_code: int | None = None
+        self.last_firmware_error_message: str | None = None
+        self.write_flags_seen: list[int] = []
+        setattr(self, "check_eprom_id", Mock(return_value=(True, self.id_value)))
+
+    def _is_blank(self) -> bool:
+        if self.blank_override is not None:
+            return self.blank_override
+        return bytes(self.data) == b"\xff" * self.memory_size
+
+    def write_eprom(
+        self,
+        name: str,
+        eprom_data: dict[str, Any],
+        input_file_path: str,
+        operation_flags: int = 0,
+        address_str: str | None = None,
+        pulse_us: int = 0,
+    ) -> bool:
+        self.last_firmware_error_code = None
+        self.last_firmware_error_message = None
+        self.write_flags_seen.append(operation_flags)
+        if not (operation_flags & FLAG_SKIP_BLANK_CHECK) and not self._is_blank():
+            self.last_firmware_error_code = MSG_ERR_NOT_BLANK
+            self.last_firmware_error_message = (
+                "Error: EPROM not blank at address 0x000000, value 0xAB"
+            )
+            return False
+        return super().write_eprom(
+            name,
+            eprom_data,
+            input_file_path,
+            operation_flags,
+            address_str=address_str,
+            pulse_us=pulse_us,
+        )
+
+    def check_eprom_blank(
+        self, name: str, eprom_data: dict[str, Any], operation_flags: int = 0
+    ) -> bool:
+        self.last_firmware_error_code = None
+        self.last_firmware_error_message = None
+        is_blank = super().check_eprom_blank(name, eprom_data, operation_flags)
+        if not is_blank:
+            self.last_firmware_error_code = MSG_ERR_NOT_BLANK
+            self.last_firmware_error_message = (
+                "Error: EPROM not blank at address 0x000000, value 0xAB"
+            )
+        return is_blank

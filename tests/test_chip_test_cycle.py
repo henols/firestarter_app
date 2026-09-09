@@ -74,7 +74,7 @@ def _cycle_operator(name: str, *, blank: bool = False):
             handle.write(b"\xff" * size)
         return True
 
-    def _write(_name, _data, path, address_str=None, **_kw):
+    def _write(_name, _data, path, operation_flags=0, address_str=None, **_kw):
         with open(path, "rb") as handle:
             writes.append((address_str, handle.read()))
         return True
@@ -376,6 +376,68 @@ def test_rig_life_is_rendered_in_the_write_coverage_line() -> None:
     assert "slots left on this part" in line
 
 
+def test_slots_remaining_line_reports_after_this_run_when_the_write_ran() -> None:
+    """D-20: the operator-facing number is slots left AFTER this run. The
+    resolver's own `slots_remaining` is the resolve-time (before-this-run)
+    count -- `_write_coverage_line` subtracts one when the write actually
+    ran (an OK/BAD/marginal verdict), because the run this line is about
+    just spent the top slot the resolver picked."""
+    from firestarter.diagnostic_report import _write_coverage_line
+
+    target = ct.WriteTarget(
+        region=(0xFF00, 256),
+        pattern=b"\xaa" * 256,
+        masked=True,
+        bits_cleared=512,
+        bits_retained=1536,
+        current_source="probe read",
+        slots_remaining=256,
+        slots_total=256,
+        region_policy=ct.REGION_POLICY_UV_SLOT,
+    )
+    result = ct.StepResult(
+        op=ct.OP_WRITE, verdict=ct.VERDICT_OK, run_count=1, write_target=target
+    )
+    step = ct.Step(op=ct.OP_WRITE, supported=True, reason="")
+
+    line = _write_coverage_line(result, step)
+    assert line is not None
+    assert "255 of 256 slots left on this part" in line
+
+
+def test_slots_remaining_line_reports_the_resolved_count_when_the_write_was_refused() -> (
+    None
+):
+    """D-21's flip side of the same predicate: a refused write (SKIPPED,
+    the write step was applicable and did not run) has not spent the slot
+    the resolver counted, so the reported number stays the resolved count
+    unreduced."""
+    from firestarter.diagnostic_report import _write_coverage_line
+
+    target = ct.WriteTarget(
+        region=(0xFF00, 256),
+        pattern=b"\xaa" * 256,
+        masked=True,
+        bits_cleared=512,
+        bits_retained=1536,
+        current_source="probe read",
+        slots_remaining=256,
+        slots_total=256,
+        region_policy=ct.REGION_POLICY_UV_SLOT,
+    )
+    result = ct.StepResult(
+        op=ct.OP_WRITE,
+        verdict=ct.VERDICT_SKIPPED,
+        run_count=0,
+        write_target=target,
+    )
+    step = ct.Step(op=ct.OP_WRITE, supported=True, reason="")
+
+    line = _write_coverage_line(result, step)
+    assert line is not None
+    assert "256 of 256 slots left on this part" in line
+
+
 def test_non_uv_target_reports_no_rig_life() -> None:
     """The counts are UV-only: an erasable part has no finite slot budget, so
     a number there would be meaningless rather than merely absent."""
@@ -394,3 +456,115 @@ def test_help_describes_the_repeat_as_a_cycle_and_a_rig_check() -> None:
     doc = (cli_handlers_mod.dev_test.__doc__ or "").lower()
     assert "cycle" in doc
     assert "rig-health" in doc or "rig health" in doc
+
+
+def test_a_failing_first_cycle_keeps_the_fingerprint_read_back() -> None:
+    """Evidence-gated fingerprint read-back across cycles (PRUNE-02).
+
+    Cycle 1 fails, cycle 2 passes -- the gate still consults `per_step[i]`
+    across ALL prior cycles, not just the final cycle's own one-element
+    `outcomes` list, so the read-back is kept. Built on `_cycle_operator`,
+    not `test_chip_test.py`'s plain `_mock_operator`: its `read_eprom` side
+    effect seeks to the ABSOLUTE address before writing, which
+    `_read_region` depends on -- a double that writes at offset 0 makes
+    every region slice come back short and this test would pass for the
+    wrong reason. `derive_plan`'s own unconditional `read` step (present on
+    every protocol, a separate read-repeatability diagnostic) contributes a
+    fixed baseline of `runs` calls regardless of the fingerprint gate; the
+    gate's own contribution is measured as the DELTA above that baseline."""
+    operator, _writes = _cycle_operator(_ERASABLE)
+    operator.write_eprom.side_effect = [False, True]
+    plan = ct.derive_plan(_ERASABLE, _REAL_DB, write_scope="full")
+    runs = 2
+
+    ct.run_plan(plan, operator, _REAL_DB, runs=runs)
+
+    assert operator.read_eprom.call_count > runs
+
+
+def test_an_all_passing_two_cycle_run_performs_zero_fingerprint_read_backs() -> None:
+    """The adjacency edge's neighbour: no failure injected anywhere in the
+    two-cycle run, so the fingerprint is synthesized with zero device
+    reads and `read_eprom.call_count` stays at exactly the `read` step's
+    own fixed baseline of `runs` calls -- zero ADDED by the gate."""
+    operator, _writes = _cycle_operator(_ERASABLE)
+    plan = ct.derive_plan(_ERASABLE, _REAL_DB, write_scope="full")
+    runs = 2
+
+    ct.run_plan(plan, operator, _REAL_DB, runs=runs)
+
+    assert operator.read_eprom.call_count == runs
+
+
+def _probe_shaped_target(*, current_is_probe_read: bool) -> ct.WriteTarget:
+    start, length = 0xFF00, 256
+    current = b"\xff" * length
+    desired = ct.generate_pattern(start, length)
+    return ct.WriteTarget(
+        region=(start, length),
+        pattern=ct.mask_write_pattern(current, desired),
+        masked=True,
+        bits_cleared=ct.bits_cleared_by(current, desired),
+        bits_retained=ct.bits_retained_by(current, desired),
+        current_source="probe read",
+        current=current,
+        current_is_probe_read=current_is_probe_read,
+        region_policy=ct.REGION_POLICY_UV_SLOT,
+    )
+
+
+def test_uv_cycle_tranches_carry_the_probe_read_witness() -> None:
+    """The staged tranches are the ONLY targets that ever reach
+    `write_eprom` or the report (Phase 179, UV-03) -- a witness not carried
+    through here is invisible on exactly the family it exists for."""
+    target = _probe_shaped_target(current_is_probe_read=True)
+    staged = ct._uv_cycle_targets(target, 2)
+    assert len(staged) == 2
+    assert all(t.current_is_probe_read is True for t in staged)
+
+
+def test_alternating_cycle_complement_carries_no_probe_read_witness() -> None:
+    """Anti-vacuity sibling to the tranche-carry test above: sourcing the
+    tranche target with `current_is_probe_read=False` must yield staged
+    copies that are ALSO `False` -- without this leg, the prior test would
+    pass just as well against a hard-coded `current_is_probe_read=True` in
+    `_uv_cycle_targets`."""
+    target = _probe_shaped_target(current_is_probe_read=False)
+    staged = ct._uv_cycle_targets(target, 2)
+    assert len(staged) == 2
+    assert all(t.current_is_probe_read is False for t in staged)
+
+
+def test_sram_complement_carries_no_probe_read_witness() -> None:
+    """`_alternating_cycle_targets`' complement builds an unmasked,
+    address-derived image for SRAM/FRAM -- never a probe-read image -- so
+    it must carry the default `False`, not the source target's witness."""
+    unmasked = ct.WriteTarget(
+        region=(0x1000, 256),
+        pattern=ct.generate_pattern(0x1000, 256),
+        masked=False,
+        bits_cleared=0,
+        bits_retained=0,
+        current_source="address-derived pattern (unmasked)",
+    )
+    complement = ct._alternating_cycle_targets(unmasked, 2)
+    assert complement[1].current_is_probe_read is False
+
+
+@pytest.mark.parametrize("chip", ["M27C512", "AM27C020", "TMS27C512"])
+def test_uv_plan_blank_check_sits_outside_the_cycle_block(chip: str) -> None:
+    """The structural fact that makes a non-`None` `error_code` on a
+    `SKIPPED` blank-check step safe (Phase 179, UV-02/Q7): `_dispatch_step`
+    now returns a non-`None` `error_code` on a step whose verdict is
+    `SKIPPED`, and that is only safe while the step sits OUTSIDE the block
+    where `_run_cycle_block` breaks on `result.error_code is not None`
+    (`chip_test.py:1648-1652`). A future phase that moves the UV blank-
+    check inside the block would silently reintroduce the cycle-2 abort
+    this phase exists to remove; this test would go red instead."""
+    plan = ct.derive_plan(chip, _REAL_DB, write_scope="full")
+    ops = [s.op for s in plan.steps]
+    blank_check_index = ops.index(ct.OP_BLANK_CHECK)
+    bounds = ct.cycle_block_bounds(plan.steps)
+    assert bounds is not None
+    block_start, _block_stop = bounds
+    assert blank_check_index < block_start

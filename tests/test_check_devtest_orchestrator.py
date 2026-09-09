@@ -514,15 +514,23 @@ def test_handler_function_names_all_resolve_to_real_callables() -> None:
     )
 
 
-def test_handler_function_names_contains_the_new_uv_scope_helpers() -> None:
-    """`_resolve_write_scope` and `_is_uv_eprom` (this plan's two new
-    handler helpers) are both named in the allow-list -- the mandatory task
-    RESEARCH C-4 called out, not merely avoiding a gate trip."""
+def test_handler_function_names_contains_the_uv_scope_helper() -> None:
+    """`_is_uv_eprom` (the handler-side UV predicate RESEARCH C-4 called
+    out) is named in the allow-list. Its former sibling helper, which used
+    to resolve the scope literal on `_is_uv_eprom`'s behalf, was deleted in
+    Phase 181 plan 04 -- its two-line rule is now inlined at `dev_test`'s
+    single `derive_plan` call site -- and removed from the allow-list in
+    the same commit; there is no longer a second name to assert here.
+    Phase 181 plan 05 (RPT-F1) added `_canonical_part_number`, the
+    handler-side canonical-alias selector, in the same commit as its new
+    call site inside `dev_test`."""
     check_devtest_orchestrator = importlib.import_module(
         "tools.check_devtest_orchestrator"
     )
     assert "_is_uv_eprom" in check_devtest_orchestrator._HANDLER_FUNCTION_NAMES
-    assert "_resolve_write_scope" in check_devtest_orchestrator._HANDLER_FUNCTION_NAMES
+    assert (
+        "_canonical_part_number" in check_devtest_orchestrator._HANDLER_FUNCTION_NAMES
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -531,28 +539,29 @@ def test_handler_function_names_contains_the_new_uv_scope_helpers() -> None:
 # fail-closed.
 # ---------------------------------------------------------------------------
 
-# The six real names dev_test's BODY (never its decorator list) references,
-# measured live 2026-08-04 against the shipped cli_handlers.py. v1.30 Phase
+# The real names dev_test's BODY (never its decorator list) references,
+# measured live against the shipped cli_handlers.py. v1.30 Phase
 # 134 plan 134-05 (D-14): `_verdict_code` is no longer called directly from
 # `dev_test`'s own body -- the exit computation now calls `_overall_exit_code`
 # (which itself calls `_verdict_code` internally), so the body-only
-# derivation swaps one name for the other; the count stays six.
+# derivation swaps one name for the other.
 #
 # v1.30 Phase 134 plan 134-07 (D-15): `_overall_exit_code` is in turn no
 # longer called directly from `dev_test`'s own body -- the exit computation
 # now calls `_dev_test_exit_code` (which itself calls `_verdict_code`
 # internally, mirroring `_overall_exit_code`'s own shape), so the body-only
-# derivation swaps THIS name too; the count stays six.
+# derivation swaps THIS name too.
 #
 # Quick task 260821-spg: `_sdp_recovery_line` was deleted along with the
 # console echo it fed (`dev_test`'s always-writes notice and SDP-recovery
-# lecture are both gone) -- so the count moves back from seven to six.
+# lecture are both gone).
 _EXPECTED_DEV_TEST_REFERENCED_HELPERS = {
+    "_canonical_part_number",
     "_chip_id_fields",
+    "_cli_start_time",
     "_dev_test_exit_code",
-    "_is_interactive",
+    "_is_uv_eprom",
     "_make_sampler",
-    "_resolve_write_scope",
     "_sanitize_chip_token",
 }
 
@@ -573,11 +582,19 @@ def test_every_helper_referenced_by_dev_test_is_listed() -> None:
     proves every *referenced* helper is *listed*; test 9 proves every
     *listed* name is *real*. Together they are bidirectional; neither alone
     is. The assertion here is a SUBSET, never an equality, because
-    `_is_uv_eprom` is legitimately listed but not referenced from
-    `dev_test`'s body (it is called from `_resolve_write_scope`) -- an
-    equality assertion would be red for the opposite reason on day one.
-    `_default_uv_write_confirm` used to be the other such entry; it went
-    when the UV write prompt was retired (quick task 260822-aq6).
+    `_is_interactive` is legitimately listed but not referenced from
+    `dev_test`'s body -- an equality assertion would be red for the opposite
+    reason on day one. `_default_uv_write_confirm` used to be the other such
+    entry; it went when the UV write prompt was retired (quick task
+    260822-aq6). `_is_uv_eprom` used to be the third such entry; Phase 181
+    plan 04 made it body-referenced by inlining the deleted write-scope
+    helper's rule at `dev_test`'s own `derive_plan` call site.
+    `_canonical_part_number` (Phase 181 plan 05, RPT-F1) is the newest
+    entry: `dev_test`'s body calls it directly, beside the existing
+    `auto_capture.protocol` assignment. `_cli_start_time` (Phase 181 plan
+    06, RPT-D2) joins it: `dev_test`'s body calls it once, immediately
+    before the `report.elapsed` assignment that precedes the first
+    serialization.
     """
     check_devtest_orchestrator = importlib.import_module(
         "tools.check_devtest_orchestrator"
@@ -596,12 +613,12 @@ def test_every_helper_referenced_by_dev_test_is_listed() -> None:
         "assertion below vacuously true. dev_test may have moved, been "
         "renamed, or the AST walk broke."
     )
-    assert len(derived) >= 6, (
+    assert len(derived) >= 7, (
         f"_referenced_underscore_helpers_in_dev_test returned only "
         f"{len(derived)} name(s) ({sorted(derived)}) against the real "
-        f"cli_handlers.py -- expected at least 6. A shrinking derived set "
-        f"is itself suspicious even though the subset check below would "
-        f"still pass."
+        f"cli_handlers.py -- expected at least 7 (re-measured, Phase 181 "
+        f"plan 06). A shrinking derived set is itself suspicious even "
+        f"though the subset check below would still pass."
     )
 
     assert derived == _EXPECTED_DEV_TEST_REFERENCED_HELPERS, (

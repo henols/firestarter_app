@@ -8,6 +8,12 @@ pins the CAPTURE half in `chip_test._run_step`.
 These are real measurements against a deliberately-slowed mock operator,
 not plumbing assertions: a test that only checked `duration_s is not None`
 would pass just as happily against a hardcoded `0.0`.
+
+The mean-fold tests below join this module for the same reason: they pin
+`_aggregate_cycle_results`'s presentation half of `duration_s` -- the mean
+over the cycles that ran (RPT-D1) -- against real per-cycle measurements
+rather than hand-built `StepResult`s alone, so a fold that silently kept
+summing would redden here too.
 """
 
 from __future__ import annotations
@@ -17,9 +23,11 @@ from unittest.mock import Mock
 
 from firestarter.chip_test import (
     _RAN_VERDICTS,
+    OP_READ,
     VERDICT_NA,
     Step,
     StepResult,
+    _aggregate_cycle_results,
     _run_step,
     derive_plan,
     run_plan,
@@ -64,7 +72,7 @@ def test_duration_measures_real_elapsed_time():
     on a loaded CI runner, and over-reporting is not the failure mode worth
     guarding: a broken timer reports zero, not too much.
     """
-    plan = derive_plan("w29c020", _REAL_DB, write_scope="none")
+    plan = derive_plan("w29c020", _REAL_DB, write_scope="full")
     results = run_plan(plan, _operator(id_sleep=_SLEEP_S), _REAL_DB)
 
     id_result = next(r for r in results if r.op == "id")
@@ -77,7 +85,7 @@ def test_fast_steps_are_not_credited_with_the_slow_step_time():
     the `read` step that follows it. Guards against a timer anchored once at
     run start instead of per step.
     """
-    plan = derive_plan("w29c020", _REAL_DB, write_scope="none")
+    plan = derive_plan("w29c020", _REAL_DB, write_scope="full")
     results = run_plan(plan, _operator(id_sleep=_SLEEP_S), _REAL_DB)
 
     id_result = next(r for r in results if r.op == "id")
@@ -97,7 +105,7 @@ def test_steps_that_did_not_run_have_no_duration():
     A `0.0` there would read as "ran, took no measurable time" rather than
     "never ran", and it would be summed into the `steps total` row.
     """
-    plan = derive_plan("w29c020", _REAL_DB, write_scope="none")
+    plan = derive_plan("w29c020", _REAL_DB, write_scope="full")
     results = run_plan(plan, _operator(), _REAL_DB)
 
     not_run = [r for r in results if r.verdict not in _RAN_VERDICTS]
@@ -109,7 +117,7 @@ def test_steps_that_did_not_run_have_no_duration():
 def test_every_step_that_ran_carries_a_duration():
     """No step that ran is left unmeasured -- the wrapper covers every
     return path of the timed function, not just the happy one."""
-    plan = derive_plan("w29c020", _REAL_DB, write_scope="none")
+    plan = derive_plan("w29c020", _REAL_DB, write_scope="full")
     results = run_plan(plan, _operator(), _REAL_DB)
 
     ran = [r for r in results if r.verdict in _RAN_VERDICTS]
@@ -164,3 +172,70 @@ def test_a_not_run_verdict_is_not_stamped_even_when_slow(monkeypatch):
     )
 
     assert result.duration_s is None
+
+
+def test_the_fold_reports_the_mean_not_the_sum():
+    """Two real per-cycle durations fold to their mean, not their sum --
+    a real measurement, not a hand-built `StepResult` pair, so a fold that
+    silently kept summing reddens here even if a plumbing-only test would
+    not notice."""
+    plan = derive_plan("w29c020", _REAL_DB, write_scope="full")
+    op = _operator()
+    r1 = run_plan(plan, op, _REAL_DB)
+    r2 = run_plan(plan, op, _REAL_DB)
+
+    id1 = next(r for r in r1 if r.op == "id")
+    id2 = next(r for r in r2 if r.op == "id")
+    assert id1.duration_s is not None
+    assert id2.duration_s is not None
+
+    folded = _aggregate_cycle_results([id1, id2], "id")
+    expected_mean = round((id1.duration_s + id2.duration_s) / 2, 3)
+    assert folded.duration_s == expected_mean
+    assert folded.duration_s < round(id1.duration_s + id2.duration_s, 3)
+
+
+def test_the_mean_equals_sum_over_count_for_a_slowed_pair():
+    """The mean-over-count relation, computed from durations this test
+    itself measured against a deliberately-slowed mock -- not an arithmetic
+    identity checked against itself."""
+    plan = derive_plan("w29c020", _REAL_DB, write_scope="full")
+    slow_op = _operator(id_sleep=_SLEEP_S)
+    results = run_plan(plan, slow_op, _REAL_DB)
+    id_slow = next(r for r in results if r.op == "id")
+
+    fast_op = _operator()
+    results_fast = run_plan(plan, fast_op, _REAL_DB)
+    id_fast = next(r for r in results_fast if r.op == "id")
+
+    folded = _aggregate_cycle_results([id_slow, id_fast], "id")
+    measured = [id_slow.duration_s, id_fast.duration_s]
+    assert folded.duration_s == round(sum(measured) / len(measured), 3)
+
+
+def test_a_fold_with_no_measured_duration_stays_none():
+    """No cycle producing a duration yields `None`, never `0.0` -- a `0.0`
+    would read as "ran and took no time" rather than "unmeasured"."""
+    a = StepResult(op=OP_READ, verdict="OK", run_count=1, duration_s=None)
+    b = StepResult(op=OP_READ, verdict="OK", run_count=1, duration_s=None)
+    folded = _aggregate_cycle_results([a, b], OP_READ)
+    assert folded.duration_s is None
+
+
+def test_a_single_cycle_result_is_returned_unchanged():
+    """A `--fast` run's `duration_s` is that one cycle's own measured
+    duration, by identity through the existing single-result early return."""
+    a = StepResult(op=OP_READ, verdict="OK", run_count=1, duration_s=1.234)
+    folded = _aggregate_cycle_results([a], OP_READ)
+    assert folded is a
+
+
+def test_cycle_order_does_not_change_the_folded_mean():
+    """Reversing the order of the two cycle results yields the identical
+    `duration_s` -- IEEE-754 addition of two floats is exactly commutative
+    at the default cycle count."""
+    a = StepResult(op=OP_READ, verdict="OK", run_count=1, duration_s=1.111)
+    b = StepResult(op=OP_READ, verdict="OK", run_count=1, duration_s=2.222)
+    forward = _aggregate_cycle_results([a, b], OP_READ)
+    reversed_fold = _aggregate_cycle_results([b, a], OP_READ)
+    assert forward.duration_s == reversed_fold.duration_s

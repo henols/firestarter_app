@@ -20,6 +20,7 @@ import serial.serialutil
 import serial.tools.list_ports
 
 import firestarter.codec as codec
+import firestarter.transport_counters as transport_counters
 from firestarter.config import ConfigManager  # Assuming ConfigManager is refactored
 from firestarter.constants import (
     BAUD_RATE,
@@ -354,6 +355,8 @@ class SerialCommunicator:
         override seam is used.
         """
         result = codec.decode_id_frame(frame_len, body)
+        if result is None:
+            transport_counters.record_decode_failure()
         # body layout: [id_byte][params_bytes...][crc_byte]
         if result is not None and len(body) >= 2:
             msg_id = body[0]
@@ -494,6 +497,7 @@ class SerialCommunicator:
                         "Magic preamble seen but length bytes not received "
                         "before timeout — re-syncing."
                     )
+                    transport_counters.record_resync_length_missing()
                     continue
                 frame_len = struct.unpack_from(">H", len_bytes)[0]
 
@@ -509,6 +513,7 @@ class SerialCommunicator:
                         f"Frame body truncated: expected {frame_len} bytes, "
                         f"got {len(body)} — re-syncing."
                     )
+                    transport_counters.record_resync_body_truncated()
                     continue
 
                 # Consume the trailing terminator (D-04: anchor, not
@@ -560,6 +565,7 @@ class SerialCommunicator:
                 return response
 
         # If the generator finishes without yielding a significant response, it's a timeout.  # noqa: E501
+        transport_counters.record_response_timeout()
         logger.warning(f"Timeout waiting for a response from {self.port_name}.")
         raise SerialTimeoutError(
             f"Timeout waiting for a significant response from {self.port_name}."
@@ -1028,14 +1034,15 @@ class SerialCommunicator:
 
         for port_name in potential_ports:
             try:
-                communicator = cls._probe_port(
-                    port_name,
-                    baud_rate,
-                    command_to_send,
-                    config_manager,
-                    fault_inject_outgoing=fault_inject_outgoing,
-                    allow_outdated_firmware=allow_outdated_firmware,
-                )
+                with transport_counters.probe_scope():
+                    communicator = cls._probe_port(
+                        port_name,
+                        baud_rate,
+                        command_to_send,
+                        config_manager,
+                        fault_inject_outgoing=fault_inject_outgoing,
+                        allow_outdated_firmware=allow_outdated_firmware,
+                    )
                 if communicator:
                     if status_update_active:
                         logger.info("Connecting... OK      ", extra={"status": "end"})

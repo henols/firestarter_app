@@ -170,6 +170,8 @@ from firestarter.chip_test import (
     SDP_HOLD_HELD,
     SDP_HOLD_NOT_HELD,
     SDP_HOLD_NOT_RUN,
+    STATUS_COMPLETE,
+    STATUS_ERROR,
     VERDICT_BAD,
     VERDICT_MARGINAL,
     VERDICT_NA,
@@ -264,30 +266,54 @@ def _result(results, op):
 # ---------------------------------------------------------------------------
 # Baseline 1: the shipped op-string sequence + per-step (verdict, run_count)
 # (criterion 4, D-13a). Measured by actually running derive_plan("M8720",
-# _REAL_DB) (default write_scope="none") and run_plan(...) against a fresh
-# _mock_operator() at this commit -- transcribed from that run, never
-# predicted. write_scope="none" structurally omits write/verify/erase from
-# Plan.steps (D-01, SAFE-01), so this literal covers only {id, read,
-# blank-check}; D-13b's sentinel test (plan 133-03) is what covers the
-# remaining shipped op strings via the fail-closed dispatch-arm proof, not
-# this literal.
+# _REAL_DB, write_scope="full") and run_plan(...) against a fresh
+# _mock_operator() -- transcribed from that run, never predicted; D-13b's
+# sentinel test (plan 133-03) covers the shipped op strings via the
+# fail-closed dispatch-arm proof, independent of this literal.
 # ---------------------------------------------------------------------------
 
 _SHIPPED_OPS_SEQUENCE = {
-    "op_sequence": ["id", "read", "blank-check"],
+    "op_sequence": [
+        "id",
+        "read",
+        "write",
+        "verify",
+        "erase",
+        "blank-check",
+        "write-baseline-b",
+        "write-baseline-a",
+        "sdp-lock",
+        "write-inhibited",
+        "sdp-unlock",
+        "write-restored",
+    ],
     # (verdict, run_count) per step, same order as op_sequence above.
     # "id" is NA/run_count=0: M8720's chip-id sentinel is 0 (no real id in
-    # the DB entry), so derive_plan marks the id step unsupported.
-    "verdict_run_count": [("NA", 0), ("OK", 2), ("OK", 1)],
-    "len_results": 3,
+    # the DB entry), so derive_plan marks the id step unsupported. M8720 is
+    # a measured SDP-REFUSE chip (protocol 0x08), so all six SDP-leg steps
+    # are NA/run_count=0.
+    "verdict_run_count": [
+        ("NA", 0),
+        ("OK", 2),
+        ("OK", 2),
+        ("OK", 2),
+        ("OK", 2),
+        ("OK", 2),
+        ("NA", 0),
+        ("NA", 0),
+        ("NA", 0),
+        ("NA", 0),
+        ("NA", 0),
+        ("NA", 0),
+    ],
+    "len_results": 12,
 }
 
 
 def test_shipped_ops_sequence_unchanged():
     """Criterion 4's before-image: the engine's behaviour for a
-    write_scope="none" run on "M8720" is frozen against a literal measured
-    at this commit, BEFORE chip_test.py is touched by any later plan in
-    this phase.
+    write_scope="full" run on "M8720" is frozen against a literal measured
+    at this commit.
 
     If this fails, a shipped op's behaviour changed: either the derived op
     sequence itself moved (derive_plan), or a step's verdict/run_count
@@ -296,14 +322,14 @@ def test_shipped_ops_sequence_unchanged():
     (b): a silently *added* step would still pass a prefix comparison of
     the first three).
     """
-    plan = derive_plan("M8720", _REAL_DB)
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
     op_sequence = [r.op for r in results]
     assert op_sequence == _SHIPPED_OPS_SEQUENCE["op_sequence"], (
-        f"derive_plan('M8720', _REAL_DB)'s derived op sequence changed: "
-        f"measured {op_sequence!r}, frozen baseline "
+        f"derive_plan('M8720', _REAL_DB, write_scope='full')'s derived op "
+        f"sequence changed: measured {op_sequence!r}, frozen baseline "
         f"{_SHIPPED_OPS_SEQUENCE['op_sequence']!r} (133-01 before-image, "
         "criterion 4)"
     )
@@ -426,24 +452,27 @@ _PRE_EDIT_PRECEDENCE_MATRIX = {
     "AssertionError": ("AssertionError", None, None),
 }
 
-# CURRENT expectation -- advanced by plan 133-02 (D-08) for EXACTLY the
-# three rows measured to change against the edited `_run_step`:
-# SerialError, SerialTimeoutError, and HardwareOperationError now escape
-# ONLY as far as `_run_step`'s new `except (SerialError,
-# HardwareOperationError)` clause and land on BAD/error_code=None --
-# neither class carries `.error_code`. ProgrammerNotFoundError and
-# FirmwareOutdatedError still ESCAPE (re-raised by the new first clause,
-# unchanged from the pre-edit row). EpromOperationError,
-# ChipNotImplementedError, ChipNotFoundError, and AssertionError are all
-# untouched -- their rows are byte-identical to _PRE_EDIT_PRECEDENCE_MATRIX,
-# proving the existing `except EpromOperationError` and `except
-# (ChipNotImplementedError, ChipNotFoundError)` clauses were neither moved
-# nor reworded. Measured live against the post-133-02-edit engine, never
-# hand-derived.
+"""CURRENT expectation -- advanced by plan 133-02 (D-08), then re-pointed
+by plan 178-01 (D-01/D-12), for EXACTLY the three rows measured to change
+against the edited `_run_step`: SerialError, SerialTimeoutError, and
+HardwareOperationError now escape ONLY as far as `_run_step`'s `except
+(SerialError, HardwareOperationError)` clause and land on
+SKIPPED/error_code=None -- neither class carries `.error_code`, and the
+chip-verdict axis reads SKIPPED (not BAD) so the destructive gate still
+closes while the fault reason still renders (the status-axis proof for
+these three rows is authored separately in plan 178-02).
+ProgrammerNotFoundError and FirmwareOutdatedError still ESCAPE (re-raised
+by the new first clause, unchanged from the pre-edit row).
+EpromOperationError, ChipNotImplementedError, ChipNotFoundError, and
+AssertionError are all untouched -- their rows are byte-identical to
+_PRE_EDIT_PRECEDENCE_MATRIX, proving the existing `except
+EpromOperationError` and `except (ChipNotImplementedError,
+ChipNotFoundError)` clauses were neither moved nor reworded. Measured live
+against the post-edit engine, never hand-derived."""
 _EXPECTED_PRECEDENCE_MATRIX = dict(_PRE_EDIT_PRECEDENCE_MATRIX)
-_EXPECTED_PRECEDENCE_MATRIX["SerialError"] = (None, "BAD", None)
-_EXPECTED_PRECEDENCE_MATRIX["SerialTimeoutError"] = (None, "BAD", None)
-_EXPECTED_PRECEDENCE_MATRIX["HardwareOperationError"] = (None, "BAD", None)
+_EXPECTED_PRECEDENCE_MATRIX["SerialError"] = (None, "SKIPPED", None)
+_EXPECTED_PRECEDENCE_MATRIX["SerialTimeoutError"] = (None, "SKIPPED", None)
+_EXPECTED_PRECEDENCE_MATRIX["HardwareOperationError"] = (None, "SKIPPED", None)
 
 # Named by plan 133-02 in the SAME commit as the _EXPECTED_PRECEDENCE_MATRIX
 # edit above (133-CONTEXT.md D-08; 133-01-PLAN.md must_haves) -- exactly the
@@ -563,8 +592,9 @@ def test_precedence_matrix_deriver_is_non_vacuous():
 
 def test_serial_timeout_degrades_one_step():
     """A SerialTimeoutError raised by the "read" step's operator method
-    degrades THAT ONE step to a recorded BAD result; run_plan still returns
-    a full report for every other step (LEG-11, criterion 2)."""
+    degrades THAT ONE step to a recorded SKIPPED/ERROR result; run_plan
+    still returns a full report for every other step (LEG-11, criterion
+    2)."""
     operator = _mock_operator()
     operator.read_eprom.side_effect = SerialTimeoutError(
         "133-02 injected half-seated-cable probe"
@@ -578,7 +608,8 @@ def test_serial_timeout_degrades_one_step():
 
     read_result = _result(results, OP_READ)
     blank_check_result = _result(results, OP_BLANK_CHECK)
-    assert read_result.verdict == VERDICT_BAD
+    assert read_result.verdict == VERDICT_SKIPPED
+    assert read_result.status == STATUS_ERROR
     # The later step still ran -- this is what distinguishes "degraded one
     # step" from "aborted the run" (D-08, T-133-10).
     assert blank_check_result.verdict == VERDICT_OK
@@ -603,7 +634,8 @@ def test_hardware_error_degrades_one_step():
 
     read_result = _result(results, OP_READ)
     blank_check_result = _result(results, OP_BLANK_CHECK)
-    assert read_result.verdict == VERDICT_BAD
+    assert read_result.verdict == VERDICT_SKIPPED
+    assert read_result.status == STATUS_ERROR
     # Observable consequence of the new clause omitting error_code: neither
     # SerialError nor HardwareOperationError carries that attribute.
     assert read_result.error_code is None
@@ -684,6 +716,41 @@ def test_assertion_error_propagates():
         "criterion 2 requires the deliberate signal to propagate unchanged, "
         "not be re-wrapped or reconstructed"
     )
+
+
+def test_the_transport_precedence_rows_carry_the_error_status():
+    """The status proof for the three re-pointed precedence rows, added
+    BESIDE the three-tuple matrix above rather than by widening it (that
+    tuple has no status slot, and widening it would force a rewrite of the
+    frozen Phase-133 before-image matrix).
+
+    Injects each exception exactly as `_derive_precedence_row` does --
+    `check_eprom_blank`'s side_effect -- and reads the actual blank-check
+    `StepResult.status`. `SerialError`, `SerialTimeoutError` and
+    `HardwareOperationError` all carry `status == STATUS_ERROR`; a genuine
+    chip/firmware finding (`EpromOperationError`) must NOT have acquired an
+    error status, so its row stays `STATUS_COMPLETE`."""
+    for name in ("SerialError", "SerialTimeoutError", "HardwareOperationError"):
+        exc_cls = _PRECEDENCE_EXCEPTION_CLASSES[name]
+        operator = _mock_operator()
+        operator.check_eprom_blank.side_effect = _make_injected_exception(exc_cls)
+        plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+        results = run_plan(plan, operator, _REAL_DB)
+
+        result = _result(results, OP_BLANK_CHECK)
+        assert result.status == STATUS_ERROR, (name, result.status)
+
+    operator = _mock_operator()
+    operator.check_eprom_blank.side_effect = _make_injected_exception(
+        EpromOperationError
+    )
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    result = _result(results, OP_BLANK_CHECK)
+    assert result.status == STATUS_COMPLETE
 
 
 # ---------------------------------------------------------------------------
@@ -1543,7 +1610,7 @@ def test_empty_registry_noop():
     the drain's existence. Reuses _SHIPPED_OPS_SEQUENCE (133-01's frozen
     before-image) rather than a fresh literal: if the drain silently
     appended anything, this would diverge from that pre-133-04 baseline."""
-    plan = derive_plan("M8720", _REAL_DB)
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     operator = _mock_operator()
 
     results = run_plan(plan, operator, _REAL_DB)
@@ -2053,77 +2120,6 @@ def test_derive_plan_baseline_transition_ordering():
 
 
 # ---------------------------------------------------------------------------
-# D-18's write_scope="none" proofs (v1.30 Phase 134, plan 134-03, Task 3).
-# write_scope="none" is UNREACHABLE from `dev test` since Phase 121's
-# reversal (`_resolve_write_scope` returns only "full"/"partial") -- these
-# two tests are library/test surface, never a live gate.
-# ---------------------------------------------------------------------------
-
-
-def test_allow_write_scope_none_locks_six_sdp_leg_steps_and_moves_the_banner():
-    """D-18: an ALLOW chip's write_scope="none" plan carries NONE of the
-    six SDP-leg ops in `plan.steps` -- all six go to the advisory
-    `locked_destructive` list instead (mirroring the shipped write/verify/
-    erase treatment), each carrying a non-empty reason. These entries DO
-    count toward `count_applicable`'s M (called here, never edited), so
-    `n_ran < m_applicable` and the banner fires -- MEASURING D-18's stated
-    polarity rather than merely asserting it in prose."""
-    name = "AT28C256"
-    allowed, _reason = sdp_capability(name, _REAL_DB)
-    assert allowed is True, f"fixture setup error: {name} is not really ALLOW"
-
-    plan = derive_plan(name, _REAL_DB, write_scope="none")
-    ops = [s.op for s in plan.steps]
-    leg_ops_in_steps = [op for op in ops if op in _SDP_LEG_STEP_ORDER]
-    assert not leg_ops_in_steps, (
-        f"write_scope='none' must OMIT the six SDP-leg ops from plan.steps "
-        f"entirely (D-18); found: {leg_ops_in_steps}"
-    )
-
-    locked_leg_entries = [
-        (op, reason)
-        for op, reason in plan.locked_destructive
-        if op in _SDP_LEG_STEP_ORDER
-    ]
-    assert len(locked_leg_entries) == len(_SDP_LEG_STEP_ORDER)
-    assert {op for op, _r in locked_leg_entries} == set(_SDP_LEG_STEP_ORDER)
-    assert all(reason for _op, reason in locked_leg_entries), (
-        "every locked SDP-leg entry must carry a non-empty reason"
-    )
-
-    operator = _mock_operator()
-    results = run_plan(plan, operator, _REAL_DB)
-    counts = count_applicable(plan, results)
-    assert counts.n_ran < counts.m_applicable, (
-        f"D-18's stated polarity (the N-of-M banner fires) is not "
-        f"measured: n_ran={counts.n_ran}, m_applicable={counts.m_applicable}"
-    )
-
-
-def test_refuse_write_scope_none_is_byte_identical_to_pre_phase134():
-    """D-18 refinement (Claude's Discretion, taken on four measurements --
-    134-CONTEXT.md D-18, recorded again in 134-03-SUMMARY.md): a REFUSE
-    chip's write_scope="none" plan is BYTE-IDENTICAL to before this phase
-    -- exactly the three shipped `locked_destructive` entries, and NO
-    SDP-leg entries at all (neither a step nor a `locked_destructive`
-    entry). This is the branch that keeps LEG-10's named proof
-    (`test_empty_registry_noop`, above) green, and it is library/test
-    surface only: `write_scope="none"` is unreachable from a real `dev
-    test` run since Phase 121's reversal."""
-    name = "M8720"
-    allowed, _reason = sdp_capability(name, _REAL_DB)
-    assert allowed is False, f"fixture setup error: {name} is not really REFUSE"
-
-    plan = derive_plan(name, _REAL_DB, write_scope="none")
-    assert [s.op for s in plan.steps] == ["id", "read", "blank-check"]
-    assert plan.locked_destructive == [
-        (OP_WRITE, 'write_scope="none": write omitted'),
-        (OP_VERIFY, 'write_scope="none": verify omitted'),
-        (OP_ERASE, 'write_scope="none": erase omitted'),
-    ]
-
-
-# ---------------------------------------------------------------------------
 # LEG-12's pure hold-state derivation (v1.30 Phase 134, plan 134-04, Task 2,
 # D-10/D-12/D-15). `pytest -k "hold"` selects every test below.
 # ---------------------------------------------------------------------------
@@ -2222,10 +2218,10 @@ def test_hold_state_always_returns_str_never_bool_or_none():
     )
 
 
-def test_oracle_applicable_true_for_allow_chip_full_and_none_scope():
-    """`sdp_oracle_applicable` is True for an ALLOW chip's plan whether the
-    leg is a real supported step (write_scope="full"/"partial") or an
-    advisory `locked_destructive` entry (write_scope="none", D-18)."""
+def test_oracle_applicable_true_for_allow_chip_full_and_partial_scope():
+    """`sdp_oracle_applicable` is True for an ALLOW chip's plan at both
+    reachable scopes -- the leg is a real supported step at write_scope=
+    "full" and at write_scope="partial" alike."""
     name = "AT28C256"
     allowed, _reason = sdp_capability(name, _REAL_DB)
     assert allowed is True, f"fixture setup error: {name} is not really ALLOW"
@@ -2233,14 +2229,15 @@ def test_oracle_applicable_true_for_allow_chip_full_and_none_scope():
     full_plan = derive_plan(name, _REAL_DB, write_scope="full")
     assert sdp_oracle_applicable(full_plan) is True
 
-    none_plan = derive_plan(name, _REAL_DB, write_scope="none")
-    assert sdp_oracle_applicable(none_plan) is True
+    partial_plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    assert sdp_oracle_applicable(partial_plan) is True
 
 
-def test_oracle_applicable_false_for_refuse_chip_full_and_none_scope():
-    """`sdp_oracle_applicable` is False for a REFUSE chip's plan -- its
-    `write-inhibited` step IS present in `plan.steps` (LEG-02's NA path),
-    but with `supported=False`, so it must not count as applicable."""
+def test_oracle_applicable_false_for_refuse_chip_full_and_partial_scope():
+    """`sdp_oracle_applicable` is False for a REFUSE chip's plan at both
+    reachable scopes -- its `write-inhibited` step IS present in
+    `plan.steps` (LEG-02's NA path), but with `supported=False`, so it
+    must not count as applicable."""
     name = "M8720"
     allowed, _reason = sdp_capability(name, _REAL_DB)
     assert allowed is False, f"fixture setup error: {name} is not really REFUSE"
@@ -2248,8 +2245,8 @@ def test_oracle_applicable_false_for_refuse_chip_full_and_none_scope():
     full_plan = derive_plan(name, _REAL_DB, write_scope="full")
     assert sdp_oracle_applicable(full_plan) is False
 
-    none_plan = derive_plan(name, _REAL_DB, write_scope="none")
-    assert sdp_oracle_applicable(none_plan) is False
+    partial_plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    assert sdp_oracle_applicable(partial_plan) is False
 
 
 # ---------------------------------------------------------------------------

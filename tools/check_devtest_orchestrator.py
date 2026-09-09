@@ -144,7 +144,7 @@ FIRESTARTER_DEVTEST_SUBMIT = os.environ.get(
 # placed inside `dev_test` itself trips `EXIT=1`. `_is_uv_eprom` sat in this
 # set pointing at nothing (a leftover speculative name) --
 # a later allow-list update landed the real handler-side UV predicate under that exact
-# name, and added `_resolve_write_scope` alongside it. Every future helper
+# name. Every future helper
 # added to the `dev test` surface MUST be listed here, or this gate silently
 # under-covers exactly that new code -- `tests/test_check_devtest_orchestrator
 # .py::test_handler_function_names_all_resolve_to_real_callables` makes this
@@ -156,8 +156,9 @@ _HANDLER_FUNCTION_NAMES = frozenset(
         "_overall_exit_code",
         "_dev_test_exit_code",
         "_sanitize_chip_token",
+        "_canonical_part_number",
+        "_cli_start_time",
         "_is_uv_eprom",
-        "_resolve_write_scope",
         "_chip_id_fields",
         "_is_interactive",
         "_make_sampler",

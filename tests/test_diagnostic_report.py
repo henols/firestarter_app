@@ -73,15 +73,19 @@ from firestarter.chip_test import (
     SDP_HOLD_HELD,
     SDP_HOLD_NOT_HELD,
     SDP_HOLD_NOT_RUN,
+    STATUS_COMPLETE,
+    STATUS_ERROR,
     VERDICT_BAD,
     VERDICT_NA,
     VERDICT_OK,
     VERDICT_SKIPPED,
     Fingerprint,
     Plan,
+    Step,
     StepResult,
     WriteTarget,
     derive_plan,
+    is_uv_eprom,
     run_plan,
 )
 from firestarter.database import EpromDatabase
@@ -124,7 +128,9 @@ def _build_report(chip_name: str = "M8720"):
         TransportHealth,
     )
 
-    plan = derive_plan(chip_name, _REAL_DB)
+    full = _REAL_DB.get_eprom(chip_name)
+    scope = "partial" if full and is_uv_eprom(full) else "full"
+    plan = derive_plan(chip_name, _REAL_DB, write_scope=scope)
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB, runs=2)
     banner = count_applicable(plan, results)
@@ -554,7 +560,16 @@ def test_transport_not_measured():
     d = report.to_dict()
 
     transport = d["transport_health"]
-    for key in ("cobs_errors", "crc_failures", "retries", "timeouts"):
+    for key in (
+        "cobs_errors",
+        "crc_failures",
+        "decode_failures",
+        "probe_timeouts",
+        "resync_body_truncated",
+        "resync_length_missing",
+        "retries",
+        "timeouts",
+    ):
         assert transport[key] == NOT_MEASURED
         assert transport[key] != 0
 
@@ -657,6 +672,12 @@ def test_db_diff_readonly():
 
 
 def test_db_diff_verdict_mapping():
+    """RETARGETED 181-08: the PASS-only case's SKIPPED step is deliberately a
+    non-write op (`blank-check`, not `write`) -- a SKIPPED write-op result is
+    now D-21's refusal disqualifier and would withhold the candidate
+    disposition this case asserts. See
+    test_a_refused_write_disqualifies_the_fourth_arm_but_na_and_ok_do_not
+    for that disqualifying shape."""
     from firestarter.diagnostic_report import build_db_diff
 
     db = _mock_db()
@@ -677,7 +698,7 @@ def test_db_diff_verdict_mapping():
     pass_results = [
         StepResult(op="id", verdict=VERDICT_OK),
         StepResult(op="blank", verdict=VERDICT_NA),
-        StepResult(op="write", verdict=VERDICT_SKIPPED),
+        StepResult(op="blank-check", verdict=VERDICT_SKIPPED),
     ]
     diff_pass = build_db_diff("X", db, pass_results)
     assert "community-reported" in diff_pass.proposed_disposition
@@ -718,7 +739,13 @@ def test_ladder_state_verdict_mapping():
     all-OK (subset of {OK,NA,SKIPPED}, at least one OK) -> community-reported;
     marginal / indeterminate-fingerprint / no-change -> "" (no community-*
     tag). community-confirmed is the human-only target and must never be
-    emitted here (D-01/D-02)."""
+    emitted here (D-01/D-02).
+
+    RETARGETED 181-08: the PASS-only case's SKIPPED step is deliberately a
+    non-write op -- a SKIPPED write-op result is now D-21's refusal
+    disqualifier and would land this shape on `_LADDER_NONE` instead. See
+    test_a_refused_write_disqualifies_the_fourth_arm_but_na_and_ok_do_not
+    for that disqualifying shape."""
     from firestarter.diagnostic_report import (
         _LADDER_COMMUNITY_CONFIRMED,
         _LADDER_COMMUNITY_FAIL,
@@ -739,7 +766,7 @@ def test_ladder_state_verdict_mapping():
     pass_results = [
         StepResult(op="id", verdict=VERDICT_OK),
         StepResult(op="blank", verdict=VERDICT_NA),
-        StepResult(op="write", verdict=VERDICT_SKIPPED),
+        StepResult(op="blank-check", verdict=VERDICT_SKIPPED),
     ]
     diff_pass = build_db_diff("X", db, pass_results)
     assert diff_pass.ladder_state == _LADDER_COMMUNITY_REPORTED == "community-reported"
@@ -778,6 +805,173 @@ def test_ladder_state_verdict_mapping():
     ):
         assert diff.ladder_state != _LADDER_COMMUNITY_CONFIRMED
         assert diff.ladder_state != "community-confirmed"
+
+
+def test_error_run_status_routes_the_ladder_to_inconclusive():
+    """D-04's ladder guard: a run whose status axis reads ERROR on any step
+    lands on the inconclusive disposition with an empty ladder_state, never
+    on community-reported -- even though every step's verdict is otherwise
+    clean. Anti-vacuity sibling included: the identical verdict shape at
+    the default status lands on community-reported instead, proving the
+    guard is doing the work rather than the ladder already landing on
+    inconclusive regardless."""
+    from firestarter.diagnostic_report import _DISPOSITION_INCONCLUSIVE, build_db_diff
+
+    db = _mock_db()
+
+    ok_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_OK),
+    ]
+    errored_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_SKIPPED, status=STATUS_ERROR),
+    ]
+
+    diff_errored = build_db_diff("X", db, errored_results)
+    assert diff_errored.ladder_state == ""
+    assert diff_errored.proposed_disposition == _DISPOSITION_INCONCLUSIVE
+
+    diff_clean = build_db_diff("X", db, ok_results)
+    assert diff_clean.ladder_state == "community-reported"
+    assert diff_clean.proposed_disposition != _DISPOSITION_INCONCLUSIVE
+
+
+def test_a_refused_write_disqualifies_the_fourth_arm_but_na_and_ok_do_not():
+    """D-20/D-21: one "did a write actually run" predicate closes the
+    exhausted-slots ladder flip (T-179-05) without touching the
+    unsupported-write parts whose disposition was already correct. A
+    SKIPPED write (applicable, did not run) must NOT propose the same
+    disposition a verified PASS proposes; an NA write (never going to run
+    in the first place) and a clean OK write must both be unaffected."""
+    from firestarter.diagnostic_report import _DISPOSITION_CANDIDATE, build_db_diff
+
+    db = _mock_db()
+
+    skipped_write_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_OK),
+        StepResult(op="blank-check", verdict=VERDICT_SKIPPED),
+        StepResult(op="write", verdict=VERDICT_SKIPPED),
+        StepResult(op="verify", verdict=VERDICT_SKIPPED),
+    ]
+    na_write_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_OK),
+        StepResult(op="write", verdict=VERDICT_NA),
+    ]
+    ok_write_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_OK),
+        StepResult(op="write", verdict=VERDICT_OK),
+        StepResult(op="verify", verdict=VERDICT_OK),
+    ]
+
+    diff_skipped = build_db_diff("X", db, skipped_write_results)
+    assert diff_skipped.proposed_disposition != _DISPOSITION_CANDIDATE
+    assert diff_skipped.ladder_state != "community-reported"
+
+    diff_na = build_db_diff("X", db, na_write_results)
+    assert diff_na.proposed_disposition == _DISPOSITION_CANDIDATE
+    assert diff_na.ladder_state == "community-reported"
+
+    diff_ok = build_db_diff("X", db, ok_write_results)
+    assert diff_ok.proposed_disposition == _DISPOSITION_CANDIDATE
+    assert diff_ok.ladder_state == "community-reported"
+
+
+def test_a_planted_na_as_refusal_disqualifier_reddens_the_na_case_claim(monkeypatch):
+    """D-21 anti-vacuity, plant 1: an over-broad predicate that ALSO treats
+    NA as a refusal must NOT be what `build_db_diff` uses -- if it were, an
+    unsupported-write part's disposition would silently change, which this
+    phase was not asked to do. Anchors the real predicate's False-for-NA
+    behaviour BEFORE mutating, per this project's anti-vacuity house style
+    (test_readback_inventory.py's assert-the-anchor-first triad).
+    Static/in-process only -- monkeypatches one module attribute for the
+    duration of this test; no bench run is implied."""
+    import firestarter.diagnostic_report as dr
+
+    db = _mock_db()
+    na_write_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_OK),
+        StepResult(op="write", verdict=VERDICT_NA),
+    ]
+    assert dr._write_step_was_refused(na_write_results) is False
+
+    diff_na = dr.build_db_diff("X", db, na_write_results)
+    assert diff_na.proposed_disposition == dr._DISPOSITION_CANDIDATE
+
+    def over_broad_predicate(results):
+        return any(
+            r.op in ("write", "write-partial")
+            and r.verdict in (VERDICT_SKIPPED, VERDICT_NA)
+            for r in results
+        )
+
+    assert over_broad_predicate(na_write_results) is True
+    monkeypatch.setattr(dr, "_write_step_was_refused", over_broad_predicate)
+    with pytest.raises(AssertionError):
+        mutated_diff = dr.build_db_diff("X", db, na_write_results)
+        assert mutated_diff.proposed_disposition == dr._DISPOSITION_CANDIDATE
+
+
+def test_a_planted_missing_write_ran_condition_reddens_the_refused_slots_claim():
+    """D-20 anti-vacuity, plant 2: the slots sentence's write-ran condition
+    is load-bearing, not decorative. Anchors the RAN case's real "one
+    fewer" behaviour first, then computes what a no-condition
+    (always-subtract) implementation would have produced for the SAME
+    target's REFUSED case, and asserts that claim -- that the real
+    function would say the same wrong thing -- raises AssertionError.
+    Static/in-process only; no bench run is implied."""
+    from firestarter.diagnostic_report import _write_coverage_line
+
+    target = WriteTarget(
+        region=(0xFF00, 256),
+        pattern=b"\xaa" * 256,
+        masked=True,
+        bits_cleared=512,
+        bits_retained=1536,
+        current_source="probe read",
+        slots_remaining=256,
+        slots_total=256,
+        region_policy=REGION_POLICY_UV_SLOT,
+    )
+    step = Step(op="write", supported=True, reason="")
+
+    ran_result = StepResult(
+        op="write", verdict=VERDICT_OK, run_count=1, write_target=target
+    )
+    ran_line = _write_coverage_line(ran_result, step)
+    assert "255 of 256 slots left on this part" in ran_line
+
+    refused_result = StepResult(
+        op="write", verdict=VERDICT_SKIPPED, run_count=0, write_target=target
+    )
+    refused_line = _write_coverage_line(refused_result, step)
+
+    no_condition_would_say = (
+        f"{target.slots_remaining - 1} of {target.slots_total} slots left on this part"
+    )
+    with pytest.raises(AssertionError):
+        assert no_condition_would_say in refused_line
+
+
+def test_comparing_a_real_disposition_against_an_empty_expected_set_fails_rather_than_passes_vacuously():
+    """The standalone vacuity leg, explicitly separate from the two planted
+    legs above: an empty expected-disposition set must fail against a real
+    disposition rather than passing vacuously (the same house standard
+    test_readback_inventory.py's third anti-vacuity leg establishes)."""
+    from firestarter.diagnostic_report import build_db_diff
+
+    db = _mock_db()
+    ok_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="write", verdict=VERDICT_OK),
+    ]
+    diff = build_db_diff("X", db, ok_results)
+    with pytest.raises(AssertionError):
+        assert diff.proposed_disposition in set()
 
 
 def test_ladder_state_single_source_in_to_dict():
@@ -915,10 +1109,20 @@ def test_full_report_all_sub_objects_single_source():
 
 
 def test_voltage_split_fields_serialize():
-    from firestarter.diagnostic_report import NOT_MEASURED, DiagnosticReport
+    """(RPT-B1, plan 181-09) The standalone half of this test's original
+    claim had no subject after RPT-B1: `vpp_mv`/`vpe_mv` are deleted from
+    the dataclass, from `_voltage_dict()` and from the schema, because no
+    code path had ever assigned them (proven by
+    `tests/test_voltage_field_census.py`'s attribute-scoped AST census, not
+    merely asserted here). The surviving half -- the destructive
+    before/after pairing -- is untouched; only its own two now-dead
+    assertions (`vpp_mv`/`vpe_mv` reading `NOT_MEASURED`) are replaced by a
+    four-key mapping assertion naming neither deleted key."""
+    from firestarter.diagnostic_report import DiagnosticReport
 
-    # (a) destructive-run shape: before/after pairs populated, standalone
-    # vpp_mv/vpe_mv left None -> both must serialize to NOT_MEASURED, never 0.
+    # (a) destructive-run shape: before/after pairs populated, and the
+    # emitted mapping carries exactly those four keys -- neither deleted
+    # standalone name.
     report_destructive = _build_report()
     report_destructive.vpp_before_mv = 20900
     report_destructive.vpp_after_mv = 17400
@@ -931,24 +1135,16 @@ def test_voltage_split_fields_serialize():
     assert voltage_destructive["vpp_after_mv"] == 17400
     assert voltage_destructive["vpe_before_mv"] == 23900
     assert voltage_destructive["vpe_after_mv"] == 23800
-    assert voltage_destructive["vpp_mv"] == NOT_MEASURED
-    assert voltage_destructive["vpe_mv"] == NOT_MEASURED
+    assert sorted(voltage_destructive) == [
+        "vpe_after_mv",
+        "vpe_before_mv",
+        "vpp_after_mv",
+        "vpp_before_mv",
+    ]
+    assert "vpp_mv" not in voltage_destructive
+    assert "vpe_mv" not in voltage_destructive
 
-    # (b) non-destructive standalone shape: vpp_mv/vpe_mv populated, all four
-    # before/after pairs left None -> all four must serialize to
-    # NOT_MEASURED, never a false 0 (D-04 honest-fallback).
-    report_standalone = _build_report()
-    report_standalone.vpp_mv = 20900
-    report_standalone.vpe_mv = 23900
-
-    d_standalone = report_standalone.to_dict()
-    voltage_standalone = d_standalone["voltage"]
-    assert voltage_standalone["vpp_mv"] == 20900
-    assert voltage_standalone["vpe_mv"] == 23900
-    for key in ("vpp_before_mv", "vpp_after_mv", "vpe_before_mv", "vpe_after_mv"):
-        assert voltage_standalone[key] == NOT_MEASURED
-
-    # (c) single-source assertion: render() must expose a voltage row
+    # (b) single-source assertion: render() must expose a voltage row
     # consistent with to_dict()["voltage"] -- proving render() sources from
     # to_dict() rather than maintaining a second field list (D-01).
     assert isinstance(report_destructive, DiagnosticReport)
@@ -957,6 +1153,56 @@ def test_voltage_split_fields_serialize():
     rendered_text = " ".join(rendered_cells)
     assert "20900" in rendered_text
     assert table.row_count > 0
+
+
+"""ATTR-06 (Phase 178 plan 04, D-14) -- the honesty sentence about the rail
+reading itself: `hw_read_voltage` measures the regulator rail, never the
+socket, so the disclosure must reach both the exported dict AND the
+rendered console text, unconditionally -- even when no rail was measured."""
+
+
+def test_rail_reading_disclosure_is_exported_and_rendered():
+    from firestarter.diagnostic_report import (
+        _RAIL_READING_DISCLOSURE,
+        DiagnosticReport,
+    )
+
+    report = _minimal_report(vpp_before_mv=11800, vpe_before_mv=12100)
+    report.vpp_after_mv = 11750
+    report.vpe_after_mv = 12050
+
+    d = report.to_dict()
+    disclosure = d["rail_reading_disclosure"]
+    assert disclosure == _RAIL_READING_DISCLOSURE
+    assert isinstance(disclosure, str) and disclosure.strip()
+    assert "socket" in disclosure.lower()
+
+    assert isinstance(report, DiagnosticReport)
+    table = report.render()
+    rendered_cells = [str(cell) for column in table.columns for cell in column.cells]
+    rendered_text = " ".join(rendered_cells)
+    assert disclosure in rendered_text
+
+
+def test_rail_reading_disclosure_renders_when_no_rail_was_measured():
+    """The ATTR-06 empty edge: all four rail fields `None`, so
+    `_voltage_dict` substitutes `NOT_MEASURED` -- the disclosure must still
+    be exported and rendered, unconditionally."""
+    from firestarter.diagnostic_report import _RAIL_READING_DISCLOSURE
+
+    report = _minimal_report()
+    assert report.vpp_before_mv is None
+    assert report.vpe_before_mv is None
+
+    d = report.to_dict()
+    disclosure = d["rail_reading_disclosure"]
+    assert disclosure == _RAIL_READING_DISCLOSURE
+    assert isinstance(disclosure, str) and disclosure.strip()
+
+    table = report.render()
+    rendered_cells = [str(cell) for column in table.columns for cell in column.cells]
+    rendered_text = " ".join(rendered_cells)
+    assert disclosure in rendered_text
 
 
 # ---------------------------------------------------------------------------
@@ -1095,7 +1341,7 @@ def test_hold_state_is_str_never_bool():
     assert not isinstance(value, bool)
 
 
-def test_schema_version_1_7_single_sourced():
+def test_schema_version_2_0_single_sourced():
     """`to_dict()["schema_version"]` equals the IMPORTED `SCHEMA_VERSION`
     (never a literal restated here), and the production module bumps the
     constant to its new value in exactly ONE place (single-sourced, D-10) --
@@ -1107,8 +1353,11 @@ def test_schema_version_1_7_single_sourced():
     again for the 1.5 -> 1.6 bump (quick task 260821-wna), which added the
     additive per-step `write_region_start`/`write_region_length`/
     `write_bits_cleared`/`write_bits_retained`/`write_current_source` keys,
-    and again for the 1.6 -> 1.7 bump (quick task 260822-aq6), which added
-    the additive per-step `run_count` key."""
+    again for the 1.6 -> 1.7 bump (quick task 260822-aq6), which added the
+    additive per-step `run_count` key, again for the 1.7 -> 1.8 bump
+    (Phase 178 plan 01, D-07), which added the top-level `run_status` and
+    per-step `status` keys, and again for the 1.8 -> 2.0 bump (Phase 181
+    plan 01, D-13/RPT-E1), which added the top-level `is_uv` key."""
     import inspect
 
     from firestarter import diagnostic_report as dr_mod
@@ -1117,7 +1366,7 @@ def test_schema_version_1_7_single_sourced():
     assert report.to_dict()["schema_version"] == dr_mod.SCHEMA_VERSION
 
     source = inspect.getsource(dr_mod)
-    assert source.count('"1.7"') == 1
+    assert source.count('"2.0"') == 1
 
 
 def test_dedup_fingerprint_sensitive_to_sdp_step_verdict_change():
@@ -1381,19 +1630,19 @@ def test_dedup_fingerprint_slot_run_hash_is_unchanged_by_coverage_tag():
     assert dedup_fingerprint(fixed_report) == "a0a50436ae3d"
 
 
-def test_schema_version_is_one_seven():
-    """PROV-04: the imported constant equals `"1.7"`, and a freshly built
+def test_schema_version_is_two_oh():
+    """PROV-04: the imported constant equals `"2.0"`, and a freshly built
     report's `to_dict()["schema_version"]` equals the IMPORTED constant --
     never a restated literal in the second assertion. This is the only
     place in the suite that pins WHICH version this phase shipped; every
-    other site (including `test_schema_version_1_7_single_sourced` above)
-    keeps importing the constant. 1.7 (quick task 260822-aq6) added the
-    additive per-step `run_count` key -- the repeat count that had been
-    populated on every `StepResult` since Phase 121 and read by nothing
-    outside this suite. Pre-1.7 consumers ignore it."""
+    other site (including `test_schema_version_2_0_single_sourced` above)
+    keeps importing the constant. 2.0 (Phase 181 plan 01, D-13/RPT-E1)
+    added the top-level `is_uv` key -- RPT-A4's carry-through of
+    `Plan.is_uv`. Both consumers accept `schema_version` by presence only
+    and the dedup hash never reads it, so the bump is mechanically free."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == "1.7"
+    assert SCHEMA_VERSION == "2.0"
 
     report = _minimal_report()
     assert report.to_dict()["schema_version"] == SCHEMA_VERSION
@@ -1465,15 +1714,16 @@ def test_chip_id_one_sided_row_when_no_mismatch_was_recorded():
     ONE-sided `chip_id` row -- no `/ None` tail.
 
     RETARGETED 2026-08-21 (was `test_hex_cell_chip_id_partial_is_none_safe`,
-    which pinned `"0x00A4 / None"`). `chip_id_actual` is populated ONLY on a
-    mismatch: on a passing id check the firmware's OK reply carries no id,
-    so `check_eprom_id` returns the host's own expected value echoed back
-    and `_chip_id_fields` discards it rather than present a never-measured
-    number as a measurement. Printing the resulting `None` beside a real
+    which pinned `"0x00A4 / None"`). Printing a `None` beside a real
     expected id read as a FAILED read, which is what the operator queried.
     The `None`-safety the original test guarded still holds -- `_hex_cell`
     is unchanged and its own None/unparseable cases are covered by
-    test_hex_cell_returns_str_value_unchanged_for_none_and_unparseable."""
+    test_hex_cell_returns_str_value_unchanged_for_none_and_unparseable.
+
+    RPT-A1 (181-08) made `chip_id_actual` populate on a PASSING id check
+    too, equal to `chip_id_expected` -- see
+    test_chip_id_one_sided_row_when_actual_equals_expected for that case,
+    which this test's `None` case does not cover."""
     report = _minimal_report()
     report.auto_capture.chip_id_expected = 0x00A4
     report.auto_capture.chip_id_actual = None
@@ -1503,15 +1753,38 @@ def test_chip_id_two_sided_row_only_when_a_mismatch_was_recorded():
 
 
 def test_hex_cell_chip_id_both_populated_is_4_digit_upper_hex():
+    """Both sides of a real mismatch are 4-digit uppercase hex. Uses
+    differing values (RETARGETED 181-08 from an equal pair, which now
+    renders one-sided per test_chip_id_one_sided_row_when_actual_equals_expected
+    -- D-10)."""
     report = _minimal_report()
     report.auto_capture.chip_id_expected = 0x1234
-    report.auto_capture.chip_id_actual = 0x1234
+    report.auto_capture.chip_id_actual = 0x5678
 
     table = report.render()
     field_col, value_col = table.columns
     rows = dict(zip(field_col.cells, value_col.cells))
 
-    assert rows["chip_id (expected/actual)"] == "0x1234 / 0x1234"
+    assert rows["chip_id (expected/actual)"] == "0x1234 / 0x5678"
+
+
+def test_chip_id_one_sided_row_when_actual_equals_expected():
+    """RPT-A1 (181-08): `chip_id_actual` now populates on a PASSING id
+    check too, equal to `chip_id_expected` by construction (the value is
+    the host's own expected id, echoed out of the command dict -- not an
+    independent read-back). D-10 requires the console row to stay
+    ONE-sided on this agreement -- a matching pair is not added to the
+    table."""
+    report = _minimal_report()
+    report.auto_capture.chip_id_expected = 0x1F65
+    report.auto_capture.chip_id_actual = 0x1F65
+
+    table = report.render()
+    field_col, value_col = table.columns
+    rows = dict(zip(field_col.cells, value_col.cells))
+
+    assert rows["chip_id"] == "0x1F65"
+    assert "chip_id (expected/actual)" not in rows
 
 
 _NOISE_ROW_FIELDS = (
@@ -1604,6 +1877,20 @@ def test_render_keeps_the_surviving_rows():
     assert any(f.startswith("step: ") for f in fields)
 
 
+def test_render_table_title_names_the_canonical_when_present_and_chip_otherwise():
+    """RPT-F1/D-03: the console table title reads
+    `auto_capture.canonical_part_number` off the SAME dict `to_dict()`
+    produces, falling back to `ac["chip"]` -- never `ac.chip` directly --
+    when the canonical did not resolve (D-24)."""
+    canonical_report = _minimal_report(chip="m27c512")
+    canonical_report.auto_capture.canonical_part_number = "M27C512"
+    assert canonical_report.render().title == "dev test -- M27C512"
+
+    fallback_report = _minimal_report(chip="M8720")
+    assert fallback_report.auto_capture.canonical_part_number is None
+    assert fallback_report.render().title == "dev test -- M8720"
+
+
 def test_to_dict_payload_unchanged_by_the_render_trim():
     """The removed console rows' DATA is still in `to_dict()` -- this is
     the non-vacuity proof that only the console changed. Every key that
@@ -1631,6 +1918,85 @@ def test_to_dict_payload_unchanged_by_the_render_trim():
         assert "fingerprint" in step_row
     assert d["steps"][0]["error_code"] == 42
     assert d["steps"][0]["fingerprint"] == FP_ADDRESS_LINE
+
+
+def test_fingerprint_siblings_equal_the_dataclass_own_values():
+    """RPT-A2: the four `fingerprint_*` siblings -- totals, bad count,
+    percentage and the bounded evidence mapping the classifier already
+    measured -- exported as flat additive keys beside the existing
+    classification string."""
+    report = _minimal_report(
+        step_specs=[("write", VERDICT_BAD, FP_ADDRESS_LINE, "some reason")]
+    )
+    result = report.results[0]
+    result.fingerprint = Fingerprint(
+        total=512,
+        bad=7,
+        bad_pct=1.3671875,
+        classification=FP_ADDRESS_LINE,
+        evidence={"ff_ratio": 0.1, "repeat_divergent": False, "first_offset": 3},
+    )
+
+    step_row = report.to_dict()["steps"][0]
+
+    assert step_row["fingerprint"] == FP_ADDRESS_LINE
+    assert step_row["fingerprint_total"] == result.fingerprint.total
+    assert step_row["fingerprint_bad"] == result.fingerprint.bad
+    assert step_row["fingerprint_bad_pct"] == result.fingerprint.bad_pct
+    assert step_row["fingerprint_evidence"] == result.fingerprint.evidence
+
+
+def test_fingerprint_siblings_are_none_on_a_fingerprint_less_step():
+    report = _minimal_report(step_specs=[("id", VERDICT_OK, None, "")])
+    assert report.results[0].fingerprint is None
+
+    step_row = report.to_dict()["steps"][0]
+
+    assert step_row["fingerprint"] is None
+    assert step_row["fingerprint_total"] is None
+    assert step_row["fingerprint_bad"] is None
+    assert step_row["fingerprint_bad_pct"] is None
+    assert step_row["fingerprint_evidence"] is None
+
+
+def test_every_step_element_carries_an_identical_fingerprint_sibling_key_set():
+    report = _minimal_report(
+        step_specs=[
+            ("id", VERDICT_OK, None, ""),
+            ("write", VERDICT_BAD, FP_ADDRESS_LINE, "some reason"),
+        ]
+    )
+    steps = report.to_dict()["steps"]
+    key_sets = {tuple(sorted(s)) for s in steps}
+    assert len(key_sets) == 1, [sorted(s) for s in steps]
+    assert "fingerprint_total" in steps[0]
+    assert "fingerprint_bad" in steps[0]
+    assert "fingerprint_bad_pct" in steps[0]
+    assert "fingerprint_evidence" in steps[0]
+
+
+def test_divergence_is_present_on_every_step_and_carries_the_engine_value():
+    """RPT-A3: `divergence` reaches `steps[]` unconditionally, carrying the
+    step's own mapping where the engine produced one and `None` where it
+    did not -- the report carries this value, it never derives it."""
+    report = _minimal_report(
+        step_specs=[
+            ("id", VERDICT_OK, None, ""),
+            ("read", VERDICT_OK, None, ""),
+        ]
+    )
+    report.results[1].divergence = {
+        "repeat_divergent": False,
+        "cmp_len": 32,
+        "bad": 0,
+        "pct": 0.0,
+        "first_offset": None,
+    }
+
+    steps = report.to_dict()["steps"]
+    assert all("divergence" in s for s in steps)
+    assert steps[0]["divergence"] is None
+    assert steps[1]["divergence"] == report.results[1].divergence
 
 
 # ---------------------------------------------------------------------------
@@ -1665,10 +2031,13 @@ def test_step_with_no_duration_renders_bare_verdict():
     assert rows["step: write"] == VERDICT_BAD
 
 
-def test_steps_total_row_sums_only_steps_that_ran():
-    """The `steps total` row sums the per-step durations present, skipping
-    `None`. It is a RENDER-only derivation: `to_dict()` gains no total key,
-    since a consumer can re-add the per-step values itself."""
+def test_elapsed_row_replaces_the_removed_summed_row():
+    """RPT-D2: the render-only row that used to sum the per-step durations
+    is gone. Its replacement is the `elapsed` row -- a stored whole-command
+    measurement read off `to_dict()`, never a sum recomputed here. The old
+    row's claim (a rendered total in front of the operator) survives, but
+    as a claim about a different, honestly-scoped number: `elapsed` covers
+    the connects and the database load the removed row silently excluded."""
     report = _minimal_report(
         step_specs=[
             ("read", VERDICT_OK, None, ""),
@@ -1678,12 +2047,29 @@ def test_steps_total_row_sums_only_steps_that_ran():
     )
     report.results[0].duration_s = 41.875
     report.results[1].duration_s = 0.09
+    report.elapsed = 42.5
 
     rows = dict(zip(*[c.cells for c in report.render().columns]))
-    # 41.875 + 0.09 = 41.965 -> "42.0s"; the NA step contributes nothing.
-    assert rows["steps total"] == "42.0s"
+    assert rows["elapsed"] == "42.5s"
+    assert not any("total" in label for label in rows)
     assert "steps_total" not in report.to_dict()
     assert "total" not in report.to_dict()
+
+
+def test_elapsed_row_is_absent_when_the_value_is_absent():
+    """No `elapsed` row at all when the report carries no stamp -- an
+    unmeasured whole-command duration must not render as a fabricated
+    zero or an empty cell beside real ones."""
+    report = _minimal_report(
+        step_specs=[
+            ("read", VERDICT_OK, None, ""),
+        ]
+    )
+    report.results[0].duration_s = 1.0
+    assert report.elapsed is None
+
+    rows = dict(zip(*[c.cells for c in report.render().columns]))
+    assert "elapsed" not in rows
 
 
 def test_durations_do_not_perturb_dedup_fingerprint():
@@ -1704,6 +2090,128 @@ def test_durations_do_not_perturb_dedup_fingerprint():
     slow.results[0].duration_s = 987.654
 
     assert dedup_fingerprint(fast) == dedup_fingerprint(slow)
+
+
+def test_status_axis_does_not_perturb_dedup_fingerprint():
+    """D-10, Leg B: two reports built from the SAME `step_specs`, differing
+    ONLY in `results[0].status` (`STATUS_COMPLETE` default vs
+    `STATUS_ERROR`), MUST produce the SAME `dedup_fingerprint`.
+
+    Both reports hold the identical `verdict` on every step -- exactly the
+    constraint `test_durations_do_not_perturb_dedup_fingerprint` above
+    carries for `duration_s`. Varying the verdict alongside the status
+    would make the equality trivially true for the wrong reason (the
+    verdict match alone would already force the hashes equal), emptying
+    the proof. This is the POSITIVE leg ATTR-04's confirmation needs: a
+    green invariance oracle alone proves only that nothing already-frozen
+    moved -- it cannot prove the new field is actually excluded, because no
+    frozen shape carried a status before plan 178-03."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    step_specs = [("id", VERDICT_OK, None, ""), ("read", VERDICT_OK, None, "")]
+    complete_report = _minimal_report(step_specs=step_specs)
+    error_report = _minimal_report(step_specs=step_specs)
+    error_report.results[0].status = STATUS_ERROR
+
+    assert dedup_fingerprint(complete_report) == dedup_fingerprint(error_report)
+
+
+def test_a_verdict_change_still_perturbs_dedup_fingerprint():
+    """The anti-vacuity sibling to the Leg B test immediately above: with
+    both reports' statuses held EQUAL, moving one report's
+    `results[0].verdict` from `VERDICT_OK` to `VERDICT_BAD` MUST still
+    perturb `dedup_fingerprint`. Without this leg, Leg B's equality is
+    satisfiable by a hash function that reads nothing at all -- this is
+    what proves it is not."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    step_specs = [("id", VERDICT_OK, None, ""), ("read", VERDICT_OK, None, "")]
+    ok_report = _minimal_report(step_specs=step_specs)
+    bad_report = _minimal_report(step_specs=step_specs)
+    bad_report.results[0].verdict = VERDICT_BAD
+
+    assert dedup_fingerprint(ok_report) != dedup_fingerprint(bad_report)
+
+
+def test_status_axis_does_not_perturb_an_empty_results_fingerprint():
+    """ATTR-04's empty edge: a report with `results == []` hashes
+    identically regardless of the status axis, because the per-step loop
+    that builds `parts` never runs; a single-element `results` list behaves
+    the same way when its one step's status is flipped. The
+    directly-constructed empty reports below deliberately do NOT go through
+    `_minimal_report` -- its `step_specs = step_specs or [...]` fallback
+    treats a passed-in `[]` as falsy and silently substitutes the two-step
+    default, which would make an "empty results" test build a two-step
+    report instead.
+
+    The frozen `synthetic-arm4-empty-results` shape's hash is read from the
+    registry (`FROZEN_HASHES`), never transcribed, and cross-checked
+    against a fresh `build_shape` reproduction -- if either moved, ATTR-04
+    was violated."""
+    from firestarter.diagnostic_report import (
+        AutoCapture,
+        DiagnosticReport,
+        TransportHealth,
+        dedup_fingerprint,
+    )
+    from tests.fixtures.report_shapes import FROZEN_HASHES, build_shape
+
+    def _report_with_results(results):
+        return DiagnosticReport(
+            auto_capture=AutoCapture(
+                host_version="3.0.0b10", chip="M8720", protocol="0x08"
+            ),
+            transport=TransportHealth(),
+            plan=Plan(name="M8720"),
+            results=results,
+        )
+
+    empty_a = _report_with_results([])
+    empty_b = _report_with_results([])
+    assert dedup_fingerprint(empty_a) == dedup_fingerprint(empty_b)
+
+    single_a = _minimal_report(step_specs=[("id", VERDICT_OK, None, "")])
+    single_b = _minimal_report(step_specs=[("id", VERDICT_OK, None, "")])
+    single_b.results[0].status = STATUS_ERROR
+    assert dedup_fingerprint(single_a) == dedup_fingerprint(single_b)
+
+    frozen_shape = build_shape("synthetic-arm4-empty-results")
+    assert (
+        dedup_fingerprint(frozen_shape) == FROZEN_HASHES["synthetic-arm4-empty-results"]
+    )
+    assert FROZEN_HASHES["synthetic-arm4-empty-results"] == "8d6208d00be7"
+
+
+def test_status_axis_does_not_reorder_the_fingerprint_pre_image():
+    """ATTR-04's ordering edge: `dedup_fingerprint` builds `parts` in
+    `report.results` order and the status axis appends nothing, so
+    permuting which step carries `STATUS_ERROR`, across a fixed verdict
+    sequence, leaves the hash invariant across all three permutations.
+
+    `inspect.getsource` then proves the structural half of D-08 directly:
+    the function still contains exactly three `parts.append` call sites
+    and the substring `status` never appears in its body -- so a future
+    append for the status axis would fail this even where some shape
+    happens to collide on the hash value alone."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    step_specs = [
+        ("id", VERDICT_OK, None, ""),
+        ("read", VERDICT_OK, None, ""),
+        ("write", VERDICT_OK, None, ""),
+    ]
+    baseline = _minimal_report(step_specs=step_specs)
+    base_hash = dedup_fingerprint(baseline)
+
+    for error_index in range(3):
+        permuted = _minimal_report(step_specs=step_specs)
+        for i, result in enumerate(permuted.results):
+            result.status = STATUS_ERROR if i == error_index else STATUS_COMPLETE
+        assert dedup_fingerprint(permuted) == base_hash
+
+    source = inspect.getsource(dedup_fingerprint)
+    assert source.count("parts.append") == 3
+    assert "status" not in source
 
 
 def test_duration_cell_formatting_boundaries():

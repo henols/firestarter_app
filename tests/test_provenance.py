@@ -71,8 +71,8 @@ def _minimal_report(**auto_capture_kwargs) -> DiagnosticReport:
     return DiagnosticReport(
         auto_capture=AutoCapture(**ac_defaults),
         transport=TransportHealth(),
-        plan=Plan(name=ac_defaults["chip"], steps=[], locked_destructive=[]),
-        banner=BannerCounts(n_ran=0, m_applicable=0, locked_steps=[]),
+        plan=Plan(name=ac_defaults["chip"], steps=[]),
+        banner=BannerCounts(n_ran=0, m_applicable=0),
     )
 
 

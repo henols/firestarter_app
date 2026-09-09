@@ -45,7 +45,7 @@ from rich.prompt import Confirm
 # it imports no serial-transport or hardware-manager class -- so importing
 # `VERDICT_NA` from it here does not breach the ORCHESTRATOR-ONLY
 # invariant stated in this module's docstring.
-from firestarter.chip_test import VERDICT_NA
+from firestarter.chip_test import STATUS_COMPLETE, STATUS_ERROR, VERDICT_NA
 from firestarter.diagnostic_report import is_submittable
 
 # ---------------------------------------------------------------------------
@@ -136,14 +136,33 @@ def sanitize_dict(d: dict[str, Any], *, user: str | None = None) -> dict[str, An
 # Overall verdict (title-legibility ordering) + builders
 # ---------------------------------------------------------------------------
 
+"""The title's fourth return value (D-05): a run whose status axis reads
+ERROR did not execute validly at all, so its title must never read as a
+chip verdict (a `FAIL` filed against a manufacturer's part for a
+half-seated cable). Reuses the existing bare `INCONCLUSIVE` token with the
+cause parenthesized in the body, so `devtest_issues.py`'s `TITLE_RE` still
+captures the bare token and its `SOFT` set still classifies it, with zero
+triage-tooling change. No new title token is introduced."""
+_TITLE_VERDICT_HARNESS = "INCONCLUSIVE (harness)"
+
 
 def overall_verdict(results: Any) -> str:
     """FAIL-dominant title verdict -- NOT the handler's exit-code
     `max()` ordering (`cli_handlers.py`, where `marginal=2 > BAD=1`).
 
-    `FAIL` if any step verdict is `BAD`; else `INCONCLUSIVE` if any is
-    `marginal`; else `PASS`. Human-legible ordering for the issue title.
+    Returns `_TITLE_VERDICT_HARNESS` if any result's status axis reads
+    `STATUS_ERROR` (read via `getattr` with the COMPLETE default, so the
+    status-less `SimpleNamespace` doubles this function has always taken
+    keep returning PASS/FAIL/INCONCLUSIVE exactly as before); else `FAIL`
+    if any step verdict is `BAD`; else `INCONCLUSIVE` if any is
+    `marginal`; else `PASS`. The status guard is deliberately AHEAD of the
+    verdict fold -- this status-axis-first ordering is NOT the exit
+    code's: a run that is both BAD and ERROR titles harness-inconclusive
+    but still exits 1 (`cli_handlers.py`). Human-legible ordering for the
+    issue title.
     """
+    if any(getattr(r, "status", STATUS_COMPLETE) == STATUS_ERROR for r in results):
+        return _TITLE_VERDICT_HARNESS
     verdicts = {r.verdict for r in results}
     if "BAD" in verdicts:
         return "FAIL"
@@ -158,11 +177,19 @@ def build_title(report: Any, chip: str) -> str:
     The dedup shorthash is read from `report.to_dict()["dedup_fingerprint"]`
     (the Plan-01 field) -- this is the single-source link between the report
     model and the issue title.
+
+    RPT-F1: the name slot reads `auto_capture.canonical_part_number` off
+    the same dict, falling back to the `chip` parameter when it is `None`
+    (D-24) -- never by re-selecting, so the title, the body's
+    `canonical_part_number` line, the console and the saved artifact
+    cannot disagree.
     """
     d = report.to_dict()
     shorthash = d["dedup_fingerprint"]
+    canonical = d.get("auto_capture", {}).get("canonical_part_number")
+    name = canonical or chip
     verdict = overall_verdict(report.results)
-    return f"[dev test] {chip} — {verdict} ({shorthash})"
+    return f"[dev test] {name} — {verdict} ({shorthash})"
 
 
 def _duration_text(seconds: Any) -> str:
@@ -251,11 +278,27 @@ def build_body(
     260822-gxx, `_reason_text`) -- an NA step's disclosure prose (e.g. an
     SDP-applicability disclaimer) still reaches the fenced JSON block below,
     just not the table.
+
+    RPT-F1: one line above the table names the canonical part number,
+    read off `sanitized_dict["auto_capture"]` like every other cell here,
+    falling back to the raw `chip` (D-24) when the canonical did not
+    resolve.
+
+    RPT-D2: a second line, beside the canonical line, carries `elapsed` --
+    the whole-command wall-clock measurement, never a sum of this table's
+    own `Took` column -- rendered via the SAME `_duration_text` formatter
+    the table uses, so the two duration surfaces cannot disagree on
+    precision. Omitted entirely when `elapsed` is absent.
     """
-    lines = [
-        "| Step | Verdict | Runs | Took | Reason |",
-        "| ---- | ------- | ---- | ---- | ------ |",
-    ]
+    ac = sanitized_dict.get("auto_capture", {})
+    canonical_part_number = ac.get("canonical_part_number") or ac.get("chip", "")
+    lines = [f"canonical part number: {canonical_part_number}"]
+    elapsed = sanitized_dict.get("elapsed")
+    if elapsed is not None:
+        lines.append(f"elapsed: {_duration_text(elapsed)}")
+    lines.append("")
+    lines.append("| Step | Verdict | Runs | Took | Reason |")
+    lines.append("| ---- | ------- | ---- | ---- | ------ |")
     for step in sanitized_dict.get("steps", []):
         reason = _reason_text(step.get("verdict"), step.get("reason"))
         took = _duration_text(step.get("duration_s"))

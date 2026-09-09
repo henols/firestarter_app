@@ -100,7 +100,7 @@ _CHIP_NO_ID = "M8720"
 # UV-erasable (electrical-type "Flash/EEPROM").
 _CHIP_WITH_ID = "AS29F002T"
 # AM27512 IS UV-erasable (electrical-type "UV-EPROM", measured exact via
-# is_uv_eprom) -- the one family `_resolve_write_scope` ever asks about.
+# is_uv_eprom) -- the one family `dev_test`'s scope rule resolves to "partial".
 _CHIP_UV = "AM27512"
 # AT28C256 is one of the v1.30 milestone's 43 measured SDP-ALLOW chips
 # (sdp_capability() returns True) -- verified at plan time to resolve
@@ -594,6 +594,95 @@ def test_dev_test_output_trim_console_shrunk_payload_intact(
     assert "db_diff" in data
 
 
+def test_canonical_part_number_reaches_all_four_surfaces_while_the_raw_token_stays_on_ac_chip_and_the_filenames(
+    runner: CliRunner,
+) -> None:
+    """`w27c020` is a real alias-exact match (`database.py` part_number
+    `W27C02,W27C020,W27E02,W27E020,W27L02`) whose canonical spelling
+    differs from the raw CLI token only in case -- `W27C020`. One real
+    Click invocation proves the whole RPT-F1/D-03 chain: the saved JSON's
+    `auto_capture.canonical_part_number` is the canonical, its
+    `auto_capture.chip` is the raw token, both saved filenames are
+    derived from the raw token, and the saved markdown's first heading
+    line names the canonical."""
+    chip = "w27c020"
+    operator = make_clean_operator()
+    app = make_app_context(
+        eprom_operator=operator, hardware_manager=make_hardware_manager()
+    )
+    with _off_tty():
+        result = runner.invoke(cli, ["dev", "test", chip], obj=app)
+    assert result.exit_code == 0, result.output
+
+    data = _load_report(chip)
+    assert data["auto_capture"]["canonical_part_number"] == "W27C020"
+    assert data["auto_capture"]["chip"] == chip
+
+    json_path = _reports_dir() / f"dev-test-{chip}.json"
+    md_path = _reports_dir() / f"dev-test-{chip}.md"
+    assert json_path.exists()
+    assert md_path.exists()
+
+    md_first_line = md_path.read_text().splitlines()[0]
+    assert md_first_line == "# dev test -- W27C020"
+
+
+def test_a_real_invocation_saves_a_nonnegative_elapsed_stable_across_to_dict_calls(
+    runner: CliRunner,
+) -> None:
+    """A real Click invocation stamps `report.elapsed` once at CLI entry.
+    The saved JSON carries a non-negative float, and a second `to_dict()`
+    on the SAME in-memory report -- `to_json_block()`'s call, embedded in
+    the saved `.md`, is a real third serialization of the same object the
+    saved `.json` is the second serialization of -- returns the SAME
+    `elapsed` (generated may or may not differ; only `elapsed` is stored
+    once), which is the property that makes a stored field necessary
+    rather than a computed one."""
+    chip = _CHIP_NO_ID
+    app = make_app_context(
+        eprom_operator=make_clean_operator(), hardware_manager=make_hardware_manager()
+    )
+    with _off_tty():
+        result = runner.invoke(cli, ["dev", "test", chip], obj=app)
+    assert result.exit_code == 0, result.output
+
+    data = _load_report(chip)
+    assert isinstance(data["elapsed"], float)
+    assert data["elapsed"] >= 0
+
+    md_text = (_reports_dir() / f"dev-test-{chip}.md").read_text()
+    fenced = md_text.split("```json\n", 1)[1].rsplit("\n```", 1)[0]
+    embedded = json.loads(fenced)
+    assert embedded["elapsed"] == data["elapsed"]
+
+
+def test_a_clean_run_saves_a_populated_chip_id_actual_equal_to_expected(
+    runner: CliRunner,
+) -> None:
+    """RPT-A1/RPT-A5 (181-08): a clean run's saved report carries a
+    non-`None` `auto_capture.chip_id_actual` equal to its
+    `chip_id_expected` -- the id step's own `StepResult.chip_id_detected`,
+    read structurally, populates even on a PASS. D-10's gate: the rendered
+    console output must NOT show a two-sided `chip_id (expected/actual)`
+    row for this run -- a matching pair on agreement is not added to the
+    table."""
+    chip = "w27c020"
+    operator = make_clean_operator()
+    operator.check_eprom_id.return_value = (True, 55941)
+    app = make_app_context(
+        eprom_operator=operator, hardware_manager=make_hardware_manager()
+    )
+    with _off_tty():
+        result = runner.invoke(cli, ["dev", "test", chip], obj=app)
+    assert result.exit_code == 0, result.output
+    assert "chip_id (expected/actual)" not in result.output
+
+    data = _load_report(chip)
+    ac = data["auto_capture"]
+    assert ac["chip_id_actual"] is not None
+    assert ac["chip_id_actual"] == ac["chip_id_expected"]
+
+
 # ---------------------------------------------------------------------------
 # Zero-option surface (D-05)
 # ---------------------------------------------------------------------------
@@ -787,18 +876,6 @@ class TestUVWriteHasNoPrompt:
         assert "write" in ops
         assert "write-partial" not in ops
 
-    def test_write_scope_resolver_needs_no_confirm_callable(self) -> None:
-        """`_resolve_write_scope`'s signature no longer carries a `confirm_fn`
-        seam, because there is nothing left to confirm. Pinned so the seam
-        cannot quietly return."""
-        import inspect
-
-        from firestarter.cli_handlers import _resolve_write_scope
-
-        params = inspect.signature(_resolve_write_scope).parameters
-        assert "confirm_fn" not in params
-        assert set(params) == {"app", "chip", "interactive"}
-
 
 # ---------------------------------------------------------------------------
 # Sampler bracketing (D-04): always built now, no more standalone slots
@@ -819,7 +896,12 @@ class TestSamplerBracketing:
         write_eprom twice, and the sampler fires before+after EACH call
         (chip_test.py _dispatch_multi_run) -- 4 total sample_vpp_mv/
         sample_vpe_mv calls, with the LAST before/after pair winning the
-        report's single before/after slot."""
+        report's single before/after slot.
+
+        RPT-B1 (plan 181-09): the standalone `vpp_mv`/`vpe_mv` slots are
+        gone from the schema entirely -- a real run's voltage mapping
+        carries exactly the four surviving before/after keys, asserted
+        below alongside the values themselves."""
         operator = make_clean_operator()
         hw = make_hardware_manager(
             vpp_values=[20900, 17400, 20800, 17300],
@@ -836,8 +918,12 @@ class TestSamplerBracketing:
         assert voltage["vpp_after_mv"] == 17300
         assert voltage["vpe_before_mv"] == 4950
         assert voltage["vpe_after_mv"] == 4850
-        assert voltage["vpp_mv"] == "not measured"
-        assert voltage["vpe_mv"] == "not measured"
+        assert sorted(voltage) == [
+            "vpe_after_mv",
+            "vpe_before_mv",
+            "vpp_after_mv",
+            "vpp_before_mv",
+        ]
         assert hw.sample_vpp_mv.call_count == 4
         assert hw.sample_vpe_mv.call_count == 4
 
@@ -1709,8 +1795,12 @@ class TestExitFloorD15:
             StepResult(op="read", verdict=VERDICT_OK, run_count=1),
             StepResult(op="write-baseline-b", verdict=VERDICT_OK, run_count=1),
         ]
-        exit_clean = _dev_test_exit_code(results, sdp_oracle_not_run=False)
-        exit_notrun = _dev_test_exit_code(results, sdp_oracle_not_run=True)
+        exit_clean = _dev_test_exit_code(
+            results, sdp_oracle_not_run=False, run_status_error=False
+        )
+        exit_notrun = _dev_test_exit_code(
+            results, sdp_oracle_not_run=True, run_status_error=False
+        )
         assert exit_clean == 0, exit_clean
         assert exit_notrun == 2, exit_notrun
         assert exit_clean != exit_notrun
@@ -2016,9 +2106,10 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
     ) -> None:
         """R2b: a transport fault raised BY the id check (a half-seated
         cable, not a firmware-reported disagreement) degrades the id step
-        to BAD via `_run_step`'s `(SerialError, HardwareOperationError)`
-        handler -- separately proving the gate closes on this id-check
-        failure mode too, not only on `is_ok=False`."""
+        to SKIPPED/ERROR via `_run_step`'s `(SerialError,
+        HardwareOperationError)` handler -- separately proving the gate
+        closes on this id-check failure mode too, not only on
+        `is_ok=False`."""
         operator = make_clean_operator()
         operator.check_eprom_id.side_effect = SerialError("half-seated cable")
         app = make_app_context(
@@ -2030,12 +2121,32 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
             result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
         data = _load_report(SYNTHETIC_CHIP_NAME)
         steps = {s["op"]: s for s in data["steps"]}
-        assert steps["id"]["verdict"] == "BAD", steps["id"]
+        assert steps["id"]["verdict"] == "SKIPPED", steps["id"]
+        assert steps["id"]["status"] == "ERROR", steps["id"]
         operator.sdp_lock.assert_not_called()
         hold_state = data["sdp_hold_state"]
         assert hold_state == SDP_HOLD_NOT_RUN, hold_state
         normalized = _normalize_console_text(result.output)
         assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
+
+    def test_transport_fault_exits_two_and_titles_inconclusive_harness(
+        self, runner: CliRunner
+    ) -> None:
+        """D-06/D-05 end-to-end: the same transport fault R2b exercises
+        also exits 2 (the status-axis exit floor) and writes a report whose
+        top-level `run_status` reads `ERROR`."""
+        operator = make_clean_operator()
+        operator.check_eprom_id.side_effect = SerialError("half-seated cable")
+        app = make_app_context(
+            db=SyntheticNonzeroChipIdDatabase(),
+            eprom_operator=operator,
+            hardware_manager=make_hardware_manager(),
+        )
+        with _off_tty():
+            result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
+        assert result.exit_code == 2, result.output
+        data = _load_report(SYNTHETIC_CHIP_NAME)
+        assert data["run_status"] == "ERROR", data
 
 
 class TestLaunderingRoutesR3R4:
@@ -2227,7 +2338,16 @@ class TestWriteCoverageProvenanceD_F:
         "partial" (D-01/D-03), so the execution-time resolver probes and
         masks rather than taking the D-C full-device shortcut. The saved
         JSON's write step carries the resolved slot region/bit counts, and
-        the console shows the D-F "write coverage" row."""
+        the console shows the D-F "write coverage" row.
+
+        Exit 0, not 1 (Phase 179): a used chip is genuinely NOT all-0xFF, so
+        `check_eprom_blank` (real, chip-content-derived, not stubbed)
+        honestly reports the chip is not blank -- but on a UV plan that is
+        now an expected, operator-actionable pre-write FINDING
+        (`Step.uv_prewrite`), adjudicated to `SKIPPED` rather than `BAD`, so
+        it no longer dominates the exit-code fold. It still does not stop
+        the write/verify steps from running and succeeding, which is what
+        this test actually pins."""
         from .fake_chip import FakeChip
 
         chip = FakeChip.uv_with_content(65536, b"\xf0" * 256, start=65280)
@@ -2236,12 +2356,7 @@ class TestWriteCoverageProvenanceD_F:
         )
         with _off_tty():
             result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
-        # exit 1, not 0: a used chip is genuinely NOT all-0xFF, so
-        # `check_eprom_blank` (real, chip-content-derived, not stubbed)
-        # honestly reports BAD -- that BAD is what makes this a "used chip"
-        # scenario at all, and it does not stop the write/verify steps from
-        # running and succeeding, which is what this test actually pins.
-        assert result.exit_code == 1, result.output
+        assert result.exit_code == 0, result.output
 
         data = _load_report(_CHIP_UV)
         steps = {s["op"]: s for s in data["steps"]}

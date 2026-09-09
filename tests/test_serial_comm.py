@@ -435,7 +435,16 @@ def test_read_and_parse_lines_ringfence_unchanged() -> None:
     It goes RED if ANY change is made to the generator body (per GATE-1.8d:
     any change must be flagged and deferred to v1.9 alongside binary re-validation).
 
-    Pinned SHA-256 (2026-06-11): 6d9e4fe4b67b78c110418305113b275174f16b2ecc9e0f55fbf5d9a623398184
+    Pinned SHA-256 (2026-09-04): 8b77800003a44fb21f2054fe8d0584e804648a76e52c3f23f55f06df74127b41
+    (Updated from 6d9e4fe4b67b78c110418305113b275174f16b2ecc9e0f55fbf5d9a623398184
+     at Phase 176 plan 03: both re-sync branches now call
+     transport_counters.record_resync_length_missing() /
+     .record_resync_body_truncated() beside their existing logger.warning(...),
+     before the existing continue. Approved via blocking-human checkpoint
+     (RPT-C1). Not a transport-path change: no new read() call, no new branch
+     on a wire byte, and no write to start_time, so none of the byte-by-byte
+     read loop, the magic-preamble dispatch, the frame-length read, or the
+     timeout reset semantics is affected.)
     (Updated from 544433068cb14ac14677939435cb4f0ea78783b503315ed645b5f88c5c44a444
      at Phase 65-01: Response now carries id=decoded.id for ProtocolNotImplementedError
      typed-raise dispatch. Change is in-scope for v1.12 host graceful handling — not
@@ -446,7 +455,7 @@ def test_read_and_parse_lines_ringfence_unchanged() -> None:
 
     from firestarter.serial_comm import SerialCommunicator
 
-    _PINNED_SHA256 = "6d9e4fe4b67b78c110418305113b275174f16b2ecc9e0f55fbf5d9a623398184"
+    _PINNED_SHA256 = "8b77800003a44fb21f2054fe8d0584e804648a76e52c3f23f55f06df74127b41"
 
     src = inspect.getsource(SerialCommunicator._read_and_parse_lines)
     actual_digest = hashlib.sha256(src.encode("utf-8")).hexdigest()

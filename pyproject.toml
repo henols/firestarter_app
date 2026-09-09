@@ -70,7 +70,7 @@ py32 = [
 ]
 test = [
     "pytest>=8.0",
-    "syrupy>=5.0",
+    "syrupy>=5.0,<7",
     # Phase 37 additions:
     "ruff>=0.15.14",
     # Upper bound <3 (Phase 131 D-14): tools/check_mypy_watermark.py's

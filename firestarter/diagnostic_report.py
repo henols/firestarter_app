@@ -32,11 +32,14 @@ from typing import Any
 from firestarter.chip_test import (
     _RAN_VERDICTS,
     REGION_POLICY_FULL_DEVICE,
+    STATUS_COMPLETE,
+    STATUS_ERROR,
     VERDICT_NA,
     BannerCounts,
     Plan,
     Step,
     StepResult,
+    _write_step_was_refused,
     coverage_tag,
     repeat_policy_tag,
 )
@@ -45,15 +48,25 @@ from firestarter.chip_test import (
 # Module constants -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.7"  # baked into to_dict() output
+SCHEMA_VERSION = "2.0"  # baked into to_dict() output
 NOT_MEASURED = "not measured"  # honest fallback, never a false 0
 # Distinct from NOT_MEASURED: this field was never ASKED, rather than asked and
 # empty. Reusing NOT_MEASURED would conflate the two.
 NOT_REPORTED = "not reported"
 
-# Elevated-counter threshold for `transport_suspect` (dormant today -- no
-# transport counter is reachable per RESEARCH §Transport Counter Survey; a
-# future phase that adds real counters activates this without a redesign).
+"""ATTR-06 (D-14): the sentence the report says about its own rail readings.
+`hw_read_voltage` energizes and measures the boost-regulator rail only -- it
+asserts no socket-routing bit, so a rig with VPP unhooked still reads a
+healthy rail. Computed ONCE here, exported by `to_dict()` under
+`rail_reading_disclosure`, and read by `render()` off the exported dict --
+the same single-sourcing discipline `write_coverage`/`sdp_hold_state` use.
+States what the reading does NOT show; never a claim that it proves
+anything (advisory voice, matching `_DISPOSITION_*` below)."""
+_RAIL_READING_DISCLOSURE = (
+    "vpp/vpe readings measure the regulator rail only -- they do not show "
+    "whether the eprom socket is connected (advisory)"
+)
+
 _SUSPECT_THRESHOLD = 5
 
 
@@ -91,6 +104,14 @@ class AutoCapture:
     chip_id_expected: int | None = None
     chip_id_actual: int | None = None
     chip_id_mismatch_reason: str | None = None
+    canonical_part_number: str | None = None
+    """The matched database row's alias for `chip` (RPT-F1), selected by
+    `cli_handlers._canonical_part_number` and stamped once alongside
+    `protocol`. `chip` deliberately keeps the operator's raw token, because
+    `dedup_fingerprint`'s pre-image starts with it (D-16); this field sits
+    outside that hash's explicit five-entry allow-list, which is the whole
+    exclusion mechanism -- an unresolvable token leaves it `None` and every
+    consumer falls back to `chip` rather than render the word `None`."""
 
 
 # ---------------------------------------------------------------------------
@@ -102,31 +123,96 @@ class AutoCapture:
 class TransportHealth:
     """Best-effort transport-health counters.
 
-    Every counter defaults to `None` -- "not measured" -- because no
-    COBS-decode-error / CRC-failure / retry / timeout counter is reachable
-    from the operator or serial-transport layer today (RESEARCH §Transport
-    Counter Survey: verified NONE exist). `transport_suspect` defaults
-    `False` and can only be set `True` by `_is_transport_suspect` below --
-    never inferred from absent data.
+    Every counter defaults to `None` -- "not measured". `decode_failures`,
+    `timeouts`, `probe_timeouts`, `resync_length_missing` and
+    `resync_body_truncated` are wired from `firestarter.transport_counters`
+    (Phase 176 plans 01, 02 and 03); once a run has happened each carries a
+    real integer, and reads `not measured` only before one has. The
+    remaining three stay `not measured` for good reason, each recorded here
+    so a future phase looking to "fix" them reads why it should not:
+
+    `cobs_errors` -- COBS on this link is OUTBOUND ONLY. `cobs_encode` is
+    called from `send_json_command` and the data-chunk path; `cobs_decode`
+    exists but has zero production call sites, verified tree-wide -- every
+    caller is a test module. The inbound path is magic-preamble plus length
+    plus CRC8 framing, not COBS, so a COBS decode error is an event the host
+    cannot have.
+
+    `crc_failures` -- `codec.decode_id_frame` does detect a CRC mismatch
+    specifically, but it returns the same `None` for five distinct causes
+    (short/truncated frame, CRC mismatch, unknown message id, a text-only
+    catalog entry arriving as an id frame, and a param-shape mismatch), so
+    the counter at that seam is `decode_failures` and naming it
+    `crc_failures` would claim a precision it does not have. Reaching a true
+    CRC count requires changing `codec.decode_id_frame`'s return type, which
+    is out of this phase's scope.
+
+    `retries` -- there is NO host-side transport retry loop anywhere.
+    `_read_and_parse_lines` re-syncs by continuing the byte loop and never
+    re-requests anything; `expect_ack` loops waiting for the next frame,
+    which is not a re-send. The only retries in this system are the firmware
+    write-pulse counts carried by `MSG_INFO_RETRIES` and
+    `MSG_ERR_WRITE_FAILED`. Routing those here would report a marginal chip
+    needing extra write-pulse retries as a LINK fault, and at five would
+    flip `transport_suspect`, sending a triager hunting a cable while the
+    chip is the actual finding.
+
+    `transport_suspect` defaults `False` and can only be set `True` by
+    `_is_transport_suspect` below -- never inferred from absent data.
     """
 
     cobs_errors: int | None = None
     crc_failures: int | None = None
+    decode_failures: int | None = None
+    probe_timeouts: int | None = None
+    resync_body_truncated: int | None = None
+    resync_length_missing: int | None = None
     retries: int | None = None
     timeouts: int | None = None
     transport_suspect: bool = False
+
+
+_SUSPECT_SCANNED_FIELDS: tuple[str, ...] = (
+    "cobs_errors",
+    "crc_failures",
+    "decode_failures",
+    "resync_body_truncated",
+    "resync_length_missing",
+    "retries",
+    "timeouts",
+)
+
+_SUSPECT_EXCLUDED_FIELDS: tuple[str, ...] = ("probe_timeouts",)
 
 
 def _is_transport_suspect(th: TransportHealth) -> bool:
     """True only when a counter is PRESENT (not None) AND elevated.
 
     Absent counters can never fabricate suspicion -- mirrors the
-    honest `indeterminate` fingerprint bucket. Since no counter is reachable
-    today (RESEARCH §Transport Counter Survey), this always returns False in
-    production; it exists so a future counter source activates it without a
-    redesign.
+    honest `indeterminate` fingerprint bucket. Scans `_SUSPECT_SCANNED_FIELDS`
+    by name rather than a hard-coded tuple, so extending the scanned domain
+    (as `decode_failures` does here) is a data change, not a rule change --
+    the guard clause itself, both conjuncts and their order, is unchanged.
+
+    `probe_timeouts` is deliberately in `_SUSPECT_EXCLUDED_FIELDS`, never in
+    `_SUSPECT_SCANNED_FIELDS`: port-discovery failures are ordinary on a
+    multi-board rig and are not link sickness, so counting them toward
+    suspicion would report a healthy rig as sick.
+
+    `_SUSPECT_THRESHOLD` stays `5`. Its basis: the counter that would have
+    inflated it is `timeouts`, which pays one timeout per wrong candidate
+    port on every connect that has to walk past one -- at the 32 connects a
+    single at28c256 run costs, an unscoped global counter would cross `5` by
+    the sixth wrong-port probe and report a healthy three-board rig as
+    transport-suspect. Scoping those into `probe_timeouts` (Phase 176 plan
+    02) is what justifies `5` against how the remaining scanned counters
+    actually behave, rather than leaving it as the untouched default chosen
+    while every counter was still dormant. A per-counter threshold was
+    considered and rejected: it is more work for a distinction the scoping
+    above already draws.
     """
-    for value in (th.cobs_errors, th.crc_failures, th.retries, th.timeouts):
+    for name in _SUSPECT_SCANNED_FIELDS:
+        value = getattr(th, name)
         if value is not None and value >= _SUSPECT_THRESHOLD:
             return True
     return False
@@ -296,6 +382,15 @@ def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
     config. Neither the disposition text nor `ladder_state` ever yields a
     concrete `support_status` value, and `ladder_state` never becomes
     `_LADDER_COMMUNITY_CONFIRMED` -- that state is human-gated only.
+
+    D-21's fourth-arm precondition: a run in which the write step was
+    applicable and did not run (`chip_test._write_step_was_refused`,
+    verdict SKIPPED) must not propose the same disposition a verified PASS
+    proposes -- the hole is pre-existing and reachable on any refused
+    write, not UV-specific, and it is closed here rather than as a
+    UV-specific carve-out. `NA` is deliberately NOT a refusal (a write that
+    was never going to run in the first place), so an unsupported-write
+    part's disposition is unaffected.
     """
     raw_config, _manufacturer = db.get_eprom_config(name)
     current = (raw_config or {}).get("support_status", "supported")
@@ -305,14 +400,27 @@ def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
         r.fingerprint is not None and r.fingerprint.classification == "indeterminate"
         for r in results
     )
+    """D-04's ladder guard: a run whose status axis reads ERROR did not
+    execute validly, so it must never be proposed for `community-reported`
+    graduation regardless of how clean its verdicts otherwise look. Read
+    via `getattr` with the COMPLETE default so a duck-typed result object
+    without the field folds to COMPLETE rather than raising. Ahead of
+    every other arm below."""
+    run_errored = any(
+        getattr(r, "status", STATUS_COMPLETE) == STATUS_ERROR for r in results
+    )
+    write_refused = _write_step_was_refused(results)
 
-    if "BAD" in verdicts:
+    if run_errored:
+        proposed = _DISPOSITION_INCONCLUSIVE
+        ladder_state = _LADDER_NONE
+    elif "BAD" in verdicts:
         proposed = _DISPOSITION_COMMUNITY_FAIL
         ladder_state = _LADDER_COMMUNITY_FAIL
     elif "marginal" in verdicts or has_indeterminate_fingerprint:
         proposed = _DISPOSITION_INCONCLUSIVE
         ladder_state = _LADDER_NONE
-    elif "OK" in verdicts and verdicts <= {"OK", "NA", "SKIPPED"}:
+    elif "OK" in verdicts and verdicts <= {"OK", "NA", "SKIPPED"} and not write_refused:
         proposed = _DISPOSITION_CANDIDATE
         ladder_state = _LADDER_COMMUNITY_REPORTED
     else:
@@ -474,6 +582,18 @@ def _write_coverage_line(result: StepResult, step: Step | None) -> str | None:
     `step` is `None` for every step that is not the located write/
     write-partial step (see `DiagnosticReport._write_step_index`) -- this
     function is a no-op for all of them.
+
+    D-20's slots-remaining arithmetic: the number an operator reads is
+    slots left AFTER this run. `WriteTarget.slots_remaining` is the
+    resolve-time count, taken BEFORE the write executes and therefore
+    necessarily including the slot about to be written -- the resolver
+    takes the first acceptable slot from a top-down list and a completed
+    write saturates exactly one slot, so "slots left" and "runs left" are
+    the same number, but only after subtracting the run this line is
+    about. The subtraction happens HERE, at the one point where both the
+    resolved count and the run's own outcome (`_write_step_was_refused`,
+    D-21) are both known -- a resolver that subtracted one would assert a
+    consumption that may never occur.
     """
     if step is None:
         return None
@@ -516,8 +636,13 @@ def _write_coverage_line(result: StepResult, step: Step | None) -> str | None:
         # staged tranche copy, which inherits its slot rather than re-deriving
         # the count.
         if target.slots_remaining is not None and target.slots_total:
+            reported_slots_remaining = (
+                target.slots_remaining
+                if _write_step_was_refused([result])
+                else target.slots_remaining - 1
+            )
             line += (
-                f"; {target.slots_remaining} of {target.slots_total} slots "
+                f"; {reported_slots_remaining} of {target.slots_total} slots "
                 "left on this part"
             )
         return line
@@ -546,11 +671,11 @@ class DiagnosticReport:
     objects (never redefined here, never recomputed) plus the new
     `AutoCapture`/`TransportHealth` sub-objects. The measured-voltage slot is
     split into destructive-run before/after pairs
-    per rail (`vpp_before_mv`/`vpp_after_mv`/`vpe_before_mv`/`vpe_after_mv`)
-    plus standalone non-destructive readings (`vpp_mv`/`vpe_mv`) -- a rail
-    that sagged across a write reads very differently from a regulator that
-    never reached its target, so the two shapes are never conflated into one
-    field.
+    per rail (`vpp_before_mv`/`vpp_after_mv`/`vpe_before_mv`/`vpe_after_mv`).
+    Schema 2.0 dropped the standalone non-destructive `vpp_mv`/`vpe_mv`
+    slots that shape used to also carry -- no code path had ever assigned
+    them (RPT-B1, proven by `tests/test_voltage_field_census.py`'s
+    attribute-scoped AST census).
 
     `db_diff` (plan 03) is the advisory, read-only DB-diff -- current
     `support_status` beside a proposed-disposition string derived purely from
@@ -563,13 +688,11 @@ class DiagnosticReport:
     plan: Plan
     results: list[StepResult] = field(default_factory=list)
     banner: BannerCounts | None = None
-    # Split destructive before/after VPP readings, with a standalone honest fallback.
+    # Destructive before/after VPP/VPE rail readings.
     vpp_before_mv: int | None = None
     vpp_after_mv: int | None = None
     vpe_before_mv: int | None = None
     vpe_after_mv: int | None = None
-    vpp_mv: int | None = None
-    vpe_mv: int | None = None
     db_diff: DbDiff | None = None
     # the carriage half only --
     # a plain `str`, NEVER a `bool` and NEVER a key named `locked` or
@@ -583,6 +706,30 @@ class DiagnosticReport:
     # `test_non_registry_still_has_no_ops`'s AST inversion guard to carry
     # zero op vocabulary).
     sdp_hold_state: str = ""
+    """The carriage half only -- a plain `str`, declared and serialised
+    here, never derived here. Defaults to `""` (unassigned); the VALUE is
+    assigned by `cli_handlers.py` from `chip_test.run_status(results)`,
+    beside the `sdp_hold_state` assignment above. Deliberately excluded
+    from `dedup_fingerprint`'s hash input (D-08) -- that function builds
+    its hash from an explicit allow-list with no reflection over dataclass
+    fields, so this field's absence from that list is the whole exclusion
+    mechanism."""
+    run_status: str = ""
+    elapsed: float | None = None
+    """Wall-clock seconds from CLI entry to immediately before the first
+    serialization. INCLUDES the database load, the identity read, plan
+    derivation and every step. EXCLUDES the console render, the artifact
+    write and the submit prompt -- those three run after the stamp is
+    taken, not before it. ASSIGNED by `cli_handlers.py`, never derived
+    here: `to_dict()` runs three times per run (console render, the saved
+    `.json`, `to_json_block()` inside the `.md`), so a value computed
+    inside `to_dict()` would differ between the console and the saved
+    artifact. `None` when no CLI-entry stamp exists (a direct handler call,
+    e.g. from a unit test). Deliberately excluded from `dedup_fingerprint`'s
+    hash input, same mechanism as `run_status` above -- that function
+    builds its hash from an explicit allow-list with no reflection over
+    dataclass fields, so this field's absence from that list is the whole
+    exclusion mechanism."""
 
     def _utc_now(self) -> str:
         return datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -600,6 +747,7 @@ class DiagnosticReport:
             "chip_id_expected": ac.chip_id_expected,
             "chip_id_actual": ac.chip_id_actual,
             "chip_id_mismatch_reason": ac.chip_id_mismatch_reason,
+            "canonical_part_number": ac.canonical_part_number,
         }
 
     def _transport_dict(self) -> dict[str, Any]:
@@ -610,6 +758,22 @@ class DiagnosticReport:
             "cobs_errors": NOT_MEASURED if th.cobs_errors is None else th.cobs_errors,
             "crc_failures": (
                 NOT_MEASURED if th.crc_failures is None else th.crc_failures
+            ),
+            "decode_failures": (
+                NOT_MEASURED if th.decode_failures is None else th.decode_failures
+            ),
+            "probe_timeouts": (
+                NOT_MEASURED if th.probe_timeouts is None else th.probe_timeouts
+            ),
+            "resync_body_truncated": (
+                NOT_MEASURED
+                if th.resync_body_truncated is None
+                else th.resync_body_truncated
+            ),
+            "resync_length_missing": (
+                NOT_MEASURED
+                if th.resync_length_missing is None
+                else th.resync_length_missing
             ),
             "retries": NOT_MEASURED if th.retries is None else th.retries,
             "timeouts": NOT_MEASURED if th.timeouts is None else th.timeouts,
@@ -635,8 +799,6 @@ class DiagnosticReport:
             "vpe_after_mv": (
                 NOT_MEASURED if self.vpe_after_mv is None else self.vpe_after_mv
             ),
-            "vpp_mv": NOT_MEASURED if self.vpp_mv is None else self.vpp_mv,
-            "vpe_mv": NOT_MEASURED if self.vpe_mv is None else self.vpe_mv,
         }
 
     def _write_step_index(self) -> int | None:
@@ -653,7 +815,7 @@ class DiagnosticReport:
         -- so the FIRST step carrying both `destructive=True` and a
         non-`None` `write_region` is unambiguously the shipped write step.
         `None` when `self.plan.steps` carries no such step (a synthetic/
-        minimal report built with an empty `Plan`, or `write_scope="none"`).
+        minimal report built with an empty `Plan`).
         """
         return next(
             (
@@ -667,6 +829,35 @@ class DiagnosticReport:
     def _step_dict(
         self, result: StepResult, step: Step | None = None
     ) -> dict[str, Any]:
+        """One `steps[]` element, keyed unconditionally so every element
+        carries the same key set regardless of its op.
+
+        The four `fingerprint_*` siblings (RPT-A2) are read straight off the
+        `Fingerprint` the classifier already produced -- `total`, `bad`,
+        `bad_pct`, `evidence` -- so this is a serialization change with no
+        new computation and no second classifier. `fingerprint` keeps
+        carrying the classification string alone, because that string is
+        the only fingerprint component `dedup_fingerprint` hashes; the four
+        siblings are therefore additive and cannot re-key a filed report.
+        `fingerprint_evidence` is bounded by construction: it carries a
+        ratio, a flag, a first offset and one clustering score per
+        candidate high address bit, never a list of offsets.
+
+        `divergence` (RPT-A3) carries the read step's own mapping straight
+        off `StepResult.divergence` -- the engine is its single source, this
+        method never derives it. It is a mapping whenever a comparison was
+        possible, with `bad` zero on agreement (D-11, mirroring PRUNE-03);
+        `None` only when no comparison was possible.
+
+        `chip_id_detected` (RPT-A5) carries the id step's own
+        `StepResult.chip_id_detected` straight off the engine, unconditionally,
+        on every step element. On a passing id check it is the host's own
+        expected id echoed out of the command dict rather than an
+        independent read-back (`check_eprom_id`'s OK reply carries no id
+        back from the firmware); on a mismatch it is the id the firmware
+        actually reported; `None` when the id step never ran or returned no
+        id.
+        """
         # Schema 1.6: the five `write_*` keys below
         # are read off `StepResult.write_target` -- `None` on every step
         # that isn't a write/verify, and `None` on a write/verify step that
@@ -690,6 +881,7 @@ class DiagnosticReport:
         return {
             "op": result.op,
             "verdict": result.verdict,
+            "status": result.status,
             # Schema 1.7: how many times the
             # underlying operator method actually ran for this step. It has
             # been 2 for every read/write/verify/erase since the
@@ -717,6 +909,18 @@ class DiagnosticReport:
             "fingerprint": (
                 result.fingerprint.classification if result.fingerprint else None
             ),
+            "fingerprint_total": (
+                result.fingerprint.total if result.fingerprint else None
+            ),
+            "fingerprint_bad": (result.fingerprint.bad if result.fingerprint else None),
+            "fingerprint_bad_pct": (
+                result.fingerprint.bad_pct if result.fingerprint else None
+            ),
+            "fingerprint_evidence": (
+                result.fingerprint.evidence if result.fingerprint else None
+            ),
+            "divergence": result.divergence,
+            "chip_id_detected": result.chip_id_detected,
             # Schema 1.5: wall-clock seconds for the step, or `None` when it
             # did not run. Additive -- every pre-1.5 consumer ignores it.
             "duration_s": result.duration_s,
@@ -730,11 +934,10 @@ class DiagnosticReport:
 
     def _banner_dict(self) -> dict[str, Any]:
         if self.banner is None:
-            return {"n_ran": None, "m_applicable": None, "locked_steps": []}
+            return {"n_ran": None, "m_applicable": None}
         return {
             "n_ran": self.banner.n_ran,
             "m_applicable": self.banner.m_applicable,
-            "locked_steps": list(self.banner.locked_steps),
         }
 
     def _db_diff_dict(self) -> dict[str, Any] | None:
@@ -774,10 +977,23 @@ class DiagnosticReport:
         `dataclasses.asdict()` wholesale, Pitfall 3): this is the ONE place
         `schema_version` is baked in and the ONE place NOT_MEASURED is
         substituted for an absent transport counter.
+
+        `is_uv` carries the RPT-A4 read-through of `Plan.is_uv` --
+        `derive_plan`'s single decision, never re-derived here. Deliberately
+        excluded from `dedup_fingerprint`'s hash input (D-16) -- that
+        function builds its hash from an explicit allow-list with no
+        reflection over dataclass fields, so this field's absence from that
+        list is the whole exclusion mechanism.
+
+        `elapsed` is a plain attribute read here, never computed: this
+        method runs three times per run (see `elapsed`'s own docstring on
+        the dataclass field above), and a value computed inside `to_dict()`
+        would answer a different question on each of the three calls.
         """
         return {
             "schema_version": SCHEMA_VERSION,
             "generated": self._utc_now(),
+            "elapsed": self.elapsed,
             "auto_capture": self._auto_capture_dict(),
             "transport_health": self._transport_dict(),
             "steps": self._steps_list(),
@@ -787,6 +1003,9 @@ class DiagnosticReport:
             "dedup_fingerprint": dedup_fingerprint(self),
             "db_diff": self._db_diff_dict(),
             "sdp_hold_state": self.sdp_hold_state,
+            "run_status": self.run_status,
+            "is_uv": self.plan.is_uv,
+            "rail_reading_disclosure": _RAIL_READING_DISCLOSURE,
         }
 
     def render(self, console: Any = None) -> Any:
@@ -806,8 +1025,9 @@ class DiagnosticReport:
         `sdp_hold_state` renders as its BARE state token via `_state_cell`
         (the `NOT-RUN: <reason>` sentence wrapped across three lines), and
         the single six-value `voltage` row became one `_rail_cell` row per
-        rail, dropping the `vpp_mv`/`vpe_mv` standalone slots that no code
-        path assigns.
+        rail. The two standalone slots that row used to also carry are gone
+        from the schema entirely now (RPT-B1) -- not merely hidden from this
+        console table.
 
         `to_dict()` is unchanged throughout -- every one of those values is
         still in the JSON/markdown artifact and the filed issue body; only
@@ -818,12 +1038,24 @@ class DiagnosticReport:
         and the duration. It is the smallest thing that makes the
         N>=2 repeat policy legible at the point an operator actually
         notices it -- watching the same op go past twice.
+
+        RPT-F1: the title names `auto_capture.canonical_part_number` when
+        present, falling back to `ac['chip']` -- read off `ac`, the mapping
+        `to_dict()` already produced, never by re-selecting.
+
+        RPT-D2: the row that used to sum the per-step durations is gone --
+        that sum excluded the identity read, plan derivation, the artifact
+        write and the submit prompt, so it under-reported the run's real
+        cost. Its replacement is the `elapsed` row: a stored measurement of
+        the whole command, read off the exported dict rather than recomputed
+        here, omitted entirely when the value is absent.
         """
         from rich.table import Table
 
         d = self.to_dict()
         ac = d["auto_capture"]
-        table = Table(title=f"dev test -- {ac['chip']}")
+        title_name = ac["canonical_part_number"] or ac["chip"]
+        table = Table(title=f"dev test -- {title_name}")
         table.add_column("Field")
         table.add_column("Value")
 
@@ -831,15 +1063,10 @@ class DiagnosticReport:
         table.add_row("fw_board_identity", _identity_cell(ac["fw_board_identity"]))
         table.add_row("hw_revision", _identity_cell(ac["hw_revision"]))
         table.add_row("protocol", _hex_cell(ac["protocol"], 2))
-        # `chip_id_actual` is populated ONLY on a mismatch: on a passing id
-        # check the firmware's OK reply carries no id back, so
-        # `check_eprom_id` returns the host's OWN expected value echoed from
-        # `cmd_data["chip-id"]` and `_chip_id_fields` correctly discards it
-        # rather than present a never-measured number as a measurement.
-        # Rendering the resulting `None` beside a real expected id read like
-        # a failed read, so the two-sided row now appears only when there IS
-        # a disagreement to show (operator asked, 2026-08-21).
-        if ac["chip_id_actual"] is None:
+        if (
+            ac["chip_id_actual"] is None
+            or ac["chip_id_actual"] == ac["chip_id_expected"]
+        ):
             table.add_row("chip_id", _hex_cell(ac["chip_id_expected"], 4))
         else:
             table.add_row(
@@ -854,10 +1081,6 @@ class DiagnosticReport:
         # `n_ran` -- so the number of step rows here is exactly the banner's
         # N by construction, never a second hand-maintained notion of "ran".
         #
-        # Safe to hide: `NA` and `SKIPPED` both map to exit code 0
-        # (`cli_handlers._VERDICT_EXIT_CODES`), so no nonzero-exit cause can
-        # hide here. The one non-verdict exit term, the not-run SDP
-        # oracle floor, stays legible in the `sdp_hold_state` row above.
         # Every step keeps its full entry in `to_dict()["steps"]`, so the
         # JSON, the markdown table and the filed issue body are unchanged.
         for step_row in d["steps"]:
@@ -878,20 +1101,8 @@ class DiagnosticReport:
         banner = d["banner"]
         table.add_row("banner", f"{banner['n_ran']} of {banner['m_applicable']} ran")
 
-        # Sum of the steps that ran (operator asked for timings, 2026-08-21).
-        # Deliberately labelled "steps total", not "elapsed": it excludes the
-        # identity read, plan derivation, report write and the submit prompt,
-        # so calling it wall-clock for the whole command would overclaim. It
-        # is NOT added to `to_dict()` -- a derived sum belongs to the render,
-        # and the per-step `duration_s` values it comes from are all in the
-        # JSON for any consumer that wants to re-add them.
-        total = sum(
-            float(sr["duration_s"])
-            for sr in d["steps"]
-            if sr.get("duration_s") is not None
-        )
-        if total:
-            table.add_row("steps total", _duration_cell(total))
+        if d["elapsed"] is not None:
+            table.add_row("elapsed", _duration_cell(d["elapsed"]))
 
         # its own console row, never folded into a step's `reason`.
         # Rendered via `_state_cell` -- a no-op passthrough today, since
@@ -927,6 +1138,7 @@ class DiagnosticReport:
         table.add_row(
             "vpe (before/after)", _rail_cell(v["vpe_before_mv"], v["vpe_after_mv"])
         )
+        table.add_row("rail reading", d["rail_reading_disclosure"])
 
         if console is not None:
             console.print(table)

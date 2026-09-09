@@ -45,8 +45,12 @@ repeated invocations and are used instead -- collection succeeding is exactly
 the liveness property test 3 needs to prove.
 
 Only ONE full-suite subprocess is ever run per test session (cached via
-`functools.lru_cache` in `_run_child_suite`, shared by tests 1-3) -- at
-roughly 40-50s, that cost must not be paid more than once per module.
+`functools.lru_cache` in `_run_child_suite`, shared by tests 1-3) -- measured
+at 139s at the v1.36 branch base and at roughly 181s once Phase 175's four
+new test modules are present, that cost must not be paid more than once per
+module. The child run's own `timeout=` is 420s, not 180s, for the same
+reason: 420 carries real headroom over the ~181s measured figure, where 180
+would not.
 
 Tests (one named function each):
   1. `test_no_skip_claims_firmware_absent_while_marker_present` -- BASE-03's
@@ -107,8 +111,13 @@ _IGNORE_ARG = f"--ignore={_THIS_MODULE}"
 # that deliberateness is D-10's second purpose (the allow-list doubles as
 # documentation of every legitimate skip reason).
 # ---------------------------------------------------------------------------
+META_TREE_FIXTURES_ABSENT_IN_STANDALONE_CHECKOUT = (
+    "meta-tree fixtures directory not found at"
+)
+
 ALLOWED_SKIP_REASONS: frozenset[str] = frozenset(
     {
+        META_TREE_FIXTURES_ABSENT_IN_STANDALONE_CHECKOUT,
         # BASE-03's whole assertion: legitimate ONLY when the sibling
         # ../firestarter/.git marker is genuinely absent (test 1 below
         # enforces the "while present" half of that split). Imported, never
@@ -237,7 +246,7 @@ def _run_child_suite() -> _ChildRunResult:
         cwd=str(_APP_DIR),
         capture_output=True,
         text=True,
-        timeout=180,
+        timeout=420,
     )
     skip_entries = _parse_skip_entries(result.stdout)
     return _ChildRunResult(
