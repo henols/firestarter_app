@@ -65,6 +65,18 @@ moved `m27c512-full-all-ok`'s fingerprint from `6d3afbc52315` to
 `e9df6ca4627c` -- transcribed verbatim in
 `.planning/phases/174-blast-radius-invariance-harness/evidence/
 174-06-shape-aliasing-red-green.txt`.
+
+RPT-E3 re-anchoring (D-15, Phase 181 plan 01): GATE-06's `RK-174-` ledger
+table, its app-side fixture, its checker and its CI workflow were all
+retired on 2026-09-08, so RPT-E3's phrase "the re-keys declared under
+GATE-06" has no table left to point at. RPT-E3's anchor is now the 19
+absolute `FROZEN_HASHES` literals in `tests/fixtures/report_shapes.py`
+plus the two-commit review rule carried verbatim in
+`test_dedup_fingerprint_is_frozen`'s own failure message: "If deliberate,
+land the behaviour change and the re-key of this literal as SEPARATE
+commits, so the re-key stays a reviewable unit." Phase 181 declares
+ZERO re-keys, so RPT-E3's exception clause discharges as empty and that
+rule never fires in this phase.
 """
 
 from __future__ import annotations
@@ -605,6 +617,44 @@ def test_to_dict_key_list_pins_are_sensitive_to_added_and_removed_keys() -> None
         "adding a top-level key did not move the sorted key list away "
         "from the pinned constant -- the pin is vacuous"
     )
+
+
+def test_the_to_dict_key_pin_reddens_on_a_planted_added_and_removed_key() -> None:
+    """The pin that will govern every deletion in this phase, observed RED
+    against both directions of key drift on a real `to_dict()` mapping --
+    never production. `_VOLTAGE_KEYS` and `_BANNER_KEYS` have never been
+    SHRUNK before: `git log -S'_VOLTAGE_KEYS'` returns only `5693bf7
+    test(174-03)`, the commit that created them, so plan `181-02` and plan
+    `181-05` perform the first deletions ever to pass through these pins.
+    `ec1db5c` (`feat(178-01)`) is an additive precedent only -- there is no
+    subtractive precedent to cite."""
+    report = build_shape("sst27sf512-six-step")
+    d = report.to_dict()
+    keys = sorted(d)
+    assert len(keys) == 14
+    assert keys.count("is_uv") == 1
+
+    added = dict(d)
+    added["synthetic_planted_key"] = None
+    assert sorted(added) != _TO_DICT_KEYS
+    with pytest.raises(AssertionError):
+        assert sorted(added) == _TO_DICT_KEYS
+
+    removed = dict(d)
+    del removed["is_uv"]
+    assert sorted(removed) != _TO_DICT_KEYS
+    with pytest.raises(AssertionError):
+        assert sorted(removed) == _TO_DICT_KEYS
+
+
+def test_the_to_dict_key_pin_is_not_vacuous_against_an_empty_expected_list() -> None:
+    """The separate, explicitly-named vacuity leg (never folded into the
+    RED-drift test above): comparing a real `to_dict()` key list against
+    an empty expected list must fail, not pass by coincidence."""
+    report = build_shape("sst27sf512-six-step")
+    keys = sorted(report.to_dict())
+    with pytest.raises(AssertionError):
+        assert keys == []
 
 
 _PINNED_SHAPE_ID_SET = [
