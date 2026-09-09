@@ -30,6 +30,7 @@ string; no fixture file is ever written."""
 
 import ast
 import pathlib
+import types
 
 import pytest
 
@@ -69,9 +70,10 @@ _SELF_REFERENTIAL_NAMES = frozenset(
 )
 
 
-def _module_source(module: object) -> str:
+def _module_source(module: types.ModuleType) -> str:
     """Load `module`'s own source from its `__file__`, guarded by a length
     assertion so a mis-resolved path cannot pass this census vacuously."""
+    assert module.__file__ is not None
     source = pathlib.Path(module.__file__).read_text(encoding="utf-8")
     assert len(source) > 1000
     return source
@@ -86,11 +88,11 @@ def _assignment_sites(source: str, names: tuple[str, ...]) -> dict[str, set[str]
     functions = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
     sites: dict[str, set[str]] = {name: set() for name in names}
     for node in ast.walk(tree):
-        targets: list[ast.expr] = []
-        if isinstance(node, ast.Assign):
-            targets = list(node.targets)
-        elif isinstance(node, ast.AnnAssign):
-            targets = [node.target]
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets: list[ast.expr] = (
+            list(node.targets) if isinstance(node, ast.Assign) else [node.target]
+        )
         for target in targets:
             if isinstance(target, ast.Attribute) and target.attr in names:
                 containing = [
