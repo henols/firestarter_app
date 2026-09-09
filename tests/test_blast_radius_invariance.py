@@ -81,6 +81,7 @@ rule never fires in this phase.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
@@ -957,3 +958,114 @@ def test_shape_ids_closure_is_sensitive_to_removed_and_added_entries() -> None:
         "appending one entry to a copy of the committed anchor did not "
         "move it away from sorted(SHAPE_IDS) -- the closure pin is vacuous"
     )
+
+
+_DEDUP_ALLOW_LIST_ANCHOR = (
+    '    canonical = "|".join(parts)\n'
+    '    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]\n'
+)
+
+_DEDUP_MUTANT_TO_DICT = (
+    "    canonical = json.dumps(report.to_dict(), sort_keys=True)\n"
+    '    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]\n'
+)
+
+_DEDUP_MUTANT_REFLECTION = (
+    '    canonical = "|".join(\n'
+    "        str(getattr(report, f.name)) for f in dataclasses.fields(report)\n"
+    "    )\n"
+    '    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]\n'
+)
+
+_DEDUP_FORBIDDEN_NAMES = frozenset({"to_dict", "asdict", "fields", "vars", "__dict__"})
+
+
+def _dedup_fingerprint_reachable_names(source: str | None = None) -> set[str]:
+    """Parse `dedup_fingerprint`'s own source -- its real module file
+    (`firestarter/diagnostic_report.py`) when `source` is omitted, guarded
+    by a source-length assertion so a mis-resolved path cannot pass this
+    pin vacuously, or an in-memory mutant string when supplied by a
+    planted-mutation test -- locate the function definition, and return
+    every `ast.Call` name and `ast.Attribute` attr reachable from its
+    body: the surface HYG-03's pin checks for the serializer entry point
+    (`to_dict`) and the dataclass-reflection helpers (`dataclasses.fields`,
+    `dataclasses.asdict`, `vars`, `__dict__`). See `.planning/
+    MILESTONES.md`'s v1.36 section (D-18) for the recorded decision this
+    pin enforces."""
+    if source is None:
+        from firestarter import diagnostic_report
+
+        source = Path(diagnostic_report.__file__).read_text(encoding="utf-8")
+        assert len(source) > 1000
+    tree = ast.parse(source)
+    func = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef) and n.name == "dedup_fingerprint"
+    )
+    names: set[str] = set()
+    for node in ast.walk(func):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            names.add(node.func.id)
+        if isinstance(node, ast.Attribute):
+            names.add(node.attr)
+    return names
+
+
+def test_dedup_fingerprint_hashes_an_explicit_allow_list_and_never_the_serialized_mapping() -> (
+    None
+):
+    """HYG-03 (D-18): `dedup_fingerprint` must never be refactored to hash
+    `to_dict()`'s serialized mapping or to reflect over `DiagnosticReport`'s
+    dataclass fields -- every additive field would then re-key every
+    historical report, and `count_agreeing` reads the hash embedded in an
+    already-filed issue body without ever re-hashing it. The decision and
+    its measurement are recorded in `.planning/MILESTONES.md`'s v1.36
+    section; this pin is the gate that reddens if a future rewrite ignores
+    it."""
+    names = _dedup_fingerprint_reachable_names()
+    assert {"join", "sha256", "hexdigest"} <= names, sorted(names)
+    assert names.isdisjoint(_DEDUP_FORBIDDEN_NAMES), sorted(
+        names & _DEDUP_FORBIDDEN_NAMES
+    )
+
+
+def test_a_planted_reflective_body_reddens_the_allow_list_pin() -> None:
+    """The anti-vacuity leg. The allow-list anchor occurs exactly once in
+    the real, unmutated source; two independent in-memory `str.replace`
+    mutants each redden the pin -- one hashing `report.to_dict()`'s
+    serialized mapping, one reflecting over `dataclasses.fields(report)` --
+    proving the positive claim above is falsifiable, not trivially true.
+    Both mutations live only in this process's memory for the duration of
+    this test; no fixture file is written."""
+    from firestarter import diagnostic_report
+
+    source = Path(diagnostic_report.__file__).read_text(encoding="utf-8")
+    assert source.count(_DEDUP_ALLOW_LIST_ANCHOR) == 1
+
+    to_dict_mutant = source.replace(_DEDUP_ALLOW_LIST_ANCHOR, _DEDUP_MUTANT_TO_DICT, 1)
+    reflection_mutant = source.replace(
+        _DEDUP_ALLOW_LIST_ANCHOR, _DEDUP_MUTANT_REFLECTION, 1
+    )
+
+    to_dict_names = _dedup_fingerprint_reachable_names(to_dict_mutant)
+    reflection_names = _dedup_fingerprint_reachable_names(reflection_mutant)
+
+    with pytest.raises(AssertionError):
+        assert to_dict_names.isdisjoint(_DEDUP_FORBIDDEN_NAMES), sorted(
+            to_dict_names & _DEDUP_FORBIDDEN_NAMES
+        )
+    with pytest.raises(AssertionError):
+        assert reflection_names.isdisjoint(_DEDUP_FORBIDDEN_NAMES), sorted(
+            reflection_names & _DEDUP_FORBIDDEN_NAMES
+        )
+
+
+def test_an_empty_forbidden_name_set_fails_rather_than_passing_vacuously() -> None:
+    """The separate, explicitly named vacuity leg: comparing the real
+    function's reachable names against an empty expected set must fail,
+    proving that an accidentally-empty forbidden-name set could never
+    pass this pin silently."""
+    names = _dedup_fingerprint_reachable_names()
+    with pytest.raises(AssertionError):
+        assert names == set()
