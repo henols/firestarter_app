@@ -1186,7 +1186,7 @@ def test_hold_state_is_str_never_bool():
     assert not isinstance(value, bool)
 
 
-def test_schema_version_1_8_single_sourced():
+def test_schema_version_2_0_single_sourced():
     """`to_dict()["schema_version"]` equals the IMPORTED `SCHEMA_VERSION`
     (never a literal restated here), and the production module bumps the
     constant to its new value in exactly ONE place (single-sourced, D-10) --
@@ -1199,9 +1199,10 @@ def test_schema_version_1_8_single_sourced():
     additive per-step `write_region_start`/`write_region_length`/
     `write_bits_cleared`/`write_bits_retained`/`write_current_source` keys,
     again for the 1.6 -> 1.7 bump (quick task 260822-aq6), which added the
-    additive per-step `run_count` key, and again for the 1.7 -> 1.8 bump
+    additive per-step `run_count` key, again for the 1.7 -> 1.8 bump
     (Phase 178 plan 01, D-07), which added the top-level `run_status` and
-    per-step `status` keys."""
+    per-step `status` keys, and again for the 1.8 -> 2.0 bump (Phase 181
+    plan 01, D-13/RPT-E1), which added the top-level `is_uv` key."""
     import inspect
 
     from firestarter import diagnostic_report as dr_mod
@@ -1210,7 +1211,7 @@ def test_schema_version_1_8_single_sourced():
     assert report.to_dict()["schema_version"] == dr_mod.SCHEMA_VERSION
 
     source = inspect.getsource(dr_mod)
-    assert source.count('"1.8"') == 1
+    assert source.count('"2.0"') == 1
 
 
 def test_dedup_fingerprint_sensitive_to_sdp_step_verdict_change():
@@ -1474,19 +1475,19 @@ def test_dedup_fingerprint_slot_run_hash_is_unchanged_by_coverage_tag():
     assert dedup_fingerprint(fixed_report) == "a0a50436ae3d"
 
 
-def test_schema_version_is_one_eight():
-    """PROV-04: the imported constant equals `"1.8"`, and a freshly built
+def test_schema_version_is_two_oh():
+    """PROV-04: the imported constant equals `"2.0"`, and a freshly built
     report's `to_dict()["schema_version"]` equals the IMPORTED constant --
     never a restated literal in the second assertion. This is the only
     place in the suite that pins WHICH version this phase shipped; every
-    other site (including `test_schema_version_1_8_single_sourced` above)
-    keeps importing the constant. 1.8 (Phase 178 plan 01, D-07) added the
-    top-level `run_status` and per-step `status` keys -- the run-validity
-    status axis, held separately from the chip-verdict axis. Pre-1.8
-    consumers ignore both."""
+    other site (including `test_schema_version_2_0_single_sourced` above)
+    keeps importing the constant. 2.0 (Phase 181 plan 01, D-13/RPT-E1)
+    added the top-level `is_uv` key -- RPT-A4's carry-through of
+    `Plan.is_uv`. Both consumers accept `schema_version` by presence only
+    and the dedup hash never reads it, so the bump is mechanically free."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == "1.8"
+    assert SCHEMA_VERSION == "2.0"
 
     report = _minimal_report()
     assert report.to_dict()["schema_version"] == SCHEMA_VERSION

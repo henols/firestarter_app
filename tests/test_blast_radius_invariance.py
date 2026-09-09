@@ -88,9 +88,10 @@ from .fixtures.report_shapes import (
 _HEX12_RE = re.compile(r"^[0-9a-f]{12}$")
 
 """D-07's first pin: `DiagnosticReport.to_dict()`
-(`firestarter/diagnostic_report.py:771-790`) emits thirteen top-level keys
+(`firestarter/diagnostic_report.py:771-790`) emits fourteen top-level keys
 today (Phase 178 plan 01 added `run_status`, schema 1.8; Phase 178 plan 04
-adds `rail_reading_disclosure`, the ATTR-06 sentence)."""
+adds `rail_reading_disclosure`, the ATTR-06 sentence; Phase 181 plan 01
+adds `is_uv`, RPT-A4's carry-through of `Plan.is_uv`)."""
 _TO_DICT_KEYS = [
     "auto_capture",
     "banner",
@@ -98,6 +99,7 @@ _TO_DICT_KEYS = [
     "dedup_fingerprint",
     "generated",
     "is_submittable",
+    "is_uv",
     "rail_reading_disclosure",
     "run_status",
     "schema_version",
@@ -508,15 +510,17 @@ def test_schema_version_is_pinned() -> None:
     the imported constant, the literal, and the value `to_dict()` actually
     bakes in, all in one expression, so a constant rename and a value
     change are both caught. Phase 178 plan 01 moved this to `1.8` (D-07,
-    the `run_status` export). Phase 181 moves this to `2.0` per D-3/RPT-E1,
-    and it has to move this line to do it."""
+    the `run_status` export). Phase 181 plan 01 moved this to `2.0`
+    (D-3/RPT-E1)."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
     report = build_shape(_TRACER_SHAPE_ID)
     baked = report.to_dict()["schema_version"]
-    assert SCHEMA_VERSION == "1.8" == baked, (
+    assert SCHEMA_VERSION == "2.0" == baked, (
         f"SCHEMA_VERSION drifted: constant={SCHEMA_VERSION!r}, baked="
-        f"{baked!r}, expected '1.8' (RPT-E1 moves this to '2.0' in Phase 181)"
+        f"{baked!r}, expected '2.0' (Phase 181 plan 01 took it there; the "
+        "bump was mechanically free because both parsers accept "
+        "schema_version by presence only and the dedup hash never reads it)"
     )
 
 

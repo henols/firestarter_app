@@ -23,9 +23,10 @@
   "dedup_fingerprint": "7a89fcea856a",
   "generated": "1970-01-01T00:00:00Z",
   "is_submittable": true,
+  "is_uv": false,
   "rail_reading_disclosure": "vpp/vpe readings measure the regulator rail only -- they do not show whether the eprom socket is connected (advisory)",
   "run_status": "",
-  "schema_version": "1.8",
+  "schema_version": "2.0",
   "sdp_hold_state": "",
   "steps": [
     {

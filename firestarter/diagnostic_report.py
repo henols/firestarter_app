@@ -47,7 +47,7 @@ from firestarter.chip_test import (
 # Module constants -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "1.8"  # baked into to_dict() output
+SCHEMA_VERSION = "2.0"  # baked into to_dict() output
 NOT_MEASURED = "not measured"  # honest fallback, never a false 0
 # Distinct from NOT_MEASURED: this field was never ASKED, rather than asked and
 # empty. Reusing NOT_MEASURED would conflate the two.
@@ -889,6 +889,13 @@ class DiagnosticReport:
         `dataclasses.asdict()` wholesale, Pitfall 3): this is the ONE place
         `schema_version` is baked in and the ONE place NOT_MEASURED is
         substituted for an absent transport counter.
+
+        `is_uv` carries the RPT-A4 read-through of `Plan.is_uv` --
+        `derive_plan`'s single decision, never re-derived here. Deliberately
+        excluded from `dedup_fingerprint`'s hash input (D-16) -- that
+        function builds its hash from an explicit allow-list with no
+        reflection over dataclass fields, so this field's absence from that
+        list is the whole exclusion mechanism.
         """
         return {
             "schema_version": SCHEMA_VERSION,
@@ -903,6 +910,7 @@ class DiagnosticReport:
             "db_diff": self._db_diff_dict(),
             "sdp_hold_state": self.sdp_hold_state,
             "run_status": self.run_status,
+            "is_uv": self.plan.is_uv,
             "rail_reading_disclosure": _RAIL_READING_DISCLOSURE,
         }
 
