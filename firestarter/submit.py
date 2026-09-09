@@ -283,15 +283,22 @@ def build_body(
     read off `sanitized_dict["auto_capture"]` like every other cell here,
     falling back to the raw `chip` (D-24) when the canonical did not
     resolve.
+
+    RPT-D2: a second line, beside the canonical line, carries `elapsed` --
+    the whole-command wall-clock measurement, never a sum of this table's
+    own `Took` column -- rendered via the SAME `_duration_text` formatter
+    the table uses, so the two duration surfaces cannot disagree on
+    precision. Omitted entirely when `elapsed` is absent.
     """
     ac = sanitized_dict.get("auto_capture", {})
     canonical_part_number = ac.get("canonical_part_number") or ac.get("chip", "")
-    lines = [
-        f"canonical part number: {canonical_part_number}",
-        "",
-        "| Step | Verdict | Runs | Took | Reason |",
-        "| ---- | ------- | ---- | ---- | ------ |",
-    ]
+    lines = [f"canonical part number: {canonical_part_number}"]
+    elapsed = sanitized_dict.get("elapsed")
+    if elapsed is not None:
+        lines.append(f"elapsed: {_duration_text(elapsed)}")
+    lines.append("")
+    lines.append("| Step | Verdict | Runs | Took | Reason |")
+    lines.append("| ---- | ------- | ---- | ---- | ------ |")
     for step in sanitized_dict.get("steps", []):
         reason = _reason_text(step.get("verdict"), step.get("reason"))
         took = _duration_text(step.get("duration_s"))

@@ -1776,10 +1776,13 @@ def test_step_with_no_duration_renders_bare_verdict():
     assert rows["step: write"] == VERDICT_BAD
 
 
-def test_steps_total_row_sums_only_steps_that_ran():
-    """The `steps total` row sums the per-step durations present, skipping
-    `None`. It is a RENDER-only derivation: `to_dict()` gains no total key,
-    since a consumer can re-add the per-step values itself."""
+def test_elapsed_row_replaces_the_removed_summed_row():
+    """RPT-D2: the render-only row that used to sum the per-step durations
+    is gone. Its replacement is the `elapsed` row -- a stored whole-command
+    measurement read off `to_dict()`, never a sum recomputed here. The old
+    row's claim (a rendered total in front of the operator) survives, but
+    as a claim about a different, honestly-scoped number: `elapsed` covers
+    the connects and the database load the removed row silently excluded."""
     report = _minimal_report(
         step_specs=[
             ("read", VERDICT_OK, None, ""),
@@ -1789,12 +1792,29 @@ def test_steps_total_row_sums_only_steps_that_ran():
     )
     report.results[0].duration_s = 41.875
     report.results[1].duration_s = 0.09
+    report.elapsed = 42.5
 
     rows = dict(zip(*[c.cells for c in report.render().columns]))
-    # 41.875 + 0.09 = 41.965 -> "42.0s"; the NA step contributes nothing.
-    assert rows["steps total"] == "42.0s"
+    assert rows["elapsed"] == "42.5s"
+    assert not any("total" in label for label in rows)
     assert "steps_total" not in report.to_dict()
     assert "total" not in report.to_dict()
+
+
+def test_elapsed_row_is_absent_when_the_value_is_absent():
+    """No `elapsed` row at all when the report carries no stamp -- an
+    unmeasured whole-command duration must not render as a fabricated
+    zero or an empty cell beside real ones."""
+    report = _minimal_report(
+        step_specs=[
+            ("read", VERDICT_OK, None, ""),
+        ]
+    )
+    report.results[0].duration_s = 1.0
+    assert report.elapsed is None
+
+    rows = dict(zip(*[c.cells for c in report.render().columns]))
+    assert "elapsed" not in rows
 
 
 def test_durations_do_not_perturb_dedup_fingerprint():

@@ -976,6 +976,13 @@ class DiagnosticReport:
         RPT-F1: the title names `auto_capture.canonical_part_number` when
         present, falling back to `ac['chip']` -- read off `ac`, the mapping
         `to_dict()` already produced, never by re-selecting.
+
+        RPT-D2: the row that used to sum the per-step durations is gone --
+        that sum excluded the identity read, plan derivation, the artifact
+        write and the submit prompt, so it under-reported the run's real
+        cost. Its replacement is the `elapsed` row: a stored measurement of
+        the whole command, read off the exported dict rather than recomputed
+        here, omitted entirely when the value is absent.
         """
         from rich.table import Table
 
@@ -1033,20 +1040,8 @@ class DiagnosticReport:
         banner = d["banner"]
         table.add_row("banner", f"{banner['n_ran']} of {banner['m_applicable']} ran")
 
-        # Sum of the steps that ran (operator asked for timings, 2026-08-21).
-        # Deliberately labelled "steps total", not "elapsed": it excludes the
-        # identity read, plan derivation, report write and the submit prompt,
-        # so calling it wall-clock for the whole command would overclaim. It
-        # is NOT added to `to_dict()` -- a derived sum belongs to the render,
-        # and the per-step `duration_s` values it comes from are all in the
-        # JSON for any consumer that wants to re-add them.
-        total = sum(
-            float(sr["duration_s"])
-            for sr in d["steps"]
-            if sr.get("duration_s") is not None
-        )
-        if total:
-            table.add_row("steps total", _duration_cell(total))
+        if d["elapsed"] is not None:
+            table.add_row("elapsed", _duration_cell(d["elapsed"]))
 
         # its own console row, never folded into a step's `reason`.
         # Rendered via `_state_cell` -- a no-op passthrough today, since
