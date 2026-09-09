@@ -31,6 +31,7 @@
   "sdp_hold_state": "",
   "steps": [
     {
+      "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
       "fingerprint": null,
@@ -51,6 +52,13 @@
       "write_region_start": null
     },
     {
+      "divergence": {
+        "bad": 0,
+        "cmp_len": 65536,
+        "first_offset": null,
+        "pct": 0.0,
+        "repeat_divergent": false
+      },
       "duration_s": 0.0,
       "error_code": null,
       "fingerprint": null,
@@ -71,6 +79,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": 176,
       "fingerprint": null,
@@ -91,6 +100,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
       "fingerprint": "match",
@@ -116,6 +126,7 @@
       "write_region_start": 65280
     },
     {
+      "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
       "fingerprint": "match",
@@ -141,6 +152,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,
@@ -161,6 +173,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,
@@ -181,6 +194,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,
@@ -201,6 +215,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,
@@ -221,6 +236,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,
@@ -241,6 +257,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,
@@ -261,6 +278,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,

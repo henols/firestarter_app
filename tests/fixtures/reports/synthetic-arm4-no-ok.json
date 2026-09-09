@@ -31,6 +31,7 @@
   "sdp_hold_state": "",
   "steps": [
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,
@@ -51,6 +52,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,

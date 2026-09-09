@@ -31,6 +31,7 @@
   "sdp_hold_state": "",
   "steps": [
     {
+      "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
       "fingerprint": null,
@@ -51,6 +52,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
       "fingerprint": null,
@@ -71,6 +73,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
       "fingerprint": "match",
@@ -96,6 +99,7 @@
       "write_region_start": 0
     },
     {
+      "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
       "fingerprint": "match",
@@ -121,6 +125,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
       "fingerprint": null,
@@ -141,6 +146,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
       "fingerprint": null,
@@ -161,6 +167,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,
@@ -181,6 +188,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,
@@ -201,6 +209,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,
@@ -221,6 +230,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,
@@ -241,6 +251,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,
@@ -261,6 +272,7 @@
       "write_region_start": null
     },
     {
+      "divergence": null,
       "duration_s": null,
       "error_code": null,
       "fingerprint": null,

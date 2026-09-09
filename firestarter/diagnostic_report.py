@@ -818,6 +818,12 @@ class DiagnosticReport:
         `fingerprint_evidence` is bounded by construction: it carries a
         ratio, a flag, a first offset and one clustering score per
         candidate high address bit, never a list of offsets.
+
+        `divergence` (RPT-A3) carries the read step's own mapping straight
+        off `StepResult.divergence` -- the engine is its single source, this
+        method never derives it. It is a mapping whenever a comparison was
+        possible, with `bad` zero on agreement (D-11, mirroring PRUNE-03);
+        `None` only when no comparison was possible.
         """
         # Schema 1.6: the five `write_*` keys below
         # are read off `StepResult.write_target` -- `None` on every step
@@ -880,6 +886,7 @@ class DiagnosticReport:
             "fingerprint_evidence": (
                 result.fingerprint.evidence if result.fingerprint else None
             ),
+            "divergence": result.divergence,
             # Schema 1.5: wall-clock seconds for the step, or `None` when it
             # did not run. Additive -- every pre-1.5 consumer ignores it.
             "duration_s": result.duration_s,

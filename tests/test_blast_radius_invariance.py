@@ -187,14 +187,16 @@ _DB_DIFF_KEYS = [
     "proposed_disposition",
 ]
 
-"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits eighteen keys per
+"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits nineteen keys per
 step, UNCONDITIONALLY (Phase 178 plan 01 adds `status`, schema 1.8; Phase
-181 plan 07 adds the four `fingerprint_*` siblings, RPT-A2) -- taken from
-`sst27sf512-six-step`'s first (`id`) step, whose five `write_*` fields and
-four `fingerprint_*` siblings stay `None` because `id` carries no write
-target and no fingerprint, but all eighteen KEYS are present regardless.
-The pin is over the key SET, not over which values are non-`None`."""
+181 plan 07 adds the four `fingerprint_*` siblings (RPT-A2) and `divergence`
+(RPT-A3)) -- taken from `sst27sf512-six-step`'s first (`id`) step, whose
+five `write_*` fields, four `fingerprint_*` siblings and `divergence` all
+stay `None` because `id` carries no write target, no fingerprint and no
+read-step comparison, but all nineteen KEYS are present regardless. The pin
+is over the key SET, not over which values are non-`None`."""
 _STEPS_ELEMENT_0_KEYS = [
+    "divergence",
     "duration_s",
     "error_code",
     "fingerprint",

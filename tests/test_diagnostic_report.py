@@ -1799,6 +1799,30 @@ def test_every_step_element_carries_an_identical_fingerprint_sibling_key_set():
     assert "fingerprint_evidence" in steps[0]
 
 
+def test_divergence_is_present_on_every_step_and_carries_the_engine_value():
+    """RPT-A3: `divergence` reaches `steps[]` unconditionally, carrying the
+    step's own mapping where the engine produced one and `None` where it
+    did not -- the report carries this value, it never derives it."""
+    report = _minimal_report(
+        step_specs=[
+            ("id", VERDICT_OK, None, ""),
+            ("read", VERDICT_OK, None, ""),
+        ]
+    )
+    report.results[1].divergence = {
+        "repeat_divergent": False,
+        "cmp_len": 32,
+        "bad": 0,
+        "pct": 0.0,
+        "first_offset": None,
+    }
+
+    steps = report.to_dict()["steps"]
+    assert all("divergence" in s for s in steps)
+    assert steps[0]["divergence"] is None
+    assert steps[1]["divergence"] == report.results[1].divergence
+
+
 # ---------------------------------------------------------------------------
 # Per-step timings (schema 1.5, 2026-08-21): the operator asked for timings
 # captured, presented in the box, and carried to GitHub. These pin the
