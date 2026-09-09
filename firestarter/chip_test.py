@@ -1323,7 +1323,15 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
       which is the claim every disclosure surface makes about it.
     * `fingerprint`/`write_target` -- from the LAST cycle that produced one:
       the device's final state is the one a reader can still verify.
-    * `duration_s` -- the SUM across cycles, so "steps total" stays honest.
+    * `duration_s` -- the MEAN over the cycles that reached the operator,
+      taken over the same `ran` population `run_count` reports, so the two
+      can never disagree about which cycles are being described. Cycle 1 and
+      cycle 2 are not the same operation -- only cycle 1's write can start
+      from an unknown device state -- so the mean deliberately blends two
+      slightly different costs rather than discarding half the evidence.
+      This makes the field a per-operation cost whose meaning does not vary
+      with `run_count`: a `--fast` run's single cycle and a default run's
+      two cycles measure the same quantity.
     * `error_code`/`reason` -- the FIRST non-empty, so the earliest failure
       explains the row rather than being overwritten by a later cycle.
     """
@@ -1349,7 +1357,7 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
         verdict = ran[0].verdict
         reason = next((r.reason for r in ran if r.reason), "")
 
-    durations = [r.duration_s for r in results if r.duration_s is not None]
+    durations = [r.duration_s for r in ran if r.duration_s is not None]
     return StepResult(
         op=op,
         verdict=verdict,
@@ -1360,7 +1368,7 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
         fingerprint=next((r.fingerprint for r in reversed(ran) if r.fingerprint), None),
         run_count=len(ran),
         divergence=next((r.divergence for r in reversed(ran) if r.divergence), None),
-        duration_s=round(sum(durations), 3) if durations else None,
+        duration_s=round(sum(durations) / len(durations), 3) if durations else None,
         write_target=next(
             (r.write_target for r in reversed(ran) if r.write_target is not None), None
         ),
