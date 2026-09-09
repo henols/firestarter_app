@@ -123,24 +123,35 @@ _TO_DICT_KEYS = [
     "voltage",
 ]
 
-"""D-07's second pin: `_voltage_dict()` (`:619-640`) emits six keys today.
-`vpp_mv` and `vpe_mv` are RPT-B1's two deletes -- present now, pinned now,
-so Phase 181's deletion has to argue with a gate that predates it rather
-than landing in the same phase as its own gate."""
+"""D-07's second pin: `_voltage_dict()` emits four keys (plan 181-09,
+RPT-B1). `vpp_mv` and `vpe_mv`, the two standalone non-destructive slots,
+are deleted -- the deletion argued with this gate rather than landing in
+the same phase as its own gate, exactly as Phase 174 intended.
+`_VOLTAGE_KEYS` was SIX entries from its creation (`5693bf7
+test(174-03)`) through plan `181-08`, confirmed by diffing this list's own
+defining lines across every intervening commit -- not by `git log
+-S'_VOLTAGE_KEYS'`, which also matches nearby prose that merely NAMES this
+pin (plans `181-01` and `181-04` both edited docstring text mentioning
+`_VOLTAGE_KEYS` by name without touching the list itself, so that search
+returns three commits and is not a content-change measurement here).
+`_BANNER_KEYS` (`locked_steps`, plan `181-04`) was the first Phase-174
+key-list pin this milestone ever shrank; this is the second, and the first
+shrink of `_VOLTAGE_KEYS` specifically. `ec1db5c` (`feat(178-01)`) remains
+an additive precedent only -- no name in this list was ever removed before
+today."""
 _VOLTAGE_KEYS = [
     "vpe_after_mv",
     "vpe_before_mv",
-    "vpe_mv",
     "vpp_after_mv",
     "vpp_before_mv",
-    "vpp_mv",
 ]
 
 """D-07's third pin: `_banner_dict()` emits two keys, `locked_steps`
-deleted (RPT-B2, Phase 181 plan 04). This is the first Phase-174 key-list
-pin ever shrunk: `git log -S'_VOLTAGE_KEYS'` returns only the commit that
-created these pins, and `ec1db5c` (`feat(178-01)`) is an additive precedent
-only."""
+deleted (RPT-B2, Phase 181 plan 04). This was the first Phase-174
+key-list pin this milestone ever shrank -- `_VOLTAGE_KEYS`'s own
+deletion (plan 181-09, RPT-B1) followed it; see that pin's docstring
+above for the measured `git log -S` caveat. `ec1db5c` (`feat(178-01)`)
+is an additive precedent only."""
 _BANNER_KEYS = [
     "m_applicable",
     "n_ran",
@@ -637,12 +648,12 @@ def test_the_to_dict_key_pin_reddens_on_a_planted_added_and_removed_key() -> Non
     """The pin that will govern every deletion in this phase, observed RED
     against both directions of key drift on a real `to_dict()` mapping --
     never production. `_VOLTAGE_KEYS` and `_BANNER_KEYS` had never been
-    SHRUNK before this phase: `git log -S'_VOLTAGE_KEYS'` returns only
-    `5693bf7 test(174-03)`, the commit that created them, so plan `181-04`
-    (`_BANNER_KEYS`, RPT-B2) and plan `181-05` (`_VOLTAGE_KEYS`, RPT-B1)
-    perform the first deletions ever to pass through these pins.
-    `ec1db5c` (`feat(178-01)`) is an additive precedent only -- there is no
-    subtractive precedent to cite."""
+    SHRUNK before this phase, confirmed by diffing each list's own defining
+    lines across every commit from `5693bf7 test(174-03)` (their creation)
+    onward -- plan `181-04` (`_BANNER_KEYS`, RPT-B2) and plan `181-09`
+    (`_VOLTAGE_KEYS`, RPT-B1) perform the first deletions ever to pass
+    through these pins. `ec1db5c` (`feat(178-01)`) is an additive precedent
+    only -- there is no subtractive precedent to cite."""
     report = build_shape("sst27sf512-six-step")
     d = report.to_dict()
     keys = sorted(d)

@@ -671,11 +671,11 @@ class DiagnosticReport:
     objects (never redefined here, never recomputed) plus the new
     `AutoCapture`/`TransportHealth` sub-objects. The measured-voltage slot is
     split into destructive-run before/after pairs
-    per rail (`vpp_before_mv`/`vpp_after_mv`/`vpe_before_mv`/`vpe_after_mv`)
-    plus standalone non-destructive readings (`vpp_mv`/`vpe_mv`) -- a rail
-    that sagged across a write reads very differently from a regulator that
-    never reached its target, so the two shapes are never conflated into one
-    field.
+    per rail (`vpp_before_mv`/`vpp_after_mv`/`vpe_before_mv`/`vpe_after_mv`).
+    Schema 2.0 dropped the standalone non-destructive `vpp_mv`/`vpe_mv`
+    slots that shape used to also carry -- no code path had ever assigned
+    them (RPT-B1, proven by `tests/test_voltage_field_census.py`'s
+    attribute-scoped AST census).
 
     `db_diff` (plan 03) is the advisory, read-only DB-diff -- current
     `support_status` beside a proposed-disposition string derived purely from
@@ -688,13 +688,11 @@ class DiagnosticReport:
     plan: Plan
     results: list[StepResult] = field(default_factory=list)
     banner: BannerCounts | None = None
-    # Split destructive before/after VPP readings, with a standalone honest fallback.
+    # Destructive before/after VPP/VPE rail readings.
     vpp_before_mv: int | None = None
     vpp_after_mv: int | None = None
     vpe_before_mv: int | None = None
     vpe_after_mv: int | None = None
-    vpp_mv: int | None = None
-    vpe_mv: int | None = None
     db_diff: DbDiff | None = None
     # the carriage half only --
     # a plain `str`, NEVER a `bool` and NEVER a key named `locked` or
@@ -801,8 +799,6 @@ class DiagnosticReport:
             "vpe_after_mv": (
                 NOT_MEASURED if self.vpe_after_mv is None else self.vpe_after_mv
             ),
-            "vpp_mv": NOT_MEASURED if self.vpp_mv is None else self.vpp_mv,
-            "vpe_mv": NOT_MEASURED if self.vpe_mv is None else self.vpe_mv,
         }
 
     def _write_step_index(self) -> int | None:
@@ -1029,8 +1025,9 @@ class DiagnosticReport:
         `sdp_hold_state` renders as its BARE state token via `_state_cell`
         (the `NOT-RUN: <reason>` sentence wrapped across three lines), and
         the single six-value `voltage` row became one `_rail_cell` row per
-        rail, dropping the `vpp_mv`/`vpe_mv` standalone slots that no code
-        path assigns.
+        rail. The two standalone slots that row used to also carry are gone
+        from the schema entirely now (RPT-B1) -- not merely hidden from this
+        console table.
 
         `to_dict()` is unchanged throughout -- every one of those values is
         still in the JSON/markdown artifact and the filed issue body; only

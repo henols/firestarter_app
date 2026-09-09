@@ -89,9 +89,7 @@
   "voltage": {
     "vpe_after_mv": "not measured",
     "vpe_before_mv": "not measured",
-    "vpe_mv": "not measured",
     "vpp_after_mv": "not measured",
-    "vpp_before_mv": "not measured",
-    "vpp_mv": "not measured"
+    "vpp_before_mv": "not measured"
   }
 }

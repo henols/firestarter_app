@@ -896,7 +896,12 @@ class TestSamplerBracketing:
         write_eprom twice, and the sampler fires before+after EACH call
         (chip_test.py _dispatch_multi_run) -- 4 total sample_vpp_mv/
         sample_vpe_mv calls, with the LAST before/after pair winning the
-        report's single before/after slot."""
+        report's single before/after slot.
+
+        RPT-B1 (plan 181-09): the standalone `vpp_mv`/`vpe_mv` slots are
+        gone from the schema entirely -- a real run's voltage mapping
+        carries exactly the four surviving before/after keys, asserted
+        below alongside the values themselves."""
         operator = make_clean_operator()
         hw = make_hardware_manager(
             vpp_values=[20900, 17400, 20800, 17300],
@@ -913,8 +918,12 @@ class TestSamplerBracketing:
         assert voltage["vpp_after_mv"] == 17300
         assert voltage["vpe_before_mv"] == 4950
         assert voltage["vpe_after_mv"] == 4850
-        assert voltage["vpp_mv"] == "not measured"
-        assert voltage["vpe_mv"] == "not measured"
+        assert sorted(voltage) == [
+            "vpe_after_mv",
+            "vpe_before_mv",
+            "vpp_after_mv",
+            "vpp_before_mv",
+        ]
         assert hw.sample_vpp_mv.call_count == 4
         assert hw.sample_vpe_mv.call_count == 4
 
