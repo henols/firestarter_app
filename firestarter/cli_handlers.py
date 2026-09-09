@@ -2269,37 +2269,6 @@ def _is_uv_eprom(app: "AppContext", chip: str) -> bool:
     return is_uv_eprom(full)
 
 
-def _resolve_write_scope(
-    app: "AppContext",
-    chip: str,
-    *,
-    interactive: bool,
-) -> str:
-    """Decide this run's `write_scope` literal.
-
-    UV parts get "partial", everything else "full". That is the whole rule, and
-    there is no prompt on any path.
-
-    A UV part's scope is deliberately NOT a consent ceiling that would permit a
-    full-device write on a blank chip. `dev test` validates the firmware, host
-    and database for a chip TYPE -- it is not a chip-qualification tool -- so
-    writing half a virgin UV part buys no coverage a single top slot does not,
-    and costs the part's remaining life as a regression rig.
-
-    The prompt went with it: with no ceiling, both answers resolved to the same
-    masked slot write, and a prompt whose answer cannot alter the outcome is
-    worse than none. The report states which slot was written and how many the
-    part has left, which is better disclosure than that yes/no was.
-
-    `interactive` is retained, unused, so the call sites and the orchestrator
-    gate keep their shape.
-    """
-    del interactive  # no branch keys on it any more -- see the docstring
-    if not _is_uv_eprom(app, chip):
-        return "full"
-    return "partial"
-
-
 # The write-pass number backing a real sweep
 # invariant -- a full ALLOW-shaped run makes 6 write passes over the write
 # region (the shipped write/verify/erase steps write twice, plus this
@@ -2312,56 +2281,6 @@ def _resolve_write_scope(
 _ALWAYS_WRITES_PASS_COUNT = 6
 
 
-# Design history for `dev_test`, moved here from its docstring by quick
-# task 260821-spg: this prose used to BE the docstring, which Click
-# renders verbatim as `--help` output -- load-bearing project history that
-# had no business being printed to every tester who typed `--help`. Moved
-# verbatim (as comments), not deleted; `--help` now carries only
-# user-facing usage text. Quick task 260821-spg also deleted the two
-# `click.echo(...)` calls this function used to make (the always-writes
-# notice and the SDP-recovery line) -- both were prose-only; the
-# behaviour they described (six write passes, SDP lock applied/released)
-# is unchanged and is still computed and still in the JSON/console table.
-#
-# Takes ZERO options -- CHIP is the only argument. The
-# four flags this command carried through v1.21 (`--destructive`,
-# `--output-dir`, `-y`/`--yes`, `--submit`) are gone; each now errors as
-# an unknown option.
-#
-# ALWAYS WRITES: every run writes to the chip, unconditionally. A
-# UV-erasable EPROM is asked first, and quick task 260821-wna
-# changes what the two answers DO: yes permits the whole device to be
-# written IF the chip reads blank, and otherwise writes one masked
-# 256-byte slot; no writes one 256-byte slot only,
-# unconditionally -- never read-only or non-destructive either way, and
-# the two answers no longer resolve to the same window on a used chip. Off
-# a TTY the ask is treated as a DECLINED prompt, not absent consent, so a
-# single 256-byte slot is written anyway. Every OTHER family --
-# explicitly including this milestone's own AT28C family, an
-# electrically-erasable EEPROM -- is written in full with NO prompt at
-# all, because that write is recoverable via erase (unlike an
-# irrecoverable UV write); as of this task that full write now covers the
-# WHOLE DEVICE (minus flash4's two boot blocks) rather than a small region.
-# A large part's full-device pass is therefore several
-# device-length transfers at 250000 baud -- minutes, not seconds. The
-# report is unconditionally persisted to `<config dir>/reports` (honors
-# `FIRESTARTER_CONFIG_DIR`) and is always handed to `submit_report`
-# (DEVTEST-05/06; Plan 121-11 owns that function's internals).
-#
-# REVERSAL (operator-specified
-# 2026-07-29): this supersedes v1.21's non-destructive-by-default premise
-# entirely, the CLI-only `--destructive` flag (removed, not merely
-# disabled), and the earlier statement that the destructive confirm was
-# "the ONLY interactive input left in this handler" (superseded by the
-# UV-only ask above). The deliberate removal of every
-# interactive prompt about tester-supplied identity is PARTIALLY reversed
-# in spirit by that same UV ask -- it is a new interactive prompt, just
-# not an identity-collection one; shield revision, chip origin and
-# pot-adjustment stay un-asked.
-#
-# Exit code: 0 if every step is OK/NA/SKIPPED, 2 if any step is
-# marginal (and none BAD), 1 if any step is BAD (including a chip-ID
-# mismatch) -- computed as max over per-step exit codes.
 @dev.command(name="test")
 @click.argument("chip", shell_complete=_complete_eprom)
 @click.option(
@@ -2398,9 +2317,11 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # The chip must be known to be in the DB (see above) before its
     # electrical type can be read, so the UV-scope resolution happens here,
     # after the hard-fail.
-    interactive = _is_interactive()
-    write_scope = _resolve_write_scope(app, chip, interactive=interactive)
-    plan = derive_plan(chip, app.db, write_scope=write_scope)
+    plan = derive_plan(
+        chip,
+        app.db,
+        write_scope="partial" if _is_uv_eprom(app, chip) else "full",
+    )
 
     # EpromOperator.comm is a transient per-operation connection torn down
     # after every operator call (see 112-02-SUMMARY.md) -- there is no live

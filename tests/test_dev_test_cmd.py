@@ -100,7 +100,8 @@ _CHIP_NO_ID = "M8720"
 # UV-erasable (electrical-type "Flash/EEPROM").
 _CHIP_WITH_ID = "AS29F002T"
 # AM27512 IS UV-erasable (electrical-type "UV-EPROM", measured exact via
-# is_uv_eprom) -- the one family `_resolve_write_scope` ever asks about.
+# is_uv_eprom) -- the one family `dev_test`'s inlined scope rule resolves
+# to "partial" rather than "full".
 _CHIP_UV = "AM27512"
 # AT28C256 is one of the v1.30 milestone's 43 measured SDP-ALLOW chips
 # (sdp_capability() returns True) -- verified at plan time to resolve
@@ -786,18 +787,6 @@ class TestUVWriteHasNoPrompt:
         ops = {s["op"] for s in data["steps"]}
         assert "write" in ops
         assert "write-partial" not in ops
-
-    def test_write_scope_resolver_needs_no_confirm_callable(self) -> None:
-        """`_resolve_write_scope`'s signature no longer carries a `confirm_fn`
-        seam, because there is nothing left to confirm. Pinned so the seam
-        cannot quietly return."""
-        import inspect
-
-        from firestarter.cli_handlers import _resolve_write_scope
-
-        params = inspect.signature(_resolve_write_scope).parameters
-        assert "confirm_fn" not in params
-        assert set(params) == {"app", "chip", "interactive"}
 
 
 # ---------------------------------------------------------------------------

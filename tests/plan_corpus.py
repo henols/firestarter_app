@@ -27,13 +27,13 @@ resolves every one of those duplicates to the same plan, so the corpus below
 is keyed by name, not by row -- sweeping by row would derive and discard the
 same plan up to several times over for no added coverage.
 
-**The single reachable scope and D-08/D-09 (181-02).** Every name is swept
-at exactly the ONE scope `dev test` itself would actually resolve for it:
-`"partial"` for a UV chip, `"full"` otherwise (`cli_handlers._resolve_write_scope`'s
-own rule, measured equivalent to `Plan.is_uv` over all 677 names in
+**The single reachable scope and D-08/D-09 (181-02, 181-04).** Every name is
+swept at exactly the ONE scope `dev test` itself would actually resolve for
+it: `"partial"` for a UV chip, `"full"` otherwise (`dev_test`'s inlined
+scope rule, measured equivalent to `Plan.is_uv` over all 677 names in
 `evidence/181-02-derive-plan-equivalence.txt`). `write_scope="none"`
-structurally omits the write step from `Plan.steps` (`derive_plan`'s own
-docstring), so the write-to-verify rule was always vacuously true across
+structurally omitted the write step from `Plan.steps` (retired in
+181-04), so the write-to-verify rule was always vacuously true across
 every `"none"` plan -- sweeping it would silently inflate a "zero
 violations" count with rows that could never violate anything, which is
 why it was never swept even when the corpus covered two scopes per name.
@@ -41,8 +41,11 @@ Sweeping `"full"` alongside a UV chip's actually-reachable `"partial"`
 scope was the same kind of vacuity one level up: `dev test` never derives
 a UV chip's `"full"` plan or a non-UV chip's `"partial"` plan, so a corpus
 that swept both was proving properties about plans nothing ever runs.
-Plan 181-04 drops `derive_plan`'s `write_scope` keyword entirely; this
-corpus already sweeps the domain that survives that deletion.
+Plan 181-04's operator adjudication (2026-09-09) narrows `derive_plan`'s
+`write_scope` keyword to these two values with no default, rather than
+dropping it entirely -- dropping it would have moved the write-op selector
+onto `is_uv` and re-keyed 7 of the 19 frozen dedup hashes. This corpus
+already sweeps the domain that survives either shape of that deletion.
 
 **plan_corpus caching.** `derive_plan` over the whole database measures
 under a second, but every sentinel module in this phase imports this corpus,
@@ -99,8 +102,8 @@ _PLAN_CORPUS_CACHE = None
 
 def _reachable_scope(name: str) -> str:
     """`"partial"` for a UV chip, `"full"` otherwise -- the same rule
-    `cli_handlers._resolve_write_scope` applies, measured equivalent to
-    `Plan.is_uv` over all 677 names (evidence/181-02-derive-plan-equivalence.txt)."""
+    `dev_test` inlines at its `derive_plan` call site, measured equivalent
+    to `Plan.is_uv` over all 677 names (evidence/181-02-derive-plan-equivalence.txt)."""
     full = REAL_DB.get_eprom(name)
     return "partial" if full and is_uv_eprom(full) else "full"
 
