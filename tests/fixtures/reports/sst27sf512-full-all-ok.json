@@ -31,6 +31,7 @@
   "sdp_hold_state": "",
   "steps": [
     {
+      "chip_id_detected": 49060,
       "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
@@ -52,6 +53,7 @@
       "write_region_start": null
     },
     {
+      "chip_id_detected": null,
       "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
@@ -73,6 +75,7 @@
       "write_region_start": null
     },
     {
+      "chip_id_detected": null,
       "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
@@ -99,6 +102,7 @@
       "write_region_start": 0
     },
     {
+      "chip_id_detected": null,
       "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
@@ -125,6 +129,7 @@
       "write_region_start": null
     },
     {
+      "chip_id_detected": null,
       "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
@@ -146,6 +151,7 @@
       "write_region_start": null
     },
     {
+      "chip_id_detected": null,
       "divergence": null,
       "duration_s": 0.0,
       "error_code": null,
@@ -167,6 +173,7 @@
       "write_region_start": null
     },
     {
+      "chip_id_detected": null,
       "divergence": null,
       "duration_s": null,
       "error_code": null,
@@ -188,6 +195,7 @@
       "write_region_start": null
     },
     {
+      "chip_id_detected": null,
       "divergence": null,
       "duration_s": null,
       "error_code": null,
@@ -209,6 +217,7 @@
       "write_region_start": null
     },
     {
+      "chip_id_detected": null,
       "divergence": null,
       "duration_s": null,
       "error_code": null,
@@ -230,6 +239,7 @@
       "write_region_start": null
     },
     {
+      "chip_id_detected": null,
       "divergence": null,
       "duration_s": null,
       "error_code": null,
@@ -251,6 +261,7 @@
       "write_region_start": null
     },
     {
+      "chip_id_detected": null,
       "divergence": null,
       "duration_s": null,
       "error_code": null,
@@ -272,6 +283,7 @@
       "write_region_start": null
     },
     {
+      "chip_id_detected": null,
       "divergence": null,
       "duration_s": null,
       "error_code": null,

@@ -656,6 +656,33 @@ def test_a_real_invocation_saves_a_nonnegative_elapsed_stable_across_to_dict_cal
     assert embedded["elapsed"] == data["elapsed"]
 
 
+def test_a_clean_run_saves_a_populated_chip_id_actual_equal_to_expected(
+    runner: CliRunner,
+) -> None:
+    """RPT-A1/RPT-A5 (181-08): a clean run's saved report carries a
+    non-`None` `auto_capture.chip_id_actual` equal to its
+    `chip_id_expected` -- the id step's own `StepResult.chip_id_detected`,
+    read structurally, populates even on a PASS. D-10's gate: the rendered
+    console output must NOT show a two-sided `chip_id (expected/actual)`
+    row for this run -- a matching pair on agreement is not added to the
+    table."""
+    chip = "w27c020"
+    operator = make_clean_operator()
+    operator.check_eprom_id.return_value = (True, 55941)
+    app = make_app_context(
+        eprom_operator=operator, hardware_manager=make_hardware_manager()
+    )
+    with _off_tty():
+        result = runner.invoke(cli, ["dev", "test", chip], obj=app)
+    assert result.exit_code == 0, result.output
+    assert "chip_id (expected/actual)" not in result.output
+
+    data = _load_report(chip)
+    ac = data["auto_capture"]
+    assert ac["chip_id_actual"] is not None
+    assert ac["chip_id_actual"] == ac["chip_id_expected"]
+
+
 # ---------------------------------------------------------------------------
 # Zero-option surface (D-05)
 # ---------------------------------------------------------------------------

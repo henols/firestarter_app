@@ -1066,6 +1066,18 @@ class StepResult:
     site is `diagnostic_report.py:378`). Deliberately NOT part of
     `dedup_fingerprint`, which excludes every volatile field so two runs of
     the same chip still dedup.
+
+    `chip_id_detected` (RPT-A5, D-23) is the id `operator.check_eprom_id`
+    returned on the id step, carried structurally instead of being
+    recovered later by parsing `reason`. On a MISMATCH it is the id the
+    firmware actually reported. On a PASS, `check_eprom_id`'s own OK reply
+    carries no id back from the firmware, so the value is the host's own
+    expected id, echoed out of the command dict -- this field therefore
+    records the id the check was verified AGAINST on a pass, never an
+    independent read-back. `None` when no id was obtained (a not-OK check
+    with no parseable id, or an id step that never ran). Deliberately NOT
+    part of `dedup_fingerprint`, which excludes every volatile field so two
+    runs of the same chip still dedup.
     """
 
     op: str
@@ -1075,6 +1087,7 @@ class StepResult:
     fingerprint: Fingerprint | None = None
     run_count: int = 0
     divergence: dict[str, Any] | None = None
+    chip_id_detected: int | None = None
     # Wall-clock seconds for the whole step, stamped by `_run_step`'s timing
     # wrapper (operator asked for timings captured/presented/filed,
     # 2026-08-21). `None` for a step that never ran (NA/SKIPPED) -- a `0.0`
@@ -2728,7 +2741,13 @@ def _dispatch_id(name: str, eprom_data: dict[str, Any], operator: Any) -> StepRe
         )
     elif not is_ok:
         reason = "chip-ID check did not return OK"
-    return StepResult(op=OP_ID, verdict=verdict, reason=reason, run_count=1)
+    return StepResult(
+        op=OP_ID,
+        verdict=verdict,
+        reason=reason,
+        run_count=1,
+        chip_id_detected=detected_id,
+    )
 
 
 def _dispatch_read(

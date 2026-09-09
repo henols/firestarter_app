@@ -2214,11 +2214,18 @@ def _chip_id_fields(
     """Derive (chip_id_expected, chip_id_actual, mismatch_reason) for AutoCapture.
 
     `chip_id_expected` is read directly off the DB entry (host-side, never
-    from firmware). `chip_id_actual`/`chip_id_mismatch_reason` are recovered
-    from the id step's `StepResult.reason` text (the ONLY place
-    `chip_test._dispatch_id` records the detected id) when a mismatch
-    was reported; on a clean/NA/SKIPPED id step there is no actual-id
-    disagreement to surface, so both stay `None`.
+    from firmware). `chip_id_actual` is read STRUCTURALLY off the id step's
+    own `StepResult.chip_id_detected` field (RPT-A5) rather than recovered
+    from `reason` prose, and populates on a PASSING id check as well as on a
+    mismatch (RPT-A1) -- it is `None` only when the id step never ran
+    (NA/SKIPPED/absent) or returned no id at all. On a pass, the value
+    equals `chip_id_expected`: `check_eprom_id`'s OK reply carries no id
+    back from the firmware, so `chip_id_detected` is the host's own
+    expected id echoed out of the command dict, not an independent
+    read-back -- `chip_id_actual` therefore records the id the check was
+    verified AGAINST on a pass, and the id the firmware actually reported
+    on a mismatch. `chip_id_mismatch_reason` remains prose, read from
+    `reason`, and stays `None` unless there is a disagreement to surface.
     """
     full = app.db.get_eprom(chip) or {}
     prog = app.db.convert_to_programmer(full) if full else {}
@@ -2227,14 +2234,12 @@ def _chip_id_fields(
     chip_id_actual: Optional[int] = None
     mismatch_reason: Optional[str] = None
     for r in results:
+        if r.op == OP_ID:
+            chip_id_actual = r.chip_id_detected
+            break
+    for r in results:
         if r.op == OP_ID and r.reason and "mismatch" in r.reason.lower():
             mismatch_reason = r.reason
-            # reason text: "chip-ID mismatch: expected 0x.., detected 0x.."
-            try:
-                detected_hex = r.reason.rsplit("0x", 1)[-1]
-                chip_id_actual = int(detected_hex, 16)
-            except (ValueError, IndexError):
-                chip_id_actual = None
             break
     return chip_id_expected, chip_id_actual, mismatch_reason
 

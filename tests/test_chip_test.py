@@ -81,6 +81,7 @@ from firestarter.chip_test import (
     WriteTarget,
     _aggregate_cycle_results,
     _diff_offsets,  # test-internal: the shared divergence primitive (D-04)
+    _dispatch_id,
     _dispatch_multi_run,  # test-internal: fail-closed dispatch proof (121-02)
     _dispatch_read,
     _dispatch_step,  # test-internal: fail-closed dispatch proof (121-02)
@@ -2046,6 +2047,48 @@ def test_run_plan_sampler_exception_does_not_abort_write_step():
     assert write_result.verdict == VERDICT_OK
     assert write_result.run_count == 2
     assert operator.write_eprom.call_count == 2
+
+
+def test_dispatch_id_pass_records_the_echoed_expected_id():
+    """RPT-A5/RPT-A1: on a PASS, `check_eprom_id`'s OK reply carries no id
+    back from the firmware, so the value it returns is the host's OWN
+    expected id echoed out of the command dict -- `chip_id_detected` on a
+    pass therefore EQUALS the expected id by construction, and is the echo
+    the check was verified against, never an independent read-back. This is
+    the measured basis for the console `chip_id` row staying one-sided on
+    agreement (D-10)."""
+    operator = Mock()
+    operator.check_eprom_id.return_value = (True, 0x1F65)
+    result = _dispatch_id("m27c512", {"chip-id": 0x1F65}, operator)
+
+    assert result.chip_id_detected == 0x1F65
+    assert result.reason == ""
+    assert result.verdict == VERDICT_OK
+
+
+def test_dispatch_id_mismatch_records_the_firmware_reported_id():
+    """A mismatching id check yields `chip_id_detected` equal to the id the
+    firmware actually reported, and a `reason` byte-identical to the string
+    base produces (D-23 -- the human sentence never changes)."""
+    operator = Mock()
+    operator.check_eprom_id.return_value = (True, 0x1234)
+    result = _dispatch_id("m27c512", {"chip-id": 0x1F65}, operator)
+
+    assert result.chip_id_detected == 0x1234
+    assert result.reason == "chip-ID mismatch: expected 0x1F65, detected 0x1234"
+    assert result.verdict == VERDICT_BAD
+
+
+def test_dispatch_id_not_ok_with_no_id_leaves_chip_id_detected_none():
+    """A `check_eprom_id` returning `(False, None)` yields
+    `chip_id_detected is None` and the not-OK reason, byte-identical to
+    base (D-23)."""
+    operator = Mock()
+    operator.check_eprom_id.return_value = (False, None)
+    result = _dispatch_id("m27c512", {"chip-id": 0x1F65}, operator)
+
+    assert result.chip_id_detected is None
+    assert result.reason == "chip-ID check did not return OK"
 
 
 def test_read_step_disagreement_is_divergence_metric_not_marginal():

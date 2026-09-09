@@ -824,6 +824,15 @@ class DiagnosticReport:
         method never derives it. It is a mapping whenever a comparison was
         possible, with `bad` zero on agreement (D-11, mirroring PRUNE-03);
         `None` only when no comparison was possible.
+
+        `chip_id_detected` (RPT-A5) carries the id step's own
+        `StepResult.chip_id_detected` straight off the engine, unconditionally,
+        on every step element. On a passing id check it is the host's own
+        expected id echoed out of the command dict rather than an
+        independent read-back (`check_eprom_id`'s OK reply carries no id
+        back from the firmware); on a mismatch it is the id the firmware
+        actually reported; `None` when the id step never ran or returned no
+        id.
         """
         # Schema 1.6: the five `write_*` keys below
         # are read off `StepResult.write_target` -- `None` on every step
@@ -887,6 +896,7 @@ class DiagnosticReport:
                 result.fingerprint.evidence if result.fingerprint else None
             ),
             "divergence": result.divergence,
+            "chip_id_detected": result.chip_id_detected,
             # Schema 1.5: wall-clock seconds for the step, or `None` when it
             # did not run. Additive -- every pre-1.5 consumer ignores it.
             "duration_s": result.duration_s,
@@ -1028,15 +1038,10 @@ class DiagnosticReport:
         table.add_row("fw_board_identity", _identity_cell(ac["fw_board_identity"]))
         table.add_row("hw_revision", _identity_cell(ac["hw_revision"]))
         table.add_row("protocol", _hex_cell(ac["protocol"], 2))
-        # `chip_id_actual` is populated ONLY on a mismatch: on a passing id
-        # check the firmware's OK reply carries no id back, so
-        # `check_eprom_id` returns the host's OWN expected value echoed from
-        # `cmd_data["chip-id"]` and `_chip_id_fields` correctly discards it
-        # rather than present a never-measured number as a measurement.
-        # Rendering the resulting `None` beside a real expected id read like
-        # a failed read, so the two-sided row now appears only when there IS
-        # a disagreement to show (operator asked, 2026-08-21).
-        if ac["chip_id_actual"] is None:
+        if (
+            ac["chip_id_actual"] is None
+            or ac["chip_id_actual"] == ac["chip_id_expected"]
+        ):
             table.add_row("chip_id", _hex_cell(ac["chip_id_expected"], 4))
         else:
             table.add_row(

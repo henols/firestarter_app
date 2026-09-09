@@ -1562,15 +1562,16 @@ def test_chip_id_one_sided_row_when_no_mismatch_was_recorded():
     ONE-sided `chip_id` row -- no `/ None` tail.
 
     RETARGETED 2026-08-21 (was `test_hex_cell_chip_id_partial_is_none_safe`,
-    which pinned `"0x00A4 / None"`). `chip_id_actual` is populated ONLY on a
-    mismatch: on a passing id check the firmware's OK reply carries no id,
-    so `check_eprom_id` returns the host's own expected value echoed back
-    and `_chip_id_fields` discards it rather than present a never-measured
-    number as a measurement. Printing the resulting `None` beside a real
+    which pinned `"0x00A4 / None"`). Printing a `None` beside a real
     expected id read as a FAILED read, which is what the operator queried.
     The `None`-safety the original test guarded still holds -- `_hex_cell`
     is unchanged and its own None/unparseable cases are covered by
-    test_hex_cell_returns_str_value_unchanged_for_none_and_unparseable."""
+    test_hex_cell_returns_str_value_unchanged_for_none_and_unparseable.
+
+    RPT-A1 (181-08) made `chip_id_actual` populate on a PASSING id check
+    too, equal to `chip_id_expected` -- see
+    test_chip_id_one_sided_row_when_actual_equals_expected for that case,
+    which this test's `None` case does not cover."""
     report = _minimal_report()
     report.auto_capture.chip_id_expected = 0x00A4
     report.auto_capture.chip_id_actual = None
@@ -1600,15 +1601,38 @@ def test_chip_id_two_sided_row_only_when_a_mismatch_was_recorded():
 
 
 def test_hex_cell_chip_id_both_populated_is_4_digit_upper_hex():
+    """Both sides of a real mismatch are 4-digit uppercase hex. Uses
+    differing values (RETARGETED 181-08 from an equal pair, which now
+    renders one-sided per test_chip_id_one_sided_row_when_actual_equals_expected
+    -- D-10)."""
     report = _minimal_report()
     report.auto_capture.chip_id_expected = 0x1234
-    report.auto_capture.chip_id_actual = 0x1234
+    report.auto_capture.chip_id_actual = 0x5678
 
     table = report.render()
     field_col, value_col = table.columns
     rows = dict(zip(field_col.cells, value_col.cells))
 
-    assert rows["chip_id (expected/actual)"] == "0x1234 / 0x1234"
+    assert rows["chip_id (expected/actual)"] == "0x1234 / 0x5678"
+
+
+def test_chip_id_one_sided_row_when_actual_equals_expected():
+    """RPT-A1 (181-08): `chip_id_actual` now populates on a PASSING id
+    check too, equal to `chip_id_expected` by construction (the value is
+    the host's own expected id, echoed out of the command dict -- not an
+    independent read-back). D-10 requires the console row to stay
+    ONE-sided on this agreement -- a matching pair is not added to the
+    table."""
+    report = _minimal_report()
+    report.auto_capture.chip_id_expected = 0x1F65
+    report.auto_capture.chip_id_actual = 0x1F65
+
+    table = report.render()
+    field_col, value_col = table.columns
+    rows = dict(zip(field_col.cells, value_col.cells))
+
+    assert rows["chip_id"] == "0x1F65"
+    assert "chip_id (expected/actual)" not in rows
 
 
 _NOISE_ROW_FIELDS = (
