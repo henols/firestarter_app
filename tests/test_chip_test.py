@@ -79,8 +79,10 @@ from firestarter.chip_test import (
     Step,
     StepResult,
     WriteTarget,
+    _aggregate_cycle_results,
     _diff_offsets,  # test-internal: the shared divergence primitive (D-04)
     _dispatch_multi_run,  # test-internal: fail-closed dispatch proof (121-02)
+    _dispatch_read,
     _dispatch_step,  # test-internal: fail-closed dispatch proof (121-02)
     _id_step_closes_gate,  # test-internal: destructive-write safety gate (178-02)
     _synthesized_match_fingerprint,  # test-internal: PRUNE-03 zero-I/O fingerprint (177-01)
@@ -2071,7 +2073,14 @@ def test_read_step_disagreement_is_divergence_metric_not_marginal():
     assert read_result.divergence["bad"] > 0
 
 
-def test_read_step_agreement_no_divergence_recorded():
+def test_read_step_agreement_records_a_zero_bad_divergence_mapping():
+    """D-11 (mirroring PRUNE-03): the previous claim here -- `divergence` is
+    ABSENT on an agreeing read (`assert not read_result.divergence`) -- was
+    DELIBERATELY falsified by this change. `None` used to conflate two
+    different facts: "compared and matched" and "never compared". Phase
+    180's D-06 cited this test as covering the agreeing case; the agreeing
+    case is STILL covered here, by the stronger assertion that a real
+    zero-bad mapping is recorded rather than nothing."""
     operator = _mock_operator()
     operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\xaa" * 32)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
@@ -2079,7 +2088,121 @@ def test_read_step_agreement_no_divergence_recorded():
 
     read_result = _result(results, OP_READ)
     assert read_result.verdict == VERDICT_OK
-    assert not read_result.divergence
+    assert read_result.divergence == {
+        "repeat_divergent": False,
+        "cmp_len": 32,
+        "bad": 0,
+        "pct": 0.0,
+        "first_offset": None,
+    }
+    assert read_result.reason == ""
+
+
+def test_agreeing_and_diverging_divergence_mappings_share_the_same_key_set():
+    """Both branches of `_dispatch_read`'s divergence construction emit the
+    same five keys, or `parse_devtest_issue.py` and the triage skill see a
+    ragged shape."""
+    operator = _mock_operator()
+    operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\xaa" * 32)
+    plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
+    agreeing = _result(run_plan(plan, operator, _REAL_DB, runs=2), OP_READ)
+
+    diverging_operator = _mock_operator()
+    call_results = [b"\x00" * 64, b"\xff" * 64]
+    call_count = {"n": 0}
+
+    def _read_side_effect(_name, _eprom_data, output_file=None, **_kwargs):
+        data = call_results[call_count["n"] % len(call_results)]
+        call_count["n"] += 1
+        if output_file:
+            Path(output_file).write_bytes(data)
+        return True
+
+    diverging_operator.read_eprom.side_effect = _read_side_effect
+    diverging = _result(run_plan(plan, diverging_operator, _REAL_DB, runs=2), OP_READ)
+
+    assert sorted(agreeing.divergence) == sorted(diverging.divergence)
+
+
+def test_a_single_run_and_an_all_empty_read_leave_divergence_none():
+    """The outer `len(run_bytes) >= 2 and any(run_bytes)` gate is what
+    preserves `None`-means-no-comparison-was-possible for `--fast` (one
+    run) and for a failed read (all-empty bytes) -- D-11 changes only the
+    inner branch, never this gate. Calls `_dispatch_read` directly (rather
+    than through `run_plan`, which refuses `runs < 2` at the plan level) --
+    the same seam `test_read_step_disagreement_is_divergence_metric_not_marginal`'s
+    siblings above call through `run_plan` for, since a single-run read is
+    the one shape `run_plan` itself cannot produce."""
+    operator = _mock_operator()
+    operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\xaa" * 32)
+    single_run = _dispatch_read("m27c512", {}, operator, runs=1)
+    assert single_run.divergence is None
+
+    empty_operator = _mock_operator()
+
+    def _empty_side_effect(_name, _eprom_data, output_file=None, **_kwargs):
+        if output_file:
+            Path(output_file).write_bytes(b"")
+        return False
+
+    empty_operator.read_eprom.side_effect = _empty_side_effect
+    empty_read = _dispatch_read("m27c512", {}, empty_operator, runs=2)
+    assert empty_read.divergence is None
+
+
+def test_the_agreeing_branch_never_calls_the_per_byte_diff_primitive(monkeypatch):
+    """The cheapest honest proof of the non-call (D-11's own justification):
+    the sha equality already proves zero mismatches, so the agreeing branch
+    must derive its five values without walking the whole compared region
+    through `_diff_offsets`."""
+    from firestarter import chip_test as ct
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError(
+            "the per-byte diff primitive was called on an agreeing read"
+        )
+
+    monkeypatch.setattr(ct, "_diff_offsets", _boom)
+
+    operator = _mock_operator()
+    operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\x5a" * 128)
+    plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    read_result = _result(results, OP_READ)
+    assert read_result.divergence["bad"] == 0
+
+
+def test_aggregate_cycle_results_preserves_a_zero_bad_divergence_mapping():
+    """The truthiness-filtered fold at `_aggregate_cycle_results`
+    (`next((r.divergence for r in reversed(ran) if r.divergence), None)`)
+    keeps an agreeing mapping because a non-empty dict is truthy -- this
+    pin reddens if the recorded agreeing shape ever becomes an empty
+    mapping, which the fold would then silently discard."""
+    divergence = {
+        "repeat_divergent": False,
+        "cmp_len": 64,
+        "bad": 0,
+        "pct": 0.0,
+        "first_offset": None,
+    }
+    a = StepResult(
+        op=OP_READ,
+        verdict=VERDICT_OK,
+        run_count=1,
+        duration_s=1.0,
+        divergence=divergence,
+    )
+    b = StepResult(
+        op=OP_READ,
+        verdict=VERDICT_OK,
+        run_count=1,
+        duration_s=1.0,
+        divergence=divergence,
+    )
+    folded = _aggregate_cycle_results([a, b], OP_READ)
+    assert folded.divergence is not None
+    assert folded.divergence["bad"] == 0
 
 
 def test_read_step_last_run_failure_yields_bad():

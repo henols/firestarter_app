@@ -1055,7 +1055,10 @@ class StepResult:
     the number of times the underlying operator method was actually invoked
     for this step (1 for single-run steps; N for multi-run destructive/verify
     steps). `divergence` carries the read-step byte-level divergence
-    metric when the step's `runs` disagreed -- a metric only, never a
+    metric as a mapping whenever a comparison of the step's `runs` was
+    possible, `bad` zero on agreement (D-11, mirroring PRUNE-03) -- `None`
+    only when no comparison was possible, i.e. a single-run read or a read
+    whose runs all produced empty bytes. A metric only, never a
     verdict flip and never `marginal` (marginal is destructive/verify-only).
     `status` is one of COMPLETE/ERROR/SKIP -- the run-validity axis, held
     separately from the `verdict` chip-verdict axis above, and distinct
@@ -2738,6 +2741,18 @@ def _dispatch_read(
     (marginal is destructive/verify-only). The step's own verdict is OK/BAD
     from the LAST run's return value -- disagreement across runs does not
     change it.
+
+    `divergence` (D-11, mirroring PRUNE-03) is a mapping whenever a
+    comparison was possible -- both an agreeing and a disagreeing pair of
+    runs -- with `bad` zero on agreement rather than the mapping being
+    absent; it stays `None` only when no comparison was possible (a
+    single-run `--fast` read, or a read whose runs all produced empty
+    bytes). The agreeing branch derives its five values directly rather
+    than calling `_diff_offsets`: the sha equality already proves zero
+    mismatches, and that primitive walks the whole compared range in a
+    Python-level comprehension, so calling it on the common path would add
+    a full-image compare for information already known. Both outcomes
+    carry the SAME five keys, so no consumer sees a ragged shape.
     """
     last_ok = True
     run_bytes: list[bytes] = []
@@ -2751,6 +2766,7 @@ def _dispatch_read(
                 run_bytes.append(b"")
 
     divergence: dict[str, Any] | None = None
+    diverged = False
     if len(run_bytes) >= 2 and any(run_bytes):
         shas = [hashlib.sha256(b).hexdigest() for b in run_bytes]
         diverged = len(set(shas)) != 1
@@ -2765,8 +2781,16 @@ def _dispatch_read(
                 "pct": pct,
                 "first_offset": first,
             }
+        else:
+            divergence = {
+                "repeat_divergent": False,
+                "cmp_len": min(len(run_bytes[0]), len(run_bytes[1])),
+                "bad": 0,
+                "pct": 0.0,
+                "first_offset": None,
+            }
 
-    reason = "read runs diverged" if divergence else ""
+    reason = "read runs diverged" if diverged else ""
     return StepResult(
         op=OP_READ,
         verdict=VERDICT_OK if last_ok else VERDICT_BAD,
