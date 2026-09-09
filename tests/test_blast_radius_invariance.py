@@ -562,9 +562,9 @@ def test_frozen_pre_2_0_fixtures_still_parse_forward_only() -> None:
             "this repo is not checked out as a submodule of the meta repo"
         )
 
-    null_identity_body = (fixtures_dir / "dev-test-at28c256-null-identity.md").read_text(
-        encoding="utf-8"
-    )
+    null_identity_body = (
+        fixtures_dir / "dev-test-at28c256-null-identity.md"
+    ).read_text(encoding="utf-8")
     populated_identity_body = (
         fixtures_dir / "dev-test-at28c256-populated-identity.md"
     ).read_text(encoding="utf-8")

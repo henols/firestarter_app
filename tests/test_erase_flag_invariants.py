@@ -309,5 +309,3 @@ def test_at28c256_full_plan_shape_is_pinned() -> None:
         f"blank-check (index {blank_check_index}) must sit strictly after "
         f"erase (index {erase_index})"
     )
-
-
