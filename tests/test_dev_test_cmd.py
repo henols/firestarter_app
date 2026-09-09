@@ -627,6 +627,35 @@ def test_canonical_part_number_reaches_all_four_surfaces_while_the_raw_token_sta
     assert md_first_line == "# dev test -- W27C020"
 
 
+def test_a_real_invocation_saves_a_nonnegative_elapsed_stable_across_to_dict_calls(
+    runner: CliRunner,
+) -> None:
+    """A real Click invocation stamps `report.elapsed` once at CLI entry.
+    The saved JSON carries a non-negative float, and a second `to_dict()`
+    on the SAME in-memory report -- `to_json_block()`'s call, embedded in
+    the saved `.md`, is a real third serialization of the same object the
+    saved `.json` is the second serialization of -- returns the SAME
+    `elapsed` (generated may or may not differ; only `elapsed` is stored
+    once), which is the property that makes a stored field necessary
+    rather than a computed one."""
+    chip = _CHIP_NO_ID
+    app = make_app_context(
+        eprom_operator=make_clean_operator(), hardware_manager=make_hardware_manager()
+    )
+    with _off_tty():
+        result = runner.invoke(cli, ["dev", "test", chip], obj=app)
+    assert result.exit_code == 0, result.output
+
+    data = _load_report(chip)
+    assert isinstance(data["elapsed"], float)
+    assert data["elapsed"] >= 0
+
+    md_text = (_reports_dir() / f"dev-test-{chip}.md").read_text()
+    fenced = md_text.split("```json\n", 1)[1].rsplit("\n```", 1)[0]
+    embedded = json.loads(fenced)
+    assert embedded["elapsed"] == data["elapsed"]
+
+
 # ---------------------------------------------------------------------------
 # Zero-option surface (D-05)
 # ---------------------------------------------------------------------------

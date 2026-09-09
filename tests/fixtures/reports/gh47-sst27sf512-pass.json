@@ -21,6 +21,7 @@
     "proposed_disposition": "inconclusive -- needs N>=2 agreement (advisory)"
   },
   "dedup_fingerprint": "f9dbc31dcd27",
+  "elapsed": null,
   "generated": "1970-01-01T00:00:00Z",
   "is_submittable": true,
   "is_uv": false,

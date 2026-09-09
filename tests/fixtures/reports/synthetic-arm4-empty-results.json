@@ -21,6 +21,7 @@
     "proposed_disposition": "no change suggested (advisory)"
   },
   "dedup_fingerprint": "8d6208d00be7",
+  "elapsed": null,
   "generated": "1970-01-01T00:00:00Z",
   "is_submittable": true,
   "is_uv": false,

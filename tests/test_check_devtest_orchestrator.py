@@ -558,6 +558,7 @@ def test_handler_function_names_contains_the_uv_scope_helper() -> None:
 _EXPECTED_DEV_TEST_REFERENCED_HELPERS = {
     "_canonical_part_number",
     "_chip_id_fields",
+    "_cli_start_time",
     "_dev_test_exit_code",
     "_is_uv_eprom",
     "_make_sampler",
@@ -590,7 +591,10 @@ def test_every_helper_referenced_by_dev_test_is_listed() -> None:
     helper's rule at `dev_test`'s own `derive_plan` call site.
     `_canonical_part_number` (Phase 181 plan 05, RPT-F1) is the newest
     entry: `dev_test`'s body calls it directly, beside the existing
-    `auto_capture.protocol` assignment.
+    `auto_capture.protocol` assignment. `_cli_start_time` (Phase 181 plan
+    06, RPT-D2) joins it: `dev_test`'s body calls it once, immediately
+    before the `report.elapsed` assignment that precedes the first
+    serialization.
     """
     check_devtest_orchestrator = importlib.import_module(
         "tools.check_devtest_orchestrator"
@@ -609,11 +613,11 @@ def test_every_helper_referenced_by_dev_test_is_listed() -> None:
         "assertion below vacuously true. dev_test may have moved, been "
         "renamed, or the AST walk broke."
     )
-    assert len(derived) >= 6, (
+    assert len(derived) >= 7, (
         f"_referenced_underscore_helpers_in_dev_test returned only "
         f"{len(derived)} name(s) ({sorted(derived)}) against the real "
-        f"cli_handlers.py -- expected at least 6 (re-measured, Phase 181 "
-        f"plan 05). A shrinking derived set is itself suspicious even "
+        f"cli_handlers.py -- expected at least 7 (re-measured, Phase 181 "
+        f"plan 06). A shrinking derived set is itself suspicious even "
         f"though the subset check below would still pass."
     )
 

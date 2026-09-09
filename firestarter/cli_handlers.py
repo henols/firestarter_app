@@ -10,6 +10,7 @@ import hashlib
 import json
 import logging
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -377,7 +378,28 @@ class _FirmwareVersionType(click.ParamType):
         return value
 
 
-@click.group()
+_CLI_START_MONOTONIC_META_KEY = "_firestarter_cli_start_monotonic"
+
+
+def _cli_start_time() -> Optional[float]:
+    """Return the monotonic timestamp the CLI group's first statement
+    recorded into the current Click context's `meta` mapping, or `None`
+    when there is no current Click context (a direct handler call, e.g.
+    from a unit test with no CLI entry point in play) or no stamp was ever
+    recorded there. `meta` is shared down the whole context chain, so a
+    value the group wrote is readable from any subcommand's own context --
+    this is per-invocation state, never module-level, so one `CliRunner`
+    invocation cannot hand a later one a stale base.
+    """
+    ctx = click.get_current_context(silent=True)
+    if ctx is None:
+        return None
+    return ctx.meta.get(_CLI_START_MONOTONIC_META_KEY)
+
+
+@click.group(
+    help="EPROM programmer for Arduino and Relatively-Universal-ROM-Programmer shield."
+)
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose mode")
 @click.option(
     "-p",
@@ -389,7 +411,7 @@ class _FirmwareVersionType(click.ParamType):
 @click.pass_context
 @map_typed_errors
 def cli(ctx: click.Context, verbose: bool, port: Optional[str]) -> None:
-    """EPROM programmer for Arduino and Relatively-Universal-ROM-Programmer shield."""
+    ctx.meta[_CLI_START_MONOTONIC_META_KEY] = time.monotonic()
     # CliRunner tests pass a pre-built AppContext via `runner.invoke(cli, ..., obj=app)`;
     # honor that and skip manager construction in test mode. In production
     # ctx.obj starts as None (Click default) so the manager-construction path
@@ -2450,6 +2472,10 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     report.db_diff = build_db_diff(chip, app.db, results)
 
     console = Console()
+    cli_start = _cli_start_time()
+    report.elapsed = (
+        None if cli_start is None else round(time.monotonic() - cli_start, 3)
+    )
     report.render(console)
 
     # The report is ALWAYS persisted, unconditionally, to the reports

@@ -689,6 +689,21 @@ class DiagnosticReport:
     fields, so this field's absence from that list is the whole exclusion
     mechanism."""
     run_status: str = ""
+    elapsed: float | None = None
+    """Wall-clock seconds from CLI entry to immediately before the first
+    serialization. INCLUDES the database load, the identity read, plan
+    derivation and every step. EXCLUDES the console render, the artifact
+    write and the submit prompt -- those three run after the stamp is
+    taken, not before it. ASSIGNED by `cli_handlers.py`, never derived
+    here: `to_dict()` runs three times per run (console render, the saved
+    `.json`, `to_json_block()` inside the `.md`), so a value computed
+    inside `to_dict()` would differ between the console and the saved
+    artifact. `None` when no CLI-entry stamp exists (a direct handler call,
+    e.g. from a unit test). Deliberately excluded from `dedup_fingerprint`'s
+    hash input, same mechanism as `run_status` above -- that function
+    builds its hash from an explicit allow-list with no reflection over
+    dataclass fields, so this field's absence from that list is the whole
+    exclusion mechanism."""
 
     def _utc_now(self) -> str:
         return datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -904,10 +919,16 @@ class DiagnosticReport:
         function builds its hash from an explicit allow-list with no
         reflection over dataclass fields, so this field's absence from that
         list is the whole exclusion mechanism.
+
+        `elapsed` is a plain attribute read here, never computed: this
+        method runs three times per run (see `elapsed`'s own docstring on
+        the dataclass field above), and a value computed inside `to_dict()`
+        would answer a different question on each of the three calls.
         """
         return {
             "schema_version": SCHEMA_VERSION,
             "generated": self._utc_now(),
+            "elapsed": self.elapsed,
             "auto_capture": self._auto_capture_dict(),
             "transport_health": self._transport_dict(),
             "steps": self._steps_list(),
