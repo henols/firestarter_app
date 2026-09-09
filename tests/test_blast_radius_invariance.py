@@ -524,6 +524,60 @@ def test_schema_version_is_pinned() -> None:
     )
 
 
+def test_frozen_pre_2_0_fixtures_still_parse_forward_only() -> None:
+    """RPT-E2: deletions are forward-only -- a report written under an
+    older schema keeps parsing after the deletion, because both parsers
+    accept `schema_version` by presence only. Ceiling: this pins the
+    PARSE, not the rendering, and it does not claim the triage skill's
+    prose still reads correctly for a pre-2.0 body.
+
+    Resolves both frozen fixture bodies from the meta tree at
+    `/workspaces/.claude/skills/devtest-triage/fixtures/` -- the same
+    three-parents-up resolution the retired `tests/test_rekey_ledger.py`
+    used, but WITH a skip guard this time: the app suite must not
+    hard-depend on the meta tree, since that exact unguarded reach-out is
+    what sent app CI to `13 failed, 13 passed` on a bare checkout and
+    condemned that coupling."""
+    from firestarter.diagnostic_report import SCHEMA_VERSION
+    from tools.parse_devtest_issue import _extract_fenced_report
+
+    meta_root = Path(__file__).resolve().parent.parent.parent
+    fixtures_dir = meta_root / ".claude" / "skills" / "devtest-triage" / "fixtures"
+    if not fixtures_dir.is_dir():
+        pytest.skip(
+            f"meta-tree fixtures directory not found at {fixtures_dir} -- "
+            "this repo is not checked out as a submodule of the meta repo"
+        )
+
+    null_identity_body = (fixtures_dir / "dev-test-at28c256-null-identity.md").read_text(
+        encoding="utf-8"
+    )
+    populated_identity_body = (
+        fixtures_dir / "dev-test-at28c256-populated-identity.md"
+    ).read_text(encoding="utf-8")
+    assert len(null_identity_body) > 1000
+    assert len(populated_identity_body) > 1000
+
+    parsed_1_2 = _extract_fenced_report(null_identity_body)
+    assert parsed_1_2 is not None
+    assert parsed_1_2["schema_version"] == "1.2"
+    assert parsed_1_2["schema_version"] != SCHEMA_VERSION
+    assert "locked_steps" in parsed_1_2["banner"]
+    assert "vpp_mv" in parsed_1_2["voltage"]
+    assert "vpe_mv" in parsed_1_2["voltage"]
+
+    parsed_1_4 = _extract_fenced_report(populated_identity_body)
+    assert parsed_1_4 is not None
+    assert parsed_1_4["schema_version"] == "1.4"
+    assert parsed_1_4["schema_version"] != SCHEMA_VERSION
+    assert "locked_steps" in parsed_1_4["banner"]
+    assert "vpp_mv" in parsed_1_4["voltage"]
+    assert "vpe_mv" in parsed_1_4["voltage"]
+
+    no_schema_version_body = '```json\n{"auto_capture": {}}\n```'
+    assert _extract_fenced_report(no_schema_version_body) is None
+
+
 def test_to_dict_key_list_pins_are_sensitive_to_added_and_removed_keys() -> None:
     """The anti-vacuity leg for the seven D-07 pins above: an in-process
     mutation of a real `to_dict()` mapping, never a change to production
