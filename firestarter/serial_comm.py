@@ -83,7 +83,7 @@ DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
 WRITE_BUDGET_MAX_S = 14400  # seconds; derived ceiling, see comment above
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
 GENERIC_FRAME_DECODE_ERROR_TEXT = CATALOG[MSG_ERR_EMPTY_INPUT].format
-SETUP_ACK_RECOVERY_TIMEOUT = 2.0  # seconds
+SETUP_ACK_RECOVERY_TIMEOUT_S = 2.0
 
 # INIT/MAIN/END are absent here -- they arrive as ID frames via the catalog
 # severity-band lookup. OK + DATA remain until the firmware conversions
@@ -857,10 +857,12 @@ class SerialCommunicator:
                     f"Port {port_name}: setup ack was a spurious "
                     f"{GENERIC_FRAME_DECODE_ERROR_TEXT!r} frame — Uno-class "
                     f"boards can emit one around a DTR reset. Giving the real "
-                    f"ack {SETUP_ACK_RECOVERY_TIMEOUT}s to arrive before "
+                    f"ack {SETUP_ACK_RECOVERY_TIMEOUT_S}s to arrive before "
                     f"giving up on this port."
                 )
-                is_ok, msg = communicator.expect_ack(timeout=SETUP_ACK_RECOVERY_TIMEOUT)
+                is_ok, msg = communicator.expect_ack(
+                    timeout=SETUP_ACK_RECOVERY_TIMEOUT_S
+                )
 
             if not is_ok:
                 logger.debug(f"Port {port_name} responded but not with OK: {msg}")
