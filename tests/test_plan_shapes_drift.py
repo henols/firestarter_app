@@ -38,10 +38,10 @@ _GEN_SCRIPT = _APP_DIR / "tools" / "measure_plan_shapes.py"
 _EXPECTED_AGGREGATE = {
     "rows": 746,
     "distinct_part_numbers": 677,
-    "plans": 1354,
+    "plans": 677,
     "distinct_shape_families": 8,
-    "total_steps": 16248,
-    "unsupported_steps": 9304,
+    "total_steps": 8124,
+    "unsupported_steps": 4652,
 }
 
 

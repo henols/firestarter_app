@@ -66,9 +66,14 @@ def _step_token(op: str, supported: bool) -> str:
 
 def _family_token(plan) -> str:
     """The chip's `(op, supported)` shape, collapsed to four hyphen-joined
-    tokens. This scheme is bijective on the shipped database's `full` plans
-    (`validate` proves it rather than assuming it): knowing the four tokens
-    fully determines both the `full` and `partial` step sequence, because
+    tokens, computed from the chip's single reachable-scope plan (181-02
+    D-08/D-09: `partial` for a UV chip, `full` otherwise -- the same rule
+    `tests/plan_corpus.py`'s `plan_corpus()` uses). This scheme is
+    bijective on the shipped database's reachable-scope plans (`validate`
+    proves it rather than assuming it, and also proves no family mixes a
+    UV and a non-UV member -- their write op strings ("write-partial" vs
+    "write") would otherwise disagree under the same family label):
+    knowing the four tokens fully determines the step sequence, because
     `derive_plan`'s own op ORDER is a function of exactly these same four
     facts (id-check presence, blank-check position, erase presence, SDP-leg
     presence), and every step's `supported` flag is one of these four flags
@@ -133,30 +138,25 @@ def derive() -> dict:
     unsupported_steps = 0
 
     for name in PART_NUMBERS:
-        full_plan = corpus[(name, "full")]
-        partial_plan = corpus[(name, "partial")]
+        plan = corpus[name]
 
-        for plan in (full_plan, partial_plan):
-            total_steps += len(plan.steps)
-            unsupported_steps += sum(1 for s in plan.steps if not s.supported)
+        total_steps += len(plan.steps)
+        unsupported_steps += sum(1 for s in plan.steps if not s.supported)
 
-        family = _family_token(full_plan)
+        family = _family_token(plan)
         chips[name] = family
 
         if family not in shape_families:
             shape_families[family] = {
                 "chip_count": 0,
-                "full": [_step_token(s.op, s.supported) for s in full_plan.steps],
-                "partial": [
-                    _step_token(s.op, s.supported) for s in partial_plan.steps
-                ],
+                "steps": [_step_token(s.op, s.supported) for s in plan.steps],
             }
         shape_families[family]["chip_count"] += 1
 
     aggregate = {
         "rows": len(all_rows(REAL_DB)),
         "distinct_part_numbers": len(chips),
-        "plans": len(chips) * 2,
+        "plans": len(chips),
         "distinct_shape_families": len(shape_families),
         "total_steps": total_steps,
         "unsupported_steps": unsupported_steps,
@@ -217,10 +217,9 @@ def validate(payload: dict) -> None:
             f"aggregate distinct_part_numbers {aggregate['distinct_part_numbers']} "
             f"!= len(chips) {len(chips)}"
         )
-    if aggregate["plans"] != len(chips) * 2:
+    if aggregate["plans"] != len(chips):
         raise ValidationError(
-            f"aggregate plans {aggregate['plans']} != 2 * len(chips) "
-            f"{len(chips) * 2}"
+            f"aggregate plans {aggregate['plans']} != len(chips) {len(chips)}"
         )
     if aggregate["distinct_shape_families"] != len(shape_families):
         raise ValidationError(
@@ -228,42 +227,47 @@ def validate(payload: dict) -> None:
             f"!= len(shape_families) {len(shape_families)}"
         )
 
-    from tests.plan_corpus import PART_NUMBERS, plan_corpus
+    from firestarter.chip_test import is_uv_eprom
+    from tests.plan_corpus import PART_NUMBERS, REAL_DB, plan_corpus
 
     corpus = plan_corpus()
     recomputed_total_steps = 0
     recomputed_unsupported_steps = 0
-    seen_shapes: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {}
+    seen_shapes: dict[str, tuple[str, ...]] = {}
+    seen_uv: dict[str, bool] = {}
     for name in PART_NUMBERS:
-        full_plan = corpus[(name, "full")]
-        partial_plan = corpus[(name, "partial")]
-        for plan in (full_plan, partial_plan):
-            recomputed_total_steps += len(plan.steps)
-            recomputed_unsupported_steps += sum(
-                1 for s in plan.steps if not s.supported
-            )
+        plan = corpus[name]
+        recomputed_total_steps += len(plan.steps)
+        recomputed_unsupported_steps += sum(1 for s in plan.steps if not s.supported)
 
         family = chips.get(name)
         if family is None or family not in shape_families:
             continue
-        shape_pair = (
-            tuple(_step_token(s.op, s.supported) for s in full_plan.steps),
-            tuple(_step_token(s.op, s.supported) for s in partial_plan.steps),
-        )
-        if family in seen_shapes and seen_shapes[family] != shape_pair:
+
+        is_uv = is_uv_eprom(REAL_DB.get_eprom(name))
+        if family in seen_uv and seen_uv[family] != is_uv:
             raise ValidationError(
-                f"family {family!r} is not bijective with its (full, "
-                f"partial) shape: chip {name!r} disagrees with an earlier "
-                "member of the same family"
+                f"family {family!r} mixes a UV and a non-UV chip -- their "
+                f"write op strings ('write-partial' vs 'write') disagree "
+                f"under the same family label; chip {name!r} broke it"
             )
-        seen_shapes[family] = shape_pair
+        seen_uv[family] = is_uv
+
+        shape = tuple(_step_token(s.op, s.supported) for s in plan.steps)
+        if family in seen_shapes and seen_shapes[family] != shape:
+            raise ValidationError(
+                f"family {family!r} is not bijective with its shape: chip "
+                f"{name!r} disagrees with an earlier member of the same "
+                "family"
+            )
+        seen_shapes[family] = shape
 
     for family, entry in shape_families.items():
-        recorded_pair = (tuple(entry["full"]), tuple(entry["partial"]))
-        if family in seen_shapes and seen_shapes[family] != recorded_pair:
+        recorded = tuple(entry["steps"])
+        if family in seen_shapes and seen_shapes[family] != recorded:
             raise ValidationError(
-                f"family {family!r}'s recorded (full, partial) shape does "
-                "not match its members' actual shape"
+                f"family {family!r}'s recorded shape does not match its "
+                "members' actual shape"
             )
 
     if aggregate["total_steps"] != recomputed_total_steps:

@@ -3,10 +3,10 @@
   "aggregate": {
     "distinct_part_numbers": 677,
     "distinct_shape_families": 8,
-    "plans": 1354,
+    "plans": 677,
     "rows": 746,
-    "total_steps": 16248,
-    "unsupported_steps": 9304
+    "total_steps": 8124,
+    "unsupported_steps": 4652
   },
   "chips": {
     "2516": "noid-bcpre-eraseNA-sdpNA",
@@ -690,24 +690,10 @@
   "shape_families": {
     "id-bcpost-erase-sdpNA": {
       "chip_count": 197,
-      "full": [
+      "steps": [
         "id",
         "read",
         "write",
-        "verify",
-        "erase",
-        "blank-check",
-        "write-baseline-b(NA)",
-        "write-baseline-a(NA)",
-        "sdp-lock(NA)",
-        "write-inhibited(NA)",
-        "sdp-unlock(NA)",
-        "write-restored(NA)"
-      ],
-      "partial": [
-        "id",
-        "read",
-        "write-partial",
         "verify",
         "erase",
         "blank-check",
@@ -721,21 +707,7 @@
     },
     "id-bcpre-eraseNA-sdpNA": {
       "chip_count": 180,
-      "full": [
-        "id",
-        "read",
-        "blank-check",
-        "write",
-        "verify",
-        "erase(NA)",
-        "write-baseline-b(NA)",
-        "write-baseline-a(NA)",
-        "sdp-lock(NA)",
-        "write-inhibited(NA)",
-        "sdp-unlock(NA)",
-        "write-restored(NA)"
-      ],
-      "partial": [
+      "steps": [
         "id",
         "read",
         "blank-check",
@@ -752,25 +724,11 @@
     },
     "id-bcpreNA-eraseNA-sdpNA": {
       "chip_count": 27,
-      "full": [
+      "steps": [
         "id",
         "read",
         "blank-check(NA)",
         "write",
-        "verify",
-        "erase(NA)",
-        "write-baseline-b(NA)",
-        "write-baseline-a(NA)",
-        "sdp-lock(NA)",
-        "write-inhibited(NA)",
-        "sdp-unlock(NA)",
-        "write-restored(NA)"
-      ],
-      "partial": [
-        "id",
-        "read",
-        "blank-check(NA)",
-        "write-partial",
         "verify",
         "erase(NA)",
         "write-baseline-b(NA)",
@@ -783,24 +741,10 @@
     },
     "noid-bcpost-erase-sdpNA": {
       "chip_count": 26,
-      "full": [
+      "steps": [
         "id(NA)",
         "read",
         "write",
-        "verify",
-        "erase",
-        "blank-check",
-        "write-baseline-b(NA)",
-        "write-baseline-a(NA)",
-        "sdp-lock(NA)",
-        "write-inhibited(NA)",
-        "sdp-unlock(NA)",
-        "write-restored(NA)"
-      ],
-      "partial": [
-        "id(NA)",
-        "read",
-        "write-partial",
         "verify",
         "erase",
         "blank-check",
@@ -814,24 +758,10 @@
     },
     "noid-bcpostNA-erase-sdp": {
       "chip_count": 40,
-      "full": [
+      "steps": [
         "id(NA)",
         "read",
         "write",
-        "verify",
-        "erase",
-        "blank-check(NA)",
-        "write-baseline-b",
-        "write-baseline-a",
-        "sdp-lock",
-        "write-inhibited",
-        "sdp-unlock",
-        "write-restored"
-      ],
-      "partial": [
-        "id(NA)",
-        "read",
-        "write-partial",
         "verify",
         "erase",
         "blank-check(NA)",
@@ -845,24 +775,10 @@
     },
     "noid-bcpostNA-erase-sdpNA": {
       "chip_count": 41,
-      "full": [
+      "steps": [
         "id(NA)",
         "read",
         "write",
-        "verify",
-        "erase",
-        "blank-check(NA)",
-        "write-baseline-b(NA)",
-        "write-baseline-a(NA)",
-        "sdp-lock(NA)",
-        "write-inhibited(NA)",
-        "sdp-unlock(NA)",
-        "write-restored(NA)"
-      ],
-      "partial": [
-        "id(NA)",
-        "read",
-        "write-partial",
         "verify",
         "erase",
         "blank-check(NA)",
@@ -876,21 +792,7 @@
     },
     "noid-bcpre-eraseNA-sdpNA": {
       "chip_count": 90,
-      "full": [
-        "id(NA)",
-        "read",
-        "blank-check",
-        "write",
-        "verify",
-        "erase(NA)",
-        "write-baseline-b(NA)",
-        "write-baseline-a(NA)",
-        "sdp-lock(NA)",
-        "write-inhibited(NA)",
-        "sdp-unlock(NA)",
-        "write-restored(NA)"
-      ],
-      "partial": [
+      "steps": [
         "id(NA)",
         "read",
         "blank-check",
@@ -907,25 +809,11 @@
     },
     "noid-bcpreNA-eraseNA-sdpNA": {
       "chip_count": 76,
-      "full": [
+      "steps": [
         "id(NA)",
         "read",
         "blank-check(NA)",
         "write",
-        "verify",
-        "erase(NA)",
-        "write-baseline-b(NA)",
-        "write-baseline-a(NA)",
-        "sdp-lock(NA)",
-        "write-inhibited(NA)",
-        "sdp-unlock(NA)",
-        "write-restored(NA)"
-      ],
-      "partial": [
-        "id(NA)",
-        "read",
-        "blank-check(NA)",
-        "write-partial",
         "verify",
         "erase(NA)",
         "write-baseline-b(NA)",

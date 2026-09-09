@@ -27,14 +27,22 @@ resolves every one of those duplicates to the same plan, so the corpus below
 is keyed by name, not by row -- sweeping by row would derive and discard the
 same plan up to several times over for no added coverage.
 
-**SWEEP_SCOPES and D-08.** Only `"full"` and `"partial"` are swept.
-`write_scope="none"` structurally omits the write step from `Plan.steps`
-(`derive_plan`'s own docstring), so the write-to-verify rule is vacuously
-true across every `"none"` plan -- sweeping it would silently inflate a
-"zero violations" count with rows that could never violate anything.
-`dev test` itself only ever produces `"full"` (non-UV) or `"partial"` (UV
-and non-UV alike), so full+partial is already a strict superset of the
-reachable domain.
+**The single reachable scope and D-08/D-09 (181-02).** Every name is swept
+at exactly the ONE scope `dev test` itself would actually resolve for it:
+`"partial"` for a UV chip, `"full"` otherwise (`cli_handlers._resolve_write_scope`'s
+own rule, measured equivalent to `Plan.is_uv` over all 677 names in
+`evidence/181-02-derive-plan-equivalence.txt`). `write_scope="none"`
+structurally omits the write step from `Plan.steps` (`derive_plan`'s own
+docstring), so the write-to-verify rule was always vacuously true across
+every `"none"` plan -- sweeping it would silently inflate a "zero
+violations" count with rows that could never violate anything, which is
+why it was never swept even when the corpus covered two scopes per name.
+Sweeping `"full"` alongside a UV chip's actually-reachable `"partial"`
+scope was the same kind of vacuity one level up: `dev test` never derives
+a UV chip's `"full"` plan or a non-UV chip's `"partial"` plan, so a corpus
+that swept both was proving properties about plans nothing ever runs.
+Plan 181-04 drops `derive_plan`'s `write_scope` keyword entirely; this
+corpus already sweeps the domain that survives that deletion.
 
 **plan_corpus caching.** `derive_plan` over the whole database measures
 under a second, but every sentinel module in this phase imports this corpus,
@@ -52,10 +60,11 @@ and `tests/test_chip_test_cycle.py:26` -- named here so the drift is visible
 rather than discovered later by a fifth copy. The fixed `check_eprom_id`
 return value `(True, 0x1234)` mismatches most real chips' actual chip IDs,
 which closes the destructive gate `run_plan` consults before every write or
-erase call and makes roughly 2,545 of the corpus's 6,944 supported steps
-come back SKIPPED rather than actually dispatched. A sweep built on this
-double proves step-count alignment and NA-on-unsupported; it does not
-exercise the write path on most chips.
+erase call and makes roughly 1,383 of the corpus's 3,472 supported steps
+(181-02: re-measured against the single-reachable-scope corpus) come back
+SKIPPED rather than actually dispatched. A sweep built on this double
+proves step-count alignment and NA-on-unsupported; it does not exercise
+the write path on most chips.
 
 **plan_with_steps and step.** `Plan` and `Step` are plain dataclasses with
 no builder of their own. `plan_with_steps` assembles a `Plan` from bare
@@ -68,7 +77,7 @@ from __future__ import annotations
 
 from unittest.mock import Mock
 
-from firestarter.chip_test import Plan, Step, derive_plan
+from firestarter.chip_test import Plan, Step, derive_plan, is_uv_eprom
 from firestarter.database import EpromDatabase
 
 REAL_DB = EpromDatabase(skip_local_override=True)
@@ -85,21 +94,26 @@ def all_rows(db: EpromDatabase) -> list[tuple[str, dict]]:
 
 PART_NUMBERS = tuple(sorted({chip["part_number"] for _mfr, chip in all_rows(REAL_DB)}))
 
-SWEEP_SCOPES = ("full", "partial")
-
 _PLAN_CORPUS_CACHE = None
 
 
+def _reachable_scope(name: str) -> str:
+    """`"partial"` for a UV chip, `"full"` otherwise -- the same rule
+    `cli_handlers._resolve_write_scope` applies, measured equivalent to
+    `Plan.is_uv` over all 677 names (evidence/181-02-derive-plan-equivalence.txt)."""
+    full = REAL_DB.get_eprom(name)
+    return "partial" if full and is_uv_eprom(full) else "full"
+
+
 def plan_corpus():
-    """The whole sweep domain: every `PART_NUMBERS` name at every
-    `SWEEP_SCOPES` scope, derived once and cached for the rest of the
+    """The whole sweep domain: every `PART_NUMBERS` name, each at its own
+    single reachable scope, derived once and cached for the rest of the
     pytest process."""
     global _PLAN_CORPUS_CACHE
     if _PLAN_CORPUS_CACHE is None:
         _PLAN_CORPUS_CACHE = {
-            (name, scope): derive_plan(name, REAL_DB, write_scope=scope)
+            name: derive_plan(name, REAL_DB, write_scope=_reachable_scope(name))
             for name in PART_NUMBERS
-            for scope in SWEEP_SCOPES
         }
     return _PLAN_CORPUS_CACHE
 

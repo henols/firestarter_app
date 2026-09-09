@@ -1,7 +1,8 @@
 """
 Phase 175 Plan 04 (PRUNE-05) -- the execution half of D-10's no-drop proof:
-every one of the 1,354 shipped plans, run through the real ``run_plan`` with
-a hardware-free operator double, must yield exactly one ``StepResult`` per
+every one of the 677 shipped plans (181-02: one per part number, each at its
+single reachable scope), run through the real ``run_plan`` with a
+hardware-free operator double, must yield exactly one ``StepResult`` per
 ``Plan.steps`` entry, and every unsupported step's result must carry the
 ``NA`` verdict.
 
@@ -11,7 +12,7 @@ the whole shipped database. It does NOT exercise the write path on most
 chips: the shared ``mock_operator``'s ``check_eprom_id`` returns a fixed
 ``(True, 0x1234)`` which mismatches most real chip IDs and closes the
 destructive gate ``run_plan`` consults before every write, write-partial and
-erase call, so roughly 2,545 of the corpus's 6,944 supported steps come back
+erase call, so roughly 1,383 of the corpus's 3,472 supported steps come back
 ``SKIPPED`` -- dominated by the write/write-partial/erase steps reporting a
 chip-ID mismatch and by verify steps reporting no write target available. A
 SKIPPED step still yields a ``StepResult``, so PRUNE-05 is unaffected by this
@@ -48,7 +49,7 @@ was measured at over 70 seconds combined, so
 ``test_every_unsupported_step_result_carries_the_na_verdict`` below share one
 cached sweep pass (``_run_whole_database_sweep``, mirroring the
 ``plan_corpus()`` caching idiom in ``tests/plan_corpus.py``) rather than each
-re-running ``run_plan`` over all 1,354 plans independently. Correctness is
+re-running ``run_plan`` over all 677 plans independently. Correctness is
 identical either way; this shape only avoids paying the 34-second cost twice.
 
 **Anti-vacuity note (see Task 2's additions below the guard leg).** Both
@@ -114,7 +115,7 @@ _SWEEP_CACHE: _SweepReport | None = None
 def _run_whole_database_sweep() -> _SweepReport:
     """Run every plan in `plan_corpus()` through the real `run_plan` exactly
     once per pytest process, building and discarding each plan's results as
-    the loop goes so peak memory stays flat rather than holding all 16,248
+    the loop goes so peak memory stays flat rather than holding all 8,124
     `StepResult` objects at once. Cached module-globally (see module
     docstring's "Cost, the escape hatch, and the shape chosen") so the two
     whole-database test functions below share one sweep pass."""
@@ -146,13 +147,13 @@ def _run_whole_database_sweep() -> _SweepReport:
 
 def test_every_plan_yields_one_result_per_step():
     """The alignment half of PRUNE-05, over the whole shipped database at
-    the default `runs=2`: 1,354 plans, 16,248 steps, 16,248 results, zero
+    the default `runs=2`: 677 plans, 8,124 steps, 8,124 results, zero
     plans where `len(results) != len(plan.steps)`. The corpus size is
     asserted first, as an absolute, so a corpus that silently shrank to zero
     could not read green on the violations check that follows."""
     report = _run_whole_database_sweep()
-    assert report.plan_count == 1354, (
-        f"plan_corpus() returned {report.plan_count} plans, expected 1354 -- "
+    assert report.plan_count == 677, (
+        f"plan_corpus() returned {report.plan_count} plans, expected 677 -- "
         "a sweep over the wrong count proves nothing about the whole database"
     )
     assert report.alignment_violations == (), (
@@ -160,21 +161,21 @@ def test_every_plan_yields_one_result_per_step():
         f"result count -- a step was silently dropped or added: "
         f"{report.alignment_violations[:10]}"
     )
-    assert report.result_count == 16248, (
-        f"total result count was {report.result_count}, expected 16248 for "
+    assert report.result_count == 8124, (
+        f"total result count was {report.result_count}, expected 8124 for "
         f"{report.step_count} total steps"
     )
 
 
 def test_every_unsupported_step_result_carries_the_na_verdict():
     """The NA-on-unsupported half of PRUNE-05, over the whole shipped
-    database: 9,304 of 9,304 `supported=False` steps produce a result whose
+    database: 4,652 of 4,652 `supported=False` steps produce a result whose
     verdict is `VERDICT_NA`. The unsupported count is asserted as an
     absolute, non-zero floor first -- a sweep that visited no unsupported
     steps would otherwise report zero violations and pass vacuously."""
     report = _run_whole_database_sweep()
-    assert report.unsupported_count == 9304, (
-        f"swept {report.unsupported_count} unsupported steps, expected 9304 "
+    assert report.unsupported_count == 4652, (
+        f"swept {report.unsupported_count} unsupported steps, expected 4652 "
         "-- the ballast population moved and must be re-measured"
     )
     assert report.na_violations == (), (
@@ -190,7 +191,7 @@ def test_a_single_run_returns_only_the_plan_guard_result():
     never one result per step. `allow_single_run=True` restores the normal
     one-result-per-step shape. This is why the sweep above uses the default
     `runs=2` rather than the cheaper `runs=1`."""
-    plan = plan_corpus()[("M8720", "full")]
+    plan = plan_corpus()["M8720"]
 
     guarded = chip_test.run_plan(plan, mock_operator(), REAL_DB, runs=1)
     assert len(guarded) == 1, (
@@ -217,20 +218,19 @@ def test_a_single_run_returns_only_the_plan_guard_result():
 
 _SORTED_PART_NUMBERS = sorted(PART_NUMBERS)
 
-SENSITIVITY_SLICE: tuple[tuple[str, str], ...] = tuple(
-    [(name, "full") for name in _SORTED_PART_NUMBERS[:20]]
-    + [(name, "partial") for name in _SORTED_PART_NUMBERS[:20]]
-)
-"""A pinned 40-member slice of `plan_corpus()` keys -- the first 20
-`(name, "full")` and the first 20 `(name, "partial")` pairs from
-`sorted(PART_NUMBERS)`, chosen deterministically rather than randomly so a
-re-run always exercises the same 40 plans. 40 is enough because both
-mutations the sensitivity legs below apply are deterministic, not
-probabilistic, and the slice keeps those legs at roughly two seconds rather
-than re-paying the 34-second whole-database sweep three times over. Its size
-is asserted as an absolute `40` at the top of every leg that uses it, so a
-slice that went empty (an import-time regression in `PART_NUMBERS`, for
-example) cannot pass a sensitivity check that silently visited nothing."""
+SENSITIVITY_SLICE: tuple[str, ...] = tuple(_SORTED_PART_NUMBERS[:40])
+"""A pinned 40-member slice of `plan_corpus()` keys -- the first 40 names
+from `sorted(PART_NUMBERS)` (181-02: the corpus is now keyed by name alone,
+one entry per name at its single reachable scope, so a 40-name slice
+replaces the former 20-full-plus-20-partial pairing), chosen
+deterministically rather than randomly so a re-run always exercises the
+same 40 plans. 40 is enough because both mutations the sensitivity legs
+below apply are deterministic, not probabilistic, and the slice keeps
+those legs fast rather than re-paying the whole-database sweep three times
+over. Its size is asserted as an absolute `40` at the top of every leg
+that uses it, so a slice that went empty (an import-time regression in
+`PART_NUMBERS`, for example) cannot pass a sensitivity check that silently
+visited nothing."""
 
 
 def test_dropping_a_result_is_flagged_as_a_misalignment():
@@ -306,7 +306,7 @@ def test_a_short_results_list_is_reported_not_truncated():
     exactly the unsupported step whose result was cut and read that as
     "nothing wrong"."""
     corpus = plan_corpus()
-    plan = corpus[("M8720", "full")]
+    plan = corpus["M8720"]
     full_results = chip_test.run_plan(plan, mock_operator(), REAL_DB)
     short_results = list(full_results[:-1])
     violations = na_verdict_violations(plan, short_results)
