@@ -405,13 +405,6 @@ _SDP_LEG_STEP_ORDER: tuple[str, ...] = (
     OP_WRITE_RESTORED,
 )
 
-# The `write_scope="none"` advisory prose, in the same
-# `'write_scope="none": ... omitted'` shape the shipped write/verify/
-# erase `locked_destructive` reasons already use above -- naming the SDP
-# leg's own governing decision rather than reusing the write-scope tag on a
-# reason it does not own.
-_SDP_LOCKED_REASON = 'write_scope="none": {op} omitted'
-
 # Region-policy vocabulary. Plain
 # module-level strings mirroring how this module already carries its op
 # vocabulary (OP_* above) -- `Step.region_policy` is set exactly once by
@@ -495,13 +488,6 @@ class Step:
 class Plan:
     """Ordered, derived test plan for a single chip.
 
-    `locked_destructive` is ADVISORY ONLY: the (op, reason) of write/erase
-    steps a destructive run would have added. `run_plan` MUST NOT iterate it --
-    it exists so the N-of-M banner can count without a second `derive_plan`
-    call, and without giving the executor any path to a destructive op in a
-    non-destructive run. It is empty in production; the banner still carries
-    signal when the chip-ID gate closes or `resolve_chip` refuses a step.
-
     `is_uv` is decided EXACTLY ONCE by `derive_plan` from the DB's
     `electrical-type` -- the only axis that is both complete and exact.
     Downstream may only READ it. Nothing may re-derive UV-ness from a proxy:
@@ -511,7 +497,6 @@ class Plan:
     name: str
     steps: list[Step] = field(default_factory=list)
     reason: str = ""
-    locked_destructive: list[tuple[str, str]] = field(default_factory=list)
     is_uv: bool = False
 
 
@@ -531,25 +516,23 @@ def is_uv_eprom(full: dict) -> bool:
     return full.get("electrical-type", "") == "UV-EPROM"
 
 
-_WRITE_SCOPE_NONE = "none"
 _WRITE_SCOPE_PARTIAL = "partial"
 _WRITE_SCOPE_FULL = "full"
-_WRITE_SCOPES = frozenset({_WRITE_SCOPE_NONE, _WRITE_SCOPE_PARTIAL, _WRITE_SCOPE_FULL})
+_WRITE_SCOPES = frozenset({_WRITE_SCOPE_PARTIAL, _WRITE_SCOPE_FULL})
 
 
-def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
+def derive_plan(name: str, db: Any, *, write_scope: str) -> Plan:
     """Derive the ordered op list for `name` strictly from frozen DB fields.
 
     Reads `db.get_eprom` then `db.convert_to_programmer`, NEVER
     `chip_resolver.resolve_chip` -- so it works even for chips whose
     `support_status` would make `resolve_chip` refuse them. `write_scope`
-    comes only from this call's kwarg, never from config or environment.
+    comes only from this call's keyword argument, never from config or
+    environment, and carries NO DEFAULT -- a bare two-argument call raises
+    `TypeError` rather than silently selecting a scope.
 
-    Three accepted values, fail-closed against anything else:
+    Two accepted values, fail-closed against anything else:
 
-    - `"none"` -- write/verify/erase are structurally OMITTED from
-      `Plan.steps` and recorded on the advisory `Plan.locked_destructive`
-      instead. `run_plan` has no code path that iterates those.
     - `"full"` -- write, verify and erase are real steps. On a non-UV chip
       this spans the whole device (minus flash4 boot blocks) when
       `full_device_region` accepts `memory-size`; a UV chip gets the top slot.
@@ -559,6 +542,16 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
 
     An unrecognised value raises ValueError -- never a silent fallback to a
     mode that writes.
+
+    The parameter is deliberately RETAINED rather than derived from `is_uv`:
+    seven registered shapes in `tests/fixtures/report_shapes.py` build a UV
+    chip at `write_scope="full"`, a combination `dev test` itself never
+    produces, and selecting the write op from `is_uv` would rename their
+    write op and re-key their `dedup_fingerprint` -- including
+    `m27c512-full-canonical-name` and `m27c512-full-comma-joined-name`, the
+    two shapes Phase 174 froze as D-02's rejected alternatives. Guarded by
+    `test_the_write_op_selector_reads_write_scope_and_never_is_uv` in
+    `tests/test_derive_plan_structural_sentinel.py`.
 
     `Plan.is_uv`, `Step.write_region` and `Step.region_policy` are decided
     HERE and ONLY HERE (a verify's region is definitionally the preceding
@@ -589,14 +582,12 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     can_erase = bool(prog.get("flags", 0) & FLAG_CAN_ERASE)
     chip_id = prog.get("chip-id", 0)
     is_uv = is_uv_eprom(full)
-    write_execute = write_scope in (_WRITE_SCOPE_FULL, _WRITE_SCOPE_PARTIAL)
 
     # Region computation lives HERE, from Plan.is_uv and memory-size, producing a
     # (region, policy, reason) decision -- the POLICY travels on
     # `Step.region_policy` so execution time knows what kind of region it is, not
     # just where it sits.
     #
-    #   scope none  -> region None, policy fixed.
     #   UV, either  -> uv-slot policy at the first slot candidate; falls back to
     #                  top-anchored/fixed if the device cannot hold one slot. The
     #                  scope still matters and reaches the executor via
@@ -619,10 +610,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
         cycle_payload = CYCLE_PAYLOAD_ALTERNATE
     else:
         cycle_payload = CYCLE_PAYLOAD_SAME
-    if write_scope == _WRITE_SCOPE_NONE:
-        write_region = None
-        region_policy = REGION_POLICY_FIXED
-    elif is_uv:
+    if is_uv:
         slot_starts = uv_slot_starts(mem_size, _UV_WRITE_REGION_LENGTH)
         if slot_starts:
             write_region = (slot_starts[0], _UV_WRITE_REGION_LENGTH)
@@ -655,7 +643,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
 
     # The SDP leg's own region: computed by EXACTLY today's formula
     # (`_DEFAULT_REGION` at full, `_top_anchored_or_default(full)` at
-    # partial/none) regardless of the policy decision above. D-D keeps the
+    # partial) regardless of the policy decision above. D-D keeps the
     # leg small deliberately: it proves the lock mechanism, not coverage,
     # and AT28C256's plan alone carries six region-sized write-shaped SDP
     # ops that would otherwise become six full-device transfers per run.
@@ -669,7 +657,6 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     )
 
     steps: list[Step] = []
-    locked_destructive: list[tuple[str, str]] = []
 
     # id-check: ALWAYS first. Supported only when the chip
     # carries a real (nonzero) chip-id to compare against -- the sentinel
@@ -687,10 +674,8 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     # consumed a second time, read-only, by the blank-check placement logic
     # immediately below, so the two decisions can never drift apart. Mirrors
     # the erase arm's own supported condition (can_erase and protocol !=
-    # _PROTOCOL_FLASH4) narrowed by write_execute, since an erase step that is
-    # merely advisory (locked_destructive, write_scope="none") never actually
-    # runs -- there is nothing for blank-check to sit behind.
-    erase_is_executable = can_erase and protocol != _PROTOCOL_FLASH4 and write_execute
+    # _PROTOCOL_FLASH4) exactly.
+    erase_is_executable = can_erase and protocol != _PROTOCOL_FLASH4
 
     # A blank-check verdict is only meaningful once SOMETHING in this plan can
     # actually leave the device blank. Built here and appended at ONE of two
@@ -716,7 +701,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
                 "(volatile/byte-rewritable, no factory-blank state)"
             ),
         )
-    elif write_execute and protocol in _AUTO_ERASE_ON_WRITE_PROTOCOLS:
+    elif protocol in _AUTO_ERASE_ON_WRITE_PROTOCOLS:
         family = (
             "0x0D (28C family)" if protocol == _PROTOCOL_EEPROM_28C else "0x05 (flash4)"
         )
@@ -738,64 +723,53 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
         # its historic position (right after read, before write).
         steps.append(blank_check_step)
 
-    # write: always supported, always flagged destructive. When
-    # write_scope="none" the step is OMITTED from the executable `steps`
-    # list -- structurally absent, not skipped at exec time
-    # -- and recorded on the advisory `locked_destructive` list instead.
+    # write: always supported, always flagged destructive.
     # write_scope="partial" emits `OP_WRITE_PARTIAL` instead of `OP_WRITE`
     # so the partial-vs-full distinction is visible
     # in the op string itself, everywhere `StepResult.op` is read.
-    if write_execute:
-        write_op = OP_WRITE_PARTIAL if write_scope == _WRITE_SCOPE_PARTIAL else OP_WRITE
-        steps.append(
-            Step(
-                op=write_op,
-                supported=True,
-                reason=region_reason,
-                destructive=True,
-                write_region=write_region,
-                region_policy=region_policy,
-                full_device_permitted=full_device_permitted,
-                cycle_payload=cycle_payload,
-            )
+    write_op = OP_WRITE_PARTIAL if write_scope == _WRITE_SCOPE_PARTIAL else OP_WRITE
+    steps.append(
+        Step(
+            op=write_op,
+            supported=True,
+            reason=region_reason,
+            destructive=True,
+            write_region=write_region,
+            region_policy=region_policy,
+            full_device_permitted=full_device_permitted,
+            cycle_payload=cycle_payload,
         )
-    else:
-        locked_destructive.append((OP_WRITE, 'write_scope="none": write omitted'))
+    )
 
-    # verify: always supported, but only executable on a write-executing
-    # plan -- it follows the same write/erase gating (there is no
-    # preceding write on a non-executing run, so a bare verify would compare
-    # a freshly-generated pattern against unrelated chip contents).
-    # Positioned after write and before erase so the destructive step order
-    # (write, verify, erase) is UNCHANGED by this task -- but a blank-check
-    # may now follow the erase step (see erase_is_executable above): once
-    # something in the plan can leave the device blank, blank-check doubles
-    # as that step's own oracle instead of reporting pre-existing chip
-    # state. Its write_region equals the write step's -- a verify's region
-    # is definitionally the preceding write's.
-    if write_execute:
-        steps.append(
-            Step(
-                op=OP_VERIFY,
-                supported=True,
-                reason="",
-                write_region=write_region,
-                region_policy=region_policy,
-                full_device_permitted=full_device_permitted,
-                cycle_payload=cycle_payload,
-            )
+    # verify: always supported and always executable -- there is always a
+    # preceding write to compare against. Positioned after write and before
+    # erase so the destructive step order (write, verify, erase) stays
+    # fixed -- but a blank-check may follow the erase step (see
+    # erase_is_executable above): once something in the plan can leave the
+    # device blank, blank-check doubles as that step's own oracle instead
+    # of reporting pre-existing chip state. Its write_region equals the
+    # write step's -- a verify's region is definitionally the preceding
+    # write's.
+    steps.append(
+        Step(
+            op=OP_VERIFY,
+            supported=True,
+            reason="",
+            write_region=write_region,
+            region_policy=region_policy,
+            full_device_permitted=full_device_permitted,
+            cycle_payload=cycle_payload,
         )
-    else:
-        locked_destructive.append((OP_VERIFY, 'write_scope="none": verify omitted'))
+    )
 
     # erase: supported only if FLAG_CAN_ERASE is set AND protocol != 0x05
     # (flash4 auto-erases per page; the flag is deliberately clear for it --
     # Pitfall 6). UV-EPROM never has the flag set (electrical-type is not in
     # {EEPROM, Flash/EEPROM}) so it is NA here for the same condition.
     # `erase_is_executable` (computed once, above, and reused verbatim here)
-    # is exactly `can_erase and protocol != _PROTOCOL_FLASH4 and
-    # write_execute` -- never re-derived, so this arm and the blank-check
-    # placement decision can never drift apart.
+    # is exactly `can_erase and protocol != _PROTOCOL_FLASH4` -- never
+    # re-derived, so this arm and the blank-check placement decision can
+    # never drift apart.
     if can_erase and protocol != _PROTOCOL_FLASH4:
         if erase_is_executable:
             steps.append(Step(op=OP_ERASE, supported=True, reason="", destructive=True))
@@ -803,8 +777,6 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
             # doubles as an oracle for, and precedes the SDP leg block
             # appended below -- the leg stays a contiguous terminal block.
             steps.append(blank_check_step)
-        else:
-            locked_destructive.append((OP_ERASE, 'write_scope="none": erase omitted'))
     else:
         if protocol == _PROTOCOL_FLASH4:
             reason = "flash4 (0x05) auto-erases per page; no separate erase op"
@@ -831,9 +803,8 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
             )
         else:
             reason = "FLAG_CAN_ERASE not set for this chip"
-        # NA erase is never a supported executable step regardless of the
-        # write_scope -- there is nothing to lock/omit here (it was never
-        # runnable), so it is NOT added to locked_destructive either.
+        # NA erase is never a supported executable step -- there is
+        # nothing to append here; it was never runnable.
         steps.append(
             Step(op=OP_ERASE, supported=False, reason=reason, destructive=True)
         )
@@ -849,63 +820,44 @@ def derive_plan(name: str, db: Any, *, write_scope: str = "none") -> Plan:
     # this: `derive_plan`'s signature gains no parameter, so `dev test`
     # keeps zero options.
     sdp_allowed, sdp_reason = sdp_capability(name, db)
-    if write_execute:
-        if sdp_allowed:
-            # ALLOW chip, a real `dev test` run: six real, executable steps,
-            # using `leg_region` -- computed by the SAME formula the shipped
-            # write arm used before this task (never the new full-device/
-            # uv-slot policy; D-D keeps the leg small deliberately). ALLOW
-            # chips are all non-UV, so `leg_region` is always
-            # `_DEFAULT_REGION` on every reachable run. Policy is always
-            # `fixed` here -- the leg is never widened to the full device.
-            for sdp_op in _SDP_LEG_STEP_ORDER:
-                steps.append(
-                    Step(
-                        op=sdp_op,
-                        supported=True,
-                        reason="",
-                        destructive=True,
-                        write_region=leg_region,
-                        region_policy=REGION_POLICY_FIXED,
-                    )
-                )
-        else:
-            # REFUSE chip, a real `dev test` run: six NA steps carrying
-            # sdp_capability()'s OWN refusal prose verbatim.
-            # `run_plan:877-879`'s existing NA path turns each into a
-            # `_skip_result(..., verdict=VERDICT_NA)` with NO operator
-            # call -- zero new machinery needed.
-            for sdp_op in _SDP_LEG_STEP_ORDER:
-                steps.append(
-                    Step(
-                        op=sdp_op,
-                        supported=False,
-                        reason=sdp_reason,
-                        destructive=True,
-                    )
-                )
-    elif sdp_allowed:
-        # ALLOW chip, write_scope="none": all six steps go to the advisory
-        # `locked_destructive` list instead of `steps` (mirroring the
-        # shipped write/verify/erase treatment above) -- these entries DO
-        # count toward count_applicable's M, so N < M and the banner fires,
-        # matching its polarity.
+    if sdp_allowed:
+        # ALLOW chip: six real, executable steps, using `leg_region` --
+        # computed by the SAME formula the shipped write arm used before
+        # this task (never the new full-device/uv-slot policy; D-D keeps
+        # the leg small deliberately). ALLOW chips are all non-UV, so
+        # `leg_region` is always `_DEFAULT_REGION` on every reachable run.
+        # Policy is always `fixed` here -- the leg is never widened to the
+        # full device.
         for sdp_op in _SDP_LEG_STEP_ORDER:
-            locked_destructive.append((sdp_op, _SDP_LOCKED_REASON.format(op=sdp_op)))
-    # else: a REFUSE chip at write_scope="none" emits NOTHING -- neither a step
-    # nor a locked_destructive entry. An unsupported step must never be fabricated
-    # as a runnable or locked one, and locked_destructive is an advisory list of
-    # steps a destructive run WOULD run, so it is the wrong home for them.
-    #
-    # write_scope="none" is unreachable from `dev test`, so on every reachable run
-    # REFUSE chips do receive the six NA steps from the branch above. This branch
-    # is library and test surface only.
+            steps.append(
+                Step(
+                    op=sdp_op,
+                    supported=True,
+                    reason="",
+                    destructive=True,
+                    write_region=leg_region,
+                    region_policy=REGION_POLICY_FIXED,
+                )
+            )
+    else:
+        # REFUSE chip: six NA steps carrying sdp_capability()'s OWN refusal
+        # prose verbatim. `run_plan:877-879`'s existing NA path turns each
+        # into a `_skip_result(..., verdict=VERDICT_NA)` with NO operator
+        # call -- zero new machinery needed.
+        for sdp_op in _SDP_LEG_STEP_ORDER:
+            steps.append(
+                Step(
+                    op=sdp_op,
+                    supported=False,
+                    reason=sdp_reason,
+                    destructive=True,
+                )
+            )
 
     return Plan(
         name=name,
         steps=steps,
         reason="",
-        locked_destructive=locked_destructive,
         is_uv=is_uv,
     )
 
@@ -2018,17 +1970,21 @@ def sdp_oracle_applicable(plan: Plan) -> bool:
     single-source-of-truth discipline applied to `count_applicable`).
 
     `True` when `plan.steps` carries an `OP_WRITE_INHIBITED` `Step` with
-    `supported=True` (a real `dev test` run, ALLOW chip), OR when
-    `plan.locked_destructive` carries an `OP_WRITE_INHIBITED` `(op, reason)`
-    pair (the `write_scope="none"` ALLOW-chip shape). `False` for a
+    `supported=True` (a real `dev test` run, ALLOW chip). `False` for a
     REFUSE chip: its `OP_WRITE_INHIBITED` step IS present in `plan.steps`
     (the NA path), but with `supported=False` -- the oracle never runs
     for a REFUSE chip, so that presence must not count as "applicable".
+
+    A second arm reading the plan's now-retired advisory omitted-ops list
+    for an `OP_WRITE_INHIBITED` entry was removed as PROVABLY DEAD: that
+    entry was reachable only at the retired `write_scope="none"`, measured
+    zero-effect over all 677 part numbers and both SDP-capability classes
+    (plan 181-02, `sdp_oracle_applicable_second_arm_changes_result_for=0`).
     """
     for step in plan.steps:
         if step.op == OP_WRITE_INHIBITED and step.supported:
             return True
-    return any(op == OP_WRITE_INHIBITED for op, _reason in plan.locked_destructive)
+    return False
 
 
 def sdp_hold_state(plan: Plan, results: list[StepResult]) -> str:
@@ -3671,12 +3627,9 @@ def _dispatch_sdp_leg(
 # 109-PATTERNS.md): M excludes NA/inapplicable slots (blank-check NA on
 # SRAM/FRAM, id NA when the DB's chip-id sentinel is 0, erase NA on UV /
 # non-FLAG_CAN_ERASE) so the banner never inflates M with never-achievable
-# slots. M is computed from the SINGLE derived `Plan` object -- its
-# `steps` (already-supported, already-executable ops) PLUS the applicable
-# entries on `plan.locked_destructive` (every entry there is, by 109-01's
-# construction, an applicable destructive op a `--destructive` run WOULD
-# execute; NA destructive ops are never placed there) -- derive_plan is
-# NEVER called a second time to compute M.
+# slots. M is computed from the SINGLE derived `Plan` object's `steps`
+# (already-supported, already-executable ops) -- derive_plan is NEVER
+# called a second time to compute M.
 #
 # N counts the steps THIS run actually executed: any StepResult verdict in
 # {OK, BAD, marginal} counts as "ran" (a ran-but-BAD step still counts,
@@ -3693,38 +3646,30 @@ class BannerCounts:
     `n_ran` is the number of applicable steps THIS run executed (any
     verdict); `m_applicable` is the number of applicable steps a
     `--destructive` run would execute for this SAME chip (from the single
-    `Plan` object, never a second derivation); `locked_steps` is
-    `plan.locked_destructive` verbatim, for a future report/banner to name
-    the specific missing ops (e.g. "write, erase").
+    `Plan` object, never a second derivation).
     """
 
     n_ran: int
     m_applicable: int
-    locked_steps: list[tuple[str, str]] = field(default_factory=list)
 
 
 def count_applicable(plan: Plan, results: list[StepResult]) -> BannerCounts:
     """Compute the applicable-only N-of-M banner data.
 
-    M = `sum(1 for s in plan.steps if s.supported)` PLUS
-    `len(plan.locked_destructive)` -- both read off the ONE `plan` object
-    passed in; this function never calls `derive_plan`.
+    M = `sum(1 for s in plan.steps if s.supported)`, read off the ONE
+    `plan` object passed in; this function never calls `derive_plan`.
 
     N = count of `results` whose verdict is in {OK, BAD, marginal} (ran);
     NA and SKIPPED results are excluded.
 
-    For a `write_scope="none"` chip run, `locked_destructive` is non-empty
-    and N < M (the banner-trigger condition). For a `write_scope="full"` (or
-    `"partial"`) run, `locked_destructive` is empty and N == M (banner would
-    not fire), since the previously-locked ops are now real supported
-    `steps` that the run executed.
+    Every reachable `write_scope` (`"full"` or `"partial"`) produces a plan
+    whose applicable destructive ops are real, supported `steps` -- there is
+    no longer an advisory list of omitted ops to add to M, so N == M
+    whenever every applicable step ran.
     """
-    m_applicable = sum(1 for s in plan.steps if s.supported) + len(
-        plan.locked_destructive
-    )
+    m_applicable = sum(1 for s in plan.steps if s.supported)
     n_ran = sum(1 for r in results if r.verdict in _RAN_VERDICTS)
     return BannerCounts(
         n_ran=n_ran,
         m_applicable=m_applicable,
-        locked_steps=list(plan.locked_destructive),
     )

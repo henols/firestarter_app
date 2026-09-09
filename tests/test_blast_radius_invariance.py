@@ -134,10 +134,12 @@ _VOLTAGE_KEYS = [
     "vpp_mv",
 ]
 
-"""D-07's third pin: `_banner_dict()` (`:731-738`) emits three keys today.
-`locked_steps` is RPT-B2's delete -- present now, pinned now."""
+"""D-07's third pin: `_banner_dict()` emits two keys, `locked_steps`
+deleted (RPT-B2, Phase 181 plan 04). This is the first Phase-174 key-list
+pin ever shrunk: `git log -S'_VOLTAGE_KEYS'` returns only the commit that
+created these pins, and `ec1db5c` (`feat(178-01)`) is an additive precedent
+only."""
 _BANNER_KEYS = [
-    "locked_steps",
     "m_applicable",
     "n_ran",
 ]
@@ -622,10 +624,11 @@ def test_to_dict_key_list_pins_are_sensitive_to_added_and_removed_keys() -> None
 def test_the_to_dict_key_pin_reddens_on_a_planted_added_and_removed_key() -> None:
     """The pin that will govern every deletion in this phase, observed RED
     against both directions of key drift on a real `to_dict()` mapping --
-    never production. `_VOLTAGE_KEYS` and `_BANNER_KEYS` have never been
-    SHRUNK before: `git log -S'_VOLTAGE_KEYS'` returns only `5693bf7
-    test(174-03)`, the commit that created them, so plan `181-02` and plan
-    `181-05` perform the first deletions ever to pass through these pins.
+    never production. `_VOLTAGE_KEYS` and `_BANNER_KEYS` had never been
+    SHRUNK before this phase: `git log -S'_VOLTAGE_KEYS'` returns only
+    `5693bf7 test(174-03)`, the commit that created them, so plan `181-04`
+    (`_BANNER_KEYS`, RPT-B2) and plan `181-05` (`_VOLTAGE_KEYS`, RPT-B1)
+    perform the first deletions ever to pass through these pins.
     `ec1db5c` (`feat(178-01)`) is an additive precedent only -- there is no
     subtractive precedent to cite."""
     report = build_shape("sst27sf512-six-step")

@@ -624,7 +624,6 @@ def test_derive_plan_destructive_flag_strips_not_annotates():
     assert all(not s.supported for s in sdp_steps), (
         "M8720 is REFUSE -- its six SDP-leg steps must all be unsupported/NA"
     )
-    assert plan_destructive.locked_destructive == []
     ops_destructive_set = set(ops_destructive)
     assert "write" in ops_destructive_set
     assert "erase" in ops_destructive_set
@@ -645,12 +644,11 @@ def test_derive_plan_verify_gated_behind_destructive():
 
 def test_derive_plan_destructive_keeps_and_empties_advisory():
     # destructive_keeps: write_scope="full" keeps write/erase in steps
-    # exactly as Phase 108 produced them, and locked_destructive is empty.
+    # exactly as Phase 108 produced them.
     plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     ops = {s.op for s in plan.steps}
     assert "write" in ops
     assert "erase" in ops
-    assert plan.locked_destructive == []
 
 
 # ---------------------------------------------------------------------------
@@ -2477,8 +2475,7 @@ def test_count_applicable_skipped_does_not_count_as_ran():
 
     counts = count_applicable(plan, results)
     # write/erase were gated SKIPPED -- excluded from N despite being
-    # counted in M (they are `plan.steps` supported entries here, since
-    # write_scope="full" keeps them in steps rather than locked_destructive).
+    # counted in M (they are `plan.steps` supported entries).
     ran_ops = {r.op for r in results if r.verdict not in (VERDICT_NA, VERDICT_SKIPPED)}
     assert "write" not in ran_ops
     assert "erase" not in ran_ops
@@ -2502,16 +2499,14 @@ def test_count_applicable_m_from_single_plan_never_rederives(monkeypatch):
 
 
 def test_count_applicable_n_equals_m_when_destructive():
-    # Same chip (M8720), write_scope="full": locked_destructive is empty and
-    # every applicable step actually executes -- N == M (banner would not
-    # trigger).
+    # Same chip (M8720), write_scope="full": every applicable step actually
+    # executes -- N == M (banner would not trigger).
     plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
     counts = count_applicable(plan, results)
 
-    assert plan.locked_destructive == []
     assert counts.n_ran == counts.m_applicable == 5
 
 

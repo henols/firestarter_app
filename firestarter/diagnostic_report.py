@@ -767,7 +767,7 @@ class DiagnosticReport:
         -- so the FIRST step carrying both `destructive=True` and a
         non-`None` `write_region` is unambiguously the shipped write step.
         `None` when `self.plan.steps` carries no such step (a synthetic/
-        minimal report built with an empty `Plan`, or `write_scope="none"`).
+        minimal report built with an empty `Plan`).
         """
         return next(
             (
@@ -845,11 +845,10 @@ class DiagnosticReport:
 
     def _banner_dict(self) -> dict[str, Any]:
         if self.banner is None:
-            return {"n_ran": None, "m_applicable": None, "locked_steps": []}
+            return {"n_ran": None, "m_applicable": None}
         return {
             "n_ran": self.banner.n_ran,
             "m_applicable": self.banner.m_applicable,
-            "locked_steps": list(self.banner.locked_steps),
         }
 
     def _db_diff_dict(self) -> dict[str, Any] | None:
