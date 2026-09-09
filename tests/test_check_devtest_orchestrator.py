@@ -520,11 +520,17 @@ def test_handler_function_names_contains_the_uv_scope_helper() -> None:
     to resolve the scope literal on `_is_uv_eprom`'s behalf, was deleted in
     Phase 181 plan 04 -- its two-line rule is now inlined at `dev_test`'s
     single `derive_plan` call site -- and removed from the allow-list in
-    the same commit; there is no longer a second name to assert here."""
+    the same commit; there is no longer a second name to assert here.
+    Phase 181 plan 05 (RPT-F1) added `_canonical_part_number`, the
+    handler-side canonical-alias selector, in the same commit as its new
+    call site inside `dev_test`."""
     check_devtest_orchestrator = importlib.import_module(
         "tools.check_devtest_orchestrator"
     )
     assert "_is_uv_eprom" in check_devtest_orchestrator._HANDLER_FUNCTION_NAMES
+    assert (
+        "_canonical_part_number" in check_devtest_orchestrator._HANDLER_FUNCTION_NAMES
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -550,6 +556,7 @@ def test_handler_function_names_contains_the_uv_scope_helper() -> None:
 # console echo it fed (`dev_test`'s always-writes notice and SDP-recovery
 # lecture are both gone).
 _EXPECTED_DEV_TEST_REFERENCED_HELPERS = {
+    "_canonical_part_number",
     "_chip_id_fields",
     "_dev_test_exit_code",
     "_is_uv_eprom",
@@ -581,6 +588,9 @@ def test_every_helper_referenced_by_dev_test_is_listed() -> None:
     260822-aq6). `_is_uv_eprom` used to be the third such entry; Phase 181
     plan 04 made it body-referenced by inlining the deleted write-scope
     helper's rule at `dev_test`'s own `derive_plan` call site.
+    `_canonical_part_number` (Phase 181 plan 05, RPT-F1) is the newest
+    entry: `dev_test`'s body calls it directly, beside the existing
+    `auto_capture.protocol` assignment.
     """
     check_devtest_orchestrator = importlib.import_module(
         "tools.check_devtest_orchestrator"
@@ -599,12 +609,12 @@ def test_every_helper_referenced_by_dev_test_is_listed() -> None:
         "assertion below vacuously true. dev_test may have moved, been "
         "renamed, or the AST walk broke."
     )
-    assert len(derived) >= 5, (
+    assert len(derived) >= 6, (
         f"_referenced_underscore_helpers_in_dev_test returned only "
         f"{len(derived)} name(s) ({sorted(derived)}) against the real "
-        f"cli_handlers.py -- expected at least 5. A shrinking derived set "
-        f"is itself suspicious even though the subset check below would "
-        f"still pass."
+        f"cli_handlers.py -- expected at least 6 (re-measured, Phase 181 "
+        f"plan 05). A shrinking derived set is itself suspicious even "
+        f"though the subset check below would still pass."
     )
 
     assert derived == _EXPECTED_DEV_TEST_REFERENCED_HELPERS, (
