@@ -1744,14 +1744,11 @@ def test_to_dict_payload_unchanged_by_the_render_trim():
     assert d["steps"][0]["fingerprint"] == FP_ADDRESS_LINE
 
 
-# ---------------------------------------------------------------------------
-# Fingerprint siblings (RPT-A2, Phase 181 plan 07): the totals, bad count,
-# percentage and bounded evidence the classifier already measured, exported
-# as flat additive keys beside the existing classification string.
-# ---------------------------------------------------------------------------
-
-
 def test_fingerprint_siblings_equal_the_dataclass_own_values():
+    """RPT-A2: the four `fingerprint_*` siblings -- totals, bad count,
+    percentage and the bounded evidence mapping the classifier already
+    measured -- exported as flat additive keys beside the existing
+    classification string."""
     report = _minimal_report(
         step_specs=[("write", VERDICT_BAD, FP_ADDRESS_LINE, "some reason")]
     )
