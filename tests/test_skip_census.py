@@ -111,8 +111,13 @@ _IGNORE_ARG = f"--ignore={_THIS_MODULE}"
 # that deliberateness is D-10's second purpose (the allow-list doubles as
 # documentation of every legitimate skip reason).
 # ---------------------------------------------------------------------------
+META_TREE_FIXTURES_ABSENT_IN_STANDALONE_CHECKOUT = (
+    "meta-tree fixtures directory not found at"
+)
+
 ALLOWED_SKIP_REASONS: frozenset[str] = frozenset(
     {
+        META_TREE_FIXTURES_ABSENT_IN_STANDALONE_CHECKOUT,
         # BASE-03's whole assertion: legitimate ONLY when the sibling
         # ../firestarter/.git marker is genuinely absent (test 1 below
         # enforces the "while present" half of that split). Imported, never
