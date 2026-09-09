@@ -1701,6 +1701,20 @@ def test_render_keeps_the_surviving_rows():
     assert any(f.startswith("step: ") for f in fields)
 
 
+def test_render_table_title_names_the_canonical_when_present_and_chip_otherwise():
+    """RPT-F1/D-03: the console table title reads
+    `auto_capture.canonical_part_number` off the SAME dict `to_dict()`
+    produces, falling back to `ac["chip"]` -- never `ac.chip` directly --
+    when the canonical did not resolve (D-24)."""
+    canonical_report = _minimal_report(chip="m27c512")
+    canonical_report.auto_capture.canonical_part_number = "M27C512"
+    assert canonical_report.render().title == "dev test -- M27C512"
+
+    fallback_report = _minimal_report(chip="M8720")
+    assert fallback_report.auto_capture.canonical_part_number is None
+    assert fallback_report.render().title == "dev test -- M8720"
+
+
 def test_to_dict_payload_unchanged_by_the_render_trim():
     """The removed console rows' DATA is still in `to_dict()` -- this is
     the non-vacuity proof that only the console changed. Every key that

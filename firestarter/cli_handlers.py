@@ -2217,6 +2217,58 @@ def _chip_id_fields(
     return chip_id_expected, chip_id_actual, mismatch_reason
 
 
+def _canonical_part_number(part_number: Optional[str], raw_token: str) -> Optional[str]:
+    """RPT-F1: the alias within the matched database row's `part_number`
+    that equals `raw_token` under the same normalization
+    `database.get_eprom_config` used to match it; when no alias matches,
+    the first alias in the list. The alias is carried verbatim, including
+    any parenthetical mode annotation.
+
+    Mirrors `get_eprom_config`'s own exact-then-alias-exact-then-
+    paren-stripped ladder (`database.py:446-486`) rung for rung, rather
+    than writing a second normalization, so the alias this returns is by
+    construction one `get_eprom_config` itself matched on. This function
+    reduces a name it is already given -- it does not decide which row
+    matched; that decision already happened.
+
+    514 of the database's 953 distinct aliases resolve to a comma-joined
+    `part_number`, and the naive "first alias" reading is actively wrong
+    on several of them -- `w27c020`'s first alias is `W27C02`, a
+    genuinely different part number. 43 rows carry a parenthetical mode
+    annotation and 24 paren-stripped names collide across more than one
+    row (every DALLAS NVRAM ships an `(RW)` row and a `(TEST)` row), so
+    stripping the parens here would file two distinct rows under one
+    title.
+
+    Returns `None` when `part_number` is `None` or blank (D-24) -- the
+    caller falls back to the raw token rather than render the word `None`.
+    """
+    if not part_number:
+        return None
+
+    import re
+
+    def _strip_paren(s: str) -> str:
+        return re.sub(r"\([^)]*\)", "", s).strip().lower()
+
+    query = raw_token.lower()
+    if query == part_number.lower():
+        return part_number
+
+    if "," in part_number or "(" in part_number:
+        aliases = [a.strip() for a in part_number.split(",")]
+        for alias in aliases:
+            if alias.lower() == query:
+                return alias
+        query_stripped = _strip_paren(raw_token)
+        if query_stripped:
+            for alias in aliases:
+                if _strip_paren(alias) == query_stripped:
+                    return alias
+
+    return part_number.split(",")[0].strip()
+
+
 def _is_interactive() -> bool:
     """TTY check factored into its own function so tests can monkeypatch it
     directly -- `click.testing.CliRunner.invoke` replaces `sys.stdin`
@@ -2386,6 +2438,9 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     if full:
         prog = app.db.convert_to_programmer(full)
         auto_capture.protocol = str(prog.get("algorithm"))
+        auto_capture.canonical_part_number = _canonical_part_number(
+            full.get("name"), chip
+        )
     (
         auto_capture.chip_id_expected,
         auto_capture.chip_id_actual,
@@ -2405,8 +2460,9 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     out_path.mkdir(parents=True, exist_ok=True)
     safe_chip = _sanitize_chip_token(chip)
 
+    report_dict = report.to_dict()
     json_file = out_path / f"dev-test-{safe_chip}.json"
-    json_file.write_text(json.dumps(report.to_dict(), indent=2), encoding="utf-8")
+    json_file.write_text(json.dumps(report_dict, indent=2), encoding="utf-8")
 
     # Local import, matching this handler's existing `submit as submit_mod`
     # style further down -- `submit` imports `diagnostic_report`, so a
@@ -2416,8 +2472,11 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     from firestarter.submit import _reason_text as submit_reason_text
     from firestarter.submit import _runs_text as submit_runs_text
 
+    canonical_heading_name = (
+        report_dict["auto_capture"]["canonical_part_number"] or chip
+    )
     md_lines = [
-        f"# dev test -- {chip}",
+        f"# dev test -- {canonical_heading_name}",
         "",
         "| Step | Verdict | Runs | Took | Reason |",
         "| ---- | ------- | ---- | ---- | ------ |",

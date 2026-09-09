@@ -177,11 +177,19 @@ def build_title(report: Any, chip: str) -> str:
     The dedup shorthash is read from `report.to_dict()["dedup_fingerprint"]`
     (the Plan-01 field) -- this is the single-source link between the report
     model and the issue title.
+
+    RPT-F1: the name slot reads `auto_capture.canonical_part_number` off
+    the same dict, falling back to the `chip` parameter when it is `None`
+    (D-24) -- never by re-selecting, so the title, the body's
+    `canonical_part_number` line, the console and the saved artifact
+    cannot disagree.
     """
     d = report.to_dict()
     shorthash = d["dedup_fingerprint"]
+    canonical = d.get("auto_capture", {}).get("canonical_part_number")
+    name = canonical or chip
     verdict = overall_verdict(report.results)
-    return f"[dev test] {chip} — {verdict} ({shorthash})"
+    return f"[dev test] {name} — {verdict} ({shorthash})"
 
 
 def _duration_text(seconds: Any) -> str:
@@ -270,8 +278,17 @@ def build_body(
     260822-gxx, `_reason_text`) -- an NA step's disclosure prose (e.g. an
     SDP-applicability disclaimer) still reaches the fenced JSON block below,
     just not the table.
+
+    RPT-F1: one line above the table names the canonical part number,
+    read off `sanitized_dict["auto_capture"]` like every other cell here,
+    falling back to the raw `chip` (D-24) when the canonical did not
+    resolve.
     """
+    ac = sanitized_dict.get("auto_capture", {})
+    canonical_part_number = ac.get("canonical_part_number") or ac.get("chip", "")
     lines = [
+        f"canonical part number: {canonical_part_number}",
+        "",
         "| Step | Verdict | Runs | Took | Reason |",
         "| ---- | ------- | ---- | ---- | ------ |",
     ]

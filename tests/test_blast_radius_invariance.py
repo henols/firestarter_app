@@ -144,11 +144,10 @@ _BANNER_KEYS = [
     "n_ran",
 ]
 
-"""D-07's fourth pin: `_auto_capture_dict()` (`:592-603`) emits eight keys
-today, with NO `canonical_part_number` key -- RPT-F1 adds one. The
-absence is pinned as an absence: an addition surfaces here as a pin
-failure on this exact list, not as a silent widening."""
+"""D-07's fourth pin: `_auto_capture_dict()` (`:592-603`) emits nine keys
+today (Phase 181 plan 05 adds `canonical_part_number`, RPT-F1)."""
 _AUTO_CAPTURE_KEYS = [
+    "canonical_part_number",
     "chip",
     "chip_id_actual",
     "chip_id_expected",
@@ -476,15 +475,15 @@ def test_to_dict_banner_key_list_is_pinned() -> None:
 
 
 def test_to_dict_auto_capture_key_list_is_pinned() -> None:
+    """The positive `"canonical_part_number" not in keys` absence assertion
+    this test used to carry was discharged deliberately by RPT-F1 (Phase
+    181 plan 05), in the same commit as `_AUTO_CAPTURE_KEYS` gaining the
+    key -- not deleted for convenience."""
     d = build_shape(_TRACER_SHAPE_ID).to_dict()
     keys = sorted(d["auto_capture"])
     assert keys == _AUTO_CAPTURE_KEYS, (
         f"to_dict()['auto_capture'] keys drifted from the pinned D-07 shape; "
         f"expected {_AUTO_CAPTURE_KEYS}, got {keys}"
-    )
-    assert "canonical_part_number" not in keys, (
-        "auto_capture gained canonical_part_number -- RPT-F1 landed; "
-        "update _AUTO_CAPTURE_KEYS deliberately in the same commit"
     )
 
 

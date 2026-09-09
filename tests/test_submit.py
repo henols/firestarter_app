@@ -325,6 +325,22 @@ def test_title_reflects_fail_verdict():
     assert "deadbeef0000" in title
 
 
+def test_title_shows_the_canonical_part_number_when_it_differs_from_the_raw_token():
+    """RPT-F1/D-01/D-03: when `auto_capture.canonical_part_number` is set
+    and differs from the raw `chip` argument, the title shows the
+    canonical, not the raw token -- single-sourced off `report.to_dict()`,
+    never re-selected."""
+    report = Mock()
+    report.to_dict.return_value = {
+        "dedup_fingerprint": "abc123def456",
+        "auto_capture": {"canonical_part_number": "W27C020"},
+    }
+    report.results = [_step("id", "OK")]
+    title = submit.build_title(report, "w27c020")
+    assert "W27C020" in title
+    assert "w27c020" not in title
+
+
 def test_build_body_table_from_sanitized_steps():
     sanitized = {
         "steps": [

@@ -103,6 +103,14 @@ class AutoCapture:
     chip_id_expected: int | None = None
     chip_id_actual: int | None = None
     chip_id_mismatch_reason: str | None = None
+    canonical_part_number: str | None = None
+    """The matched database row's alias for `chip` (RPT-F1), selected by
+    `cli_handlers._canonical_part_number` and stamped once alongside
+    `protocol`. `chip` deliberately keeps the operator's raw token, because
+    `dedup_fingerprint`'s pre-image starts with it (D-16); this field sits
+    outside that hash's explicit five-entry allow-list, which is the whole
+    exclusion mechanism -- an unresolvable token leaves it `None` and every
+    consumer falls back to `chip` rather than render the word `None`."""
 
 
 # ---------------------------------------------------------------------------
@@ -698,6 +706,7 @@ class DiagnosticReport:
             "chip_id_expected": ac.chip_id_expected,
             "chip_id_actual": ac.chip_id_actual,
             "chip_id_mismatch_reason": ac.chip_id_mismatch_reason,
+            "canonical_part_number": ac.canonical_part_number,
         }
 
     def _transport_dict(self) -> dict[str, Any]:
@@ -942,12 +951,17 @@ class DiagnosticReport:
         and the duration. It is the smallest thing that makes the
         N>=2 repeat policy legible at the point an operator actually
         notices it -- watching the same op go past twice.
+
+        RPT-F1: the title names `auto_capture.canonical_part_number` when
+        present, falling back to `ac['chip']` -- read off `ac`, the mapping
+        `to_dict()` already produced, never by re-selecting.
         """
         from rich.table import Table
 
         d = self.to_dict()
         ac = d["auto_capture"]
-        table = Table(title=f"dev test -- {ac['chip']}")
+        title_name = ac["canonical_part_number"] or ac["chip"]
+        table = Table(title=f"dev test -- {title_name}")
         table.add_column("Field")
         table.add_column("Value")
 

@@ -1,6 +1,7 @@
 {
   "_generated_by": "tools/snapshot_report_shapes.py",
   "auto_capture": {
+    "canonical_part_number": null,
     "chip": "M27C512,M27V512",
     "chip_id_actual": null,
     "chip_id_expected": null,

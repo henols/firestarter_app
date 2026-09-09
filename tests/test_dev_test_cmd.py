@@ -594,6 +594,39 @@ def test_dev_test_output_trim_console_shrunk_payload_intact(
     assert "db_diff" in data
 
 
+def test_canonical_part_number_reaches_all_four_surfaces_while_the_raw_token_stays_on_ac_chip_and_the_filenames(
+    runner: CliRunner,
+) -> None:
+    """`w27c020` is a real alias-exact match (`database.py` part_number
+    `W27C02,W27C020,W27E02,W27E020,W27L02`) whose canonical spelling
+    differs from the raw CLI token only in case -- `W27C020`. One real
+    Click invocation proves the whole RPT-F1/D-03 chain: the saved JSON's
+    `auto_capture.canonical_part_number` is the canonical, its
+    `auto_capture.chip` is the raw token, both saved filenames are
+    derived from the raw token, and the saved markdown's first heading
+    line names the canonical."""
+    chip = "w27c020"
+    operator = make_clean_operator()
+    app = make_app_context(
+        eprom_operator=operator, hardware_manager=make_hardware_manager()
+    )
+    with _off_tty():
+        result = runner.invoke(cli, ["dev", "test", chip], obj=app)
+    assert result.exit_code == 0, result.output
+
+    data = _load_report(chip)
+    assert data["auto_capture"]["canonical_part_number"] == "W27C020"
+    assert data["auto_capture"]["chip"] == chip
+
+    json_path = _reports_dir() / f"dev-test-{chip}.json"
+    md_path = _reports_dir() / f"dev-test-{chip}.md"
+    assert json_path.exists()
+    assert md_path.exists()
+
+    md_first_line = md_path.read_text().splitlines()[0]
+    assert md_first_line == "# dev test -- W27C020"
+
+
 # ---------------------------------------------------------------------------
 # Zero-option surface (D-05)
 # ---------------------------------------------------------------------------
