@@ -100,8 +100,7 @@ _CHIP_NO_ID = "M8720"
 # UV-erasable (electrical-type "Flash/EEPROM").
 _CHIP_WITH_ID = "AS29F002T"
 # AM27512 IS UV-erasable (electrical-type "UV-EPROM", measured exact via
-# is_uv_eprom) -- the one family `dev_test`'s inlined scope rule resolves
-# to "partial" rather than "full".
+# is_uv_eprom) -- the one family `dev_test`'s scope rule resolves to "partial".
 _CHIP_UV = "AM27512"
 # AT28C256 is one of the v1.30 milestone's 43 measured SDP-ALLOW chips
 # (sdp_capability() returns True) -- verified at plan time to resolve
