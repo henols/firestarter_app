@@ -148,8 +148,7 @@ FIRESTARTER_DEVTEST_SUBMIT = os.environ.get(
 # added to the `dev test` surface MUST be listed here, or this gate silently
 # under-covers exactly that new code -- `tests/test_check_devtest_orchestrator
 # .py::test_handler_function_names_all_resolve_to_real_callables` makes this
-# a permanently-enforced invariant rather than a one-off fix. `_cli_start_time`
-# (Phase 181 plan 06, RPT-D2) is the newest entry.
+# a permanently-enforced invariant rather than a one-off fix.
 _HANDLER_FUNCTION_NAMES = frozenset(
     {
         "dev_test",
