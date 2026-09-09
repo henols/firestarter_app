@@ -56,7 +56,12 @@ from firestarter.frame_parser import (  # noqa: F401  — re-exports for test_de
     _decode_param,
     cobs_encode,
 )
-from firestarter.messages import MSG_ERR_PROTOCOL_NOT_IMPLEMENTED, MSG_OK_READY
+from firestarter.messages import (
+    CATALOG,
+    MSG_ERR_EMPTY_INPUT,
+    MSG_ERR_PROTOCOL_NOT_IMPLEMENTED,
+    MSG_OK_READY,
+)
 
 logger = logging.getLogger("SerialComm")
 rurp_logger = logging.getLogger("RURP")
@@ -76,6 +81,8 @@ DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
 # adversarial one.
 WRITE_BUDGET_MAX_S = 14400  # seconds; derived ceiling, see comment above
 CONNECTION_STABILIZE_DELAY = 2.0  # seconds after opening port
+GENERIC_FRAME_DECODE_ERROR_TEXT = CATALOG[MSG_ERR_EMPTY_INPUT].format
+SETUP_ACK_RECOVERY_TIMEOUT_S = 2.0
 
 # INIT/MAIN/END are absent here -- they arrive as ID frames via the catalog
 # severity-band lookup. OK + DATA remain until the firmware conversions
@@ -838,6 +845,20 @@ class SerialCommunicator:
             # the operation never starts and the rail stays down.
             communicator.send_json_command(command_to_send)
             is_ok, msg = communicator.expect_ack()
+
+            if msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
+                logger.debug(
+                    f"Port {port_name}: setup ack was a spurious "
+                    f"{GENERIC_FRAME_DECODE_ERROR_TEXT!r} frame — Uno-class "
+                    f"boards can emit one around a DTR reset. Reading past it "
+                    f"for up to {SETUP_ACK_RECOVERY_TIMEOUT_S}s for the real ack."
+                )
+                setup_ack_deadline = time.time() + SETUP_ACK_RECOVERY_TIMEOUT_S
+                while msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
+                    remaining = setup_ack_deadline - time.time()
+                    if remaining <= 0:
+                        break
+                    is_ok, msg = communicator.expect_ack(timeout=remaining)
 
             if not is_ok:
                 logger.debug(f"Port {port_name} responded but not with OK: {msg}")
