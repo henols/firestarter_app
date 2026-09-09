@@ -38,7 +38,7 @@ One module-level `EpromDatabase(skip_local_override=True)` instance is
 used throughout, so a developer's own `~/.firestarter/database.json`
 override can never change any of the counts asserted here.
 
-Coverage (6 legs):
+Coverage (5 legs):
   1. Exactly 84 of the 746 total rows carry `programming.algorithm == 13`.
   2. Every one of those 84 rows carries the erase capability bit after
      conversion.
@@ -49,15 +49,13 @@ Coverage (6 legs):
   4. Algorithm-5 rows (a distinct, non-empty population) still never carry
      the bit -- a named hardware-damage guard, not a duplicate of leg 3.
   5. AT28C256's `write_scope="full"` plan shape is pinned.
-  6. AT28C256's `write_scope="none"` plan shape is pinned -- the one shape
-     this phase changed that no committed test previously watched.
 
 Reachability (each leg was observed to fail against a deliberate,
 temporary local mutation before being trusted -- see
 153-12-SUMMARY.md "Reachability evidence" for the transcribed failures and
 confirmation that every mutation was reverted with an empty
 `git diff --quiet -- firestarter/database.py`):
-  - Legs 2, 5 and 6 fail against a revert of plan 07's tuple edit
+  - Legs 2 and 5 fail against a revert of plan 07's tuple edit
     (`if algo not in (5,):` reverted to `if algo not in (5, 13):`), which
     reproduces the pre-Phase-153 state where algorithm 13 never carried
     the bit.
@@ -313,60 +311,3 @@ def test_at28c256_full_plan_shape_is_pinned() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Leg 6: AT28C256 write_scope="none" plan shape, pinned -- the shape this
-# phase changed with no prior committed assertion.
-# ---------------------------------------------------------------------------
-
-# Measured live in this session: three steps only (id, read, blank-check).
-_AT28C256_NONE_EXPECTED_OP_ORDER = [OP_ID, OP_READ, OP_BLANK_CHECK]
-
-# The nine ops that go to the advisory locked_destructive list instead of
-# steps: write, verify, erase, and the six-op SDP leg.
-_AT28C256_NONE_EXPECTED_LOCKED_OPS = {
-    OP_WRITE,
-    OP_VERIFY,
-    OP_ERASE,
-    OP_WRITE_BASELINE_B,
-    OP_WRITE_BASELINE_A,
-    OP_SDP_LOCK,
-    OP_WRITE_INHIBITED,
-    OP_SDP_UNLOCK,
-    OP_WRITE_RESTORED,
-}
-
-
-def test_at28c256_write_scope_none_shape_is_pinned() -> None:
-    """Pin the measured write_scope="none" plan for AT28C256.
-
-    THIS SHAPE CHANGED in this phase: before ERASE-03 restored
-    FLAG_CAN_ERASE for algorithm 13, erase was NA (unsupported) at every
-    write_scope, so it was never added to `locked_destructive` (an NA step
-    was never runnable in the first place, so there was nothing to lock).
-    Now that erase is a real, supported, destructive step, write_scope="none"
-    demotes it to `locked_destructive` alongside write/verify/the SDP leg --
-    dropping the executable `steps` list from four entries (id, read,
-    erase-as-NA-with-a-different-reason, blank-check) to three (id, read,
-    blank-check). No committed test asserted this shape before this plan,
-    so it would otherwise have been an unnoticed behavioural change.
-    """
-    plan = derive_plan(_AT28C256_CHIP_NAME, _REAL_DB, write_scope="none")
-    ops = [step.op for step in plan.steps]
-
-    assert ops == _AT28C256_NONE_EXPECTED_OP_ORDER, (
-        f"AT28C256 write_scope='none' op order drifted from the pinned "
-        f"shape; expected {_AT28C256_NONE_EXPECTED_OP_ORDER}, got {ops}"
-    )
-
-    blank_check_step = plan.steps[ops.index(OP_BLANK_CHECK)]
-    assert blank_check_step.supported is True, (
-        "AT28C256 blank-check must be supported at write_scope='none' -- "
-        "with no write executing, blank-check has no auto-erase side "
-        "effect in flight to make it NA"
-    )
-
-    locked_ops = {op for op, _reason in plan.locked_destructive}
-    assert locked_ops == _AT28C256_NONE_EXPECTED_LOCKED_OPS, (
-        f"AT28C256 write_scope='none' locked_destructive set drifted; "
-        f"expected {_AT28C256_NONE_EXPECTED_LOCKED_OPS}, got {locked_ops}"
-    )

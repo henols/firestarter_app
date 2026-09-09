@@ -266,30 +266,54 @@ def _result(results, op):
 # ---------------------------------------------------------------------------
 # Baseline 1: the shipped op-string sequence + per-step (verdict, run_count)
 # (criterion 4, D-13a). Measured by actually running derive_plan("M8720",
-# _REAL_DB) (default write_scope="none") and run_plan(...) against a fresh
-# _mock_operator() at this commit -- transcribed from that run, never
-# predicted. write_scope="none" structurally omits write/verify/erase from
-# Plan.steps (D-01, SAFE-01), so this literal covers only {id, read,
-# blank-check}; D-13b's sentinel test (plan 133-03) is what covers the
-# remaining shipped op strings via the fail-closed dispatch-arm proof, not
-# this literal.
+# _REAL_DB, write_scope="full") and run_plan(...) against a fresh
+# _mock_operator() -- transcribed from that run, never predicted; D-13b's
+# sentinel test (plan 133-03) covers the shipped op strings via the
+# fail-closed dispatch-arm proof, independent of this literal.
 # ---------------------------------------------------------------------------
 
 _SHIPPED_OPS_SEQUENCE = {
-    "op_sequence": ["id", "read", "blank-check"],
+    "op_sequence": [
+        "id",
+        "read",
+        "write",
+        "verify",
+        "erase",
+        "blank-check",
+        "write-baseline-b",
+        "write-baseline-a",
+        "sdp-lock",
+        "write-inhibited",
+        "sdp-unlock",
+        "write-restored",
+    ],
     # (verdict, run_count) per step, same order as op_sequence above.
     # "id" is NA/run_count=0: M8720's chip-id sentinel is 0 (no real id in
-    # the DB entry), so derive_plan marks the id step unsupported.
-    "verdict_run_count": [("NA", 0), ("OK", 2), ("OK", 1)],
-    "len_results": 3,
+    # the DB entry), so derive_plan marks the id step unsupported. M8720 is
+    # a measured SDP-REFUSE chip (protocol 0x08), so all six SDP-leg steps
+    # are NA/run_count=0.
+    "verdict_run_count": [
+        ("NA", 0),
+        ("OK", 2),
+        ("OK", 2),
+        ("OK", 2),
+        ("OK", 2),
+        ("OK", 2),
+        ("NA", 0),
+        ("NA", 0),
+        ("NA", 0),
+        ("NA", 0),
+        ("NA", 0),
+        ("NA", 0),
+    ],
+    "len_results": 12,
 }
 
 
 def test_shipped_ops_sequence_unchanged():
     """Criterion 4's before-image: the engine's behaviour for a
-    write_scope="none" run on "M8720" is frozen against a literal measured
-    at this commit, BEFORE chip_test.py is touched by any later plan in
-    this phase.
+    write_scope="full" run on "M8720" is frozen against a literal measured
+    at this commit.
 
     If this fails, a shipped op's behaviour changed: either the derived op
     sequence itself moved (derive_plan), or a step's verdict/run_count
@@ -298,14 +322,14 @@ def test_shipped_ops_sequence_unchanged():
     (b): a silently *added* step would still pass a prefix comparison of
     the first three).
     """
-    plan = derive_plan("M8720", _REAL_DB)
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB)
 
     op_sequence = [r.op for r in results]
     assert op_sequence == _SHIPPED_OPS_SEQUENCE["op_sequence"], (
-        f"derive_plan('M8720', _REAL_DB)'s derived op sequence changed: "
-        f"measured {op_sequence!r}, frozen baseline "
+        f"derive_plan('M8720', _REAL_DB, write_scope='full')'s derived op "
+        f"sequence changed: measured {op_sequence!r}, frozen baseline "
         f"{_SHIPPED_OPS_SEQUENCE['op_sequence']!r} (133-01 before-image, "
         "criterion 4)"
     )
@@ -1586,7 +1610,7 @@ def test_empty_registry_noop():
     the drain's existence. Reuses _SHIPPED_OPS_SEQUENCE (133-01's frozen
     before-image) rather than a fresh literal: if the drain silently
     appended anything, this would diverge from that pre-133-04 baseline."""
-    plan = derive_plan("M8720", _REAL_DB)
+    plan = derive_plan("M8720", _REAL_DB, write_scope="full")
     operator = _mock_operator()
 
     results = run_plan(plan, operator, _REAL_DB)
@@ -2096,77 +2120,6 @@ def test_derive_plan_baseline_transition_ordering():
 
 
 # ---------------------------------------------------------------------------
-# D-18's write_scope="none" proofs (v1.30 Phase 134, plan 134-03, Task 3).
-# write_scope="none" is UNREACHABLE from `dev test` since Phase 121's
-# reversal (`_resolve_write_scope` returns only "full"/"partial") -- these
-# two tests are library/test surface, never a live gate.
-# ---------------------------------------------------------------------------
-
-
-def test_allow_write_scope_none_locks_six_sdp_leg_steps_and_moves_the_banner():
-    """D-18: an ALLOW chip's write_scope="none" plan carries NONE of the
-    six SDP-leg ops in `plan.steps` -- all six go to the advisory
-    `locked_destructive` list instead (mirroring the shipped write/verify/
-    erase treatment), each carrying a non-empty reason. These entries DO
-    count toward `count_applicable`'s M (called here, never edited), so
-    `n_ran < m_applicable` and the banner fires -- MEASURING D-18's stated
-    polarity rather than merely asserting it in prose."""
-    name = "AT28C256"
-    allowed, _reason = sdp_capability(name, _REAL_DB)
-    assert allowed is True, f"fixture setup error: {name} is not really ALLOW"
-
-    plan = derive_plan(name, _REAL_DB, write_scope="none")
-    ops = [s.op for s in plan.steps]
-    leg_ops_in_steps = [op for op in ops if op in _SDP_LEG_STEP_ORDER]
-    assert not leg_ops_in_steps, (
-        f"write_scope='none' must OMIT the six SDP-leg ops from plan.steps "
-        f"entirely (D-18); found: {leg_ops_in_steps}"
-    )
-
-    locked_leg_entries = [
-        (op, reason)
-        for op, reason in plan.locked_destructive
-        if op in _SDP_LEG_STEP_ORDER
-    ]
-    assert len(locked_leg_entries) == len(_SDP_LEG_STEP_ORDER)
-    assert {op for op, _r in locked_leg_entries} == set(_SDP_LEG_STEP_ORDER)
-    assert all(reason for _op, reason in locked_leg_entries), (
-        "every locked SDP-leg entry must carry a non-empty reason"
-    )
-
-    operator = _mock_operator()
-    results = run_plan(plan, operator, _REAL_DB)
-    counts = count_applicable(plan, results)
-    assert counts.n_ran < counts.m_applicable, (
-        f"D-18's stated polarity (the N-of-M banner fires) is not "
-        f"measured: n_ran={counts.n_ran}, m_applicable={counts.m_applicable}"
-    )
-
-
-def test_refuse_write_scope_none_is_byte_identical_to_pre_phase134():
-    """D-18 refinement (Claude's Discretion, taken on four measurements --
-    134-CONTEXT.md D-18, recorded again in 134-03-SUMMARY.md): a REFUSE
-    chip's write_scope="none" plan is BYTE-IDENTICAL to before this phase
-    -- exactly the three shipped `locked_destructive` entries, and NO
-    SDP-leg entries at all (neither a step nor a `locked_destructive`
-    entry). This is the branch that keeps LEG-10's named proof
-    (`test_empty_registry_noop`, above) green, and it is library/test
-    surface only: `write_scope="none"` is unreachable from a real `dev
-    test` run since Phase 121's reversal."""
-    name = "M8720"
-    allowed, _reason = sdp_capability(name, _REAL_DB)
-    assert allowed is False, f"fixture setup error: {name} is not really REFUSE"
-
-    plan = derive_plan(name, _REAL_DB, write_scope="none")
-    assert [s.op for s in plan.steps] == ["id", "read", "blank-check"]
-    assert plan.locked_destructive == [
-        (OP_WRITE, 'write_scope="none": write omitted'),
-        (OP_VERIFY, 'write_scope="none": verify omitted'),
-        (OP_ERASE, 'write_scope="none": erase omitted'),
-    ]
-
-
-# ---------------------------------------------------------------------------
 # LEG-12's pure hold-state derivation (v1.30 Phase 134, plan 134-04, Task 2,
 # D-10/D-12/D-15). `pytest -k "hold"` selects every test below.
 # ---------------------------------------------------------------------------
@@ -2265,10 +2218,10 @@ def test_hold_state_always_returns_str_never_bool_or_none():
     )
 
 
-def test_oracle_applicable_true_for_allow_chip_full_and_none_scope():
-    """`sdp_oracle_applicable` is True for an ALLOW chip's plan whether the
-    leg is a real supported step (write_scope="full"/"partial") or an
-    advisory `locked_destructive` entry (write_scope="none", D-18)."""
+def test_oracle_applicable_true_for_allow_chip_full_and_partial_scope():
+    """`sdp_oracle_applicable` is True for an ALLOW chip's plan at both
+    reachable scopes -- the leg is a real supported step at write_scope=
+    "full" and at write_scope="partial" alike."""
     name = "AT28C256"
     allowed, _reason = sdp_capability(name, _REAL_DB)
     assert allowed is True, f"fixture setup error: {name} is not really ALLOW"
@@ -2276,14 +2229,15 @@ def test_oracle_applicable_true_for_allow_chip_full_and_none_scope():
     full_plan = derive_plan(name, _REAL_DB, write_scope="full")
     assert sdp_oracle_applicable(full_plan) is True
 
-    none_plan = derive_plan(name, _REAL_DB, write_scope="none")
-    assert sdp_oracle_applicable(none_plan) is True
+    partial_plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    assert sdp_oracle_applicable(partial_plan) is True
 
 
-def test_oracle_applicable_false_for_refuse_chip_full_and_none_scope():
-    """`sdp_oracle_applicable` is False for a REFUSE chip's plan -- its
-    `write-inhibited` step IS present in `plan.steps` (LEG-02's NA path),
-    but with `supported=False`, so it must not count as applicable."""
+def test_oracle_applicable_false_for_refuse_chip_full_and_partial_scope():
+    """`sdp_oracle_applicable` is False for a REFUSE chip's plan at both
+    reachable scopes -- its `write-inhibited` step IS present in
+    `plan.steps` (LEG-02's NA path), but with `supported=False`, so it
+    must not count as applicable."""
     name = "M8720"
     allowed, _reason = sdp_capability(name, _REAL_DB)
     assert allowed is False, f"fixture setup error: {name} is not really REFUSE"
@@ -2291,8 +2245,8 @@ def test_oracle_applicable_false_for_refuse_chip_full_and_none_scope():
     full_plan = derive_plan(name, _REAL_DB, write_scope="full")
     assert sdp_oracle_applicable(full_plan) is False
 
-    none_plan = derive_plan(name, _REAL_DB, write_scope="none")
-    assert sdp_oracle_applicable(none_plan) is False
+    partial_plan = derive_plan(name, _REAL_DB, write_scope="partial")
+    assert sdp_oracle_applicable(partial_plan) is False
 
 
 # ---------------------------------------------------------------------------

@@ -84,6 +84,7 @@ from firestarter.chip_test import (
     StepResult,
     WriteTarget,
     derive_plan,
+    is_uv_eprom,
     run_plan,
 )
 from firestarter.database import EpromDatabase
@@ -126,7 +127,9 @@ def _build_report(chip_name: str = "M8720"):
         TransportHealth,
     )
 
-    plan = derive_plan(chip_name, _REAL_DB)
+    full = _REAL_DB.get_eprom(chip_name)
+    scope = "partial" if full and is_uv_eprom(full) else "full"
+    plan = derive_plan(chip_name, _REAL_DB, write_scope=scope)
     operator = _mock_operator()
     results = run_plan(plan, operator, _REAL_DB, runs=2)
     banner = count_applicable(plan, results)

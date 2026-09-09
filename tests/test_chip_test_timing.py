@@ -64,7 +64,7 @@ def test_duration_measures_real_elapsed_time():
     on a loaded CI runner, and over-reporting is not the failure mode worth
     guarding: a broken timer reports zero, not too much.
     """
-    plan = derive_plan("w29c020", _REAL_DB, write_scope="none")
+    plan = derive_plan("w29c020", _REAL_DB, write_scope="full")
     results = run_plan(plan, _operator(id_sleep=_SLEEP_S), _REAL_DB)
 
     id_result = next(r for r in results if r.op == "id")
@@ -77,7 +77,7 @@ def test_fast_steps_are_not_credited_with_the_slow_step_time():
     the `read` step that follows it. Guards against a timer anchored once at
     run start instead of per step.
     """
-    plan = derive_plan("w29c020", _REAL_DB, write_scope="none")
+    plan = derive_plan("w29c020", _REAL_DB, write_scope="full")
     results = run_plan(plan, _operator(id_sleep=_SLEEP_S), _REAL_DB)
 
     id_result = next(r for r in results if r.op == "id")
@@ -97,7 +97,7 @@ def test_steps_that_did_not_run_have_no_duration():
     A `0.0` there would read as "ran, took no measurable time" rather than
     "never ran", and it would be summed into the `steps total` row.
     """
-    plan = derive_plan("w29c020", _REAL_DB, write_scope="none")
+    plan = derive_plan("w29c020", _REAL_DB, write_scope="full")
     results = run_plan(plan, _operator(), _REAL_DB)
 
     not_run = [r for r in results if r.verdict not in _RAN_VERDICTS]
@@ -109,7 +109,7 @@ def test_steps_that_did_not_run_have_no_duration():
 def test_every_step_that_ran_carries_a_duration():
     """No step that ran is left unmeasured -- the wrapper covers every
     return path of the timed function, not just the happy one."""
-    plan = derive_plan("w29c020", _REAL_DB, write_scope="none")
+    plan = derive_plan("w29c020", _REAL_DB, write_scope="full")
     results = run_plan(plan, _operator(), _REAL_DB)
 
     ran = [r for r in results if r.verdict in _RAN_VERDICTS]

@@ -78,11 +78,8 @@ run, is committed at
 from __future__ import annotations
 
 import dataclasses
-from unittest.mock import Mock
 
 import firestarter.chip_test as chip_test
-from firestarter.cli_handlers import _resolve_write_scope
-from tests.conftest import make_app_context
 from tests.plan_corpus import (
     PART_NUMBERS,
     REAL_DB,
@@ -486,14 +483,6 @@ def test_plans_with_no_write_are_vacuously_clean():
     )
     assert chip_test.cycle_block_bounds(no_write_plan.steps) is None
     assert write_verify_violations(no_write_plan) == []
-
-    real_plan = chip_test.derive_plan(PART_NUMBERS[0], REAL_DB, write_scope="none")
-    assert not any(s.op in REQUIRES_VERIFY for s in real_plan.steps), (
-        f"fixture setup error: {PART_NUMBERS[0]!r} at write_scope='none' "
-        "must carry no step in REQUIRES_VERIFY"
-    )
-    assert chip_test.cycle_block_bounds(real_plan.steps) is None
-    assert write_verify_violations(real_plan) == []
 
 
 def test_an_unsupported_write_is_skipped_by_decision():
@@ -1012,54 +1001,3 @@ def test_uv_policy_violations_flags_both_directions():
     )
 
 
-def test_resolve_write_scope_returns_partial_for_every_uv_row():
-    """The handler-level leg D-12 says matters most: the `derive_plan`-
-    level pins above stay true even if `_resolve_write_scope`
-    (`cli_handlers.py:2236`) is changed to return `"full"` for UV tomorrow,
-    so without this leg the operator-agreed ceiling is unguarded at the
-    only level that actually decides it.
-
-    Generalizes `TestUVWriteHasNoPrompt`
-    (`tests/test_dev_test_cmd.py:708-801`) from two named chips to the
-    whole database, and from the report's rendered op string to the
-    resolver's own return value -- `TestUVWriteHasNoPrompt` never calls
-    `_resolve_write_scope` for its return value at all, so this leg is not
-    a restatement of it. Does not repeat that class's absence-of-`Confirm`
-    assertion, its parameter-name-set assertion, or its TTY-invariance
-    assertions; the both-`interactive`-values comparison here is a
-    by-product of the sweep, not a restatement of that TTY-invariance
-    claim.
-
-    Builds the context ONCE with `make_app_context(db=REAL_DB,
-    config_manager=Mock())`: `db=REAL_DB` reuses the corpus module's single
-    database instance instead of building a second one that could
-    desynchronise from the corpus (D-07); `config_manager=Mock()` avoids
-    constructing a real `ConfigManager`, which is where this project's
-    documented `~/.firestarter/config.json` write leak lives and which
-    `_resolve_write_scope` never touches."""
-    corpus = plan_corpus()
-    app = make_app_context(db=REAL_DB, config_manager=Mock())
-    offenders = []
-    partial_count = 0
-    full_count = 0
-    for name in PART_NUMBERS:
-        want = "partial" if corpus[(name, "full")].is_uv else "full"
-        if want == "partial":
-            partial_count += 1
-        else:
-            full_count += 1
-        for interactive in (False, True):
-            got = _resolve_write_scope(app, name, interactive=interactive)
-            if got != want:
-                offenders.append((name, interactive, want, got))
-
-    assert partial_count == 270, (
-        f"UV (partial-scope) name count drifted to {partial_count}, expected 270"
-    )
-    assert full_count == 407, (
-        f"non-UV (full-scope) name count drifted to {full_count}, expected 407"
-    )
-    assert not offenders, (
-        f"{len(offenders)} of {len(PART_NUMBERS)} names disagree between "
-        f"_resolve_write_scope and Plan.is_uv; first ten: {offenders[:10]}"
-    )
