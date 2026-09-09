@@ -1745,6 +1745,64 @@ def test_to_dict_payload_unchanged_by_the_render_trim():
 
 
 # ---------------------------------------------------------------------------
+# Fingerprint siblings (RPT-A2, Phase 181 plan 07): the totals, bad count,
+# percentage and bounded evidence the classifier already measured, exported
+# as flat additive keys beside the existing classification string.
+# ---------------------------------------------------------------------------
+
+
+def test_fingerprint_siblings_equal_the_dataclass_own_values():
+    report = _minimal_report(
+        step_specs=[("write", VERDICT_BAD, FP_ADDRESS_LINE, "some reason")]
+    )
+    result = report.results[0]
+    result.fingerprint = Fingerprint(
+        total=512,
+        bad=7,
+        bad_pct=1.3671875,
+        classification=FP_ADDRESS_LINE,
+        evidence={"ff_ratio": 0.1, "repeat_divergent": False, "first_offset": 3},
+    )
+
+    step_row = report.to_dict()["steps"][0]
+
+    assert step_row["fingerprint"] == FP_ADDRESS_LINE
+    assert step_row["fingerprint_total"] == result.fingerprint.total
+    assert step_row["fingerprint_bad"] == result.fingerprint.bad
+    assert step_row["fingerprint_bad_pct"] == result.fingerprint.bad_pct
+    assert step_row["fingerprint_evidence"] == result.fingerprint.evidence
+
+
+def test_fingerprint_siblings_are_none_on_a_fingerprint_less_step():
+    report = _minimal_report(step_specs=[("id", VERDICT_OK, None, "")])
+    assert report.results[0].fingerprint is None
+
+    step_row = report.to_dict()["steps"][0]
+
+    assert step_row["fingerprint"] is None
+    assert step_row["fingerprint_total"] is None
+    assert step_row["fingerprint_bad"] is None
+    assert step_row["fingerprint_bad_pct"] is None
+    assert step_row["fingerprint_evidence"] is None
+
+
+def test_every_step_element_carries_an_identical_fingerprint_sibling_key_set():
+    report = _minimal_report(
+        step_specs=[
+            ("id", VERDICT_OK, None, ""),
+            ("write", VERDICT_BAD, FP_ADDRESS_LINE, "some reason"),
+        ]
+    )
+    steps = report.to_dict()["steps"]
+    key_sets = {tuple(sorted(s)) for s in steps}
+    assert len(key_sets) == 1, [sorted(s) for s in steps]
+    assert "fingerprint_total" in steps[0]
+    assert "fingerprint_bad" in steps[0]
+    assert "fingerprint_bad_pct" in steps[0]
+    assert "fingerprint_evidence" in steps[0]
+
+
+# ---------------------------------------------------------------------------
 # Per-step timings (schema 1.5, 2026-08-21): the operator asked for timings
 # captured, presented in the box, and carried to GitHub. These pin the
 # report-side half; `tests/test_chip_test_timing.py` pins the capture half.

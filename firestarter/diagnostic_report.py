@@ -805,6 +805,20 @@ class DiagnosticReport:
     def _step_dict(
         self, result: StepResult, step: Step | None = None
     ) -> dict[str, Any]:
+        """One `steps[]` element, keyed unconditionally so every element
+        carries the same key set regardless of its op.
+
+        The four `fingerprint_*` siblings (RPT-A2) are read straight off the
+        `Fingerprint` the classifier already produced -- `total`, `bad`,
+        `bad_pct`, `evidence` -- so this is a serialization change with no
+        new computation and no second classifier. `fingerprint` keeps
+        carrying the classification string alone, because that string is
+        the only fingerprint component `dedup_fingerprint` hashes; the four
+        siblings are therefore additive and cannot re-key a filed report.
+        `fingerprint_evidence` is bounded by construction: it carries a
+        ratio, a flag, a first offset and one clustering score per
+        candidate high address bit, never a list of offsets.
+        """
         # Schema 1.6: the five `write_*` keys below
         # are read off `StepResult.write_target` -- `None` on every step
         # that isn't a write/verify, and `None` on a write/verify step that
@@ -855,6 +869,16 @@ class DiagnosticReport:
             "error_code": result.error_code,
             "fingerprint": (
                 result.fingerprint.classification if result.fingerprint else None
+            ),
+            "fingerprint_total": (
+                result.fingerprint.total if result.fingerprint else None
+            ),
+            "fingerprint_bad": (result.fingerprint.bad if result.fingerprint else None),
+            "fingerprint_bad_pct": (
+                result.fingerprint.bad_pct if result.fingerprint else None
+            ),
+            "fingerprint_evidence": (
+                result.fingerprint.evidence if result.fingerprint else None
             ),
             # Schema 1.5: wall-clock seconds for the step, or `None` when it
             # did not run. Additive -- every pre-1.5 consumer ignores it.
