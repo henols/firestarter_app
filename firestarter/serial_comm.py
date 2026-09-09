@@ -846,17 +846,19 @@ class SerialCommunicator:
             communicator.send_json_command(command_to_send)
             is_ok, msg = communicator.expect_ack()
 
-            if not is_ok and msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
+            if msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
                 logger.debug(
                     f"Port {port_name}: setup ack was a spurious "
                     f"{GENERIC_FRAME_DECODE_ERROR_TEXT!r} frame — Uno-class "
-                    f"boards can emit one around a DTR reset. Giving the real "
-                    f"ack {SETUP_ACK_RECOVERY_TIMEOUT_S}s to arrive before "
-                    f"giving up on this port."
+                    f"boards can emit one around a DTR reset. Reading past it "
+                    f"for up to {SETUP_ACK_RECOVERY_TIMEOUT_S}s for the real ack."
                 )
-                is_ok, msg = communicator.expect_ack(
-                    timeout=SETUP_ACK_RECOVERY_TIMEOUT_S
-                )
+                setup_ack_deadline = time.time() + SETUP_ACK_RECOVERY_TIMEOUT_S
+                while msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
+                    remaining = setup_ack_deadline - time.time()
+                    if remaining <= 0:
+                        break
+                    is_ok, msg = communicator.expect_ack(timeout=remaining)
 
             if not is_ok:
                 logger.debug(f"Port {port_name} responded but not with OK: {msg}")

@@ -25,11 +25,21 @@ drain ever read it, too late to help). Because Uno-class boards reset on
 every port open, this reproduced on every retry — the self-sustaining trap
 the report describes.
 
+Live Uno hardware (`fault_inject_outgoing`, one or more leading 0x00 bytes
+ahead of the real COBS frame in a single write) reproduced this ordering
+byte-for-byte and proved a single fixed retry is under-built: the reporter's
+own log already shows TWO `Empty input` lines, and a board noisy enough to
+emit two after the send is not hypothetical. `_probe_port` now reads past
+the generic error text for a bounded wall-clock deadline
+(`SETUP_ACK_RECOVERY_TIMEOUT_S`) instead of exactly one extra read,
+discarding only responses whose text is that exact generic string.
+
 These tests replay the reporter's exact frame ordering through a
 `_FakeSerial` — no hardware, Uno or otherwise, is needed to prove the host
-logic. Test A pins the fixed, correct behaviour (probe recovers). Test B is
-a negative control: a genuine, non-recoverable decode error must still fail
-the probe.
+logic. The one- and two-frame tests pin the fixed, correct behaviour (probe
+recovers past either count). The negative-control test confirms a genuine,
+non-recoverable decode error still fails the probe, bounded by the same
+deadline rather than hanging.
 """
 
 from unittest.mock import MagicMock, patch
@@ -63,6 +73,36 @@ def test_probe_port_recovers_from_spurious_empty_input_ahead_of_real_ack() -> No
     not sink the probe — the real ack is one read away.
     """
     fake_ser = _FakeSerial()
+    fake_ser.feed(build_frame(MSG_ERR_EMPTY_INPUT, b""))
+    fake_ser.feed(build_frame(MSG_OK_READY, b""))
+
+    with (
+        patch.object(SerialCommunicator, "__init__", _make_init(fake_ser)),
+        patch.object(SerialCommunicator, "send_json_command", return_value=15),
+        patch.object(SerialCommunicator, "consume_remaining_input", return_value=None),
+    ):
+        comm = SerialCommunicator._probe_port(
+            port_name="/dev/fake",
+            baud_rate=250000,
+            command_to_send={"state": 13},
+            config_manager=MagicMock(),
+            allow_outdated_firmware=True,
+        )
+
+    assert comm is not None
+    assert comm.programmer_info == "Ready"
+
+
+def test_probe_port_recovers_from_two_spurious_empty_input_frames_ahead_of_real_ack() -> (
+    None
+):
+    """The reporter's own log shows TWO `Empty input` lines before the real
+    ack. A single bounded retry survives one; it must also survive two,
+    which is exactly what a wall-clock deadline (rather than a fixed retry
+    count) buys.
+    """
+    fake_ser = _FakeSerial()
+    fake_ser.feed(build_frame(MSG_ERR_EMPTY_INPUT, b""))
     fake_ser.feed(build_frame(MSG_ERR_EMPTY_INPUT, b""))
     fake_ser.feed(build_frame(MSG_OK_READY, b""))
 
