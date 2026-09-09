@@ -376,6 +376,68 @@ def test_rig_life_is_rendered_in_the_write_coverage_line() -> None:
     assert "slots left on this part" in line
 
 
+def test_slots_remaining_line_reports_after_this_run_when_the_write_ran() -> None:
+    """D-20: the operator-facing number is slots left AFTER this run. The
+    resolver's own `slots_remaining` is the resolve-time (before-this-run)
+    count -- `_write_coverage_line` subtracts one when the write actually
+    ran (an OK/BAD/marginal verdict), because the run this line is about
+    just spent the top slot the resolver picked."""
+    from firestarter.diagnostic_report import _write_coverage_line
+
+    target = ct.WriteTarget(
+        region=(0xFF00, 256),
+        pattern=b"\xaa" * 256,
+        masked=True,
+        bits_cleared=512,
+        bits_retained=1536,
+        current_source="probe read",
+        slots_remaining=256,
+        slots_total=256,
+        region_policy=ct.REGION_POLICY_UV_SLOT,
+    )
+    result = ct.StepResult(
+        op=ct.OP_WRITE, verdict=ct.VERDICT_OK, run_count=1, write_target=target
+    )
+    step = ct.Step(op=ct.OP_WRITE, supported=True, reason="")
+
+    line = _write_coverage_line(result, step)
+    assert line is not None
+    assert "255 of 256 slots left on this part" in line
+
+
+def test_slots_remaining_line_reports_the_resolved_count_when_the_write_was_refused() -> (
+    None
+):
+    """D-21's flip side of the same predicate: a refused write (SKIPPED,
+    the write step was applicable and did not run) has not spent the slot
+    the resolver counted, so the reported number stays the resolved count
+    unreduced."""
+    from firestarter.diagnostic_report import _write_coverage_line
+
+    target = ct.WriteTarget(
+        region=(0xFF00, 256),
+        pattern=b"\xaa" * 256,
+        masked=True,
+        bits_cleared=512,
+        bits_retained=1536,
+        current_source="probe read",
+        slots_remaining=256,
+        slots_total=256,
+        region_policy=ct.REGION_POLICY_UV_SLOT,
+    )
+    result = ct.StepResult(
+        op=ct.OP_WRITE,
+        verdict=ct.VERDICT_SKIPPED,
+        run_count=0,
+        write_target=target,
+    )
+    step = ct.Step(op=ct.OP_WRITE, supported=True, reason="")
+
+    line = _write_coverage_line(result, step)
+    assert line is not None
+    assert "256 of 256 slots left on this part" in line
+
+
 def test_non_uv_target_reports_no_rig_life() -> None:
     """The counts are UV-only: an erasable part has no finite slot budget, so
     a number there would be meaningless rather than merely absent."""

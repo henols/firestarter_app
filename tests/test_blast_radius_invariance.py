@@ -256,7 +256,17 @@ pre-write UV blank-check now adjudicates to `SKIPPED` instead of `BAD`, so
 the row no longer spends a chip `BAD` and clears `build_db_diff`'s
 `"BAD" in verdicts` arm identically to `NA`/`SKIPPED`, landing on the same
 CANDIDATE/community-reported pair as `uv-slot-write-pass`, the new shape
-this phase registers."""
+this phase registers.
+
+Phase 181 plan 08 (D-20/D-21, T-179-05) moves all five `m27c512-*` shapes
+a third time, off CANDIDATE/community-reported onto NO_CHANGE/"": each
+one's own `write` step is SKIPPED (every UV slot exhausted -- measured,
+not asserted), so the fourth arm's new write-refusal disqualifier now
+correctly withholds the disposition a verified PASS proposes for a run
+that wrote nothing. This is the exhausted-slots ladder-flip bug closing,
+not a regression -- the full 19-shape before/after census (every shape,
+both dispositions) is recorded in
+`.planning/phases/181-.../evidence/181-08-write-refused-predicate.txt`."""
 LADDER_PINS: dict[str, tuple[str, str]] = {
     "at28c256-full-all-ok-sdp": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
     "attr01-status-axis-transport-fault": (_DISPOSITION_INCONCLUSIVE_LITERAL, ""),
@@ -264,20 +274,11 @@ LADDER_PINS: dict[str, tuple[str, str]] = {
     "gh23-w27e257-fail": (_DISPOSITION_COMMUNITY_FAIL_LITERAL, "community-fail"),
     "gh28-m27c512-fail": (_DISPOSITION_COMMUNITY_FAIL_LITERAL, "community-fail"),
     "gh47-sst27sf512-pass": (_DISPOSITION_INCONCLUSIVE_LITERAL, ""),
-    "m27c512-full-all-ok": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
-    "m27c512-full-blank-check-bad": (
-        _DISPOSITION_CANDIDATE_LITERAL,
-        "community-reported",
-    ),
-    "m27c512-full-canonical-name": (
-        _DISPOSITION_CANDIDATE_LITERAL,
-        "community-reported",
-    ),
-    "m27c512-full-comma-joined-name": (
-        _DISPOSITION_CANDIDATE_LITERAL,
-        "community-reported",
-    ),
-    "m27c512-full-runs-1": (_DISPOSITION_CANDIDATE_LITERAL, "community-reported"),
+    "m27c512-full-all-ok": (_DISPOSITION_NO_CHANGE_LITERAL, ""),
+    "m27c512-full-blank-check-bad": (_DISPOSITION_NO_CHANGE_LITERAL, ""),
+    "m27c512-full-canonical-name": (_DISPOSITION_NO_CHANGE_LITERAL, ""),
+    "m27c512-full-comma-joined-name": (_DISPOSITION_NO_CHANGE_LITERAL, ""),
+    "m27c512-full-runs-1": (_DISPOSITION_NO_CHANGE_LITERAL, ""),
     "prune03-synthesized-fingerprint-match": (
         _DISPOSITION_CANDIDATE_LITERAL,
         "community-reported",

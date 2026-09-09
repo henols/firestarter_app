@@ -17,8 +17,8 @@
   },
   "db_diff": {
     "current_support_status": "supported",
-    "ladder_state": "community-reported",
-    "proposed_disposition": "suggests: candidate for community-reported (advisory)"
+    "ladder_state": "",
+    "proposed_disposition": "no change suggested (advisory)"
   },
   "dedup_fingerprint": "6d3afbc52315",
   "elapsed": null,

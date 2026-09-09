@@ -671,6 +671,12 @@ def test_db_diff_readonly():
 
 
 def test_db_diff_verdict_mapping():
+    """RETARGETED 181-08: the PASS-only case's SKIPPED step is deliberately a
+    non-write op (`blank-check`, not `write`) -- a SKIPPED write-op result is
+    now D-21's refusal disqualifier and would withhold the candidate
+    disposition this case asserts. See
+    test_a_refused_write_disqualifies_the_fourth_arm_but_na_and_ok_do_not
+    for that disqualifying shape."""
     from firestarter.diagnostic_report import build_db_diff
 
     db = _mock_db()
@@ -691,7 +697,7 @@ def test_db_diff_verdict_mapping():
     pass_results = [
         StepResult(op="id", verdict=VERDICT_OK),
         StepResult(op="blank", verdict=VERDICT_NA),
-        StepResult(op="write", verdict=VERDICT_SKIPPED),
+        StepResult(op="blank-check", verdict=VERDICT_SKIPPED),
     ]
     diff_pass = build_db_diff("X", db, pass_results)
     assert "community-reported" in diff_pass.proposed_disposition
@@ -732,7 +738,13 @@ def test_ladder_state_verdict_mapping():
     all-OK (subset of {OK,NA,SKIPPED}, at least one OK) -> community-reported;
     marginal / indeterminate-fingerprint / no-change -> "" (no community-*
     tag). community-confirmed is the human-only target and must never be
-    emitted here (D-01/D-02)."""
+    emitted here (D-01/D-02).
+
+    RETARGETED 181-08: the PASS-only case's SKIPPED step is deliberately a
+    non-write op -- a SKIPPED write-op result is now D-21's refusal
+    disqualifier and would land this shape on `_LADDER_NONE` instead. See
+    test_a_refused_write_disqualifies_the_fourth_arm_but_na_and_ok_do_not
+    for that disqualifying shape."""
     from firestarter.diagnostic_report import (
         _LADDER_COMMUNITY_CONFIRMED,
         _LADDER_COMMUNITY_FAIL,
@@ -753,7 +765,7 @@ def test_ladder_state_verdict_mapping():
     pass_results = [
         StepResult(op="id", verdict=VERDICT_OK),
         StepResult(op="blank", verdict=VERDICT_NA),
-        StepResult(op="write", verdict=VERDICT_SKIPPED),
+        StepResult(op="blank-check", verdict=VERDICT_SKIPPED),
     ]
     diff_pass = build_db_diff("X", db, pass_results)
     assert diff_pass.ladder_state == _LADDER_COMMUNITY_REPORTED == "community-reported"
@@ -822,6 +834,49 @@ def test_error_run_status_routes_the_ladder_to_inconclusive():
     diff_clean = build_db_diff("X", db, ok_results)
     assert diff_clean.ladder_state == "community-reported"
     assert diff_clean.proposed_disposition != _DISPOSITION_INCONCLUSIVE
+
+
+def test_a_refused_write_disqualifies_the_fourth_arm_but_na_and_ok_do_not():
+    """D-20/D-21: one "did a write actually run" predicate closes the
+    exhausted-slots ladder flip (T-179-05) without touching the
+    unsupported-write parts whose disposition was already correct. A
+    SKIPPED write (applicable, did not run) must NOT propose the same
+    disposition a verified PASS proposes; an NA write (never going to run
+    in the first place) and a clean OK write must both be unaffected."""
+    from firestarter.diagnostic_report import _DISPOSITION_CANDIDATE, build_db_diff
+
+    db = _mock_db()
+
+    skipped_write_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_OK),
+        StepResult(op="blank-check", verdict=VERDICT_SKIPPED),
+        StepResult(op="write", verdict=VERDICT_SKIPPED),
+        StepResult(op="verify", verdict=VERDICT_SKIPPED),
+    ]
+    na_write_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_OK),
+        StepResult(op="write", verdict=VERDICT_NA),
+    ]
+    ok_write_results = [
+        StepResult(op="id", verdict=VERDICT_OK),
+        StepResult(op="read", verdict=VERDICT_OK),
+        StepResult(op="write", verdict=VERDICT_OK),
+        StepResult(op="verify", verdict=VERDICT_OK),
+    ]
+
+    diff_skipped = build_db_diff("X", db, skipped_write_results)
+    assert diff_skipped.proposed_disposition != _DISPOSITION_CANDIDATE
+    assert diff_skipped.ladder_state != "community-reported"
+
+    diff_na = build_db_diff("X", db, na_write_results)
+    assert diff_na.proposed_disposition == _DISPOSITION_CANDIDATE
+    assert diff_na.ladder_state == "community-reported"
+
+    diff_ok = build_db_diff("X", db, ok_write_results)
+    assert diff_ok.proposed_disposition == _DISPOSITION_CANDIDATE
+    assert diff_ok.ladder_state == "community-reported"
 
 
 def test_ladder_state_single_source_in_to_dict():

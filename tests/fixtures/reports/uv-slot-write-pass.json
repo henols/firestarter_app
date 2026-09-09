@@ -124,7 +124,7 @@
       "verdict": "OK",
       "write_bits_cleared": 512,
       "write_bits_retained": 1024,
-      "write_coverage": "slot 0xFF00 (256 bytes), 512 bits cleared this cycle; 256 of 256 slots left on this part",
+      "write_coverage": "slot 0xFF00 (256 bytes), 512 bits cleared this cycle; 255 of 256 slots left on this part",
       "write_current_source": "probe read (tranche 2/2)",
       "write_region_length": 256,
       "write_region_start": 65280

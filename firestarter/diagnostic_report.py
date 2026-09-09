@@ -39,6 +39,7 @@ from firestarter.chip_test import (
     Plan,
     Step,
     StepResult,
+    _write_step_was_refused,
     coverage_tag,
     repeat_policy_tag,
 )
@@ -381,6 +382,15 @@ def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
     config. Neither the disposition text nor `ladder_state` ever yields a
     concrete `support_status` value, and `ladder_state` never becomes
     `_LADDER_COMMUNITY_CONFIRMED` -- that state is human-gated only.
+
+    D-21's fourth-arm precondition: a run in which the write step was
+    applicable and did not run (`chip_test._write_step_was_refused`,
+    verdict SKIPPED) must not propose the same disposition a verified PASS
+    proposes -- the hole is pre-existing and reachable on any refused
+    write, not UV-specific, and it is closed here rather than as a
+    UV-specific carve-out. `NA` is deliberately NOT a refusal (a write that
+    was never going to run in the first place), so an unsupported-write
+    part's disposition is unaffected.
     """
     raw_config, _manufacturer = db.get_eprom_config(name)
     current = (raw_config or {}).get("support_status", "supported")
@@ -399,6 +409,7 @@ def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
     run_errored = any(
         getattr(r, "status", STATUS_COMPLETE) == STATUS_ERROR for r in results
     )
+    write_refused = _write_step_was_refused(results)
 
     if run_errored:
         proposed = _DISPOSITION_INCONCLUSIVE
@@ -409,7 +420,7 @@ def build_db_diff(name: str, db: Any, results: list[StepResult]) -> DbDiff:
     elif "marginal" in verdicts or has_indeterminate_fingerprint:
         proposed = _DISPOSITION_INCONCLUSIVE
         ladder_state = _LADDER_NONE
-    elif "OK" in verdicts and verdicts <= {"OK", "NA", "SKIPPED"}:
+    elif "OK" in verdicts and verdicts <= {"OK", "NA", "SKIPPED"} and not write_refused:
         proposed = _DISPOSITION_CANDIDATE
         ladder_state = _LADDER_COMMUNITY_REPORTED
     else:
@@ -571,6 +582,18 @@ def _write_coverage_line(result: StepResult, step: Step | None) -> str | None:
     `step` is `None` for every step that is not the located write/
     write-partial step (see `DiagnosticReport._write_step_index`) -- this
     function is a no-op for all of them.
+
+    D-20's slots-remaining arithmetic: the number an operator reads is
+    slots left AFTER this run. `WriteTarget.slots_remaining` is the
+    resolve-time count, taken BEFORE the write executes and therefore
+    necessarily including the slot about to be written -- the resolver
+    takes the first acceptable slot from a top-down list and a completed
+    write saturates exactly one slot, so "slots left" and "runs left" are
+    the same number, but only after subtracting the run this line is
+    about. The subtraction happens HERE, at the one point where both the
+    resolved count and the run's own outcome (`_write_step_was_refused`,
+    D-21) are both known -- a resolver that subtracted one would assert a
+    consumption that may never occur.
     """
     if step is None:
         return None
@@ -613,8 +636,13 @@ def _write_coverage_line(result: StepResult, step: Step | None) -> str | None:
         # staged tranche copy, which inherits its slot rather than re-deriving
         # the count.
         if target.slots_remaining is not None and target.slots_total:
+            reported_slots_remaining = (
+                target.slots_remaining
+                if _write_step_was_refused([result])
+                else target.slots_remaining - 1
+            )
             line += (
-                f"; {target.slots_remaining} of {target.slots_total} slots "
+                f"; {reported_slots_remaining} of {target.slots_total} slots "
                 "left on this part"
             )
         return line

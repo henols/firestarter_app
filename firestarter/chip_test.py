@@ -1975,6 +1975,35 @@ def _baseline_closes_sdp_gate(result: StepResult) -> bool:
     return result.verdict != VERDICT_OK
 
 
+def _write_step_was_refused(results: list[StepResult]) -> bool:
+    """`True` iff `results` carries a write-op (`OP_WRITE`/`OP_WRITE_PARTIAL`)
+    result whose verdict is `SKIPPED` -- the write step was applicable and
+    did not run (saturated, refused, or otherwise skipped), as opposed to
+    `NA` (never going to run in the first place) or a real OK/BAD/marginal
+    outcome (D-21). The engine owns the op and verdict vocabulary this
+    predicate reads, so it owns the predicate too.
+
+    Deliberately NOT a UV special case: this is the general "did a write
+    actually run" question, reachable on any refused write, UV or not.
+    `NA` is deliberately excluded -- treating an unsupported write as a
+    refusal would change dispositions for parts whose write step was never
+    going to run, which this predicate must leave alone.
+
+    Two call sites, deliberately the same function rather than two
+    look-alike expressions that could drift apart: `diagnostic_report.
+    _write_coverage_line`'s slots-remaining arithmetic (D-20) and
+    `diagnostic_report.build_db_diff`'s fourth ladder arm (D-21's
+    community-reported disqualifier). Read via `getattr` with safe
+    defaults, matching `build_db_diff`'s own `run_errored` pre-arm, so a
+    duck-typed result object folds safe rather than raising.
+    """
+    return any(
+        getattr(r, "op", None) in (OP_WRITE, OP_WRITE_PARTIAL)
+        and getattr(r, "verdict", None) == VERDICT_SKIPPED
+        for r in results
+    )
+
+
 # Three-valued hold-state REPORT VALUES. These are report values, NOT op
 # strings -- they
 # carry no `OP_` prefix and must never join `_ALL_OPS`/`_MULTIWORD_OP_VALUES`
