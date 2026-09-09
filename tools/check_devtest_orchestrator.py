@@ -149,10 +149,6 @@ FIRESTARTER_DEVTEST_SUBMIT = os.environ.get(
 # under-covers exactly that new code -- `tests/test_check_devtest_orchestrator
 # .py::test_handler_function_names_all_resolve_to_real_callables` makes this
 # a permanently-enforced invariant rather than a one-off fix.
-#
-# Phase 181 plan 05 (RPT-F1) added `_canonical_part_number`, the
-# handler-side canonical-alias selector `dev_test` calls before its first
-# serialization.
 _HANDLER_FUNCTION_NAMES = frozenset(
     {
         "dev_test",
