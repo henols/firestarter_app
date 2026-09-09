@@ -70,15 +70,6 @@ py32 = [
 ]
 test = [
     "pytest>=8.0",
-    # Upper bound <7 (HYG-01 / D-17): PyPI now serves syrupy 6.0.0, whose
-    # headline change is native Amber serialization of stdlib dataclasses --
-    # and `Plan`, `Step`, `Fingerprint` and the report classes in this
-    # package are all dataclasses. The 19 committed report snapshots and
-    # tools/snapshot_report_shapes.py --check are exactly what a
-    # serialization change would silently re-render. The currently
-    # installed release (6.0.0) is already inside this bound, so it refuses
-    # a future major rather than fixing a present break. Raise the bound
-    # deliberately and re-verify the snapshots in the same commit.
     "syrupy>=5.0,<7",
     # Phase 37 additions:
     "ruff>=0.15.14",
