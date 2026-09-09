@@ -574,7 +574,17 @@ def test_frozen_pre_2_0_fixtures_still_parse_forward_only() -> None:
     used, but WITH a skip guard this time: the app suite must not
     hard-depend on the meta tree, since that exact unguarded reach-out is
     what sent app CI to `13 failed, 13 passed` on a bare checkout and
-    condemned that coupling."""
+    condemned that coupling.
+
+    Plan 181-09 re-runs this test AFTER deleting `vpp_mv`/`vpe_mv` from
+    the current schema -- the run that actually establishes RPT-E2's
+    property, since before that deletion landed there was nothing
+    forward about this claim. Both fixture bodies still parse and both
+    still carry the two now-deleted keys as their own frozen pre-2.0
+    content; this test never constructs a `DiagnosticReport`, so the
+    dataclass fields' removal cannot affect it -- the parser accepts
+    `schema_version` by presence only, exactly as the module docstring
+    above states."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
     from tools.parse_devtest_issue import _extract_fenced_report
 
