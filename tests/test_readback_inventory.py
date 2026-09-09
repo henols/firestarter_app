@@ -395,7 +395,7 @@ def test_a_planted_stray_setup_operation_call_in_read_eprom_reddens_the_hardened
         assert mutant_shape["connect_route_calls"] == 1
 
 
-_LAST_OK_REASSIGN_ANCHOR = '    reason = "read runs diverged" if divergence else ""\n'
+_LAST_OK_REASSIGN_ANCHOR = '    reason = "read runs diverged" if diverged else ""\n'
 
 
 def _last_ok_assignment_shape(source: str) -> dict[str, object]:
