@@ -144,14 +144,11 @@ FIRESTARTER_DEVTEST_SUBMIT = os.environ.get(
 # placed inside `dev_test` itself trips `EXIT=1`. `_is_uv_eprom` sat in this
 # set pointing at nothing (a leftover speculative name) --
 # a later allow-list update landed the real handler-side UV predicate under that exact
-# name. A later deletion removed the UV-scope helper that name used to sit
-# alongside (its rule is now inlined at `dev_test`'s single `derive_plan`
-# call site) and dropped it from this set in the same commit. Every future
-# helper added to the `dev test` surface MUST be listed here, or this gate
-# silently under-covers exactly that new code -- `tests/test_check_
-# devtest_orchestrator.py::test_handler_function_names_all_resolve_to_real_
-# callables` makes this a permanently-enforced invariant rather than a
-# one-off fix.
+# name. Every future helper
+# added to the `dev test` surface MUST be listed here, or this gate silently
+# under-covers exactly that new code -- `tests/test_check_devtest_orchestrator
+# .py::test_handler_function_names_all_resolve_to_real_callables` makes this
+# a permanently-enforced invariant rather than a one-off fix.
 _HANDLER_FUNCTION_NAMES = frozenset(
     {
         "dev_test",
