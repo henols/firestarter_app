@@ -95,6 +95,28 @@ class HardwareOperationError(Exception):
     pass
 
 
+class Pin1HazardRefusedError(HardwareOperationError):
+    """Raised when a damage-capable operation on an affected part is refused.
+
+    A part whose pin map places an address line at or above A19 on socket
+    pin 1 shares that pin with the RURP shield's JP5-switched 12.75V
+    programming rail. Every RURP Rev 2.x board reaches socket pin 1 through
+    JP5 the same way, so this is not a shield-revision problem --
+    `HardwareRevisionUnsupportedError` would be the wrong (and dishonest)
+    base to reuse here. It subclasses `HardwareOperationError` instead.
+
+    Raised either because the part is affected and no acknowledgement was
+    given in this invocation, or because the bus configuration carries no
+    evidence at all that socket pin 1 is safe -- fail-closed either way.
+    `cli_handlers.map_typed_errors` renders this verbatim, ahead of the
+    generic `HardwareOperationError` arm, so a caller reaching this refusal
+    by any path -- CLI, `dev test`, or a future entry point -- sees the
+    hazard text rather than a degraded generic hardware-error message.
+    """
+
+    pass
+
+
 class FirmwareOperationError(Exception):
     """Custom exception for firmware operation failures."""
 

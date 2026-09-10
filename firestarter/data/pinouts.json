@@ -91,6 +91,17 @@
             "ce-pin": [22], "oe-pin": [24], "rw-pin": [31]
         }
     },
+    "DIP32_27C801": {
+        "name": "JEDEC 32-pin UV-EPROM 1M (27C080 / M27C801 — A19 on pin 1, VPP on pin 24)",
+        "comment": "Per piersfinlayson/one-rom docs/CHIP-TYPES.md (datasheet-verified): the 8 Mbit 27C080/M27C801 class has 20 address lines (A0-A19) with A19 at pin 1, and VPP at pin 24 shared with /OE — the same OE/VPP sharing DIP28_27512 uses at pin 22. /PGM is pin 22 shared with /CE. Distinct from DIP32_STD (27C040 class: pin 1 = VPP, pin 31 = A18, 19 address lines) and from DIP32_27C020 (pin 31 = PGM). Assigned by resolve_pinout_key to pin_count=32 && pm_idx=12 && proto_id=0x08 && variant_lo=0x03 — the eight 1 MB rows AM27C080, AM27LV080, AT27C080, M27C801 (x2), MX27C8000, MX27C8000A, UPD27C8001. HARDWARE: A19 at pin 1 means socket pin 1 carries an address line, and on Rev 2.x shields socket pin 1 is also the VPP-enable line (JP5 = A19_CUT bridges it to the switched VPP node). JP5 must be cut for these parts, per the shield silkscreen.",
+        "pins": {
+            "vcc-pin": [32], "gnd-pin": [16],
+            "vpp-pin": [24], "oe-pin": [24],
+            "address-bus-pins": [12, 11, 10, 9, 8, 7, 6, 5, 27, 26, 23, 25, 4, 28, 29, 3, 2, 30, 31, 1],
+            "data-bus-pins": [13, 14, 15, 17, 18, 19, 20, 21],
+            "ce-pin": [22]
+        }
+    },
     "DIP28_28C256": {
         "name": "JEDEC 28-pin 5V parallel EEPROM (28C256 family)",
         "comment": "Per piersfinlayson/one-rom (datasheet-verified): 28C256 family has 15 address pins (A0-A14), with A14 at pin 1 (NOT VPP) and WE at pin 27 (NOT PGM). 5V single-supply, no programming voltage. Distinct from DIP28_2764 (UV-EPROM layout) which has VPP at pin 1 and PGM at pin 27. Covers ~8 chips at (pin_count=28, pm_idx=20, protocol_id=0x07): AT28C256, AT28C256E/F, HN58C256, HN58C256AP, etc. Routes through configure_eeprom28c after WARNING-5 algo override OR directly via pm_idx-based pinout selection.",

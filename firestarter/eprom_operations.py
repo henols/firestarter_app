@@ -57,6 +57,7 @@ from firestarter.exceptions import (
     SerialTimeoutError,
 )
 from firestarter.frame_parser import _crc8_ccitt, cobs_encode
+from firestarter.jp5_gate import require_acknowledged
 from firestarter.messages import MSG_DATA_PROTECTION_STATUS, MSG_WARN_SDP_UNLOCK_SKIPPED
 from firestarter.sdp_capability import SDP_PROTOCOL_ID
 from firestarter.serial_comm import (
@@ -1972,6 +1973,7 @@ class EpromOperator:
         operation_flags: int = 0,
         address_str: Optional[str] = None,
         pulse_us: int = 0,  # per-run pulse-width override (us; 0=not supplied, use the database value)
+        pin1_hazard_acknowledged: bool = False,
     ) -> bool:
         # per-run pulse override, riding the existing
         # "pulse-delay" DB-dict key rather than adding a new wire field or
@@ -1997,6 +1999,13 @@ class EpromOperator:
                 eprom_data_dict
             )  # shallow copy -- never mutate caller's dict
             eprom_data_dict["pulse-delay"] = pulse_us
+
+        require_acknowledged(
+            eprom_name,
+            eprom_data_dict.get("bus-config"),
+            "write",
+            pin1_hazard_acknowledged,
+        )
 
         with self._operation_context(
             eprom_name,

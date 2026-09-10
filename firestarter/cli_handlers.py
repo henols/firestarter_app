@@ -68,12 +68,14 @@ from firestarter.exceptions import (
     FirmwareOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
+    Pin1HazardRefusedError,
     ProtocolNotImplementedError,
     SerialError,
     SerialTimeoutError,
 )
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.hardware import HardwareManager
+from firestarter.jp5_gate import confirm_or_refuse
 from firestarter.lock_status import (
     classify_protection_response,
     exit_code_for_class,
@@ -208,6 +210,8 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
             raise click.ClickException(str(e)) from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
+        except Pin1HazardRefusedError as e:
+            raise click.ClickException(str(e)) from e
         except HardwareOperationError as e:
             raise click.ClickException(f"Hardware error: {e}") from e
 
@@ -746,6 +750,9 @@ def write(
             "normal write."
         )
 
+    if not confirm_or_refuse(eprom, eprom_data.get("bus-config"), "write"):
+        sys.exit(1)
+
     ok = app.eprom_operator.write_eprom(
         eprom,
         eprom_data,
@@ -762,6 +769,7 @@ def write(
         # write_eprom's own integer sentinel (0 means "use the database
         # value" -- see that function's docstring).
         pulse_us=pulse_us or 0,
+        pin1_hazard_acknowledged=True,
     )
     sys.exit(0 if ok else 1)
 
