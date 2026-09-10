@@ -214,13 +214,19 @@ class TestDiffDbVccMarginRailBucketInvariance:
             "28C16AF) since Phase 168's build_db.py wiki-page repoint made "
             f"their unsupported_reason diverge from the Phase-98 baseline; got:\n{stdout}"
         )
-        assert "[PROV01_PROTECT_METADATA] (682 chips)" in stdout, (
+        assert "[PROV01_PROTECT_METADATA] (674 chips)" in stdout, (
             "PROV01_PROTECT_METADATA must drop by exactly the 56 margin-rail "
-            "movers plus the 4 chips Phase 168 reclassified into RULE_PHASE66 "
-            f"(742 -> 686 -> 682); got:\n{stdout}"
+            "movers, the 4 chips Phase 168 reclassified into RULE_PHASE66, and "
+            "the 8 chips Phase 182 reclassified into RULE_PHASE182_A19_PINOUT "
+            f"(742 -> 686 -> 682 -> 674); got:\n{stdout}"
         )
         assert "[PGSZ_PAGE_SIZE] (2 chips)" in stdout, (
             f"PGSZ_PAGE_SIZE must stay 2 chips (pre-existing, unaffected); got:\n{stdout}"
+        )
+        assert "[RULE_PHASE182_A19_PINOUT] (8 chips)" in stdout, (
+            "RULE_PHASE182_A19_PINOUT must explain exactly 8 chips -- the "
+            "AM27C080/AM27LV080/AT27C080/M27C801 (x2)/MX27C8000/MX27C8000A/"
+            f"UPD27C8001 1 MB proto-0x08 DIP32_27C801 relabel; got:\n{stdout}"
         )
         assert "NEW chips (0)" in stdout, f"Expected 0 NEW chips; got:\n{stdout}"
         assert "MISSING chips (0)" in stdout, (

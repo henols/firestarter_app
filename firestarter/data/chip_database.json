@@ -344,7 +344,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AM27C080",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C801",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -498,7 +498,7 @@
         "vpp_mv": 12000
       },
       "part_number": "AM27LV080",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C801",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -1674,7 +1674,7 @@
         "vpp_mv": 13000
       },
       "part_number": "AT27C080",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C801",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -8228,7 +8228,7 @@
         "vpp_mv": 13000
       },
       "part_number": "MX27C8000",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C801",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -8250,7 +8250,7 @@
         "vpp_mv": 13000
       },
       "part_number": "MX27C8000A",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C801",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -10003,7 +10003,7 @@
         "vpp_mv": 12000
       },
       "part_number": "UPD27C8001",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C801",
       "programming": {
         "algorithm": 8,
         "chip_id_check": false,
@@ -11518,7 +11518,7 @@
         "vpp_mv": 13000
       },
       "part_number": "M27C801",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C801",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
@@ -13549,7 +13549,7 @@
         "vpp_mv": 13000
       },
       "part_number": "M27C801",
-      "pinout": "DIP32_STD",
+      "pinout": "DIP32_27C801",
       "programming": {
         "algorithm": 8,
         "chip_id_check": true,
