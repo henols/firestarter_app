@@ -772,7 +772,7 @@ class TestThirtyTwoPinVariantLoDispatch:
     """D-02 (Plan 182-02): the 32-pin protocol-0x08 cluster dispatches on
     variant_lo exactly as the 24-pin and 28-pin arms already do, with the
     mem_size threshold surviving only as the residual fall-through arm —
-    replacing the retired MAX_27C020_SIZE self-comparing parity arm.
+    replacing the retired size-threshold self-comparing parity arm.
     """
 
     @pytest.mark.parametrize(
