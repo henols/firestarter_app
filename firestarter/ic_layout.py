@@ -183,23 +183,6 @@ class EpromSpecBuilder:
             }
         }
 
-    def _get_rev2_2_jumper_settings_data(self, jp5: int) -> dict:
-        """Generates structured data for Rev 2.2 jumper settings."""
-        jp5_label = self._select_jumper_label(
-            jp5, "Open", "Closed"
-        )  # Assuming 1=Open, 2=Closed
-        jumper_display = [" N/A   ", " ● ●   ", "(● ●)  "]  # 0: N/A, 1: Open, 2: Closed
-        return {
-            "2.2": {
-                "jp5": {
-                    "config_text": "28pin",
-                    "display": jumper_display[jp5],
-                    "pin_text": "32pin",
-                    "selected_label": jp5_label,
-                },
-            }
-        }
-
     def get_chip_type_string(self, protocol_id: int | None = None) -> str:
         """Return a user-facing chip-type label.
 
@@ -653,7 +636,6 @@ class EpromSpecBuilder:
                 output_data["jumpers"].update(
                     self._get_rev2_jumper_settings_data(jp4_rev2)
                 )
-                # output_data["jumpers"].update( self._get_rev2_2_jumper_settings_data(jp4_rev2))  # noqa: E501
 
         protocol_id = eprom_data.get("protocol-id")
         if protocol_id is not None:
