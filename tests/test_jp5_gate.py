@@ -19,6 +19,10 @@ Four things are proved here:
      before `_operation_context` is ever entered.
   4. The off-TTY leg of `confirm_or_refuse` -- `confirm_fn` is never reached
      without a TTY.
+  5. The affected-part set is DERIVED from `pinouts.json`, never hand-listed
+     (SAFE-01, success criterion 2) -- a synthetic pin map merged with no
+     source edit appears in the set exactly when its own pin map earns it,
+     and the module carries no literal 8 Mbit part-number list.
 """
 
 from unittest.mock import Mock, patch
@@ -290,3 +294,161 @@ def test_cli_erase_with_force_on_affected_part_still_refuses_off_tty():
         result = runner.invoke(cli, ["erase", "DIP32_27C801", "-f"], obj=app)
     assert result.exit_code == 1
     eprom_operator.erase_eprom.assert_not_called()
+
+
+A18_REMAINDER_PINOUTS = {"DIP32_SST39SF040"}
+
+
+def _derived_sets(db: EpromDatabase) -> tuple[set[str], set[str]]:
+    structural = set()
+    gated = set()
+    for key in db.pin_maps:
+        pin_count = int(key.split("_")[0].removeprefix("DIP"))
+        bus_config = db.get_bus_config(pin_count, key)
+        if socket_pin1_address_bit(bus_config) is not None:
+            structural.add(key)
+        if is_affected(bus_config):
+            gated.add(key)
+    return structural, gated
+
+
+def test_structural_set_over_the_real_shipped_data_is_exactly_two_keys():
+    db = EpromDatabase(skip_local_override=True)
+    structural, _gated = _derived_sets(db)
+    assert structural == {"DIP32_SST39SF040", "DIP32_27C801"}
+
+
+def test_gated_set_over_the_real_shipped_data_is_exactly_dip32_27c801():
+    db = EpromDatabase(skip_local_override=True)
+    _structural, gated = _derived_sets(db)
+    assert gated == {"DIP32_27C801"}
+
+
+def test_socket_pin1_address_bit_for_the_two_structural_pinouts():
+    db = EpromDatabase(skip_local_override=True)
+    assert socket_pin1_address_bit(db.get_bus_config(32, "DIP32_SST39SF040")) == 18
+    assert socket_pin1_address_bit(db.get_bus_config(32, "DIP32_27C801")) == 19
+
+
+def test_a18_remainder_is_recorded_and_deliberately_not_gated():
+    db = EpromDatabase(skip_local_override=True)
+    structural, gated = _derived_sets(db)
+    assert structural - gated == A18_REMAINDER_PINOUTS
+
+    shipped_rows = sum(
+        1
+        for chips in db.proms.values()
+        for chip in chips
+        if chip.get("pinout") == "DIP32_SST39SF040"
+    )
+    assert shipped_rows == 255
+
+
+def test_synthetic_pin_map_with_pin1_at_index19_appears_in_the_affected_set():
+    db = EpromDatabase(skip_local_override=True)
+    synthetic_key = "DIP32_SYNTHETIC_A19"
+    db._merge_pin_maps(
+        db.pin_maps,
+        {
+            synthetic_key: {
+                "name": "Synthetic fixture -- pin 1 at address bit 19",
+                "pins": {
+                    "vcc-pin": [32],
+                    "gnd-pin": [16],
+                    "data-bus-pins": db.pin_maps["DIP32_27C801"]["pins"][
+                        "data-bus-pins"
+                    ],
+                    "ce-pin": [22],
+                    "oe-pin": [24],
+                    "address-bus-pins": [
+                        12,
+                        11,
+                        10,
+                        9,
+                        8,
+                        7,
+                        6,
+                        5,
+                        27,
+                        26,
+                        23,
+                        25,
+                        4,
+                        28,
+                        29,
+                        3,
+                        2,
+                        30,
+                        31,
+                        1,
+                    ],
+                },
+            }
+        },
+    )
+
+    _structural, gated = _derived_sets(db)
+    assert synthetic_key in gated
+
+
+def test_synthetic_pin_map_with_pin1_at_index18_does_not_appear_in_the_affected_set():
+    db = EpromDatabase(skip_local_override=True)
+    synthetic_key = "DIP32_SYNTHETIC_A18"
+    db._merge_pin_maps(
+        db.pin_maps,
+        {
+            synthetic_key: {
+                "name": "Synthetic fixture -- pin 1 at address bit 18",
+                "pins": {
+                    "vcc-pin": [32],
+                    "gnd-pin": [16],
+                    "data-bus-pins": db.pin_maps["DIP32_27C801"]["pins"][
+                        "data-bus-pins"
+                    ],
+                    "ce-pin": [22],
+                    "oe-pin": [24],
+                    "address-bus-pins": [
+                        12,
+                        11,
+                        10,
+                        9,
+                        8,
+                        7,
+                        6,
+                        5,
+                        27,
+                        26,
+                        23,
+                        25,
+                        4,
+                        28,
+                        29,
+                        3,
+                        2,
+                        30,
+                        1,
+                    ],
+                },
+            }
+        },
+    )
+
+    structural, gated = _derived_sets(db)
+    assert synthetic_key in structural
+    assert synthetic_key not in gated
+
+
+def test_get_bus_config_unknown_pinout_returns_none():
+    db = EpromDatabase(skip_local_override=True)
+    assert db.get_bus_config(32, "DIP32_DOES_NOT_EXIST") is None
+
+
+def test_require_acknowledged_fails_closed_through_a_real_unknown_pinout_lookup():
+    db = EpromDatabase(skip_local_override=True)
+    unresolved_bus_config = db.get_bus_config(32, "DIP32_DOES_NOT_EXIST")
+    with pytest.raises(Pin1HazardRefusedError):
+        require_acknowledged(
+            "DIP32_DOES_NOT_EXIST", unresolved_bus_config, "write", True
+        )
+    with pytest.raises(Pin1HazardRefusedError):
+        require_acknowledged("DIP32_DOES_NOT_EXIST", {}, "write", True)
