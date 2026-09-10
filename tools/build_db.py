@@ -5,8 +5,6 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-from firestarter.constants import MAX_27C020_SIZE
-
 # ==========================================
 # 1. CONFIGURATION
 # ==========================================
@@ -24,11 +22,6 @@ PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
 # Curated non-upstream chip supplement, merged post-decode (see
 # the EXTRA_CHIPS block in main()). Physically-real chips absent from infoic.xml.
 EXTRA_CHIPS_FILE = os.path.join(os.path.dirname(__file__), "extra_chips.json")
-# Largest 0x08 32-pin part where pin 31 (A18) is structurally unused, so the
-# DIP32_27C020 pinout arm is keyed on size. Larger parts (AM27C040, AM27C080)
-# really do drive A18 and must stay on DIP32_STD. Mirrored in
-# firestarter/include/firestarter.h; the pair is asserted by
-# tests/test_revision_constants_parity.py.
 
 # ==========================================
 # 2. PINOUT LIBRARY (The Missing Physical Layer)
@@ -179,6 +172,8 @@ _VCC_MARGIN_RAIL_MV = VCC_VOLTAGES[0x02]
 # function below is the sole pinout-selection path. See RESEARCH.md
 # §"Full Principled Rule Structure" for derivation evidence.
 
+_PGM_ON_PIN31_MAX_SIZE = 262144
+
 with open(PINOUT_FILE) as _f:
     VALID_PINOUT_KEYS = set(json.load(_f).keys())
 
@@ -268,16 +263,14 @@ def resolve_pinout_key(
             elif proto_id == 0x0D:
                 key = "DIP32_28C512_EEPROM"  # 5V EEPROM; WE=30, no VPP
             elif proto_id in {0x07, 0x08, 0x10}:
-                if proto_id == 0x08 and mem_size <= MAX_27C020_SIZE:
-                    # ≤256K 0x08 chips (27C010/27C020 class) have pin 31 = PGM
-                    # (NOT A18 — A18 = bit 18 = mask 0x40000 is unused at ≤256K).
-                    # 512K AM27C040 (524288) and 1M AM27C080 (1048576) legitimately use
-                    # pin 31 = A18 and MUST stay on DIP32_STD.
-                    key = (
-                        "DIP32_27C020"  # PGM on pin 31 (off address bus); VPP on pin 1
-                    )
+                if proto_id == 0x08 and variant_lo == 0x03:
+                    key = "DIP32_27C801"
+                elif proto_id == 0x08 and variant_lo == 0x02:
+                    key = "DIP32_STD"
+                elif proto_id == 0x08 and mem_size <= _PGM_ON_PIN31_MAX_SIZE:
+                    key = "DIP32_27C020"
                 else:
-                    key = "DIP32_STD"  # UV-EPROM / Intel-flash; VPP=pin 1
+                    key = "DIP32_STD"
             else:
                 key = None
         else:

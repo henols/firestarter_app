@@ -24,6 +24,8 @@ import json
 import os
 import sys
 
+import pytest
+
 _DB_FILE = os.environ.get(
     "FIRESTARTER_DB_FILE",
     os.path.join(
@@ -764,3 +766,77 @@ class TestNonSupportedNonDispatchable:
             f"D-03 HARD / D-12 violated. All violations:\n"
             + "\n".join(f"  {v}" for v in violations)
         )
+
+
+class TestThirtyTwoPinVariantLoDispatch:
+    """D-02 (Plan 182-02): the 32-pin protocol-0x08 cluster dispatches on
+    variant_lo exactly as the 24-pin and 28-pin arms already do, with the
+    mem_size threshold surviving only as the residual fall-through arm —
+    replacing the retired MAX_27C020_SIZE self-comparing parity arm.
+    """
+
+    @pytest.mark.parametrize(
+        "pm_idx,variant_lo,proto_id,mem_size,expected",
+        [
+            (12, 0x03, 0x08, 1048576, "DIP32_27C801"),
+            (12, 0x02, 0x08, 524288, "DIP32_STD"),
+            (12, 0x00, 0x08, 131072, "DIP32_27C020"),
+            (12, 0x01, 0x08, 262144, "DIP32_27C020"),
+            (12, 0x10, 0x10, 524288, "DIP32_STD"),
+            (12, 0x11, 0x10, 524288, "DIP32_STD"),
+            (12, 0x12, 0x10, 524288, "DIP32_STD"),
+            (12, 0x13, 0x10, 524288, "DIP32_STD"),
+            (0, 0x00, 0x0E, 131072, "DIP32_SST39SF040"),
+        ],
+    )
+    def test_thirty_two_pin_0x08_dispatch_forks_on_variant_lo(
+        self, pm_idx, variant_lo, proto_id, mem_size, expected
+    ):
+        """Each `(pm_idx, variant_lo, proto_id, mem_size)` tuple pins one row
+        of the 182-RESEARCH.md measured 8-row blast radius, the four
+        protocol-0x10 points proving the variant_lo fork stays inside the
+        proto_id == 0x08 test (Intel-flash parts did not move), and the
+        pm_idx=0 SRAM point proving the fork did not touch a sibling arm.
+        The final assertion is the self-checking leg: every key this
+        dispatch can produce must be a member of VALID_PINOUT_KEYS, so a
+        typo here fails loudly rather than merely warning at regen time.
+        """
+        from tools import build_db
+
+        resolved = build_db.resolve_pinout_key(
+            32,
+            variant_lo,
+            0,
+            pm_idx=pm_idx,
+            proto_id=proto_id,
+            type_int=1,
+            mem_size=mem_size,
+        )
+        assert resolved == expected, (
+            f"pm_idx={pm_idx} variant_lo=0x{variant_lo:02X} proto_id=0x{proto_id:02X} "
+            f"mem_size={mem_size}: expected {expected!r}, got {resolved!r}"
+        )
+        assert resolved in build_db.VALID_PINOUT_KEYS, (
+            f"{resolved!r} resolved but is not a member of VALID_PINOUT_KEYS "
+            f"(pinouts.json) — the WARN guard would fire on regen"
+        )
+
+    def test_the_pgm_on_pin31_boundary_keeps_sst37vf040_on_dip32_std(self):
+        """SST37VF040 (pm_idx=13, variant_lo=0x04, 524288 bytes) must stay on
+        DIP32_STD via the residual `_PGM_ON_PIN31_MAX_SIZE` arm. A pure
+        variant_lo ladder that routed everything-not-0x02-or-0x03 onto
+        DIP32_27C020 would put a 512 KB part's A18 address line onto a PGM
+        strobe — this is RESEARCH pitfall 2, and the reason the size
+        threshold survives as the fall-through arm rather than being
+        replaced outright.
+        """
+        from tools import build_db
+
+        resolved = build_db.resolve_pinout_key(
+            32, 0x04, 0, pm_idx=13, proto_id=0x08, type_int=1, mem_size=524288
+        )
+        assert resolved == "DIP32_STD", (
+            f"SST37VF040 must resolve to DIP32_STD via the residual size arm, "
+            f"got {resolved!r}"
+        )
+        assert resolved in build_db.VALID_PINOUT_KEYS
