@@ -24,11 +24,17 @@ Four things are proved here:
 from unittest.mock import Mock, patch
 
 import pytest
+from click.testing import CliRunner
 
+from firestarter import cli_handlers
+from firestarter.cli_handlers import AppContext, cli
 from firestarter.config import ConfigManager
 from firestarter.database import EpromDatabase, pin_conversions
+from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
 from firestarter.exceptions import Pin1HazardRefusedError
+from firestarter.firmware import FirmwareManager
+from firestarter.hardware import HardwareManager
 from firestarter.jp5_gate import (
     DAMAGE_CAPABLE_OPERATIONS,
     GATED_ADDRESS_BIT,
@@ -193,3 +199,94 @@ def test_write_eprom_on_affected_chip_refuses_before_operation_context():
         with pytest.raises(Pin1HazardRefusedError):
             operator.write_eprom("DIP32_27C801", eprom_data, "in.bin")
         ctx_mock.assert_not_called()
+
+
+def test_erase_eprom_on_affected_chip_refuses_before_operation_context():
+    operator = _make_operator()
+    eprom_data = {"bus-config": AFFECTED_BUS_CONFIG}
+    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+        with pytest.raises(Pin1HazardRefusedError):
+            operator.erase_eprom("DIP32_27C801", eprom_data)
+        ctx_mock.assert_not_called()
+
+
+def test_erase_eprom_acknowledged_reaches_operation_context():
+    operator = _make_operator()
+    eprom_data = {"bus-config": AFFECTED_BUS_CONFIG}
+    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+        ctx_mock.return_value.__enter__ = Mock(return_value=(None, 0, "erase"))
+        ctx_mock.return_value.__exit__ = Mock(return_value=False)
+        result = operator.erase_eprom(
+            "DIP32_27C801", eprom_data, pin1_hazard_acknowledged=True
+        )
+        ctx_mock.assert_called_once()
+        assert result is False
+
+
+def test_erase_eprom_unaffected_reaches_operation_context_regardless_of_acknowledged():
+    operator = _make_operator()
+    for eprom_data in (
+        {"bus-config": A18_BUS_CONFIG},
+        {"bus-config": NO_PIN1_BUS_CONFIG},
+    ):
+        with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+            ctx_mock.return_value.__enter__ = Mock(return_value=(None, 0, "erase"))
+            ctx_mock.return_value.__exit__ = Mock(return_value=False)
+            operator.erase_eprom("W27C512", eprom_data, pin1_hazard_acknowledged=False)
+            ctx_mock.assert_called_once()
+
+
+def test_confirm_or_refuse_erase_off_tty_returns_false_and_never_calls_confirm_fn():
+    isatty_fn = Mock(return_value=False)
+    confirm_fn = Mock()
+    result = confirm_or_refuse(
+        "DIP32_27C801",
+        AFFECTED_BUS_CONFIG,
+        "erase",
+        isatty_fn=isatty_fn,
+        confirm_fn=confirm_fn,
+    )
+    assert result is False
+    confirm_fn.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", ["read", "verify", "blank", "id"])
+def test_confirm_or_refuse_d06_scope_returns_true_with_no_hazard_printed(operation):
+    confirm_fn = Mock()
+    console = Mock()
+    result = confirm_or_refuse(
+        "DIP32_27C801",
+        AFFECTED_BUS_CONFIG,
+        operation,
+        isatty_fn=Mock(return_value=False),
+        confirm_fn=confirm_fn,
+        console=console,
+    )
+    assert result is True
+    confirm_fn.assert_not_called()
+    console.print.assert_not_called()
+
+
+def _cli_app_context(eprom_operator):
+    return AppContext(
+        db=Mock(),
+        config_manager=ConfigManager(),
+        eprom_operator=eprom_operator,
+        hardware_manager=Mock(spec=HardwareManager),
+        firmware_manager=Mock(spec=FirmwareManager),
+        eprom_presenter=Mock(spec=EpromConsolePresenter),
+    )
+
+
+def test_cli_erase_with_force_on_affected_part_still_refuses_off_tty():
+    runner = CliRunner()
+    eprom_operator = Mock(spec=EpromOperator)
+    app = _cli_app_context(eprom_operator)
+    with patch.object(
+        cli_handlers,
+        "resolve_chip",
+        return_value={"bus-config": AFFECTED_BUS_CONFIG},
+    ):
+        result = runner.invoke(cli, ["erase", "DIP32_27C801", "-f"], obj=app)
+    assert result.exit_code == 1
+    eprom_operator.erase_eprom.assert_not_called()

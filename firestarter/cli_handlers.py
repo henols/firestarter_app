@@ -22,6 +22,7 @@ from rich.console import Console
 
 from firestarter import __version__ as version
 from firestarter import (
+    jp5_gate,
     sdp_honesty,  # unreadable_state_caveat(), called not re-authored
     transport_counters,
 )
@@ -75,7 +76,6 @@ from firestarter.exceptions import (
 )
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
 from firestarter.hardware import HardwareManager
-from firestarter.jp5_gate import confirm_or_refuse
 from firestarter.lock_status import (
     classify_protection_response,
     exit_code_for_class,
@@ -750,7 +750,7 @@ def write(
             "normal write."
         )
 
-    if not confirm_or_refuse(eprom, eprom_data.get("bus-config"), "write"):
+    if not jp5_gate.confirm_or_refuse(eprom, eprom_data.get("bus-config"), "write"):
         sys.exit(1)
 
     ok = app.eprom_operator.write_eprom(
@@ -869,11 +869,16 @@ def erase(
     sector address given for it.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
+
+    if not jp5_gate.confirm_or_refuse(eprom, eprom_data.get("bus-config"), "erase"):
+        sys.exit(1)
+
     ok = app.eprom_operator.erase_eprom(
         eprom,
         eprom_data,
         operation_flags=_build_op_flags(blank_check=blank_check, force=force),
         address_str=sector_address,
+        pin1_hazard_acknowledged=True,
     )
     sys.exit(0 if ok else 1)
 

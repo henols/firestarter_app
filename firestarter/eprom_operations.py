@@ -2142,7 +2142,15 @@ class EpromOperator:
         eprom_data_dict: dict,
         operation_flags: int = 0,
         address_str: Optional[str] = None,
+        pin1_hazard_acknowledged: bool = False,
     ) -> bool:
+        require_acknowledged(
+            eprom_name,
+            eprom_data_dict.get("bus-config"),
+            "erase",
+            pin1_hazard_acknowledged,
+        )
+
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
