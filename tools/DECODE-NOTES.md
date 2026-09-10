@@ -43,12 +43,34 @@ load-bearing reproducibility artifact is this recorded SHA — the `diff_db.py` 
 
 ---
 
-## 1. LOW byte — `variant & 0xFF` (pinout-family sub-discriminator) — UNCHANGED
+## 1. LOW byte — `variant & 0xFF` (pinout-family sub-discriminator)
 
-The variant **low** byte is **already consumed** by `resolve_pinout_key`
-(`build_db.py` ~L193-270) as the pinout-family sub-discriminator *within* a physical
-layout cluster (`pm_idx`). It is **NOT changed this phase** — `resolve_pinout_key`
-stays verbatim (RESEARCH Pitfall 3: swapping these would put 12V on the wrong pin).
+The variant **low** byte is consumed by `resolve_pinout_key` (`build_db.py`
+~L193-283) as the pinout-family sub-discriminator *within* a physical layout
+cluster (`pm_idx`).
+
+**Updated 2026-09-10 (Phase 182 Plan 02, D-02):** the 32-pin `proto_id == 0x08`
+cluster was, until this plan, the **one place** `resolve_pinout_key` abandoned
+`variant_lo` and substituted a hand-tuned `mem_size` threshold — the sole
+exception to this section's otherwise-uniform rule. That threshold routed every
+32-pin `proto_id == 0x08` chip above 256 KB onto `DIP32_STD`, so all eight 1 MB
+rows (`AM27C080`, `AM27LV080`, `AT27C080`, `M27C801` ×2, `MX27C8000`,
+`MX27C8000A`, `UPD27C8001`) landed on `DIP32_STD` with `vpp-pin: [1]` even
+though pin 1 on that class is A19, not VPP. The corrected rule forks on
+`variant_lo` inside the `proto_id == 0x08` branch exactly as the 24-pin and
+28-pin arms already do; the `mem_size` threshold survives only as the residual
+fall-through arm, because `SST37VF040` (`pm_idx` 13, `variant_lo` 0x04, 524288
+bytes) must stay on `DIP32_STD` and a pure `variant_lo` ladder would move it.
+The corrected rule was run over all 767 filtered infoic rows: the measured
+blast radius is exactly 8 rows — the same eight parts named above. The
+sentence that used to stand here, claiming `resolve_pinout_key` was left
+byte-for-byte unedited this phase, is retracted; that claim is no longer true
+for the 32-pin cluster.
+
+**Correction to CONTEXT's D-02 table:** `pin_map` for the 32-pin cluster is
+`0x600C`, not `0x000c` as CONTEXT's D-02 table states — `0x000c` is the low
+byte only (`pm_idx = 0x0C = 12`). `pm_idx` is what `resolve_pinout_key`
+switches on; the correction does not change any resolved key.
 
 The concrete `variant_lo` values it switches on:
 
@@ -60,10 +82,18 @@ The concrete `variant_lo` values it switches on:
 | 22 (28-pin) | `0x10` | `DIP28_27512` | **VPP on pin 22** (OE/VPP shared) |
 | 22 (28-pin) | `0x11` | `DIP28_27256` | **VPP on pin 1** |
 | 22 (28-pin) | else | `DIP28_2764` | 27C128 / 27C64 layout |
+| 12 (32-pin) | `0x03` | `DIP32_27C801` | 1 MB 27C080 / M27C801 class — **A19 on pin 1**, VPP on pin 24 shared with /OE |
+| 12 (32-pin) | `0x02` | `DIP32_STD` | 512 KB 27C040 class — pin 1 = VPP, pin 31 = A18 |
+| 12 (32-pin) | else | `DIP32_27C020` via the residual `_PGM_ON_PIN31_MAX_SIZE` size arm | the `0x00`, `0x01` and `0x04` classes — the size threshold still separates these because `SST37VF040` (`pm_idx` 13, `variant_lo` 0x04, 524288 bytes) must stay on `DIP32_STD` |
 
 **Critical (RESEARCH Pitfall 3):** `0x10 → DIP28_27512` (VPP pin 22) and
 `0x11 → DIP28_27256` (VPP pin 1) must never be swapped — that is a 12V-to-wrong-pin
-hardware-damage path. The low-byte logic is correct and out of scope for the rewrite.
+hardware-damage path. The 28-pin low-byte logic is unchanged by this plan.
+
+**Critical (Phase 182 D-02):** the `variant_lo` fork for the 32-pin cluster must
+stay **inside** the `proto_id == 0x08` test. Protocol `0x10` rows at `pm_idx` 10
+and 13 carry `variant_lo` values `0x10` through `0x13`; hoisting the fork above
+the protocol test would reroute Intel-flash parts onto the wrong layout.
 
 ---
 
