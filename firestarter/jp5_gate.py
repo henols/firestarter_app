@@ -10,8 +10,9 @@ On the shipped RURP Rev 2.x shield, socket pin 1 is switched by JP5 (KiCad
 value `A19_CUT`, a Bridged SolderJumper footprint -- bridged by default) onto
 the same 12.75V rail the programming voltage regulator drives. A part whose
 pin map places an address line at or above A19 on socket pin 1 -- the 8 Mbit
-27C080/M27C801 class -- has that address line driven from the programming
-rail on every write or erase while JP5 stays bridged. This module is the
+UV-EPROM class this phase's `DIP32_27C801` pinout describes -- has that
+address line driven from the programming rail on every write or erase while
+JP5 stays bridged. This module is the
 policy: which parts are affected, which operations can cause the damage, and
 the refusal/confirmation that stands between a damage-capable operation and
 the serial link.
