@@ -310,3 +310,43 @@ def test_can_erase_row_and_wire_capability_bit_agree_for_uv_eprom(
         "AM27512 (UV-EPROM) wire flags must NOT carry FLAG_CAN_ERASE — the "
         "two axes must agree with the negative info row above"
     )
+
+
+def test_the_rev_2_2_jp5_renderer_is_absent_from_the_class(
+    spec_builder: EpromSpecBuilder,
+) -> None:
+    assert not hasattr(spec_builder, "_get_rev2_2_jumper_settings_data"), (
+        "_get_rev2_2_jumper_settings_data must be deleted from the class — "
+        "it renders a bridged solder jumper as a settable Rev 2.2 config "
+        "header"
+    )
+
+
+def test_the_rev_2_jp4_renderer_still_emits_its_jumper_block(
+    spec_builder: EpromSpecBuilder,
+    db: EpromDatabase,
+) -> None:
+    eprom = db.get_eprom("AM27C040")
+    assert eprom is not None, "AM27C040 not found in database"
+
+    result = spec_builder.build_specifications(
+        eprom, electrical_type=eprom.get("electrical-type")
+    )
+    assert result is not None
+
+    jumpers = result["jumpers"]
+    assert "2.0 & 2.1" in jumpers, (
+        f"expected surviving '2.0 & 2.1' jp4 block, got keys {list(jumpers)}"
+    )
+    jp4 = jumpers["2.0 & 2.1"]["jp4"]
+    for field in ("config_text", "display", "pin_text", "selected_label"):
+        assert field in jp4, f"jp4 block missing {field!r}: {jp4!r}"
+
+    def _no_jp5_or_22(node: object) -> None:
+        if isinstance(node, dict):
+            assert "2.2" not in node, f"dead '2.2' key found: {jumpers!r}"
+            assert "jp5" not in node, f"dead 'jp5' key found: {jumpers!r}"
+            for value in node.values():
+                _no_jp5_or_22(value)
+
+    _no_jp5_or_22(jumpers)
