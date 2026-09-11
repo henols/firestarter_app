@@ -5,13 +5,7 @@ Hardware-free proof of the `firestarter dev test <chip>` wiring: no real
 serial port or bench access is opened anywhere in this module -- every
 manager on `AppContext` is `Mock(spec=...)` and `EpromDatabase` is
 constructed with `skip_local_override=True` (mirrors
-test_validate_family_cmd.py's `make_app_context` seam). TTY-gating is
-controlled by patching the module-level `firestarter.cli_handlers.
-_is_interactive` function directly (NOT `sys.stdin.isatty`) because
-`click.testing.CliRunner.invoke` replaces `sys.stdin` with its own stream
-for the duration of the call, so a `patch("sys.stdin.isatty", ...)` applied
-before `invoke()` silently does not survive (documented in cli_handlers.py's
-`_is_interactive` docstring and 112-02-SUMMARY.md's Issues Encountered).
+test_validate_family_cmd.py's `make_app_context` seam).
 
 PREMISE INVERTED AS OF PHASE 121 (Plan 09): `dev test` no longer has a
 non-destructive mode. The destructive-run flag, the output-directory
@@ -515,11 +509,6 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
-def _off_tty():
-    """Context manager forcing the off-TTY branch (D-03)."""
-    return patch("firestarter.cli_handlers._is_interactive", return_value=False)
-
-
 def _reports_dir() -> Path:
     return Path(get_config_dir()) / "reports"
 
@@ -569,8 +558,7 @@ def test_dev_test_output_trim_console_shrunk_payload_intact(
         eprom_operator=make_clean_operator(),
         hardware_manager=make_hardware_manager(),
     )
-    with _off_tty():
-        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+    result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
     assert result.exit_code == 0, result.output
 
     # Exclude the printed issue URL and everything after it: it legitimately
@@ -610,8 +598,7 @@ def test_canonical_part_number_reaches_all_four_surfaces_while_the_raw_token_sta
     app = make_app_context(
         eprom_operator=operator, hardware_manager=make_hardware_manager()
     )
-    with _off_tty():
-        result = runner.invoke(cli, ["dev", "test", chip], obj=app)
+    result = runner.invoke(cli, ["dev", "test", chip], obj=app)
     assert result.exit_code == 0, result.output
 
     data = _load_report(chip)
@@ -642,8 +629,7 @@ def test_a_real_invocation_saves_a_nonnegative_elapsed_stable_across_to_dict_cal
     app = make_app_context(
         eprom_operator=make_clean_operator(), hardware_manager=make_hardware_manager()
     )
-    with _off_tty():
-        result = runner.invoke(cli, ["dev", "test", chip], obj=app)
+    result = runner.invoke(cli, ["dev", "test", chip], obj=app)
     assert result.exit_code == 0, result.output
 
     data = _load_report(chip)
@@ -672,8 +658,7 @@ def test_a_clean_run_saves_a_populated_chip_id_actual_equal_to_expected(
     app = make_app_context(
         eprom_operator=operator, hardware_manager=make_hardware_manager()
     )
-    with _off_tty():
-        result = runner.invoke(cli, ["dev", "test", chip], obj=app)
+    result = runner.invoke(cli, ["dev", "test", chip], obj=app)
     assert result.exit_code == 0, result.output
     assert "chip_id (expected/actual)" not in result.output
 
@@ -761,10 +746,7 @@ class TestZeroOptionSurface:
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(),
         )
-        with _off_tty():
-            result = runner.invoke(
-                cli, ["dev", "test", _CHIP_NO_ID, *extra_args], obj=app
-            )
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID, *extra_args], obj=app)
         assert result.exit_code == 2, result.output
         assert "no such option" in result.output.lower()
 
@@ -778,8 +760,7 @@ class TestZeroOptionSurface:
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID, "-y"], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID, "-y"], obj=app)
         assert result.exit_code == 2, result.output
         assert "no such option" in result.output.lower()
 
@@ -853,8 +834,7 @@ class TestUVWriteHasNoPrompt:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
         assert result.exit_code in (0, 1, 2), result.output
         data = _load_report(_CHIP_UV)
         assert "write-partial" in {s["op"] for s in data["steps"]}
@@ -908,8 +888,7 @@ class TestSamplerBracketing:
             vpe_values=[5000, 4900, 4950, 4850],
         )
         app = make_app_context(eprom_operator=operator, hardware_manager=hw)
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         data = _load_report(_CHIP_NO_ID)
         voltage = data["voltage"]
@@ -946,10 +925,7 @@ class TestReportDestination:
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(),
         )
-        with (
-            _off_tty(),
-            patch.dict(os.environ, {"FIRESTARTER_CONFIG_DIR": str(custom_dir)}),
-        ):
+        with patch.dict(os.environ, {"FIRESTARTER_CONFIG_DIR": str(custom_dir)}):
             result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         reports_dir = custom_dir / "reports"
@@ -964,8 +940,7 @@ class TestReportDestination:
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         data = _load_report(_CHIP_NO_ID)
         for key in (
@@ -991,8 +966,7 @@ class TestReportDestination:
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(hw_revision="Rev 2.0-class"),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         assert "Rev 2.0-class" in result.output
         data = _load_report(_CHIP_NO_ID)
@@ -1005,8 +979,7 @@ class TestReportDestination:
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         md_text = (_reports_dir() / f"dev-test-{_CHIP_NO_ID}.md").read_text()
         assert "```json" in md_text
@@ -1036,8 +1009,7 @@ class TestReportDestination:
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         allowed, expected_reason = sdp_capability(_CHIP_NO_ID, _REAL_DB)
         assert allowed is False, "fixture setup error: _CHIP_NO_ID must be REFUSE"
@@ -1090,8 +1062,7 @@ class TestReportDestination:
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         allowed, expected_reason = sdp_capability(_CHIP_NO_ID, _REAL_DB)
         assert allowed is False, "fixture setup error: _CHIP_NO_ID must be REFUSE"
@@ -1144,8 +1115,7 @@ class TestReportDestination:
                 fw_board_identity="3.0.0b19:leonardo"
             ),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         assert "3.0.0b19:leonardo" in result.output
         data = _load_report(_CHIP_NO_ID)
@@ -1163,8 +1133,7 @@ class TestReportDestination:
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(fw_board_identity=identity),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         data = _load_report(_CHIP_NO_ID)
         assert data["auto_capture"]["fw_board_identity"] == identity
@@ -1191,8 +1160,7 @@ class TestReportDestination:
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(fw_board_identity=first_identity),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app_first)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app_first)
         assert result.exit_code == 0, result.output
         first_recorded = _load_report(_CHIP_NO_ID)["auto_capture"]["fw_board_identity"]
 
@@ -1200,8 +1168,7 @@ class TestReportDestination:
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(fw_board_identity=second_identity),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app_second)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app_second)
         assert result.exit_code == 0, result.output
         second_recorded = _load_report(_CHIP_NO_ID)["auto_capture"]["fw_board_identity"]
 
@@ -1235,8 +1202,7 @@ class TestReportDestination:
                 hw_revision=None, fw_board_identity=None
             ),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
 
         assert NOT_REPORTED in result.output
@@ -1271,10 +1237,7 @@ class TestSubmitReport:
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(),
         )
-        with (
-            _off_tty(),
-            patch("firestarter.submit.submit_report") as mock_submit_report,
-        ):
+        with patch("firestarter.submit.submit_report") as mock_submit_report:
             result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         mock_submit_report.assert_called_once()
@@ -1299,7 +1262,6 @@ class TestSubmitReport:
         mock_browser_open = Mock()
         mock_run_fn = Mock()
         with (
-            _off_tty(),
             patch("firestarter.submit.webbrowser.open", mock_browser_open),
             patch("firestarter.submit.subprocess.run", mock_run_fn),
         ):
@@ -1337,8 +1299,7 @@ class TestAbsentChipHardFail:
             eprom_operator=Mock(spec=EpromOperator),
             hardware_manager=Mock(spec=HardwareManager),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", chip], obj=app)
+        result = runner.invoke(cli, ["dev", "test", chip], obj=app)
         assert result.exit_code == 1, result.output
         assert f"{chip}: not found in database" in result.output
         app.hardware_manager.read_programmer_identity.assert_not_called()
@@ -1356,8 +1317,7 @@ class TestAbsentChipHardFail:
         operator = make_clean_operator()
         hw = make_hardware_manager()
         app = make_app_context(eprom_operator=operator, hardware_manager=hw)
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", chip], obj=app)
+        result = runner.invoke(cli, ["dev", "test", chip], obj=app)
         assert result.exit_code == 0, result.output
         hw.read_programmer_identity.assert_called()
         data = _load_report(chip)
@@ -1400,8 +1360,7 @@ class TestExitCodeMapping:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
 
     def test_bad_write_outcome_exits_1(self, runner: CliRunner) -> None:
@@ -1411,8 +1370,7 @@ class TestExitCodeMapping:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 1, result.output
 
     def test_marginal_disagreement_exits_2(self, runner: CliRunner) -> None:
@@ -1422,8 +1380,7 @@ class TestExitCodeMapping:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 2, result.output
 
     def test_chip_id_mismatch_exits_1(self, runner: CliRunner) -> None:
@@ -1435,8 +1392,7 @@ class TestExitCodeMapping:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_WITH_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_WITH_ID], obj=app)
         assert result.exit_code == 1, result.output
         operator.write_eprom.assert_not_called()
 
@@ -1470,8 +1426,7 @@ class TestExitCodeMapping:
         # (slot) write on every path and the claim under test -- that the
         # partial-write mode introduces no new verdict and needs no
         # exit-code map edit -- is reached without simulating an answer.
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
         assert result.exit_code == expected_exit, result.output
         data = _load_report(_CHIP_UV)
         steps = {s["op"] for s in data["steps"]}
@@ -1515,8 +1470,7 @@ class TestExitPrecedenceLeg06:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         assert result.exit_code == 1, result.output
         data = _load_report(_CHIP_ALLOW)
         steps = {s["op"]: s for s in data["steps"]}
@@ -1539,8 +1493,7 @@ class TestExitPrecedenceLeg06:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         assert result.exit_code == 1, result.output
         data = _load_report(_CHIP_ALLOW)
         steps = {s["op"]: s for s in data["steps"]}
@@ -1560,8 +1513,7 @@ class TestExitPrecedenceLeg06:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         data = _load_report(_CHIP_ALLOW)
         verdicts = {s["op"]: s["verdict"] for s in data["steps"]}
         assert verdicts["write-baseline-b"] == "OK", verdicts
@@ -1605,8 +1557,7 @@ class TestHoldStateLeg12:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         assert result.exit_code == 0, result.output
         data = _load_report(_CHIP_ALLOW)
         assert data["sdp_hold_state"] == SDP_HOLD_HELD, data["sdp_hold_state"]
@@ -1623,8 +1574,7 @@ class TestHoldStateLeg12:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         data = _load_report(_CHIP_ALLOW)
         assert data["sdp_hold_state"] == SDP_HOLD_NOT_HELD, data["sdp_hold_state"]
         normalized = _normalize_console_text(result.output)
@@ -1647,8 +1597,7 @@ class TestHoldStateLeg12:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         data = _load_report(_CHIP_ALLOW)
         hold_state = data["sdp_hold_state"]
         assert hold_state == SDP_HOLD_NOT_RUN, hold_state
@@ -1682,8 +1631,7 @@ class TestExitFloorD15:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         data = _load_report(_CHIP_ALLOW)
         verdicts = {s["verdict"] for s in data["steps"]}
         assert "BAD" not in verdicts, verdicts
@@ -1720,8 +1668,7 @@ class TestExitFloorD15:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         data = _load_report(_CHIP_ALLOW)
         verdicts = {s["verdict"] for s in data["steps"]}
         assert "BAD" in verdicts, verdicts
@@ -1751,8 +1698,7 @@ class TestExitFloorD15:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         data = _load_report(_CHIP_ALLOW)
         verdicts = {s["verdict"] for s in data["steps"]}
         assert "BAD" not in verdicts, verdicts
@@ -1770,8 +1716,7 @@ class TestExitFloorD15:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         data = _load_report(_CHIP_NO_ID)
         verdicts = {s["verdict"] for s in data["steps"]}
         assert "BAD" not in verdicts, verdicts
@@ -1885,8 +1830,7 @@ class TestSdpRecoveryOutcomesD12:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         data = _load_report(_CHIP_ALLOW)
         assert data["sdp_hold_state"] == SDP_HOLD_HELD, data["sdp_hold_state"]
         steps = {s["op"]: s for s in data["steps"]}
@@ -1902,8 +1846,7 @@ class TestSdpRecoveryOutcomesD12:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         data = _load_report(_CHIP_ALLOW)
         steps = {s["op"]: s for s in data["steps"]}
         assert steps["write-restored"]["verdict"] != "OK", steps["write-restored"]
@@ -1917,8 +1860,7 @@ class TestSdpRecoveryOutcomesD12:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         data = _load_report(_CHIP_ALLOW)
         assert data["sdp_hold_state"] == SDP_HOLD_NOT_RUN
         operator.sdp_lock.assert_not_called()
@@ -1961,10 +1903,7 @@ class TestCtrlCResidualNotClosedD12:
         )
         report_path = _reports_dir() / f"dev-test-{_CHIP_ALLOW}.json"
         assert not report_path.exists()
-        with (
-            patch("firestarter.cli_handlers.run_plan", side_effect=KeyboardInterrupt),
-            _off_tty(),
-        ):
+        with patch("firestarter.cli_handlers.run_plan", side_effect=KeyboardInterrupt):
             runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         # No report was ever written -- run_plan raised before
         # report.render(), the JSON/markdown writes, and submit_report all
@@ -2065,8 +2004,7 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
             eprom_operator=operator,
             hardware_manager=make_hardware_manager(),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
+        result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
         data = _load_report(SYNTHETIC_CHIP_NAME)
         steps = {s["op"]: s for s in data["steps"]}
         assert steps["id"]["verdict"] == "BAD", steps["id"]
@@ -2090,8 +2028,7 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
             eprom_operator=operator,
             hardware_manager=make_hardware_manager(),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
+        result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
         data = _load_report(SYNTHETIC_CHIP_NAME)
         steps = {s["op"]: s for s in data["steps"]}
         assert steps["id"]["verdict"] == "BAD", steps["id"]
@@ -2117,8 +2054,7 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
             eprom_operator=operator,
             hardware_manager=make_hardware_manager(),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
+        result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
         data = _load_report(SYNTHETIC_CHIP_NAME)
         steps = {s["op"]: s for s in data["steps"]}
         assert steps["id"]["verdict"] == "SKIPPED", steps["id"]
@@ -2142,8 +2078,7 @@ class TestLaunderingRoutesR1R2SyntheticChipId:
             eprom_operator=operator,
             hardware_manager=make_hardware_manager(),
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
+        result = runner.invoke(cli, ["dev", "test", SYNTHETIC_CHIP_NAME], obj=app)
         assert result.exit_code == 2, result.output
         data = _load_report(SYNTHETIC_CHIP_NAME)
         assert data["run_status"] == "ERROR", data
@@ -2173,14 +2108,11 @@ class TestLaunderingRoutesR3R4:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with (
-            patch(
-                "firestarter.chip_test.resolve_chip",
-                side_effect=ChipNotImplementedError(
-                    "simulated: adapter required for this test"
-                ),
+        with patch(
+            "firestarter.chip_test.resolve_chip",
+            side_effect=ChipNotImplementedError(
+                "simulated: adapter required for this test"
             ),
-            _off_tty(),
         ):
             result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         data = _load_report(_CHIP_ALLOW)
@@ -2227,8 +2159,7 @@ class TestLaunderingRoutesR3R4:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         allowed, _expected_reason = sdp_capability(_CHIP_NO_ID, _REAL_DB)
         assert allowed is False, "fixture setup error: _CHIP_NO_ID must be REFUSE"
         data = _load_report(_CHIP_NO_ID)
@@ -2282,8 +2213,7 @@ class TestBlankCheckAfterEraseKaq:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         data = _load_report(_CHIP_NO_ID)
         steps = {s["op"]: s for s in data["steps"]}
@@ -2311,8 +2241,7 @@ class TestBlankCheckAfterEraseKaq:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_ALLOW], obj=app)
         assert result.exit_code == 0, result.output
         data = _load_report(_CHIP_ALLOW)
         steps = {s["op"]: s for s in data["steps"]}
@@ -2354,8 +2283,7 @@ class TestWriteCoverageProvenanceD_F:
         app = make_app_context(
             eprom_operator=chip, hardware_manager=make_hardware_manager()
         )
-        with _off_tty():
-            result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
         assert result.exit_code == 0, result.output
 
         data = _load_report(_CHIP_UV)
