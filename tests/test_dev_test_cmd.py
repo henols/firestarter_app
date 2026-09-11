@@ -801,7 +801,7 @@ class TestUVWriteHasNoPrompt:
     and, as of D-9, how many slots the part has left.
     """
 
-    def test_no_prompt_on_a_uv_part_even_on_a_tty(self, runner: CliRunner) -> None:
+    def test_no_uv_write_prompt_surface_exists(self, runner: CliRunner) -> None:
         """The load-bearing assertion of the whole class. `Confirm` is no
         longer imported by `cli_handlers` at all, so its absence is asserted
         structurally rather than by patching a name that would silently
@@ -814,22 +814,9 @@ class TestUVWriteHasNoPrompt:
         )
         assert not hasattr(cli_handlers_mod, "_default_uv_write_confirm")
 
-    def test_uv_part_writes_one_slot_on_a_tty(self, runner: CliRunner) -> None:
-        """On a TTY, where the ask used to happen, a UV part gets exactly the
-        partial (slot) write and the run completes without blocking."""
-        operator = make_clean_operator()
-        app = make_app_context(
-            eprom_operator=operator, hardware_manager=make_hardware_manager()
-        )
-        with patch("firestarter.cli_handlers._is_interactive", return_value=True):
-            result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
-        assert result.exit_code in (0, 1, 2), result.output
-        data = _load_report(_CHIP_UV)
-        assert "write-partial" in {s["op"] for s in data["steps"]}
-
-    def test_uv_part_writes_one_slot_off_a_tty_too(self, runner: CliRunner) -> None:
-        """Off a TTY the outcome is IDENTICAL -- there is no longer any path
-        on which TTY presence changes what a UV part receives."""
+    def test_uv_part_writes_one_slot(self, runner: CliRunner) -> None:
+        """A UV part receives exactly the partial (slot) write and the run
+        completes without blocking."""
         operator = make_clean_operator()
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
@@ -843,13 +830,12 @@ class TestUVWriteHasNoPrompt:
         self, runner: CliRunner
     ) -> None:
         """Unchanged from the retired class: every non-UV family is written in
-        full, unprompted, TTY or not."""
+        full, unprompted."""
         operator = make_clean_operator()
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        with patch("firestarter.cli_handlers._is_interactive", return_value=True):
-            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         data = _load_report(_CHIP_NO_ID)
         ops = {s["op"] for s in data["steps"]}
