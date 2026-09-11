@@ -110,10 +110,6 @@ CROSS_REPO_TEST_PATHS: tuple[ScanPathEntry, ...] = (
         ),
     ),
     ScanPathEntry(
-        "test/native/avr/test_dispatch/test_configure_memory.cpp",
-        ("tools/wiki/dispatch_mirror.py (meta repo; relocated by 168-10)",),
-    ),
-    ScanPathEntry(
         "test/native/avr/_shared/sdp_bus_config.h",
         ("test_sdp_bus_config_drift.py",),
     ),

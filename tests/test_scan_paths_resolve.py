@@ -48,6 +48,7 @@ _FLOOR = 6
 
 _APP_REPO_ROOT = Path(__file__).resolve().parent.parent
 _TOOLS_DIR = _APP_REPO_ROOT / "tools"
+_TESTS_DIR = _APP_REPO_ROOT / "tests"
 
 
 def _resolvers_for(fw_relative_path: str) -> tuple[str, ...]:
@@ -156,4 +157,47 @@ def test_all_eleven_tool_resolvers_exist() -> None:
     assert not missing_tools, (
         f"the following tools named in CROSS_REPO_TOOL_RESOLVERS no longer "
         f"exist in {_TOOLS_DIR}: {missing_tools}"
+    )
+
+
+def test_every_scan_path_resolver_is_an_existing_tests_module() -> None:
+    """Every CROSS_REPO_TEST_PATHS entry's resolved_by value must be a bare
+    filename present as tests/<name>, so a value naming a guard file that
+    does not exist -- or a value in a form nothing can check -- fails here
+    instead of rotting silently. Population A coverage; population B's
+    equivalent is test_all_eleven_tool_resolvers_exist above."""
+    offenders: list[str] = []
+    for entry in CROSS_REPO_TEST_PATHS:
+        if not entry.resolved_by:
+            offenders.append(
+                f"{entry.fw_relative_path}: resolved_by is empty -- an entry "
+                "that names no resolver does not belong in this inventory"
+            )
+            continue
+        for value in entry.resolved_by:
+            is_bare = (
+                value not in ("", ".", "..")
+                and "/" not in value
+                and "\\" not in value
+                and Path(value).name == value
+            )
+            if not is_bare:
+                offenders.append(
+                    f"{entry.fw_relative_path}: {value!r} is not a bare "
+                    f"filename -- resolved_by must hold bare filenames "
+                    f"present as tests/<name>; a genuine cross-repo handoff "
+                    "requires extending the type and stating how it gets "
+                    "checked, not smuggling a path into the string"
+                )
+            elif not (_TESTS_DIR / value).is_file():
+                offenders.append(
+                    f"{entry.fw_relative_path}: {value!r} does not exist as "
+                    f"a file under {_TESTS_DIR} -- resolved_by must name a "
+                    "guard file that is present there"
+                )
+
+    assert not offenders, (
+        "The following resolved_by value(s) are unwritable claims -- each "
+        f"must be a bare filename present as a file under {_TESTS_DIR}:\n"
+        + "\n".join(f"  - {offender}" for offender in offenders)
     )
