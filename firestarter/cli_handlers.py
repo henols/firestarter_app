@@ -22,6 +22,7 @@ from rich.console import Console
 
 from firestarter import __version__ as version
 from firestarter import (
+    flash4_erase_gate,
     jp5_gate,
     sdp_honesty,  # unreadable_state_caveat(), called not re-authored
     transport_counters,
@@ -869,6 +870,10 @@ def erase(
     sector address given for it.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
+
+    if flash4_erase_gate.is_flash4(eprom_data):
+        click.echo(flash4_erase_gate.refusal_text(eprom))
+        sys.exit(1)
 
     if not jp5_gate.confirm_or_refuse(eprom, eprom_data.get("bus-config"), "erase"):
         sys.exit(1)
