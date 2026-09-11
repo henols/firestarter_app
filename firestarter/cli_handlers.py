@@ -849,6 +849,13 @@ def blank(app: AppContext, eprom: str, force: bool) -> None:
     default=None,
     help="Sector address for sector erase (hex e.g. 0x10000). Omit for chip erase.",
 )
+@click.option(
+    "--ignore-unsupported",
+    "ignore_unsupported",
+    is_flag=True,
+    default=False,
+    help="Exit 0 instead of 1 when erase is not supported for this EPROM.",
+)
 @click.pass_obj
 @map_typed_errors
 def erase(
@@ -857,6 +864,7 @@ def erase(
     force: bool,
     blank_check: bool,
     sector_address: Optional[str],
+    ignore_unsupported: bool,
 ) -> None:
     """Erase an EPROM, if supported.
 
@@ -868,12 +876,15 @@ def erase(
     ``-s``/``--sector-address`` applies to the ``0x06`` sector-erase protocol. The
     ``0x0D`` software chip erase is device-global by construction and ignores any
     sector address given for it.
+
+    An unsupported erase exits 1 by default; ``--ignore-unsupported`` makes it
+    exit 0 instead, for scripting, while still printing the same line.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
 
     if flash4_erase_gate.is_flash4(eprom_data):
         click.echo(flash4_erase_gate.refusal_text(eprom))
-        sys.exit(1)
+        sys.exit(0 if ignore_unsupported else 1)
 
     if not jp5_gate.confirm_or_refuse(eprom, eprom_data.get("bus-config"), "erase"):
         sys.exit(1)

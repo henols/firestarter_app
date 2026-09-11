@@ -53,3 +53,33 @@ def test_cli_erase_on_flash4_part_refuses_pre_connect_with_one_line():
     lines = result.output.splitlines()
     assert lines == [refusal_text("AE29F2008")]
     eprom_operator.erase_eprom.assert_not_called()
+
+
+def test_cli_erase_ignore_unsupported_exits_0_with_byte_identical_output():
+    runner = CliRunner()
+
+    exit1_operator = Mock(spec=EpromOperator)
+    exit1_app = _cli_app_context(exit1_operator)
+    with patch.object(
+        cli_handlers,
+        "resolve_chip",
+        return_value={"algorithm": 5, "bus-config": NO_PIN1_BUS_CONFIG},
+    ):
+        exit1_result = runner.invoke(cli, ["erase", "AE29F2008"], obj=exit1_app)
+
+    exit0_operator = Mock(spec=EpromOperator)
+    exit0_app = _cli_app_context(exit0_operator)
+    with patch.object(
+        cli_handlers,
+        "resolve_chip",
+        return_value={"algorithm": 5, "bus-config": NO_PIN1_BUS_CONFIG},
+    ):
+        exit0_result = runner.invoke(
+            cli, ["erase", "AE29F2008", "--ignore-unsupported"], obj=exit0_app
+        )
+
+    assert exit1_result.exit_code == 1
+    assert exit0_result.exit_code == 0
+    assert exit0_result.output == exit1_result.output
+    exit1_operator.erase_eprom.assert_not_called()
+    exit0_operator.erase_eprom.assert_not_called()
