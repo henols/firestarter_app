@@ -37,7 +37,7 @@ Coverage:
      or, in NMOS_TRUE_VPP_MV's case, already-known-and-cited -- decode
      tables enumerated from the live source, not guessed). Scoping this to
      `tree.body` rather than `ast.walk` is what keeps this test from firing
-     on `_AT28C_DIP24_NAMES` (build_db.py:594) -- that set literal (not
+     on `_AT28C_DIP24_NAMES` -- that set literal (not
      even a Dict) is a LOCAL variable nested inside a `for` loop several
      indent levels deep, addressing a pre-existing, unrelated Phase 76/D-03
      physical-adapter classification, not a module-level construct at all.
