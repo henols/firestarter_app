@@ -4,7 +4,7 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Flash4 (protocol 0x05) erase-refusal gate (SAFE-06).
+Flash4 (protocol 0x05) erase-refusal gate.
 
 Coverage:
   1. THE PURE PREDICATE -- `is_flash4` parametrized over every `algorithm`
@@ -14,7 +14,7 @@ Coverage:
      `algorithm` key, returns False rather than raising or refusing. This
      polarity is deliberately inverted against `jp5_gate` and
      `sdp_capability`, which both fail CLOSED on absent evidence.
-  3. COUPLING TO THE REAL DATABASE (activation decision D-4) -- the set of
+  3. COUPLING TO THE REAL DATABASE -- the set of
      part numbers for which the predicate fires, driven through
      `resolve_chip` against `EpromDatabase(skip_local_override=True)`, is
      exactly the set of shipped rows whose `programming.algorithm` is 5.
@@ -22,15 +22,15 @@ Coverage:
      occurs anywhere in `flash4_erase_gate.py`'s source, docstrings
      included, proving the predicate is database-derived rather than a
      hand-kept list.
-  5. THE MESSAGE SHAPE (D-07) -- the rendered refusal line is exactly one
+  5. THE MESSAGE SHAPE -- the rendered refusal line is exactly one
      line, names the chip, and carries none of a forbidden-substring list
      covering the cause, the alternative, and the `--force` workaround.
-  6. NOT A BLANKET REFUSAL (D-05) -- a part whose algorithm is not 5 still
+  6. NOT A BLANKET REFUSAL -- a part whose algorithm is not 5 still
      reaches `EpromOperator.erase_eprom`.
 
 End-to-end proof that `firestarter erase` on a flash4 part refuses before
 the serial port opens, printing exactly one line and never reaching
-`EpromOperator.erase_eprom` -- the D-02 pre-connect guarantee.
+`EpromOperator.erase_eprom` -- the pre-connect guarantee.
 """
 
 import inspect
@@ -154,7 +154,7 @@ def test_is_flash4_fails_open_on_absent_evidence(programmer_data):
 
 
 def test_predicate_matches_real_database_algorithm_5_rows_exactly():
-    """COUPLING TO THE REAL DATABASE (D-4): the set of part numbers for
+    """COUPLING TO THE REAL DATABASE: the set of part numbers for
     which the predicate fires, each driven through `resolve_chip` against
     the real shipped database, is exactly the set of shipped rows whose
     `programming.algorithm` is 5. Both sides are derived from the
@@ -233,11 +233,12 @@ FORBIDDEN_REFUSAL_SUBSTRINGS = (
 
 
 def test_refusal_text_is_one_line_and_carries_no_forbidden_content():
-    """THE MESSAGE SHAPE (D-07): exactly one line, names the chip, and
+    """THE MESSAGE SHAPE: exactly one line, names the chip, and
     carries none of a forbidden-substring list covering the cause, the
     alternative, and the `--force` forged-identity workaround. A NEGATIVE
     assertion on purpose -- it is what stops a later executor quietly
-    re-adding the cause clause D-07 removed and D-09 moved to REPLY-03.
+    re-adding the cause clause and the alternative that were deliberately
+    left out of the tool's output.
     """
     text = refusal_text("ae29f2008")
 
@@ -252,7 +253,7 @@ def test_refusal_text_is_one_line_and_carries_no_forbidden_content():
 
 
 def test_cli_erase_on_non_flash4_part_still_reaches_operator():
-    """NOT A BLANKET REFUSAL (D-05): a part whose algorithm is not 5 still
+    """NOT A BLANKET REFUSAL: a part whose algorithm is not 5 still
     reaches `EpromOperator.erase_eprom`. Without this leg, a fail-closed
     regression in the FAIL-OPEN group would pass every other test in this
     file.

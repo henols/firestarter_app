@@ -4,7 +4,7 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Flash4 (protocol 0x05) erase-refusal policy (SAFE-06).
+Flash4 (protocol 0x05) erase-refusal policy.
 
 The 0x05 firmware path does not implement a chip erase for the flash4
 protocol class -- a real hardware limitation, not a database misclassification
@@ -66,14 +66,14 @@ def is_flash4(programmer_data: Mapping[str, Any] | None) -> bool:
 
 
 def refusal_text(chip_name: str) -> str:
-    """The one-line, cause-free refusal text (D-07).
+    """The one-line, cause-free refusal text.
 
     Built from `_REFUSAL_FORMAT` rather than assembled inline, so a test can
     assert the exact shape instead of a whole sentence. Carries no cause
     clause, no alternative command, and no mention of the `--force`
     forged-identity workaround -- an operator who reads a cause here could
     route around a correct refusal onto the wrong chip's identity, which is
-    the exact harm this module exists to avoid. That statement belongs to
-    Phase 187's REPLY-03 alone (D-09, D-10), not here.
+    the exact harm this module exists to avoid. That statement belongs in
+    the reply to the issue reporter, not in the tool's output.
     """
     return _REFUSAL_FORMAT.format(chip_name=chip_name.upper())
