@@ -17,7 +17,8 @@ Both shapes are caught:
   - the simple shape: `FW_ABSENT = not some_path.exists()`
   - the compound shape: `FW_ABSENT = not (a.exists() and b.exists())` --
     exactly what `tests/test_dispatch_mirror.py` used before its rekey onto
-    `tests/fw_presence.py`.
+    `tests/fw_presence.py`; that module was later deleted entirely on
+    2026-08-31 (`39ea3e8`).
 
 **What this must NOT forbid.** A path-existence check inside a FUNCTION
 BODY, used for ordinary control flow (e.g. `if not resolved.exists(): raise

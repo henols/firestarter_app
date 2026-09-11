@@ -17,7 +17,8 @@ Plants THREE things:
      modules Phase 123 Plan 08 rekeyed.
   2. `COMPOUND_ABSENCE_PROXY` -- the compound shape, a `not` over a boolean
      combination of two `.exists()` calls -- the exact shape
-     `tests/test_dispatch_mirror.py` used before its own rekey.
+     `tests/test_dispatch_mirror.py` used before its own rekey; that module
+     was later deleted entirely on 2026-08-31 (`39ea3e8`).
   3. `legitimate_in_function_check` -- a path-existence check used for
      ordinary control flow INSIDE a function body. This must NOT be
      flagged; its presence here is what proves the lint discriminates by
@@ -38,8 +39,8 @@ SIMPLE_ABSENCE_PROXY = not _SOME_NONEXISTENT_PATH.exists()
 
 # PLANTED VIOLATION (compound shape): a module-level absence proxy over a
 # boolean combination of two `.exists()` calls -- mirrors the exact shape
-# test_dispatch_mirror.py used before its Phase 123 Plan 08 rekey (it ANDed
-# the existence of two firmware-repo paths together before negating).
+# test_dispatch_mirror.py used before its Phase 123 Plan 08 rekey (ANDing
+# two paths before negating); deleted 2026-08-31 (`39ea3e8`).
 COMPOUND_ABSENCE_PROXY = not (
     _SOME_NONEXISTENT_PATH.exists() and _OTHER_NONEXISTENT_PATH.exists()
 )
