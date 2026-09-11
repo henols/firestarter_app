@@ -2325,16 +2325,6 @@ def _canonical_part_number(part_number: Optional[str], raw_token: str) -> Option
     return part_number.split(",")[0].strip()
 
 
-def _is_interactive() -> bool:
-    """TTY check factored into its own function so tests can monkeypatch it
-    directly -- `click.testing.CliRunner.invoke` replaces `sys.stdin`
-    with its own stream for the duration of the call, so a test-time
-    `patch("sys.stdin.isatty", ...)` applied before `invoke()` does not
-    survive; patching `firestarter.cli_handlers._is_interactive` does.
-    """
-    return sys.stdin.isatty()
-
-
 def _make_sampler(app: "AppContext", report: DiagnosticReport) -> Any:
     """Build the before/after sampler thunk closing over `hardware_manager`.
 
