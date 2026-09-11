@@ -7,7 +7,7 @@ Permission is hereby granted under MIT license.
 The single resolving test for D-11's cross-repo scan-path inventory
 (BASE-02; Phase 123 Plan 08).
 
-Four tests, deliberately small, iterating the union in `tests/scan_paths.py`
+Five tests, deliberately small, iterating the union in `tests/scan_paths.py`
 rather than re-deriving anything:
 
   1. Every path in `ALL_CROSS_REPO_PATHS` resolves to an existing file when
@@ -25,6 +25,10 @@ rather than re-deriving anything:
      `CROSS_REPO_TOOL_RESOLVERS` exist in `tools/`, so a renamed or deleted
      tool is caught rather than silently dropping its paths from the
      inventory.
+  5. Population A's `resolved_by` values are each a bare filename present
+     as `tests/<name>`, so a value naming a guard file that does not exist,
+     or a value in a form nothing can check, is caught before it can rot
+     silently.
 """
 
 from __future__ import annotations
@@ -40,10 +44,10 @@ from tests.scan_paths import (
     resolve_scan_path,
 )
 
-# Floor equal to what actually ships (measured at plan time): 6 population-A
-# test paths, the deduplicated union of population A + the genuinely
-# cross-repo subset of population B. An emptied or mis-globbed inventory
-# must fail this, not pass silently.
+# Below 6 the inventory cannot be doing its job: an emptied or mis-globbed
+# CROSS_REPO_TEST_PATHS would still pass test 1 vacuously, over zero paths.
+# A deliberate removal (D-14) must move this floor deliberately, for the
+# reason it is moved -- never reflexively to match a fresh census.
 _FLOOR = 6
 
 _APP_REPO_ROOT = Path(__file__).resolve().parent.parent
