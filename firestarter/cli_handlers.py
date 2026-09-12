@@ -1811,7 +1811,7 @@ _VALIDATION_SPEC_PATH: Path = (
 )
 
 
-def _load_validation_spec() -> Dict[str, Any]:  # noqa: UP006 (python3.9 compat)
+def _load_validation_spec() -> dict[str, Any]:
     """Load the authored validation matrix spec JSON."""
     return json.loads(_VALIDATION_SPEC_PATH.read_text(encoding="utf-8"))
 
