@@ -9,7 +9,7 @@ name = "firestarter"
 description = "EPROM programmer software for the Relatively Universal ROM Programmer"
 readme = { file = "README.md", content-type = "text/markdown" }
 dynamic = ["version"]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 keywords = [
     "firestarter",
     "eprom",
@@ -34,8 +34,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
@@ -107,7 +105,7 @@ testpaths = ["tests"]
 addopts = "-ra -q"
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py311"
 line-length = 88
 # extend-exclude (not exclude, to keep ruff's built-in defaults):
 # (1) tests/golden/v1.3-COVERAGE-MATRIX.md is asserted byte-identical to
@@ -152,7 +150,7 @@ indent-style = "space"
 # re-fires this exact failure -- GATE-01's returncode-before-regex ordering
 # is what makes that arrive as a red gate instead of a silent green
 # (backlog 999.27).
-python_version = "3.10"
+python_version = "3.11"
 ignore_missing_imports = true   # needed for tqdm, rich (no stubs)
 disallow_untyped_defs = false   # gradual adoption — global stays lenient (D-10)
 check_untyped_defs = false
