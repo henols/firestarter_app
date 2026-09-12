@@ -18,13 +18,15 @@ DB path resolution mirrors `tools/check_dispatch.py`:
 the live DB is `<repo-root>/firestarter_app/firestarter/data/chip_database.json`
 unless `FIRESTARTER_DB_FILE` env-var overrides.
 
-Output defaults to `<repo-root>/.planning/v1.3-COVERAGE-MATRIX.md` (absolute,
-computed from `__file__` per RESEARCH.md Pitfall 6 — robust against the
-operator's cwd).
+Output defaults land in the planning directory at the repository root
+(absolute, computed from `__file__` — robust against the operator's cwd);
+the tool exits rather than inventing that directory when it is absent.
 
 Exit codes:
   0 — clean generate, or `--check` with no new findings.
   1 — `--check` would mint a new DEFECT-COV-NN, OR DB parse error.
+  2 — a default `--output`/`--ledger` path would be created outside an
+      existing repository checkout; pass explicit paths instead.
 
 Idempotence contract:
   - Sorted iteration on every dict.items()
@@ -52,10 +54,6 @@ DB_FILE = os.environ.get(
     os.path.join(_DATA_DIR, "chip_database.json"),
 )
 
-# Pitfall 6 defense: derive repo root from __file__ so the default --output
-# path is absolute and robust against operator cwd. The tool lives at
-# <repo-root>/firestarter_app/tools/audit_coverage_matrix.py, so the repo
-# root is three dirname() hops up.
 _REPO_ROOT = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 )
@@ -67,6 +65,31 @@ DEFAULT_OUTPUT_ALL = os.path.join(
 DEFAULT_LEDGER_ALL = os.path.join(
     _REPO_ROOT, ".planning", "v1.3-defect-coverage-ids-all.json"
 )
+
+PLANNING_DIR = os.path.join(_REPO_ROOT, ".planning")
+
+
+def resolve_default_paths(all_algorithms):
+    """Return the (output, ledger) default path pair for this run.
+
+    Returns the `*_ALL` pair when `all_algorithms` is true, the plain pair
+    otherwise. Refuses to invent a planning directory outside an existing
+    repository checkout: when `PLANNING_DIR` is not already a directory,
+    this writes one actionable line to stderr naming `--output` and
+    `--ledger`, and raises `SystemExit(2)` without creating anything.
+    """
+    if not os.path.isdir(PLANNING_DIR):
+        print(
+            f"ERROR: default output/ledger location {PLANNING_DIR!r} does not "
+            "exist. Refusing to create a planning directory outside an "
+            "existing repository checkout. Pass explicit --output and "
+            "--ledger paths instead.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+    if all_algorithms:
+        return DEFAULT_OUTPUT_ALL, DEFAULT_LEDGER_ALL
+    return DEFAULT_OUTPUT, DEFAULT_LEDGER
 
 
 # ---------------------------------------------------------------------------
@@ -1909,13 +1932,18 @@ def main():
     )
     args = parser.parse_args()
 
+    output = args.output
+    ledger = args.ledger
+    if output is None or ledger is None:
+        default_output, default_ledger = resolve_default_paths(args.all_algorithms)
+        if output is None:
+            output = default_output
+        if ledger is None:
+            ledger = default_ledger
+
     if args.all_algorithms:
-        output = args.output or DEFAULT_OUTPUT_ALL
-        ledger = args.ledger or DEFAULT_LEDGER_ALL
         rc = generate_matrix_all(output, ledger, check=args.check)
     else:
-        output = args.output or DEFAULT_OUTPUT
-        ledger = args.ledger or DEFAULT_LEDGER
         rc = generate_matrix(output, ledger, check=args.check)
     sys.exit(rc)
 
