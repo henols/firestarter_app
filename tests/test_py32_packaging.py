@@ -40,14 +40,6 @@ file that a future refactor could silently drift without any test noticing:
      behaviour against a planted `tmp_path` file, never the real deleted
      doc, so it needs no oracle change.
 
-**Why a regex scan, not a TOML parse.** tomllib is py3.11+ and this
-project's declared floor is py3.9 (ruff target-version = "py39", mypy
-python_version = "3.9"); tomli is not a dependency this project carries and
-this plan adds none. tests/test_revision_constants_parity.py already scans
-source text for exactly this class of gate -- a #define extractor over a C
-header -- so a regex scan over pyproject.toml's `py32 = [` block follows the
-same repo idiom rather than introducing a new dependency for one file.
-
 **Non-vacuity (research finding A-7).** A scan that finds nothing must
 never read as a pass. Every gate below asserts its scan target was located
 at all -- the `py32 = [` block, `def flash_method(`, and the install doc's
@@ -76,9 +68,9 @@ _FIRMWARE_PY = _APP_DIR / "firestarter" / "firmware.py"
 _INSTALL_DOC = _APP_DIR / "doc" / "PY32F071-FIRMWARE-INSTALL.md"
 
 # D-19: pyusb 1.3.1 is the current release at plan time (Requires-Python
-# >=3.9.0, satisfiable on this project's py39 floor); <2 refuses a future
-# major that could reorder ctrl_transfer's parameters. Written
-# independently of pyproject.toml -- never derived from the file under test.
+# >=3.9.0); <2 refuses a future major that could reorder ctrl_transfer's
+# parameters. Written independently of pyproject.toml -- never derived from
+# the file under test.
 _EXPECTED_PYUSB_SPEC = "pyusb>=1.3.1,<2"
 
 _PY32_BLOCK_RE = re.compile(r"^py32\s*=\s*\[(.*?)\]", re.DOTALL | re.MULTILINE)
