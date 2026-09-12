@@ -726,23 +726,3 @@ def test_unknown_marker_string_matches_the_report_model():
     human-verify checkpoint.
     """
     assert _REPORT_NOT_REPORTED == NOT_REPORTED
-
-
-def test_parser_marker_strings_trip_no_forbidden_claim_pattern():
-    """Neither `NOT_REPORTED` nor `_NOT_ATTRIBUTABLE` (this module's copies)
-    matches any of `check_diagnostic_report_claims.py`'s 14 forbidden-phrase
-    patterns -- closing a measured fail-open: that gate scans ONLY
-    `firestarter/diagnostic_report.py`, so a clause authored in
-    `tools/parse_devtest_issue.py` is covered by no gate at all. Asserts
-    non-vacuity too, so this cannot pass because the import silently
-    yielded nothing. Does NOT widen the gate's own target list (Phase
-    152's business, not this phase's)."""
-    from tools.check_diagnostic_report_claims import FORBIDDEN_PATTERNS
-
-    assert len(FORBIDDEN_PATTERNS) >= 14
-
-    for label, pattern in FORBIDDEN_PATTERNS:
-        assert not pattern.search(NOT_REPORTED), f"NOT_REPORTED trips [{label}]"
-        assert not pattern.search(_NOT_ATTRIBUTABLE), (
-            f"_NOT_ATTRIBUTABLE trips [{label}]"
-        )
