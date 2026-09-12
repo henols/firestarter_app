@@ -132,6 +132,7 @@ _DEFAULT_TARGETS = [
         "tests/scan_paths.py",
         "tests/test_address_parser.py",
         "tests/test_audit_coverage_matrix.py",
+        "tests/test_audit_coverage_matrix_default_paths.py",
         "tests/test_boot_block_hint.py",
         "tests/test_bug_characterization.py",
         "tests/test_build_db_inclusion.py",
