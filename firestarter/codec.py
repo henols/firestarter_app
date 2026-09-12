@@ -10,7 +10,7 @@ silkscreen table.
 
 import logging
 import struct
-from typing import Any, List, Optional  # noqa: UP035
+from typing import Any, List  # noqa: UP035
 
 from firestarter.constants import (
     COMMAND_NAMES,
@@ -54,7 +54,7 @@ _REVISION_SILKSCREEN = {
 }
 
 
-def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> Optional[str]:  # noqa: UP006
+def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> str | None:  # noqa: UP006
     """Sentinel-aware message renderer for P-02/P-03 shaped IDs and
     MSG_DEBUG sub-payloads (currently DBG_CMD gets symbolic-name
     annotation; other DBG_* sub_ids render via DEBUG_CATALOG).
@@ -168,7 +168,7 @@ def format_message(msg_id: int, params: List[Any], entry: MessageDef) -> Optiona
     return None  # fall through to generic catalog format-string rendering
 
 
-def decode_id_frame(frame_len: int, body: bytes) -> Optional[LogMessage]:
+def decode_id_frame(frame_len: int, body: bytes) -> LogMessage | None:
     """
     Read-path-adjacent — behavior preserved verbatim from serial_comm.py per
     Ring-fenced. Do not refactor without re-validating the v1.6 baseline binaries.

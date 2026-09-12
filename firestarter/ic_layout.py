@@ -7,7 +7,7 @@ IC Layout Generation Module
 """
 
 import logging
-from typing import Dict, List, Optional  # noqa: UP035
+from typing import Dict, List  # noqa: UP035
 
 from firestarter.database import EpromDatabase, format_mv  # Changed import
 
@@ -347,7 +347,7 @@ class EpromSpecBuilder:
                 }
         return None
 
-    def _generate_pin_names_for_display(self, eprom_data: dict) -> Optional[List[str]]:  # noqa: UP006
+    def _generate_pin_names_for_display(self, eprom_data: dict) -> List[str] | None:  # noqa: UP006
         pin_count = eprom_data.get("pin-count")
         if pin_count not in self._generic_pin_names_map:
             logger.error(f"No generic layout available for {pin_count}-pin EPROM.")
@@ -475,8 +475,8 @@ class EpromSpecBuilder:
 
     def resolve_type_label(
         self,
-        electrical_type: Optional[str],  # noqa: UP006
-        protocol_id: Optional[int] = None,  # noqa: UP006
+        electrical_type: str | None,  # noqa: UP006
+        protocol_id: int | None = None,  # noqa: UP006
     ) -> str:
         """Return the user-facing chip-type display label (single source of truth).
 
@@ -508,8 +508,8 @@ class EpromSpecBuilder:
     def build_specifications(  # noqa: UP006
         self,
         eprom_data: dict,
-        electrical_type: Optional[str] = None,  # noqa: UP006
-    ) -> Optional[Dict]:  # noqa: UP006
+        electrical_type: str | None = None,  # noqa: UP006
+    ) -> Dict | None:  # noqa: UP006
         """Build a dictionary of comprehensive technical specifications for the EPROM.
 
         This includes basic properties, pin names for layout, jumper settings,

@@ -24,7 +24,8 @@ the reasoning.
 """
 
 import sys
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from rich.prompt import Confirm
 
@@ -38,7 +39,7 @@ GATED_ADDRESS_BIT = 19
 DAMAGE_CAPABLE_OPERATIONS = frozenset({"write", "erase"})
 
 
-def socket_pin1_address_bit(bus_config: Optional[dict]) -> Optional[int]:
+def socket_pin1_address_bit(bus_config: dict | None) -> int | None:
     """Return the address-bit index socket pin 1 carries, or None.
 
     `bus_config["bus"]` is an ordered A0..An list of RURP bus lines, so the
@@ -55,7 +56,7 @@ def socket_pin1_address_bit(bus_config: Optional[dict]) -> Optional[int]:
     return bus.index(SOCKET_PIN_1_BUS_LINE)
 
 
-def is_affected(bus_config: Optional[dict]) -> bool:
+def is_affected(bus_config: dict | None) -> bool:
     """True when socket pin 1 carries an address line at or above A19.
 
     The comparison is `>=`, not `==`: address-bit index is a genuinely
@@ -82,7 +83,7 @@ def hazard_text(chip_name: str, operation: str, address_bit: int) -> str:
 
 def require_acknowledged(
     chip_name: str,
-    bus_config: Optional[dict],
+    bus_config: dict | None,
     operation: str,
     acknowledged: bool,
 ) -> None:
@@ -115,10 +116,10 @@ def _print(msg: str, *, console: Any = None) -> None:
 
 def confirm_or_refuse(
     chip_name: str,
-    bus_config: Optional[dict],
+    bus_config: dict | None,
     operation: str,
     *,
-    isatty_fn: Optional[Callable[[], bool]] = None,
+    isatty_fn: Callable[[], bool] | None = None,
     confirm_fn: Callable[..., bool] = Confirm.ask,
     console: Any = None,
 ) -> bool:

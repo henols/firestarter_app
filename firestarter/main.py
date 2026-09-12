@@ -14,7 +14,6 @@ argparse -> Click migration.
 import signal
 import sys
 from types import FrameType
-from typing import Optional  # noqa: UP035
 
 from firestarter.cli_handlers import cli
 
@@ -22,7 +21,7 @@ from firestarter.cli_handlers import cli
 main = cli
 
 
-def exit_gracefully(signum: int, frame: Optional[FrameType]) -> None:
+def exit_gracefully(signum: int, frame: FrameType | None) -> None:
     """Signal handler that exits the process with status 1."""
     sys.exit(1)
 

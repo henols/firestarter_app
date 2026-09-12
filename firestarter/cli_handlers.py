@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Callable, Dict, List, Literal, Optional  # noqa: UP035
+from typing import Any, Callable, Dict, List, Literal  # noqa: UP035
 
 import click
 import click.shell_completion
@@ -314,8 +314,8 @@ def _build_op_flags(
     # SDP auto-set condition inside write() below -- flipping this default
     # invalidates the removal-safety argument the `dev sdp` removal rests on.
     skip_sdp_unlock: bool = False,
-    input_enable: Optional[bool] = None,
-    chip_disable: Optional[bool] = None,
+    input_enable: bool | None = None,
+    chip_disable: bool | None = None,
 ) -> int:
     """Map Click kwargs to wire flags.
 
@@ -366,10 +366,10 @@ class _FirmwareVersionType(click.ParamType):
 
     def convert(
         self,
-        value: Optional[str],
-        param: Optional[click.Parameter],
-        ctx: Optional[click.Context],
-    ) -> Optional[str]:
+        value: str | None,
+        param: click.Parameter | None,
+        ctx: click.Context | None,
+    ) -> str | None:
         if value is None:
             return None
         if not FIRMWARE_VERSION_RE.match(value):
@@ -386,7 +386,7 @@ class _FirmwareVersionType(click.ParamType):
 _CLI_START_MONOTONIC_META_KEY = "_firestarter_cli_start_monotonic"
 
 
-def _cli_start_time() -> Optional[float]:
+def _cli_start_time() -> float | None:
     """Return the monotonic timestamp the CLI group's first statement
     recorded into the current Click context's `meta` mapping, or `None`
     when there is no current Click context (a direct handler call, e.g.
@@ -415,7 +415,7 @@ def _cli_start_time() -> Optional[float]:
 @click.version_option(version=version, prog_name="Firestarter")
 @click.pass_context
 @map_typed_errors
-def cli(ctx: click.Context, verbose: bool, port: Optional[str]) -> None:
+def cli(ctx: click.Context, verbose: bool, port: str | None) -> None:
     ctx.meta[_CLI_START_MONOTONIC_META_KEY] = time.monotonic()
     # CliRunner tests pass a pre-built AppContext via `runner.invoke(cli, ..., obj=app)`;
     # honor that and skip manager construction in test mode. In production
@@ -527,10 +527,10 @@ def search(app: AppContext, text: str) -> None:
 def read(
     app: AppContext,
     eprom: str,
-    output_file: Optional[str],
+    output_file: str | None,
     force: bool,
-    address: Optional[str],
-    size: Optional[str],
+    address: str | None,
+    size: str | None,
 ) -> None:
     """Reads the content from an EPROM."""
     eprom_data = resolve_chip(eprom, db=app.db)
@@ -617,9 +617,9 @@ def write(
     blank_check: bool,
     skip_erase: bool,
     force: bool,
-    address: Optional[str],
+    address: str | None,
     vpe_as_vpp: bool,
-    pulse_us: Optional[int],
+    pulse_us: int | None,
     skip_sdp_unlock: bool,
 ) -> None:
     """Writes a binary file to an EPROM.
@@ -791,7 +791,7 @@ def verify(
     app: AppContext,
     eprom: str,
     input_file: str,
-    address: Optional[str],
+    address: str | None,
     force: bool,
 ) -> None:
     """Verifies the content of an EPROM."""
@@ -863,7 +863,7 @@ def erase(
     eprom: str,
     force: bool,
     blank_check: bool,
-    sector_address: Optional[str],
+    sector_address: str | None,
     ignore_unsupported: bool,
 ) -> None:
     """Erase an EPROM, if supported.
@@ -949,7 +949,7 @@ def chip_id(app: AppContext, eprom: str, force: bool) -> None:
 @click.option("-t", "--timeout", type=int, default=None, hidden=True)
 @click.pass_obj
 @map_typed_errors
-def vpp(app: AppContext, timeout: Optional[int]) -> None:
+def vpp(app: AppContext, timeout: int | None) -> None:
     """VPP voltage."""
     ok = app.hardware_manager.read_vpp_voltage(
         timeout_seconds=timeout, flags=_build_op_flags()
@@ -961,7 +961,7 @@ def vpp(app: AppContext, timeout: Optional[int]) -> None:
 @click.option("-t", "--timeout", type=int, default=None, hidden=True)
 @click.pass_obj
 @map_typed_errors
-def vpe(app: AppContext, timeout: Optional[int]) -> None:
+def vpe(app: AppContext, timeout: int | None) -> None:
     """VPE voltage."""
     ok = app.hardware_manager.read_vpe_voltage(
         timeout_seconds=timeout, flags=_build_op_flags()
@@ -1010,9 +1010,9 @@ def hw(app: AppContext) -> None:
 @map_typed_errors
 def config(
     app: AppContext,
-    rev: Optional[float],
-    r16: Optional[int],
-    r14r15: Optional[int],
+    rev: float | None,
+    r16: int | None,
+    r14r15: int | None,
 ) -> None:
     """Handles CONFIGURATION values."""
     # set_hardware_config expects Optional[int]; the Click option accepts float
@@ -1035,7 +1035,7 @@ def config(
 
 
 def _maybe_auto_route_to_pre_click(
-    install: bool, pre: bool, firmware_version: Optional[str], stable: bool
+    install: bool, pre: bool, firmware_version: str | None, stable: bool
 ) -> bool:
     """Click-side equivalent of the _maybe_auto_route_to_pre helper.
 
@@ -1141,14 +1141,14 @@ def fw(
     ctx: click.Context,
     install: bool,
     pre: bool,
-    firmware_version: Optional[str],
+    firmware_version: str | None,
     stable: bool,
     list_releases: bool,
     board: str,
-    usb_id: Optional[str],
+    usb_id: str | None,
     dfu_probe: bool,
-    avrdude_path: Optional[str],
-    avrdude_config_path: Optional[str],
+    avrdude_path: str | None,
+    avrdude_config_path: str | None,
     force: bool,
     json_output: bool,
 ) -> None:
@@ -1300,7 +1300,7 @@ class _DevGroup(click.Group):
     override -- an unregistered name is already absent from `self.commands`.
     """
 
-    def get_command(self, ctx: click.Context, cmd_name: str) -> Optional[click.Command]:
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
         real = super().get_command(ctx, cmd_name)
         if real is not None:
             return real
@@ -1343,8 +1343,8 @@ def dev() -> None:
 def dev_read(
     app: AppContext,
     eprom: str,
-    address: Optional[str],
-    size: Optional[str],
+    address: str | None,
+    size: str | None,
     force: bool,
 ) -> None:
     """Reads the content from an EPROM and prints data to console."""
@@ -1533,7 +1533,7 @@ if _DEV_TOOLS_ENABLED:
         app: AppContext,
         eprom: str,
         runs: int,
-        output_dir: Optional[str],
+        output_dir: str | None,
         keep_files: bool,
         max_diffs: int,
         quiet: bool,
@@ -1593,7 +1593,7 @@ if _DEV_TOOLS_ENABLED:
         eprom: str,
         source_image: str,
         runs: int,
-        output_dir: Optional[str],
+        output_dir: str | None,
         force: bool,
     ) -> None:
         """Erase, write the source image, read back N times, and compare SHA-256.
@@ -1661,7 +1661,7 @@ if _DEV_TOOLS_ENABLED:
         direction: str,
         fault_form: str,
         mode: str,
-        output_dir: Optional[str],
+        output_dir: str | None,
         samples: int,
     ) -> None:
         """Demonstrate COBS resync: inject a corrupted frame and assert recovery on the next.
@@ -1829,7 +1829,7 @@ def _families_for_selection(
 
 def _emit_skip_deferred_artifact(
     families: List[Dict[str, Any]],  # noqa: UP006
-    output_dir: Optional[str],
+    output_dir: str | None,
     reason: str = "no board/chip/source provided",
 ) -> None:
     """Emit validation-matrix.{json,md} with all Tier-3 cells as SKIP-deferred.
@@ -1874,7 +1874,7 @@ def _emit_skip_deferred_artifact(
 
 def _write_artifact(
     cells: List[Dict[str, Any]],  # noqa: UP006
-    output_dir: Optional[str],
+    output_dir: str | None,
 ) -> None:
     """Write validation-matrix.json and validation-matrix.md to output_dir.
 
@@ -1885,9 +1885,7 @@ def _write_artifact(
     out_path.mkdir(parents=True, exist_ok=True)
 
     artifact: Dict[str, Any] = {  # noqa: UP006
-        "generated": datetime.datetime.now(datetime.timezone.utc).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        ),
+        "generated": datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "harness_version": "71",
         "cells": cells,
     }
@@ -1980,10 +1978,10 @@ if _DEV_TOOLS_ENABLED:
     def dev_validate_family(
         app: AppContext,
         family: str,
-        board: Optional[str],
-        chip: Optional[str],
-        source: Optional[str],
-        output_dir: Optional[str],
+        board: str | None,
+        chip: str | None,
+        source: str | None,
+        output_dir: str | None,
     ) -> None:
         """Run the per-family validation matrix Tier-3 runner.
 
@@ -2035,7 +2033,7 @@ if _DEV_TOOLS_ENABLED:
         # The r1 value is read from hardware config via the HardwareManager.
         # The hardware path is exercised only with real hardware; here we gate
         # on the operator config.
-        r1_raw: Optional[int] = None
+        r1_raw: int | None = None
         try:
             hw_config = app.config_manager.get_value("r1", None)
             if hw_config is not None:
@@ -2078,7 +2076,7 @@ if _DEV_TOOLS_ENABLED:
             )
 
             # Derive evidence SHA from source image for the cell record.
-            evidence_sha: Optional[str]
+            evidence_sha: str | None
             try:
                 evidence_sha = hashlib.sha256(Path(source).read_bytes()).hexdigest()
             except OSError:
@@ -2239,7 +2237,7 @@ def _sanitize_chip_token(chip: str) -> str:
 
 def _chip_id_fields(
     app: "AppContext", chip: str, results: list
-) -> tuple[Optional[int], Optional[int], Optional[str]]:
+) -> tuple[int | None, int | None, str | None]:
     """Derive (chip_id_expected, chip_id_actual, mismatch_reason) for AutoCapture.
 
     `chip_id_expected` is read directly off the DB entry (host-side, never
@@ -2260,8 +2258,8 @@ def _chip_id_fields(
     prog = app.db.convert_to_programmer(full) if full else {}
     chip_id_expected = prog.get("chip-id") or None
 
-    chip_id_actual: Optional[int] = None
-    mismatch_reason: Optional[str] = None
+    chip_id_actual: int | None = None
+    mismatch_reason: str | None = None
     for r in results:
         if r.op == OP_ID:
             chip_id_actual = r.chip_id_detected
@@ -2273,7 +2271,7 @@ def _chip_id_fields(
     return chip_id_expected, chip_id_actual, mismatch_reason
 
 
-def _canonical_part_number(part_number: Optional[str], raw_token: str) -> Optional[str]:
+def _canonical_part_number(part_number: str | None, raw_token: str) -> str | None:
     """RPT-F1: the alias within the matched database row's `part_number`
     that equals `raw_token` under the same normalization
     `database.get_eprom_config` used to match it; when no alias matches,
