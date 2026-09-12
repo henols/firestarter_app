@@ -251,6 +251,24 @@ _RATIONALES = {
         "   .planning/phases/136.1-sdp-partition-provenance/136.1-01-PLAN.md;\n"
         "   .planning/phases/136.1-sdp-partition-provenance/136.1-01-BLAST-RADIUS.md]"
     ),
+    "RULE_PHASE182_A19_PINOUT": (
+        "Phase 182 fix — DIP32_27C801 pinout for the eight 1 MB proto-0x08 chips.\n"
+        "  Root cause: resolve_pinout_key's 32-pin arm abandoned infoic's own\n"
+        "  variant_lo field and substituted a size threshold, so all eight\n"
+        "  1 MB (mem_size=1048576) pm_idx=12/proto_id=0x08/variant_lo=0x03 rows landed\n"
+        "  on DIP32_STD — a layout declaring 19 address lines and vpp-pin: [1].\n"
+        "  Consequence: the host asked for VPP on socket pin 1 of a part whose pin 1\n"
+        "  is A19, not VPP.\n"
+        "  Fix: the 32-pin proto_id==0x08 arm now forks on variant_lo, routing 0x03\n"
+        "  to DIP32_27C801 (20 address lines, A19 at pin 1, VPP shares pin 24 with /OE).\n"
+        "  Scope: exactly 8 rows, pinout field only — no algorithm / timing / voltage /\n"
+        "  electrical.type / VPP delta.\n"
+        "  [VERIFIED: minipro database.c @ a8efaedc236c1d9718bd28299dfbb99536b010ff —\n"
+        "   https://gitlab.com/DavidGriffith/minipro/-/blob/a8efaedc236c1d9718bd28299dfbb99536b010ff/src/database.c —\n"
+        "   AM27C080, AM27LV080, AT27C080, M27C801 (x2, SGS-THOMSON and ST), MX27C8000,\n"
+        "   MX27C8000A, UPD27C8001]\n"
+        "  [CITED: .planning/phases/182-jp5-destructive-operation-gate/182-RESEARCH.md]"
+    ),
 }
 
 
@@ -380,6 +398,9 @@ _RULE_FIELD_PATHS = {
     "RC1_DIP32_27C020": {
         ("pinout",),
     },
+    "RULE_PHASE182_A19_PINOUT": {
+        ("pinout",),
+    },
     # Flags bit 14/15 + raw page_size decode added. Scoped to exactly these
     # three new programming.* keys — no other field changes.
     "PROV01_PROTECT_METADATA": {
@@ -416,6 +437,18 @@ def _diff_field_paths(bl_chip, cu_chip, prefix=()):
 # was corrected. SST39SF040 is EXCLUDED (sst-keep decision — no code change).
 _PHASE84_RELABEL_PART_NUMBERS = frozenset({"FM1608"})
 
+_PHASE182_A19_PART_NUMBERS = frozenset(
+    {
+        "AM27C080",
+        "AM27LV080",
+        "AT27C080",
+        "M27C801",
+        "MX27C8000",
+        "MX27C8000A",
+        "UPD27C8001",
+    }
+)
+
 
 def _classify_diff(bl_chip, cu_chip):
     """Classify a changed chip → (label, extra_paths) or (None, diff_paths).
@@ -445,8 +478,11 @@ def _classify_diff(bl_chip, cu_chip):
                          current vdd_mv (value-scoped, before BUG3_VCC_VDD — otherwise a
                          mover would be misattributed to the vcc/vdd label-swap rationale)
       5. BUG3_VCC_VDD  — voltage (vcc/vdd) changed only
-      6a. RC1_DIP32_27C020 — pinout changed to DIP32_27C020 (before SRAM_PINOUT)
-      6b. SRAM_PINOUT  — pinout changed only (other pinout re-routes)
+      6a. RULE_PHASE182_A19_PINOUT — pinout changed to DIP32_27C801, value AND
+                         part_number scoped to the eight named 1 MB chips (before
+                         RC1_DIP32_27C020 and SRAM_PINOUT)
+      6b. RC1_DIP32_27C020 — pinout changed to DIP32_27C020 (before SRAM_PINOUT)
+      6c. SRAM_PINOUT  — pinout changed only (other pinout re-routes)
       7. RULE_PHASE84_RELABEL — only electrical.type changed, AND the chip is in
                          _PHASE84_RELABEL_PART_NUMBERS (cosmetic label-only correction;
                          scoped by part_number; MORE SPECIFIC than BUG_A_ETYPE so must
@@ -516,6 +552,17 @@ def _classify_diff(bl_chip, cu_chip):
         label = "RULE_VCC_MARGIN_RAIL"
     elif voltage_diff and not timing_diff and not algo_diff:
         label = "BUG3_VCC_VDD"
+    elif (
+        pinout_diff
+        and not algo_diff
+        and not timing_diff
+        and not voltage_diff
+        and not type_diff
+        and not vpp_diff
+        and cu_chip.get("pinout") == "DIP32_27C801"
+        and cu_chip.get("part_number") in _PHASE182_A19_PART_NUMBERS
+    ):
+        label = "RULE_PHASE182_A19_PINOUT"
     elif (
         pinout_diff
         and not algo_diff

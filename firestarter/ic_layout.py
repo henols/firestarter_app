@@ -7,7 +7,7 @@ IC Layout Generation Module
 """
 
 import logging
-from typing import Dict, List, Optional  # noqa: UP035
+from typing import Dict, List  # noqa: UP035
 
 from firestarter.database import EpromDatabase, format_mv  # Changed import
 
@@ -183,23 +183,6 @@ class EpromSpecBuilder:
             }
         }
 
-    def _get_rev2_2_jumper_settings_data(self, jp5: int) -> dict:
-        """Generates structured data for Rev 2.2 jumper settings."""
-        jp5_label = self._select_jumper_label(
-            jp5, "Open", "Closed"
-        )  # Assuming 1=Open, 2=Closed
-        jumper_display = [" N/A   ", " ● ●   ", "(● ●)  "]  # 0: N/A, 1: Open, 2: Closed
-        return {
-            "2.2": {
-                "jp5": {
-                    "config_text": "28pin",
-                    "display": jumper_display[jp5],
-                    "pin_text": "32pin",
-                    "selected_label": jp5_label,
-                },
-            }
-        }
-
     def get_chip_type_string(self, protocol_id: int | None = None) -> str:
         """Return a user-facing chip-type label.
 
@@ -364,7 +347,7 @@ class EpromSpecBuilder:
                 }
         return None
 
-    def _generate_pin_names_for_display(self, eprom_data: dict) -> Optional[List[str]]:  # noqa: UP006
+    def _generate_pin_names_for_display(self, eprom_data: dict) -> List[str] | None:  # noqa: UP006
         pin_count = eprom_data.get("pin-count")
         if pin_count not in self._generic_pin_names_map:
             logger.error(f"No generic layout available for {pin_count}-pin EPROM.")
@@ -492,8 +475,8 @@ class EpromSpecBuilder:
 
     def resolve_type_label(
         self,
-        electrical_type: Optional[str],  # noqa: UP006
-        protocol_id: Optional[int] = None,  # noqa: UP006
+        electrical_type: str | None,  # noqa: UP006
+        protocol_id: int | None = None,  # noqa: UP006
     ) -> str:
         """Return the user-facing chip-type display label (single source of truth).
 
@@ -525,8 +508,8 @@ class EpromSpecBuilder:
     def build_specifications(  # noqa: UP006
         self,
         eprom_data: dict,
-        electrical_type: Optional[str] = None,  # noqa: UP006
-    ) -> Optional[Dict]:  # noqa: UP006
+        electrical_type: str | None = None,  # noqa: UP006
+    ) -> Dict | None:  # noqa: UP006
         """Build a dictionary of comprehensive technical specifications for the EPROM.
 
         This includes basic properties, pin names for layout, jumper settings,
@@ -653,7 +636,6 @@ class EpromSpecBuilder:
                 output_data["jumpers"].update(
                     self._get_rev2_jumper_settings_data(jp4_rev2)
                 )
-                # output_data["jumpers"].update( self._get_rev2_2_jumper_settings_data(jp4_rev2))  # noqa: E501
 
         protocol_id = eprom_data.get("protocol-id")
         if protocol_id is not None:

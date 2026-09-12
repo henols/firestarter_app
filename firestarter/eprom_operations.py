@@ -17,7 +17,7 @@ import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Dict, Optional, Tuple  # noqa: UP035
+from typing import Callable, Dict, Tuple  # noqa: UP035
 
 import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -57,6 +57,7 @@ from firestarter.exceptions import (
     SerialTimeoutError,
 )
 from firestarter.frame_parser import _crc8_ccitt, cobs_encode
+from firestarter.jp5_gate import require_acknowledged
 from firestarter.messages import MSG_DATA_PROTECTION_STATUS, MSG_WARN_SDP_UNLOCK_SKIPPED
 from firestarter.sdp_capability import SDP_PROTOCOL_ID
 from firestarter.serial_comm import (
@@ -158,7 +159,7 @@ _PULSE_WIDTH_RE = re.compile(r"Pulse width (\d+) us")
 _LOCK_STATUS_RE = re.compile(r"raw=0x([0-9A-Fa-f]{2}) decode=(\d+)")
 
 
-def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional[str]:
+def _boot_block_hint_message(response, protocol: int, mem_size: int) -> str | None:
     """Return a boot-block-locked inference hint string, or None.
 
     A flash4 write that fails with MSG_ERR_FL4_VERIFY_TIMEOUT in the first or
@@ -214,7 +215,7 @@ def _boot_block_hint_message(response, protocol: int, mem_size: int) -> Optional
     return hint
 
 
-def _budget_failure_hint_message(response) -> Optional[str]:
+def _budget_failure_hint_message(response) -> str | None:
     """Return a per-byte program-budget-failure disposition hint, or None.
 
     Keyed on MSG_ERR_MAX_PULSES, MSG_ERR_ENERGY_CAP and MSG_ERR_PULSE_TOO_WIDE.
@@ -387,7 +388,7 @@ class EpromOperator:
     """
 
     def __init__(
-        self, config: ConfigManager, progress_callback: Optional[Callable] = None
+        self, config: ConfigManager, progress_callback: Callable | None = None
     ):
         self.comm: SerialCommunicator | None = None
         self.config = config
@@ -409,8 +410,8 @@ class EpromOperator:
         # Scope, deliberately narrow: only the EpromOperationError arm sets these -- a
         # real firmware ERROR frame. The transport arm does not; its text can carry a
         # host device path and it has no firmware message id to report.
-        self.last_firmware_error_code: Optional[int] = None
-        self.last_firmware_error_message: Optional[str] = None
+        self.last_firmware_error_code: int | None = None
+        self.last_firmware_error_message: str | None = None
 
     def _calculate_buffer_size(self) -> int:
         # CAP-01: firmware_max_chunk is populated by the
@@ -457,10 +458,10 @@ class EpromOperator:
         eprom_data_dict: dict,  # Pre-fetched EPROM data
         cmd: int,
         operation_flags: int = 0,
-        address: Optional[str] = None,
-        size: Optional[str] = None,
-        fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None,
-    ) -> Tuple[Optional[Dict], int]:  # noqa: UP006
+        address: str | None = None,
+        size: str | None = None,
+        fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
+    ) -> Tuple[Dict | None, int]:  # noqa: UP006
         """
         Prepares for an EPROM operation: uses pre-fetched EPROM data, sets up command, and connects.
         Returns (eprom_data_for_command, buffer_size) or (None, 0) on failure.
@@ -518,9 +519,9 @@ class EpromOperator:
         eprom_data_dict: dict,
         cmd: int,
         operation_flags: int = 0,
-        address: Optional[str] = None,
-        size: Optional[str] = None,
-        fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None,
+        address: str | None = None,
+        size: str | None = None,
+        fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
     ):
         """A context manager to handle EPROM operation setup and teardown.
 
@@ -559,9 +560,9 @@ class EpromOperator:
     def _run_state_machine(
         self,
         operation_name: str,
-        main_phase_handler: Optional[Callable] = None,
+        main_phase_handler: Callable | None = None,
         **handler_kwargs,
-    ) -> Tuple[bool, Optional[str]]:  # noqa: UP006
+    ) -> Tuple[bool, str | None]:  # noqa: UP006
         """A unified state machine driver for all operations."""
         if not self.comm:
             return False, "Not connected"
@@ -612,7 +613,7 @@ class EpromOperator:
 
     def _execute_phase(
         self, phase_name: str, progress: ClassProgressHandler
-    ) -> Optional[str]:
+    ) -> str | None:
         """Executes a single phase (INIT or END) of the state machine."""
         self.comm.send_ack()
         logger.debug(f"{phase_name.lower()} start")
@@ -669,7 +670,7 @@ class EpromOperator:
 
     # --- Main Phase Handlers ---
 
-    def _main_phase_simple(self, progress: ClassProgressHandler) -> Optional[str]:
+    def _main_phase_simple(self, progress: ClassProgressHandler) -> str | None:
         """Main phase handler for simple commands like erase, blank check, id."""
         final_msg = None
         while True:
@@ -731,8 +732,8 @@ class EpromOperator:
         progress: ClassProgressHandler,
         input_file_path: str,
         buffer_size: int,
-        eprom_data_dict: Optional[dict] = None,
-        response_timeout: Optional[float] = None,
+        eprom_data_dict: dict | None = None,
+        response_timeout: float | None = None,
     ) -> None:
         """Main phase handler for writing or verifying data.
 
@@ -897,10 +898,10 @@ class EpromOperator:
         self,
         eprom_name: str,
         eprom_data_dict: dict,
-        output_file: Optional[str] = None,
+        output_file: str | None = None,
         operation_flags: int = 0,
-        address_str: Optional[str] = None,
-        size_str: Optional[str] = None,
+        address_str: str | None = None,
+        size_str: str | None = None,
     ) -> bool:
         with self._operation_context(
             eprom_name,
@@ -947,7 +948,7 @@ class EpromOperator:
         eprom_name: str,
         eprom_data_dict: dict,
         runs: int = 3,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         keep_files: bool = True,
         max_diffs: int = 10,
         quiet: bool = False,
@@ -1149,7 +1150,7 @@ class EpromOperator:
         eprom_data_dict: dict,
         source_image_path: str,
         runs: int = 5,
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
         operation_flags: int = 0,
     ) -> int:
         """Erase, write the source image, read back N times, and compare each
@@ -1261,7 +1262,7 @@ class EpromOperator:
         eprom_data_dict: dict,
         direction: str = "outgoing",
         fault_form: str = "corrupt-crc8",
-        output_dir: Optional[str] = None,
+        output_dir: str | None = None,
     ) -> bool:
         """Demonstrate COBS resync by injecting a corrupted frame and asserting a
         bounded clean error followed by a byte-exact clean transfer.
@@ -1324,7 +1325,7 @@ class EpromOperator:
         #   surfaced error so the "sub-second clean error, no 2 s cascade" bar can be
         #   measured (the harness reports it; the firmware's actual latency decides it).
         corrupted_ok = False
-        error_latency_s: Optional[float] = None
+        error_latency_s: float | None = None
         corrupted_detail = ""
         _t0 = time.monotonic()
         try:
@@ -1482,7 +1483,7 @@ class EpromOperator:
         direction: str,
         fault_form: str,
         corrupted_ok: bool,
-        error_latency_s: Optional[float],
+        error_latency_s: float | None,
         detail: str,
     ) -> None:
         """Write the fault-injection log (one per cycle).
@@ -1525,8 +1526,8 @@ class EpromOperator:
     def measure_command_nak_latency(
         self,
         fault_form: str = "corrupt-crc8",
-        output_dir: Optional[str] = None,
-        port: Optional[str] = None,
+        output_dir: str | None = None,
+        port: str | None = None,
     ) -> bool:
         """Outgoing PER-FRAME latency measurement on an ESTABLISHED single-port
         connection (53-04 harness refinement).
@@ -1577,7 +1578,7 @@ class EpromOperator:
         baseline_ok = False
         corrupted_surfaced_error = False
         recovery_ok = False
-        nak_latency_s: Optional[float] = None
+        nak_latency_s: float | None = None
         detail = ""
         try:
             comm = SerialCommunicator(port=port)
@@ -1647,7 +1648,7 @@ class EpromOperator:
         baseline_ok: bool,
         corrupted_surfaced_error: bool,
         recovery_ok: bool,
-        nak_latency_s: Optional[float],
+        nak_latency_s: float | None,
         detail: str,
     ) -> None:
         """Write the per-frame NAK latency log (53-04 harness refinement)."""
@@ -1724,8 +1725,8 @@ class EpromOperator:
     def measure_connect_cost(
         self,
         samples: int = 10,
-        port: Optional[str] = None,
-        output_dir: Optional[str] = None,
+        port: str | None = None,
+        output_dir: str | None = None,
     ) -> bool:
         """Per-connect cost measurement harness (MEAS-01 instrument).
 
@@ -1830,7 +1831,7 @@ class EpromOperator:
         self,
         eprom_name: str,
         eprom_data_dict: dict,
-        address_str: Optional[str] = None,
+        address_str: str | None = None,
         size_str: str = "256",
         operation_flags: int = 0,
     ) -> bool:
@@ -1932,7 +1933,7 @@ class EpromOperator:
         self,
         eprom_name: str,
         eprom_data_dict: dict,
-        address_str: Optional[str],
+        address_str: str | None,
         flags: int = 0,
     ) -> bool:
         try:
@@ -1970,8 +1971,9 @@ class EpromOperator:
         eprom_data_dict: dict,
         input_file_path: str,
         operation_flags: int = 0,
-        address_str: Optional[str] = None,
+        address_str: str | None = None,
         pulse_us: int = 0,  # per-run pulse-width override (us; 0=not supplied, use the database value)
+        pin1_hazard_acknowledged: bool = False,
     ) -> bool:
         # per-run pulse override, riding the existing
         # "pulse-delay" DB-dict key rather than adding a new wire field or
@@ -1997,6 +1999,13 @@ class EpromOperator:
                 eprom_data_dict
             )  # shallow copy -- never mutate caller's dict
             eprom_data_dict["pulse-delay"] = pulse_us
+
+        require_acknowledged(
+            eprom_name,
+            eprom_data_dict.get("bus-config"),
+            "write",
+            pin1_hazard_acknowledged,
+        )
 
         with self._operation_context(
             eprom_name,
@@ -2097,7 +2106,7 @@ class EpromOperator:
         eprom_data_dict: dict,
         input_file_path: str,
         operation_flags: int = 0,
-        address_str: Optional[str] = None,
+        address_str: str | None = None,
     ) -> bool:
         with self._operation_context(
             eprom_name,
@@ -2132,8 +2141,16 @@ class EpromOperator:
         eprom_name: str,
         eprom_data_dict: dict,
         operation_flags: int = 0,
-        address_str: Optional[str] = None,
+        address_str: str | None = None,
+        pin1_hazard_acknowledged: bool = False,
     ) -> bool:
+        require_acknowledged(
+            eprom_name,
+            eprom_data_dict.get("bus-config"),
+            "erase",
+            pin1_hazard_acknowledged,
+        )
+
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
@@ -2292,7 +2309,7 @@ class EpromOperator:
 
     def check_eprom_id(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
-    ) -> Tuple[bool, Optional[int]]:  # noqa: UP006
+    ) -> Tuple[bool, int | None]:  # noqa: UP006
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
@@ -2329,7 +2346,7 @@ class EpromOperator:
 
     def _main_phase_capture_lock_status(
         self, progress: ClassProgressHandler, captured: list
-    ) -> Optional[str]:
+    ) -> str | None:
         """Main-phase handler for `CMD_LOCK_STATUS`.
 
         Mirrors `_main_phase_simple` exactly (same MAIN/ERROR/OK handling,
@@ -2372,7 +2389,7 @@ class EpromOperator:
 
     def read_protection_status(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
-    ) -> Tuple[bool, Optional[bytes]]:  # noqa: UP006
+    ) -> Tuple[bool, bytes | None]:  # noqa: UP006
         """Send `CMD_LOCK_STATUS` and return `(True, payload)` on an
         accepted command, `(False, None)` otherwise.
 

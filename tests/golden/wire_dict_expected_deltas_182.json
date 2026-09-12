@@ -1,0 +1,219 @@
+{
+  "deltas": {
+    "AMD|AM27C080|12": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          20,
+          22,
+          21
+        ]
+      }
+    },
+    "AMD|AM27LV080|19": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          20,
+          22,
+          21
+        ]
+      }
+    },
+    "ATMEL|AT27C080|6": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          20,
+          22,
+          21
+        ]
+      }
+    },
+    "MACRONIX(MXIC)|MX27C8000A|15": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          20,
+          22,
+          21
+        ]
+      }
+    },
+    "MACRONIX(MXIC)|MX27C8000|14": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          20,
+          22,
+          21
+        ]
+      }
+    },
+    "NEC|UPD27C8001|10": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          20,
+          22,
+          21
+        ]
+      }
+    },
+    "SGS-THOMSON|M27C801|17": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          20,
+          22,
+          21
+        ]
+      }
+    },
+    "ST|M27C801|14": {
+      "bus-config": {
+        "bus": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          20,
+          22,
+          21
+        ]
+      }
+    }
+  },
+  "meta": {
+    "decision": "Milestone D-17: tests/golden/wire_dict_baseline.json is preserved byte-unchanged; this file is the reviewable delta layer recording the Phase 182 bus-config change on top of it.",
+    "honesty": "This layer proves that exactly these 8 records' bus-config moved to the values shown, and that the golden's own record for each key did not already carry that value. It does not prove the values are electrically correct beyond what Phase 182's RESEARCH and the DIP32_27C801 pinout definition establish; it is a wire-level regression fence, not a hardware verification.",
+    "how_to_update": "A new delta must name the chips and the reason in the commit message. Growing this list without a provenance justification is exactly the re-baselining D-17 exists to prevent. The anti-laundering assertion in tests/test_wire_dict_equivalence.py (leg a) protects wire_dict_baseline.json itself; this file's own non-vacuity and exact-count legs protect this layer the same way.",
+    "phase": "182-jp5-destructive-operation-gate",
+    "provenance": "Generated programmatically from the live capture (_capture_wire_dicts) against the committed golden, never transcribed by hand, because the record-key `|<i>` suffix is a positional index within that manufacturer's list and a hand-written key would silently point at the wrong record."
+  }
+}

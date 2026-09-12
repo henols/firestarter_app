@@ -10,7 +10,7 @@ EPROM Information Module
 import json
 import logging
 import re
-from typing import Dict, Optional  # noqa: UP035
+from typing import Dict  # noqa: UP035
 
 from firestarter.database import EpromDatabase, format_mv  # Changed import
 from firestarter.ic_layout import EpromSpecBuilder  # Import renamed class
@@ -94,19 +94,13 @@ class EpromConsolePresenter:
     def prepare_detailed_eprom_data(
         self,
         eprom_name: str,  # For logging and titles
-        eprom_details: Optional[
-            Dict  # noqa: UP006
-        ],  # Pre-fetched from db.get_eprom(name)  # noqa: UP006
-        eprom_data_for_programmer: Optional[
-            Dict  # noqa: UP006
-        ],  # Pre-fetched from db.get_eprom(name)
-        raw_config_data: Optional[
-            Dict  # noqa: UP006
-        ],  # Pre-fetched from db.get_eprom_config()  # noqa: UP006
-        manufacturer: Optional[str],  # Pre-fetched from db.get_eprom_config()
+        eprom_details: dict | None,
+        eprom_data_for_programmer: dict | None,
+        raw_config_data: dict | None,
+        manufacturer: str | None,  # Pre-fetched from db.get_eprom_config()
         include_export_config: bool = False,
         include_adapter: bool = False,
-    ) -> Optional[Dict]:  # noqa: UP006
+    ) -> Dict | None:  # noqa: UP006
         """
         Prepares a comprehensive data structure for a specific EPROM,
         ready for presentation. It fetches raw specifications, constructs
@@ -180,10 +174,10 @@ class EpromConsolePresenter:
 
     def _prepare_export_configuration_data(
         self,
-        raw_config_data: Optional[Dict],  # noqa: UP006
-        manufacturer: Optional[str],
+        raw_config_data: Dict | None,  # noqa: UP006
+        manufacturer: str | None,
         eprom_name: str,
-    ) -> Optional[Dict]:  # noqa: UP006
+    ) -> Dict | None:  # noqa: UP006
         """
         Prepares EPROM and Pin Map configuration data formatted for export.
         """
@@ -223,7 +217,7 @@ class EpromConsolePresenter:
 
     def present_eprom_details(
         self,
-        chip_data: Optional[Dict],  # noqa: UP006
+        chip_data: Dict | None,  # noqa: UP006
         show_export_config: bool = False,
         show_adapter: bool = False,
     ):

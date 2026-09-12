@@ -10,7 +10,7 @@ import logging
 import re
 import statistics
 import time
-from typing import NamedTuple, Optional, Tuple  # noqa: UP035
+from typing import NamedTuple, Tuple  # noqa: UP035
 
 from firestarter.config import ConfigManager
 from firestarter.constants import (
@@ -43,11 +43,11 @@ class ProgrammerIdentity(NamedTuple):
     so callers read them by name -- two `Optional[str]` positionals
     type-check clean when swapped, and a name makes that impossible."""
 
-    hw_revision: Optional[str]
-    fw_board_identity: Optional[str]
+    hw_revision: str | None
+    fw_board_identity: str | None
 
 
-def _scrub_identity(raw: Optional[str]) -> Optional[str]:
+def _scrub_identity(raw: str | None) -> str | None:
     """Scrub a raw firmware/board identity string for safe recording and
     rendering.
 
@@ -84,7 +84,7 @@ class HardwareManager:
 
     def _execute_simple_command(
         self, command_dict: dict, operation_name: str
-    ) -> Tuple[bool, Optional[str]]:  # noqa: UP006
+    ) -> Tuple[bool, str | None]:  # noqa: UP006
         """
         Connects, sends a command, expects an OK, and disconnects.
         Returns (success_status, message_from_programmer).
@@ -202,9 +202,9 @@ class HardwareManager:
 
     def set_hardware_config(
         self,
-        rev: Optional[int] = None,
-        r1_val: Optional[int] = None,
-        r2_val: Optional[int] = None,
+        rev: int | None = None,
+        r1_val: int | None = None,
+        r2_val: int | None = None,
         flags: int = 0,
     ) -> bool:
         """
@@ -262,7 +262,7 @@ class HardwareManager:
         self,
         state_to_set: int,
         voltage_type_str: str,
-        timeout_seconds: Optional[int] = None,
+        timeout_seconds: int | None = None,
         flags: int = 0,
     ) -> bool:
         """
@@ -346,18 +346,18 @@ class HardwareManager:
                 comm.disconnect()
 
     def read_vpp_voltage(
-        self, timeout_seconds: Optional[int] = None, flags: int = 0
+        self, timeout_seconds: int | None = None, flags: int = 0
     ) -> bool:
         """Reads the VPP voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPP, "VPP", timeout_seconds, flags)
 
     def read_vpe_voltage(
-        self, timeout_seconds: Optional[int] = None, flags: int = 0
+        self, timeout_seconds: int | None = None, flags: int = 0
     ) -> bool:
         """Reads the VPE voltage from the programmer."""
         return self._read_voltage_loop(COMMAND_READ_VPE, "VPE", timeout_seconds, flags)
 
-    def _parse_voltage_frame(self, message: Optional[str]) -> Optional[int]:
+    def _parse_voltage_frame(self, message: str | None) -> int | None:
         """
         Parses the FIRST "%u.%uV" pair out of a 0xE4/0xE5 DATA message (e.g.
         "VPP: 20.9V, Internal VCC: 5.0V") and reconstructs the value as
@@ -373,9 +373,7 @@ class HardwareManager:
         v_int, v_dec = int(match.group(1)), int(match.group(2))
         return v_int * 1000 + v_dec * 100
 
-    def _sample_one_voltage(
-        self, state: int, n: int = 3, flags: int = 0
-    ) -> Optional[int]:
+    def _sample_one_voltage(self, state: int, n: int = 3, flags: int = 0) -> int | None:
         """
         Reads N DATA frames for the given rail `state` (COMMAND_READ_VPP or
         COMMAND_READ_VPE) and returns the median reconstructed mV value.
@@ -437,12 +435,12 @@ class HardwareManager:
 
         return int(statistics.median(samples)) if samples else None
 
-    def sample_vpp_mv(self, n: int = 3) -> Optional[int]:
+    def sample_vpp_mv(self, n: int = 3) -> int | None:
         """Value-returning sibling of read_vpp_voltage: median VPP mV over
         `n` samples (100 mV resolution), or None if not measured."""
         return self._sample_one_voltage(COMMAND_READ_VPP, n=n)
 
-    def sample_vpe_mv(self, n: int = 3) -> Optional[int]:
+    def sample_vpe_mv(self, n: int = 3) -> int | None:
         """Value-returning sibling of read_vpe_voltage: median VPE mV over
         `n` samples (100 mV resolution), or None if not measured."""
         return self._sample_one_voltage(COMMAND_READ_VPE, n=n)

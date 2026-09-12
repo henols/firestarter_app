@@ -732,9 +732,7 @@ class DiagnosticReport:
     exclusion mechanism."""
 
     def _utc_now(self) -> str:
-        return datetime.datetime.now(datetime.timezone.utc).strftime(
-            "%Y-%m-%dT%H:%M:%SZ"
-        )
+        return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def _auto_capture_dict(self) -> dict[str, Any]:
         ac = self.auto_capture

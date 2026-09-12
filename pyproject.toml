@@ -9,7 +9,7 @@ name = "firestarter"
 description = "EPROM programmer software for the Relatively Universal ROM Programmer"
 readme = { file = "README.md", content-type = "text/markdown" }
 dynamic = ["version"]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 keywords = [
     "firestarter",
     "eprom",
@@ -34,8 +34,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
@@ -62,7 +60,7 @@ dev = [
 # only needed for that board, and because pyusb pulls in a libusb backend that
 # AVR users (avrdude over serial) never touch.
 # Floor raised to 1.3.1 (HOST-07 / D-19): the current pyusb release at plan
-# time, Requires-Python >=3.9.0, satisfiable on this project's py39 floor.
+# time, Requires-Python >=3.9.0.
 # Upper bound <2 refuses a future major that could reorder ctrl_transfer's
 # parameters, which Plan 127-06's API-surface test pins against 1.3.1's shape.
 py32 = [
@@ -107,7 +105,7 @@ testpaths = ["tests"]
 addopts = "-ra -q"
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py311"
 line-length = 88
 # extend-exclude (not exclude, to keep ruff's built-in defaults):
 # (1) tests/golden/v1.3-COVERAGE-MATRIX.md is asserted byte-identical to
@@ -124,7 +122,7 @@ extend-exclude = ["tests/golden", "tests/fixtures"]
 # E: pycodestyle errors (style violations that ruff-format does not fix)
 # F: pyflakes (undefined names, unused imports)
 # I: isort (import ordering)
-# UP: pyupgrade (modernise syntax within py39 bounds — UP007/UP045 no-ops on py39)
+# UP: pyupgrade
 # No select = ["ALL"] — broadening to B/SIM/C4 deferred to Phase 42.
 # E501 excluded: ruff-format enforces line length; including E501 causes a
 # noqa-adds-noqa-on-long-lines cycle (443 violations pre-format → 3 post-format).
@@ -136,23 +134,7 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.mypy]
-# Phase 131 D-13/GATE-05: 3.10 is mypy's true
-# effective target here, measured, not a preference. The previous "3.9" was
-# rejected by mypy 2.0+ as below its minimum supported *target* -- emitted
-# as a non-fatal config note -- and silently discarded: it never took effect
-# once, in CI or locally, since the mypy>=2.1.0 pin landed 2026-05-27. mypy
-# clamps to its minimum supported target (3.10), NOT to the running
-# interpreter. requires-python stays >=3.9 (D-13): dropping it is a
-# published-metadata breaking change on a live PyPI package, an operator
-# decision, not this phase's to make. The honest cost: after this line
-# nothing type-checks against the advertised 3.9 floor -- ruff's
-# target-version = "py39" catches py3.10+ syntax but never a stdlib API used
-# on 3.9 (backlog 999.26 / FUT-MYPY-01). The treadmill: Python 3.10 EOLs
-# 2026-10-31, and a future mypy clamping its minimum target to >=3.11
-# re-fires this exact failure -- GATE-01's returncode-before-regex ordering
-# is what makes that arrive as a red gate instead of a silent green
-# (backlog 999.27).
-python_version = "3.10"
+python_version = "3.11"
 ignore_missing_imports = true   # needed for tqdm, rich (no stubs)
 disallow_untyped_defs = false   # gradual adoption — global stays lenient (D-10)
 check_untyped_defs = false

@@ -165,12 +165,17 @@
     The ``0x0D`` software chip erase is device-global by construction and
     ignores any sector address given for it.
   
+    An unsupported erase exits 1 by default; ``--ignore-unsupported`` makes it
+    exit 0 instead, for scripting, while still printing the same line.
+  
   Options:
     -f, --force                   Force, even if the VPP or chip id doesn't
                                   match.
     -b, --blank-check             Do a blank check after erase.
     -s, --sector-address ADDRESS  Sector address for sector erase (hex e.g.
                                   0x10000). Omit for chip erase.
+    --ignore-unsupported          Exit 0 instead of 1 when erase is not
+                                  supported for this EPROM.
     --help                        Show this message and exit.
   
   '''

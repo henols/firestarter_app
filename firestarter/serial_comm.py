@@ -131,9 +131,9 @@ class SerialCommunicator:
     # CAP-03 extends this same ack with the firmware's advertised per-block
     # write-time budget (write_block_budget_s below); the identical
     # class-level-declaration reasoning applies to it.
-    firmware_identity: Optional[str] = None
-    hw_revision: Optional[int] = None
-    write_block_budget_s: Optional[int] = None
+    firmware_identity: str | None = None
+    hw_revision: int | None = None
+    write_block_budget_s: int | None = None
 
     def __init__(
         self,
@@ -144,23 +144,23 @@ class SerialCommunicator:
         self.port_name = port
         self.baud_rate = baud_rate
         self.timeout = timeout
-        self.connection: Optional[serial.Serial] = None
+        self.connection: serial.Serial | None = None
         self.programmer_info: str | None = None
         # Fault-injection hook — None by default; production path is byte-identical.
         # Set only within dev fault-inject scope; cleared after the single corrupted transfer.
         # getattr-guarded in send_json_command; this attribute is the formal default.
-        self._fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None
+        self._fault_inject_outgoing: Callable[[bytes], bytes] | None = None
         # DEPRECATED: firmware_buffer_size was set by the earlier
         # identity-string parse (3rd colon-field). That parse block is removed; capacity
         # now comes from the MSG_OK_READY ack via firmware_max_chunk. Declaration kept
         # so conftest.py make_comm factory mirrors __init__ without breakage.
-        self.firmware_buffer_size: Optional[int] = None
+        self.firmware_buffer_size: int | None = None
         # CAP-01: firmware advertises effective MAIN-path decode capacity
         # via the MSG_OK_READY operation-setup ack (2-byte big-endian u16 param).
         # Populated by _decode_id_frame override; None until the first MSG_OK_READY
         # with a 2-byte param is decoded. _calculate_buffer_size returns 512 (safe
         # Uno floor) when None; never a FirmwareOutdatedError.
-        self.firmware_max_chunk: Optional[int] = None
+        self.firmware_max_chunk: int | None = None
         # CAP-02: the MSG_OK_READY ack was extended past CAP-01's 2-byte
         # buffer-size region to also carry the effective hardware revision and
         # the firmware identity string, so a single command exchange now yields
@@ -172,8 +172,8 @@ class SerialCommunicator:
         # the retired CMD_FW_VERSION probe used to read off the wire; callers
         # wanting the numeric part must strip the board suffix exactly as
         # _probe_port does.
-        self.firmware_identity: Optional[str] = None
-        self.hw_revision: Optional[int] = None
+        self.firmware_identity: str | None = None
+        self.hw_revision: int | None = None
         # CAP-03: the firmware's advertised worst-case seconds for
         # one write block. The firmware ALREADY pads this figure -- only it
         # knows its own delay(500) VPE settle, the final full-block verify
@@ -183,7 +183,7 @@ class SerialCommunicator:
         # never a refusal (mirroring CAP-01's own reversal of
         # FirmwareOutdatedError into a safe default). Populated by
         # _decode_id_frame below. Consumed only on the write path.
-        self.write_block_budget_s: Optional[int] = None
+        self.write_block_budget_s: int | None = None
         # Bounded record of every id frame
         # successfully decoded on this connection. Populated by the
         # _decode_id_frame override below. A set of integers only — nothing
@@ -265,7 +265,7 @@ class SerialCommunicator:
             frame = _hook(frame)
         return self.send_bytes(frame)
 
-    def _parse_response_line(self, line_bytes: bytes) -> Optional[Response]:
+    def _parse_response_line(self, line_bytes: bytes) -> Response | None:
         """
         Parses a raw byte line from the serial port into a structured Response object.
         It filters non-printable characters and uses a regex to find a known prefix.
@@ -332,7 +332,7 @@ class SerialCommunicator:
         )
         rurp_logger.log(level, f"{log_prefix}: {message}")
 
-    def _decode_id_frame(self, frame_len: int, body: bytes) -> Optional[LogMessage]:
+    def _decode_id_frame(self, frame_len: int, body: bytes) -> LogMessage | None:
         """Compatibility wrapper -- see codec.decode_id_frame.
 
         CAP-01: on MSG_OK_READY with a 2-byte param region, extract the
@@ -573,7 +573,7 @@ class SerialCommunicator:
 
     def expect_ack(
         self, timeout: float = DEFAULT_RESPONSE_TIMEOUT
-    ) -> Tuple[bool, Optional[str]]:  # noqa: UP006
+    ) -> Tuple[bool, str | None]:  # noqa: UP006
         """
         Waits for an 'OK' or 'ERROR' response from the programmer.
         """
@@ -651,7 +651,7 @@ class SerialCommunicator:
 
     @staticmethod
     def _list_potential_ports(
-        preferred_port: Optional[str] = None,
+        preferred_port: str | None = None,
         restrict_to_preferred: bool = False,
     ) -> List[str]:  # noqa: UP006
         """Candidate ports to probe, most preferred first.
@@ -764,7 +764,7 @@ class SerialCommunicator:
 
     @staticmethod
     def _validate_hardware_revision(
-        command_to_send: dict, detected: Optional[int]
+        command_to_send: dict, detected: int | None
     ) -> None:
         """Pure-policy shield-revision guard. Raises on reject, returns on pass.
 
@@ -811,7 +811,7 @@ class SerialCommunicator:
         baud_rate: int,
         command_to_send: dict,
         config_manager: ConfigManager,
-        fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None,
+        fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
         allow_outdated_firmware: bool = False,
     ) -> Optional["SerialCommunicator"]:
         """
@@ -971,11 +971,11 @@ class SerialCommunicator:
         cls,
         command_to_send: dict,
         config_manager: ConfigManager,
-        preferred_port: Optional[str] = None,
+        preferred_port: str | None = None,
         baud_rate: int = int(BAUD_RATE),
-        fault_inject_outgoing: Optional[Callable[[bytes], bytes]] = None,
+        fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
         allow_outdated_firmware: bool = False,
-        restrict_to_port: Optional[bool] = None,
+        restrict_to_port: bool | None = None,
     ) -> "SerialCommunicator":
         """
         Finds a compatible programmer by probing potential serial ports.
@@ -1109,7 +1109,7 @@ class FaultInjectingSerialCommunicator(SerialCommunicator):
         self._corrupt_incoming_once = corrupt_incoming_once
         self._fault_fired = False
 
-    def _decode_id_frame(self, frame_len: int, body: bytes) -> Optional[LogMessage]:
+    def _decode_id_frame(self, frame_len: int, body: bytes) -> LogMessage | None:
         """One-shot incoming-frame fault injection: flip last body byte exactly once.
 
         After the first call, _fault_fired is set and subsequent calls pass

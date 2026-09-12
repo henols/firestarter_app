@@ -197,7 +197,7 @@ _READY_BARE_INDEX_RE = re.compile(r"_ready\[\s*(\d+)\s*\]")
 # ---------------------------------------------------------------------------
 _DECODE_ID_FRAME_DEF_RE = re.compile(
     r"^([ \t]*)def _decode_id_frame\(\s*self\s*,\s*frame_len:\s*int\s*,\s*"
-    r"body:\s*bytes\s*\)\s*->\s*Optional\[LogMessage\]\s*:\s*$",
+    r"body:\s*bytes\s*\)\s*->\s*LogMessage\s*\|\s*None\s*:\s*$",
     re.MULTILINE,
 )
 _HOST_PARAMS_SLICE_RE = re.compile(r"params_bytes\s*=\s*body\[1:-1\]")

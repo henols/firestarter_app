@@ -11,7 +11,7 @@ import logging
 import os
 import re
 import time
-from typing import List, Literal, Optional, Tuple, TypedDict  # noqa: UP035
+from typing import List, Literal, Tuple, TypedDict  # noqa: UP035
 
 import requests
 from packaging.version import InvalidVersion, Version
@@ -108,7 +108,7 @@ _PORTLESS_FLASH_METHODS = frozenset({FLASH_METHOD_DFU})
 #
 # See `.planning/phases/127-host-dfu-installer/127-NONREGRESSION.md` for the
 # phase evidence artifact carrying this same record.
-def flash_method(board: Optional[str]) -> str:
+def flash_method(board: str | None) -> str:
     """Return the install method for a board name (case-insensitive)."""
     return _BOARD_FLASH_METHODS.get((board or "").lower(), FLASH_METHOD_AVRDUDE)
 
@@ -137,7 +137,7 @@ def _asset_label(board: str) -> str:
     return " or ".join(repr(name) for name in names)
 
 
-def _pick_asset(assets: object, board: str) -> Optional[str]:
+def _pick_asset(assets: object, board: str) -> str | None:
     """Resolve the download URL of the first matching asset, else None."""
     if not isinstance(assets, list):
         return None
@@ -168,7 +168,7 @@ class FirmwareManager:
         self,
         preferred_port: str | None = None,
         flags: int = 0,
-    ) -> Tuple[Optional[str], Optional[str], Optional[str]]:  # noqa: UP006
+    ) -> Tuple[str | None, str | None, str | None]:  # noqa: UP006
         """
         Checks the currently installed firmware version on the programmer.
         Returns: (port_name, current_version, board_name) or (None, None, None) on failure.
@@ -239,7 +239,7 @@ class FirmwareManager:
 
     def fetch_latest_release_info(
         self, board: str = "uno"
-    ) -> Tuple[Optional[str], Optional[str]]:  # noqa: UP006
+    ) -> Tuple[str | None, str | None]:  # noqa: UP006
         """
         Fetches the latest firmware version and download URL for the specified board.
         Returns: (latest_version_str, download_url_str) or (None, None) on failure.
@@ -319,9 +319,9 @@ class FirmwareManager:
     def fetch_release_info(
         self,
         channel: Literal["stable", "pre", "pinned"] = "stable",
-        version: Optional[str] = None,
+        version: str | None = None,
         board: str = "uno",
-    ) -> Tuple[Optional[str], Optional[str]]:  # noqa: UP006
+    ) -> Tuple[str | None, str | None]:  # noqa: UP006
         """Router: returns (resolved_version, download_url) or (None, None) on failure.
 
         channel='stable'  → delegates to fetch_latest_release_info (back-compat shim).
@@ -464,7 +464,7 @@ class FirmwareManager:
         out.sort(key=lambda entry: Version(entry["version"]), reverse=True)
         return out
 
-    def _download_firmware_file(self, url: str) -> Optional[str]:
+    def _download_firmware_file(self, url: str) -> str | None:
         """Downloads firmware from the URL and saves it to a temporary local path."""
         logger.info(f"Downloading firmware from {url}...")
         start_time = time.time()
@@ -501,9 +501,9 @@ class FirmwareManager:
         self,
         hex_file_path: str,
         board: str,
-        avrdude_path_override: Optional[str],
-        avrdude_config_override: Optional[str],
-        target_port: Optional[str],
+        avrdude_path_override: str | None,
+        avrdude_config_override: str | None,
+        target_port: str | None,
     ) -> bool:
         """Internal method to perform the Avrdude flashing process."""
         start_time = time.time()
@@ -620,7 +620,7 @@ class FirmwareManager:
         self,
         image_path: str,
         board: str,
-        usb_id: Optional[str] = None,
+        usb_id: str | None = None,
     ) -> bool:
         """Install firmware over the board's USB DFU bootloader.
 
@@ -699,7 +699,7 @@ class FirmwareManager:
             pass
 
     @staticmethod
-    def probe_dfu(usb_id: Optional[str] = None) -> List[str]:  # noqa: UP006
+    def probe_dfu(usb_id: str | None = None) -> List[str]:  # noqa: UP006
         """Describe attached DFU devices. Raises FirmwareOperationError on failure.
 
         This is the instrument for the first bench session with real PY32F071
@@ -724,10 +724,10 @@ class FirmwareManager:
         self,
         hex_file_path: str,
         board: str,
-        avrdude_path_override: Optional[str],
-        avrdude_config_override: Optional[str],
-        target_port: Optional[str],
-        usb_id: Optional[str] = None,
+        avrdude_path_override: str | None,
+        avrdude_config_override: str | None,
+        target_port: str | None,
+        usb_id: str | None = None,
     ) -> bool:
         """Dispatch to the flasher for this board.
 
@@ -747,14 +747,14 @@ class FirmwareManager:
     def manage_firmware_update(
         self,
         install_flag: bool = False,
-        avrdude_path_override: Optional[str] = None,
-        avrdude_config_override: Optional[str] = None,
-        port_override: Optional[str] = None,
-        board_override: Optional[str] = "uno",
+        avrdude_path_override: str | None = None,
+        avrdude_config_override: str | None = None,
+        port_override: str | None = None,
+        board_override: str | None = "uno",
         flags: int = 0,
         channel: Literal["stable", "pre", "pinned"] = "stable",
-        pinned_version: Optional[str] = None,
-        usb_id: Optional[str] = None,
+        pinned_version: str | None = None,
+        usb_id: str | None = None,
         board_explicit: bool = False,
     ) -> bool:
         """

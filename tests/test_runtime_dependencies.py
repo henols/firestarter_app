@@ -12,10 +12,10 @@ for a test that parses `pyproject.toml` -- the shape here is an original
 decision, not a copied one.
 """
 
+import tomllib
 from pathlib import Path
 
 import pytest
-import tomllib
 
 _EXPECTED_RUNTIME_DISTRIBUTIONS = frozenset(
     {"click", "packaging", "pyserial", "requests", "rich", "tqdm"}

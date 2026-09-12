@@ -10,7 +10,7 @@ Configuration Management Module
 import json
 import logging
 import os
-from typing import Any, Optional
+from typing import Any
 
 
 # Define the home path and configuration file path.
@@ -88,7 +88,7 @@ class ConfigManager:
         str, bool
     ] = {}  # Tracks initialization status, keyed by config file path  # noqa: E501
 
-    def __new__(cls, config_filename: Optional[str] = None, *args, **kwargs):
+    def __new__(cls, config_filename: str | None = None, *args, **kwargs):
         actual_filename = config_filename or CONFIG_FILE_DEFAULT
         instance_key = os.path.join(HOME_PATH, actual_filename)
 
@@ -96,7 +96,7 @@ class ConfigManager:
             cls._instances[instance_key] = super(ConfigManager, cls).__new__(cls)  # noqa: UP008
         return cls._instances[instance_key]
 
-    def __init__(self, config_filename: Optional[str] = None):
+    def __init__(self, config_filename: str | None = None):
         actual_filename = config_filename or CONFIG_FILE_DEFAULT
         self.config_file_path = os.path.join(HOME_PATH, actual_filename)
 

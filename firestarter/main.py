@@ -14,7 +14,6 @@ argparse -> Click migration.
 import signal
 import sys
 from types import FrameType
-from typing import Optional  # noqa: UP035
 
 from firestarter.cli_handlers import cli
 
@@ -22,15 +21,15 @@ from firestarter.cli_handlers import cli
 main = cli
 
 
-def exit_gracefully(signum: int, frame: Optional[FrameType]) -> None:
+def exit_gracefully(signum: int, frame: FrameType | None) -> None:
     """Signal handler that exits the process with status 1."""
     sys.exit(1)
 
 
 if __name__ == "__main__":
-    if sys.version_info < (3, 9):  # noqa: UP036
+    if sys.version_info < (3, 11):  # noqa: UP036
         sys.exit(
-            "Error: Firestarter requires Python 3.9 or higher. "
+            "Error: Firestarter requires Python 3.11 or higher. "
             "Please update your Python version."
         )
 

@@ -63,7 +63,7 @@ make the gate permanently red on code this phase never touched -- a false
 positive, not a real violation. Instead, `_scan_target_functions` narrows
 the handler scan to `dev_test` plus its private co-located helpers
 (`_verdict_code`, `_sanitize_chip_token`, `_is_uv_eprom`, `_chip_id_fields`,
-`_is_interactive`, `_make_sampler` -- `_HANDLER_FUNCTION_NAMES` below), i.e.
+`_make_sampler` -- `_HANDLER_FUNCTION_NAMES` below), i.e.
 exactly the new Phase-112 code, via an AST `FunctionDef`/`AsyncFunctionDef`
 name filter over the parsed module -- never a brittle line-number range. The
 `chip_test.py` leg is unaffected and still scans the ENTIRE file (it has, by
@@ -160,7 +160,6 @@ _HANDLER_FUNCTION_NAMES = frozenset(
         "_cli_start_time",
         "_is_uv_eprom",
         "_chip_id_fields",
-        "_is_interactive",
         "_make_sampler",
     }
 )

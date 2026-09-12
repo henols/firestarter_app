@@ -4,12 +4,12 @@
 
 ## Languages
 **Primary:**
-- Python 3.9+ - All application logic (enforced via `requires-python = ">=3.9"` in `pyproject.toml`)
+- Python 3.11+ - All application logic (enforced via `requires-python = ">=3.11"` in `pyproject.toml`; see `henols/firestarter_prom` `.planning/notes/python-floor-decision.md` for why and the standing rule for the next move)
 - Bash - Test scripts (`firestarter_test.sh`, `write_test.sh`)
 
 ## Runtime
 **Environment:**
-- Python 3.13.5 (current dev machine runtime; min supported is 3.9)
+- Python 3.13.5 (current dev machine runtime; min supported is 3.11)
 - OS Independent (classifiers confirm Linux/macOS/Windows support)
 
 **Package Manager:**
@@ -54,7 +54,7 @@
 
 ## Platform Requirements
 **Development:**
-- Python 3.9+
+- Python 3.11+
 - `avrdude` installed and on `PATH` (for firmware install subcommand only)
 - Physical RURP Arduino shield connected via USB serial for any hardware tests
 - `xxd` and `diff` available for bash test scripts

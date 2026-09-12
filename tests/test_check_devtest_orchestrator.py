@@ -582,13 +582,15 @@ def test_every_helper_referenced_by_dev_test_is_listed() -> None:
     proves every *referenced* helper is *listed*; test 9 proves every
     *listed* name is *real*. Together they are bidirectional; neither alone
     is. The assertion here is a SUBSET, never an equality, because
-    `_is_interactive` is legitimately listed but not referenced from
-    `dev_test`'s body -- an equality assertion would be red for the opposite
-    reason on day one. `_default_uv_write_confirm` used to be the other such
-    entry; it went when the UV write prompt was retired (quick task
-    260822-aq6). `_is_uv_eprom` used to be the third such entry; Phase 181
-    plan 04 made it body-referenced by inlining the deleted write-scope
-    helper's rule at `dev_test`'s own `derive_plan` call site.
+    `_verdict_code` is legitimately listed but not referenced from
+    `dev_test`'s body directly -- `_dev_test_exit_code` calls it internally
+    instead, mirroring `_overall_exit_code`'s own shape above -- an equality
+    assertion would be red for the opposite reason on day one.
+    `_default_uv_write_confirm` used to be the other such entry; it went
+    when the UV write prompt was retired (quick task 260822-aq6).
+    `_is_uv_eprom` used to be the third such entry; Phase 181 plan 04 made
+    it body-referenced by inlining the deleted write-scope helper's rule at
+    `dev_test`'s own `derive_plan` call site.
     `_canonical_part_number` (Phase 181 plan 05, RPT-F1) is the newest
     entry: `dev_test`'s body calls it directly, beside the existing
     `auto_capture.protocol` assignment. `_cli_start_time` (Phase 181 plan
