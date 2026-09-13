@@ -10,15 +10,15 @@ tools/catalog/ directory) and emits one of two deterministic outputs:
   --language python     -> messages.py  (severity codes, MSG_* ID constants,
                                          MessageDef dataclass, CATALOG dict)
 
-LCAT-03 historical note: an earlier revision emitted a third output
+An earlier revision emitted a third output
 (`--language cpp-table` -> messages.c) holding a 256-byte PROGMEM table
 backing a `MSG_PARAM_COUNT(id)` macro. The firmware never wired up a
 caller for it (every emit-site already passes its param_count explicitly),
 so the table cost ~256 B of Leonardo flash for no functional benefit.
-Dropped post-Phase-7 to reclaim that space; the cpp-table emitter and
+Dropped to reclaim that space; the cpp-table emitter and
 messages.c are gone from the codegen surface.
 
-Determinism contract (LCAT-05): two consecutive runs against the same catalog
+Determinism contract: two consecutive runs against the same catalog
 file produce byte-identical output. Achieved by:
   - sorting messages by id ascending before emission
   - no timestamps, hostnames, or hashes in the banner
@@ -26,7 +26,7 @@ file produce byte-identical output. Achieved by:
   - upper-case 2-digit hex literals ("0x%02X")
   - explicit dict iteration via sorted(...)
 
-Validation (LCAT-02 + LCI-04): the --check flag runs the full 10-rule catalog
+Validation: the --check flag runs the full 10-rule catalog
 validator and exits 1 on any violation. Validation also runs unconditionally
 before emission, so an invalid catalog never produces output.
 
@@ -148,7 +148,7 @@ PY_BANNER_TEMPLATE = (
 
 
 # ===========================================================================
-# 2. CATALOG VALIDATION (LCAT-02 + LCI-04)
+# 2. CATALOG VALIDATION
 # ===========================================================================
 
 class CatalogError(Exception):
