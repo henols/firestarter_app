@@ -8,10 +8,10 @@ import requests
 # ==========================================
 # 1. CONFIGURATION
 # ==========================================
-# Pinned to the SHA recorded in tools/DECODE-NOTES.md §0/§3 (the Phase-86 regen
-# provenance of record) so the fetch is deterministic and the baseline re-pin is
-# reproducible. Was /-/raw/master/ — switched to the pinned commit
-# discretion (DECODE-NOTES.md §3). Short form: a8efaedc.
+# Pinned to the SHA recorded in tools/DECODE-NOTES.md §0/§3 so the fetch is
+# deterministic and the baseline re-pin is reproducible. Was /-/raw/master/ —
+# switched to the pinned commit at DECODE-NOTES.md §3 discretion. Short form:
+# a8efaedc.
 MINIPRO_XML_URL = (
     "https://gitlab.com/DavidGriffith/minipro/-/raw/"
     "a8efaedc236c1d9718bd28299dfbb99536b010ff/infoic.xml"
@@ -110,12 +110,12 @@ _PAGE_SIZE_BY_PART: dict[str, int] = {
     "W29C040": 256,
     # W29C042 shares the same DB entry as W29C040 (same family, same page structure)
     # but is not individually documented in the in-repo datasheet — omitted per
-    # PGSZ-01 discipline. The shared entry gets W29C040's citation via part-number lookup.
+    # page-size discipline. The shared entry gets W29C040's citation via part-number lookup.
     # [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C020.pdf §6.2
     #         "Every page contains 128 bytes of data." + FEATURES "128 bytes per page"]
     "W29C020": 128,
     # W29C020C and W29C022 share the same DB entry as W29C020 (same family).
-    # Not individually documented in the in-repo datasheet — omitted per PGSZ-01
+    # Not individually documented in the in-repo datasheet — omitted per page-size
     # discipline. The shared entry gets W29C020's citation via part-number lookup.
 }
 
@@ -130,7 +130,7 @@ NON_DISPATCHABLE_ALGO = 0x00
 
 # [VERIFIED: canonical IC2_ALG_* constants from database.h#L24-L77 @ a8efaedc]
 # 0x35 (IC2_ALG_ITE) and 0x39 (phantom — no IC2_ALG constant) removed:
-# neither produces chips in the INFOIC2PLUS DIP-24..32 filter.
+# neither produces chips in the INFOIC2PLUS 24-to-32-pin DIP filter.
 # 0x34 = XICOR X88C64P — DIP-parallel NovRAM; unimplemented protocol but
 # confirmed DIP-parallel memory. Added here so the chip passes the
 # KNOWN_PROTOCOLS gate and gets classified as protocol-not-implemented.
@@ -147,7 +147,7 @@ KNOWN_PROTOCOLS = {
     0x28,
     0x29,
     0x34,  # XICOR X88C64P — DIP-parallel NovRAM; included as protocol-not-implemented
-    # NOT 0x35 or 0x39 — removed by v1.11 DEC-05
+    # NOT 0x35 or 0x39 — removed
 }
 
 # [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
@@ -454,7 +454,7 @@ def main():
                 pin_map_raw = int(ic.get("pin_map", "0"), 16)
                 pm_idx = pin_map_raw & 0xFF
 
-                # DB-07: Initialize support classification fields.
+                # Initialize support classification fields.
                 # These defaults are overridden at the two inclusion gates below
                 # and at the NMOS VPP override block before chip_entry construction.
                 _support_status = "supported"
@@ -477,8 +477,8 @@ def main():
                     continue
                 if proto_id == 0x34:
                     _support_status = "protocol-not-implemented"
-                    # DB-04 Approach A (67.1-01): reason string begins with SC-required
-                    # wording so the host can render it verbatim.
+                    # Reason string begins with SC-required wording so the host can
+                    # render it verbatim.
                     # Must contain "not implemented" substring — existing test
                     # test_read_protocol_not_implemented_typed_refusal asserts it.
                     _unsupported_reason = (
@@ -504,9 +504,9 @@ def main():
                     and (flags & 0x10)
                 ):
                     _support_status = "adapter-required"
-                    # DB-04 Approach A (67.1-01): reason string begins with
+                    # Reason string begins with
                     # "adapter required:" so the host can render it verbatim.
-                    # Non-empty adapter note required (DB-02 SC#1).
+                    # Non-empty adapter note required.
                     _unsupported_reason = (
                         "adapter required: requires a dedicated DIP24 EEPROM adapter "
                         "or firmware handler — socket pin 21 = WE, which the RURP "
@@ -519,7 +519,7 @@ def main():
                         f"chips; tracked in follow_up 24pin-eeprom-no-handler).",
                         file=sys.stderr,
                     )
-                    # CR-01 Option A: demote to NON_DISPATCHABLE_ALGO so dispatch()
+                    # Demote to NON_DISPATCHABLE_ALGO so dispatch()
                     # returns ERROR instead of configure_eprom (HARD invariant).
                     proto_id = NON_DISPATCHABLE_ALGO
 
@@ -609,7 +609,7 @@ def main():
                         _etype = _relabel_etype
                         break
 
-                # Site C: DB-03 NMOS VPP correction.
+                # NMOS VPP correction.
                 # Must run AFTER all fm1608/WARNING-5 overrides (ordering invariant).
                 # "Highest VPP wins": iterate all aliases; the match with the highest
                 # VPP determines the final voltage + status (conservative — avoids
@@ -623,7 +623,7 @@ def main():
                 if _nmos_vpp_mv is not None:
                     if _nmos_vpp_mv > RURP_VPP_CEILING_MV:
                         _support_status = "vpp-exceeds-max"
-                        # DB-04 Approach A (67.1-01): reason string begins with
+                        # Reason string begins with
                         # "VPP <x>V exceeds programmer max (<ceil>V)" so the host
                         # can render it verbatim.
                         # Uses "programmer max" (not "RURP ceiling") per SC#2 wording.
@@ -631,7 +631,7 @@ def main():
                             f"VPP {_nmos_vpp_mv // 1000}V exceeds programmer max "
                             f"({RURP_VPP_CEILING_MV // 1000}V)"
                         )
-                        # CR-01 Option A: demote to NON_DISPATCHABLE_ALGO so dispatch()
+                        # Demote to NON_DISPATCHABLE_ALGO so dispatch()
                         # returns ERROR instead of configure_eprom (HARD invariant).
                         proto_id = NON_DISPATCHABLE_ALGO
                     # else: leave _support_status as "supported" — M2732A (21V)
