@@ -46,7 +46,6 @@ _FALSE_POSITIVE_CANDIDATE_NAMES = frozenset(
     {
         "ic_layout.py",
         "check_devtest_orchestrator.py",
-        "test_check_dispatch_invariants.py",
         "test_chip_resolver.py",
         "test_eprom_database.py",
         "test_extra_chips_supplement.py",
