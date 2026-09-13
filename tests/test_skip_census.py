@@ -130,12 +130,6 @@ ALLOWED_SKIP_REASONS: frozenset[str] = frozenset(
         # installs the package before running tests, so this should not
         # fire there.
         "firestarter entry point not found on PATH",
-        # tests/test_audit_coverage_matrix.py: legitimate only when this
-        # sub-repo is checked out standalone with no meta-repo `.planning/`
-        # directory one level up (e.g. GitHub Actions cloning only
-        # firestarter_app) -- documented in-source as an intentional
-        # standalone-CI guard. Path is interpolated, hence a prefix match.
-        "meta-repo ledger not available at",
         # tests/test_variant_decode_evidence_stability.py: legitimate only
         # when the meta-repo bench EVIDENCE.json artifact is absent (same
         # standalone-checkout class as the entry above). Path is
