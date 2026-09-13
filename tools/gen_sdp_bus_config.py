@@ -2,7 +2,7 @@
 """
 SDP bus_config ground-truth codegen.
 
-Derives, validates and emits the `bus_config_t` ground truth the Phase-116 trace
+Derives, validates and emits the `bus_config_t` ground truth the SDP trace
 suites assert against, for five representative AT28C-family chips spanning the
 four `0x0D` (EEPROM_PARALLEL) pinouts:
 
@@ -66,8 +66,8 @@ sys.path.insert(0, str(_APP_ROOT))
 # One chip per 0x0D pinout, plus a second DIP32_28C512_EEPROM size band.
 # That pinout alone spans 64 KB to 512 KB; AT28C010 and AT28C040 share an
 # IDENTICAL bus_config, so the band is distinguished by mem_size and prior
-# register state, not by bus_config (RESEARCH SUMMARY.md, "Note" under F5's
-# per-pinout table). Fixed order -- this IS the emission order.
+# register state, not by bus_config. Fixed order -- this IS the emission
+# order.
 REPRESENTATIVE_CHIPS = [
     "AT28C256",  # DIP28_28C256, 32768 B
     "AT28C64",  # DIP28_28C64, 8192 B
@@ -76,8 +76,8 @@ REPRESENTATIVE_CHIPS = [
     "AT28C040",  # DIP32_28C512_EEPROM, 524288 B -- same bus_config as AT28C010
 ]
 
-# Independently-measured reference values (RESEARCH.md SUMMARY.md §F5 /
-# §Code Examples), in the fixed REPRESENTATIVE_CHIPS order above. A derived
+# Independently-measured reference values, in the fixed
+# REPRESENTATIVE_CHIPS order above. A derived
 # value disagreeing with these means pinouts.json moved and the trace goldens
 # are stale -- fail loudly rather than emit fresh ground truth silently.
 _EXPECTED_MATCHING_LINES = [14, 13, 11, 16, 16]
@@ -277,7 +277,7 @@ def validate_rows(rows: list) -> None:
         ):
             raise ValueError(
                 "AT28C010 and AT28C040 were expected to share an identical "
-                "bus_config (D-09 premise) but diverged"
+                "bus_config but diverged"
             )
 
 
@@ -344,8 +344,8 @@ def _build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="gen_sdp_bus_config.py",
         description=(
-            "Derive + emit the bus_config_t ground truth for the Phase-116 "
-            "SDP trace suites, from the host's own convert_to_programmer path."
+            "Derive + emit the bus_config_t ground truth for the SDP trace "
+            "suites, from the host's own convert_to_programmer path."
         ),
     )
     p.add_argument(

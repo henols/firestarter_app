@@ -169,8 +169,7 @@ _VCC_MARGIN_RAIL_MV = VCC_VOLTAGES[0x02]
 
 # DIP28_VARIANT_MAP, PIN_MAP_TO_PINOUT, and PIN_MAP_PROTO_TO_PINOUT
 # have been DELETED. The principled resolve_pinout_key
-# function below is the sole pinout-selection path. See RESEARCH.md
-# §"Full Principled Rule Structure" for derivation evidence.
+# function below is the sole pinout-selection path.
 
 _PGM_ON_PIN31_MAX_SIZE = 262144
 
@@ -206,7 +205,7 @@ def resolve_pinout_key(
                 # 28C-family EEPROM (AT28C04/16, XL2804/2816, AM28C16A, etc.)
                 # variant_lo=0x10 is the reliable 28C-EEPROM discriminator —
                 # do NOT rely on flags&0x10 here; many 28C parts have flags=0x0000
-                # (e.g. AM28C16A, CAT28C16A, XL2804A — confirmed RESEARCH Pitfall 1).
+                # (e.g. AM28C16A, CAT28C16A, XL2804A).
                 # [VERIFIED: infoic.xml — all (pm_idx=23, variant_lo=0x10) chips
                 #  are the 28C family sharing the DIP24_2816 layout]
                 key = "DIP24_2816"  # 5V EEPROM, rw-pin=21 (WE), no vpp-pin
@@ -220,7 +219,7 @@ def resolve_pinout_key(
     elif pin_count == 28:
         if pm_idx == 22:
             # 27C512/256/128/64 UV-EPROM family — variant_lo sub-discriminates.
-            # CRITICAL (RESEARCH Pitfall 3): 0x10→27512 (VPP on pin 22) and
+            # CRITICAL: 0x10→27512 (VPP on pin 22) and
             # 0x11→27256 (VPP on pin 1) must not be swapped — 12V to wrong pin.
             # [VERIFIED: infoic.xml — pm_idx=22 is the 27Cxxx family group]
             if variant_lo == 0x10:
@@ -602,9 +601,9 @@ def main():
                 #
                 # SST39SF040 deliberately KEEPS Flash/EEPROM: relabelling it to
                 # 'Flash' flips FLAG_CAN_ERASE off and breaks its auto-erase.
-                _PHASE84_RELABEL = {"FM1608": "FRAM"}
+                _ETYPE_RELABEL = {"FM1608": "FRAM"}
                 part_aliases_set = {a.split("@")[0].strip() for a in name.split(",")}
-                for _relabel_pn, _relabel_etype in _PHASE84_RELABEL.items():
+                for _relabel_pn, _relabel_etype in _ETYPE_RELABEL.items():
                     if _relabel_pn in part_aliases_set:
                         _etype = _relabel_etype
                         break
