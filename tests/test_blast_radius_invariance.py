@@ -189,8 +189,7 @@ _TRANSPORT_HEALTH_KEYS = [
 
 """D-07's sixth pin: `_db_diff_dict()` (`:740-748`) emits three keys today,
 populated only after `build_db_diff` is composed onto a report -- `None`
-on a bare `build_shape()` result. The paired test below composes it the
-same way `tools/snapshot_report_shapes.py:render_shape` does, so there is
+on a bare `build_shape()` result. The paired test below composes it, so there is
 exactly one place that composition happens, not two independently
 maintained copies."""
 _DB_DIFF_KEYS = [
@@ -465,8 +464,7 @@ def test_to_dict_top_level_key_list_is_pinned() -> None:
 
 def _to_dict_with_db_diff(shape_id: str) -> dict:
     """`db_diff` is `None` on a bare `build_shape()` report -- populated
-    only after `build_db_diff` is composed onto it, exactly as
-    `tools/snapshot_report_shapes.py:render_shape` does. The D-07 db_diff
+    only after `build_db_diff` is composed onto it. The D-07 db_diff
     key-list pin needs a populated `db_diff`, so this helper mirrors that
     composition rather than maintaining a second copy of it."""
     from firestarter.database import EpromDatabase
