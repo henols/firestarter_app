@@ -6,13 +6,13 @@ Permission is hereby granted under MIT license.
 """
 
 FIRESTARTER_RELEASE_URL = (
-    "https://api.github.com/repos/henols/firestarter/releases/latest"
+    "https://api.github.com/repos/henols/firestarter_fw/releases/latest"
 )
 
-FIRESTARTER_RELEASES_URL = "https://api.github.com/repos/henols/firestarter/releases"
+FIRESTARTER_RELEASES_URL = "https://api.github.com/repos/henols/firestarter_fw/releases"
 
 FIRESTARTER_RELEASE_BY_TAG_URL = (
-    "https://api.github.com/repos/henols/firestarter/releases/tags/{tag}"
+    "https://api.github.com/repos/henols/firestarter_fw/releases/tags/{tag}"
 )
 
 # Constants

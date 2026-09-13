@@ -405,7 +405,7 @@ class FirmwareManager:
         self,
         channel_filter: Literal["all", "pre", "stable"] = "all",
         board: str = "uno",
-    ) -> List[ReleaseInfo]:  # noqa: UP006
+    ) -> List[ReleaseInfo] | None:  # noqa: UP006
         """Enumerate available firmware releases sorted by PEP 440 version descending.
 
         Omits draft releases and releases without a board-matching .hex asset.
@@ -416,13 +416,16 @@ class FirmwareManager:
         channel_filter='stable' → stable only.
 
         Returns a flat list of ReleaseInfo dicts (version, tag, channel,
-        published, asset_url).
+        published, asset_url), or `None` if the fetch itself did not succeed.
+        `None` means the fetch did not succeed; `[]` means it succeeded and
+        no release carried a board-matching asset — the two states are
+        distinguishable and must never be conflated.
         """
         try:
             all_releases = self._fetch_all_releases()
         except requests.RequestException as e:
             logger.error(f"Failed to fetch releases for list: {e}")
-            return []
+            return None
 
         out: List[ReleaseInfo] = []  # noqa: UP006
         for r in all_releases:

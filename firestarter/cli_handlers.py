@@ -53,7 +53,11 @@ from firestarter.chip_test import (
     sdp_oracle_applicable,
 )
 from firestarter.config import ConfigManager, get_config_dir
-from firestarter.constants import FLAG_CHIP_ENABLE, FLAG_OUTPUT_ENABLE
+from firestarter.constants import (
+    FIRESTARTER_RELEASES_URL,
+    FLAG_CHIP_ENABLE,
+    FLAG_OUTPUT_ENABLE,
+)
 from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import (
     AutoCapture,
@@ -1214,6 +1218,14 @@ def fw(
         releases = app.firmware_manager.list_releases(
             channel_filter=channel_filter, board=board
         )
+        if releases is None:
+            click.echo(
+                f"Could not list firmware releases for board {board}: the release "
+                f"endpoint {FIRESTARTER_RELEASES_URL} could not be read. No release "
+                "information was retrieved.",
+                err=True,
+            )
+            sys.exit(1)
         if json_output:
             import json as _json
 
@@ -1224,6 +1236,8 @@ def fw(
                 print(
                     f"{r['version']:<12} {r['channel']:<14} {r['published']:<22} {r['asset_url']}"  # noqa: E501
                 )
+            if not releases:
+                print(f"No releases found for board {board}.")
         sys.exit(0)
 
     # SimpleNamespace adapter for the magic-default helper (zero churn).

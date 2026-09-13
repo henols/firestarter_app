@@ -179,21 +179,24 @@ try:
 except ModuleNotFoundError:
     pass
 
-import requests
-
 from firestarter import firmware as _firmware_module
 
 
-def _raise_request_exception(*_args, **_kwargs):
-    raise requests.RequestException(
-        "blocked: no network access in this subprocess test"
-    )
+class _EmptyReleasesResponse:
+    def json(self):
+        return []
+
+    def raise_for_status(self):
+        return None
+
+    headers: dict = {}
 
 
-# Stub the HTTP seam so `fw --list` needs no network: list_releases() already
-# catches requests.RequestException and returns an empty list (the real code
-# path, not a bypass of it).
-_firmware_module.requests.get = _raise_request_exception
+def _return_empty_releases_response(*_args, **_kwargs):
+    return _EmptyReleasesResponse()
+
+
+_firmware_module.requests.get = _return_empty_releases_response
 
 from click.testing import CliRunner
 from firestarter.cli_handlers import cli
