@@ -14,11 +14,12 @@ CLI usage:
     output_path -- path to write the binary image
 
 Prints the SHA-256 hex digest of the generated image to stdout.  This is the
-oracle value to record in EVIDENCE.json as sha256_image_A / sha256_image_B.
+oracle value to compare against the recorded sha256_image_A / sha256_image_B
+hash for the corresponding image.
 
 Storage convention:
-    /tmp/firestarter_bench_p82/<chip>_img_A.bin  (seed=1)
-    /tmp/firestarter_bench_p82/<chip>_img_B.bin  (seed=2)
+    /tmp/firestarter_bench/<chip>_img_A.bin  (seed=1)
+    /tmp/firestarter_bench/<chip>_img_B.bin  (seed=2)
 """
 
 import hashlib

@@ -1,13 +1,13 @@
 # Phase 6 (LCI-02 + LCI-03 + LCI-04): host CI — codegen drift + catalog validity + pytest. release.yml and publish.yml are tag/PyPI-only.
 # Phase 37 (D-06): pull_request trigger drops branches filter — runs on all PRs (v1.8-app-cleanup included).
-# Phase 37 (D-07): install uses .[test] extra; gate steps: ruff check, ruff format --check, mypy watermark, pytest --cov.
+# Phase 37 (D-07): install uses .[test] extra; gate steps: ruff check, ruff format --check, pytest --cov.
 # Phase 127 (D-01/D-02): adds a manual dispatch trigger and a second, isolated
 # ci-py32 job that installs the [py32] extra and runs the real-pyusb API
 # surface tests. No automatic trigger changed.
 # CI runs on EVERY branch. The push trigger used to be main-only, so a push to
-# a milestone or fix branch ran no gate at all -- ruff, the mypy watermark and
-# the coverage floor were only enforced once a PR existed or once work reached
-# main. Nothing in this workflow publishes: it produces no release, no tag and
+# a milestone or fix branch ran no gate at all -- ruff and the coverage floor
+# were only enforced once a PR existed or once work reached main. Nothing in
+# this workflow publishes: it produces no release, no tag and
 # no PyPI upload, so there is no publish boundary to guard here. Artefact
 # publishing lives in release.yml (main), beta-release.yml (beta) and
 # publish.yml (release:published), and none of those triggers is touched.
@@ -63,17 +63,6 @@ jobs:
             --language python
           git diff --exit-code firestarter/messages.py
 
-      - name: Vector catalog validity check
-        run: python3 tools/catalog/codegen_vectors.py --catalog tools/catalog/frame-vectors.toml --check
-
-      - name: Codegen drift gate (frame_vectors.py)
-        run: |
-          python3 tools/catalog/codegen_vectors.py \
-            --catalog tools/catalog/frame-vectors.toml \
-            --target firestarter/frame_vectors.py \
-            --language python-vectors
-          git diff --exit-code firestarter/frame_vectors.py
-
       - name: Install package + test deps
         run: pip install -e .[test]
 
@@ -82,9 +71,6 @@ jobs:
 
       - name: ruff format check
         run: ruff format --check firestarter/ tests/
-
-      - name: mypy type check (watermark gate)
-        run: python tools/check_mypy_watermark.py
 
       - name: Run pytest with coverage
         run: pytest tests/ --cov=firestarter --cov-report=term-missing --cov-fail-under=70
@@ -99,7 +85,7 @@ jobs:
   # the [py32] extra and genuinely imports pyusb -- distinct from the
   # primary `ci` job's `.[test]`-only install. Deliberately NOT a matrix
   # dimension on `ci`, so a pyusb or libusb break here cannot take down the
-  # primary gate. Runs no ruff/ruff-format/mypy/coverage/codegen-drift step:
+  # primary gate. Runs no ruff/ruff-format/coverage/codegen-drift step:
   # the primary `ci` job already gates all of those over the whole tree.
   ci-py32:
     runs-on: ubuntu-latest

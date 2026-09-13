@@ -22,11 +22,11 @@ block anywhere else in an issue: the `[dev test]` title marker
 (`submit.py:build_title`) AND a fenced ```json block whose parsed object
 carries a `schema_version` key (`diagnostic_report.py:to_json_block`).
 `schema_version` is accepted by PRESENCE (any value), not an exact
-string match, so this parser survives a future schema bump (e.g. the
-Phase-114 1.0 -> 1.1 `ladder_state` addition) without a code change.
+string match, so this parser survives a future schema bump (e.g. a
+1.0 -> 1.1 `ladder_state` addition) without a code change.
 
-Untrusted input (T-114-03/T-114-04, RESEARCH Pitfall 6): every issue body
-is community-authored and MUST be treated as hostile. This module never
+Untrusted input: every issue body is community-authored and MUST be
+treated as hostile. This module never
 calls `eval`/`exec`, never shells out, never interpolates body content
 into a command, bounds the body size before parsing, and wraps every
 `json.loads` in a `JSONDecodeError` guard. Every extraction function
@@ -37,7 +37,7 @@ Cross-report agreement: `count_agreeing` groups SAVED
 issue bodies by their ALREADY-EMBEDDED `dedup_fingerprint`
 (`diagnostic_report.py:dedup_fingerprint`, never re-hashed here). This is
 the cross-report N>=2 human-decision signal -- explicitly distinct from
-Phase-108's internal per-run N>=2 (a single sweep's own repeat-run
+an internal per-run N>=2 (a single sweep's own repeat-run
 agreement). Nothing in this module writes `support_status`; it is a
 a scan target and is read-only by construction, matching
 `diagnostic_report.py`'s own `db.get_eprom_config` read-only discipline.
@@ -124,7 +124,7 @@ def extract_db_diff(report_obj: dict[str, Any]) -> dict[str, Any]:
     report dict (defensive `.get` throughout).
 
     Tolerant of a missing `db_diff` (`None`, an older/degenerate report)
-    and of a missing `ladder_state` key (schema 1.0, pre-Phase-114) --
+    and of a missing `ladder_state` key (schema 1.0) --
     both default to `""`/`"supported"` rather than raising `KeyError`.
     """
     db_diff = report_obj.get("db_diff") or {}
@@ -167,8 +167,8 @@ def count_agreeing(bodies: list[str]) -> dict[str, int]:
 
     Reuses the ALREADY-EMBEDDED `dedup_fingerprint` from each body's fenced
     JSON -- never re-hashes and never reads a per-step run count (that
-    would conflate this with Phase-108's internal per-run N>=2, RESEARCH
-    Pitfall 5). A body that is not a dev test report (no fenced JSON, no
+    would conflate this with an internal per-run N>=2 signal). A body
+    that is not a dev test report (no fenced JSON, no
     `schema_version`, malformed, oversized) is silently skipped, never
     raises.
     """
@@ -199,9 +199,8 @@ def count_agreeing(bodies: list[str]) -> dict[str, int]:
 # `firestarter` import in this file (`_read_live_support_status`, above) is
 # function-local and pre-existing -- it stays exactly as it is. The
 # substitute for an import-time guarantee is a value-parity assert in
-# `tests/test_parse_devtest_issue.py::test_unknown_marker_string_matches_the_report_model`
-# (RESEARCH Pattern 3 / P-4), the only module in this repo that legitimately
-# imports both worlds.
+# `tests/test_parse_devtest_issue.py::test_unknown_marker_string_matches_the_report_model`,
+# the only module in this repo that legitimately imports both worlds.
 NOT_REPORTED = "not reported"
 
 # One action-oriented clause, true under EITHER reading of a
@@ -265,7 +264,7 @@ def render_diff(
     input, never an auto-promotion trigger.
 
     Also carries the provenance identity a triager needs before any
-    firmware-version claim can rest on this report (PROV-06): a labelled
+    firmware-version claim can rest on this report: a labelled
     `host_version` row and a labelled `fw_board_identity` row that folds in
     the `_NOT_ATTRIBUTABLE` clause when the identity is absent. No
     `hw_revision` row -- a write-path finding is attributable only
@@ -387,7 +386,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="parse_devtest_issue.py",
         description=(
-            "INBOX-01 stdlib triage parser for a community `dev test` GitHub "
+            "Stdlib triage parser for a community `dev test` GitHub "
             "issue: detects the report via the '[dev test]' title marker plus "
             "a fenced JSON block carrying schema_version, surfaces the "
             "current-vs-proposed DB-diff, and (given saved issue bodies) "

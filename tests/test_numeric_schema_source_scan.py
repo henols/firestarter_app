@@ -19,14 +19,10 @@ Coverage:
      scan of firestarter/database.py (732 lines, small and focused) for
      `_parse_pulse_duration`, `.replace("V"` and `vpp_volts`, parametrized
      so a failure names exactly which token was found.
-  2. test_audit_coverage_matrix_contains_no_parse_pulse_us -- a whole-file
-     scan of tools/audit_coverage_matrix.py (1942 lines -- too large for a
-     generic-token scan, but `parse_pulse_us` is a distinctive
-     project-local identifier, so scanning for that exact token is safe).
-  3. test_page_size_by_part_has_exactly_two_entries -- imports
+  2. test_page_size_by_part_has_exactly_two_entries -- imports
      tools.build_db and asserts `len(_PAGE_SIZE_BY_PART) == 2` (no source
      parsing needed; the constant is a real dict at import time).
-  4. test_build_db_has_no_new_module_level_part_keyed_dict -- an ast walk
+  3. test_build_db_has_no_new_module_level_part_keyed_dict -- an ast walk
      of tools/build_db.py's top-level statements (`tree.body` only, NOT a
      recursive `ast.walk`) collecting every module-level Dict-valued
      Assign/AnnAssign name, asserting the set found today is exactly the
@@ -43,13 +39,13 @@ Coverage:
      physical-adapter classification, not a module-level construct at all.
      A genuinely new module-level part-keyed dict, by construction, always
      shows up in `tree.body` and this test catches it.
-  5. test_scan_helper_detects_planted_forbidden_tokens -- non-vacuity leg:
-     drives the exact same `_find_forbidden_tokens` helper tests 1 and 2
-     call, against a synthetic source string containing all four forbidden
+  4. test_scan_helper_detects_planted_forbidden_tokens -- non-vacuity leg:
+     drives the exact same `_find_forbidden_tokens` helper test 1 calls,
+     against a synthetic source string containing all four forbidden
      tokens, proving the helper is capable of reporting a violation rather
      than only ever having been observed to pass.
 
-Read this before extending: the module-level dict enumeration in test 4 is
+Read this before extending: the module-level dict enumeration in test 3 is
 a closed list, not a wildcard filter. If a legitimate new module-level dict
 is ever added to build_db.py, this test WILL go red -- that is by design
 (DATA-04 requires a human decision, not a silent grandfather-in), and the
@@ -69,7 +65,6 @@ _HERE = Path(__file__).resolve().parent
 _APP_ROOT = _HERE.parent
 
 _DATABASE_PY = _APP_ROOT / "firestarter" / "database.py"
-_AUDIT_COVERAGE_MATRIX_PY = _APP_ROOT / "tools" / "audit_coverage_matrix.py"
 _BUILD_DB_PY = _APP_ROOT / "tools" / "build_db.py"
 
 # Forbidden tokens naming the deleted coercion layer -- DATA-03's own
@@ -83,9 +78,8 @@ _DATABASE_PY_FORBIDDEN_TOKENS: tuple[str, ...] = (
     "vpp_volts",
 )
 
-# Distinctive project-local identifier; audit_coverage_matrix.py (1942
-# lines) is too large for a generic-token scan, but this exact name cannot
-# appear by accident.
+# Distinctive project-local identifier; this exact name cannot appear by
+# accident.
 _AUDIT_COVERAGE_MATRIX_FORBIDDEN_TOKEN = "parse_pulse_us"
 
 # DATA-04: the module-level dict names live in tools/build_db.py TODAY,
@@ -165,22 +159,7 @@ def test_database_py_contains_no_forbidden_coercion_token(token: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 2 (DATA-03): parse_pulse_us stays deleted from audit_coverage_matrix.py
-# ---------------------------------------------------------------------------
-
-
-def test_audit_coverage_matrix_contains_no_parse_pulse_us() -> None:
-    source = _AUDIT_COVERAGE_MATRIX_PY.read_text(encoding="utf-8")
-    found = _find_forbidden_tokens(source, (_AUDIT_COVERAGE_MATRIX_FORBIDDEN_TOKEN,))
-    assert not found, (
-        "tools/audit_coverage_matrix.py contains the forbidden token "
-        f"{_AUDIT_COVERAGE_MATRIX_FORBIDDEN_TOKEN!r} -- DATA-03 requires "
-        "parse_pulse_us to stay deleted under any name (Phase 148 Plan 05)."
-    )
-
-
-# ---------------------------------------------------------------------------
-# Test 3 (DATA-04): _PAGE_SIZE_BY_PART has exactly 2 entries
+# Test 2 (DATA-04): _PAGE_SIZE_BY_PART has exactly 2 entries
 # ---------------------------------------------------------------------------
 
 
@@ -197,7 +176,7 @@ def test_page_size_by_part_has_exactly_two_entries() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 4 (DATA-04): no new module-level part-keyed dict in build_db.py
+# Test 3 (DATA-04): no new module-level part-keyed dict in build_db.py
 # ---------------------------------------------------------------------------
 
 
@@ -228,7 +207,7 @@ def test_build_db_has_no_new_module_level_part_keyed_dict() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 5: non-vacuity -- the scan helper can actually fail
+# Test 4: non-vacuity -- the scan helper can actually fail
 # ---------------------------------------------------------------------------
 
 

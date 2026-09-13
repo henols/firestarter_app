@@ -1306,7 +1306,14 @@ def test_run_status_is_complete_when_no_step_errored():
     `_ALL_OPS` or `_MULTIWORD_OP_VALUES` -- mirroring the `SDP_HOLD_*`
     precedent -- so a later reader cannot "helpfully" register a report
     value as an op string."""
-    from tests.test_op_registration_parity import _ALL_OPS, _MULTIWORD_OP_VALUES
+    import firestarter.chip_test as chip_test_mod
+
+    _ALL_OPS = frozenset(
+        value
+        for name, value in vars(chip_test_mod).items()
+        if name.startswith("OP_") and isinstance(value, str)
+    )
+    _MULTIWORD_OP_VALUES = frozenset(v for v in _ALL_OPS if "-" in v)
 
     ok = StepResult(op=OP_ID, verdict=VERDICT_OK)
     assert run_status([ok]) == STATUS_COMPLETE

@@ -8,7 +8,7 @@ Every other field (`name`, `protocol-id`/`algorithm`, `memory-size`,
 DB-derived value; this fixture invents nothing except the one field its
 whole purpose is to vary. It is TEST INPUT ONLY -- never imported by any
 production module -- and, unlike the AST-scan-only planted fixtures beside
-it in this directory (`planted_permit_by_default.py` et al.), it IS meant
+it in this directory, it IS meant
 to be imported and instantiated at test run time: it drives the real CLI
 through `derive_plan`/`resolve_chip`/`run_plan`, not a text scanner.
 
