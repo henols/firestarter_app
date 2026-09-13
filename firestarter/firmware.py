@@ -152,6 +152,17 @@ def _pick_asset(assets: object, board: str) -> str | None:
     return None
 
 
+def _endpoint_for_channel(
+    channel: Literal["stable", "pre", "pinned"], version: str | None
+) -> str:
+    """Return the endpoint URL the given release channel resolves through."""
+    if channel == "pre":
+        return FIRESTARTER_RELEASES_URL
+    if channel == "pinned" and version:
+        return FIRESTARTER_RELEASE_BY_TAG_URL.format(tag=version)
+    return FIRESTARTER_RELEASE_URL
+
+
 class FirmwareManager:
     """
     Manages firmware-related operations for the EPROM programmer.
@@ -940,5 +951,14 @@ class FirmwareManager:
                         f"Could not remove temporary firmware file {hex_file}: {e}"
                     )
             return install_success
+
+        if not latest_version or not download_url:
+            endpoint = _endpoint_for_channel(channel, pinned_version)
+            logger.error(
+                f"Could not resolve a firmware release for {board_to_use} from "
+                f"{endpoint}. The installed firmware version was not compared "
+                "against any release."
+            )
+            return False
 
         return True  # No installation performed, but process completed as expected
