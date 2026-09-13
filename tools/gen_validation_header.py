@@ -7,7 +7,7 @@ deterministic C++ header for the native Unity test suites:
 
   firestarter/test/native/avr/_shared/validation_matrix.h
 
-Mirrors the established tools/catalog/codegen.py shape:
+Mirrors the established codegen shape (the meta repo's tools/catalog/codegen.py):
   - Validate-first: validate_spec() raises ValueError on any schema violation
     BEFORE emission (T-71-INPUT mitigation).
   - Deterministic: sorted family/protocol order, no timestamps, LF endings.
