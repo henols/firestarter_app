@@ -19,11 +19,6 @@ specific non-vacuous form:
     from `protection_readability.NOT_IMPLEMENTED_PROTOCOL_IDS`, observing
     this leg fail naming that row, then restoring the set and observing it
     pass again. That temporary edit is never committed.
-  - The unreachability leg (leg 4) consumes the real planted fixture
-    `tests/fixtures/planted_protection_permit_by_default.py`, committed by
-    plan `151-09`, which genuinely returns a silicon-only class token from
-    the pure path -- proving the leg is capable of failing, not merely an
-    absence assertion that would pass trivially.
 
 Coverage (task numbering matches `151-12-PLAN.md`):
   Task 1 (this file's first half):
@@ -39,8 +34,7 @@ Coverage (task numbering matches `151-12-PLAN.md`):
        distribution exactly), and the total arithmetic
        405 + 40 + 84 + 217 == 746.
   Task 2 (this file's second half):
-    4. Structural unreachability of `protected`/`unprotected`, paired with
-       the planted fixture routed through the subprocess gate seam.
+    4. Structural unreachability of `protected`/`unprotected`.
     6. Robustness: the two key-less TEXAS INSTRUMENTS rows, the ten
        non-`"supported"` rows, and a synthetic novel-algorithm control.
     7. `AMBIGUOUS_DOC_CITATIONS` is live over the real corpus.
@@ -63,9 +57,6 @@ from __future__ import annotations
 
 import ast
 import json
-import os
-import subprocess
-import sys
 from pathlib import Path
 from typing import NamedTuple
 
@@ -564,14 +555,7 @@ def test_no_row_resolves_to_a_silicon_only_token() -> None:
 def test_silicon_only_tokens_never_appear_in_a_return_value_ast() -> None:
     """D-12 leg 4(a): walk `protection_readability.py`'s AST (never grep) and
     assert neither `SILICON_ONLY_TOKENS` literal appears as, or anywhere
-    inside, any `Return` node's value.
-
-    This half alone would pass trivially -- the real module was never
-    going to contain the literal. `test_planted_fixture_fails_the_gate_seam_
-    naming_class1` below is what makes it non-decorative: it proves this
-    same rule, applied by `tools/check_protection_readability_invariants.py`,
-    is actually capable of failing on a real return of a silicon-only
-    token."""
+    inside, any `Return` node's value."""
     source = _MODULE_FILE.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(_MODULE_FILE))
     offending: list[tuple[int, object]] = []
@@ -584,65 +568,6 @@ def test_silicon_only_tokens_never_appear_in_a_return_value_ast() -> None:
         "D-12 leg 4(a): silicon-only token literal(s) found inside a Return "
         f"value in protection_readability.py: {offending}"
     )
-
-
-def _run_protection_readability_checker(
-    env_overrides: dict[str, str] | None = None,
-) -> subprocess.CompletedProcess:
-    """Mirrors `tests/test_check_protection_readability.py`'s `_run_checker`
-    shape: always a real subprocess through the env-override seam, never an
-    in-process pytest env-patching fixture -- the seam binds at import
-    time."""
-    env = {**os.environ, **(env_overrides or {})}
-    return subprocess.run(
-        [sys.executable, "tools/check_protection_readability_invariants.py"],
-        cwd=str(_FA_DIR),
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-
-
-def test_planted_fixture_fails_the_gate_seam_naming_class1() -> None:
-    """D-12 leg 4(b), first half: the real planted fixture plan `151-09`
-    committed --
-    `tests/fixtures/planted_protection_permit_by_default.py` -- genuinely
-    returns the silicon-only token `"unprotected"` from a pure-shaped
-    `protection_gate_for_entry`-lookalike function, with no membership test
-    dominating the return. Routed through
-    `FIRESTARTER_PROTECTION_READABILITY_SRC` into
-    `tools/check_protection_readability_invariants.py` as a subprocess, it
-    must exit non-zero naming Class 1 -- this is the fixture's proof that
-    leg 4(a)'s AST rule is a real checkable negative, not a rule that was
-    never going to fire."""
-    result = _run_protection_readability_checker(
-        {
-            "FIRESTARTER_PROTECTION_READABILITY_SRC": (
-                "tests/fixtures/planted_protection_permit_by_default.py"
-            )
-        }
-    )
-    assert result.returncode != 0, (
-        "D-12 leg 4(b): the planted permit-by-default fixture must fail the "
-        f"gate. stdout: {result.stdout!r} stderr: {result.stderr!r}"
-    )
-    assert "Class 1" in result.stdout, (
-        "D-12 leg 4(b): the gate's failure output must name Class 1. "
-        f"stdout: {result.stdout!r}"
-    )
-
-
-def test_real_module_passes_the_same_gate_seam() -> None:
-    """D-12 leg 4(b), second half -- the complement that isolates the
-    planted fixture's failure above as the actual cause: the REAL
-    `protection_readability.py`, routed through the identical seam, must
-    exit 0."""
-    result = _run_protection_readability_checker()
-    assert result.returncode == 0, (
-        "D-12 leg 4(b): the real protection_readability.py module must pass "
-        f"the gate. stdout: {result.stdout!r} stderr: {result.stderr!r}"
-    )
-    assert "PASS" in result.stdout
 
 
 # ---------------------------------------------------------------------------

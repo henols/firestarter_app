@@ -4,8 +4,7 @@ schema 2.0 deletes from `DiagnosticReport`.
 
 The trap this census exists to avoid: the same two names are DATABASE fields on an
 unrelated code path. `firestarter/ic_layout.py` reads a chip record's `vpp_mv` dict
-key; `tools/check_devtest_orchestrator.py`'s wire-dict key set carries the same name;
-and roughly twenty more textual hits land across `tests/test_check_dispatch_
+key; and roughly twenty more textual hits land across `tests/test_check_dispatch_
 invariants.py`, `tests/test_chip_resolver.py`, `tests/test_eprom_database.py`,
 `tests/test_extra_chips_supplement.py`, `tests/test_diff_db_gate.py`, `tests/
 test_sdp_capability.py`, `tests/test_wire_dict_equivalence.py` and `tests/
@@ -45,7 +44,6 @@ _PLANTED_ANCHOR = "            report.vpp_before_mv = vpp\n"
 _FALSE_POSITIVE_CANDIDATE_NAMES = frozenset(
     {
         "ic_layout.py",
-        "check_devtest_orchestrator.py",
         "test_chip_resolver.py",
         "test_eprom_database.py",
         "test_extra_chips_supplement.py",

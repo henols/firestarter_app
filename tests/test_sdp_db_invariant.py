@@ -209,9 +209,7 @@ def _assert_partition_matches_committed(
 # test-outcome reason. Narrowing this list to green a failing field report
 # (e.g. a community `dev test` FAIL on an AT28C part) converts a real
 # finding into an `NA` step at exit 0 and quietly retires the only evidence
-# path this feature has. The widening counterpart to this gate already
-# exists: `tools/check_sdp_capability_invariants.py` plus
-# `tests/fixtures/planted_widenable_allowset.py`.
+# path this feature has.
 _COMMITTED_SDP_ALLOW_ENTRIES: tuple[str, ...] = (
     "ATMEL/AT28BV256,AT28LV256",
     "ATMEL/AT28BV64B,AT28LV64B",

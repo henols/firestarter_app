@@ -119,11 +119,6 @@ NOT genuine UV-EPROMs; see cca7d62. They sit on `DIP28_27512` or `DIP28_27256`
 pinouts which DO have a real vpp-pin, so 12V on that pin is correct. See `WARNING-5`
 in `.planning/v1.0-MILESTONE-AUDIT.md` and the phase folder
 `.planning/phases/13-close-gap-warning-5-at28c256-64-5v-eeprom-override-12v-on-we/`.
-Regression guard: `tools/check_dispatch.py` asserts (a) no chip routes to
-`configure_eprom` on a pinout with no vpp-pin (structural, type-string-independent —
-GATE-03 primary guard); (b) no `DIP28_2764` chip with a 5V-EEPROM type routes to
-`configure_eprom` (WARNING-5 type-keyed guard, covers the A14-hazard that the
-structural guard cannot catch because DIP28_2764 does have a vpp-pin).
 
 ### Constants
 
