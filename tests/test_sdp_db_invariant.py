@@ -161,9 +161,8 @@ def _assert_partition_matches_committed(
     Direction matters (P-10): a chip present in `committed_allow` but absent
     from `measured_allow` LEFT the allow-set -- the narrowing signal this
     gate exists to catch. A chip present in `measured_allow` but absent from
-    `committed_allow` ENTERED it -- the widening signal
-    `tools/check_sdp_capability_invariants.py` already gates elsewhere.
-    Named separately so a reader can tell which happened at a glance.
+    `committed_allow` ENTERED it -- the widening signal, which nothing gates
+    today. Named separately so a reader can tell which happened at a glance.
     """
     measured_set = set(measured_allow)
     committed_set = set(committed_allow)

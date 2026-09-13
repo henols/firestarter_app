@@ -7,8 +7,7 @@ Permission is hereby granted under MIT license.
 Phase 66 — DB inclusion, VPP correction, and support_status.
 
 These tests assert the Phase 66 DB-01/02/03/05 behaviors implemented by
-build_db.py with chip_database.json regenerated at 744 chips (Plan 03),
-and the SC#3 dispatch-safety invariant enforced by Plan 04.
+build_db.py with chip_database.json regenerated at 744 chips (Plan 03).
 
 Taxonomy strings (locked — do NOT change wording):
   "supported"                 — normal dispatchable chip
