@@ -14,7 +14,7 @@
 
 Firestarter is an application for the [Relatively-Universal-ROM-Programmer](https://github.com/AndersBNielsen/Relatively-Universal-ROM-Programmer) RURP Arduino shield ([Get one here](https://www.imania.dk/samlesaet-hobbyelektronik-og-ic-er-relatively-universal-rom-programmer.htm)).
 
-The Firestarter Firmware can be found here [Firestarter](https://github.com/henols/firestarter).
+The Firestarter Firmware can be found here [Firestarter](https://github.com/henols/firestarter_fw).
 
 Firestarter in action [watch the video](https://youtu.be/JDHOKbyNnrE?si=0_iXKPZZwyyNGUTZ).
 

@@ -6,7 +6,7 @@ Permission is hereby granted under MIT license.
 """
 
 FIRESTARTER_RELEASE_URL = (
-    "https://api.github.com/repos/henols/firestarter/releases/latest"
+    "https://api.github.com/repos/henols/firestarter_fw/releases/latest"
 )
 
 # Constants
