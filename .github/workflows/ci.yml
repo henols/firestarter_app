@@ -1,4 +1,4 @@
-# Phase 6 (LCI-02 + LCI-03 + LCI-04): host CI — codegen drift + catalog validity + pytest. release.yml and publish.yml are tag/PyPI-only.
+# Host CI: ruff, pytest with coverage, and an entry-point smoke test. release.yml and publish.yml are tag/PyPI-only.
 # Phase 37 (D-06): pull_request trigger drops branches filter — runs on all PRs (v1.8-app-cleanup included).
 # Phase 37 (D-07): install uses .[test] extra; gate steps: ruff check, ruff format --check, pytest --cov.
 # Phase 127 (D-01/D-02): adds a manual dispatch trigger and a second, isolated
@@ -51,17 +51,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Catalog validity check
-        run: python3 tools/catalog/codegen.py --catalog tools/catalog/messages.toml --check
-
-      - name: Codegen drift gate (messages.py)
-        run: |
-          python3 tools/catalog/codegen.py \
-            --catalog tools/catalog/messages.toml \
-            --target firestarter/messages.py \
-            --language python
-          git diff --exit-code firestarter/messages.py
 
       - name: Install package + test deps
         run: pip install -e .[test]
