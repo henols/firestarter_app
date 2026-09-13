@@ -212,7 +212,7 @@ def test_build_db_has_no_new_module_level_part_keyed_dict() -> None:
 
 
 def test_scan_helper_detects_planted_forbidden_tokens() -> None:
-    """Drives the SAME `_find_forbidden_tokens` helper tests 1 and 2 call,
+    """Drives the SAME `_find_forbidden_tokens` helper test 1 calls,
     against a synthetic source string, proving the helper is capable of
     reporting a violation and is not a vacuous always-pass check."""
     synthetic_source = (
@@ -232,7 +232,7 @@ def test_scan_helper_detects_planted_forbidden_tokens() -> None:
         f"non-vacuity leg failed: _find_forbidden_tokens should have "
         f"reported all four planted tokens {list(all_tokens)!r}, got "
         f"{found!r} -- the scan helper itself is not capable of failing, "
-        f"which means tests 1 and 2 above prove nothing."
+        f"which means test 1 above proves nothing."
     )
 
 
