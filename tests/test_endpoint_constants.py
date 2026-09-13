@@ -19,19 +19,19 @@ green on exactly the drift this pin exists to catch. This module is the
 only mechanism in the repository that fails when one of the three
 constants is edited alone.
 
-No live network check can substitute for this pin either. The bare slug
-`henols/firestarter` still answers with a transparent HTTP redirect to
-`henols/firestarter_fw` and returns byte-identical release data, so a
-request against a stale constant succeeds today and will keep succeeding
-until the day the redirect is retired. A test that exercises the wire
-would stay green on a regression this pin catches immediately.
+No live network check can substitute for this pin either. The
+pre-rename repository slug still answers with a transparent HTTP
+redirect to the renamed one and returns byte-identical release data, so
+a request against a stale constant succeeds today and will keep
+succeeding until the day the redirect is retired. A test that exercises
+the wire would stay green on a regression this pin catches immediately.
 
 Each assertion below is positive-only: it checks that the constant
 contains the renamed slug with a trailing slash, so a value that merely
 ends at the bare repository name cannot satisfy it. None of them checks
-that the bare slug `henols/firestarter` is absent. That slug is a proper
-prefix of `henols/firestarter_fw`, so a negative assertion of that shape
-either passes on every value handed to it (rendering the check inert) or
+that the pre-rename slug is absent. The pre-rename slug is a proper
+prefix of the renamed one, so a negative assertion of that shape either
+passes on every value handed to it (rendering the check inert) or
 rejects the correct, already-renamed value (rendering the check wrong).
 The only sound instrument for separating the two slugs is a
 boundary-aware pattern, and that pattern belongs to the repository-wide

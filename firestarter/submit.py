@@ -56,7 +56,7 @@ from firestarter.diagnostic_report import is_submittable
 # NOT the repo this code lives in: `henols/firestarter_prom` is the single
 # repository for issue tracking per firestarter_prom#6 ("New GitHub issues must
 # be allowed only in henols/firestarter_prom"; creation is to be disabled in
-# `henols/firestarter` and `henols/firestarter_app`). A `dev test` report spans
+# `henols/firestarter_fw` and `henols/firestarter_app`). A `dev test` report spans
 # host + firmware + shield and cannot reliably attribute itself to one layer,
 # so the cross-repository tracker is also the only correct destination for it.
 SUBMIT_REPO = "henols/firestarter_prom"

@@ -5,7 +5,7 @@
 ## APIs & External Services
 **GitHub Releases API:**
 - GitHub REST API — fetches latest firmware release metadata and downloads `.hex` firmware binaries
-  - Endpoint: `https://api.github.com/repos/henols/firestarter/releases/latest` (defined in `firestarter/constants.py` as `FIRESTARTER_RELEASE_URL`)
+  - Endpoint: `https://api.github.com/repos/henols/firestarter_fw/releases/latest` (defined in `firestarter/constants.py` as `FIRESTARTER_RELEASE_URL`)
   - Used in: `firestarter/firmware.py` (`FirmwareManager.fetch_latest_release_info`, `_download_firmware_file`)
   - SDK/Client: `requests` library (unauthenticated; public repo)
   - Auth: None — public API, no token required

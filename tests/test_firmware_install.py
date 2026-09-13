@@ -33,6 +33,7 @@ import pytest
 import requests as _requests
 
 from firestarter import firmware
+from firestarter.constants import FIRESTARTER_RELEASES_URL
 from firestarter.firmware import FirmwareManager
 
 # ---------------------------------------------------------------------------
@@ -380,7 +381,7 @@ class TestFirmwareInstallPreRelease:
         ]
         page1_mock = mock_releases_factory(
             releases_page1,
-            next_url="https://api.github.com/repos/henols/firestarter/releases?page=2",
+            next_url=f"{FIRESTARTER_RELEASES_URL}?page=2",
         )
         page2_mock = mock_releases_factory(releases_page2)
         responses = iter([page1_mock, page2_mock])
@@ -491,7 +492,7 @@ class TestFirmwareInstallPreRelease:
         pages = [
             mock_releases_factory(
                 release_on_page(i),
-                next_url=f"https://api.github.com/repos/henols/firestarter/releases?page={i + 1}",  # noqa: E501
+                next_url=f"{FIRESTARTER_RELEASES_URL}?page={i + 1}",  # noqa: E501
             )
             for i in range(1, 7)  # 6 pages, last has a next_url too
         ]
