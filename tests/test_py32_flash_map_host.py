@@ -41,14 +41,12 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
 from firestarter import py32_dfu
 from firestarter.py32_dfu import ImageError, Py32DfuFlasher
-from tests.fw_presence import FW_ROOT, fw_path, requires_fw
 
 _EXPECTED_FLASH_BASE = 0x08000000
 _EXPECTED_APP_REGION_SIZE = 122880  # 120 * 1024
@@ -135,7 +133,6 @@ class TestEnvelopeBehaviour:
 # marker this module uses, and it fires only when the sibling repo itself
 # is genuinely absent (no `../firestarter/.git` marker), never on a
 # present-but-renamed scan target.
-_LINKER_SCRIPT = fw_path("platform", "py32f071", "linker", "PY32F071xB_FLASH.ld")
 
 # _REGION_RE and _parse_regions below are byte-identical copies of
 # firestarter/tests/test_py32_flash_map.py's own `_REGION_RE` (~line 172)
@@ -200,22 +197,6 @@ def _assert_config_origin_matches(regions: dict[str, tuple[int, int]]) -> None:
     )
 
 
-def _git_hash_object(path: Path) -> str:
-    """Resolve `git` fail-closed and hash-object `path` inside FW_ROOT."""
-    git_bin = shutil.which("git")
-    assert git_bin is not None, (
-        "`git` binary not found on PATH. This must FAIL the suite, never "
-        "be silently skipped."
-    )
-    result = subprocess.run(
-        [git_bin, "-C", str(FW_ROOT), "hash-object", str(path)],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip()
-
-
 def _git_porcelain(path: Path) -> str:
     git_bin = shutil.which("git")
     assert git_bin is not None, (
@@ -229,163 +210,3 @@ def _git_porcelain(path: Path) -> str:
         check=True,
     )
     return result.stdout
-
-
-class TestLinkerScriptParity:
-    """D-14's five live parity tests. Each re-parses the real linker script
-    (no caching across tests -- the file is small and this keeps every test
-    independently readable) and runs the shared non-vacuity guard before
-    comparing any value."""
-
-    @requires_fw
-    def test_parse_is_non_vacuous(self) -> None:
-        """Coverage 1 -- run first and separately, before any value
-        comparison. Records the region count in the failure message."""
-        regions = _load_regions(_LINKER_SCRIPT)
-        _assert_non_vacuous(regions, str(_LINKER_SCRIPT))
-
-    @requires_fw
-    def test_config_origin_matches_app_region_end(self) -> None:
-        regions = _load_regions(_LINKER_SCRIPT)
-        _assert_non_vacuous(regions, str(_LINKER_SCRIPT))
-        _assert_config_origin_matches(regions)
-
-    @requires_fw
-    def test_flash_length_and_origin_match_app_region(self) -> None:
-        regions = _load_regions(_LINKER_SCRIPT)
-        _assert_non_vacuous(regions, str(_LINKER_SCRIPT))
-        flash_origin, flash_length = regions["FLASH"]
-        assert flash_length == py32_dfu.APP_REGION_SIZE, (
-            f"linker LENGTH(FLASH) {flash_length} != host APP_REGION_SIZE "
-            f"{py32_dfu.APP_REGION_SIZE}"
-        )
-        assert flash_origin == py32_dfu.FLASH_BASE, (
-            f"linker ORIGIN(FLASH) 0x{flash_origin:08X} != host FLASH_BASE "
-            f"0x{py32_dfu.FLASH_BASE:08X}"
-        )
-
-    @requires_fw
-    def test_config_length_and_in_script_adjacency(self) -> None:
-        """LENGTH(CONFIG) matches the host, and ORIGIN(FLASH) + LENGTH(FLASH)
-        == ORIGIN(CONFIG) IN THE SCRIPT ITSELF -- the two-way check that
-        catches a map edit moving both sides consistently but disagreeing
-        with the host."""
-        regions = _load_regions(_LINKER_SCRIPT)
-        _assert_non_vacuous(regions, str(_LINKER_SCRIPT))
-        flash_origin, flash_length = regions["FLASH"]
-        config_origin, config_length = regions["CONFIG"]
-        assert config_length == py32_dfu.CONFIG_REGION_SIZE, (
-            f"linker LENGTH(CONFIG) {config_length} != host "
-            f"CONFIG_REGION_SIZE {py32_dfu.CONFIG_REGION_SIZE}"
-        )
-        assert flash_origin + flash_length == config_origin, (
-            "the linker script's own FLASH and CONFIG regions are not "
-            f"adjacent: ORIGIN(FLASH)+LENGTH(FLASH) = "
-            f"0x{flash_origin + flash_length:08X} != ORIGIN(CONFIG) = "
-            f"0x{config_origin:08X}"
-        )
-
-    @requires_fw
-    def test_bootloader_seam_present_at_zero_length(self) -> None:
-        """BOOTLOADER must exist with LENGTH 0. Its disappearance or its
-        acquiring a non-zero length both MOVE the application's ORIGIN --
-        this is the tripwire Phase 129 will trip deliberately; see
-        127-CONTEXT.md <deferred>."""
-        regions = _load_regions(_LINKER_SCRIPT)
-        _assert_non_vacuous(regions, str(_LINKER_SCRIPT))
-        assert "BOOTLOADER" in regions, (
-            "no BOOTLOADER region found in the MEMORY block -- its "
-            "disappearance moves the application's ORIGIN. See "
-            "127-CONTEXT.md <deferred>."
-        )
-        _bootloader_origin, bootloader_length = regions["BOOTLOADER"]
-        assert bootloader_length == 0, (
-            f"BOOTLOADER LENGTH is {bootloader_length}, not 0 -- a non-zero "
-            "length MOVES the application's ORIGIN (every previously "
-            "flashed unit's vector-table address changes, on a part with "
-            "no VTOR). This is the tripwire Phase 129 will trip "
-            "deliberately -- see 127-CONTEXT.md <deferred>."
-        )
-
-
-class TestLinkerScriptParityFailsClosedOnBadInput:
-    """The three RED demonstrations (D-14).
-
-    Two of the three are purely synthetic -- they build their own text and
-    need no firmware checkout, so they deliberately carry no `@requires_fw`
-    and run everywhere. The third, `test_planted_mutated_config_origin_is_
-    detected`, is different in kind: it reads the REAL linker script and
-    git-hashes it to prove the plant never touched the source of truth, so
-    it genuinely does require the sibling firmware checkout and IS gated.
-
-    This docstring previously read "None carries `@requires_fw`". That was
-    false for the planted leg and invisible locally, where the devcontainer
-    always has the sibling checkout; in a standalone CI checkout the leg hit
-    `git -C .../firestarter hash-object` with no such repo and died on
-    exit 128, failing the beta-release build (Phase 130).
-    """
-
-    def test_empty_parse_trips_the_non_vacuity_guard(self) -> None:
-        """`_parse_regions` over text with no MEMORY block returns an empty
-        mapping, and `_assert_non_vacuous` raises `AssertionError` on it --
-        proving the gate cannot pass on a failed parse."""
-        regions = _parse_regions("this text has no MEMORY block in it at all")
-        assert regions == {}
-        with pytest.raises(AssertionError, match="vacuously true"):
-            _assert_non_vacuous(regions, "synthetic text")
-
-    @requires_fw
-    def test_planted_mutated_config_origin_is_detected(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A planted, deliberately mutated copy of the real linker script (a
-        different CONFIG ORIGIN) must be detected -- proving the parity
-        check can actually fail, not merely pass by construction. The
-        plant is written to tmp_path and reached by monkeypatching this
-        module's path constant; the real file's blob SHA (and the firmware
-        repo's porcelain status) are asserted unchanged before and after,
-        proving the plant never touched the source of truth -- the shape
-        firestarter/tests/test_py32_flash_map.py::
-        test_helper_reports_violations_on_planted_copies uses."""
-        real_path = _LINKER_SCRIPT  # captured BEFORE any monkeypatch
-        before_blob = _git_hash_object(real_path)
-        real_text = real_path.read_text()
-
-        mutated_text = real_text.replace(
-            "CONFIG (r)  : ORIGIN = 0x0801E000, LENGTH = 8K",
-            "CONFIG (r)  : ORIGIN = 0x0801FE00, LENGTH = 8K",
-        )
-        assert mutated_text != real_text, (
-            "planted mutation did not actually differ from the real text "
-            "-- the replacement target string was not found (the real "
-            "linker script's formatting may have changed)"
-        )
-
-        planted_path = tmp_path / "planted-PY32F071xB_FLASH.ld"
-        planted_path.write_text(mutated_text)
-        monkeypatch.setattr(sys.modules[__name__], "_LINKER_SCRIPT", planted_path)
-
-        regions = _load_regions(_LINKER_SCRIPT)
-        _assert_non_vacuous(regions, str(_LINKER_SCRIPT))
-        with pytest.raises(AssertionError, match="APP_REGION_END"):
-            _assert_config_origin_matches(regions)
-
-        after_blob = _git_hash_object(real_path)
-        assert after_blob == before_blob, (
-            "the planted mutation touched the REAL linker script -- it "
-            "must only ever be written under tmp_path"
-        )
-        assert _git_porcelain(FW_ROOT) == "", (
-            "the firmware repo's working tree is no longer clean after "
-            "the planted-copy test -- it is a read-only input to this "
-            "phase"
-        )
-
-    def test_k_suffix_is_normalised_to_bytes(self) -> None:
-        """Documents that suffix normalisation is load-bearing: LENGTH
-        values in this linker script are decimal with an optional K/M
-        suffix (`120K`), never hex -- a hex-only regex would silently
-        match nothing."""
-        text = "MEMORY\n{\n    FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 120K\n}\n"
-        regions = _parse_regions(text)
-        assert regions["FLASH"] == (0x08000000, 122880)

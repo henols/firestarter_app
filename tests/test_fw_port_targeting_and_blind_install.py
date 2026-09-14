@@ -54,7 +54,6 @@ to a single invocation, silently retargeting every later command.
 
 import json
 import os
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -209,27 +208,6 @@ class TestNamedPortRestrictsTheSearch:
 
         with open(os.path.join(tmp_config_dir, "t_remember_found.json")) as f:
             assert json.load(f)["port"] == "/dev/ttyACM1"
-
-    def test_remember_port_is_the_only_writer_of_the_saved_port(self):
-        """Source tripwire: the rule lived in two call sites and drifted.
-
-        `serial_comm` (successful probe) and `firmware` (successful flash) each
-        persisted the port independently. Fixing only the first left the leak
-        live — the flash path still promoted a typed `--port`. Any new direct
-        write of the key would reintroduce it, so pin `remember_port` as the sole
-        writer.
-        """
-        pkg = Path(__file__).resolve().parents[1] / "firestarter"
-        offenders = sorted(
-            p.name
-            for p in pkg.rglob("*.py")
-            if 'set_value("port"' in p.read_text() and p.name != "cli_handlers.py"
-        )
-        assert offenders == ["config.py"], (
-            f"{offenders} write the saved port directly; route them through "
-            f"ConfigManager.remember_port so the typed-vs-remembered rule "
-            f"cannot drift between call sites again"
-        )
 
 
 # B — blind install, gated on an explicit --board

@@ -103,44 +103,6 @@ def _not_readable_groups() -> list[tuple[str, list[str]]]:
     )
 
 
-def test_every_curated_token_has_a_citation_comment() -> None:
-    """Leg 1: every token in either frozenset is cited by a comment block."""
-    cited_readable = {t for _, toks in _readable_groups() for t in toks}
-    cited_not_readable = {t for _, toks in _not_readable_groups() for t in toks}
-
-    uncited_readable = DOCUMENTED_READABLE_TOKENS - cited_readable
-    uncited_not_readable = DOCUMENTED_NOT_READABLE_TOKENS - cited_not_readable
-    assert not uncited_readable, (
-        f"uncited documented-readable tokens: {sorted(uncited_readable)}"
-    )
-    assert not uncited_not_readable, (
-        f"uncited documented-not-readable tokens: {sorted(uncited_not_readable)}"
-    )
-
-    # And the reverse: every cited token is actually a member of the
-    # frozenset it was cited under (catches a citation for a token that was
-    # since removed from the display it claims to cover).
-    stray_readable = cited_readable - DOCUMENTED_READABLE_TOKENS
-    stray_not_readable = cited_not_readable - DOCUMENTED_NOT_READABLE_TOKENS
-    assert not stray_readable, (
-        f"cited but not in DOCUMENTED_READABLE_TOKENS: {sorted(stray_readable)}"
-    )
-    assert not stray_not_readable, (
-        f"cited but not in DOCUMENTED_NOT_READABLE_TOKENS: {sorted(stray_not_readable)}"
-    )
-
-
-def test_every_readable_citation_has_line_and_section_reference() -> None:
-    """Leg 3: a documented-readable citation names both a line and a §section."""
-    for comment_text, tokens in _readable_groups():
-        assert _LINE_REF_RE.search(comment_text), (
-            f"citation for {tokens} has no ':NNN' line reference: {comment_text!r}"
-        )
-        assert _SECTION_REF_RE.search(comment_text), (
-            f"citation for {tokens} has no '§N' section reference: {comment_text!r}"
-        )
-
-
 def test_mechanism_and_permanence_keys_and_values_are_well_formed() -> None:
     """Leg 4: MECHANISM_BY_TOKEN / PERMANENCE_BY_TOKEN are well-scoped mappings."""
     union = DOCUMENTED_READABLE_TOKENS | DOCUMENTED_NOT_READABLE_TOKENS

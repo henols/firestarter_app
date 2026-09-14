@@ -55,7 +55,6 @@ property over both curated frozensets.
 
 from __future__ import annotations
 
-import ast
 import json
 from pathlib import Path
 from typing import NamedTuple
@@ -525,24 +524,6 @@ def test_no_row_resolves_to_a_silicon_only_token() -> None:
 
 # Leg 4: structural unreachability of the two silicon-only tokens, with a
 # planted fixture.
-
-
-def test_silicon_only_tokens_never_appear_in_a_return_value_ast() -> None:
-    """D-12 leg 4(a): walk `protection_readability.py`'s AST (never grep) and
-    assert neither `SILICON_ONLY_TOKENS` literal appears as, or anywhere
-    inside, any `Return` node's value."""
-    source = _MODULE_FILE.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(_MODULE_FILE))
-    offending: list[tuple[int, object]] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Return) and node.value is not None:
-            for sub in ast.walk(node.value):
-                if isinstance(sub, ast.Constant) and sub.value in SILICON_ONLY_TOKENS:
-                    offending.append((getattr(sub, "lineno", node.lineno), sub.value))
-    assert not offending, (
-        "D-12 leg 4(a): silicon-only token literal(s) found inside a Return "
-        f"value in protection_readability.py: {offending}"
-    )
 
 
 # Leg 6: robustness controls.

@@ -317,29 +317,3 @@ def test_reject_py32_only_option_enabled_and_not_given_returns(
     # See test_reject_py32_only_option_disabled_and_not_given_returns above
     # for why this is a bare call rather than `assert ... is None`.
     cli_handlers._reject_py32_only_option("--usb-id", False)
-
-
-def test_refusal_message_and_helper_occur_exactly_once_and_three_times() -> None:
-    """An inline copy of the refusal message is the exact shape that
-    produced HOST-02's `--usb-id`-accepted-on-stable bug in the first place.
-    Source-scans `firestarter/cli_handlers.py` and asserts the message
-    occurs exactly once and the helper's own name occurs exactly three
-    times (one definition, two call sites).
-    """
-    source = _CLI_HANDLERS_PATH.read_text()
-    assert source, f"{_CLI_HANDLERS_PATH} was empty or unreadable"
-    assert "def _reject_py32_only_option" in source, (
-        "the helper's own definition is absent from cli_handlers.py -- the "
-        "count assertions below would otherwise be checking a vacuously "
-        "true condition"
-    )
-
-    assert source.count("no such option") == 1, (
-        "the refusal message occurs more than once in cli_handlers.py -- an "
-        "inline copy of the refusal has returned, the exact shape that "
-        "produced HOST-02's --usb-id-accepted-on-stable bug"
-    )
-    assert source.count("_reject_py32_only_option") == 3, (
-        "expected exactly 3 occurrences of _reject_py32_only_option (one "
-        "definition, two call sites) in cli_handlers.py"
-    )

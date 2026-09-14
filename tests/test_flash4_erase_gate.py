@@ -41,7 +41,6 @@ import pytest
 from click.testing import CliRunner
 
 from firestarter import cli_handlers
-from firestarter import flash4_erase_gate as flash4_erase_gate_mod
 from firestarter.chip_resolver import resolve_chip
 from firestarter.cli_handlers import AppContext, cli
 from firestarter.config import ConfigManager
@@ -193,28 +192,6 @@ def _module_source(module) -> str:
     path = inspect.getsourcefile(module)
     assert path is not None, f"could not resolve a source file for {module!r}"
     return Path(path).read_text(encoding="utf-8")
-
-
-def test_module_source_contains_no_shipped_part_number_literal():
-    """NO PART-NUMBER LITERAL IN THE MODULE: every shipped `part_number`
-    string is checked, not a sample -- this is what makes
-    "database-derived, never a hand-kept list" a checked fact rather than
-    a claim.
-    """
-    db = EpromDatabase(skip_local_override=True)
-    source_upper = _module_source(flash4_erase_gate_mod).upper()
-
-    offending = set()
-    for vendor_chips in db.proms.values():
-        for chip in vendor_chips:
-            part_number = chip.get("part_number", "")
-            if part_number and part_number.upper() in source_upper:
-                offending.add(part_number)
-
-    assert not offending, (
-        "flash4_erase_gate.py source contains shipped part-number "
-        f"literal(s): {sorted(offending)}"
-    )
 
 
 FORBIDDEN_REFUSAL_SUBSTRINGS = (

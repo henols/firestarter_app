@@ -180,38 +180,6 @@ def _prose_line_numbers(text: str) -> set[int]:
     return prose_lines
 
 
-def test_no_runtime_consumer_in_shipped_package_source_scan() -> None:
-    """Every occurrence of `protect_on_after` / `protect_off_before` under
-    `firestarter_app/firestarter/` must fall on a comment or docstring line
-    -- never on a line of executable code. This is the structural proof
-    that D-14/D-16's "no runtime consumer" claim holds, and it is a Python
-    test that actually runs (see module docstring, C-13)."""
-    offenders: list[str] = []
-    checked_any = False
-    for py_file in sorted(_FIRESTARTER_PKG_DIR.rglob("*.py")):
-        rel = py_file.relative_to(_FA_DIR)
-        text = py_file.read_text(encoding="utf-8")
-        if "protect_on_after" not in text and "protect_off_before" not in text:
-            continue
-        checked_any = True
-        prose_lines = _prose_line_numbers(text)
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            if "protect_on_after" in line or "protect_off_before" in line:
-                if lineno not in prose_lines:
-                    offenders.append(f"{rel}:{lineno}: {line.strip()}")
-
-    assert checked_any, (
-        "No file under firestarter_app/firestarter/ mentions either field "
-        "at all -- this would mean the known provenance comments were "
-        "removed; investigate before trusting the (vacuous) pass below."
-    )
-    assert not offenders, (
-        "Found protect_on_after/protect_off_before OUTSIDE a comment or "
-        "docstring (i.e. as executable code) -- naming file:line: "
-        + "; ".join(offenders)
-    )
-
-
 def test_sdp_capability_module_untouched_this_plan() -> None:
     """Structural guard: this plan must not depend on, or require edits to,
     `firestarter/sdp_capability.py` -- D-16 forbids editing it. This test

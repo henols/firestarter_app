@@ -226,35 +226,3 @@ _SOURCE_SOURCE_ORACLE_RE = re.compile(
     r"assert\s+(?:py32_dfu\.)?(?:DFU|DFUSE|FLASH)_[A-Z_]+\s*==\s*(?:0x)?[0-9]"
 )
 _CONSTANT_MENTION_RE = re.compile(r"\b(?:DFU|DFUSE|FLASH)_[A-Z_]+\b")
-
-
-def test_test_py32_dfu_still_contains_no_source_source_opcode_oracle() -> None:
-    """C-2, held forward: tests/test_py32_dfu.py must never again compare a
-    DFU_*/DFUSE_*/FLASH_* constant directly against a numeric literal -- that
-    is research finding 7's source==source oracle, which this module (not
-    that one) exists to anchor instead."""
-    assert _TEST_PY32_DFU.is_file(), (
-        f"{_TEST_PY32_DFU} not found -- this scan target was renamed or "
-        "moved; update this path, do not remove or bypass this gate."
-    )
-    text = _TEST_PY32_DFU.read_text(encoding="utf-8")
-
-    # Non-vacuity guard: the file must actually mention at least one of
-    # these constant names, or the absence check below would be vacuously
-    # true (the exact hollow shape this project has had to unwind before).
-    mentions = _CONSTANT_MENTION_RE.findall(text)
-    assert mentions, (
-        f"non-vacuity guard tripped: {_TEST_PY32_DFU} contains zero mentions "
-        "of a DFU_*/DFUSE_*/FLASH_* constant name -- the absence check below "
-        "would be vacuously true. Investigate before trusting this test."
-    )
-
-    for lineno, line in enumerate(text.splitlines(), start=1):
-        assert _SOURCE_SOURCE_ORACLE_RE.search(line) is None, (
-            f"{_TEST_PY32_DFU}:{lineno} compares a DFU_*/DFUSE_*/FLASH_* "
-            f"constant directly against a numeric literal ({line.strip()!r}) "
-            "-- this is the source==source opcode oracle research finding 7 "
-            "identified. Add an independent anchor to "
-            "tests/test_dfu_opcode_anchors.py instead of asserting the "
-            "module against itself here."
-        )

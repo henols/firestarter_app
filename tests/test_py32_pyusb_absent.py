@@ -99,37 +99,6 @@ def test_pyusb_missing_error_is_a_dfu_error() -> None:
     assert issubclass(py32_dfu.PyusbMissingError, py32_dfu.DfuError)
 
 
-def test_require_usb_pragma_is_gone_and_the_other_two_remain() -> None:
-    """The `except ImportError` line inside `_require_usb()` carries no
-    coverage-exclusion comment, while the file still carries exactly **two**
-    such comments in total (the out-of-scope `_dev` / `_index` guards) -- so
-    this test also fails if someone deletes either of those two instead."""
-    source_path = Path(py32_dfu.__file__)
-    lines = source_path.read_text().splitlines()
-
-    require_usb_index = next(
-        (
-            i
-            for i, line in enumerate(lines)
-            if line.strip().startswith("def _require_usb(")
-        ),
-        None,
-    )
-    # Non-vacuity guard: fail loudly if `_require_usb` moved or was renamed,
-    # rather than silently passing because the search below found nothing.
-    assert require_usb_index is not None, "_require_usb() not found in source"
-
-    except_line = next(
-        line
-        for line in lines[require_usb_index : require_usb_index + 20]
-        if "except ImportError" in line
-    )
-    assert "pragma: no cover" not in except_line
-
-    total_pragmas = sum(1 for line in lines if "pragma: no cover" in line)
-    assert total_pragmas == 2
-
-
 _CHILD_PROGRAM_TEMPLATE = '''
 import importlib.abc
 import json

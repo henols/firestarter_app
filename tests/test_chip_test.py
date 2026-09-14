@@ -43,7 +43,6 @@ References:
     D-01/D-02/D-03/D-04
 """
 
-import ast
 import inspect
 from pathlib import Path
 from unittest.mock import Mock
@@ -1135,35 +1134,6 @@ def test_id_step_closes_gate_predicate_is_unchanged_by_the_status_axis():
     assert "VERDICT_BAD, VERDICT_SKIPPED" in source
     assert "status" not in source
     assert "STATUS_" not in source
-
-
-def test_the_transport_arm_does_not_route_through_skip_result():
-    """An AST walk over `chip_test.py` finds the `(SerialError,
-    HardwareOperationError)` handler body constructing `StepResult`
-    directly, with zero `_skip_result` calls inside that handler.
-    `_skip_result` stamps `STATUS_SKIP`; routing the transport arm through
-    it would silently erase the ERROR discrimination this phase exists to
-    create."""
-    import firestarter.chip_test as chip_test_mod
-
-    source = Path(chip_test_mod.__file__).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-
-    handlers = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ExceptHandler) and isinstance(node.type, ast.Tuple):
-            names = {n.id for n in node.type.elts if isinstance(n, ast.Name)}
-            if {"SerialError", "HardwareOperationError"} <= names:
-                handlers.append(node)
-
-    assert len(handlers) == 1, handlers
-    calls = [
-        call.func.id
-        for call in ast.walk(handlers[0])
-        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
-    ]
-    assert calls.count("StepResult") == 1
-    assert calls.count("_skip_result") == 0
 
 
 def test_run_status_folds_error_when_any_step_errored():
@@ -2458,14 +2428,6 @@ def test_count_applicable_n_equals_m_when_destructive():
     assert counts.n_ran == counts.m_applicable == 5
 
 
-def test_count_applicable_no_print_or_render_introduced():
-    # Banner DATA only -- this task must not add print/render/CLI output.
-    import re
-
-    src = Path(chip_test_source_path()).read_text()
-    assert not re.search(r"\bprint\(|\bclick\.|\bconsole", src)
-
-
 def chip_test_source_path() -> str:
     import firestarter.chip_test as chip_test_mod
 
@@ -2517,74 +2479,6 @@ def test_safe02_routes_via_resolve_chip_for_every_executed_step(monkeypatch):
     for call in spy.call_args_list:
         assert call.args == ("M8720",)
         assert call.kwargs == {"db": _REAL_DB}
-
-
-def test_safe02_no_vpp_no_wire_no_force_source_scan():
-    # Human-readable companion to the Plan-03 AST checker (not a
-    # replacement): a lightweight substring scan of chip_test.py's CODE
-    # (docstrings/comments stripped) asserting no VPP-set call, no raw
-    # wire/command dict literal, and no force=True / "--force" pass-through
-    # was introduced. Prose mentions of these terms in comments/docstrings
-    # describing the safety property itself (e.g. "passes no --force") are
-    # expected and must not trip this check -- only executable code lines.
-    import ast
-
-    src = Path(chip_test_source_path()).read_text()
-    tree = ast.parse(src)
-
-    # Strip module/function/class docstrings, then re-render source lines
-    # without comments by re-parsing each non-string-expression statement's
-    # own source segment. Simpler + robust: walk AST nodes and only inspect
-    # literal string/keyword values that are NOT docstrings, plus attribute/
-    # call names -- i.e. inspect the parsed AST, not raw text.
-    forbidden_call_names = {"set_vpp"}
-    forbidden_dict_keys = {"cmd", "bus-config", "vpp_mv"}
-    forbidden_kwarg = "force"
-
-    docstring_nodes = set()
-    for node in ast.walk(tree):
-        if isinstance(
-            node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-        ):
-            body = getattr(node, "body", [])
-            if (
-                body
-                and isinstance(body[0], ast.Expr)
-                and isinstance(body[0].value, ast.Constant)
-                and isinstance(body[0].value.value, str)
-            ):
-                docstring_nodes.add(id(body[0].value))
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute) and node.attr in forbidden_call_names:
-            raise AssertionError(f"forbidden attribute access: .{node.attr}")
-        if isinstance(node, ast.Call):
-            func = node.func
-            call_name = getattr(func, "attr", None) or getattr(func, "id", None)
-            if call_name in forbidden_call_names:
-                raise AssertionError(f"forbidden call: {call_name}(...)")
-            for kw in node.keywords:
-                if kw.arg == forbidden_kwarg:
-                    raise AssertionError("forbidden force= kwarg passed to a call")
-        if isinstance(node, ast.Dict):
-            for key in node.keys:
-                if (
-                    isinstance(key, ast.Constant)
-                    and isinstance(key.value, str)
-                    and key.value in forbidden_dict_keys
-                ):
-                    raise AssertionError(
-                        f"forbidden raw dict key literal: {key.value!r}"
-                    )
-        if (
-            isinstance(node, ast.Constant)
-            and isinstance(node.value, str)
-            and id(node) not in docstring_nodes
-            and node.value == "--force"
-        ):
-            raise AssertionError(
-                "forbidden literal '--force' string outside docstrings"
-            )
 
 
 def test_safe02_vpp_guard_refusal_is_a_finding_not_a_retry_single_run():

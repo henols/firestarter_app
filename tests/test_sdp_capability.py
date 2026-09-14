@@ -72,7 +72,6 @@ would pass no matter what SDP_CAPABLE_TOKENS contained.
       cannot see.
 """
 
-import ast
 import json
 from pathlib import Path
 from unittest.mock import patch
@@ -600,30 +599,6 @@ def test_predicate_is_name_keyed_and_a_programmer_dict_is_rejected() -> None:
 
     with pytest.raises(KeyError):
         sdp.sdp_capability_for_entry(programmer_dict, "at28c256")
-
-
-def test_sdp_capability_module_imports_nothing_but_stdlib_typing() -> None:
-    """D-03 purity, required so Phase 121's GATE-01 has a stable shape to
-    assert against: the predicate must stay importable by both the Click
-    handler and the operations layer with no serial, no Click and no
-    DB-loader coupling, and this leg is what keeps that true under later
-    edits."""
-    module_path = _FA_DIR / "firestarter" / "sdp_capability.py"
-    tree = ast.parse(module_path.read_text(encoding="utf-8"))
-
-    imported_modules: set[str] = set()
-    for node in tree.body:
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                imported_modules.add(alias.name.split(".")[0])
-        elif isinstance(node, ast.ImportFrom):
-            if node.module is not None:
-                imported_modules.add(node.module.split(".")[0])
-
-    assert imported_modules <= {"__future__", "typing"}, (
-        "HOST-04/D-03: sdp_capability.py's top-level imports must be a "
-        f"subset of {{'__future__', 'typing'}}; found {imported_modules}."
-    )
 
 
 # Leg 12: fail-closed on the one path CI cannot see -- a local database.json

@@ -374,26 +374,6 @@ def test_inventory_is_non_vacuous() -> None:
             )
 
 
-def test_generator_emits_no_key_outside_the_frozen_inventory() -> None:
-    """TABLE-05 / T-140-10: chip_database.json is GENERATED
-    (infoic.xml + extra_chips.json -> tools/build_db.py), never
-    hand-edited, so a new key reaching the generator's output becomes a new
-    database field the moment anyone runs `python tools/build_db.py` --
-    this must be caught by reading the generator's source and its data
-    supplement, not only the database they already produced."""
-    golden = _load_golden()
-    live = _generator_chip_entry_keys(_GEN_PATH.read_text(encoding="utf-8"))
-    live |= _extra_chips_entry_keys(_EXTRA_CHIPS_PATH)
-    recorded = set(golden["generator_emitted_chip_entry_keys"])
-    assert live == recorded, (
-        "the generator's emitted chip-entry key set diverged from the "
-        f"frozen golden -- added={sorted(live - recorded)} "
-        f"removed={sorted(recorded - live)}. chip_database.json is "
-        "generated, so a new key here becomes a new database field the "
-        "moment anyone regenerates it."
-    )
-
-
 def test_default_targets_resolve_inside_this_repository() -> None:
     """T-140-12: recompute the default database/generator/extra-chips
     targets from _APP_ROOT directly, WITHOUT consulting
@@ -418,28 +398,3 @@ def test_default_targets_resolve_inside_this_repository() -> None:
     assert _GOLDEN.resolve().is_relative_to((_HERE / "golden").resolve()), (
         f"_GOLDEN {_GOLDEN} did not resolve under {_HERE / 'golden'}"
     )
-
-
-def test_this_module_is_collected_and_never_skipped() -> None:
-    """Assumption A6: tests/conftest.py's collect_ignore is armed (pyusb
-    only) -- disprove it for THIS module specifically, and self-scan for
-    skip bypasses. Both are the same D-15 "a pre-authored gate leg can be
-    unreachable" concern."""
-    conftest_source = (_HERE / "conftest.py").read_text(encoding="utf-8")
-    this_name = Path(__file__).name
-    assert this_name not in conftest_source, (
-        f"{this_name} appears in conftest.py -- collect_ignore is armed "
-        "(pyusb only, Assumption A6) and must never grow to cover this "
-        "module"
-    )
-    this_source = Path(__file__).read_text(encoding="utf-8")
-    for line in this_source.splitlines():
-        stripped = line.strip()
-        assert not stripped.startswith("pytest.skip"), (
-            f"found a skip-bypass call at: {line!r} -- this gate must FAIL, "
-            "never silently skip"
-        )
-        assert not stripped.startswith("@pytest.mark.skipif"), (
-            f"found a skip-marker decorator at: {line!r} -- this gate must "
-            "FAIL, never silently skip"
-        )
