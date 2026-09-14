@@ -43,9 +43,7 @@ from firestarter.exceptions import FirmwareOutdatedError
 from firestarter.firmware import FirmwareManager
 from firestarter.serial_comm import SerialCommunicator
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 @contextlib.contextmanager
@@ -79,9 +77,7 @@ def _probe(**kwargs):
     )
 
 
-# ---------------------------------------------------------------------------
 # D1 — the waiver, and its twin proving the strict path is unchanged
-# ---------------------------------------------------------------------------
 
 
 class TestOutdatedFirmwareWaiverScope:
@@ -301,9 +297,7 @@ class TestUpdateDecisionReachedOnPreCap02Firmware:
                 fm.manage_firmware_update(install_flag=True, port_override="/dev/null")
 
 
-# ---------------------------------------------------------------------------
 # D2 — channel resolution on a pre-release app
-# ---------------------------------------------------------------------------
 
 
 class TestChannelAutoRouteIsNotGatedOnInstall:

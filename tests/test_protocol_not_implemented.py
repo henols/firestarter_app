@@ -35,9 +35,7 @@ from firestarter.messages import MSG_ERR_PROTOCOL_NOT_IMPLEMENTED
 
 from .conftest import build_frame
 
-# ---------------------------------------------------------------------------
 # Shared test helper (mirrors test_cli_handlers.make_app_context)
-# ---------------------------------------------------------------------------
 
 
 def make_app_context(**manager_overrides) -> AppContext:
@@ -76,9 +74,7 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
-# ---------------------------------------------------------------------------
 # SC#1: subclass relationship
-# ---------------------------------------------------------------------------
 
 
 def test_protocol_not_implemented_is_eprom_operation_error() -> None:
@@ -89,11 +85,6 @@ def test_protocol_not_implemented_is_eprom_operation_error() -> None:
     still propagate the typed exception correctly.
     """
     assert issubclass(ProtocolNotImplementedError, EpromOperationError)
-
-
-# ---------------------------------------------------------------------------
-# SC#2 (HOST-01): 0xBB ERROR frame -> typed raise through the state machine
-# ---------------------------------------------------------------------------
 
 
 def test_state_machine_raises_protocol_not_implemented_on_0xbb_frame(
@@ -129,11 +120,6 @@ def test_state_machine_raises_protocol_not_implemented_on_0xbb_frame(
         operator._execute_phase("INIT", ClassProgressHandler())
 
 
-# ---------------------------------------------------------------------------
-# SC#3 (HOST-02): CLI arm emits actionable "Unsupported protocol:" message
-# ---------------------------------------------------------------------------
-
-
 def test_cli_unsupported_protocol_message_content(runner: CliRunner) -> None:
     """SC#3 / HOST-02: a CLI invocation whose operator raises
     ProtocolNotImplementedError emits a message containing:
@@ -153,9 +139,7 @@ def test_cli_unsupported_protocol_message_content(runner: CliRunner) -> None:
     assert "Unsupported protocol" in result.output
 
 
-# ---------------------------------------------------------------------------
 # SC#4: ordering — subclass arm fires before base-class arm; generic arm unbroken
-# ---------------------------------------------------------------------------
 
 
 def test_map_typed_errors_ordering_subclass_not_caught_by_base(

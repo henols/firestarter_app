@@ -63,9 +63,7 @@ def real_db() -> EpromDatabase:
     return EpromDatabase(skip_local_override=True)
 
 
-# ---------------------------------------------------------------------------
 # Leg 1: `blank` is registered and its help text renders.
-# ---------------------------------------------------------------------------
 
 
 def test_blank_command_is_registered_and_documented(runner: CliRunner) -> None:
@@ -89,9 +87,7 @@ def test_blank_command_is_registered_and_documented(runner: CliRunner) -> None:
     assert _CLI_HANDLERS_BLANK_DECORATOR_LINE < _CLI_HANDLERS_BLANK_DEF_LINE
 
 
-# ---------------------------------------------------------------------------
 # Leg 2: `blank` reaches the host blank-check entry point exactly once.
-# ---------------------------------------------------------------------------
 
 
 def test_blank_command_reaches_the_host_blank_check_call(
@@ -119,9 +115,7 @@ def test_blank_command_reaches_the_host_blank_check_call(
     assert "operation_flags" in call_kwargs
 
 
-# ---------------------------------------------------------------------------
 # Leg 3: `blank` surfaces a not-blank verdict, not a false success.
-# ---------------------------------------------------------------------------
 
 
 def test_blank_command_reports_not_blank_correctly(
@@ -145,9 +139,7 @@ def test_blank_command_reports_not_blank_correctly(
     operator.check_eprom_blank.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
 # Leg 4: the firmware still wires CMD_BLANK_CHECK to mem_util_blank_check.
-# ---------------------------------------------------------------------------
 
 _EEPROM_28C_SOURCE = fw_path("src", "proms", "eeprom_28c.cpp")
 
@@ -194,9 +186,7 @@ def test_firmware_still_wires_the_blank_check_arm() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 5: D-153-04 -- no operation_end is wired for CMD_ERASE on 0x0D.
-# ---------------------------------------------------------------------------
 
 
 @requires_fw

@@ -102,13 +102,11 @@ _ENERGY_PULSES_COUNT = 100
 _REFUSED_WIDTH_US = 60000
 
 
-# ---------------------------------------------------------------------------
 # Synthetic response builders -- text matches the catalog's own format
 # string applied to representative params (verified this session via
 # `firestarter.messages.CATALOG[id].format % params`, byte for byte). Built
 # directly, per tests/test_boot_block_hint.py's own precedent: this avoids a
 # real wire frame and a serial path entirely.
-# ---------------------------------------------------------------------------
 
 
 def _make_max_pulses_response() -> Response:
@@ -195,9 +193,7 @@ def _compose_and_raise(response: Response) -> None:
     _raise_for_error_response(response, msg)
 
 
-# ---------------------------------------------------------------------------
 # Test 1
-# ---------------------------------------------------------------------------
 
 
 def test_max_pulses_is_a_program_failure() -> None:
@@ -242,9 +238,7 @@ def test_max_pulses_is_a_program_failure() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Test 2
-# ---------------------------------------------------------------------------
 
 
 def test_energy_cap_and_pulse_too_wide() -> None:
@@ -291,17 +285,8 @@ def test_energy_cap_and_pulse_too_wide() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Test 3
-# ---------------------------------------------------------------------------
 
-# D-21's forbidden phrasing, each built from at least two literal pieces so
-# this module's own source never spells one out contiguously (checked
-# below, mirroring firestarter/tests/test_hv_routing_source_contract_v142.py's
-# own self-check leg). Naming note: these constant NAMES do not themselves
-# spell out a forbidden phrase (they are UPPERCASE identifiers; the checks
-# below are case-sensitive against the lowercase phrases), only the STRING
-# VALUES built from concatenation below matter.
 _NEEDLE_A = "re" + "try"
 _NEEDLE_B = "re" + "trying"
 _NEEDLE_C = "try" + " again"
@@ -380,11 +365,6 @@ def test_hint_states_abort_without_continuation_wording() -> None:
             "appears verbatim in this module's own source -- rebuild it from "
             "differently-split literal pieces so this gate cannot match itself"
         )
-
-
-# ---------------------------------------------------------------------------
-# Test 4 -- D-20 source-contract leg
-# ---------------------------------------------------------------------------
 
 
 def _strip_py_comments(text: str) -> str:

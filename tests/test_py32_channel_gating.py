@@ -153,9 +153,7 @@ def _run_cli(version: str, argv: tuple[str, ...]) -> _ChildResult:
     )
 
 
-# ---------------------------------------------------------------------------
 # Simulated stable (`__version__ = "3.0.0"`)
-# ---------------------------------------------------------------------------
 
 
 def test_simulated_stable_board_choices_and_flag() -> None:
@@ -195,9 +193,7 @@ def test_simulated_stable_board_choice_rejects_py32f071() -> None:
     assert result.exit_code == 2
 
 
-# ---------------------------------------------------------------------------
 # Simulated pre-release (`__version__ = "3.0.0b1"`)
-# ---------------------------------------------------------------------------
 
 
 def test_simulated_prerelease_board_choices_and_flag() -> None:
@@ -227,9 +223,7 @@ def test_simulated_prerelease_dfu_probe_and_usb_id_not_refused() -> None:
     assert "no such option" not in result.output
 
 
-# ---------------------------------------------------------------------------
 # Import-time by construction -- ROADMAP Criterion 5's explicit assertion
-# ---------------------------------------------------------------------------
 
 
 def test_board_choices_are_computed_at_import_not_cached_across_a_version_change() -> (
@@ -264,10 +258,8 @@ def test_board_choices_are_computed_at_import_not_cached_across_a_version_change
     assert "py32f071" in prerelease.board_choices
 
 
-# ---------------------------------------------------------------------------
 # In-process unit tests for _reject_py32_only_option's truth table
 # ---------------------------------------------------------------------------
-#
 # These call the helper directly rather than through a subprocess: it reads
 # _PY32_ENABLED at call time (a module global, not a captured default
 # argument), which is exactly what makes it monkeypatchable in-process while
@@ -325,11 +317,6 @@ def test_reject_py32_only_option_enabled_and_not_given_returns(
     # See test_reject_py32_only_option_disabled_and_not_given_returns above
     # for why this is a bare call rather than `assert ... is None`.
     cli_handlers._reject_py32_only_option("--usb-id", False)
-
-
-# ---------------------------------------------------------------------------
-# One-code-path guard -- D-08's whole point
-# ---------------------------------------------------------------------------
 
 
 def test_refusal_message_and_helper_occur_exactly_once_and_three_times() -> None:

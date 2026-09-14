@@ -41,9 +41,7 @@ from firestarter.py32_dfu import (
     parse_intel_hex,
 )
 
-# ---------------------------------------------------------------------------
 # Fake USB device
-# ---------------------------------------------------------------------------
 
 
 class _FakeUsbDevice:
@@ -71,9 +69,6 @@ class _FakeUsbDevice:
         self.status = status
         self.state = state
         self.poll_ms = poll_ms
-        # HOST-03: bytes served on DFU_UPLOAD, and the DfuSe block size used
-        # to turn a requested block number into an offset into them. Both
-        # defaulted so all 58 pre-existing constructions are unaffected.
         self.upload_image = upload_image
         self.upload_block_size = upload_block_size
 
@@ -162,10 +157,6 @@ def _interface(
         name=name if dfuse else "PY32 bootloader",
         transfer_size=64,
         dfu_version=DFUSE_VERSION if dfuse else 0x0110,
-        # HOST-03: defaults to 0 (bitCanUpload unset) -- deliberate, so all 58
-        # pre-existing tests keep constructing a device Plan 127-09 will treat
-        # as unable to verify (the SKIPPED_NO_UPLOAD path), while flash() still
-        # returns True either way (D-10's blast-radius property).
         attributes=attributes,
     )
 
@@ -176,9 +167,7 @@ def _no_sleep(monkeypatch):
     monkeypatch.setattr(py32_dfu, "_sleep", lambda _seconds: None)
 
 
-# ---------------------------------------------------------------------------
 # Intel HEX parsing
-# ---------------------------------------------------------------------------
 
 
 class TestIntelHex:
@@ -228,9 +217,7 @@ class TestIntelHex:
             load_image(str(target))
 
 
-# ---------------------------------------------------------------------------
 # DfuSe memory layout
-# ---------------------------------------------------------------------------
 
 
 class TestDfuseLayout:
@@ -271,9 +258,7 @@ class TestEraseAddresses:
         )
 
 
-# ---------------------------------------------------------------------------
 # The DFU download sequence
-# ---------------------------------------------------------------------------
 
 
 class TestDfuseDownload:
@@ -467,11 +452,6 @@ class TestUnrelatedDeviceSafety:
         assert py32_dfu.dfu_device_present() is True
 
 
-# ---------------------------------------------------------------------------
-# HOST-03: DFU_UPLOAD readback verification
-# ---------------------------------------------------------------------------
-
-
 class TestReadbackVerification:
     """HOST-03 / D-09..D-12: post-write DFU_UPLOAD readback, against the mock.
 
@@ -646,9 +626,7 @@ class TestReadbackVerification:
         assert flasher.verify_result is VerifyResult.SKIPPED_NO_UPLOAD
 
 
-# ---------------------------------------------------------------------------
 # Board → install-method routing in firmware.py
-# ---------------------------------------------------------------------------
 
 
 class TestBoardRouting:

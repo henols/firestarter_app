@@ -43,7 +43,7 @@ from unittest.mock import Mock
 
 import pytest
 
-# (RETIRE-05, D-10): the six real-class annotations below
+# The six real-class annotations below
 # are for mypy only. Runtime imports of these same modules happen INSIDE
 # make_app_context()'s body (see that function) -- never at module scope --
 # because conftest's module-scope import set is deliberately free of any
@@ -65,21 +65,14 @@ if TYPE_CHECKING:
     from .fake_chip import FakeChip
 
 
-# ---------------------------------------------------------------------------
-# (HOST-04 / D-02) — optional-dependency collection
-# gate.
-#
 # tests/test_pyusb_api_surface.py imports `usb.core` at module scope and is
-# the FIRST test in this repo gated on an OPTIONAL DEPENDENCY rather than on
-# cross-repo file presence (`tests.fw_presence.requires_fw`) or a
-# CLI-on-PATH probe (test_characterization.py). It is meant to run only in
+# gated on an OPTIONAL DEPENDENCY rather than on a CLI-on-PATH probe
+# (test_characterization.py). It is meant to run only in
 # the `ci-py32` CI job, which installs the `[py32]` extra.
 #
 # `collect_ignore` is used deliberately instead of a skip marker, because it
-# produces a NON-COLLECTION rather than a skip -- so
-# tests/test_skip_census.py's `ALLOWED_SKIP_REASONS` needs no fifth entry.
-# Rejected alternatives: `pytest.importorskip("usb")` would emit a skip
-# reason absent from that allow-list; `--ignore=` in `addopts` suppresses
+# produces a NON-COLLECTION rather than a skip.
+# Rejected alternative: `--ignore=` in `addopts` suppresses
 # explicitly-named paths too, so `ci-py32` naming the file directly would
 # need an `addopts` override just to run it.
 #
@@ -219,19 +212,10 @@ def make_comm(fake_serial):
         instance._fault_inject_outgoing = None
         # firmware-advertised DATA_BUFFER_SIZE (None until probed)
         instance.firmware_buffer_size = None
-        # (EVEN-01): firmware-advertised MAIN-path decode capacity (None until probed)
         instance.firmware_max_chunk = None
-        # CAP-02: firmware identity + effective HW revision, both carried in the
-        # MSG_OK_READY ack. None until probed — and None is a REJECT for the
-        # shield-revision gate, so a fixture that forgets these fails closed.
         instance.firmware_identity = None
         instance.hw_revision = None
-        # CAP-03 (HOST-01): the firmware's advertised per-block write-time
-        # budget, carried in the same MSG_OK_READY ack. None until probed --
-        # and None means "not advertised", so the write-path safe default
-        # applies (D-10), never an error and never a refusal.
         instance.write_block_budget_s = None
-        # (D-15 / HOST-06): bounded per-connection observed-id record
         instance.seen_message_ids = set()
         return instance
 

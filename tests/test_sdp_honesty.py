@@ -64,12 +64,6 @@ from firestarter.sdp_honesty import (
 _ALLOWED_CHIP = "AT28C256"
 
 
-# ---------------------------------------------------------------------------
-# Report honesty (D-10) + firmware-too-old (D-14) -- the four survivors,
-# retargeted onto firestarter/sdp_honesty.py directly.
-# ---------------------------------------------------------------------------
-
-
 def test_summary_line_carries_the_unreadable_state_caveat_on_both_directions() -> None:
     """v1.22 HOST-05: symmetry matters because firmware's `0x5F`
     (`MSG_INFO_SDP_UNLOCK_DONE_US`) frame carries no honesty caveat where
@@ -154,18 +148,6 @@ def test_firmware_too_old_is_reported_when_unknown_cmd_comes_back() -> None:
     assert map_unknown_cmd_to_outdated(other_exc, "enable", _ALLOWED_CHIP) is None
 
 
-# ---------------------------------------------------------------------------
-# (LOCK-02/LOCK-03, D-04, C-4) -- the strictly-additive extension.
-# `unreadable_state_caveat()` and both `emission_summary()` directions are
-# pinned as literals here too, on top of the four surviving cases above and
-# `test_chip_test_sdp_leg.py`'s own four pinning legs, so an edit to either
-# function's wording goes red at this file as well -- C-4 measured that
-# `unreadable_state_caveat()` now has three landed production callers
-# (`cli_handlers.py:2408`, `:2412`, `chip_test.py:1480`) plus those four
-# pinning tests, so its text is load-bearing at seven sites total.
-# ---------------------------------------------------------------------------
-
-
 def test_unreadable_state_caveat_text_is_unchanged_by_the_additive_extension() -> None:
     """Pinned literal, byte-identical to the pre-Phase-151 wording. If this
     goes red, the extension in this plan was NOT strictly additive -- see
@@ -239,13 +221,6 @@ def test_operation_sibling_generalises_the_label_away_from_the_literal_sdp() -> 
     message = str(outdated)
     assert "lock-status query" in message, message
     assert "SDP" not in message, message
-
-
-# ---------------------------------------------------------------------------
-# Import purity (D-01/D-02's forward contract): sdp_honesty.py must stay
-# importless of click, so Phase 134's report layer (which has no CLI
-# context of its own) can import it without pulling in a CLI dependency.
-# ---------------------------------------------------------------------------
 
 
 def test_sdp_honesty_module_imports_only_leaf_firestarter_modules() -> None:

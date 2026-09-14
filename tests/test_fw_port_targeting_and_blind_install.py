@@ -78,9 +78,7 @@ def _fake_comports(*devices):
     return entries
 
 
-# ---------------------------------------------------------------------------
 # A — a named port restricts the search
-# ---------------------------------------------------------------------------
 
 
 class TestNamedPortRestrictsTheSearch:
@@ -234,9 +232,7 @@ class TestNamedPortRestrictsTheSearch:
         )
 
 
-# ---------------------------------------------------------------------------
 # B — blind install, gated on an explicit --board
-# ---------------------------------------------------------------------------
 
 
 def _manager_that_cannot_identify(monkeypatch):
@@ -370,9 +366,7 @@ class TestBlindInstallRequiresExplicitBoard:
         assert ok is False
 
 
-# ---------------------------------------------------------------------------
 # C — transient config values must not reach the disk
-# ---------------------------------------------------------------------------
 
 
 @pytest.fixture

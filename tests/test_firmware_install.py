@@ -36,9 +36,7 @@ from firestarter import firmware
 from firestarter.constants import FIRESTARTER_RELEASES_URL
 from firestarter.firmware import FirmwareManager
 
-# ---------------------------------------------------------------------------
 # Module-local helpers — NOT in conftest.py (per VALIDATION.md line 60)
-# ---------------------------------------------------------------------------
 
 
 def mock_releases_factory(releases, next_url=None):
@@ -89,9 +87,7 @@ class _FakeAvrdude:
         return ("", 0)  # (stderr, returncode) — 0 = success
 
 
-# ---------------------------------------------------------------------------
 # Stable release fixture data
-# ---------------------------------------------------------------------------
 
 _STABLE_RELEASE_UNO = {
     "tag_name": "3.0.0",
@@ -119,11 +115,6 @@ _STABLE_RELEASE_LEONARDO = {
     ],
 }
 
-# 3-asset stable release fixture for uno328pb-driven resolution.
-# tag_name "3.0.1" distinguishes from the existing uno/leonardo fixtures
-# (both at 3.0.0). Asset order [uno, uno328pb, leonardo] follows Phase 21
-# D-08 section-order discipline (matches platformio.ini default_envs order
-# D-01 landed).
 _STABLE_RELEASE_UNO328PB = {
     "tag_name": "3.0.1",
     "prerelease": False,
@@ -144,11 +135,6 @@ _STABLE_RELEASE_UNO328PB = {
         },
     ],
 }
-
-
-# ===========================================================================
-# TestFirmwareInstallStable — INST-01 non-regression
-# ===========================================================================
 
 
 class TestFirmwareInstallStable:
@@ -212,11 +198,6 @@ class TestFirmwareInstallStable:
         fm = FirmwareManager(config_manager=MagicMock())
         v, url = fm.fetch_release_info(channel="stable", board="uno")
         assert (v, url) == (None, None)
-
-
-# ===========================================================================
-# TestVersionComparator — INST-01 PEP 440 comparator fix
-# ===========================================================================
 
 
 class TestVersionComparator:
@@ -294,11 +275,6 @@ class TestVersionComparator:
         fm = FirmwareManager(config_manager=MagicMock())
         assert fm._compare_versions("not-a-version", "3.0.0") is False
         assert fm._compare_versions("", "3.0.0") is False
-
-
-# ===========================================================================
-# TestFirmwareInstallPreRelease — INST-02: --pre selection
-# ===========================================================================
 
 
 class TestFirmwareInstallPreRelease:
@@ -517,11 +493,6 @@ class TestFirmwareInstallPreRelease:
         )
 
 
-# ===========================================================================
-# TestFirmwareInstallPinned — INST-03: --firmware-version exact-tag install
-# ===========================================================================
-
-
 class TestFirmwareInstallPinned:
     """INST-03 — fetch_release_info(channel='pinned') fetches exact tag.
 
@@ -628,18 +599,11 @@ class TestFirmwareInstallPinned:
                 f"Expected {v!r} NOT to match FIRMWARE_VERSION_RE"
             )
 
-        # CR-02: $ matches before trailing \n in Python; must use \Z so newlines
-        # cannot smuggle into the URL template downstream.
         trailing_newline_inputs = ["3.1.0\n", "3.1.0b2\n", "3.1.0\r\n"]
         for v in trailing_newline_inputs:
             assert not FIRMWARE_VERSION_RE.match(v), (
                 f"Expected {v!r} NOT to match (regex anchored with \\Z)"
             )
-
-
-# ===========================================================================
-# TestFirmwareList — INST-04: fw --list output
-# ===========================================================================
 
 
 class TestFirmwareList:
@@ -843,11 +807,6 @@ class TestFirmwareList:
         assert len(result) == 1  # only 3.0.0
 
 
-# ===========================================================================
-# TestMagicDefault — D-21/D-22 beta-app auto-routing
-# ===========================================================================
-
-
 class TestMagicDefault:
     """INST-02 — magic default: beta-app bare fw -i auto-routes to --pre.
 
@@ -1017,28 +976,7 @@ class TestMagicDefault:
         )
 
 
-# ===========================================================================
 # TestFirmwareCommandDispatch — --json without --list post-parse validation
-# ===========================================================================
-#
-# (CLI-01..04) note: this class previously held 5
-# argparse-form mutex/validator tests that imported `create_firmware_args`
-# from `firestarter.main`. With the entry-point swap to Click, that argparse
-# factory + its 14 sibling `create_*_args` factories are deleted outright.
-# The equivalent Click-form contracts are pinned in
-# `tests/test_cli_handlers.py` (W3 / Plan 41-03):
-#   - test_fw_mutex_pre_and_firmware_version
-#   - test_fw_mutex_stable_and_pre
-#   - test_fw_mutex_firmware_version_and_stable
-#   - test_fw_invalid_firmware_version
-#   - (also): the Click `click.Choice` enforcement on --board renders
-#     `test_argparse_accepts_uno328pb_board_choice` redundant — `click.Choice`
-#     ships the contract structurally instead of via a per-value test.
-# Only the sys.argv-driven `test_json_without_list_post_parse_error` survives
-# here: it still pins the documented `--json requires --list` UsageError
-# contract end-to-end through the Click entry point (the test invokes
-# `from firestarter.main import main; main()`; `main = cli` re-export keeps
-# the call shape valid through D-08).
 
 
 class TestFirmwareCommandDispatch:
@@ -1070,11 +1008,6 @@ class TestFirmwareCommandDispatch:
 
         with pytest.raises(SystemExit):
             main()
-
-
-# ===========================================================================
-# TestUno328pbResolution — Phase 23 INST-01/02/03 + D-01..D-06 + revised D-10
-# ===========================================================================
 
 
 class TestUno328pbResolution:
@@ -1261,13 +1194,6 @@ class TestUno328pbResolution:
     # a separate test.
 
 
-# ---------------------------------------------------------------------------
-# ERR-03 coverage lift (D-14.3)
-# Adds tests for _fetch_all_releases pagination/JSON parsing + _compare_versions
-# PEP 440 edge cases not pinned by the TestVersionComparator block above.
-# ---------------------------------------------------------------------------
-
-
 class TestFetchAllReleasesJsonParsing:
     """D-14.3 — _fetch_all_releases parses the GitHub Releases API JSON shape."""
 
@@ -1373,9 +1299,6 @@ class TestCompareVersionsAdditionalBranches:
         )
 
 
-# Keep `pytest` referenced to avoid an unused-import lint after Phase 42's
-# extension (the original Phase 18 module imports pytest unconditionally for
-# the @pytest.fixture decorators used in earlier blocks).
 _ = pytest
 
 

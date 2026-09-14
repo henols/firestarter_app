@@ -28,9 +28,7 @@ import pytest
 
 from firestarter import submit
 
-# ---------------------------------------------------------------------------
 # sanitize_dict -- one test per leak vector (A3 fails-open discipline)
-# ---------------------------------------------------------------------------
 
 
 def test_sanitize_home_dir_path():
@@ -159,9 +157,7 @@ def test_sanitize_leaves_the_rail_reading_disclosure_byte_identical():
     assert out["rail_reading_disclosure"] == _RAIL_READING_DISCLOSURE
 
 
-# ---------------------------------------------------------------------------
 # overall_verdict / build_title / build_body / build_issue_url
-# ---------------------------------------------------------------------------
 
 
 def _step(
@@ -189,8 +185,6 @@ def test_overall_verdict_marginal_is_inconclusive():
 
 
 def test_overall_verdict_bad_dominates_marginal():
-    # FAIL-dominant ordering (D-02) -- distinct from the exit-code max()
-    # ordering where marginal(2) > BAD(1).
     results = [_step("write", "marginal"), _step("verify", "BAD")]
     assert submit.overall_verdict(results) == "FAIL"
 
@@ -388,9 +382,6 @@ def test_build_body_table_from_sanitized_steps():
     ],
 )
 def test_reason_text_verdict_keyed_suppression(verdict, reason, expected):
-    # D-1: suppression is keyed on the verdict token, never on message text.
-    # The SKIPPED and BAD rows are the non-vacuity proof -- they must NOT be
-    # suppressed, otherwise the rule would just be blanket suppression.
     assert submit._reason_text(verdict, reason) == expected
 
 
@@ -475,7 +466,6 @@ def test_build_issue_url_has_no_labels_param():
 
 
 def test_build_issue_url_not_derived_from_git_remote():
-    # D-01/T-113-05: SUBMIT_REPO is a hardcoded constant, never inferred.
     url = submit.build_issue_url("t", "b")
     assert submit.SUBMIT_REPO in url
     # Literal on purpose: the project-wide tracker per firestarter_prom#6,
@@ -483,9 +473,7 @@ def test_build_issue_url_not_derived_from_git_remote():
     assert submit.SUBMIT_REPO == "henols/firestarter_prom"
 
 
-# ---------------------------------------------------------------------------
 # gh_available + submit_via_gh (list argv, stdin body)
-# ---------------------------------------------------------------------------
 
 
 def test_gh_tier_available_when_present_and_authed():
@@ -545,11 +533,6 @@ def test_submit_via_gh_returns_none_on_failure():
 
 
 def test_submit_via_gh_argv_carries_nothing_permission_gated():
-    # D-1/T-ahy-05: the ONE assertion a mocked run_fn can honestly make
-    # about the real-world failure -- no permission-gated argument is ever
-    # sent on the create path. A mocked run_fn cannot prove GitHub accepts
-    # the create call; it CAN prove the argv never carries the label flag
-    # or the GSD_INBOX_LABEL value.
     run_fn = Mock(
         return_value=Mock(
             returncode=0,
@@ -632,23 +615,8 @@ def test_submit_via_gh_success_prints_nothing():
 
 
 def test_gsd_inbox_label_constant_retained():
-    # D-1: the label constant survives for MAINTAINER-side triage
-    # (`gh issue edit <n> --add-label gsd-inbox`), even though it is no
-    # longer sent on the community-tester create path.
     assert submit.GSD_INBOX_LABEL == "gsd-inbox"
 
-
-# ---------------------------------------------------------------------------
-# deny-set negative argv on BOTH gh paths (DEVTEST-06, D-09/D-11,
-# RESEARCH Pitfall 6) -- widens the single-flag idiom above, does not
-# replace it. `gh issue create`'s write/triage-gated flags are broader than
-# `--label` alone: `-l`/`--label`, `-a`/`--assignee`, `-m`/`--milestone`,
-# `-p`/`--project` (the last explicitly requires the `project` OAuth scope
-# per `gh issue create --help`). `gh issue comment` has NO label/assignee/
-# milestone/project flag at all -- its meaningful negatives are the
-# mutating/hijacking flags: `--delete-last`, `--edit-last`, `--yes`,
-# `-w`/`--web`, `-e`/`--editor`.
-# ---------------------------------------------------------------------------
 
 _CREATE_DENY_SET = [
     "-l",
@@ -802,11 +770,6 @@ def test_every_interactive_run_asks_even_when_the_check_fails():
 
     confirm_fn.assert_called_once()
     assert any("could not run" in m.lower() for m in printed)
-
-
-# ---------------------------------------------------------------------------
-# submit_via_browser -- D-05 oversize escalation (small/mid/huge)
-# ---------------------------------------------------------------------------
 
 
 def _small_body() -> str:
@@ -968,11 +931,6 @@ def test_browser_reachable_true_returns_the_url():
     console.print.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
-# submit_report -- D-03 refuse gate + D-04 TTY/off-TTY dispatch
-# ---------------------------------------------------------------------------
-
-
 def _make_report(*, chip="W27C512", protocol="7", host_version="3.0.0b11", pii=None):
     auto_capture = SimpleNamespace(
         chip=chip,
@@ -1065,10 +1023,6 @@ def test_offtty_prints_url_not_body_and_never_sends():
     reaches `build_issue_url` below (proven by the URL assertion staying):
     the test proves the ECHO went, not that the body stopped being built.
     """
-    # find_prior_report_fn IS still invoked off-TTY (D-09: the dedup check
-    # runs before any ask, on every path) -- injected as a Mock here so
-    # run_fn/which_fn stay provably untouched by the FILING seams, which is
-    # this test's actual concern.
     report = _make_report()
     which_fn = Mock()
     run_fn = Mock()
@@ -1438,8 +1392,6 @@ def test_tty_body_sent_to_browser_is_sanitized():
 
 
 def test_refuse_never_calls_isatty():
-    # D-03 refuse must short-circuit before the D-04 TTY gate is even
-    # consulted.
     report = _make_report(host_version=None)
     isatty_fn = Mock(return_value=True)
     submit.submit_report(
@@ -1456,14 +1408,7 @@ def test_refuse_never_calls_isatty():
     isatty_fn.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
-# submit_report -- D-09/D-10/D-11 dedup-first, always-ask, comment
-# ---------------------------------------------------------------------------
-
-
 def test_dedup_seam_invoked_before_confirm_fn_on_every_ask_path():
-    # D-09: the dedup check runs BEFORE any ask. Assert relative call
-    # order, not merely that both were called.
     report = _make_report()
     order: list[str] = []
     find_prior_report_fn = Mock(

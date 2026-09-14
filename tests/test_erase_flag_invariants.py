@@ -144,9 +144,7 @@ def _erase_capability_bit(db: EpromDatabase, manufacturer: str, chip: dict) -> b
     return bool(wire["flags"] & FLAG_CAN_ERASE)
 
 
-# ---------------------------------------------------------------------------
 # Leg 1: exactly 84 of the 746 total rows are algorithm 13.
-# ---------------------------------------------------------------------------
 
 
 def test_exactly_84_algorithm_13_rows_across_all_746_rows() -> None:
@@ -165,9 +163,7 @@ def test_exactly_84_algorithm_13_rows_across_all_746_rows() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 2: every one of the 84 algorithm-13 rows carries the erase bit.
-# ---------------------------------------------------------------------------
 
 
 def test_every_algorithm_13_row_carries_the_erase_capability_bit() -> None:
@@ -183,9 +179,7 @@ def test_every_algorithm_13_row_carries_the_erase_capability_bit() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 3: no non-algorithm-13 row's bit moved -- the scope proof.
-# ---------------------------------------------------------------------------
 
 
 def test_no_non_algorithm_13_row_gained_the_erase_capability_bit() -> None:
@@ -215,9 +209,7 @@ def test_no_non_algorithm_13_row_gained_the_erase_capability_bit() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 4: algorithm-5 hazard guard, named separately from leg 3.
-# ---------------------------------------------------------------------------
 
 
 def test_algorithm_5_rows_still_do_not_carry_the_erase_capability_bit() -> None:
@@ -252,13 +244,8 @@ def test_algorithm_5_rows_still_do_not_carry_the_erase_capability_bit() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 5: AT28C256 write_scope="full" plan shape, pinned.
-# ---------------------------------------------------------------------------
 
-# Measured live in this session (see module docstring "Reachability" and
-# 153-12-SUMMARY.md): id, read, write, verify, erase, blank-check, then the
-# six-op SDP leg, in that exact order.
 _AT28C256_FULL_EXPECTED_OP_ORDER = [
     OP_ID,
     OP_READ,

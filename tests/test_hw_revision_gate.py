@@ -56,9 +56,7 @@ def _validate(command, detected):
     return SerialCommunicator._validate_hardware_revision(command, detected)
 
 
-# ---------------------------------------------------------------------------
 # 1. Pure policy
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("allowed", [REVISION_2_2, REVISION_2_3])
@@ -154,9 +152,7 @@ def test_refusal_message_gives_the_exact_remedy():
     assert exc_info.value.detected == REVISION_2_0
 
 
-# ---------------------------------------------------------------------------
 # 2. Extended MSG_OK_READY decode
-# ---------------------------------------------------------------------------
 
 
 def _ready_body(params: bytes) -> bytes:
@@ -232,11 +228,6 @@ def test_decode_implausible_buffer_size_is_clamped_away(make_comm):
 
     assert comm.firmware_max_chunk is None
     assert comm.hw_revision == REVISION_2_2
-
-
-# ---------------------------------------------------------------------------
-# 2b. CAP-03 -- the per-block write-time budget (HOST-01, host half only)
-# ---------------------------------------------------------------------------
 
 
 def test_decode_cap03_budget_at_short_identity_length(make_comm):
@@ -342,9 +333,7 @@ def test_decode_implausible_cap03_budget_is_clamped_away(make_comm):
     assert comm.firmware_identity == "3.0.0:leonardo"
 
 
-# ---------------------------------------------------------------------------
 # 3. Coupling to the real database
-# ---------------------------------------------------------------------------
 
 
 def test_exactly_two_pinouts_emit_the_gated_vpp_line():
@@ -365,9 +354,7 @@ def test_exactly_two_pinouts_emit_the_gated_vpp_line():
     assert gated == {"DIP24_2716", "DIP24_2532"}
 
 
-# ---------------------------------------------------------------------------
 # 4. Integration through _probe_port
-# ---------------------------------------------------------------------------
 
 
 def _probe(command, revision):

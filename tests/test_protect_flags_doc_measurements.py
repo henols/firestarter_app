@@ -52,9 +52,7 @@ _FIRESTARTER_PKG_DIR = _FA_DIR / "firestarter"
 _ALGORITHM_UV_EPROM_0X0B = 11
 
 
-# ---------------------------------------------------------------------------
 # DB loading / measurement helpers
-# ---------------------------------------------------------------------------
 
 
 def _load_db() -> dict:
@@ -99,10 +97,8 @@ def _measure_protect_field(
     return true_n, false_n, absent_n, by_alg_true, by_alg_total
 
 
-# ---------------------------------------------------------------------------
 # Leg 2: the two-row exception is real, and the .get(...) discipline is
 # justified (a direct index DOES raise), not merely asserted.
-# ---------------------------------------------------------------------------
 
 
 def test_two_row_exception_is_real_and_get_discipline_is_justified() -> None:
@@ -146,13 +142,6 @@ def test_two_row_exception_is_real_and_get_discipline_is_justified() -> None:
                 "expected -- the .get(...) discipline would be asserted, "
                 "never justified non-vacuously."
             )
-
-
-# ---------------------------------------------------------------------------
-# Leg 4: no runtime consumer, proven by a source scan (structural, not a
-# gate -- D-16 forbids a new tools/check_*.py; the in-tree precedent for
-# this shape is a test).
-# ---------------------------------------------------------------------------
 
 
 def _prose_line_numbers(text: str) -> set[int]:
@@ -223,12 +212,6 @@ def test_no_runtime_consumer_in_shipped_package_source_scan() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Leg 6: sdp_capability.py untouched -- D-16's untouched-guard, copied from
-# test_b15_page_size_corroboration.py's shape.
-# ---------------------------------------------------------------------------
-
-
 def test_sdp_capability_module_untouched_this_plan() -> None:
     """Structural guard: this plan must not depend on, or require edits to,
     `firestarter/sdp_capability.py` -- D-16 forbids editing it. This test
@@ -245,11 +228,9 @@ def test_sdp_capability_module_untouched_this_plan() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 7: non-vacuity control for the recomputation-vs-doc comparison
 # machinery -- a moved synthetic chip must be named, and an untouched
 # control chip must not.
-# ---------------------------------------------------------------------------
 
 
 def _partition_by_protect_on_after(db: dict) -> tuple[list[str], list[str]]:

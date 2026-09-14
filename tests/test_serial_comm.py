@@ -152,11 +152,6 @@ def test_send_json_command_routes_through_send_string(make_comm) -> None:
     assert n > 10
 
 
-# ---------------------------------------------------------------------------
-# COBS-framed command emission tests (FRAME-05 / T-51-04/05/06)
-# ---------------------------------------------------------------------------
-
-
 def test_send_json_command_emits_cobs_frame(make_comm, fake_serial) -> None:
     """send_json_command emits a valid COBS+CRC8 frame terminated by 0x00.
 
@@ -244,14 +239,12 @@ def test_send_json_command_version_probe_is_framed(make_comm, fake_serial) -> No
     )
 
 
-# ---------------------------------------------------------------------------
 # RED tests for fault-inject hooks + ring-fence
 #
 # Four tests MUST FAIL until 53-02 adds:
 #   - SerialCommunicator._fault_inject_outgoing attribute
 #   - FaultInjectingSerialCommunicator subclass
 # One ring-fence test is GREEN now (snapshot captured from current body).
-# ---------------------------------------------------------------------------
 
 
 def test_fault_inject_outgoing_none(make_comm, monkeypatch) -> None:
@@ -348,8 +341,6 @@ def test_fault_inject_incoming_subclass(make_comm) -> None:
     comm = FaultInjectingSerialCommunicator.__new__(FaultInjectingSerialCommunicator)
     comm._corrupt_incoming_once = True
     comm._fault_fired = False
-    # (D-15 / HOST-06): bounded per-connection observed-id record,
-    # normally initialised in __init__ — mirrored here since this test bypasses it.
     comm.seen_message_ids = set()
 
     # Build a minimal body (id + params + CRC) for _decode_id_frame
@@ -435,7 +426,17 @@ def test_read_and_parse_lines_ringfence_unchanged() -> None:
     It goes RED if ANY change is made to the generator body (per GATE-1.8d:
     any change must be flagged and deferred to v1.9 alongside binary re-validation).
 
-    Pinned SHA-256 (2026-09-04): 8b77800003a44fb21f2054fe8d0584e804648a76e52c3f23f55f06df74127b41
+    Pinned SHA-256 (2026-09-14): 4aa34549780b0ea204dd4f538b15eff090ae675308a93886e8af02078a1f4763
+    (Updated from 8b77800003a44fb21f2054fe8d0584e804648a76e52c3f23f55f06df74127b41
+     by the planning-citation cleanup, debug session
+     planning-refs-in-src-comments: COMMENT TEXT ONLY. This pin hashes the
+     function's source INCLUDING its comments, so removing a planning citation
+     from a comment inside the body invalidates it by construction. Not a
+     transport-path change and not a code change of any kind: the
+     comment-stripped sha256 of firestarter/serial_comm.py is
+     cb1f35d7a34bf61653b3534d038c5385d743e838a2f7212b937c931f2985d573 both
+     before and after, so no read() call, no branch on a wire byte, no write to
+     start_time and no statement of any kind moved.)
     (Updated from 6d9e4fe4b67b78c110418305113b275174f16b2ecc9e0f55fbf5d9a623398184
      at Phase 176 plan 03: both re-sync branches now call
      transport_counters.record_resync_length_missing() /
@@ -455,7 +456,7 @@ def test_read_and_parse_lines_ringfence_unchanged() -> None:
 
     from firestarter.serial_comm import SerialCommunicator
 
-    _PINNED_SHA256 = "8b77800003a44fb21f2054fe8d0584e804648a76e52c3f23f55f06df74127b41"
+    _PINNED_SHA256 = "4aa34549780b0ea204dd4f538b15eff090ae675308a93886e8af02078a1f4763"
 
     src = inspect.getsource(SerialCommunicator._read_and_parse_lines)
     actual_digest = hashlib.sha256(src.encode("utf-8")).hexdigest()
@@ -467,16 +468,6 @@ def test_read_and_parse_lines_ringfence_unchanged() -> None:
         "Any change to this generator body must be flagged and deferred to v1.9 "
         "per the ring-fence protocol (see serial_comm.py header comment)."
     )
-
-
-# ---------------------------------------------------------------------------
-# CAP-01 (Phase 55 Plan 03 Task 2): _decode_id_frame MSG_OK_READY seam tests
-#
-# SC3b: pins that _decode_id_frame sets firmware_max_chunk from the 2-byte
-# param region of MSG_OK_READY acks, and leaves it None when params are absent.
-# Replaces the Phase 54 identity-string parse tests (now removed along with the
-# fw_fields[2]/[3] block in _probe_port).
-# ---------------------------------------------------------------------------
 
 
 def test_decode_id_frame_sets_firmware_max_chunk_from_2_byte_param(make_comm) -> None:
@@ -575,25 +566,6 @@ def test_decode_id_frame_clamps_implausible_max_chunk(make_comm, raw, expected) 
     )
 
 
-# --- D-09 / HOST-05 / F-120-02: INFO-band promotion in _log_rurp_feedback ---
-#
-# Before Plan 120-03's `elif response.type == "INFO"` arm, the whole INFO
-# band fell through to the `logging.DEBUG` initialiser in
-# `_log_rurp_feedback`, while `_setup_logging` sets the root logger to
-# `logging.INFO` unless `-v` is passed. That silently discarded every Phase
-# 118/119 SDP report line at default verbosity: a two-repo requirement that
-# passed its own phase's verification and was still false end to end.
-#
-# The fix makes SIX previously-invisible ids visible at default verbosity,
-# not five: `0x5E` (MSG_INFO_SDP_UNLOCK), `0x5F` (MSG_INFO_SDP_UNLOCK_DONE_US),
-# `0x60` (MSG_INFO_SDP_LOCK), `0x61` (MSG_INFO_SDP_LOCK_DONE_US), `0x62`
-# (MSG_INFO_PAGE_LOAD_WORST_US) — plus `0x5B` MSG_INFO_HW, which is emitted
-# unconditionally through the `LOG_WARN_ID_U8` alias at
-# `rurp_hw_rev_utils.h:96` despite a catalog severity of INFO. `0x5B`'s
-# unconditional site is Phase 35's CR-02 hard-fail-loud revision warning, so
-# this fix is also a partial fix for a second, older observability defect
-# unrelated to SDP.
-#
 # A search of this whole suite for logger-level assertions and record-count
 # assertions on the `RURP` logger (`rurp_logger`) — `caplog.at_level(...,
 # logger="RURP")`, `not caplog.records`, `len(caplog.records) ==`,

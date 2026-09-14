@@ -165,11 +165,6 @@ def test_init_phase_data_frames_not_acked() -> None:
     mock_comm.send_ack.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
-# build_flags + hexdump (module-level helpers) — D-14 fallback coverage
-# ---------------------------------------------------------------------------
-
-
 def test_build_flags_all_off() -> None:
     """build_flags returns 0 when nothing is set."""
     from firestarter.eprom_operations import build_flags
@@ -252,11 +247,9 @@ def test_class_progress_handler_set_progress() -> None:
     assert (50, 100) in captured
 
 
-# ---------------------------------------------------------------------------
 # read_timing block
 # Tests for host-side read-timing knob params in consistency_check_eprom.
 # Selectable with: pytest -k "read_timing"
-# ---------------------------------------------------------------------------
 
 # Minimal eprom_data_dict that consistency_check_eprom accepts without real DB.
 _MINIMAL_EPROM_DATA: dict = {
@@ -399,14 +392,7 @@ def test_read_timing_default_params_absent_from_command() -> None:
     assert "read-strobe-us" not in captured[0]
 
 
-# ---------------------------------------------------------------------------
 # RED tests for write_cycle_eprom 3-way verdict
-#
-# These tests MUST FAIL until 53-02 adds EpromOperator.write_cycle_eprom.
-# They pin the 3-way verdict contract: 0=all cycles match source / 1=mismatch
-# / 2=hw-error. D-06: independent host-side SHA-256 compare, NOT firmware
-# built-in verify. Monkeypatch pattern mirrors test_consistency_check.py.
-# ---------------------------------------------------------------------------
 
 
 def _make_fake_ctx_write(memory_size: int = 65536):
@@ -577,13 +563,7 @@ class TestWriteCycleEprom:
         assert rc == 2, "Erase failure must return 2 (hw-error)."
 
 
-# ---------------------------------------------------------------------------
 # unit tests for fault_inject_cycle (coverage gate)
-#
-# These tests exercise fault_inject_cycle directly to keep total coverage
-# at >=70%. The CLI smoke tests (test_cli_handlers.py) only mock the method,
-# so direct unit tests are required for coverage. XACT-02 / Phase 53 Plan 02.
-# ---------------------------------------------------------------------------
 
 
 class _MockComm:
@@ -832,10 +812,8 @@ class TestFaultInjectCycle:
         assert mutated[-1:] == b"\x00", "corrupt-crc8 keeps the 0x00 delimiter."
 
 
-# ---------------------------------------------------------------------------
 # harness refinement: measure_command_nak_latency
 # Per-frame firmware NAK latency on an established single-port connection.
-# ---------------------------------------------------------------------------
 
 
 class _FakeNakComm:
@@ -906,18 +884,11 @@ class TestMeasureCommandNakLatency:
         assert result is False
 
 
-# ---------------------------------------------------------------------------
 # (RED): SRAM/FRAM blank-check host short-circuit
-#
-# D-30: FM1608 (0x28 SRAM_STD) blank-check surfaces firmware 0xA4
-# MSG_ERR_EMPTY_INPUT because configure_sram() leaves a NULL
-# firestarter_operation_main for CMD_BLANK_CHECK.  Fix = detect SRAM/FRAM
-# at the host blank-check entry and short-circuit BEFORE issuing the command.
 #
 # These tests MUST FAIL until Task 2 adds the short-circuit to check_eprom_blank.
 # The negative control (non-SRAM still issues blank-check) MUST PASS both now
 # and after the fix.
-# ---------------------------------------------------------------------------
 
 # Minimal eprom_data_dict for an FM1608-class chip (SRAM, proto 0x28).
 # ``protocol-id`` mirrors the field name written by database._map_data.
@@ -1000,12 +971,10 @@ class TestSramBlankCheckShortCircuit:
         assert setup_called[0][0] == "W27C512"
 
 
-# ---------------------------------------------------------------------------
 # pin the SDP payload-free wire shape + the emitted
 # `flags` residue + the new FLAG_SKIP_SDP_UNLOCK bit, all at the wire
 # boundary (the composed command_dict SerialCommunicator.find_and_connect
 # receives), not at the Python function-return boundary.
-# ---------------------------------------------------------------------------
 
 
 def _at28c256_programmer_dict() -> dict:
@@ -1208,13 +1177,6 @@ class TestSdpOperationsWireShape:
             )
 
         assert captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK
-
-
-# ---------------------------------------------------------------------------
-# D-15 / HOST-06: the 0x86 ack requirement inside
-# write_eprom, both ack directions plus the flag-not-set case, and the
-# bounded seen_message_ids record itself.
-# ---------------------------------------------------------------------------
 
 
 def _drive_write_eprom_for_ack_check(

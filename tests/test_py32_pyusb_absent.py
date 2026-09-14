@@ -48,10 +48,8 @@ from firestarter import py32_dfu
 
 _APP_DIR = Path(__file__).parent.parent
 
-# ---------------------------------------------------------------------------
 # In-process half (Task 1): covers the two statements the removed
 # `# pragma: no cover` used to hide, and pins `PyusbMissingError`'s shape.
-# ---------------------------------------------------------------------------
 
 
 def test_require_usb_raises_pyusb_missing_error(
@@ -77,8 +75,6 @@ def test_pyusb_missing_error_message_substrings(
     with pytest.raises(py32_dfu.PyusbMissingError) as excinfo:
         py32_dfu._require_usb()
     message = str(excinfo.value)
-    # C-4, MEASURED (127-RESEARCH.md): these three substrings are the ones
-    # actually present in py32_dfu.py's PyusbMissingError message body.
     assert "pip install 'firestarter[py32]'" in message
     assert "libusb" in message
     assert "WinUSB" in message
@@ -133,18 +129,6 @@ def test_require_usb_pragma_is_gone_and_the_other_two_remain() -> None:
     total_pragmas = sum(1 for line in lines if "pragma: no cover" in line)
     assert total_pragmas == 2
 
-
-# ---------------------------------------------------------------------------
-# Subprocess half (Task 2): a genuine `sys.meta_path` import blocker, run in a
-# child process where `usb` is truly unreachable -- proving the import
-# *graph* is clean, not merely that this devcontainer happens to lack pyusb.
-# Copies the harness idiom established by `tests/test_skip_census.py`
-# (`functools.lru_cache`, `[sys.executable, ...]`, `cwd=str(_APP_DIR)`,
-# `capture_output=True, text=True`, an explicit `timeout=`, and a
-# *prove-the-argument-took-effect* pre-check) -- see that module's docstring
-# for why an in-process re-run cannot substitute when bindings are frozen at
-# import (Q4, `127-RESEARCH.md`).
-# ---------------------------------------------------------------------------
 
 _CHILD_PROGRAM_TEMPLATE = '''
 import importlib.abc

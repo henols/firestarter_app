@@ -31,9 +31,7 @@ from firestarter.eprom_operations import _boot_block_hint_message
 from firestarter.frame_parser import Response
 from firestarter.messages import MSG_ERR_FL4_VERIFY_TIMEOUT
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 _PROTO_FLASH4 = 5  # protocol 0x05 (FLASH_AMD_STD)
 _MEM_SIZE_W29C040 = 524288  # 512 KB
@@ -57,14 +55,12 @@ def _make_timeout_response(failing_addr: int) -> Response:
     )
 
 
-# ---------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
 
 
 def test_boot_block_hint_first_16k() -> None:
     """flash4 timeout at first-16K address (< 0x4000) emits the boot-block hint."""
-    resp = _make_timeout_response(0x0000FF)  # last byte of first page (Phase 93 repro)
+    resp = _make_timeout_response(0x0000FF)
     hint = _boot_block_hint_message(resp, _PROTO_FLASH4, _MEM_SIZE_W29C040)
     assert hint is not None, (
         "FIX-01b: boot-block hint must be returned for first-16K address 0x0000ff"

@@ -89,7 +89,6 @@ from pathlib import Path
 
 from firestarter import py32_dfu
 
-# ---------------------------------------------------------------------------
 # Independent constant block.
 #
 # Every value below is written from the specification, with a citing
@@ -97,7 +96,6 @@ from firestarter import py32_dfu
 # from `firestarter.py32_dfu` to build the expectation. `py32_dfu` is
 # imported above ONLY to supply the *observed* value each test compares
 # against.
-# ---------------------------------------------------------------------------
 
 # USB DFU 1.1 (usb.org "USB Device Firmware Upgrade Specification, Revision
 # 1.1"), Section 3, Table 3.2 "DFU Class-Specific Request Values" (page 10 of
@@ -120,11 +118,6 @@ _ANCHORED_DFU_ABORT = 6
 # (T-127-03-05).
 _ANCHORED_DFU_FUNCTIONAL_DESCRIPTOR_TYPE = 0x21
 
-# USB DFU 1.1 §4.1.3, Table 4.2, offset 2 (bmAttributes), "Bit 1: upload
-# capable (bitCanUpload)" (page 13, directly read) -- mask, not a bit index.
-# Anchored as a bare literal ONLY: the module's own bitCanUpload mask
-# constant does not exist until Plan 127-09 creates it, so no equality
-# assertion is written against it here (see this module's docstring).
 _ANCHORED_BIT_CAN_UPLOAD_MASK = 0x02
 
 # UM1504 (Puya/ST DfuSe application note) DfuSe command values, sent as a
@@ -140,19 +133,11 @@ _ANCHORED_DFUSE_READ_UNPROTECT = 0x92
 # residual as the DfuSe commands above.
 _ANCHORED_DFUSE_VERSION = 0x011A
 
-# PY32F071xB flash origin. Same A1 residual for the "from UM1504" half of
-# this claim; independently CONFIRMED against the live firmware linker
-# script by 127-RESEARCH.md §C-7/§Q2
-# (platform/py32f071/linker/PY32F071xB_FLASH.ld: `FLASH : ORIGIN =
-# 0x08000000`), which is a different, and stronger, independent source than
-# the module under test.
 _ANCHORED_FLASH_BASE = 0x08000000
 
 
-# ---------------------------------------------------------------------------
 # Assertions -- one test per group, comparing the module's constant against
 # the independent literal above.
-# ---------------------------------------------------------------------------
 
 
 def test_dfu_request_codes_match_usb_dfu_11_table_3_2() -> None:
@@ -235,14 +220,8 @@ def test_bit_can_upload_mask_matches_usb_dfu_11_section_4_1_3() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Forward-holding test -- C-2's measured property, held forward.
-# ---------------------------------------------------------------------------
-
 _TEST_PY32_DFU = Path(__file__).parent / "test_py32_dfu.py"
 
-# Same regex 127-RESEARCH.md §C-2 used to measure that no such assertion
-# currently exists in tests/test_py32_dfu.py.
 _SOURCE_SOURCE_ORACLE_RE = re.compile(
     r"assert\s+(?:py32_dfu\.)?(?:DFU|DFUSE|FLASH)_[A-Z_]+\s*==\s*(?:0x)?[0-9]"
 )

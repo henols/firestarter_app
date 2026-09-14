@@ -188,10 +188,8 @@ EXPECTED_REFUSE_PART_NUMBERS: frozenset[str] = frozenset(
 )
 
 
-# ---------------------------------------------------------------------------
 # Shared helper -- copied in shape from test_sdp_db_invariant.py's
 # _select_0x0d_chips, self-contained per that module's own convention.
-# ---------------------------------------------------------------------------
 
 
 def _select_0x0d_chips(db: dict) -> list[tuple[str, dict]]:
@@ -246,9 +244,7 @@ def _assert_partition_totality(selected: list[tuple[str, dict]]) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 1: partition covers exactly the 84 algorithm==13 entries
-# ---------------------------------------------------------------------------
 
 
 def test_partition_covers_exactly_the_84_0x0d_entries() -> None:
@@ -277,9 +273,7 @@ def test_partition_covers_exactly_the_84_0x0d_entries() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 2: allow/refuse token sets are disjoint, total, and match production
-# ---------------------------------------------------------------------------
 
 
 def test_allow_and_refuse_token_sets_are_disjoint_and_total() -> None:
@@ -326,9 +320,7 @@ def test_allow_and_refuse_token_sets_are_disjoint_and_total() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 3: predicate agrees with the derived partition on all 84 entries
-# ---------------------------------------------------------------------------
 
 
 def test_predicate_agrees_with_the_derived_partition_on_all_84_entries() -> None:
@@ -364,9 +356,7 @@ def test_predicate_agrees_with_the_derived_partition_on_all_84_entries() -> None
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 4: synthetic unknown 0x0D entry is refused, non-vacuously
-# ---------------------------------------------------------------------------
 
 
 def test_synthetic_unknown_0x0d_entry_is_refused_non_vacuous() -> None:
@@ -401,9 +391,7 @@ def test_synthetic_unknown_0x0d_entry_is_refused_non_vacuous() -> None:
         )
 
 
-# ---------------------------------------------------------------------------
 # Leg 5: all 19 DIP24_2816 parts are refused
-# ---------------------------------------------------------------------------
 
 
 def test_all_dip24_2816_parts_are_refused() -> None:
@@ -437,9 +425,7 @@ def test_all_dip24_2816_parts_are_refused() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 6: both FRAM parts are refused with the FRAM reason (branch order)
-# ---------------------------------------------------------------------------
 
 
 def test_both_fram_parts_are_refused_with_the_fram_reason() -> None:
@@ -479,11 +465,6 @@ def test_both_fram_parts_are_refused_with_the_fram_reason() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Leg 7: HOST-04's named pre-SDP class (plus second sources) is refused
-# ---------------------------------------------------------------------------
-
-
 def test_host04_named_pre_sdp_class_is_refused() -> None:
     """2804/2816 sit on DIP24_2816 while 2817 sits on DIP28_28C64 -- the trio
     spans two pinouts and no pinout rule can express it (RESEARCH F-03),
@@ -520,9 +501,7 @@ def test_host04_named_pre_sdp_class_is_refused() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 8: all 9 adapter-required parts are refused by capability
-# ---------------------------------------------------------------------------
 
 
 def test_all_nine_adapter_required_parts_are_refused_by_capability() -> None:
@@ -559,9 +538,7 @@ def test_all_nine_adapter_required_parts_are_refused_by_capability() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 9: structural invariants -- consequences of the derivation, not its rule
-# ---------------------------------------------------------------------------
 
 
 def test_allow_set_contains_no_adapter_required_and_no_dip24_2816_part() -> None:
@@ -589,13 +566,6 @@ def test_allow_set_contains_no_adapter_required_and_no_dip24_2816_part() -> None
         "HOST-04: the allow-set must contain no adapter-required part and no "
         "DIP24_2816 part. Offenders:\n" + "\n".join(offenders)
     )
-
-
-# ---------------------------------------------------------------------------
-# Leg 10: F-06 dict-shape anti-vacuity -- the predicate is name-keyed, and a
-# programmer dict (resolve_chip()'s output) is provably rejected rather than
-# silently misread.
-# ---------------------------------------------------------------------------
 
 
 def test_predicate_is_name_keyed_and_a_programmer_dict_is_rejected() -> None:
@@ -632,11 +602,6 @@ def test_predicate_is_name_keyed_and_a_programmer_dict_is_rejected() -> None:
         sdp.sdp_capability_for_entry(programmer_dict, "at28c256")
 
 
-# ---------------------------------------------------------------------------
-# Leg 11: import purity (D-03) -- sdp_capability.py stays stdlib-only
-# ---------------------------------------------------------------------------
-
-
 def test_sdp_capability_module_imports_nothing_but_stdlib_typing() -> None:
     """D-03 purity, required so Phase 121's GATE-01 has a stable shape to
     assert against: the predicate must stay importable by both the Click
@@ -661,10 +626,8 @@ def test_sdp_capability_module_imports_nothing_but_stdlib_typing() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 12: fail-closed on the one path CI cannot see -- a local database.json
 # override reaching the live DB at runtime.
-# ---------------------------------------------------------------------------
 
 
 def test_local_override_0x0d_entry_is_refused_at_runtime(tmp_path) -> None:
@@ -684,10 +647,6 @@ def test_local_override_0x0d_entry_is_refused_at_runtime(tmp_path) -> None:
                 "SYNTHETIC_LOCAL_MFR_120_05": [
                     {
                         "part_number": synthetic_part_number,
-                        # 148-04 D-10: _map_data direct-indexes these numeric
-                        # keys and raises KeyError if absent -- this synthetic
-                        # fixture must carry them even though the predicate
-                        # under test (SDP capability) never reads them.
                         "electrical": {"vcc_mv": 5000, "vpp_mv": 0},
                         "programming": {
                             "algorithm": _ALGORITHM_0X0D,
@@ -718,7 +677,6 @@ def test_local_override_0x0d_entry_is_refused_at_runtime(tmp_path) -> None:
     assert sdp.REASON_NOT_CAPABLE in reason
 
 
-# ---------------------------------------------------------------------------
 # Leg 13: the M8720 wrong-protocol reason, pinned directly against the live
 # `sdp_capability()` name-keyed wrapper (quick task 260822-hs). Re-homed
 # here from `tests/test_dev_test_cmd.py`'s
@@ -732,7 +690,6 @@ def test_local_override_0x0d_entry_is_refused_at_runtime(tmp_path) -> None:
 # `sdp_capability()`'s own output belongs in a focused unit test on
 # `sdp_capability()` itself, not smuggled in through a report field -- this
 # is that test.
-# ---------------------------------------------------------------------------
 
 
 def test_m8720_wrong_protocol_reason_is_stable_and_pinned() -> None:

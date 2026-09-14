@@ -52,9 +52,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# ---------------------------------------------------------------------------
 # Module constants -- the two detection markers + a defensive size bound
-# ---------------------------------------------------------------------------
 
 _DEV_TEST_MARKER = "[dev test]"
 
@@ -69,9 +67,7 @@ _FENCE = re.compile(r"```json\s*\n(.*?)\n```", re.DOTALL)
 _MAX_BODY_BYTES = 131_072
 
 
-# ---------------------------------------------------------------------------
 # Detection + defensive extraction
-# ---------------------------------------------------------------------------
 
 
 def _extract_fenced_report(body: str | None) -> dict[str, Any] | None:
@@ -114,9 +110,7 @@ def parse_devtest_body(title: str | None, body: str | None) -> dict[str, Any] | 
     return _extract_fenced_report(body)
 
 
-# ---------------------------------------------------------------------------
 # DB-diff surface -- current-vs-proposed + ladder_state
-# ---------------------------------------------------------------------------
 
 
 def extract_db_diff(report_obj: dict[str, Any]) -> dict[str, Any]:
@@ -156,9 +150,7 @@ def _read_live_support_status(chip: str | None) -> str | None:
     return (raw_config or {}).get("support_status", "supported")
 
 
-# ---------------------------------------------------------------------------
 # Cross-report N-agreeing -- dedup_fingerprint grouping ONLY
-# ---------------------------------------------------------------------------
 
 
 def count_agreeing(bodies: list[str]) -> dict[str, int]:
@@ -184,9 +176,7 @@ def count_agreeing(bodies: list[str]) -> dict[str, int]:
     return counts
 
 
-# ---------------------------------------------------------------------------
 # Rendering (plain-text; no third-party dependency)
-# ---------------------------------------------------------------------------
 
 # Literal #2 of three. Identical in
 # VALUE to `firestarter/diagnostic_report.py`'s `NOT_REPORTED`, but defined
@@ -316,9 +306,7 @@ def render_diff(
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
 # CLI (argparse, stdlib-only)
-# ---------------------------------------------------------------------------
 
 
 def _run_single_mode(title: str, body_file: Path | None, *, live_db: bool) -> int:

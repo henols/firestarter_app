@@ -56,9 +56,6 @@ def _aliases(chip):
     return {a.split("@")[0].strip() for a in pn.split(",") if a.strip()}
 
 
-# ---------------------------------------------------------------------------
-# VAR-03 (Phase 86): variant-decode classification assertions (Wave-0 oracle)
-# ---------------------------------------------------------------------------
 class TestVariantDecodeClassification:
     """VAR-03 (Phase 86): FM1608 + X88C64 classification, pinned BEFORE the
     Plan-02 classifier rewrite so Plan 02 is a refactor-under-test.
@@ -137,9 +134,6 @@ class TestVariantDecodeClassification:
             )
 
 
-# ---------------------------------------------------------------------------
-# DB-01: Unknown-protocol DIP chip included as protocol-not-implemented
-# ---------------------------------------------------------------------------
 class TestProtocolNotImplementedInclusion:
     """DB-01: X88C64P (proto 0x34) appears with support_status=protocol-not-implemented."""
 
@@ -170,15 +164,9 @@ class TestProtocolNotImplementedInclusion:
             )
 
 
-# ---------------------------------------------------------------------------
-# DB-02: 9 damage-hazard 24-pin EEPROMs included as adapter-required
-# ---------------------------------------------------------------------------
 class TestAdapterRequired24Pin:
     """DB-02: The 9 damage-hazard DIP24 EEPROMs appear as adapter-required."""
 
-    # Part-number substrings expected from the 9 families (D-02).
-    # These match the part_number values that build_db.py will emit after
-    # stripping @PACKAGE suffixes from the raw infoic.xml name strings.
     _EXPECTED_FAMILIES = [
         "AT28C04",
         "AT28C04E",
@@ -234,9 +222,6 @@ class TestAdapterRequired24Pin:
         )
 
 
-# ---------------------------------------------------------------------------
-# DB-03: NMOS VPP correction
-# ---------------------------------------------------------------------------
 class TestNmosVppCorrection:
     """DB-03: M2716/M2732 and M2732A have corrected VPP and correct support_status."""
 
@@ -325,9 +310,6 @@ class TestNmosVppCorrection:
             )
 
 
-# ---------------------------------------------------------------------------
-# DB-05 / D-07: Universal support_status field
-# ---------------------------------------------------------------------------
 class TestSupportStatusUniversal:
     """DB-05/D-07: Every chip record carries an explicit support_status key."""
 
@@ -371,9 +353,6 @@ class TestSupportStatusUniversal:
         )
 
 
-# ---------------------------------------------------------------------------
-# DB-02 (Plan 67.1-01): SRAM pinout corrections — 14 chips, 2 groups
-# ---------------------------------------------------------------------------
 class TestSramPinoutCorrections:
     """DB-02 (67.1): The 14 native-SRAM DIP chips that previously fell through
     resolve_pinout_key to wrong EPROM pinouts now carry correct SRAM pinouts.
@@ -496,9 +475,6 @@ class TestSramPinoutCorrections:
         )
 
 
-# ---------------------------------------------------------------------------
-# DB-04 (Plan 67.1-01): unsupported_reason strings begin with SC-required wording
-# ---------------------------------------------------------------------------
 class TestUnsupportedReasonStrings:
     """DB-04 Approach A (67.1-01): the three unsupported_reason strings in
     build_db.py now begin with the DB-04 SC#2-required status wording so the
@@ -639,9 +615,6 @@ class TestUnsupportedReasonStrings:
             )
 
 
-# ---------------------------------------------------------------------------
-# D-01: Serial/SMD parts must still be skipped
-# ---------------------------------------------------------------------------
 class TestSerialSmdStillSkipped:
     """D-01: DataFlash (proto 0x04) and FWH (proto 0x11) parts remain absent."""
 

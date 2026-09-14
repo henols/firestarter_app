@@ -274,7 +274,7 @@ def test_read_programmer_identity_scrub_collapses_an_empty_identity_to_absent(
     fake_serial.feed(_ok_frame_bytes())
     fake_serial.feed(MSG_END_DONE.to_bytes(1, "big"))
     comm = make_comm()
-    comm.firmware_identity = ""  # zero-length CAP-02 tail
+    comm.firmware_identity = ""
 
     hw = HardwareManager(hw_config)
     with patch(
@@ -364,16 +364,6 @@ def test_read_vpp_voltage_ready_not_ok_returns_false(
     ):
         ok = hw.read_vpp_voltage()
     assert ok is False
-
-
-# ---------------------------------------------------------------------------
-# Wave-0 RED scaffold (v1.21 Phase 111, VOLT-01) -- measured-voltage sampler.
-#
-# `_parse_voltage_frame` / `sample_vpp_mv` / `sample_vpe_mv` do NOT exist yet
-# on `HardwareManager` -- Plan 02 creates them. These tests are EXPECTED to
-# fail with AttributeError until then; that RED state is the Wave-0
-# deliverable (111-VALIDATION.md). Do NOT stub the production symbols here.
-# ---------------------------------------------------------------------------
 
 
 def test_parse_voltage_frame_reconstructs_mv(hw_config) -> None:
@@ -466,14 +456,12 @@ def test_sample_median_of_even_n_off_grid(hw_config, make_comm, fake_serial) -> 
     assert result == 20950
 
 
-# ---------------------------------------------------------------------------
 # dev-test-vpp-vpe-timeout fix (2026-07-03) -- `_sample_one_voltage` now
 # sends an explicit DONE after its n-sample loop and BEFORE disconnecting,
 # so the firmware's hw_read_voltage handler (which now recognizes OP_MSG_DONE,
 # mirroring eprom_write) ends the command immediately instead of relying on
 # its 1s watchdog. This replaces the superseded drain/retry host-side
 # mitigation (reverted commits f7ab92a, 2352b5f) with the real firmware fix.
-# ---------------------------------------------------------------------------
 
 
 def test_sample_vpp_mv_sends_done_before_disconnect(

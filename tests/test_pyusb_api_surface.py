@@ -47,11 +47,6 @@ import usb.core
 
 from tests.test_py32_dfu import _FakeUsbDevice
 
-# Independent expectation, written here rather than derived from
-# `inspect` at import time -- this is what makes a real pyusb parameter
-# rename or reorder detectable rather than silent. Measured against pyusb
-# 1.3.1 (`127-RESEARCH.md` §Q3); all five production call-sites in
-# `firestarter/py32_dfu.py` pass these positionally.
 _CTRL_TRANSFER_PARAMS = [
     "self",
     "bmRequestType",

@@ -5,7 +5,6 @@ import xml.etree.ElementTree as ET
 
 import requests
 
-# ==========================================
 # 1. CONFIGURATION
 # ==========================================
 # Pinned to the SHA recorded in tools/DECODE-NOTES.md §0/§3 so the fetch is
@@ -23,13 +22,9 @@ PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
 # the EXTRA_CHIPS block in main()). Physically-real chips absent from infoic.xml.
 EXTRA_CHIPS_FILE = os.path.join(os.path.dirname(__file__), "extra_chips.json")
 
-# ==========================================
 # 2. PINOUT LIBRARY (The Missing Physical Layer)
-# ==========================================
 
-# ==========================================
 # 3. LOGIC MAPPERS
-# ==========================================
 
 # This map translates the numeric protocol ID from upstream's XML
 # into a human-readable string that Firestarter's database uses.
@@ -176,9 +171,7 @@ _PGM_ON_PIN31_MAX_SIZE = 262144
 with open(PINOUT_FILE) as _f:
     VALID_PINOUT_KEYS = set(json.load(_f).keys())
 
-# ==========================================
 # 4. PROCESSING FUNCTIONS
-# ==========================================
 
 
 def resolve_pinout_key(

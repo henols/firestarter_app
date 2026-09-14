@@ -56,13 +56,6 @@ def test_resolve_chip_conversion_correctness(db):
     assert resolve_chip("W27C512", db=db) == expected
 
 
-# ---------------------------------------------------------------------------
-# runtime-boundary tests (D-12, T-66-01)
-# resolve_chip must refuse non-supported chips (support_status != "supported")
-# BEFORE any wire dict is built or serial byte emitted.
-# ---------------------------------------------------------------------------
-
-
 def test_resolve_chip_non_supported_raises_not_implemented(db):
     """X88C64P (protocol-not-implemented, 0x34) must raise ChipNotImplementedError.
 
@@ -130,14 +123,6 @@ def test_resolve_chip_guard_fires_before_convert_to_programmer(db):
         with pytest.raises(ChipNotImplementedError):
             resolve_chip("X88C64P", db=db)
         mock_convert.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# HOST-04 algorithm-presence guard (D-01/D-02, SC#4).
-# A support_status=="supported" entry whose programming.algorithm is absent
-# or 0 must still be refused, BEFORE any wire dict is built or serial byte
-# emitted. Mirrors the firmware's protocol==0 -> 0xBB fail-close.
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(

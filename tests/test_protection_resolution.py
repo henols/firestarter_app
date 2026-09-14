@@ -36,9 +36,7 @@ from firestarter.protection_readability import (
     protection_gate_for_entry,
 )
 
-# ---------------------------------------------------------------------------
 # Leg 1: algorithm-derived classes, table-driven.
-# ---------------------------------------------------------------------------
 
 _ALGORITHM_DERIVED_CASES: tuple[tuple[int, str], ...] = (
     tuple((pid, "no_mechanism") for pid in sorted(NO_MECHANISM_PROTOCOL_IDS))
@@ -77,11 +75,6 @@ def test_curation_protocol_ids_are_disjoint_from_algorithm_derived_sets() -> Non
         seen |= s
 
 
-# ---------------------------------------------------------------------------
-# Leg 2: 0x34 is not_implemented, named separately (OD-2 / 151-DESIGN.md §4).
-# ---------------------------------------------------------------------------
-
-
 def test_0x34_xicor_x88c64p_resolves_not_implemented() -> None:
     """OD-2: D-09's seven no-mechanism algorithms sum to 405, not 406. The
     406th row is algorithm 0x34 (52) -- `XICOR/X88C64P,X88C64S` -- which
@@ -114,11 +107,6 @@ def test_0x10_and_0x34_are_distinguished_in_the_not_implemented_reason() -> None
     assert reason_10 != reason_34
 
 
-# ---------------------------------------------------------------------------
-# Leg 3: the W29C022 named leg -- D-06's own stated acceptance condition.
-# ---------------------------------------------------------------------------
-
-
 def test_w29c022_named_in_the_refusal() -> None:
     """D-06's own acceptance condition: if the refusal for the
     `W29C020,W29C020C,W29C022` DB entry does not name `W29C022`
@@ -131,11 +119,6 @@ def test_w29c022_named_in_the_refusal() -> None:
     )
     assert token == "undocumented_alias"
     assert "W29C022" in reason
-
-
-# ---------------------------------------------------------------------------
-# Leg 4: the C-6 alias-set leg.
-# ---------------------------------------------------------------------------
 
 
 def test_c6_w29c040_w29c042_both_named_with_differing_states() -> None:
@@ -158,9 +141,7 @@ def test_c6_w29c040_w29c042_both_named_with_differing_states() -> None:
     assert w29c040_fragment != w29c042_fragment
 
 
-# ---------------------------------------------------------------------------
 # Leg 5: the mixed third Winbond entry.
-# ---------------------------------------------------------------------------
 
 
 def test_mixed_third_winbond_entry_names_undocumented_aliases() -> None:
@@ -182,9 +163,7 @@ def test_mixed_third_winbond_entry_names_undocumented_aliases() -> None:
     assert "W29C011A" in reason
 
 
-# ---------------------------------------------------------------------------
 # Leg 6: unanimity, both directions, with a non-vacuous fixture-setup check.
-# ---------------------------------------------------------------------------
 
 
 def test_unanimity_both_directions() -> None:
@@ -210,9 +189,7 @@ def test_unanimity_both_directions() -> None:
     assert "W29C022" in reason
 
 
-# ---------------------------------------------------------------------------
 # Leg 7: no per-token verdict.
-# ---------------------------------------------------------------------------
 
 
 def test_returns_a_single_2_tuple_never_a_per_token_collection() -> None:
@@ -232,9 +209,7 @@ def test_returns_a_single_2_tuple_never_a_per_token_collection() -> None:
     assert token != "read_permitted"
 
 
-# ---------------------------------------------------------------------------
 # Leg 8: the three raise controls.
-# ---------------------------------------------------------------------------
 
 
 def test_none_entry_raises_key_error() -> None:
@@ -272,9 +247,7 @@ def test_unclassed_protocol_id_raises_value_error_naming_the_synthetic_row() -> 
     assert "W29C020" not in message
 
 
-# ---------------------------------------------------------------------------
 # Leg 9: purity.
-# ---------------------------------------------------------------------------
 
 
 def test_purity_repeatable_and_non_mutating() -> None:
@@ -286,11 +259,6 @@ def test_purity_repeatable_and_non_mutating() -> None:
 
     assert result_1 == result_2
     assert entry == entry_before
-
-
-# ---------------------------------------------------------------------------
-# Leg 10: AMBIGUOUS_DOC_CITATIONS (C-17) surfaces in the refusal reason.
-# ---------------------------------------------------------------------------
 
 
 def test_ambiguous_doc_citation_surfaces_in_refusal_reason() -> None:
@@ -306,8 +274,6 @@ def test_ambiguous_doc_citation_surfaces_in_refusal_reason() -> None:
     ambiguous_token = next(iter(AMBIGUOUS_DOC_CITATIONS))
     note = AMBIGUOUS_DOC_CITATIONS[ambiguous_token]
 
-    # The worked W29C020,W29C020C,W29C022 entry contains the bare W29C020
-    # token that AMBIGUOUS_DOC_CITATIONS records the C-17 disagreement for.
     token, reason = protection_gate_for_entry(
         {"protocol-id": 5, "name": f"{ambiguous_token},W29C020C,W29C022"},
         ambiguous_token,

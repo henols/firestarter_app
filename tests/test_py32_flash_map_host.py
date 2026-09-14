@@ -50,15 +50,6 @@ from firestarter import py32_dfu
 from firestarter.py32_dfu import ImageError, Py32DfuFlasher
 from tests.fw_presence import FW_ROOT, fw_path, requires_fw
 
-# ---------------------------------------------------------------------------
-# Independent literals (D-13). Cited from platform/py32f071/linker/PY32F071xB_FLASH.ld,
-# read live at Plan 127-05 authoring time:
-#   FLASH   (rx) : ORIGIN = 0x08000000, LENGTH = 120K
-#   CONFIG  (r)  : ORIGIN = 0x0801E000, LENGTH = 8K
-#   BOOTLOADER (rx) : ORIGIN = 0x08000000, LENGTH = 0  (named zero-length seam)
-# Never imported from firestarter.py32_dfu -- these are this module's own
-# independently-typed expectation.
-# ---------------------------------------------------------------------------
 _EXPECTED_FLASH_BASE = 0x08000000
 _EXPECTED_APP_REGION_SIZE = 122880  # 120 * 1024
 _EXPECTED_APP_REGION_END = 0x0801E000
@@ -133,9 +124,6 @@ class TestEnvelopeBehaviour:
         )
 
 
-# ---------------------------------------------------------------------------
-# D-14: the fail-closed cross-repo linker-script parity gate.
-#
 # The path is resolved through `fw_path()` -- a hand-built relative path out
 # of `tests/` is deliberately never constructed here. `fw_path` raises
 # `MissingScanTargetError` when the sibling repo is present but this file is
@@ -147,7 +135,6 @@ class TestEnvelopeBehaviour:
 # marker this module uses, and it fires only when the sibling repo itself
 # is genuinely absent (no `../firestarter/.git` marker), never on a
 # present-but-renamed scan target.
-# ---------------------------------------------------------------------------
 _LINKER_SCRIPT = fw_path("platform", "py32f071", "linker", "PY32F071xB_FLASH.ld")
 
 # _REGION_RE and _parse_regions below are byte-identical copies of

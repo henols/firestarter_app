@@ -66,31 +66,15 @@ from firestarter.messages import (
 
 from .conftest import build_frame
 
-# ---------------------------------------------------------------------------
 # Entry-point resolution
-# ---------------------------------------------------------------------------
 
 _WHICH = shutil.which("firestarter")
 FIRESTARTER = _WHICH if _WHICH is not None else None
 
-# Hermetic config dir for subprocess goldens. The DB-backed subprocess tests
-# (list/info/search) invoke the real `firestarter` entry point, which merges a
-# developer's ``~/.firestarter/database.json`` user-override. The golden
-# snapshots were pinned WITHOUT any override, so a local override (e.g. the
-# 2516 user-override entry) would leak a spurious row into `list`/`info`
-# output and break the snapshot on the bench machine while CI (no override)
-# stays green. Pointing ``FIRESTARTER_CONFIG_DIR`` at an empty temp dir applies
-# the same isolation the direct-DB tests get via ``skip_local_override=True``
-# (Phase 36 Pitfall-4) at the subprocess boundary, keeping the suite
-# deterministic everywhere. (HOME cannot be used for this — the editable
-# user-site install of ``firestarter`` and its deps is HOME-relative, so
-# overriding HOME breaks the subprocess import.)
 _CLEAN_CONFIG_DIR = tempfile.mkdtemp(prefix="fs-characterization-cfg-")
 
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 def normalize_output(s: str) -> str:
@@ -121,7 +105,7 @@ def normalize_output(s: str) -> str:
     # This handles both bare paths and paths inside Python traceback strings like
     # File "/home/vscode/.local/bin/firestarter", line 8.
     # Broad root list so snapshots stay identical across dev containers, pipx/venv,
-    # system, /opt, and CI installs (WR-02).
+    # system, /opt, and CI installs.
     s = re.sub(
         r"(?:/home|/workspaces|/tmp|/Users|/opt|/usr|/root|/var|/private|/Library|/srv|/mnt)"
         r'(?:/[^\s",\')]+)+',
@@ -161,9 +145,7 @@ def run_firestarter(*args: str) -> tuple[str, str, int]:
     )
 
 
-# ---------------------------------------------------------------------------
 # Top-level --help and --version
-# ---------------------------------------------------------------------------
 
 
 def test_help(snapshot):
@@ -180,9 +162,7 @@ def test_version(snapshot):
     assert stdout == snapshot
 
 
-# ---------------------------------------------------------------------------
 # Subcommand --help snapshots
-# ---------------------------------------------------------------------------
 
 
 def test_help_read(snapshot):
@@ -331,10 +311,8 @@ def test_help_dev(snapshot):
     assert stdout == snapshot
 
 
-# ---------------------------------------------------------------------------
 # DB-backed commands (list / info / search)
 # These never call find_and_connect; no port mock needed.
-# ---------------------------------------------------------------------------
 
 
 def test_list(snapshot):
@@ -386,9 +364,7 @@ def test_search_no_results(snapshot):
     assert stdout == snapshot
 
 
-# ---------------------------------------------------------------------------
 # Usage / argument-parse errors
-# ---------------------------------------------------------------------------
 
 
 def test_error_unknown_command(snapshot):
@@ -463,25 +439,7 @@ def test_no_blank_check_polarity(snapshot):
     assert stdout == snapshot
 
 
-# ---------------------------------------------------------------------------
 # Hardware-absent path (D-05b / D-05c determinism)
-#
-# D-19 (121-04): the load-bearing patch here is
-# ``SerialCommunicator._list_potential_ports``, NOT ``serial.tools.list_ports.comports``.
-# ``_list_potential_ports(preferred_port)`` prepends ``preferred_port`` (sourced
-# from ``config_manager.get_value("port")`` in ``find_and_connect``) BEFORE it
-# ever calls ``comports()`` — and when the port was named on THIS invocation it
-# returns ``[preferred_port]`` alone, skipping ``comports()`` entirely (the
-# ``restrict_to_preferred`` arm; hence the ``**_kw`` in the stubs below).
-# A ``comports``-only patch is therefore defeated by
-# a saved port in an operator's ``~/.firestarter/config.json`` (or, in CI, by a
-# `` FIRESTARTER_CONFIG_DIR``-scoped config with a "port" key) even though no
-# real board is attached — see
-# `.planning/notes/reference_characterization_no_programmer_tests_fail_with_live_board.md`.
-# ``_list_potential_ports`` is patched via ``monkeypatch.setattr(..., raising=True)``
-# so a future rename of that method fails loudly instead of silently no-op'ing.
-# The ``comports`` patch is kept too (belt and suspenders / documents original
-# intent) but is not load-bearing on its own.
 #
 # The load-bearing ASSERTION is also not the `False` return value — a real
 # board that refuses a connection also returns False, so `result is False`
@@ -490,7 +448,6 @@ def test_no_blank_check_polarity(snapshot):
 # was never called, proving no port was ever opened.
 #
 # This runs IN-PROCESS (monkeypatch cannot cross the subprocess boundary).
-# ---------------------------------------------------------------------------
 
 
 def test_no_programmer_found_read(monkeypatch):
@@ -516,8 +473,6 @@ def test_no_programmer_found_read(monkeypatch):
     from firestarter.eprom_operations import EpromOperator
 
     config = ConfigManager()
-    # skip_local_override=True is MANDATORY (phase 36 rule, Pitfall-4): a ~/.firestarter
-    # override of W27C512 on an operator bench must not flip this assertion in CI.
     db = EpromDatabase(skip_local_override=True)
     eprom_data = db.get_eprom("W27C512")
     assert eprom_data is not None
@@ -527,9 +482,6 @@ def test_no_programmer_found_read(monkeypatch):
     # read_eprom returns False when no programmer is found
     result = operator.read_eprom("W27C512", eprom_cmd, output_file="/dev/null")
     assert result is False
-    # Load-bearing assertion (D-19): no serial port was ever opened. The
-    # `False` return alone cannot distinguish "no programmer found" from
-    # "found a real board and it refused".
     mock_serial.assert_not_called()
 
 
@@ -549,8 +501,6 @@ def test_no_programmer_found_erase(monkeypatch):
     from firestarter.eprom_operations import EpromOperator
 
     config = ConfigManager()
-    # skip_local_override=True is MANDATORY (phase 36 rule, Pitfall-4): a ~/.firestarter
-    # override of W27C512 on an operator bench must not flip this assertion in CI.
     db = EpromDatabase(skip_local_override=True)
     eprom_data = db.get_eprom("W27C512")
     assert eprom_data is not None
@@ -559,13 +509,9 @@ def test_no_programmer_found_erase(monkeypatch):
     operator = EpromOperator(config)
     result = operator.erase_eprom("W27C512", eprom_cmd)
     assert result is False
-    # Load-bearing assertion (D-19): no serial port was ever opened.
     mock_serial.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
-# In-process happy-path characterizations (D-02)
-#
 # These use make_comm / fake_serial fixtures with canned firmware responses.
 # The EpromOperator._run_state_machine is called with operator.comm injected
 # directly — bypassing find_and_connect entirely.
@@ -578,7 +524,6 @@ def test_no_programmer_found_erase(monkeypatch):
 #   → send_ack (start END)
 #   ← MSG_END_DONE   (END complete)
 #   → send_ack (final ack)
-# ---------------------------------------------------------------------------
 
 
 def _make_operator_with_comm(comm):

@@ -27,7 +27,7 @@ from typing import Any, Mapping  # noqa: UP035
 # `database.py:_map_data`) that identifies the `0x0D` / EEPROM_PARALLEL
 # dispatch bucket this predicate is scoped to. Read `protocol-id` from
 # `db.get_eprom()`'s output — never `algorithm` from `resolve_chip()` /
-# `convert_to_programmer()`, which do not carry this key (RESEARCH F-02, F-06).
+# `convert_to_programmer()`, which do not carry this key.
 SDP_PROTOCOL_ID = 13
 
 # The distinct uppercased alias tokens for the allowed parts, comma-split from
@@ -122,7 +122,7 @@ FRAM_TOKENS: frozenset[str] = frozenset({"FM28V020", "MB85R256H"})
 
 # The named pre-SDP class plus its identical-generation second sources.
 # `2817` sits on `DIP28_28C64` while `2804`/`2816` sit on `DIP24_2816`, so the
-# trio spans two pinouts and no pinout rule can express it (RESEARCH F-03).
+# trio spans two pinouts and no pinout rule can express it.
 PRE_SDP_NAMED_TOKENS: frozenset[str] = frozenset(
     {
         "2804",

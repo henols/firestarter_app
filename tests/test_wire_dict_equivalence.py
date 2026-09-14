@@ -97,35 +97,17 @@ from pathlib import Path
 
 from firestarter.database import EpromDatabase
 
-# ---------------------------------------------------------------------------
-# Path resolution (S-2) -- self-contained, not in conftest.py.
-# ---------------------------------------------------------------------------
 _HERE = Path(__file__).resolve().parent
 _GOLDEN = _HERE / "golden" / "wire_dict_baseline.json"
-# (D-17): the committed expected-delta list on top of the
-# preserved golden -- see this file's module docstring and
-# tests/golden/wire_dict_expected_deltas_149.json's own "meta" block.
 _DELTAS_149 = _HERE / "golden" / "wire_dict_expected_deltas_149.json"
-# (D-153-05, ERASE-03): the second, field-disjoint delta layer --
-# see this file's module docstring and
-# tests/golden/wire_dict_expected_deltas_153.json's own "meta" block.
 _DELTAS_153 = _HERE / "golden" / "wire_dict_expected_deltas_153.json"
 _DELTAS_182 = _HERE / "golden" / "wire_dict_expected_deltas_182.json"
 
-# The 2 record keys Phase 148's golden itself carries page-size for
-# (the pre-existing datasheet-curated _PAGE_SIZE_BY_PART rows). This is the
-# anti-laundering assertion: a future re-capture of the golden that quietly
-# grows this set defeats the whole point of a committed delta list.
 _GOLDEN_PAGE_SIZE_RECORD_KEYS = {
     "WINBOND|W29C020,W29C020C,W29C022|7",
     "WINBOND|W29C040,W29C042|8",
 }
 
-# ---------------------------------------------------------------------------
-# The nine wire keys measured in Task 1 (RESEARCH F-8). D-06/D-14 assumed
-# five; bus-config, flags and page-size are real wire fields that a
-# five-key capture would have missed.
-# ---------------------------------------------------------------------------
 _EXPECTED_WIRE_KEYS = {
     "algorithm",
     "bus-config",
@@ -138,11 +120,9 @@ _EXPECTED_WIRE_KEYS = {
     "vpp_mv",
 }
 
-# ---------------------------------------------------------------------------
 # Real DB, captured once at module level (skip_local_override=True is
 # MANDATORY -- tests/test_characterization.py:501 states the rule verbatim:
 # a ~/.firestarter override would leak a spurious row into this capture).
-# ---------------------------------------------------------------------------
 _REAL_DB = EpromDatabase(skip_local_override=True)
 
 
@@ -198,9 +178,7 @@ def _describe_record_diff(recorded: dict, live: dict) -> str:
     return "; ".join(parts) if parts else "(no difference detected)"
 
 
-# ---------------------------------------------------------------------------
 # Test 5: golden file must exist -- loud failure, never a skip.
-# ---------------------------------------------------------------------------
 
 
 def test_golden_file_exists() -> None:
@@ -212,15 +190,6 @@ def test_golden_file_exists() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Test 1 (Phase 149 D-17 + Phase 153 D-153-05): golden PLUS exactly the 18
-# named 149 deltas PLUS exactly the 84 named 153 deltas equals the live
-# capture. The golden itself stays the pre-149 capture, byte-unchanged --
-# see tests/golden/wire_dict_expected_deltas_149.json and
-# tests/golden/wire_dict_expected_deltas_153.json.
-# ---------------------------------------------------------------------------
-
-
 def test_live_capture_matches_golden_plus_the_149_and_153_and_182_deltas() -> None:
     doc = json.loads(_GOLDEN.read_text(encoding="utf-8"))
     recorded = doc["records"]
@@ -229,11 +198,6 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_deltas() -> No
     deltas_153 = json.loads(_DELTAS_153.read_text(encoding="utf-8"))["deltas"]
     deltas_182 = json.loads(_DELTAS_182.read_text(encoding="utf-8"))["deltas"]
 
-    # (a) Anti-laundering: the golden's OWN page-size-carrying record set is
-    # exactly Phase 148's original two. A future phase that re-captures the
-    # golden to make a failure disappear breaks this assertion, keeping
-    # Phase 148's own central claim ("this migration changed nothing on the
-    # wire") legible in the same file forever.
     golden_page_size_keys = {
         key for key, wire in recorded.items() if "page-size" in wire
     }
@@ -356,9 +320,7 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_deltas() -> No
     )
 
 
-# ---------------------------------------------------------------------------
 # Test 2: wire-key union is exactly the nine measured keys.
-# ---------------------------------------------------------------------------
 
 
 def test_wire_key_union_is_exactly_nine_keys() -> None:
@@ -374,11 +336,6 @@ def test_wire_key_union_is_exactly_nine_keys() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Test 3 (D-06): vcc and vpp_volts never cross the host->wire seam.
-# ---------------------------------------------------------------------------
-
-
 def test_vcc_and_vpp_volts_never_cross_the_wire() -> None:
     live = _capture_wire_dicts(_REAL_DB)
     offenders_vcc = [key for key, wire in live.items() if "vcc" in wire]
@@ -391,12 +348,6 @@ def test_vcc_and_vpp_volts_never_cross_the_wire() -> None:
         "D-06 violated: 'vpp_volts' appeared on the wire for "
         f"{offenders_vpp_volts} -- only vpp_mv may cross the seam"
     )
-
-
-# ---------------------------------------------------------------------------
-# Test 4: non-vacuity (S-5) -- the comparison helper must be capable of
-# reporting a diff, not a vacuous always-pass check.
-# ---------------------------------------------------------------------------
 
 
 def test_describe_record_diff_is_non_vacuous() -> None:
@@ -420,14 +371,6 @@ def test_describe_record_diff_is_non_vacuous() -> None:
         f"non-vacuity failure: mutated wire key 'pulse-delay' not named in "
         f"the diff report: {diff}"
     )
-
-
-# ---------------------------------------------------------------------------
-# Test 6 (Phase 153, T-153-40): exhaustive scope proof -- exactly 84 of the
-# 746 records change, and the only field that moves is `flags`. Modelled on
-# tests/test_page_size_invariants.py's exhaustive-count leg: the 746 total is
-# re-asserted in the SAME test so the 84 subset count is meaningful.
-# ---------------------------------------------------------------------------
 
 
 def test_exactly_84_records_change_flags_and_no_other_field_moves() -> None:
@@ -468,13 +411,6 @@ def test_exactly_84_records_change_flags_and_no_other_field_moves() -> None:
         f"'flags', found: {sorted(changed_fields)} -- a second, unnoticed "
         "wire change may be riding along with this one"
     )
-
-
-# ---------------------------------------------------------------------------
-# Test 7 (Phase 153, T-153-43): the 153 delta layer's gate must be capable
-# of failing. Reuses _describe_record_diff -- the SAME helper the real
-# comparison test calls -- rather than a parallel implementation.
-# ---------------------------------------------------------------------------
 
 
 def test_the_153_delta_layer_is_capable_of_failing() -> None:

@@ -34,9 +34,7 @@ test runner.
 import json
 import os
 
-# ---------------------------------------------------------------------------
 # Path seams (mirror the FIRESTARTER_DB_FILE idiom used across the suite)
-# ---------------------------------------------------------------------------
 _HERE = os.path.dirname(__file__)
 
 _DB_FILE = os.environ.get(
@@ -80,9 +78,7 @@ def _find(db, alias):
     return None
 
 
-# ---------------------------------------------------------------------------
 # (a) presence in the generated DB
-# ---------------------------------------------------------------------------
 class TestSupplementPresent:
     def test_2516_present_in_generated_db(self):
         db = _load(_DB_FILE)
@@ -99,9 +95,6 @@ class TestSupplementPresent:
         )
 
 
-# ---------------------------------------------------------------------------
-# (b) SAFE-04: 2516 wire values verbatim + UNVERIFIED / not write-graduated
-# ---------------------------------------------------------------------------
 class TestSafe04WireStability:
     def test_2516_wire_values_match_v1_15_override(self):
         """SAFE-04: 2516 wire values are the v1.15 user-override verbatim — algorithm
@@ -146,9 +139,6 @@ class TestSafe04WireStability:
         )
 
 
-# ---------------------------------------------------------------------------
-# (c) D-11: every supplement record cites a datasheet + carries a source marker
-# ---------------------------------------------------------------------------
 class TestSupplementProvenance:
     def test_every_supplement_record_cites_a_datasheet(self):
         extra = _load(_EXTRA_CHIPS_FILE)
@@ -178,9 +168,6 @@ class TestSupplementProvenance:
             )
 
 
-# ---------------------------------------------------------------------------
-# (d) D-11 / GATE-03: 24-pin VPP-pin safety — supplement pinouts have a vpp-pin
-# ---------------------------------------------------------------------------
 class TestSupplementVppSafety:
     def test_supplement_pinouts_have_a_vpp_pin(self):
         """The supplement chips are 0x0B UV-EPROMs that route to configure_eprom and

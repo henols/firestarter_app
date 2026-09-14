@@ -107,9 +107,7 @@ def _eprom_data():
     return resolve_chip(_CHIP, db=_REAL_DB)
 
 
-# ---------------------------------------------------------------------------
 # 1-2: the recording seam in eprom_operations.py
-# ---------------------------------------------------------------------------
 
 
 def test_state_machine_records_the_firmware_id_and_text_off_an_error_frame(
@@ -156,9 +154,7 @@ def test_a_cleared_slot_cannot_carry_a_previous_operations_failure(
     assert operator.last_firmware_error_message is None
 
 
-# ---------------------------------------------------------------------------
 # 3-7: the consuming seam in chip_test.py
-# ---------------------------------------------------------------------------
 
 
 def test_failing_blank_check_step_carries_the_firmware_id_and_text() -> None:
@@ -266,9 +262,7 @@ def test_an_operator_without_the_attributes_degrades_to_the_old_behaviour() -> N
     assert result.reason == ""
 
 
-# ---------------------------------------------------------------------------
 # 9-10: the report surface
-# ---------------------------------------------------------------------------
 
 
 def _report_with(results: list[ct.StepResult]) -> DiagnosticReport:

@@ -2434,12 +2434,12 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     )
 
     # EpromOperator.comm is a transient per-operation connection torn down
-    # after every operator call (see 112-02-SUMMARY.md) -- there is no live
+    # after every operator call -- there is no live
     # comm to read programmer_info off of after run_plan returns without
     # opening a new, extraneous connection, which would violate the
     # orchestrator-only contract. Both identity values instead
     # come off the hardware-revision read's OWN connection: its
-    # find_and_connect triggers the CAP-02 setup ack, which sets
+    # find_and_connect triggers the identity setup ack, which sets
     # comm.firmware_identity before the HARDWARE_REVISION dispatch even
     # runs, so one orchestrator-safe energize/query read (Part A,
     # hardware.py) yields both fields with zero extra connections.
@@ -2566,7 +2566,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     console.print(f"[dim]Report written to {json_file}[/dim]")
 
     # Unconditional: every run reaches the filing ask, not only
-    # an explicit --submit run -- Plan 121-11 owns submit_report's internal
+    # an explicit --submit run. submit_report owns the internal
     # dedup-before-ask / ask-anyway-on-failure / comment-on-duplicate logic.
     from firestarter import submit as submit_mod
 

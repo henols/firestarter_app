@@ -63,19 +63,8 @@ from pathlib import Path
 _FA_DIR = Path(__file__).parent.parent
 _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
 
-# Upstream protocol_id / firmware dispatch key for configure_eeprom28c
-# (0x0D) -- the same 84-entry bucket test_sdp_db_invariant.py's GATE-08
-# scopes to. Deliberately duplicated here (not imported from
-# test_sdp_db_invariant.py) -- matching this project's house convention
-# (see test_lockable_proms_doc_claims.py / this plan's own action) of not
-# cross-importing between narrow, single-purpose test modules.
 _ALGORITHM_0X0D = 13
 
-# The measured, fresh count of algorithm==13 entries where
-# protect_on_after != (infoic_page_size_raw > 1). NOT copied uncritically
-# from Phase 120's "12" -- measured directly against the live DB below and
-# asserted as this literal (see module docstring for the full named list and
-# the two-methodologies discussion).
 _EXPECTED_DISAGREEMENT_COUNT = 12
 
 
@@ -134,12 +123,10 @@ def _load_0x0d_protect_page_pairs() -> list[tuple[str, bool, int]]:
     return pairs
 
 
-# ---------------------------------------------------------------------------
 # Non-vacuity first: prove the counting helper itself can distinguish
 # agreement from disagreement, on a small hand-constructed synthetic set,
 # BEFORE trusting it against the real 84-entry data (Non-Vacuity Obligation
 # #4, 136.1-VALIDATION.md).
-# ---------------------------------------------------------------------------
 
 
 def test_disagreement_helper_non_vacuous_on_hand_counted_synthetic_pairs() -> None:
@@ -173,9 +160,7 @@ def test_disagreement_helper_non_vacuous_on_hand_counted_synthetic_pairs() -> No
     assert len(disagreements) == 2
 
 
-# ---------------------------------------------------------------------------
 # The real, measured refutation against the committed chip_database.json.
-# ---------------------------------------------------------------------------
 
 
 def test_all_84_entries_carry_both_fields_regression_check() -> None:

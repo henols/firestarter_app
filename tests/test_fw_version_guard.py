@@ -108,8 +108,6 @@ class TestValidateFirmwareVersion:
         assert "2.0.0 or higher" in str(exc_info.value)
         assert "firestarter fw --install" in str(exc_info.value)
 
-    # ---- D-02 invariant — staticmethod ignores os.environ ----
-
     def test_no_env_read(self, monkeypatch):
         """D-02: the staticmethod NEVER reads FIRESTARTER_DEV_ALLOW_PRE_V12.
 

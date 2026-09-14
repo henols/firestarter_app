@@ -109,10 +109,6 @@ def test_eprom_operation_error_not_labeled_as_communication_error(
     with caplog.at_level(logging.ERROR, logger="EpromOperator"):
         _result, _msg = operator._run_state_machine("test_operation")
 
-    # Corrected behavior: EpromOperationError must NOT be labeled as a
-    # communication error in the log output. It should carry "Programmer error"
-    # (or similar operational framing) so the user knows the serial link is fine.
-    # BUG: eprom_operations.py:265 — fix lands Phase 42 (ERR-01)
     comm_error_logged = any(
         "Communication error" in record.message for record in caplog.records
     )
