@@ -138,11 +138,9 @@ FLAG_SKIP_SDP_UNLOCK = 0x100
 JSON_KEY_READ_SETTLING_DELAY = "read-settling-delay"
 JSON_KEY_READ_STROBE_US = "read-strobe-us"
 # Per-chip page size wire field. Emitted by database.py's
-# convert_to_programmer only when the DB supplies a page_size (curated or,
-# provenance-keyed for upstream-native 0x0D rows) --
+# convert_to_programmer only when the DB supplies a page_size --
 # emit-when-present, mirrors the chip-id pattern. When absent, firmware
-# falls back to its own named AT28C page-size floor constant (algorithm 13
-# / 0x0D only; other algorithms' handlers do not consume this key at all).
+# falls back to its own named AT28C page-size floor constant.
 # Firmware sync: json_parser.c (key_page_size).
 # (firestarter commit 58c6a3c) -- the PROGMEM string exists and is dispatched
 # from key_parsers[].
