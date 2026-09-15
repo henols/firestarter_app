@@ -74,13 +74,6 @@ _BASELINE_FILE = _FA_DIR / "tools" / "baseline" / "chip_database.baseline.json"
 _ALGORITHM_0X0D = 13
 _ALGORITHM_0X05 = 5
 
-# The 27 upstream-native 0x05 identities, sourced from
-# tests/test_lock_status_class_partition.py's _ALGORITHM_0X05_KEYS rather
-# than re-authored -- that module's own leg asserts the live database
-# population against it, so the set is imported here, not relocated.
-# _ALGORITHM_0X05_KEYS uses a "MFG/part_number" string separator; this
-# module's identities are (manufacturer, part_number) tuples, so a small
-# adapter is needed.
 _NATIVE_0X05_PAGE_SIZE_IDENTITIES = frozenset(
     tuple(key.split("/", 1)) for key in _ALGORITHM_0X05_KEYS
 )
@@ -246,10 +239,6 @@ def test_18_native_carriers_split_15_at_128_and_3_at_64() -> None:
     assert {(m, p) for m, p, _v in at_64} == _NATIVE_0X0D_PAGE_SIZE_IDENTITIES_64
 
 
-# Leg 4: across all 746 rows, exactly 45 carry page_size (18 upstream-native
-# 0x0D + 27 upstream-native 0x05, no curated carrier remains).
-
-
 def test_exactly_45_page_size_carriers_across_all_746_rows() -> None:
     db = _load_db(_DB_FILE)
     total_rows = sum(len(chips) for chips in db.values())
@@ -273,11 +262,6 @@ def test_every_page_size_is_a_power_of_two_in_range() -> None:
         f"every emitted page_size must be a power of two in [1, 512]; "
         f"offenders: {offenders}"
     )
-
-
-# Leg 6: provenance -- every carrier is one of the 18 named native 0x0D
-# rows or one of the 27 named native 0x05 rows. Power-of-two alone is not
-# sufficient.
 
 
 def test_every_page_size_carrier_is_curated_or_native_0x0d() -> None:
@@ -437,11 +421,6 @@ def test_synthetic_promoted_row_page_size_is_flagged_by_provenance_helper() -> N
     assert "SYNTH-PROMOTED-NOT-NATIVE" in offenders[0]
 
 
-# Leg 12: the 27-row two-halves table -- the host half of the page-size
-# proof: every algorithm-5 row's real page, and which 18 the old
-# capacity-bracket derivation already got right.
-
-
 def _select_0x05_chips(db: dict) -> list[tuple[str, dict]]:
     """Select every (manufacturer, chip) pair with programming.algorithm == 5."""
     selected = []
@@ -484,8 +463,7 @@ def test_all_27_algorithm_5_rows_carry_their_real_page_and_18_match_the_old_deri
     db = _load_db(_DB_FILE)
     rows = _select_0x05_chips(db)
     assert len(rows) == 27, (
-        f"expected exactly 27 rows with programming.algorithm == 5, "
-        f"found {len(rows)}"
+        f"expected exactly 27 rows with programming.algorithm == 5, found {len(rows)}"
     )
 
     missing_page_size = [
@@ -503,7 +481,8 @@ def test_all_27_algorithm_5_rows_carry_their_real_page_and_18_match_the_old_deri
         f"page_size={chip['programming']['page_size']} "
         f"infoic_page_size_raw={chip['programming']['infoic_page_size_raw']}"
         for mfr, chip in rows
-        if chip["programming"]["page_size"] != chip["programming"]["infoic_page_size_raw"]
+        if chip["programming"]["page_size"]
+        != chip["programming"]["infoic_page_size_raw"]
     ]
     assert not not_real_page, (
         f"every algorithm-5 row's emitted page_size must equal its own "
