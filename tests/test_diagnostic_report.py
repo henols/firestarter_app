@@ -205,11 +205,6 @@ def _minimal_report(
     )
 
 
-# ---------------------------------------------------------------------------
-# Dedup fingerprint (SUB-03, D-02) -- deterministic, volatile-field-free
-# ---------------------------------------------------------------------------
-
-
 def test_dedup_fingerprint_is_12_char_lowercase_hex():
     from firestarter.diagnostic_report import dedup_fingerprint
 
@@ -341,21 +336,6 @@ def test_dedup_fingerprint_in_json_block():
     assert parsed["dedup_fingerprint"] == report.to_dict()["dedup_fingerprint"]
 
 
-# ---------------------------------------------------------------------------
-# Partial-vs-full-write fingerprint differentiation (D-06/D-08, Phase 121
-# Plan 07). This is D-06/D-08's proof, not merely its argument: the GRAD-01
-# no-auto-graduate lock (Phase 114) holds end to end THROUGH THE FINGERPRINT
-# -- because `dedup_fingerprint` hashes `result.op` per step, a partial run
-# (`OP_WRITE_PARTIAL = "write-partial"`) and a full run (`OP_WRITE = "write"`)
-# of the same chip never hash equal and therefore never land in the same
-# `count_agreeing` group -- NOT through the `ladder_state` tag, which
-# `build_db_diff` assigns identically for both run shapes with zero code
-# change. A future reader who drops the op name from `dedup_fingerprint`'s
-# inputs should watch `test_fingerprint_differs_for_partial_versus_full_write`
-# and `test_partial_and_full_runs_never_cross_agree` below go RED.
-# ---------------------------------------------------------------------------
-
-
 def test_fingerprint_differs_for_partial_versus_full_write():
     """Two reports identical in chip, protocol, verdicts and classifications,
     differing ONLY in the write step's op (`write` vs `write-partial`),
@@ -472,11 +452,6 @@ def test_partial_and_full_runs_never_cross_agree():
     assert sorted(counts.values()) == [1, 1]
 
 
-# ---------------------------------------------------------------------------
-# Single-source dual-render (RPT-01, D-01)
-# ---------------------------------------------------------------------------
-
-
 def test_dual_render_single_source():
     report = _build_report()
 
@@ -501,11 +476,6 @@ def test_dual_render_single_source():
     assert table.row_count >= len(dict_ops)
 
 
-# ---------------------------------------------------------------------------
-# JSON block round-trip (RPT-01, D-02)
-# ---------------------------------------------------------------------------
-
-
 def test_json_block_parseable():
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
@@ -521,11 +491,6 @@ def test_json_block_parseable():
 
     parsed = json.loads(inner)
     assert parsed["schema_version"] == SCHEMA_VERSION
-
-
-# ---------------------------------------------------------------------------
-# Auto-capture fields (RPT-02)
-# ---------------------------------------------------------------------------
 
 
 def test_auto_capture_fields():
@@ -546,11 +511,6 @@ def test_auto_capture_fields():
     for step_row in d["steps"]:
         assert "error_code" in step_row
         assert "fingerprint" in step_row
-
-
-# ---------------------------------------------------------------------------
-# Transport-health honest fallback (XPORT-01, D-03)
-# ---------------------------------------------------------------------------
 
 
 def test_transport_not_measured():
@@ -574,11 +534,6 @@ def test_transport_not_measured():
         assert transport[key] != 0
 
     assert transport["transport_suspect"] is False
-
-
-# ---------------------------------------------------------------------------
-# Orchestrator-only structural scan (SAFE-02)
-# ---------------------------------------------------------------------------
 
 
 def test_report_module_is_orchestrator_only():
@@ -615,17 +570,6 @@ def test_report_module_is_orchestrator_only():
     assert "--force" not in force_literals
 
 
-# ---------------------------------------------------------------------------
-# Auto-capture-only submittability, no human-input gate (Phase 112 Plan 04)
-# ---------------------------------------------------------------------------
-#
-# REVERSAL: this section previously tested composing a filled/blank
-# Provenance into a DiagnosticReport (RPT-04, D-04/D-05/D-06). That
-# interactive tester-input model is gone (operator-approved descope,
-# 112-UAT.md test 2) -- is_submittable is now derived purely from
-# auto_capture, and to_dict() no longer has a "provenance" key at all.
-
-
 def test_is_submittable_derived_from_auto_capture():
     from firestarter.diagnostic_report import is_submittable
 
@@ -638,11 +582,6 @@ def test_is_submittable_derived_from_auto_capture():
     report.auto_capture.protocol = None
     d_incomplete = report.to_dict()
     assert d_incomplete["is_submittable"] is False
-
-
-# ---------------------------------------------------------------------------
-# Read-only advisory DB-diff (RPT-05, D-07, Plan 03)
-# ---------------------------------------------------------------------------
 
 
 def _mock_db(support_status: str = "adapter-required"):
@@ -1026,11 +965,6 @@ def test_module_never_writes_support_status():
     assert re.search(r"\bset_[a-z_]+\(", joined) is None
 
 
-# ---------------------------------------------------------------------------
-# DbDiff composed into DiagnosticReport (RPT-05, RPT-01, Plan 03)
-# ---------------------------------------------------------------------------
-
-
 def test_report_composes_db_diff_from_single_source():
     """RPT-01 single-source: `render()` reads `self.to_dict()`, never a
     parallel field list or a re-parse of the JSON string. Quick task
@@ -1052,8 +986,6 @@ def test_report_composes_db_diff_from_single_source():
     assert d["db_diff"]["proposed_disposition"] == report.db_diff.proposed_disposition
 
     report.render()
-    # render() must read the SAME to_dict() output -- never a parallel field
-    # list, never a re-parse of the JSON string (RPT-01 single-source).
     src = inspect.getsource(type(report).render)
     assert "self.to_dict()" in src or "to_dict()" in src
     assert "json.loads" not in src
@@ -1094,20 +1026,6 @@ def test_full_report_all_sub_objects_single_source():
     report.render()  # must not raise
 
 
-# ---------------------------------------------------------------------------
-# Wave-0 RED scaffold (v1.21 Phase 111, VOLT-01 / D-01) -- measured-voltage
-# split fields on DiagnosticReport.
-#
-# `vpp_before_mv` / `vpp_after_mv` / `vpe_before_mv` / `vpe_after_mv` /
-# `vpp_mv` / `vpe_mv` and the nested `to_dict()["voltage"]` sub-dict do NOT
-# exist yet -- the current slot is the single `vpp_vpe_mv: int | None` field
-# (Plan 03 replaces it). This test is EXPECTED to fail (TypeError on the
-# unknown dataclass kwargs / KeyError on "voltage") until then; that RED
-# state is the Wave-0 deliverable (111-VALIDATION.md). Do NOT add the split
-# fields to the dataclass here.
-# ---------------------------------------------------------------------------
-
-
 def test_voltage_split_fields_serialize():
     """(RPT-B1, plan 181-09) The standalone half of this test's original
     claim had no subject after RPT-B1: `vpp_mv`/`vpe_mv` are deleted from
@@ -1144,9 +1062,6 @@ def test_voltage_split_fields_serialize():
     assert "vpp_mv" not in voltage_destructive
     assert "vpe_mv" not in voltage_destructive
 
-    # (b) single-source assertion: render() must expose a voltage row
-    # consistent with to_dict()["voltage"] -- proving render() sources from
-    # to_dict() rather than maintaining a second field list (D-01).
     assert isinstance(report_destructive, DiagnosticReport)
     table = report_destructive.render()
     rendered_cells = [str(cell) for column in table.columns for cell in column.cells]
@@ -1203,22 +1118,6 @@ def test_rail_reading_disclosure_renders_when_no_rail_was_measured():
     rendered_cells = [str(cell) for column in table.columns for cell in column.cells]
     rendered_text = " ".join(rendered_cells)
     assert disclosure in rendered_text
-
-
-# ---------------------------------------------------------------------------
-# LEG-12's carriage half (v1.30 Phase 134, plan 134-06, D-10/D-11) --
-# `sdp_hold_state`, its no-boolean gate, the schema bump, and the D-11 re-key
-# cost.
-#
-# ⚠ Evidence Ceiling (`.planning/REQUIREMENTS.md`): none of the assertions
-# below claim anything about a real die's protection state. A locked die is
-# unrepresentable in either repo's stubs, so these fixtures pin the host's
-# scripted RESPONSE (a `StepResult.verdict` this test constructs directly)
-# to a chosen value -- never a real chip. The causal claim "the lock
-# inhibited the write" is NOT provable this milestone; these tests prove
-# only that whatever `chip_test.sdp_hold_state()` returns is carried,
-# verbatim and un-fabricated, into both report surfaces.
-# ---------------------------------------------------------------------------
 
 
 def _rendered_text(table) -> str:
@@ -1391,14 +1290,6 @@ def test_dedup_fingerprint_sensitive_to_sdp_step_verdict_change():
     assert dedup_fingerprint(report_held) != dedup_fingerprint(report_leaked)
 
 
-# ---------------------------------------------------------------------------
-# Explicit unknown identity marker (PROV-05, D-10/D-12/D-13(a), v1.32 Phase
-# 147 plan 03) -- proves the marker present-when-absent and absent-when-
-# populated so `_identity_cell` can neither under- nor over-fire, and that
-# the fenced JSON keeps typed `null` throughout.
-# ---------------------------------------------------------------------------
-
-
 def test_absent_identity_renders_the_explicit_marker_in_both_rows():
     """`_minimal_report()`'s `AutoCapture` never sets `fw_board_identity` or
     `hw_revision`, so both default to `None` -- the render must show the
@@ -1462,9 +1353,7 @@ def test_populated_identity_rows_render_the_value_verbatim():
     assert NOT_REPORTED not in _rendered_text(table)
 
 
-# ---------------------------------------------------------------------------
 # run_count disclosure (quick task 260822-aq6)
-# ---------------------------------------------------------------------------
 
 
 def _run_count_report(*specs):
@@ -1551,10 +1440,8 @@ def test_dedup_fingerprint_unchanged_for_any_non_degraded_run_count():
     assert len(hashes) == 1
 
 
-# ---------------------------------------------------------------------------
 # Coverage-tag dedup discriminator (quick-devtest-coverage-dedup, follow-up
 # to 260821-wna) -- `coverage_tag`'s wiring into `dedup_fingerprint`
-# ---------------------------------------------------------------------------
 
 
 def _coverage_report(region_policy: str):
@@ -1648,7 +1535,6 @@ def test_schema_version_is_two_oh():
     assert report.to_dict()["schema_version"] == SCHEMA_VERSION
 
 
-# ---------------------------------------------------------------------------
 # Hex-render protocol / chip IDs, noise-row removal (quick task 260821-spg)
 #
 # `_hex_cell` does not exist yet when these tests are first run -- they are
@@ -1659,7 +1545,6 @@ def test_schema_version_is_two_oh():
 # in_both_rows) rather than a whole-table substring scan, so a row that
 # happens to contain a forbidden field NAME as a substring of its VALUE
 # cannot false-positive the noise-row checks.
-# ---------------------------------------------------------------------------
 
 
 def test_hex_cell_protocol_from_production_decimal_string():
@@ -1999,11 +1884,9 @@ def test_divergence_is_present_on_every_step_and_carries_the_engine_value():
     assert steps[1]["divergence"] == report.results[1].divergence
 
 
-# ---------------------------------------------------------------------------
 # Per-step timings (schema 1.5, 2026-08-21): the operator asked for timings
 # captured, presented in the box, and carried to GitHub. These pin the
 # report-side half; `tests/test_chip_test_timing.py` pins the capture half.
-# ---------------------------------------------------------------------------
 
 
 def test_step_duration_reaches_json_and_console():
@@ -2228,7 +2111,6 @@ def test_duration_cell_formatting_boundaries():
     assert _duration_cell("not-a-number") == ""
 
 
-# ---------------------------------------------------------------------------
 # D-F disclosure follow-up fix (found post-260821-wna-green-suite): the
 # write-coverage line/row must read the PLAN-TIME `Step.reason`
 # (`derive_plan`'s own disclosure), never `StepResult.reason` -- which
@@ -2241,7 +2123,6 @@ def test_duration_cell_formatting_boundaries():
 # real derive_plan() + run_plan() + render()/to_dict(), never a hand-built
 # StepResult, so a regression in the real wiring (not just the helper
 # function) would be caught here.
-# ---------------------------------------------------------------------------
 
 
 def _build_full_scope_report(chip_name: str):

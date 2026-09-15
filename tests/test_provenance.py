@@ -60,10 +60,6 @@ from firestarter.diagnostic_report import (
     is_submittable,
 )
 
-# ---------------------------------------------------------------------------
-# Auto-captured hw_revision, single-source flow-through (RPT-01, RPT-02)
-# ---------------------------------------------------------------------------
-
 
 def _minimal_report(**auto_capture_kwargs) -> DiagnosticReport:
     ac_defaults = {"host_version": "3.0.0", "chip": "M8720", "protocol": "8"}
@@ -94,11 +90,6 @@ def test_hw_revision_none_is_honest():
     assert d["auto_capture"]["hw_revision"] is None
 
 
-# ---------------------------------------------------------------------------
-# Auto-capture-only submittability (Phase 112 Plan 04)
-# ---------------------------------------------------------------------------
-
-
 def test_is_submittable_auto_capture_only():
     complete = AutoCapture(host_version="3.0.0", chip="M8720", protocol="8")
     assert is_submittable(complete) is True
@@ -125,9 +116,7 @@ def test_is_submittable_auto_capture_only():
     assert is_submittable(honest_none) is True
 
 
-# ---------------------------------------------------------------------------
 # Reintroduction guard
-# ---------------------------------------------------------------------------
 
 
 def test_no_interactive_provenance_symbols():

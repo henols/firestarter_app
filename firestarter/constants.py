@@ -6,13 +6,13 @@ Permission is hereby granted under MIT license.
 """
 
 FIRESTARTER_RELEASE_URL = (
-    "https://api.github.com/repos/henols/firestarter/releases/latest"
+    "https://api.github.com/repos/henols/firestarter_fw/releases/latest"
 )
 
-FIRESTARTER_RELEASES_URL = "https://api.github.com/repos/henols/firestarter/releases"
+FIRESTARTER_RELEASES_URL = "https://api.github.com/repos/henols/firestarter_fw/releases"
 
 FIRESTARTER_RELEASE_BY_TAG_URL = (
-    "https://api.github.com/repos/henols/firestarter/releases/tags/{tag}"
+    "https://api.github.com/repos/henols/firestarter_fw/releases/tags/{tag}"
 )
 
 # Constants
@@ -145,8 +145,7 @@ JSON_KEY_READ_STROBE_US = "read-strobe-us"
 # / 0x0D only; other algorithms' handlers do not consume this key at all).
 # Firmware sync: json_parser.c (key_page_size).
 # (firestarter commit 58c6a3c) -- the PROGMEM string exists and is dispatched
-# from key_parsers[]. tests/test_json_key_parity.py (plan 05) is the
-# enforcing test that keeps this string in lockstep with the firmware key.
+# from key_parsers[].
 JSON_KEY_PAGE_SIZE = "page-size"
 
 # RURP Control Register Bits — mirror of firestarter/include/rurp_pinout.h

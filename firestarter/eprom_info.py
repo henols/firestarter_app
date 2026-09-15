@@ -136,8 +136,8 @@ class EpromConsolePresenter:
             )
 
         # Inject support_status + unsupported_reason into combined_data for
-        # non-supported chips (DB-04 SC#1). Gated on support_status != "supported"
-        # so supported chips get no new line (Pitfall 3 — avoids snapshot regression).
+        # non-supported chips. Gated on support_status != "supported"
+        # so supported chips get no new line, which would be a snapshot regression.
         if raw_config_data:
             ss = raw_config_data.get("support_status", "supported")
             if ss != "supported":
@@ -233,9 +233,9 @@ class EpromConsolePresenter:
         logger.info(f"{'Eprom Info': <{pos}}{chip_data.get('verified_str', '')}")
         logger.info(f"{'Name:': <{pos}}{chip_data.get('name')}")
         logger.info(f"{'Manufacturer:': <{pos}}{chip_data.get('manufacturer')}")
-        # DB-04 SC#1: render status-specific support block for non-supported chips.
-        # Gated on chip_data.get("support_status") — only present when != "supported"
-        # (Pitfall 3: injection guard prevents a "Support status: supported" line).
+        # Render the status-specific support block for non-supported chips.
+        # Gated on chip_data.get("support_status") — only present when != "supported",
+        # so the injection guard prevents a "Support status: supported" line.
         if chip_data.get("support_status"):
             support_status = chip_data["support_status"]
             logger.warning("Support status:      " + support_status)

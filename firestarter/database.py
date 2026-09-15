@@ -398,7 +398,7 @@ class EpromDatabase:
         if chip_id_val:
             data["chip-id"] = int(chip_id_val, 16)
 
-        # PGSZ-01 / CR-01: carry per-chip page_size when present. Set by
+        # Carry per-chip page_size when present. Set by
         # build_db.py either for a datasheet-curated [CITED:] chip or, as
         # for a chip whose OWN upstream protocol_id is 0x0D
         # (algorithm 13 / EEPROM_POLL only). This guard is a TRUTHINESS
@@ -542,7 +542,7 @@ class EpromDatabase:
         if "bus-config" in full_eprom_data:
             programmer_data["bus-config"] = full_eprom_data["bus-config"]
 
-        # PGSZ-03 / CR-01: emit page-size wire field only when the DB supplies a
+        # Emit the page-size wire field only when the DB supplies a
         # page_size (curated or provenance-keyed for an
         # upstream-native 0x0D row) -- emit-when-present, mirrors chip-id.
         # This guard is also a TRUTHINESS test (`.get(...)` is truthy-checked,

@@ -86,7 +86,6 @@ def test_generate_pin_names_bare_int_still_works(
     assert len(result) == 28
 
 
-# ---------------------------------------------------------------------------
 # fm-fram-full display-layer companion tests
 #
 # These tests pin the two display-layer changes that accompany the FM1608
@@ -95,7 +94,6 @@ def test_generate_pin_names_bare_int_still_works(
 #   2. FM1608 build_specifications does NOT include vpp_str (VPP row stays hidden)
 #
 # Both tests are RED before the ic_layout.py changes (Task 3) and GREEN after.
-# ---------------------------------------------------------------------------
 
 
 def test_electrical_type_label_includes_fram(
@@ -149,21 +147,7 @@ def test_fm1608_vpp_row_hidden_after_relabel(
     )
 
 
-# ---------------------------------------------------------------------------
 # HOST protocol-display-name consolidation companion tests
-#
-# These tests pin the two Phase 102 display-layer changes:
-#   1. Single-source invariant (D-01): _get_protocol_info_structured's `type`
-#      field and get_chip_type_string's fallback both resolve to the SAME
-#      string for every protocol id — they must both read
-#      _PROTOCOL_DISPLAY_NAME, so the two vocabularies can never re-diverge
-#      (the recurring IN-01 class of bug).
-#   2. Coverage reconcile (D-04): 0x34 (X88C64) is present with the canonical
-#      name; 0x11 (FWH) is dropped.
-#
-# Neither test asserts on description_points bullet text (D-03 — bullets are
-# Phase-103-owned; prose reconciliation is out of scope here).
-# ---------------------------------------------------------------------------
 
 
 def test_protocol_info_type_matches_chip_type_string_single_source(
@@ -205,40 +189,12 @@ def test_protocol_display_name_coverage_reconciled(
     )
 
 
-# ---------------------------------------------------------------------------
-# (ERASE-06) — `info`'s can-be-erased row and the wire
-# FLAG_CAN_ERASE bit must AGREE, asserted in both directions.
-#
-# No `ic_layout.py` edit is owed here. Its can-be-erased block
-# (build_specifications, lines ~578-586) keys ONLY on `electrical.type` —
-# confirmed by reading that block before writing either test below — and
-# already rendered the affirmative string for every algorithm-13 chip even
-# before this phase; restoring FLAG_CAN_ERASE (database.py, plan 07) makes
-# the two INDEPENDENTLY-DERIVED axes agree as a by-product, not by design
-# of this file.
-#
-# Adopted reading of ERASE-06 (152-CONTEXT.md D-07's own decomposition,
-# which lists "info's can be erased row | ic_layout.py:582 | contradicts
-# the wire flag" — naming a CONTRADICTION, not a missing derivation): the
-# requirement is that the two axes must not contradict each other, not that
-# `info` must be computed FROM the wire bit. Under that reading, zero
-# `ic_layout.py` source change is owed, and the two axes' independence is
-# a FEATURE rather than a defect — they are derived from different DB
-# fields (`electrical.type` for the display row, `electrical.type` +
-# `programming.algorithm` for the wire bit via
-# `EpromDatabase.convert_to_programmer`), so their agreement is real
-# evidence rather than a tautological self-comparison. A leg that compared
-# `can_erase_str` to itself, or derived one axis from the other, would
-# prove nothing; asserting both independently-computed axes for the SAME
-# chip is what makes the leg meaningful.
-#
 # `_interpret_flags` (ic_layout.py ~line 222) reads a THIRD value — the
 # upstream database's synthetic `info-flags` bit (0x10, "Electrically
 # erasable", set by `_map_data` from the same `electrical.type` check but
 # routed through a different code path than `convert_to_programmer`'s
 # FLAG_CAN_ERASE). It is already consistent with the other two axes and is
 # out of scope for this leg; neither test below reads it.
-# ---------------------------------------------------------------------------
 
 
 def test_can_erase_row_and_wire_capability_bit_agree_for_algorithm_13(

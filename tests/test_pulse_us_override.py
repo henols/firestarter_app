@@ -258,13 +258,6 @@ def test_absent_flag_leaves_db_pulse(tmp_path, make_comm, fake_serial) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# the CLI half -- the `--pulse-us` option itself, its
-# `click.IntRange(1, 65535)` bounds (D-15/HOST-05), the mandatory D-17
-# report line, and the write-only scope (D-18). Six `CliRunner` cases.
-# ---------------------------------------------------------------------------
-
-
 def make_app_context(
     *,
     db: EpromDatabase | Mock | None = None,
@@ -419,16 +412,6 @@ def test_override_always_reports(
         f"is NOT the database's; output:\n{output}"
     )
 
-    # S-6 / D-17: the line must be produced by click.echo, never
-    # logger.info -- this invocation passed NO -v flag, and no log record
-    # captured at DEBUG level (the lowest possible threshold) contains the
-    # D-17 line's own distinguishing phrase, so the line cannot have
-    # travelled through the logging module at all. NOTE: a substring as
-    # loose as "pulse" is NOT safe here -- the write pipeline's own
-    # pre-existing DEBUG logging (_setup_operation) logs the whole EPROM
-    # data dict, which legitimately contains the "pulse-delay" key; that is
-    # unrelated production logging, not the D-17 line, so the needle must
-    # be specific to the D-17 line's own wording.
     assert not any(
         "overrides the database" in r.getMessage().lower() for r in caplog.records
     ), (
@@ -437,11 +420,6 @@ def test_override_always_reports(
     )
 
 
-# RESEARCH Pattern 7's measured message shape (click 8.4.2, verified in
-# .venv/ci-replica) -- see the module-level table cited by 143-07-PLAN.md's
-# "The one measured trap" section. `abc`'s message never restates the
-# numeric bound (it fails TYPE conversion, not a bound check), so its
-# expected substrings are deliberately narrower than the two numeric cases'.
 _REFUSAL_EXPECTED_SUBSTRINGS = {
     "0": ["0", "not in the range", "1<=x<=65535"],
     "65536": ["65536", "not in the range", "1<=x<=65535"],

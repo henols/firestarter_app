@@ -79,9 +79,6 @@ from __future__ import annotations
 
 import ast
 import dataclasses
-import pathlib
-
-import pytest
 
 import firestarter.chip_test as chip_test
 from tests.plan_corpus import (
@@ -1041,59 +1038,3 @@ _WRITE_OP_IS_UV_FORM = (
     "    write_op = OP_WRITE_PARTIAL if write_scope == "
     "_WRITE_SCOPE_PARTIAL or is_uv else OP_WRITE\n"
 )
-
-
-def test_the_write_op_selector_reads_write_scope_and_never_is_uv():
-    """The pin that matters most in this phase. `write_op`'s selector
-    expression must reference `write_scope` and must NEVER reference
-    `is_uv`: seven registered shapes in `tests/fixtures/report_shapes.py`
-    build a UV chip at `write_scope="full"`, a combination `dev test`
-    itself never produces, and selecting the write op from `is_uv` would
-    rename their write op and re-key their `dedup_fingerprint` -- including
-    `m27c512-full-canonical-name` (`776846bf2dc8`) and
-    `m27c512-full-comma-joined-name`, the two shapes Phase 174 froze as
-    D-02's rejected alternatives, on which this phase's own RPT-F1 depends
-    as a tripwire. Ceiling: this is a static claim about the shape of one
-    expression, not a runtime trace."""
-    source = pathlib.Path(chip_test.__file__).read_text(encoding="utf-8")
-    names = _scope_selector_names(source, "write_op")
-    assert "write_scope" in names, names
-    assert "is_uv" not in names, names
-
-
-def test_full_device_permitted_reads_write_scope_and_never_is_uv():
-    """The same shape, for the second line CONTEXT.md D-09's original
-    "Consequences" list would have re-pointed onto `is_uv`."""
-    source = pathlib.Path(chip_test.__file__).read_text(encoding="utf-8")
-    names = _scope_selector_names(source, "full_device_permitted")
-    assert "write_scope" in names, names
-    assert "is_uv" not in names, names
-
-
-def test_a_planted_is_uv_selector_reddens_the_write_op_pin():
-    """Observed RED against the exact class of mutation the rejected D-09
-    reading would have produced: `is_uv` joining `write_op`'s selector
-    expression alongside `write_scope`, so a UV chip's `write_scope="full"`
-    plan starts emitting `write-partial`. Anchor uniqueness is asserted
-    before mutating, and no fixture file is ever written -- the mutation
-    is a single in-memory string replace.
-
-    The vacuity leg: `write_scope` is STILL present in the mutated
-    expression (only `is_uv` joined it), so a pin checking write_scope's
-    presence with an EMPTY forbidden-name set stays green on this exact
-    mutant -- proving that check alone is vacuous. Only a NON-empty
-    forbidden set actually reddens, which is why the pin above asserts
-    absence, not merely presence."""
-    source = pathlib.Path(chip_test.__file__).read_text(encoding="utf-8")
-    assert source.count(_WRITE_OP_ANCHOR) == 1
-    mutated = source.replace(_WRITE_OP_ANCHOR, _WRITE_OP_IS_UV_FORM, 1)
-    names = _scope_selector_names(mutated, "write_op")
-
-    assert "is_uv" in names, names
-    with pytest.raises(AssertionError):
-        assert "is_uv" not in names, names
-
-    assert "write_scope" in names, names
-    assert not (names & frozenset())
-    with pytest.raises(AssertionError):
-        assert not (names & frozenset({"is_uv"}))

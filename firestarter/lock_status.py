@@ -42,11 +42,10 @@ PROTECTION_CLASSES: tuple[str, ...] = (
 )
 
 # The two tokens producible ONLY from a device response -- never from
-# `protection_readability.py`, whose signature accepts none. Plan 151-09's
-# AST gate asserts these two literals never appear as a return value in
-# that module; this module (`lock_status.py`) is the only place they may be
-# produced, and `classify_protection_response` below is the only function
-# in it permitted to return either one.
+# `protection_readability.py`, whose signature accepts none. This module
+# (`lock_status.py`) is the only place they may be produced, and
+# `classify_protection_response` below is the only function in it permitted
+# to return either one.
 SILICON_ONLY_TOKENS: frozenset[str] = frozenset({"protected", "unprotected"})
 
 # The three firmware decode codes from `151-DESIGN.md` §1. Byte 1 of the

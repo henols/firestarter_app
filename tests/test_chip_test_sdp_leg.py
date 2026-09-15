@@ -208,24 +208,14 @@ from firestarter.exceptions import (
 from firestarter.sdp_capability import sdp_capability
 from firestarter.sdp_honesty import unreadable_state_caveat
 
-# ---------------------------------------------------------------------------
 # Operator-double harness -- copied verbatim from tests/test_chip_test.py
 # (:287, :793-825), NOT imported (these names are module-private in a
 # 1958-line module). "M8720" is the house chip (protocol 0x08, EEPROM,
 # chip-id sentinel 0, resolves for every step against _REAL_DB) -- reused
 # here rather than picking a new one.
-# ---------------------------------------------------------------------------
 
 _REAL_DB = EpromDatabase(skip_local_override=True)
 
-# The one mandatory change vs tests/test_chip_test.py's allow-list: adding
-# "sdp_lock" and "sdp_unlock" here is inert at this commit (nothing in
-# chip_test.py calls them yet), and is why THIS task -- not a later one --
-# owns the harness. tests/test_chip_test.py's own six-name Mock(spec=[...])
-# list omits both, so without this extension every later plan's dispatch
-# test would raise AttributeError against the double instead of exercising
-# the new arm (133-CONTEXT.md D-15's forward note; key_links in
-# 133-01-PLAN.md).
 _OPERATOR_METHODS = [
     "check_eprom_id",
     "read_eprom",
@@ -262,15 +252,6 @@ def _result(results, op):
             return r
     raise AssertionError(f"no result for op {op!r} in {[r.op for r in results]}")
 
-
-# ---------------------------------------------------------------------------
-# Baseline 1: the shipped op-string sequence + per-step (verdict, run_count)
-# (criterion 4, D-13a). Measured by actually running derive_plan("M8720",
-# _REAL_DB, write_scope="full") and run_plan(...) against a fresh
-# _mock_operator() -- transcribed from that run, never predicted; D-13b's
-# sentinel test (plan 133-03) covers the shipped op strings via the
-# fail-closed dispatch-arm proof, independent of this literal.
-# ---------------------------------------------------------------------------
 
 _SHIPPED_OPS_SEQUENCE = {
     "op_sequence": [
@@ -349,15 +330,6 @@ def test_shipped_ops_sequence_unchanged():
     )
 
 
-# ---------------------------------------------------------------------------
-# Baseline 2: the exception-precedence triple (criterion 4, D-08). The
-# three-constant triple IS the mechanism: _PRE_EDIT_PRECEDENCE_MATRIX
-# (frozen forever) vs _EXPECTED_PRECEDENCE_MATRIX (edited by later plans)
-# vs _INTENDED_PRECEDENCE_DELTA (the named row set). Drop any one and the
-# criterion becomes an assertion about a diff nobody captured
-# (133-01-PLAN.md key_links).
-# ---------------------------------------------------------------------------
-
 # The nine exception classes this matrix covers, keyed by name so a failure
 # message can name the class directly. Every row is derived by RUNNING the
 # real engine (_derive_precedence_row below) -- none is hand-transcribed.
@@ -416,30 +388,6 @@ def _derive_precedence_row(exc):
     return (None, result.verdict, result.error_code)
 
 
-# FROZEN: never edited after plan 133-01 (133-CONTEXT.md D-08's basis;
-# 133-01-PLAN.md criterion 4). This is the before-image -- a later plan
-# editing it destroys the only evidence criterion 4 has that the shipped
-# exception-clause ordering was ever measured pre-edit. Measured live this
-# session against the unmodified `_run_step` (two clauses: `except
-# EpromOperationError`, then `except (ChipNotImplementedError,
-# ChipNotFoundError)`):
-#
-#   - SerialError/SerialTimeoutError/ProgrammerNotFoundError/
-#     FirmwareOutdatedError/HardwareOperationError/AssertionError: none of
-#     these is an EpromOperationError, ChipNotImplementedError, or
-#     ChipNotFoundError, so all six ESCAPE run_plan entirely today.
-#   - EpromOperationError: caught by the first clause -> BAD, error_code
-#     preserved from the raised exception.
-#   - ChipNotImplementedError: this is ALREADY the latent finding
-#     D-08 names -- it is a SUBCLASS of EpromOperationError,
-#     so it matches the FIRST except clause (Python matches the first
-#     matching class) and lands on BAD with error_code=None, never reaching
-#     the narrower second clause's SKIPPED mapping. The measurement wins
-#     over the "should be SKIPPED" reading: this row records what the
-#     shipped code actually does, not what would be tidier.
-#   - ChipNotFoundError: NOT a subclass of EpromOperationError (a direct
-#     Exception sibling), so it falls through to the second clause ->
-#     SKIPPED, error_code=None (the _skip_result() helper never sets it).
 _PRE_EDIT_PRECEDENCE_MATRIX = {
     "SerialError": ("SerialError", None, None),
     "SerialTimeoutError": ("SerialTimeoutError", None, None),
@@ -474,14 +422,6 @@ _EXPECTED_PRECEDENCE_MATRIX["SerialError"] = (None, "SKIPPED", None)
 _EXPECTED_PRECEDENCE_MATRIX["SerialTimeoutError"] = (None, "SKIPPED", None)
 _EXPECTED_PRECEDENCE_MATRIX["HardwareOperationError"] = (None, "SKIPPED", None)
 
-# Named by plan 133-02 in the SAME commit as the _EXPECTED_PRECEDENCE_MATRIX
-# edit above (133-CONTEXT.md D-08; 133-01-PLAN.md must_haves) -- exactly the
-# three classes D-08's new degrade clause now catches. Any row that changes
-# between _PRE_EDIT_PRECEDENCE_MATRIX and _EXPECTED_PRECEDENCE_MATRIX
-# without its exception-class name appearing here turns the suite RED --
-# this is the mechanism that proves the remaining six rows (and therefore
-# the seven shipped ops' exception handling) are unchanged rather than
-# merely assumed.
 _INTENDED_PRECEDENCE_DELTA: frozenset[str] = frozenset(
     {"SerialError", "SerialTimeoutError", "HardwareOperationError"}
 )
@@ -580,16 +520,6 @@ def test_precedence_matrix_deriver_is_non_vacuous():
         )
 
 
-# ---------------------------------------------------------------------------
-# LEG-11's four behavioural proofs (plan 133-02, D-08). Unlike the
-# precedence-matrix baseline above (which injects into OP_BLANK_CHECK's
-# `check_eprom_blank` for a controlled probe of the handler chain), these
-# tests use the shape LEG-11's own text describes: a "read" step degrading
-# without aborting a later step, and the two run-fatal classes still
-# escaping.
-# ---------------------------------------------------------------------------
-
-
 def test_serial_timeout_degrades_one_step():
     """A SerialTimeoutError raised by the "read" step's operator method
     degrades THAT ONE step to a recorded SKIPPED/ERROR result; run_plan
@@ -610,8 +540,6 @@ def test_serial_timeout_degrades_one_step():
     blank_check_result = _result(results, OP_BLANK_CHECK)
     assert read_result.verdict == VERDICT_SKIPPED
     assert read_result.status == STATUS_ERROR
-    # The later step still ran -- this is what distinguishes "degraded one
-    # step" from "aborted the run" (D-08, T-133-10).
     assert blank_check_result.verdict == VERDICT_OK
     operator.check_eprom_blank.assert_called()
 
@@ -752,14 +680,6 @@ def test_the_transport_precedence_rows_carry_the_error_status():
     result = _result(results, OP_BLANK_CHECK)
     assert result.status == STATUS_COMPLETE
 
-
-# ---------------------------------------------------------------------------
-# SDP dispatch arm (plan 133-03, D-01/D-04/D-05/D-11, LEG-09). The seven
-# shipped op strings, enumerated once here and cross-checked in
-# test_shipped_ops_never_reach_sdp_arm against the module's own OP_*
-# constants minus _SDP_OPS, so an eighth shipped op cannot silently escape
-# the sentinel below.
-# ---------------------------------------------------------------------------
 
 _SHIPPED_OP_STRINGS = [
     OP_ID,
@@ -963,20 +883,11 @@ def test_shipped_ops_never_reach_sdp_arm(monkeypatch):
     )
 
 
-# ---------------------------------------------------------------------------
-# LEG-03's five pattern assertions (v1.30 Phase 134, plan 134-01, D-19).
-# Every assertion below is computed against the LIVE generators for the
-# REAL region -- never against a byte literal -- and the region itself is
-# derived from chip_test._DEFAULT_REGION rather than hard-coded, so a
-# future region change fails this test loudly instead of silently passing.
-# `pytest -k "pattern_b"` selects this whole class (134-VALIDATION.md).
-#
 # ⚠ P-01, the milestone's headline pitfall: `generate_pattern` is a PURE
 # function of (start, length). Every assertion here exists specifically to
 # make the idiomatic-but-wrong implementation (deriving B by calling
 # `generate_pattern` a second time) fail loudly rather than silently ship
 # a tautology that reads as correct in review.
-# ---------------------------------------------------------------------------
 
 
 class TestInhibitedPattern:
@@ -991,10 +902,6 @@ class TestInhibitedPattern:
         )
 
     def test_pattern_b_differs_from_pattern_a_at_every_byte(self):
-        # "differ at every byte" -- not "differ somewhere". A one-page lock
-        # leak (a single byte failing to invert) must be detectable; a
-        # weaker "differ somewhere" assertion would let exactly that leak
-        # through undetected (P-01/D-19, LEG-03).
         region = _DEFAULT_REGION
         a = generate_pattern(*region)
         b = generate_inhibited_pattern(*region)
@@ -1037,12 +944,6 @@ class TestInhibitedPattern:
         assert b != all_ff, "B must not be all-0xFF (degenerate pattern)"
 
     def test_pattern_b_readback_does_not_launder_as_blank_contact(self):
-        # D-05's non-laundering leg: a fully-B read-back (the shape a
-        # firmware that silently ignored the SDP lock and accepted the
-        # inhibited write would produce) must be classified as a real
-        # divergence, never as blank/contact -- otherwise a leaked lock
-        # would render as a loose socket rather than as a chip finding.
-        #
         # Measured at this commit (context only, not the assertion): B's
         # ff_ratio is ~0.0039 against a live _FF_RATIO_THRESHOLD of 0.98 --
         # comfortably below the threshold, but the assertion below reads
@@ -1064,20 +965,6 @@ class TestInhibitedPattern:
             "read-back must sit clearly below the blank/contact threshold "
             "(D-05)."
         )
-
-
-# ---------------------------------------------------------------------------
-# The oracle's read-back-equality dispatch (v1.30 Phase 134, plan 134-02,
-# D-01/D-02/D-03/D-04/D-05, LEG-05/06(engine half)/07/08/16).
-#
-# `_readback_operator` is a SEPARATE double from `_mock_operator` above --
-# `_mock_operator`'s `read_eprom` returns True while writing no file, so the
-# engine would see `actual = b""` and every oracle test would silently
-# exercise only the length gate. `pytest -k "oracle_readback"` /
-# `"lock_leaked"` / `"partial_readback"` (134-VALIDATION.md) select the
-# tests below; `-k "degenerate"` / `"dead_write_path"` selects plan
-# 134-02 Task 3's fixtures, added in a later commit.
-# ---------------------------------------------------------------------------
 
 
 def _readback_operator(payload: bytes, *, write_ok: bool = True, **returns):
@@ -1290,21 +1177,6 @@ def test_non_inhibited_writes_clear_flag_skip_sdp_unlock(op, payload_fn):
     )
 
 
-# ---------------------------------------------------------------------------
-# LEG-08's four degenerate read-back fixtures, LEG-16's dead-write-path
-# fixture, and D-05 (v1.30 Phase 134, plan 134-02 Task 3).
-#
-# ⚠ Evidence Ceiling (REQUIREMENTS.md, reusing 133-RECORD.md §6's wording
-# rather than authoring a new formulation): a locked die is
-# unrepresentable in either repo's stubs. NO fixture in this module
-# simulates real inhibition -- every fixture here pins the host's
-# RESPONSE to a scripted read-back only. The causal claim "the lock
-# inhibited the write" is NOT provable this milestone; real silicon is
-# missing with no fallback. `pytest -k "degenerate"` selects LEG-08's four
-# fixtures; `-k "dead_write_path"` selects LEG-16's.
-# ---------------------------------------------------------------------------
-
-
 def test_module_reuses_sdp_honesty_caveat_wording():
     """This module's Evidence Ceiling comment above states the causal
     claim "the lock inhibited the write" is NOT provable this milestone --
@@ -1485,14 +1357,6 @@ def test_dead_write_path_baseline_b_is_bad():
         f"verdict {result.verdict!r}, expected BAD (LEG-16)"
     )
 
-
-# ---------------------------------------------------------------------------
-# Cleanup registry drain (plan 133-04, D-06/D-07/D-09/D-10/D-16, LEG-10).
-# Absolute path to firestarter_app/, cwd-independent (mirrors
-# tests/test_check_devtest_orchestrator.py's _FA_DIR pattern) -- used only by
-# the AST-level results-mutation proof below, which reads the INSTALLED
-# source rather than importing chip_test.py's already-compiled bytecode.
-# ---------------------------------------------------------------------------
 
 _FA_DIR = Path(__file__).parent.parent
 
@@ -1702,106 +1566,6 @@ def test_drain_continues_after_failure():
     )
 
 
-def test_drain_does_not_mutate_results():
-    """The drain must NEVER append into `results`, and must not reference
-    it at all: `results` is returned by reference, so a mutation inside
-    the `finally` IS visible to the caller, and that same list feeds seven
-    consumers in cli_handlers.py (the run_plan call site, count_applicable,
-    the generic renderer, the JSON artifact, the markdown table,
-    build_db_diff, sys.exit(max(...))) -- count_applicable would then
-    render "N greater than M" (e.g. "8 of 7 ran"). This is an AST-level
-    acceptance criterion in its own right, kept as a TEST (not a shell
-    grep) so it runs in CI on every commit."""
-    finally_try = _run_plan_finally_node()
-
-    results_refs = [
-        node
-        for node in ast.walk(ast.Module(body=finally_try.finalbody, type_ignores=[]))
-        if isinstance(node, ast.Name) and node.id == "results"
-    ]
-    assert results_refs == [], (
-        f"run_plan's cleanup-drain finally references the name 'results' "
-        f"{len(results_refs)} time(s) -- it must reference it ZERO times. "
-        "results is returned BY REFERENCE, so a finally-time mutation is "
-        "visible to the caller and feeds seven consumers in "
-        "cli_handlers.py (run_plan's call site, count_applicable, the "
-        "generic renderer, the JSON artifact, the markdown table, "
-        "build_db_diff, sys.exit(max(...))) -- count_applicable would "
-        "render N greater than M (e.g. '8 of 7 ran')."
-    )
-
-    append_calls = [
-        node
-        for node in ast.walk(ast.Module(body=finally_try.finalbody, type_ignores=[]))
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "append"
-        and isinstance(node.func.value, ast.Name)
-        and node.func.value.id == "results"
-    ]
-    assert append_calls == [], (
-        "run_plan's cleanup-drain finally calls results.append(...) -- "
-        "forbidden: the drain must never touch the list run_plan returns"
-    )
-
-
-def test_drain_swallowed_classes_match_constant():
-    """The finally's per-callable wrapper's handler names EXACTLY the
-    classes in `_UNLOCK_CLEANUP_SWALLOWED` -- resolved from the AST (not
-    assumed), and its handler body contains no `Raise` (never re-raise
-    from the finally)."""
-    import firestarter.chip_test as chip_test_mod
-
-    finally_try = _run_plan_finally_node()
-
-    inner_tries = [
-        node
-        for node in ast.walk(ast.Module(body=finally_try.finalbody, type_ignores=[]))
-        if isinstance(node, ast.Try)
-    ]
-    assert len(inner_tries) == 1, (
-        f"expected exactly one nested try/except per drain iteration inside "
-        f"the finally, found {len(inner_tries)}"
-    )
-    inner_try = inner_tries[0]
-    assert len(inner_try.handlers) == 1, (
-        f"expected exactly one except clause in the per-callable wrapper, "
-        f"found {len(inner_try.handlers)}"
-    )
-    handler = inner_try.handlers[0]
-    assert handler.type is not None, (
-        "the per-callable wrapper's except must not be bare"
-    )
-
-    handler_type_source = ast.unparse(handler.type)
-    resolved = eval(  # noqa: S307 -- trusted, static, in-repo source only
-        handler_type_source, vars(chip_test_mod)
-    )
-    assert resolved == chip_test_mod._UNLOCK_CLEANUP_SWALLOWED, (
-        f"the per-callable wrapper's except clause resolves to {resolved!r}, "
-        f"expected it to name exactly _UNLOCK_CLEANUP_SWALLOWED "
-        f"({chip_test_mod._UNLOCK_CLEANUP_SWALLOWED!r})"
-    )
-
-    raises_in_handler = [
-        node
-        for node in ast.walk(ast.Module(body=handler.body, type_ignores=[]))
-        if isinstance(node, ast.Raise)
-    ]
-    assert raises_in_handler == [], (
-        "the per-callable wrapper's except body contains a Raise -- the "
-        "drain must never re-raise from the finally (D-10)"
-    )
-
-
-# ---------------------------------------------------------------------------
-# LEG-09 criterion 3 (plan 133-04, D-11). Both cases are satisfied by
-# registry behaviour: gate-closed-from-the-start -> sdp_lock is SKIPPED ->
-# nothing registers -> sdp_unlock is never attempted; lock-ran-then-the-
-# gate-closes -> the unlock is registered -> the drain still runs it.
-# ---------------------------------------------------------------------------
-
-
 def test_gate_closed_from_start():
     """LEG-09 criterion 3, case 1: an id step that CLOSES the gate (a
     chip-ID mismatch, `_id_step_closes_gate`'s real condition) leaves the
@@ -1887,21 +1651,6 @@ def test_lock_ran_then_gate_closes():
         "member, a closing gate could skip a plan-derived unlock step and "
         "ship a locked part to the caller (133-CONTEXT.md D-11, LEG-09)"
     )
-
-
-# ---------------------------------------------------------------------------
-# LEG-01/LEG-02/LEG-04 full-population proofs (v1.30 Phase 134, plan 134-03).
-#
-# `_allow_refuse_populations()` sources both lists from the production
-# `sdp_capability_for_entry` predicate over the LIVE database -- the same
-# way tests/test_sdp_db_invariant.py's own `_partition_0x0d` does -- never
-# a hardcoded name list, so a future DB change that moves a chip between
-# ALLOW/REFUSE is caught here too. `derive_plan`'s own emission is still
-# proven against the two-argument `sdp_capability(name, db)` (the real
-# derivation source, LEG-01) in the tests below -- this helper exists only
-# to enumerate the populations cheaply (one DB pass, not one lookup per
-# candidate name).
-# ---------------------------------------------------------------------------
 
 
 def _allow_refuse_populations() -> tuple[list[str], list[str]]:
@@ -2119,12 +1868,6 @@ def test_derive_plan_baseline_transition_ordering():
     )
 
 
-# ---------------------------------------------------------------------------
-# LEG-12's pure hold-state derivation (v1.30 Phase 134, plan 134-04, Task 2,
-# D-10/D-12/D-15). `pytest -k "hold"` selects every test below.
-# ---------------------------------------------------------------------------
-
-
 def test_hold_state_held_when_write_inhibited_is_ok():
     """`write-inhibited` verdict OK -> SDP_HOLD_HELD -- the inhibited write
     was correctly refused, so the part held its lock."""
@@ -2247,20 +1990,6 @@ def test_oracle_applicable_false_for_refuse_chip_full_and_partial_scope():
 
     partial_plan = derive_plan(name, _REAL_DB, write_scope="partial")
     assert sdp_oracle_applicable(partial_plan) is False
-
-
-# ---------------------------------------------------------------------------
-# The baseline gate, cleanup de-registration, and the LEG-09 distinction
-# (v1.30 Phase 134, plan 134-04, Task 3, D-08/D-11/D-20).
-#
-# THE SEVENTH ROUTE (LEG-17, VALIDATION.md non-vacuity obligation #6): the
-# baseline gate proven below is a SEVENTH route to a non-running oracle, on
-# top of research's R1-R6 (which plan 134-10 tests). Under D-08 + D-15 it
-# fails CLOSED (exit 1 from the baseline BAD, or >= 2 via the NOT-RUN
-# floor), so it is NOT a laundering route -- but it is tested in this same
-# family and named as the seventh here so plan 134-10's six-route test does
-# not read as exhaustive when it is not.
-# ---------------------------------------------------------------------------
 
 
 def test_baseline_gate_closes_dead_write_path_allow_chip_full_leg():
@@ -2552,12 +2281,10 @@ def test_deregistration_failed_explicit_unlock_retries_via_drain_twice():
     )
 
 
-# ---------------------------------------------------------------------------
 # Region-scoped read-back (quick task 260821-wna, Task 4, finding M-2/M-3):
 # `_dispatch_sdp_leg`'s length gate is only a REAL gate once the read-back is
 # region-scoped and sliced -- these two legs prove it against doubles that
 # behave like real hardware rather than a region-sized-by-construction Mock.
-# ---------------------------------------------------------------------------
 
 
 def test_sdp_leg_length_gate_passes_against_a_full_size_readback_double():

@@ -40,11 +40,6 @@ import pytest
 
 from tools import build_db
 
-# Canned inputs, measured against the pinned infoic.xml commit
-# (a8efaedc236c1d9718bd28299dfbb99536b010ff) per 148-RESEARCH.md's exhaustive
-# 27,862-element `<ic>` scan (0 missing, 0 unparseable pulse_delay) -- the
-# reason the fatal branch below is unreachable by a real regen and this
-# module is its only coverage.
 _FATAL_LEG_PROTOCOL_NONE = 0x07
 _FATAL_LEG_PROTOCOL_STRING = 0x0B
 _VALID_HEX = "64"  # 0x64 == 100 decimal

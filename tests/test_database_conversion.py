@@ -147,11 +147,6 @@ def test_convert_w29c040_no_flag_can_erase(db: EpromDatabase) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Additional EpromDatabase surface (D-14 fallback — lift database.py coverage)
-# ---------------------------------------------------------------------------
-
-
 def test_get_eproms_returns_list(db: EpromDatabase) -> None:
     """get_eproms() returns the full chip list as a list of dicts."""
     chips = db.get_eproms()
@@ -222,15 +217,6 @@ def test_search_chip_id_returns_list(db: EpromDatabase) -> None:
             chip_id_int = chip_id_val
         matches = db.search_chip_id(chip_id_int)
         assert isinstance(matches, list)
-
-
-# ---------------------------------------------------------------------------
-# D-40 label-only CAN_ERASE pinning assertions
-# Proves that the FM1608 SRAM→FRAM relabel (fm-fram-full) and the SST39SF040
-# sst-keep decision do NOT change FLAG_CAN_ERASE.  These tests are the D-40
-# label-only-for-CAN_ERASE proof and should remain green through any subsequent
-# build_db.py regeneration.
-# ---------------------------------------------------------------------------
 
 
 def test_sst39sf040_flag_can_erase_unchanged(db: EpromDatabase) -> None:

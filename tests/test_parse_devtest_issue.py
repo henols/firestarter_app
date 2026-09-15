@@ -102,24 +102,11 @@ def _build_realistic_title_body(
     return title, body
 
 
-# ---------------------------------------------------------------------------
-# DETECT (D-04) -- both markers required
-# ---------------------------------------------------------------------------
-
-
 def test_detect_realistic_dev_test_body_parses():
     title, body = _build_realistic_title_body()
     obj = parse_devtest_body(title, body)
 
     assert obj is not None
-    # This test builds a report via the CURRENT builders, so it reflects
-    # the CURRENT SCHEMA_VERSION (imported, never restated as a literal --
-    # a v1.30 Phase 134 plan 134-06 repair: this assertion previously
-    # hardcoded "1.2" and broke the instant SCHEMA_VERSION bumped to "1.3"
-    # for LEG-12's sdp_hold_state key, exactly the single-sourcing
-    # discipline the rest of this test module already follows). The frozen
-    # b11-shaped ("1.1") fixture lives in the LEGACY section below and is
-    # never regenerated from live code.
     assert obj["schema_version"] == SCHEMA_VERSION
     assert obj["auto_capture"]["chip"] == "M8720"
 
@@ -164,9 +151,7 @@ def test_detect_empty_title_and_body_return_none():
     assert parse_devtest_body(None, None) is None
 
 
-# ---------------------------------------------------------------------------
 # DB-DIFF -- extract_db_diff surface, incl. ladder_state
-# ---------------------------------------------------------------------------
 
 
 def test_db_diff_surface_from_realistic_report():
@@ -223,18 +208,10 @@ def test_db_diff_tolerates_schema_1_0_shape_without_ladder_state():
     assert diff["dedup_fingerprint"] == "aaaa11112222"
 
 
-# ---------------------------------------------------------------------------
-# RENDER (PROV-06, W-2) -- `render_diff` had ZERO tests anywhere in the repo
-# before this plan (147-05); these are the first-ever tests for it. Every
-# assertion is a direct substring check on the returned `str` -- `render_diff`
-# is a pure function of `(report_obj, diff, n_agreeing=...)`, so there is no
-# `_rendered_text` indirection to mirror and no CLI subprocess needed.
-#
 # Evidence Ceiling (binding): none of these tests may say or imply the
 # `0x0D` write path is proven, that a support status changes, or that
 # gh#21/#32/#11/#12 are closed. Framing is only that attribution becomes
 # possible, or is explicitly refused.
-# ---------------------------------------------------------------------------
 
 
 def test_render_diff_labels_a_populated_firmware_identity():
@@ -303,12 +280,6 @@ def test_render_diff_still_labels_n_agreeing_as_a_maintainer_decision_input():
     assert "NEVER an auto-promotion trigger" in rendered
 
 
-# ---------------------------------------------------------------------------
-# AGREEING (D-03, GRAD-01) -- dedup_fingerprint grouping, distinct from
-# Phase-108's per-run N>=2
-# ---------------------------------------------------------------------------
-
-
 def test_agreeing_two_matching_one_differing_yields_count_2():
     _title_a, body_a = _build_realistic_title_body(chip="M8720")
     _title_b, body_b = _build_realistic_title_body(
@@ -362,9 +333,7 @@ def test_agreeing_empty_input_returns_empty_dict():
     assert count_agreeing([]) == {}
 
 
-# ---------------------------------------------------------------------------
 # MALFORMED (T-114-03/T-114-04, RESEARCH Pitfall 6) -- fail-soft, never raises
-# ---------------------------------------------------------------------------
 
 
 def test_malformed_oversized_body_returns_none():
@@ -436,18 +405,6 @@ def test_malformed_never_raises_across_all_negative_cases():
             raise AssertionError(f"count_agreeing raised on {body!r}: {exc}") from exc
         assert counts == {}
 
-
-# ---------------------------------------------------------------------------
-# LEGACY (D-06 back-compat, Phase 121 Plan 07) -- a frozen `3.0.0b11` body
-# shape, hand-written and NEVER regenerated from current code. `3.0.0b11`
-# predates the `write-partial` op (Phase 121 Plan 06) and the 1.1 -> 1.2
-# schema_version bump (Plan 07) -- this fixture pins exactly what a tester's
-# machine still in the wild on that release produces, and proves this
-# module needs zero change to keep accepting it: `schema_version` is
-# checked by PRESENCE only (`_extract_fenced_report`), never an exact-value
-# match, and `count_agreeing` groups purely by the embedded
-# `dedup_fingerprint`, never by `schema_version`.
-# ---------------------------------------------------------------------------
 
 _B11_TITLE = "[dev test] M8720 — PASS (b11deadbeef)"
 
@@ -601,20 +558,6 @@ def test_mixed_schema_versions_group_independently():
 
     assert counts == {"b11deadbeef": 1, "aaaa11112222": 1}
 
-
-# ---------------------------------------------------------------------------
-# W-3 (PROV-04) -- a SECOND frozen fixture, this one carrying
-# `fw_board_identity: null`. The `_B11_BODY` fixture above carries a
-# *populated* identity ("3.0.0b11:leonardo"), which is why it cannot stand
-# in for PROV-04's real-world population: the reports that motivated this
-# milestone (gh#21/#32) are exactly the null-identity ones. Modeled on a
-# real report shape -- schema_version "1.2", host_version "3.0.0b15",
-# fw_board_identity null, a populated coarse hw_revision, chip at28c256,
-# protocol 0x0D (SKILL.md's own `#32 at28c256 -- FAIL` transcript). Must
-# NEVER be regenerated from live `to_dict()` output -- the whole point is
-# pinning a shape this codebase can no longer produce (this milestone
-# replaces the hardcoded `fw_board_identity=None` construction).
-# ---------------------------------------------------------------------------
 
 _NULL_IDENTITY_TITLE = "[dev test] at28c256 — FAIL (deadnu11id00)"
 

@@ -61,11 +61,9 @@ import pytest  # noqa: F401
 from firestarter.config import ConfigManager
 from firestarter.eprom_operations import EpromOperationError, EpromOperator
 
-# ---------------------------------------------------------------------------
 # Shared helpers
-# ---------------------------------------------------------------------------
 
-_PAYLOAD_SIZE = 65536  # one full 64 KB EPROM payload (REPRO-03 canonical size)
+_PAYLOAD_SIZE = 65536
 
 
 def _identical_payload() -> bytes:
@@ -110,9 +108,7 @@ def _make_fake_state_machine_with_payloads(payloads):
     return fake_state_machine, counter
 
 
-# ---------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
 
 
 class TestConsistencyCheck:
@@ -511,12 +507,6 @@ class TestDispatchChain:
             EpromOperator, "consistency_check_eprom", fake_method, raising=False
         )
 
-        # Stub database lookups so dispatch reaches the operator method.
-        # get_eprom_config must also be stubbed (Phase 66-05): resolve_chip now calls
-        # get_eprom_config FIRST to read support_status before calling convert_to_programmer.
-        # (HOST-04): resolve_chip also requires a usable
-        # programming.algorithm on the same raw record, or it refuses before
-        # convert_to_programmer is reached.
         monkeypatch.setattr(
             EpromDatabase,
             "get_eprom_config",
@@ -540,10 +530,6 @@ class TestDispatchChain:
             lambda self, full: {"memory-size": _PAYLOAD_SIZE, "address": 0, "flags": 0},
         )
 
-        # Inject argv and run main()
-        # (D-08): main is re-exported as Click's `cli`. Click
-        # invokes sys.exit(...) at the end of every command, so we catch the
-        # SystemExit instead of relying on a return value from main_mod.main().
         argv_saved = sys.argv
         try:
             sys.argv = [
@@ -569,4 +555,4 @@ class TestDispatchChain:
         assert captured.get("eprom_name") == "TEST_CHIP"
         assert captured.get("runs") == 3
         assert captured.get("keep_files") is False
-        assert captured.get("max_diffs") == 10  # D-04 default
+        assert captured.get("max_diffs") == 10

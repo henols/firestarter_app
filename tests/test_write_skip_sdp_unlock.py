@@ -195,9 +195,7 @@ def _drive_write(
     return result, captured
 
 
-# ---------------------------------------------------------------------------
 # Explicit flag
-# ---------------------------------------------------------------------------
 
 
 def test_explicit_flag_sets_bit_0x100_on_the_wire(
@@ -217,9 +215,7 @@ def test_explicit_flag_sets_bit_0x100_on_the_wire(
     assert captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK
 
 
-# ---------------------------------------------------------------------------
 # Allowed 0x0D part, no flag -- auto-set must be scoped, not blanket
-# ---------------------------------------------------------------------------
 
 
 def test_no_flag_on_an_allowed_0x0d_part_emits_no_skip_bit_and_no_auto_set_line(
@@ -234,11 +230,6 @@ def test_no_flag_on_an_allowed_0x0d_part_emits_no_skip_bit_and_no_auto_set_line(
     assert result.exit_code == 0, result.output
     assert not (captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK)
     assert "auto-setting --skip-sdp-unlock" not in result.output
-
-
-# ---------------------------------------------------------------------------
-# Refused 0x0D part, no flag -- D-04 auto-set with a mandatory report line
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("chip", [_FRAM_CHIP, _PRESDP_DIP2816_CHIP])
@@ -256,9 +247,7 @@ def test_refused_0x0d_part_gets_the_bit_auto_set_with_an_unconditional_report_li
     assert "auto-setting --skip-sdp-unlock on your behalf" in result.output
 
 
-# ---------------------------------------------------------------------------
 # Refused 0x0D part, user already passed the flag -- no duplicate line
-# ---------------------------------------------------------------------------
 
 
 def test_auto_set_line_is_not_duplicated_when_the_user_passed_the_flag(
@@ -279,11 +268,6 @@ def test_auto_set_line_is_not_duplicated_when_the_user_passed_the_flag(
     assert result.exit_code == 0, result.output
     assert captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK
     assert "auto-setting --skip-sdp-unlock on your behalf" not in result.output
-
-
-# ---------------------------------------------------------------------------
-# Non-0x0D chip, flag passed -- D-18 warn-and-proceed
-# ---------------------------------------------------------------------------
 
 
 def test_non_0x0d_chip_with_the_flag_warns_and_proceeds(
@@ -318,11 +302,6 @@ def test_non_0x0d_chip_without_the_flag_is_unchanged(
     assert "has no effect on this chip's protocol" not in result.output
     assert "auto-setting --skip-sdp-unlock" not in result.output
     assert not (captured["command_dict"]["flags"] & FLAG_SKIP_SDP_UNLOCK)
-
-
-# ---------------------------------------------------------------------------
-# RETIRE-07 / D-14 tripwire -- the named test whose failure IS the record
-# ---------------------------------------------------------------------------
 
 
 def test_dev_sdp_removal_is_safe_only_because_auto_unlock_is_default_on(

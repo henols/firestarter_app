@@ -301,11 +301,6 @@ def _drive_simple_operation_and_record_timeouts(
     return ok, calls
 
 
-# ---------------------------------------------------------------------------
-# Test 1 -- HOST-01 / D-09: the advertised budget is used verbatim.
-# ---------------------------------------------------------------------------
-
-
 def test_write_uses_advertised_budget(tmp_path, make_comm, fake_serial) -> None:
     """HOST-01 / D-09: an advertised budget is used VERBATIM on the write
     path. A 250 s advertisement must produce a MAIN-phase ``get_response``
@@ -331,11 +326,6 @@ def test_write_uses_advertised_budget(tmp_path, make_comm, fake_serial) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Test 2 -- HOST-01 / D-10: absent advertisement falls back to 120 s.
-# ---------------------------------------------------------------------------
-
-
 def test_absent_budget_falls_back_to_120s(tmp_path, make_comm, fake_serial) -> None:
     """HOST-01 / D-10: no advertisement (``write_block_budget_s`` stays
     ``None`` -- the realistic case is a released ``beta`` firmware with
@@ -357,11 +347,6 @@ def test_absent_budget_falls_back_to_120s(tmp_path, make_comm, fake_serial) -> N
         "D-10: an absent advertisement must fall back to exactly 120.0 on "
         f"every MAIN-phase call; got {main_phase_timeouts}"
     )
-
-
-# ---------------------------------------------------------------------------
-# Test 3 -- D-10: an implausible advertisement is clamped away too.
-# ---------------------------------------------------------------------------
 
 
 def test_implausible_budget_is_clamped_away(tmp_path, make_comm, fake_serial) -> None:
@@ -389,11 +374,6 @@ def test_implausible_budget_is_clamped_away(tmp_path, make_comm, fake_serial) ->
             f"fall back to exactly 120.0 on every MAIN-phase call; got "
             f"{main_phase_timeouts}"
         )
-
-
-# ---------------------------------------------------------------------------
-# Test 4 -- D-12's negative proof (the most important test in this module).
-# ---------------------------------------------------------------------------
 
 
 def test_non_write_paths_keep_default_timeout(tmp_path, make_comm, fake_serial) -> None:
@@ -460,11 +440,6 @@ def test_non_write_paths_keep_default_timeout(tmp_path, make_comm, fake_serial) 
         )
 
 
-# ---------------------------------------------------------------------------
-# Test 5 -- D-13: a write's own INIT/END phases stay on the default too.
-# ---------------------------------------------------------------------------
-
-
 def test_init_and_end_phases_keep_default_timeout(
     tmp_path, make_comm, fake_serial
 ) -> None:
@@ -511,9 +486,7 @@ def test_init_and_end_phases_keep_default_timeout(
         )
 
 
-# ---------------------------------------------------------------------------
 # Test 6 -- Pitfall 6's fake-clock oracle.
-# ---------------------------------------------------------------------------
 
 
 def test_long_gap_within_budget_does_not_time_out(make_comm, fake_serial) -> None:

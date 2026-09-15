@@ -95,10 +95,6 @@ from .conftest import _FakeSerial, build_frame
 
 # Real 27C part used throughout this module -- see the module docstring.
 _REAL_27C_CHIP = "w27c512"
-# w27c512's memory-size (firestarter/data/chip_database.json), verified this
-# session via resolve_chip("w27c512", db=...). Used as a realistic `total`
-# in fed progress frames -- the host discards it (D-04), but a real firmware
-# would report exactly this value for this chip.
 _CHIP_MEM_SIZE = 65536
 # _calculate_buffer_size() returns this Uno-floor default whenever
 # firmware_max_chunk is None -- which make_comm() (and this module's own
@@ -276,11 +272,6 @@ def _is_monotonic_non_decreasing(values: list[int]) -> bool:
     return all(a <= b for a, b in zip(values, values[1:]))
 
 
-# ---------------------------------------------------------------------------
-# Test 1 -- HOST-02: render, don't raise.
-# ---------------------------------------------------------------------------
-
-
 def test_data_frame_in_main_phase_is_rendered(tmp_path, make_comm, fake_serial) -> None:
     """HOST-02: a mid-block MSG_DATA_PROGRESS frame is RENDERED, not raised
     on.
@@ -312,11 +303,6 @@ def test_data_frame_in_main_phase_is_rendered(tmp_path, make_comm, fake_serial) 
         "HOST-02: the recorded progress_callback positions must include "
         f"the frame's rendered current (2048); got {positions}"
     )
-
-
-# ---------------------------------------------------------------------------
-# Test 2 -- HOST-02 / D-05: the frame must never be acked.
-# ---------------------------------------------------------------------------
 
 
 def test_progress_frame_is_not_acked(tmp_path, make_comm, fake_serial) -> None:
@@ -382,11 +368,6 @@ def test_progress_frame_is_not_acked(tmp_path, make_comm, fake_serial) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Test 3 -- HOST-02 / D-04: absolute-to-relative offset arithmetic.
-# ---------------------------------------------------------------------------
-
-
 def test_offset_write_bar_starts_at_zero(tmp_path, make_comm, fake_serial) -> None:
     """D-04's arithmetic: MSG_DATA_PROGRESS carries an ABSOLUTE chip
     address, but the write bar's origin is the write's OWN start address
@@ -427,11 +408,6 @@ def test_offset_write_bar_starts_at_zero(tmp_path, make_comm, fake_serial) -> No
         "(absolute - start_addr), not the raw absolute addresses; got the "
         f"last two recorded positions: {positions[-2:]}"
     )
-
-
-# ---------------------------------------------------------------------------
-# Test 4 -- HOST-02 / D-04 / Pitfall 2: no bar rebuild on a differing total.
-# ---------------------------------------------------------------------------
 
 
 def test_differing_total_does_not_rebuild_the_bar(
@@ -486,11 +462,6 @@ def test_differing_total_does_not_rebuild_the_bar(
         "totals (65536, 70000, 60000) all differ from file_size (8) and "
         f"from each other; got ok={ok}, start_calls={start_calls}"
     )
-
-
-# ---------------------------------------------------------------------------
-# Test 5 -- HOST-02 / Pitfall 1: the latch, and its Uno-class negative.
-# ---------------------------------------------------------------------------
 
 
 def test_bar_does_not_rewind_when_firmware_drives_it(

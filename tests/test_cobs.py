@@ -36,9 +36,7 @@ from firestarter.frame_parser import (  # type: ignore[attr-defined]
     cobs_encode,
 )
 
-# ---------------------------------------------------------------------------
 # Local helpers
-# ---------------------------------------------------------------------------
 
 
 def build_cobs_frame(payload: bytes) -> bytes:
@@ -69,11 +67,6 @@ def _ref_crc8_ccitt(data: bytes) -> int:
             else:
                 crc = (crc << 1) & 0xFF
     return crc
-
-
-# ---------------------------------------------------------------------------
-# FRAME-01 / COBS round-trip
-# ---------------------------------------------------------------------------
 
 
 class TestCobsRoundtrip:
@@ -146,11 +139,6 @@ class TestCobsRoundtrip:
         assert decoded_logical[-1] == crc
 
 
-# ---------------------------------------------------------------------------
-# FRAME-04 / full-buffer round-trip
-# ---------------------------------------------------------------------------
-
-
 class TestCobsFullBuffer:
     """cobs_full_buffer: 512 B all-zero and random payloads round-trip cleanly.
 
@@ -194,11 +182,6 @@ class TestCobsFullBuffer:
         assert b"\x00" not in encoded
 
 
-# ---------------------------------------------------------------------------
-# CRC-01 / CRC8 over data payload
-# ---------------------------------------------------------------------------
-
-
 class TestCrc8DataPayload:
     """crc8_data_payload: CRC8-CCITT over raw payload matches reference recompute.
 
@@ -237,11 +220,6 @@ class TestCrc8DataPayload:
         assert decoded == expected_cobs_input
         assert decoded[-1] == crc
         assert decoded[:-1] == payload
-
-
-# ---------------------------------------------------------------------------
-# FRAME-02 / SC2 bounded resync
-# ---------------------------------------------------------------------------
 
 
 class TestCobsResync:

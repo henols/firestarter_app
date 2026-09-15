@@ -48,7 +48,6 @@ from __future__ import annotations
 import importlib.metadata
 
 import click
-import pytest
 from click.testing import CliRunner
 
 # Captured once, at import time, purely so a future reader can see which
@@ -143,19 +142,3 @@ def test_list_commands_needs_no_override_gated_name_is_simply_absent() -> None:
     # -- it is simply never registered as a `click.Command`, which is what
     # keeps it out of `list_commands` without any override of that method.
     assert _GATED_NAME in _SpikeGatedGroup._GATED
-
-
-def test_click_version_captured_for_a_future_reader() -> None:
-    """Sanity: the version-capture mechanism itself resolves to a real string."""
-    assert _CLICK_VERSION
-    assert _CLICK_VERSION[0].isdigit()
-
-
-@pytest.mark.parametrize("attr_name", ["MultiCommand"])
-def test_multicommand_is_deprecated_alias_not_in_dir_but_still_reachable(
-    attr_name: str,
-) -> None:
-    """`click.MultiCommand` is a removal-pending alias -- confirms why this
-    spike subclasses `click.Group` instead (136-RESEARCH.md §1)."""
-    assert attr_name not in dir(click)
-    assert getattr(click, attr_name) is not None

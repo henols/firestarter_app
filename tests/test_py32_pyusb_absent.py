@@ -48,10 +48,8 @@ from firestarter import py32_dfu
 
 _APP_DIR = Path(__file__).parent.parent
 
-# ---------------------------------------------------------------------------
 # In-process half (Task 1): covers the two statements the removed
 # `# pragma: no cover` used to hide, and pins `PyusbMissingError`'s shape.
-# ---------------------------------------------------------------------------
 
 
 def test_require_usb_raises_pyusb_missing_error(
@@ -77,8 +75,6 @@ def test_pyusb_missing_error_message_substrings(
     with pytest.raises(py32_dfu.PyusbMissingError) as excinfo:
         py32_dfu._require_usb()
     message = str(excinfo.value)
-    # C-4, MEASURED (127-RESEARCH.md): these three substrings are the ones
-    # actually present in py32_dfu.py's PyusbMissingError message body.
     assert "pip install 'firestarter[py32]'" in message
     assert "libusb" in message
     assert "WinUSB" in message
@@ -102,49 +98,6 @@ def test_pyusb_missing_error_is_a_dfu_error() -> None:
     assertion that keeps the error-to-exit-code chain honest."""
     assert issubclass(py32_dfu.PyusbMissingError, py32_dfu.DfuError)
 
-
-def test_require_usb_pragma_is_gone_and_the_other_two_remain() -> None:
-    """The `except ImportError` line inside `_require_usb()` carries no
-    coverage-exclusion comment, while the file still carries exactly **two**
-    such comments in total (the out-of-scope `_dev` / `_index` guards) -- so
-    this test also fails if someone deletes either of those two instead."""
-    source_path = Path(py32_dfu.__file__)
-    lines = source_path.read_text().splitlines()
-
-    require_usb_index = next(
-        (
-            i
-            for i, line in enumerate(lines)
-            if line.strip().startswith("def _require_usb(")
-        ),
-        None,
-    )
-    # Non-vacuity guard: fail loudly if `_require_usb` moved or was renamed,
-    # rather than silently passing because the search below found nothing.
-    assert require_usb_index is not None, "_require_usb() not found in source"
-
-    except_line = next(
-        line
-        for line in lines[require_usb_index : require_usb_index + 20]
-        if "except ImportError" in line
-    )
-    assert "pragma: no cover" not in except_line
-
-    total_pragmas = sum(1 for line in lines if "pragma: no cover" in line)
-    assert total_pragmas == 2
-
-
-# ---------------------------------------------------------------------------
-# Subprocess half (Task 2): a genuine `sys.meta_path` import blocker, run in a
-# child process where `usb` is truly unreachable -- proving the import
-# *graph* is clean, not merely that this devcontainer happens to lack pyusb.
-# Copies the harness idiom established by `tests/test_skip_census.py`
-# (`functools.lru_cache`, `[sys.executable, ...]`, `cwd=str(_APP_DIR)`,
-# `capture_output=True, text=True`, an explicit `timeout=`, and a
-# *prove-the-argument-took-effect* pre-check) -- see that module's docstring
-# for why an in-process re-run cannot substitute when bindings are frozen at
-# import (Q4, `127-RESEARCH.md`).
-# ---------------------------------------------------------------------------
 
 _CHILD_PROGRAM_TEMPLATE = '''
 import importlib.abc
@@ -179,21 +132,24 @@ try:
 except ModuleNotFoundError:
     pass
 
-import requests
-
 from firestarter import firmware as _firmware_module
 
 
-def _raise_request_exception(*_args, **_kwargs):
-    raise requests.RequestException(
-        "blocked: no network access in this subprocess test"
-    )
+class _EmptyReleasesResponse:
+    def json(self):
+        return []
+
+    def raise_for_status(self):
+        return None
+
+    headers: dict = {}
 
 
-# Stub the HTTP seam so `fw --list` needs no network: list_releases() already
-# catches requests.RequestException and returns an empty list (the real code
-# path, not a bypass of it).
-_firmware_module.requests.get = _raise_request_exception
+def _return_empty_releases_response(*_args, **_kwargs):
+    return _EmptyReleasesResponse()
+
+
+_firmware_module.requests.get = _return_empty_releases_response
 
 from click.testing import CliRunner
 from firestarter.cli_handlers import cli

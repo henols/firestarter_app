@@ -64,13 +64,6 @@ _BASELINE_FILE = _FA_DIR / "tools" / "baseline" / "chip_database.baseline.json"
 
 _ALGORITHM_0X0D = 13
 
-# ---------------------------------------------------------------------------
-# The two identity sets this test owns. Measured against 149-RESEARCH.md
-# section "D-01 Verification" (the four-way protocol_id join across all 84
-# algorithm==13 rows). DO NOT extend either set without a fresh provenance
-# measurement -- see the module docstring.
-# ---------------------------------------------------------------------------
-
 # The 2 pre-existing datasheet-curated _PAGE_SIZE_BY_PART rows (both
 # upstream algorithm 0x05, unrelated to the 0x0D provenance rule below).
 _CURATED_PAGE_SIZE_IDENTITIES = frozenset(
@@ -80,8 +73,6 @@ _CURATED_PAGE_SIZE_IDENTITIES = frozenset(
     }
 )
 
-# The 18 upstream-native protocol_id==0x0D rows (149-RESEARCH.md section
-# "D-01 Verification"): 15 movers at page 128, 3 already at page 64.
 _NATIVE_0X0D_PAGE_SIZE_IDENTITIES_128 = frozenset(
     {
         ("ATMEL", "AT28C010,AT28C010E"),
@@ -149,11 +140,9 @@ def _select_page_size_carriers(db: dict) -> list[tuple[str, dict]]:
     return selected
 
 
-# ---------------------------------------------------------------------------
 # Shared helpers -- both the real-DB tests (legs 5/6) and the synthetic
 # non-vacuity tests (legs 10/11) call these, so the non-vacuity legs
 # exercise the exact same code the real tests do.
-# ---------------------------------------------------------------------------
 
 
 def _range_offenders(db: dict) -> list[str]:
@@ -186,9 +175,7 @@ def _provenance_offenders(db: dict) -> list[str]:
     return offenders
 
 
-# ---------------------------------------------------------------------------
 # Leg 1: real-DB count of the 0x0D bucket itself.
-# ---------------------------------------------------------------------------
 
 
 def test_exactly_84_algorithm_0x0d_entries() -> None:
@@ -203,9 +190,7 @@ def test_exactly_84_algorithm_0x0d_entries() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 2: exactly 18 of the 84 carry page_size, and they are the named 18.
-# ---------------------------------------------------------------------------
 
 
 def test_exactly_18_of_84_carry_page_size_and_are_the_named_rows() -> None:
@@ -226,9 +211,7 @@ def test_exactly_18_of_84_carry_page_size_and_are_the_named_rows() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 3: of the 18, exactly 15 at 128 and 3 at 64.
-# ---------------------------------------------------------------------------
 
 
 def test_18_native_carriers_split_15_at_128_and_3_at_64() -> None:
@@ -247,10 +230,8 @@ def test_18_native_carriers_split_15_at_128_and_3_at_64() -> None:
     assert {(m, p) for m, p, _v in at_64} == _NATIVE_0X0D_PAGE_SIZE_IDENTITIES_64
 
 
-# ---------------------------------------------------------------------------
 # Leg 4: across all 746 rows, exactly 20 carry page_size (18 native + 2
 # curated).
-# ---------------------------------------------------------------------------
 
 
 def test_exactly_20_page_size_carriers_across_all_746_rows() -> None:
@@ -265,9 +246,7 @@ def test_exactly_20_page_size_carriers_across_all_746_rows() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 5: every emitted page_size is a power of two in [1, 512] -- exhaustive.
-# ---------------------------------------------------------------------------
 
 
 def test_every_page_size_is_a_power_of_two_in_range() -> None:
@@ -279,10 +258,8 @@ def test_every_page_size_is_a_power_of_two_in_range() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 6: provenance -- every carrier is curated or one of the 18 named
 # native rows. Power-of-two alone is not sufficient.
-# ---------------------------------------------------------------------------
 
 
 def test_every_page_size_carrier_is_curated_or_native_0x0d() -> None:
@@ -295,10 +272,8 @@ def test_every_page_size_carrier_is_curated_or_native_0x0d() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 7: AT28C256 non-change (gh#21 part -- a PROMOTED row, upstream
 # protocol_id 0x07; this phase cannot change its behaviour at all).
-# ---------------------------------------------------------------------------
 
 
 def test_at28c256_is_unchanged_by_this_phase() -> None:
@@ -337,9 +312,7 @@ def test_at28c256_is_unchanged_by_this_phase() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 8: support_status byte-unchanged across all 84 algorithm==13 rows.
-# ---------------------------------------------------------------------------
 
 
 def test_support_status_byte_unchanged_across_all_84_0x0d_rows() -> None:
@@ -374,10 +347,8 @@ def test_support_status_byte_unchanged_across_all_84_0x0d_rows() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 9: extra_chips.json back door -- no authored supplement record
 # carries page_size.
-# ---------------------------------------------------------------------------
 
 
 def test_extra_chips_json_carries_no_page_size() -> None:
@@ -399,9 +370,7 @@ def test_extra_chips_json_carries_no_page_size() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 10: synthetic non-vacuity, range.
-# ---------------------------------------------------------------------------
 
 
 def test_synthetic_out_of_band_page_size_is_flagged_by_range_helper() -> None:
@@ -420,9 +389,7 @@ def test_synthetic_out_of_band_page_size_is_flagged_by_range_helper() -> None:
     assert "SYNTH-RANGE-OFFENDER" in offenders[0]
 
 
-# ---------------------------------------------------------------------------
 # Leg 11: synthetic non-vacuity, provenance.
-# ---------------------------------------------------------------------------
 
 
 def test_synthetic_promoted_row_page_size_is_flagged_by_provenance_helper() -> None:

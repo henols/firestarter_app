@@ -70,8 +70,7 @@ READABILITY_STATES: tuple[str, ...] = (
 # Reason-fragment constants. Tests assert on these stable substrings rather
 # than on whole composed sentences, so a later prose rewording cannot silently
 # collapse two distinct reasons into one. The full sentences are composed one
-# layer up, in plan 151-06's `protection_gate_for_entry` / plan 151-08's
-# `lock_status.py`, not here.
+# layer up, in `protection_gate_for_entry` and `lock_status.py`, not here.
 REASON_NOT_FOUND = "not found in the chip database"
 REASON_NO_MECHANISM = "has no write-protection mechanism at all"
 REASON_NOT_IMPLEMENTED = "documented but this codebase does not read it"
@@ -470,7 +469,7 @@ DOCUMENTED_NOT_READABLE_TOKENS: frozenset[str] = frozenset(
         # Usually no for SDP -- a command-sequence requirement, not a readable lock bit.
         "W29C010",
         # WINBOND -- lockable-proms.md:21 §1 "W29C020 / W29C020C"
-        # C-17 tiebreak (DESIGN.md §5): the row covers both parts but every
+        # Tiebreak: the row covers both parts but every
         # restatement (lines 30, 335, 350) names W29C020C only. Bare W29C020 takes
         # the more-restrictive state by rule. See AMBIGUOUS_DOC_CITATIONS.
         "W29C020",
@@ -546,7 +545,7 @@ DOCUMENTED_NOT_READABLE_TOKENS: frozenset[str] = frozenset(
     }
 )
 
-# C-17's disagreement, recorded rather than resolved (DESIGN.md §5). The
+# A disagreement in the source document, recorded rather than resolved. The
 # tiebreak rule in words: where the source document's table row and its own
 # restatements disagree about whether a token is covered, the token takes the
 # **more restrictive** readability state -- it is not adjudicated per entry by
@@ -555,7 +554,7 @@ DOCUMENTED_NOT_READABLE_TOKENS: frozenset[str] = frozenset(
 # `W29C020,W29C020C,W29C022` DB entry refuses regardless of how this
 # tiebreak resolves, because `W29C022` is undocumented either way -- the
 # tiebreak changes only how many offending aliases the refusal names (one vs.
-# two), never the entry's verdict. C-18, recorded alongside: all three aliases
+# two), never the entry's verdict. Recorded alongside: all three aliases
 # -- W29C020, W29C020C, W29C022 -- are one upstream `<ic>` entry with one chip
 # id `0x0000da45`, so no firmware read could distinguish which of the three
 # parts is actually in the socket, whatever this tiebreak resolves to.

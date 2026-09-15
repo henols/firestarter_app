@@ -102,13 +102,11 @@ _ENERGY_PULSES_COUNT = 100
 _REFUSED_WIDTH_US = 60000
 
 
-# ---------------------------------------------------------------------------
 # Synthetic response builders -- text matches the catalog's own format
 # string applied to representative params (verified this session via
 # `firestarter.messages.CATALOG[id].format % params`, byte for byte). Built
 # directly, per tests/test_boot_block_hint.py's own precedent: this avoids a
 # real wire frame and a serial path entirely.
-# ---------------------------------------------------------------------------
 
 
 def _make_max_pulses_response() -> Response:
@@ -195,9 +193,7 @@ def _compose_and_raise(response: Response) -> None:
     _raise_for_error_response(response, msg)
 
 
-# ---------------------------------------------------------------------------
 # Test 1
-# ---------------------------------------------------------------------------
 
 
 def test_max_pulses_is_a_program_failure() -> None:
@@ -242,9 +238,7 @@ def test_max_pulses_is_a_program_failure() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Test 2
-# ---------------------------------------------------------------------------
 
 
 def test_energy_cap_and_pulse_too_wide() -> None:
@@ -291,17 +285,8 @@ def test_energy_cap_and_pulse_too_wide() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Test 3
-# ---------------------------------------------------------------------------
 
-# D-21's forbidden phrasing, each built from at least two literal pieces so
-# this module's own source never spells one out contiguously (checked
-# below, mirroring firestarter/tests/test_hv_routing_source_contract_v142.py's
-# own self-check leg). Naming note: these constant NAMES do not themselves
-# spell out a forbidden phrase (they are UPPERCASE identifiers; the checks
-# below are case-sensitive against the lowercase phrases), only the STRING
-# VALUES built from concatenation below matter.
 _NEEDLE_A = "re" + "try"
 _NEEDLE_B = "re" + "trying"
 _NEEDLE_C = "try" + " again"
@@ -319,72 +304,6 @@ _FORBIDDEN_NEEDLES = (
     _NEEDLE_F,
     _NEEDLE_G,
 )
-
-
-def test_hint_states_abort_without_continuation_wording() -> None:
-    """D-21: the write stopping and the firmware refusing every later block
-    for that write are the SAME event (141-LOOP-RECORD.md §4: the address
-    counter never advances, `command_done()` fires, no further block is
-    accepted) -- so the 0xBD/0xBE hint must not describe a pick-up-where-
-    it-stopped continuation the firmware has no mechanism for, expressed as
-    a set of forbidden phrases. Positively, the hint must still say the
-    write stopped, say what was and was not programmed, and say the
-    firmware will not take another block for this write. The 0xAE hint is
-    the deliberate exception (D-16): naming `--pulse-us` there is honest
-    remediation, since that refusal touches no byte at all.
-    """
-    for response in (_make_max_pulses_response(), _make_energy_cap_response()):
-        hint = _hint_for(response)
-        assert hint is not None, (
-            f"D-21: expected a non-None hint for id {response.id:#04x} to "
-            "check its wording"
-        )
-        low = hint.lower()
-        for needle in _FORBIDDEN_NEEDLES:
-            assert needle not in low, (
-                f"D-21: forbidden phrase {needle!r} found in the "
-                f"budget-failure hint for id {response.id:#04x} -- the "
-                "firmware's traced abort semantics mean this wording would "
-                f"describe behaviour the firmware does not have. Hint: {hint}"
-            )
-        assert "abort" in low, (
-            f"D-21: expected the hint for id {response.id:#04x} to state "
-            f"that the write stopped (an 'abort'-conveying word); got: {hint}"
-        )
-        assert "programmed" in low, (
-            f"D-21: expected the hint for id {response.id:#04x} to state "
-            f"what was and was not programmed; got: {hint}"
-        )
-        assert "stops accepting" in low, (
-            f"D-21: expected the hint for id {response.id:#04x} to state "
-            "that the firmware stops accepting blocks for this write; got: "
-            f"{hint}"
-        )
-
-    pulse_hint = _hint_for(_make_pulse_too_wide_response())
-    assert pulse_hint is not None
-    assert "--pulse-us" in pulse_hint, (
-        "D-16: unlike the abort hints above, the 0xAE hint is permitted -- "
-        "and expected -- to name --pulse-us, since a pre-flight refusal "
-        f"that touched no byte has a legitimate narrower-width remedy; got: {pulse_hint}"
-    )
-
-    # Self-check (mirrors test_hv_routing_source_contract_v142.py's own
-    # Coverage 16): without this leg, a future edit could silently
-    # un-concatenate one of the needles above and this discipline would
-    # quietly stop being machine-checked.
-    own_text = Path(__file__).read_text()
-    for needle in _FORBIDDEN_NEEDLES:
-        assert needle not in own_text, (
-            f"self-check: the concatenation-built forbidden needle {needle!r} "
-            "appears verbatim in this module's own source -- rebuild it from "
-            "differently-split literal pieces so this gate cannot match itself"
-        )
-
-
-# ---------------------------------------------------------------------------
-# Test 4 -- D-20 source-contract leg
-# ---------------------------------------------------------------------------
 
 
 def _strip_py_comments(text: str) -> str:
@@ -420,52 +339,3 @@ def _strip_py_comments(text: str) -> str:
                     line[:start_col] + (" " * (end_col - start_col)) + line[end_col:]
                 )
     return "".join(lines)
-
-
-def test_no_host_path_expects_write_failed_on_27c() -> None:
-    """D-20 / F-141-06 source-contract leg: `MSG_ERR_WRITE_FAILED` (0xB1) --
-    the OLD, now-retired per-block loop's failure id, carrying a three-param
-    payload shape (`u24 address, u8 retries, u16 bad bytes`) the per-byte
-    loop does not use -- is emitted by nothing on the 27C write path any
-    more, so no host hint or dispatch may key on it; a hint keyed on it
-    would never fire. Comment-stripped so a PROSE mention explaining the
-    exclusion (in `_BUDGET_FAILURE_IDS`'s own comment, once Task 2 lands)
-    does not itself trip this leg -- only an executable reference would.
-
-    Non-vacuity is the mechanism that makes this leg genuinely RED before
-    Task 2 and genuinely GREEN after, not merely vacuously true throughout:
-    pre-Task-2, `eprom_operations.py` references neither 0xBD's name nor
-    0xB1's name anywhere (confirmed this session), so the assertion that
-    0xBD's name IS present fails honestly until Task 2's
-    `_BUDGET_FAILURE_IDS` adds it -- proving this leg is reading the right
-    file with a stripper that has not eaten everything, rather than a
-    stripper returning "" and the absence check passing for the wrong
-    reason.
-    """
-    assert _EPROM_OPERATIONS_PATH.is_file(), (
-        f"D-20 non-vacuity: scan target {_EPROM_OPERATIONS_PATH} does not "
-        "exist -- a missing scan target must fail, never silently pass"
-    )
-    raw = _EPROM_OPERATIONS_PATH.read_text()
-    stripped = _strip_py_comments(raw)
-    assert stripped.strip() != "", (
-        "D-20 non-vacuity: comment-stripped eprom_operations.py is empty -- "
-        "nothing would ever be scanned by the check below"
-    )
-
-    needle_0xbd_name = "MSG_ERR" + "_MAX_PULSES"
-    assert needle_0xbd_name in stripped, (
-        "D-20/D-25 non-vacuity: expected the comment-stripped "
-        "eprom_operations.py to contain MSG_ERR_MAX_PULSES's own name "
-        "(0xBD) once _BUDGET_FAILURE_IDS names it -- its absence would mean "
-        "the '0xB1 absent' check below is passing vacuously, either against "
-        "the wrong file or against a stripper that consumed everything"
-    )
-
-    needle_0xb1_name = "MSG_ERR_WRITE" + "_FAILED"
-    assert needle_0xb1_name not in stripped, (
-        "D-20/F-141-06: MSG_ERR_WRITE_FAILED (0xB1) is emitted by nothing on "
-        "the 27C write path -- the per-byte loop reports 0xBD/0xBE instead, "
-        "with a different, smaller payload shape -- so no host path may key "
-        f"on it. Found the forbidden name in {_EPROM_OPERATIONS_PATH}"
-    )

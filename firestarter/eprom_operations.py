@@ -150,7 +150,7 @@ _BUDGET_FAILURE_IDS = (0xBD, 0xBE, 0xAE)
 _PULSE_WIDTH_RE = re.compile(r"Pulse width (\d+) us")
 
 # Pattern to extract the raw silicon byte and the firmware decode code from
-# MSG_DATA_PROTECTION_STATUS (0xE1, plan 151-05/151-08/151-11) messages.
+# MSG_DATA_PROTECTION_STATUS (0xE1) messages.
 # Format: "Lock status probe: raw=0x%02X decode=%u" -- same rationale as
 # _TIMEOUT_ADDR_RE/_PULSE_WIDTH_RE immediately above: Response.payload is
 # populated only for MSG_DATA_CHUNK (W-04); every other id-frame's decoded
@@ -414,7 +414,7 @@ class EpromOperator:
         self.last_firmware_error_message: str | None = None
 
     def _calculate_buffer_size(self) -> int:
-        # CAP-01: firmware_max_chunk is populated by the
+        # firmware_max_chunk is populated by the
         # _decode_id_frame MSG_OK_READY ack override in serial_comm.py, not
         # by parsing the FW identity string (that mechanism was removed).
         # Reversal: when the field is absent (old firmware
@@ -425,7 +425,7 @@ class EpromOperator:
         )
         if max_chunk is not None and max_chunk >= 1:
             return max_chunk
-        # CAP-01 safe Uno-floor default: absent advertisement -> 512.
+        # Safe Uno-floor default: absent advertisement -> 512.
         return 512
 
     def _write_block_timeout(self) -> float:
@@ -1315,8 +1315,7 @@ class EpromOperator:
         #   SETUP command frame at connection time. This is the ONLY corruptible
         #   host->fw command frame — a READ's MAIN phase emits plaintext acks
         #   (send_string), never send_json_command, so the previous "set the hook
-        #   after setup" wiring never fired (false negative; see
-        #   .planning/debug/fault-inject-harness-outgoing.md). The firmware rejects the
+        #   after setup" wiring never fired -- a false negative. The firmware rejects the
         #   corrupt frame (CRC8-before-parse / inter-byte timeout) -> connection setup
         #   fails with a bounded error == the expected outcome.
         # Incoming: connect cleanly, swap to FaultInjectingSerialCommunicator, run the

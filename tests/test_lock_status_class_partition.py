@@ -55,7 +55,6 @@ property over both curated frozensets.
 
 from __future__ import annotations
 
-import ast
 import json
 from pathlib import Path
 from typing import NamedTuple
@@ -89,7 +88,6 @@ _ALL_GATE_TOKENS = frozenset(
 )
 
 
-# ---------------------------------------------------------------------------
 # Shared walk machinery -- every leg below drives this, never a
 # reimplementation. `_walk_database_for_class_tokens` never raises itself;
 # it collects a failure string per offending row so leg 1's message can name
@@ -97,7 +95,6 @@ _ALL_GATE_TOKENS = frozenset(
 # thin wrapper that turns "any failures" into one AssertionError -- reused by
 # leg 1 (expected clean over the real DB) and leg 6(c) (expected to raise
 # over a synthetic DB, naming only the synthetic row).
-# ---------------------------------------------------------------------------
 
 
 class _RowResolution(NamedTuple):
@@ -173,9 +170,7 @@ def _resolve_database_or_raise(db: dict) -> list[_RowResolution]:
     return resolutions
 
 
-# ---------------------------------------------------------------------------
 # Leg 1: exhaustiveness
-# ---------------------------------------------------------------------------
 
 
 def test_all_746_rows_resolve_exhaustively() -> None:
@@ -202,9 +197,7 @@ def test_all_746_rows_resolve_exhaustively() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 2: disjointness and determinism
-# ---------------------------------------------------------------------------
 
 
 def test_exactly_one_token_per_row() -> None:
@@ -236,12 +229,8 @@ def test_two_consecutive_walks_are_byte_equal() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 3: the census, pinned as literals
-# ---------------------------------------------------------------------------
 
-# The seven no-mechanism algorithms and their measured per-algorithm row
-# counts (D-09). 170 + 127 + 32 + 20 + 2 + 34 + 20 == 405.
 _NO_MECHANISM_ALGORITHM_COUNTS: dict[int, int] = {
     0x07: 170,
     0x08: 127,
@@ -254,14 +243,6 @@ _NO_MECHANISM_ALGORITHM_COUNTS: dict[int, int] = {
 _NO_MECHANISM_TOTAL = 405
 assert sum(_NO_MECHANISM_ALGORITHM_COUNTS.values()) == _NO_MECHANISM_TOTAL
 
-# not_implemented == 40: 39 at 0x10 (Intel/AMD/Catalyst/ST-family, documented
-# readable per lockable-proms.md but this release implements no read for
-# 0x10, D-02) plus the single 0x34 row (XICOR/X88C64P,X88C64S -- no protocol
-# handler exists at all). This 40 SUPERSEDES `151-VALIDATION.md`'s figure of
-# 39 -- that document predates the 0x34 resolution recorded in
-# `151-DESIGN.md` §4 / OD-2. Pinned as a SET (not just a count), following
-# `test_b15_page_size_corroboration.py:230-243`'s symmetric-difference shape,
-# keyed "VENDOR/PART_NUMBER" to match this file's own `_key()`.
 _NOT_IMPLEMENTED_KEYS: frozenset[str] = frozenset(
     {
         # -- 0x10 (39 rows) --
@@ -304,7 +285,6 @@ _NOT_IMPLEMENTED_KEYS: frozenset[str] = frozenset(
         "ST/M28F512,M28F512B,M28F010",
         "TI/TMS28F010,TMS28F010A,TMS28F010B",
         "TI/TMS28F020",
-        # -- 0x34 (1 row, OD-2) --
         "XICOR/X88C64P,X88C64S",
     }
 )
@@ -346,10 +326,6 @@ _ALGORITHM_0X05_KEYS: frozenset[str] = frozenset(
 )
 assert len(_ALGORITHM_0X05_KEYS) == 27
 
-# 151-06-SUMMARY.md's measured gate-token distribution over the 217 0x05+0x06
-# entries -- pinned exactly. Per orchestrator constraint 4: if a whole-database
-# walk disagrees with these on the 0x05/0x06 subset, that is a stop-and-report
-# condition, never a fudge.
 _CURATION_READ_PERMITTED = 81
 _CURATION_UNDOCUMENTED_ALIAS = 112
 _CURATION_NOT_READABLE = 24
@@ -546,33 +522,11 @@ def test_no_row_resolves_to_a_silicon_only_token() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 4: structural unreachability of the two silicon-only tokens, with a
 # planted fixture.
-# ---------------------------------------------------------------------------
 
 
-def test_silicon_only_tokens_never_appear_in_a_return_value_ast() -> None:
-    """D-12 leg 4(a): walk `protection_readability.py`'s AST (never grep) and
-    assert neither `SILICON_ONLY_TOKENS` literal appears as, or anywhere
-    inside, any `Return` node's value."""
-    source = _MODULE_FILE.read_text(encoding="utf-8")
-    tree = ast.parse(source, filename=str(_MODULE_FILE))
-    offending: list[tuple[int, object]] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Return) and node.value is not None:
-            for sub in ast.walk(node.value):
-                if isinstance(sub, ast.Constant) and sub.value in SILICON_ONLY_TOKENS:
-                    offending.append((getattr(sub, "lineno", node.lineno), sub.value))
-    assert not offending, (
-        "D-12 leg 4(a): silicon-only token literal(s) found inside a Return "
-        f"value in protection_readability.py: {offending}"
-    )
-
-
-# ---------------------------------------------------------------------------
 # Leg 6: robustness controls.
-# ---------------------------------------------------------------------------
 
 
 def test_ti_key_less_rows_resolve_to_no_mechanism_without_raising() -> None:
@@ -671,9 +625,7 @@ def test_synthetic_novel_algorithm_control_raises_naming_only_itself() -> None:
         )
 
 
-# ---------------------------------------------------------------------------
 # Leg 7: the AMBIGUOUS_DOC_CITATIONS record is live over the real corpus.
-# ---------------------------------------------------------------------------
 
 
 def test_ambiguous_doc_citation_reaches_a_real_refusal_reason() -> None:

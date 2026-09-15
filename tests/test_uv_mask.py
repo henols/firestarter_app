@@ -33,9 +33,7 @@ from firestarter.chip_test import (
     uv_slot_starts,
 )
 
-# ---------------------------------------------------------------------------
 # mask_write_pattern (D-A)
-# ---------------------------------------------------------------------------
 
 
 def test_mask_write_pattern_is_bitwise_and():
@@ -57,9 +55,7 @@ def test_mask_write_pattern_unequal_lengths_raises():
         mask_write_pattern(b"\x01\x02", b"\x01")
 
 
-# ---------------------------------------------------------------------------
 # bits_cleared_by / bits_retained_by (D-B)
-# ---------------------------------------------------------------------------
 
 
 def test_bits_cleared_by_counts_current_set_desired_clear():
@@ -96,9 +92,7 @@ def test_bits_retained_by_unequal_lengths_raises():
         bits_retained_by(b"\x01\x02", b"\x01")
 
 
-# ---------------------------------------------------------------------------
 # uv_slot_starts (D-B)
-# ---------------------------------------------------------------------------
 
 
 def test_uv_slot_starts_top_down_ordering_and_count():
@@ -122,9 +116,7 @@ def test_uv_slot_starts_empty_on_zero_or_negative_slot_length():
     assert uv_slot_starts(65536, -1) == []
 
 
-# ---------------------------------------------------------------------------
 # full_device_region (D-D/D-E)
-# ---------------------------------------------------------------------------
 
 
 def test_full_device_region_non_flash4_whole_device():
@@ -170,9 +162,7 @@ def test_full_device_region_flash4_boot_block_length_matches_mirror():
     assert _FLASH4_BOOT_BLOCK_LENGTH == 0x4000
 
 
-# ---------------------------------------------------------------------------
 # WriteTarget.__post_init__ -- the vacuous-pass guard (D-B)
-# ---------------------------------------------------------------------------
 
 
 def _valid_target(

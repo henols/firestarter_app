@@ -73,9 +73,7 @@ def make_app_context(**manager_overrides) -> AppContext:
     )
 
 
-# ---------------------------------------------------------------------------
 # Wave 2 tests (preserved)
-# ---------------------------------------------------------------------------
 
 
 def test_cli_help_runs(runner: CliRunner) -> None:
@@ -217,9 +215,7 @@ def test_no_prefix_matching(runner: CliRunner) -> None:
     assert "No such command" in result.output
 
 
-# ---------------------------------------------------------------------------
 # Wave 3 chip-op happy-path + error-path tests
-# ---------------------------------------------------------------------------
 
 
 def test_read_happy_path(runner: CliRunner) -> None:
@@ -477,9 +473,7 @@ def test_id_chip_not_found(runner: CliRunner) -> None:
     assert result.exit_code == 1
 
 
-# ---------------------------------------------------------------------------
 # Voltage commands (vpp, vpe)
-# ---------------------------------------------------------------------------
 
 
 def test_vpp_happy_path(runner: CliRunner) -> None:
@@ -520,9 +514,7 @@ def test_vpe_returns_false(runner: CliRunner) -> None:
     assert result.exit_code == 1
 
 
-# ---------------------------------------------------------------------------
 # Hardware commands (hw, config)
-# ---------------------------------------------------------------------------
 
 
 def test_hw_happy_path(runner: CliRunner) -> None:
@@ -559,11 +551,6 @@ def test_config_returns_false(runner: CliRunner) -> None:
     app = make_app_context(hardware_manager=hw)
     result = runner.invoke(cli, ["config"], obj=app)
     assert result.exit_code == 1
-
-
-# ---------------------------------------------------------------------------
-# Firmware command (fw) — TRAPs #4 + #5 + D-14
-# ---------------------------------------------------------------------------
 
 
 def test_fw_install_happy_path(runner: CliRunner) -> None:
@@ -662,9 +649,7 @@ def test_fw_list_plain(runner: CliRunner) -> None:
     assert result.exit_code == 0
 
 
-# ---------------------------------------------------------------------------
 # dev group + 4 sub-commands
-# ---------------------------------------------------------------------------
 
 
 def test_dev_read_happy_path(runner: CliRunner) -> None:
@@ -753,13 +738,11 @@ def test_dev_consistency_check_hardware_error_verdict(runner: CliRunner) -> None
     assert result.exit_code == 2
 
 
-# ---------------------------------------------------------------------------
 # RED smoke tests for dev write-cycle + dev fault-inject
 #
 # All four tests MUST FAIL until 53-02 registers the subcommands. Click will
 # report "No such command 'write-cycle'" / "No such command 'fault-inject'",
 # producing exit code 2 (usage error) instead of the expected 0 or 2 (hw-error).
-# ---------------------------------------------------------------------------
 
 
 def test_dev_write_cycle_pass(runner: CliRunner, tmp_path) -> None:
@@ -829,13 +812,9 @@ def test_dev_fault_inject_fail(runner: CliRunner) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# DB-04 SC#1: info display shows status-specific support line (67.1-02 Task 1)
-#
 # Log output from EpromConsolePresenter goes through the logging subsystem.
 # In-process CliRunner tests capture it via pytest caplog (at WARNING level)
 # since the AppContext short-circuit skips _setup_logging in the CLI group.
-# ---------------------------------------------------------------------------
 
 
 def test_info_non_supported_shows_status(runner: CliRunner, caplog) -> None:
@@ -899,13 +878,9 @@ def test_info_protocol_not_impl_shows_status(runner: CliRunner, caplog) -> None:
     assert "not implemented" in log_text.lower()
 
 
-# ---------------------------------------------------------------------------
-# DB-04 SC#2/#4: per-status chip-op refusal matrix (67.1-02 Task 2)
-#
 # Each test asserts: exit 1, status-specific text in output, no traceback,
 # no generic "Chip not usable:" prefix (Approach A — reason string verbatim).
 # Guard fires before resolve_chip/convert_to_programmer → no serial I/O.
-# ---------------------------------------------------------------------------
 
 
 def test_read_non_supported_status_refusal(runner: CliRunner) -> None:

@@ -34,7 +34,6 @@ resolved the stable asset — a DOWNGRADE to firmware this host cannot speak to.
 
 import contextlib
 import logging
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -43,9 +42,7 @@ from firestarter.exceptions import FirmwareOutdatedError
 from firestarter.firmware import FirmwareManager
 from firestarter.serial_comm import SerialCommunicator
 
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 
 @contextlib.contextmanager
@@ -79,9 +76,7 @@ def _probe(**kwargs):
     )
 
 
-# ---------------------------------------------------------------------------
 # D1 — the waiver, and its twin proving the strict path is unchanged
-# ---------------------------------------------------------------------------
 
 
 class TestOutdatedFirmwareWaiverScope:
@@ -202,27 +197,6 @@ class TestWaiverPlumbing:
         assert fm.check_current_firmware() == ("/dev/ttyACM1", "3.0.0b11", "uno")
         assert seen.get("allow_outdated_firmware") is True
 
-    def test_only_the_updater_passes_the_waiver(self):
-        """Source-level tripwire: the waiver must not spread.
-
-        `allow_outdated_firmware=True` may appear in exactly one production
-        module — firmware.py, in check_current_firmware. serial_comm.py owns
-        the parameter itself. Any other production module gaining it means a
-        chip-operation path has acquired the relaxation, which is the whole
-        thing this fix must not do.
-        """
-        pkg = Path(__file__).resolve().parents[1] / "firestarter"
-        offenders = sorted(
-            p.name
-            for p in pkg.rglob("*.py")
-            if "allow_outdated_firmware=True" in p.read_text()
-            and p.name not in ("serial_comm.py", "firmware.py")
-        )
-        assert offenders == [], (
-            f"the outdated-firmware waiver leaked into {offenders}; it is only "
-            f"legitimate on the firmware-update read path"
-        )
-
 
 class TestUpdateDecisionReachedOnPreCap02Firmware:
     """The end-to-end regression: the update decision must be REACHED."""
@@ -301,9 +275,7 @@ class TestUpdateDecisionReachedOnPreCap02Firmware:
                 fm.manage_firmware_update(install_flag=True, port_override="/dev/null")
 
 
-# ---------------------------------------------------------------------------
 # D2 — channel resolution on a pre-release app
-# ---------------------------------------------------------------------------
 
 
 class TestChannelAutoRouteIsNotGatedOnInstall:

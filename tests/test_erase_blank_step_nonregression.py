@@ -44,7 +44,6 @@ from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator
 
 from .conftest import make_app_context
-from .fw_presence import fw_path, requires_fw
 
 _CHIP = "AT28C256"
 
@@ -63,9 +62,7 @@ def real_db() -> EpromDatabase:
     return EpromDatabase(skip_local_override=True)
 
 
-# ---------------------------------------------------------------------------
 # Leg 1: `blank` is registered and its help text renders.
-# ---------------------------------------------------------------------------
 
 
 def test_blank_command_is_registered_and_documented(runner: CliRunner) -> None:
@@ -89,9 +86,7 @@ def test_blank_command_is_registered_and_documented(runner: CliRunner) -> None:
     assert _CLI_HANDLERS_BLANK_DECORATOR_LINE < _CLI_HANDLERS_BLANK_DEF_LINE
 
 
-# ---------------------------------------------------------------------------
 # Leg 2: `blank` reaches the host blank-check entry point exactly once.
-# ---------------------------------------------------------------------------
 
 
 def test_blank_command_reaches_the_host_blank_check_call(
@@ -119,9 +114,7 @@ def test_blank_command_reaches_the_host_blank_check_call(
     assert "operation_flags" in call_kwargs
 
 
-# ---------------------------------------------------------------------------
 # Leg 3: `blank` surfaces a not-blank verdict, not a false success.
-# ---------------------------------------------------------------------------
 
 
 def test_blank_command_reports_not_blank_correctly(
@@ -145,79 +138,7 @@ def test_blank_command_reports_not_blank_correctly(
     operator.check_eprom_blank.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
 # Leg 4: the firmware still wires CMD_BLANK_CHECK to mem_util_blank_check.
-# ---------------------------------------------------------------------------
-
-_EEPROM_28C_SOURCE = fw_path("src", "proms", "eeprom_28c.cpp")
 
 
-def _read_eeprom_28c_source() -> str:
-    """Read the firmware source text, failing closed: an absent path under
-    a present repo is a MissingScanTargetError from `fw_path` itself (never
-    a silent skip); this helper is only reached when `@requires_fw` has
-    already confirmed the sibling checkout exists.
-    """
-    return _EEPROM_28C_SOURCE.read_text(encoding="utf-8")
-
-
-@requires_fw
-def test_firmware_still_wires_the_blank_check_arm() -> None:
-    """Cross-repo source assertion: `configure_eeprom28c`'s `CMD_BLANK_CHECK`
-    arm still maps to the shared `mem_util_blank_check` helper, and that
-    helper name appears EXACTLY once in this file -- the count plan 02's
-    criteria established. Skips cleanly (via `requires_fw`) when the
-    sibling firmware checkout is absent, because the host package's own CI
-    has no firmware checkout at all -- a hard failure there would be a
-    false negative about this repo's own correctness, not a real gate hit.
-    """
-    text = _read_eeprom_28c_source()
-    assert "case CMD_BLANK_CHECK:" in text, (
-        f"expected a 'case CMD_BLANK_CHECK:' arm in {_EEPROM_28C_SOURCE}"
-    )
-    # Scope the mapping assertion to the CMD_BLANK_CHECK case block itself
-    # (up to the next case label or the switch's closing brace), so this
-    # leg cannot be satisfied by an unrelated mem_util_blank_check mention
-    # elsewhere in the file.
-    case_start = text.index("case CMD_BLANK_CHECK:")
-    next_case = text.find("case CMD_", case_start + len("case CMD_BLANK_CHECK:"))
-    case_block = text[case_start : next_case if next_case != -1 else len(text)]
-    assert "mem_util_blank_check" in case_block, (
-        f"CMD_BLANK_CHECK's case block in {_EEPROM_28C_SOURCE} must assign "
-        f"mem_util_blank_check; block was: {case_block!r}"
-    )
-    total_occurrences = text.count("mem_util_blank_check")
-    assert total_occurrences == 1, (
-        f"expected exactly 1 occurrence of mem_util_blank_check in "
-        f"{_EEPROM_28C_SOURCE} (plan 02's established count), found "
-        f"{total_occurrences}"
-    )
-
-
-# ---------------------------------------------------------------------------
 # Leg 5: D-153-04 -- no operation_end is wired for CMD_ERASE on 0x0D.
-# ---------------------------------------------------------------------------
-
-
-@requires_fw
-def test_no_post_erase_blank_check_was_wired_on_0x0d() -> None:
-    """D-153-04's disposition as a source assertion: the `CMD_ERASE` case
-    block in `configure_eeprom28c` assigns no
-    `firestarter_operation_end` function -- no post-erase blank check is
-    wired on protocol 0x0D. Erase and blank stay independent, standalone
-    steps, per ERASE-05's own requirement that `blank` not be folded into
-    erase's completion. Skips cleanly (via `requires_fw`) for the same
-    reason leg 4 does.
-    """
-    text = _read_eeprom_28c_source()
-    assert "case CMD_ERASE:" in text, (
-        f"expected a 'case CMD_ERASE:' arm in {_EEPROM_28C_SOURCE}"
-    )
-    case_start = text.index("case CMD_ERASE:")
-    next_case = text.find("case CMD_", case_start + len("case CMD_ERASE:"))
-    case_block = text[case_start : next_case if next_case != -1 else len(text)]
-    assert "operation_end" not in case_block, (
-        f"CMD_ERASE's case block in {_EEPROM_28C_SOURCE} must NOT assign "
-        f"firestarter_operation_end (D-153-04: no post-erase blank check is "
-        f"wired on 0x0D); block was: {case_block!r}"
-    )

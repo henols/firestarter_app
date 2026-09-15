@@ -57,12 +57,6 @@ _APP_DIR = Path(__file__).parent.parent
 _STABLE_VERSION = "3.0.0"
 _PRERELEASE_VERSION = "3.0.0b1"
 
-# The seven gated dev subcommands + the two that stay on every channel --
-# literals here, not imported from channel.py, so this test does not become
-# trivially self-confirming against the very module it is proving. Phase 151
-# / D-01 added "lock-status" as a seventh gated name, bringing the union with
-# _STABLE_NAMES from eight to nine -- _ALL_NINE_NAMES below is named for that
-# count, not the pre-151 one.
 _GATED_NAMES = frozenset(
     {
         "reg",
@@ -198,9 +192,7 @@ def _run_cli(
     return _run_cli_cached(version, argv, _env_key(env_overrides))
 
 
-# ---------------------------------------------------------------------------
 # Simulated stable (`__version__ = "3.0.0"`, no env override)
-# ---------------------------------------------------------------------------
 
 
 def test_simulated_stable_help_lists_only_read_and_test() -> None:
@@ -250,11 +242,9 @@ def test_simulated_stable_genuine_typo_gets_clicks_generic_message() -> None:
     assert "FIRESTARTER_DEV_TOOLS" not in result.output
 
 
-# ---------------------------------------------------------------------------
 # Simulated prerelease (`__version__ = "3.0.0b1"`, no env override) --
 # the positive control without which the stable-side assertions above would
 # be unfalsifiable.
-# ---------------------------------------------------------------------------
 
 
 def test_simulated_prerelease_help_lists_all_nine() -> None:
@@ -273,11 +263,6 @@ def test_simulated_prerelease_dev_tools_enabled_is_true() -> None:
 def test_simulated_prerelease_dev_commands_is_all_nine() -> None:
     result = _run_cli(_PRERELEASE_VERSION, ("dev", "--help"))
     assert set(result.dev_commands) == _ALL_NINE_NAMES
-
-
-# ---------------------------------------------------------------------------
-# CHAN-04: dev --help is PINNED on both channels, in the same test module.
-# ---------------------------------------------------------------------------
 
 
 def test_dev_help_differs_between_channels_and_is_pinned_each_way() -> None:
@@ -306,12 +291,6 @@ def test_dev_help_differs_between_channels_and_is_pinned_each_way() -> None:
         assert gated in prerelease.output
     assert "read" in stable.output and "read" in prerelease.output
     assert "test" in stable.output and "test" in prerelease.output
-
-
-# ---------------------------------------------------------------------------
-# CHAN-06: the FIRESTARTER_DEV_TOOLS override wins over the channel signal
-# on a simulated-stable build.
-# ---------------------------------------------------------------------------
 
 
 def test_simulated_stable_with_env_override_registers_all_seven_gated_names() -> None:

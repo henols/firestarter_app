@@ -107,11 +107,6 @@ def _drive_write(
     return result, app
 
 
-# ---------------------------------------------------------------------------
-# Leg 1: --skip-erase on 0x0D warns and proceeds (D-13)
-# ---------------------------------------------------------------------------
-
-
 def test_skip_erase_on_0x0d_warns_and_proceeds(runner: CliRunner, tmp_path) -> None:
     """D-13: `write <0x0D chip> --skip-erase` prints the "nothing to skip"
     line, still calls write_eprom, and exits 0 -- the arm never aborts."""
@@ -122,11 +117,6 @@ def test_skip_erase_on_0x0d_warns_and_proceeds(runner: CliRunner, tmp_path) -> N
     assert _SKIP_ERASE_WARNING in result.output
     assert _ALLOWED_0X0D_CHIP.upper() in result.output
     app.eprom_operator.write_eprom.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Leg 2: --skip-erase on a non-0x0D chip does not warn (D-13 scope)
-# ---------------------------------------------------------------------------
 
 
 def test_skip_erase_on_non_0x0d_does_not_warn(runner: CliRunner, tmp_path) -> None:
@@ -141,9 +131,7 @@ def test_skip_erase_on_non_0x0d_does_not_warn(runner: CliRunner, tmp_path) -> No
     app.eprom_operator.write_eprom.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
 # Leg 3: no --skip-erase on 0x0D does not warn
-# ---------------------------------------------------------------------------
 
 
 def test_no_skip_erase_on_0x0d_does_not_warn(runner: CliRunner, tmp_path) -> None:
@@ -153,11 +141,6 @@ def test_no_skip_erase_on_0x0d_does_not_warn(runner: CliRunner, tmp_path) -> Non
     assert result.exit_code == 0, result.output
     assert _SKIP_ERASE_WARNING not in result.output
     app.eprom_operator.write_eprom.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Leg 4: the blank-check flag is NOT extended by this arm (RESEARCH C-8)
-# ---------------------------------------------------------------------------
 
 
 def test_blank_check_flag_on_0x0d_does_not_produce_an_erase_warning(
@@ -188,9 +171,7 @@ def test_blank_check_flag_on_0x0d_does_not_produce_an_erase_warning(
     app.eprom_operator.write_eprom.assert_called_once()
 
 
-# ---------------------------------------------------------------------------
 # Leg 5: the emitted flags are byte-identical with and without the warning
-# ---------------------------------------------------------------------------
 
 
 def test_skip_erase_warning_does_not_change_the_emitted_flags(
@@ -223,12 +204,6 @@ def test_skip_erase_warning_does_not_change_the_emitted_flags(
     assert flags_non_0x0d & FLAG_SKIP_ERASE
 
 
-# ---------------------------------------------------------------------------
-# Leg 6: this arm and the pre-existing D-04/D-18 block are not mutually
-# exclusive -- both applicable lines fire together on one invocation
-# ---------------------------------------------------------------------------
-
-
 def test_both_vacuous_flag_warnings_can_appear_together(
     runner: CliRunner, tmp_path
 ) -> None:
@@ -248,12 +223,6 @@ def test_both_vacuous_flag_warnings_can_appear_together(
     assert _AUTO_SET_LINE in result.output
     assert _SKIP_ERASE_WARNING in result.output
     app.eprom_operator.write_eprom.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Leg 7: no blank-check-vacuity warning is printed on 0x0D (Phase 153 /
-# D-153-05 / RESEARCH Pitfall 5) -- guards a deliberate non-addition
-# ---------------------------------------------------------------------------
 
 
 def test_no_blank_check_vacuity_warning_is_printed_on_0x0d(

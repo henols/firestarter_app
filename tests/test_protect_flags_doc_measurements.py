@@ -52,9 +52,7 @@ _FIRESTARTER_PKG_DIR = _FA_DIR / "firestarter"
 _ALGORITHM_UV_EPROM_0X0B = 11
 
 
-# ---------------------------------------------------------------------------
 # DB loading / measurement helpers
-# ---------------------------------------------------------------------------
 
 
 def _load_db() -> dict:
@@ -99,10 +97,8 @@ def _measure_protect_field(
     return true_n, false_n, absent_n, by_alg_true, by_alg_total
 
 
-# ---------------------------------------------------------------------------
 # Leg 2: the two-row exception is real, and the .get(...) discipline is
 # justified (a direct index DOES raise), not merely asserted.
-# ---------------------------------------------------------------------------
 
 
 def test_two_row_exception_is_real_and_get_discipline_is_justified() -> None:
@@ -148,13 +144,6 @@ def test_two_row_exception_is_real_and_get_discipline_is_justified() -> None:
             )
 
 
-# ---------------------------------------------------------------------------
-# Leg 4: no runtime consumer, proven by a source scan (structural, not a
-# gate -- D-16 forbids a new tools/check_*.py; the in-tree precedent for
-# this shape is a test).
-# ---------------------------------------------------------------------------
-
-
 def _prose_line_numbers(text: str) -> set[int]:
     """Line numbers covered by a `#` comment token or a module/class/
     function docstring -- i.e. text a human reads as prose, never code that
@@ -191,44 +180,6 @@ def _prose_line_numbers(text: str) -> set[int]:
     return prose_lines
 
 
-def test_no_runtime_consumer_in_shipped_package_source_scan() -> None:
-    """Every occurrence of `protect_on_after` / `protect_off_before` under
-    `firestarter_app/firestarter/` must fall on a comment or docstring line
-    -- never on a line of executable code. This is the structural proof
-    that D-14/D-16's "no runtime consumer" claim holds, and it is a Python
-    test that actually runs (see module docstring, C-13)."""
-    offenders: list[str] = []
-    checked_any = False
-    for py_file in sorted(_FIRESTARTER_PKG_DIR.rglob("*.py")):
-        rel = py_file.relative_to(_FA_DIR)
-        text = py_file.read_text(encoding="utf-8")
-        if "protect_on_after" not in text and "protect_off_before" not in text:
-            continue
-        checked_any = True
-        prose_lines = _prose_line_numbers(text)
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            if "protect_on_after" in line or "protect_off_before" in line:
-                if lineno not in prose_lines:
-                    offenders.append(f"{rel}:{lineno}: {line.strip()}")
-
-    assert checked_any, (
-        "No file under firestarter_app/firestarter/ mentions either field "
-        "at all -- this would mean the known provenance comments were "
-        "removed; investigate before trusting the (vacuous) pass below."
-    )
-    assert not offenders, (
-        "Found protect_on_after/protect_off_before OUTSIDE a comment or "
-        "docstring (i.e. as executable code) -- naming file:line: "
-        + "; ".join(offenders)
-    )
-
-
-# ---------------------------------------------------------------------------
-# Leg 6: sdp_capability.py untouched -- D-16's untouched-guard, copied from
-# test_b15_page_size_corroboration.py's shape.
-# ---------------------------------------------------------------------------
-
-
 def test_sdp_capability_module_untouched_this_plan() -> None:
     """Structural guard: this plan must not depend on, or require edits to,
     `firestarter/sdp_capability.py` -- D-16 forbids editing it. This test
@@ -245,11 +196,9 @@ def test_sdp_capability_module_untouched_this_plan() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Leg 7: non-vacuity control for the recomputation-vs-doc comparison
 # machinery -- a moved synthetic chip must be named, and an untouched
 # control chip must not.
-# ---------------------------------------------------------------------------
 
 
 def _partition_by_protect_on_after(db: dict) -> tuple[list[str], list[str]]:

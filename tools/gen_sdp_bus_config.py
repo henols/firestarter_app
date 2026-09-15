@@ -38,9 +38,7 @@ import argparse
 import sys
 from pathlib import Path
 
-# ===========================================================================
 # 1. DEFAULTS (relative to this script's location)
-# ===========================================================================
 
 _TOOLS_DIR = Path(__file__).parent
 _APP_ROOT = _TOOLS_DIR.parent
@@ -59,9 +57,7 @@ _PINOUTS_DEFAULT = _APP_ROOT / "firestarter" / "data" / "pinouts.json"
 # (mirrors the sibling-repo path derivation convention in gen_validation_header.py).
 sys.path.insert(0, str(_APP_ROOT))
 
-# ===========================================================================
 # 2. REPRESENTATIVE CHIP SET
-# ===========================================================================
 
 # One chip per 0x0D pinout, plus a second DIP32_28C512_EEPROM size band.
 # That pinout alone spans 64 KB to 512 KB; AT28C010 and AT28C040 share an
@@ -93,9 +89,7 @@ BANNER = (
 )
 
 
-# ===========================================================================
 # 3. DERIVATION -- mirrors src/json_parser.c's parse_bus_config exactly
-# ===========================================================================
 
 
 class DerivationError(Exception):
@@ -195,10 +189,8 @@ def derive_rows(pinouts_path: Path) -> list:
     return rows
 
 
-# ===========================================================================
 # 4. VALIDATION (T-116-02-STALE mitigation) -- load-bearing ordering: this
 #    MUST run and raise BEFORE any emission.
-# ===========================================================================
 
 
 def validate_rows(rows: list) -> None:
@@ -281,9 +273,7 @@ def validate_rows(rows: list) -> None:
             )
 
 
-# ===========================================================================
 # 5. EMITTER
-# ===========================================================================
 
 
 def emit_cpp_header(rows: list) -> str:
@@ -335,9 +325,7 @@ def emit_cpp_header(rows: list) -> str:
     return "".join(parts)
 
 
-# ===========================================================================
 # 6. CLI
-# ===========================================================================
 
 
 def _build_argparser() -> argparse.ArgumentParser:

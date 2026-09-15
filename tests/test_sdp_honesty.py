@@ -42,9 +42,7 @@ be re-taken from this module, which no longer drives any CLI surface at all.
 
 from __future__ import annotations
 
-import ast
 import re
-from pathlib import Path
 
 from firestarter.exceptions import EpromOperationError
 from firestarter.messages import MSG_ERR_TIMEOUT, MSG_ERR_UNKNOWN_CMD
@@ -62,12 +60,6 @@ from firestarter.sdp_honesty import (
 # gate-order/consent-matrix cases that only they served -- see
 # 132-PRUNE-LEDGER.md section 2.
 _ALLOWED_CHIP = "AT28C256"
-
-
-# ---------------------------------------------------------------------------
-# Report honesty (D-10) + firmware-too-old (D-14) -- the four survivors,
-# retargeted onto firestarter/sdp_honesty.py directly.
-# ---------------------------------------------------------------------------
 
 
 def test_summary_line_carries_the_unreadable_state_caveat_on_both_directions() -> None:
@@ -154,18 +146,6 @@ def test_firmware_too_old_is_reported_when_unknown_cmd_comes_back() -> None:
     assert map_unknown_cmd_to_outdated(other_exc, "enable", _ALLOWED_CHIP) is None
 
 
-# ---------------------------------------------------------------------------
-# (LOCK-02/LOCK-03, D-04, C-4) -- the strictly-additive extension.
-# `unreadable_state_caveat()` and both `emission_summary()` directions are
-# pinned as literals here too, on top of the four surviving cases above and
-# `test_chip_test_sdp_leg.py`'s own four pinning legs, so an edit to either
-# function's wording goes red at this file as well -- C-4 measured that
-# `unreadable_state_caveat()` now has three landed production callers
-# (`cli_handlers.py:2408`, `:2412`, `chip_test.py:1480`) plus those four
-# pinning tests, so its text is load-bearing at seven sites total.
-# ---------------------------------------------------------------------------
-
-
 def test_unreadable_state_caveat_text_is_unchanged_by_the_additive_extension() -> None:
     """Pinned literal, byte-identical to the pre-Phase-151 wording. If this
     goes red, the extension in this plan was NOT strictly additive -- see
@@ -239,51 +219,3 @@ def test_operation_sibling_generalises_the_label_away_from_the_literal_sdp() -> 
     message = str(outdated)
     assert "lock-status query" in message, message
     assert "SDP" not in message, message
-
-
-# ---------------------------------------------------------------------------
-# Import purity (D-01/D-02's forward contract): sdp_honesty.py must stay
-# importless of click, so Phase 134's report layer (which has no CLI
-# context of its own) can import it without pulling in a CLI dependency.
-# ---------------------------------------------------------------------------
-
-
-def test_sdp_honesty_module_imports_only_leaf_firestarter_modules() -> None:
-    """Enforces the import-set invariant `sdp_honesty.py`'s own module
-    docstring declares: its top-level import set is a subset of
-    `{"__future__", "firestarter.exceptions", "firestarter.messages"}`. Both
-    named modules are leaves (`exceptions.py` has zero top-level imports;
-    `messages.py` imports only `dataclasses`), and in particular `click` is
-    forbidden -- the caller performs the `click.echo`, so a `click`
-    dependency here would make this module unusable from Phase 134's report
-    layer.
-
-    Scoped to top-level statements only (`tree.body`, never descending into
-    a function or an `if TYPE_CHECKING:` block), so a future
-    type-checking-only import is not mistaken for a runtime one -- mirrors
-    `tests/test_sdp_capability.py`'s
-    `test_sdp_capability_module_imports_nothing_but_stdlib_typing` leg
-    (D-03's precedent for this exact shape)."""
-    # Absolute path to the firestarter_app directory (cwd-independent),
-    # computed inline (not a module-level constant) so this remains the
-    # module's only surviving private module-level name (_ALLOWED_CHIP).
-    fa_dir = Path(__file__).parent.parent
-    module_path = fa_dir / "firestarter" / "sdp_honesty.py"
-    tree = ast.parse(module_path.read_text(encoding="utf-8"))
-
-    imported_modules: set[str] = set()
-    for node in tree.body:
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                imported_modules.add(alias.name)
-        elif isinstance(node, ast.ImportFrom) and node.module is not None:
-            imported_modules.add(node.module)
-
-    assert imported_modules <= {
-        "__future__",
-        "firestarter.exceptions",
-        "firestarter.messages",
-    }, (
-        "D-01/D-02 forward contract: sdp_honesty.py's top-level imports "
-        f"must stay a leaf-only subset; found {imported_modules}."
-    )

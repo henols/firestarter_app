@@ -69,8 +69,6 @@ from .conftest import make_app_context as _make_app_context
 # (mocked) `read_protection_status` call without needing `--force`.
 _READ_PERMITTED_CHIP = "AM29F010"
 
-# The worked C-17/D-06 example: refuses regardless of the bare-`W29C020`
-# tiebreak, because `W29C022` is undocumented either way.
 _UNDOCUMENTED_ALIAS_CHIP = "W29C020"
 
 # A second curation-surface refusal whose two aliases carry two DIFFERENT
@@ -81,8 +79,6 @@ _NO_MECHANISM_CHIP = "27C256"
 _NOT_IMPLEMENTED_CHIP = "AM28F010"
 _NOT_READABLE_CHIP = "AT28C256"
 
-# An `error_code` distinct from `MSG_ERR_UNKNOWN_CMD` (0xAB) -- the negative
-# control for leg 7's D-04 keying-on-id-not-text requirement.
 _OTHER_ERROR_CODE = 0x99
 assert _OTHER_ERROR_CODE != MSG_ERR_UNKNOWN_CMD
 
@@ -116,14 +112,8 @@ def _invoke(runner: CliRunner, app: AppContext, chip: str, *, force: bool = Fals
     return runner.invoke(cli, args, obj=app)
 
 
-# ---------------------------------------------------------------------------
 # Leg 1 + 2: the class-token x exit-code matrix, and exit 0's real-read floor
-# ---------------------------------------------------------------------------
 
-# One case per one of D-09's eight class tokens. `mock` is `None` for a
-# table refusal (the operator must never be called), `("value", is_ok,
-# payload)` to configure a `return_value`, or `("error", error_code)` to
-# configure a `side_effect`.
 _MATRIX_CASES = {
     "no_mechanism": (_NO_MECHANISM_CHIP, False, None, 2),
     "not_implemented": (_NOT_IMPLEMENTED_CHIP, False, None, 2),
@@ -218,11 +208,6 @@ def test_exit_zero_reachable_only_from_silicon_only_tokens() -> None:
         )
 
 
-# ---------------------------------------------------------------------------
-# Leg 3: the W29C020 refusal, named -- D-06/D-07's measured consequence
-# ---------------------------------------------------------------------------
-
-
 def test_w29c020_refuses_by_default_naming_w29c022(runner: CliRunner) -> None:
     """No `0x05` row answers by default -- not even the operator's own
     `W29C020` -- because `W29C022` is undocumented in `lockable-proms.md`
@@ -242,9 +227,7 @@ def test_w29c020_refuses_by_default_naming_w29c022(runner: CliRunner) -> None:
     mock_operator.read_protection_status.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
 # Leg 4: the W29C040 refusal handles a SET, with differing annotations
-# ---------------------------------------------------------------------------
 
 
 def test_w29c040_refusal_names_both_aliases_with_differing_states(
@@ -268,9 +251,7 @@ def test_w29c040_refusal_names_both_aliases_with_differing_states(
     mock_operator.read_protection_status.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
 # Leg 5: the --force probe never becomes a state claim, for any fed decode
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -303,9 +284,7 @@ def test_forced_probe_is_never_a_state_claim(
     assert result.exit_code == 4, result.output
 
 
-# ---------------------------------------------------------------------------
 # Leg 6: --force never reaches the wire -- the flags word is unchanged
-# ---------------------------------------------------------------------------
 
 
 def test_force_does_not_change_the_wire_flags_word(runner: CliRunner) -> None:
@@ -339,9 +318,7 @@ def test_force_does_not_change_the_wire_flags_word(runner: CliRunner) -> None:
     assert flags_with_force == flags_without_force
 
 
-# ---------------------------------------------------------------------------
 # Leg 7: firmware_outdated, keyed on the message id, never on text
-# ---------------------------------------------------------------------------
 
 
 def test_unknown_command_error_maps_to_firmware_outdated(runner: CliRunner) -> None:
@@ -381,9 +358,7 @@ def test_unrelated_error_code_does_not_map_to_firmware_outdated(
     assert result.exit_code != 3, result.output
 
 
-# ---------------------------------------------------------------------------
 # Leg 8: the raw byte is visible on the probe path, even when unresolved
-# ---------------------------------------------------------------------------
 
 
 def test_raw_byte_visible_in_hex_on_forced_probe(runner: CliRunner) -> None:

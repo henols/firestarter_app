@@ -77,16 +77,8 @@ from .fixtures.synthetic_nonzero_chip_id import (
     SyntheticNonzeroChipIdDatabase,
 )
 
-# A real, on-disk-database instance (skip_local_override=True: no
-# ~/.firestarter override, no serial) -- the same module-level idiom
-# test_chip_test.py/test_chip_test_sdp_leg.py already use for a
-# derive_plan(...)-against-real-data proof (v1.30 Phase 134, plan 134-08).
 _REAL_DB = EpromDatabase(skip_local_override=True)
 
-# M8720 has no chip-id in the DB (id step is always NA -- a mock
-# check_eprom_id return has no effect on its verdict), is NOT UV-erasable
-# (electrical-type "EEPROM"), so it is written in full with no prompt on
-# every run (D-01).
 _CHIP_NO_ID = "M8720"
 # AS29F002T has a real chip-id in the DB, so a mismatched detected id
 # actually closes the destructive gate (112-02 SUMMARY: "Used AS29F002T ...
@@ -96,13 +88,6 @@ _CHIP_WITH_ID = "AS29F002T"
 # AM27512 IS UV-erasable (electrical-type "UV-EPROM", measured exact via
 # is_uv_eprom) -- the one family `dev_test`'s scope rule resolves to "partial".
 _CHIP_UV = "AM27512"
-# AT28C256 is one of the v1.30 milestone's 43 measured SDP-ALLOW chips
-# (sdp_capability() returns True) -- verified at plan time to resolve
-# through resolve_chip as algorithm 13 (SDP_PROTOCOL_ID), chip-id 0,
-# memory-size 32768. NOT UV-erasable (electrical-type "EEPROM"), so it
-# writes in full with no prompt, same as _CHIP_NO_ID/_CHIP_WITH_ID above --
-# the only difference that matters here is that derive_plan appends the
-# six-step SDP leg (D-06) after the four shipped ops for an ALLOW chip.
 _CHIP_ALLOW = "AT28C256"
 
 
@@ -215,21 +200,6 @@ def make_leaked_lock_operator(
     (the mixed BAD+marginal pin) without disturbing the state-tracking
     read-back the SDP leg's own verdicts depend on.
     """
-    # quick task 260821-wna, Task 3: `_write`/`_read` now accept (and honor)
-    # `address_str` -- required so a later keyword-only `address_str=...`
-    # call from `_dispatch_multi_run`/`_dispatch_sdp_leg` (Task 4) does not
-    # TypeError -- while deliberately PRESERVING the pre-existing "replace
-    # `state['data']` wholesale on every write" model rather than widening
-    # it into a persistent whole-device buffer: every ALLOW chip's write and
-    # SDP-leg regions in this suite start at address 0 (D-17: ALLOW chips
-    # are all non-UV, so `_address_arg(0)` is `None` on every reachable
-    # call), so `state['data']`'s SIZE tracking the most recent write's
-    # length -- not a fixed device size -- is exactly what keeps
-    # `_dispatch_sdp_leg`'s length gate meaningful without this fixture
-    # pre-emptively solving the region-scoped-readback problem Task 4 owns.
-    # `state['start']` records the last write's own address so `_read`'s
-    # `file_handle.seek(address)` (finding M-3) is still genuinely
-    # reproduced if a future case DOES pass a non-zero start.
     from .fake_chip import _parse_addr_or_size
 
     state = {"data": b"", "start": 0}
@@ -301,9 +271,6 @@ def make_held_lock_operator(
     def _write(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
         payload = Path(source_path).read_bytes()
         if flags & FLAG_SKIP_SDP_UNLOCK:
-            # The inhibited-write call (D-01's one narrowing): the part
-            # refuses the write internally -- state stays unchanged -- but
-            # the state machine still completes and the ack is observed.
             return True
         state["data"] = payload
         state["start"] = _parse_addr_or_size(address_str) or 0
@@ -517,11 +484,9 @@ def _load_report(chip: str) -> dict:
     return json.loads((_reports_dir() / f"dev-test-{chip}.json").read_text())
 
 
-# ---------------------------------------------------------------------------
 # Quick task 260821-spg: structural regression pinning "console trimmed,
 # payload intact" -- the whole point of the task. Fails if any of the three
 # source edits (cli_handlers.py, diagnostic_report.py, submit.py) regress.
-# ---------------------------------------------------------------------------
 
 
 def test_dev_test_output_trim_console_shrunk_payload_intact(
@@ -561,15 +526,6 @@ def test_dev_test_output_trim_console_shrunk_payload_intact(
     result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
     assert result.exit_code == 0, result.output
 
-    # Exclude the printed issue URL and everything after it: it legitimately
-    # embeds the WHOLE sanitized body (percent-encoded) as a query param --
-    # `transport_health` survives unescaped inside it (underscores/alnum are
-    # not percent-encoded by `urlencode(quote_via=quote)`), and rich's console
-    # can hard-wrap that one long token across several output lines with no
-    # per-line marker to filter on. That is correct behaviour (SUB-02), not a
-    # regression. The claim under test is about the RENDERED TABLE and the
-    # removed body echo, both of which print BEFORE the URL -- so this check
-    # looks only at the output up to where the URL begins.
     url_start = result.output.find("https://github.com/")
     assert url_start != -1, result.output
     pre_url_output = result.output[:url_start]
@@ -668,11 +624,6 @@ def test_a_clean_run_saves_a_populated_chip_id_actual_equal_to_expected(
     assert ac["chip_id_actual"] == ac["chip_id_expected"]
 
 
-# ---------------------------------------------------------------------------
-# Zero-option surface (D-05)
-# ---------------------------------------------------------------------------
-
-
 class TestZeroOptionSurface:
     """`dev test` takes CHIP plus exactly one option; each removed flag errors.
 
@@ -765,16 +716,6 @@ class TestZeroOptionSurface:
         assert "no such option" in result.output.lower()
 
 
-# ---------------------------------------------------------------------------
-# D-04: the always-writes notice is unconditional and first
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# D-01/D-03: the UV-only stop-and-ask
-# ---------------------------------------------------------------------------
-
-
 class TestUVWriteHasNoPrompt:
     """RETIRED PROMPT, recorded not deleted (quick task 260822-aq6, D-4).
 
@@ -843,11 +784,6 @@ class TestUVWriteHasNoPrompt:
         assert "write-partial" not in ops
 
 
-# ---------------------------------------------------------------------------
-# Sampler bracketing (D-04): always built now, no more standalone slots
-# ---------------------------------------------------------------------------
-
-
 class TestSamplerBracketing:
     """The sampler is built and brackets every write on every run -- there
     is no more non-destructive path with a standalone (non-split) voltage
@@ -891,11 +827,6 @@ class TestSamplerBracketing:
         ]
         assert hw.sample_vpp_mv.call_count == 4
         assert hw.sample_vpe_mv.call_count == 4
-
-
-# ---------------------------------------------------------------------------
-# Report destination: unconditionally <config dir>/reports (D-05)
-# ---------------------------------------------------------------------------
 
 
 class TestReportDestination:
@@ -1208,11 +1139,6 @@ class TestReportDestination:
         assert data["auto_capture"]["hw_revision"] is None
 
 
-# ---------------------------------------------------------------------------
-# DEVTEST-05: every run reaches the filing ask, exactly once
-# ---------------------------------------------------------------------------
-
-
 class TestSubmitReport:
     """Submission is no longer flag-gated -- every run reaches
     `submit_report` exactly once (Plan 121-11 owns its internal
@@ -1255,13 +1181,6 @@ class TestSubmitReport:
         assert result.exit_code == 0, result.output
         mock_browser_open.assert_not_called()
         mock_run_fn.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# SAFE-04: absent-chip hard-fail (case A) vs present-but-unsupported sweep
-# (case B) -- the guard keys off `get_eprom` emptiness, never a
-# `resolve_chip` support-status refusal.
-# ---------------------------------------------------------------------------
 
 
 class TestAbsentChipHardFail:
@@ -1328,11 +1247,6 @@ class TestAbsentChipHardFail:
         assert steps["blank-check"]["reason"] == "", steps["blank-check"]
         assert steps["write"]["verdict"] == "SKIPPED"
         assert "adapter" in steps["write"]["reason"]
-
-
-# ---------------------------------------------------------------------------
-# Exit-code tri-state (D-01/D-02 exit-code mapping) -- unchanged
-# ---------------------------------------------------------------------------
 
 
 class TestExitCodeMapping:
@@ -1407,24 +1321,11 @@ class TestExitCodeMapping:
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
-        # No `Confirm` patch any more: the UV write prompt was retired
-        # (quick task 260822-aq6, D-4), so a UV part resolves to the partial
-        # (slot) write on every path and the claim under test -- that the
-        # partial-write mode introduces no new verdict and needs no
-        # exit-code map edit -- is reached without simulating an answer.
         result = runner.invoke(cli, ["dev", "test", _CHIP_UV], obj=app)
         assert result.exit_code == expected_exit, result.output
         data = _load_report(_CHIP_UV)
         steps = {s["op"] for s in data["steps"]}
         assert "write-partial" in steps
-
-
-# ---------------------------------------------------------------------------
-# D-14 / LEG-06 -- BAD outranks marginal in the exit code, end to end
-# (v1.30 Phase 134 plan 134-05). `pytest -k "exit"` selects this class per
-# 134-VALIDATION.md's LEG-06 command; `-k "lock_leaked"` selects the
-# discharging test specifically.
-# ---------------------------------------------------------------------------
 
 
 class TestExitPrecedenceLeg06:
@@ -1509,18 +1410,6 @@ class TestExitPrecedenceLeg06:
         assert verdicts["write-restored"] == "OK", verdicts
 
 
-# ---------------------------------------------------------------------------
-# LEG-12 (v1.30 Phase 134 plan 134-07): the HELD/NOT-HELD/NOT-RUN hold
-# state (bare, since quick task 260822-hs), both surfaces, end to end
-# through the real CLI. Evidence
-# Ceiling (`.planning/REQUIREMENTS.md`): every fixture below pins the host's
-# RESPONSE to a scripted read-back -- a locked die is unrepresentable in
-# either repo's stubs, so the causal claim "the lock inhibited the write" is
-# NOT provable this milestone. These tests prove the REPORTED value reaches
-# both surfaces correctly, never that a real part was physically inhibited.
-# ---------------------------------------------------------------------------
-
-
 class TestHoldStateLeg12:
     """`report.sdp_hold_state = sdp_hold_state(plan, results)` (the
     derive-in-engine / assign-in-handler seam this plan wires) reaches BOTH
@@ -1592,13 +1481,6 @@ class TestHoldStateLeg12:
         operator.sdp_lock.assert_not_called()
         banner = data["banner"]
         assert banner["n_ran"] < banner["m_applicable"], banner
-
-
-# ---------------------------------------------------------------------------
-# D-15 (v1.30 Phase 134 plan 134-07): the exit-floor composition, pinned in
-# every order assumption A3 names. `pytest -k "exit"` selects these
-# alongside `TestExitPrecedenceLeg06` above.
-# ---------------------------------------------------------------------------
 
 
 class TestExitFloorD15:
@@ -1737,13 +1619,6 @@ class TestExitFloorD15:
         assert exit_clean != exit_notrun
 
 
-# ---------------------------------------------------------------------------
-# D-09 (v1.30 Phase 134, plan 134-08): the notice's write-pass count is
-# DERIVED from a live `derive_plan` result, never restated as a literal.
-# `pytest -k "notice"` selects this class.
-# ---------------------------------------------------------------------------
-
-
 class TestWritePassCountDerivedFromLivePlanD09:
     """Renamed by quick task 260821-spg (was
     `TestAlwaysWritesNoticeDerivedCountD09`): the always-writes console
@@ -1782,23 +1657,6 @@ class TestWritePassCountDerivedFromLivePlanD09:
             write_passes,
             _ALWAYS_WRITES_PASS_COUNT,
         )
-
-
-# ---------------------------------------------------------------------------
-# D-12 (v1.30 Phase 134, plan 134-08): the SDP leg's OUTCOMES, proven
-# behaviourally through the real CLI. Quick task 260821-spg removed the
-# console prose these tests used to also assert (both named recovery
-# forms, and the module-level tuple that resolved their names) -- what
-# survives is each fixture's genuine data claim: the hold state that
-# actually landed, the restore step's actual verdict, and whether
-# `sdp_lock` was actually called. `pytest -k "recovery"` no longer selects
-# this class by name; use `-k "SdpRecoveryOutcomes"` instead. Evidence
-# Ceiling (`.planning/REQUIREMENTS.md`): every fixture below pins the
-# host's RESPONSE to a scripted read-back -- a locked die is
-# unrepresentable in either repo's stubs, so no fixture here simulates real
-# inhibition, and the causal claim "the lock inhibited the write" is NOT
-# provable this milestone.
-# ---------------------------------------------------------------------------
 
 
 class TestSdpRecoveryOutcomesD12:
@@ -1852,13 +1710,6 @@ class TestSdpRecoveryOutcomesD12:
         operator.sdp_lock.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
-# 133 D-07's residual, inherited unchanged by D-12 (v1.30 Phase 134, plan
-# 134-08): RECORDED here, not closed. Recording it as a truthful test rather
-# than only a comment, per the plan's own instruction.
-# ---------------------------------------------------------------------------
-
-
 class TestCtrlCResidualNotClosedD12:
     """After a Ctrl-C mid-leg, `results = run_plan(...)` (cli_handlers.py)
     never returns, so there is NO report at all. Quick task 260821-spg
@@ -1895,34 +1746,6 @@ class TestCtrlCResidualNotClosedD12:
         # report.render(), the JSON/markdown writes, and submit_report all
         # run, so none of them ever executed.
         assert not report_path.exists()
-
-
-# ---------------------------------------------------------------------------
-# LEG-17 (v1.30 Phase 134, plan 134-10): six laundering routes to a
-# non-running SDP oracle, R1-R6. `SKIPPED` and `NA` both map to exit 0
-# (before D-15's floor), so every one of these routes could otherwise end
-# with a community member reading PASS on a run where the oracle never
-# executed. Every route test below asserts BOTH halves of the house idiom
-# (`tests/test_dev_test_cmd.py`'s own `test_chip_id_mismatch_exits_1`
-# precedent, and Phase 114.1's lesson that an exit-code/verdict-only
-# assertion lies): `operator.sdp_lock.assert_not_called()` AND a rendered
-# bare `NOT-RUN` token, in both the console and the JSON artifact (quick
-# task 260822-hs stripped the reason this comment used to describe here).
-#
-# THESE SIX ARE NOT EXHAUSTIVE. A SEVENTH route to a non-running oracle
-# exists -- 134-CONTEXT.md D-08's baseline write/read-back gate, named the
-# "seventh route" in `134-04-SUMMARY.md` -- and it fails CLOSED under
-# D-08+D-15 (it is not a laundering route). It is not re-proven in this
-# class because it is already proven end to end, in the same
-# negative-call-plus-NOT-RUN-token shape, by `TestHoldStateLeg12::
-# test_hold_state_not_run_reaches_both_surfaces` and by
-# `TestExitFloorD15::test_clean_notrun_floors_to_2` / `test_bad_and_notrun_
-# exits_1_not_2` above (all driven through `make_clean_operator()`'s dead
-# write-path shape). A later reader must not mistake "six routes covered
-# here" for "every route to a non-running oracle" -- R5/R6's library-level
-# companions live in `tests/test_chip_test.py`; `pytest -k "laundering"`
-# selects across both files.
-# ---------------------------------------------------------------------------
 
 
 def test_all_sdp_allow_chips_have_zero_chip_id_measured_live() -> None:
@@ -2165,10 +1988,8 @@ class TestLaunderingRoutesR3R4:
         assert f"sdp_hold_state {SDP_HOLD_NOT_RUN}" in normalized, normalized
 
 
-# ---------------------------------------------------------------------------
 # Quick task 260807-kaq: blank-check must run AFTER erase, end to end.
 # `pytest -k "blank_check_after_erase"` selects this class.
-# ---------------------------------------------------------------------------
 
 
 class TestBlankCheckAfterEraseKaq:
@@ -2235,12 +2056,10 @@ class TestBlankCheckAfterEraseKaq:
         operator.check_eprom_blank.assert_not_called()
 
 
-# ---------------------------------------------------------------------------
 # Write-coverage provenance end to end (quick task 260821-wna, Task 5): a
 # real CLI run over a used UV `FakeChip` saves a JSON whose write step
 # carries the slot region, and the console output contains the coverage
 # line -- both surfaces, driven through the real `dev test` command.
-# ---------------------------------------------------------------------------
 
 
 class TestWriteCoverageProvenanceD_F:
@@ -2280,12 +2099,6 @@ class TestWriteCoverageProvenanceD_F:
         assert write_step["write_region_length"] == 256, write_step
         assert write_step["write_bits_cleared"] is not None, write_step
         assert write_step["write_bits_retained"] is not None, write_step
-        # `probe read` names WHERE the mask's "current content" came from;
-        # the `(tranche n/N)` suffix names WHICH staged image of the repeat
-        # cycle this row reports (D-2). Asserted as prefix + annotation rather
-        # than an exact string so the provenance claim under test survives a
-        # change to the cycle count, and so the annotation cannot silently
-        # disappear either.
         source = write_step["write_current_source"]
         assert source.startswith("probe read"), write_step
         assert "tranche" in source, write_step

@@ -320,9 +320,7 @@ class TestIdFrameDecoder:
             f"{[r.message for r in caplog.records]}"
         )
 
-    # -----------------------------------------------------------------
     # Wave 0 gap tests: INIT/MAIN/END ID-frame decode (W-01 / W-02)
-    # -----------------------------------------------------------------
 
     def test_init_done_arrives_as_id_frame(self, fake_serial, make_comm):
         """W-01/W-02: MSG_INIT_DONE zero-param frame → Response(type='INIT',
@@ -361,9 +359,7 @@ class TestIdFrameDecoder:
         assert response.type == "END"
         assert response.message == "(end done)"
 
-    # -----------------------------------------------------------------
     # Wave 0 gap tests: P-02 MSG_OK_REV sentinel rendering
-    # -----------------------------------------------------------------
 
     def test_ok_rev_p02_with_override_decodes(self, fake_serial, make_comm):
         """P-02: MSG_OK_REV with physical=0x01, effective=0x02 (override active)
@@ -395,9 +391,7 @@ class TestIdFrameDecoder:
         assert response.type == "OK"
         assert response.message == "Rev 1"
 
-    # -----------------------------------------------------------------
     # Wave 0 gap tests: P-03 MSG_OK_CFG sentinel rendering
-    # -----------------------------------------------------------------
 
     def test_ok_cfg_p03_with_override_decodes(self, fake_serial, make_comm):
         """P-03: MSG_OK_CFG with r1=10000, r2=4700, override=0x02 (REVISION_2_0)
@@ -444,16 +438,6 @@ class TestIdFrameDecoder:
         assert response is not None
         assert response.type == "OK"
         assert response.message == "R1: 10000, R2: 4700, Override HW: Rev153"
-
-    # -----------------------------------------------------------------
-    # D-03 / WR-01 close: MSG_INFO_HW + MSG_INFO_PHYSICAL_HW
-    # silkscreen-string rendering.
-    #
-    # WR-01: both INFO frames carry the same revision byte as MSG_OK_REV
-    # but were rendering 'HW: Rev254' (raw catalog %u) for REVISION_UNKNOWN
-    # (0xFE) instead of 'HW: rev_unknown'. Both surfaces must agree on the
-    # silkscreen-string mapping per Phase 35 D-03.
-    # -----------------------------------------------------------------
 
     def test_info_hw_silkscreen_known_rev_decodes(self, fake_serial, make_comm):
         """D-03: MSG_INFO_HW with byte=0x01 (REVISION_1) renders 'HW: Rev 1'
@@ -546,10 +530,8 @@ class TestIdFrameDecoder:
         assert response.type == "INFO"
         assert response.message == "Physical HW: Rev153"
 
-    # -----------------------------------------------------------------
     # MSG_DEBUG / DBG_CMD: cmd byte annotated with symbolic name from
     # COMMAND_NAMES via the MSG_DEBUG sub_id decode path.
-    # -----------------------------------------------------------------
 
     def test_dbg_cmd_renders_with_symbolic_name(self, fake_serial, make_comm):
         """DBG_CMD (sub_id 0x04) with cmd=0x02 (COMMAND_WRITE) renders
@@ -574,9 +556,7 @@ class TestIdFrameDecoder:
         assert response.type == "DATA"
         assert response.message == "Cmd: 0xfe"
 
-    # -----------------------------------------------------------------
     # W-04 MSG_DATA_CHUNK roundtrip tests
-    # -----------------------------------------------------------------
 
     def test_data_chunk_payload_exposed_via_response_payload_field(
         self, fake_serial, make_comm

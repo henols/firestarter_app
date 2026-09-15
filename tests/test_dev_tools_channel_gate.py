@@ -33,9 +33,7 @@ import pytest
 
 from firestarter import channel
 
-# ---------------------------------------------------------------------------
 # dev_tools_enabled_by_env() -- fail-closed matrix
-# ---------------------------------------------------------------------------
 
 # `None` is the sentinel for "leave the variable unset" (monkeypatch.delenv),
 # distinct from the empty string `""` (monkeypatch.setenv to an empty value)
@@ -44,7 +42,7 @@ from firestarter import channel
 _FAIL_CLOSED_VALUES: list[str | None] = [
     None,  # unset
     "",  # empty string
-    "0",  # bool("0") is True in Python -- the exact trap D-03 warns against
+    "0",
     "false",  # bool("false") is also True -- same trap, different spelling
     "False",
     " 1 ",  # whitespace-padded -- must NOT be treated as equivalent to "1"
@@ -92,9 +90,7 @@ def test_dev_tools_enabled_by_env_reads_at_call_time_not_cached(
     assert channel.dev_tools_enabled_by_env() is True
 
 
-# ---------------------------------------------------------------------------
 # is_dev_tools_enabled() -- truth table over (is_prerelease_build, env var)
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -124,9 +120,7 @@ def test_is_dev_tools_enabled_truth_table(
     assert channel.is_dev_tools_enabled() is expected
 
 
-# ---------------------------------------------------------------------------
 # dev_command_gate_message()
-# ---------------------------------------------------------------------------
 
 
 def test_dev_command_gate_message_names_the_command_and_the_pip_instruction() -> None:
@@ -141,11 +135,6 @@ def test_dev_command_gate_message_varies_by_name() -> None:
     assert "reg" not in channel.dev_command_gate_message("addr")
 
 
-# ---------------------------------------------------------------------------
-# BETA_ONLY_DEV_COMMANDS -- the measured baseline order (136-CONTEXT.md)
-# ---------------------------------------------------------------------------
-
-
 def test_beta_only_dev_commands_matches_measured_baseline() -> None:
     """Phase 151 / D-01 appended "lock-status" as the seventh gated name;
     this pins the exact 7-tuple, never relaxed to a membership check."""
@@ -158,11 +147,6 @@ def test_beta_only_dev_commands_matches_measured_baseline() -> None:
         "validate-family",
         "lock-status",
     )
-
-
-# ---------------------------------------------------------------------------
-# CHAN-07 (file-scoped): channel.py itself calls no open() anywhere.
-# ---------------------------------------------------------------------------
 
 
 def test_channel_module_source_contains_no_open_call() -> None:

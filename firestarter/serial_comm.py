@@ -70,14 +70,15 @@ rurp_logger = logging.getLogger("RURP")
 
 DEFAULT_SERIAL_TIMEOUT = 1.0  # seconds for read operations
 DEFAULT_RESPONSE_TIMEOUT = 10  # seconds for waiting for a specific response
-# CAP-03: plausibility ceiling for the firmware-advertised per-block
-# write-time budget decoded by _decode_id_frame's CAP-03 arm below. DERIVED,
+# Plausibility ceiling for the firmware-advertised per-block write-time
+# budget decoded by _decode_id_frame's budget arm below. DERIVED,
 # not chosen: the largest value a legitimate firmware could compute is
 # ceil(max_pulses 25 * 65535 us * buffer 4096 B / 1e6) * 2 + 2 = 13424 s,
-# evaluated at CAP-01's own [1, 4096] buffer-size plausibility ceiling --
+# evaluated at the [1, 4096] buffer-size plausibility ceiling --
 # rounded up to 14400 s (4 h). A value outside [1, WRITE_BUDGET_MAX_S] leaves
 # write_block_budget_s unset so the write-path fallback applies, mirroring
-# CAP-01's own behaviour exactly. The clamp exists so a malfunctioning or
+# the buffer-size field's own behaviour exactly. The clamp exists so a
+# malfunctioning or
 # mismatched board cannot wedge the host -- it is not a defense against an
 # adversarial one.
 WRITE_BUDGET_MAX_S = 14400  # seconds; derived ceiling, see comment above
@@ -120,7 +121,7 @@ class SerialCommunicator:
     across available serial ports.
     """
 
-    # CAP-02 identity fields, declared at CLASS level on purpose. __init__ also
+    # Identity fields, declared at CLASS level on purpose. __init__ also
     # assigns them, but plenty of call sites never run __init__ — conftest's
     # make_comm builds instances via __new__, and several suites patch __init__
     # to a no-op lambda to avoid opening a real port. _probe_port reads
@@ -128,7 +129,7 @@ class SerialCommunicator:
     # every one of those into an AttributeError swallowed by the broad
     # `except Exception` in _probe_port, which degrades to "no programmer
     # found". Class defaults of None keep the gates fail-closed instead.
-    # CAP-03 extends this same ack with the firmware's advertised per-block
+    # The same ack also carries the firmware's advertised per-block
     # write-time budget (write_block_budget_s below); the identical
     # class-level-declaration reasoning applies to it.
     firmware_identity: str | None = None
@@ -155,17 +156,17 @@ class SerialCommunicator:
         # now comes from the MSG_OK_READY ack via firmware_max_chunk. Declaration kept
         # so conftest.py make_comm factory mirrors __init__ without breakage.
         self.firmware_buffer_size: int | None = None
-        # CAP-01: firmware advertises effective MAIN-path decode capacity
+        # The firmware advertises effective MAIN-path decode capacity
         # via the MSG_OK_READY operation-setup ack (2-byte big-endian u16 param).
         # Populated by _decode_id_frame override; None until the first MSG_OK_READY
         # with a 2-byte param is decoded. _calculate_buffer_size returns 512 (safe
         # Uno floor) when None; never a FirmwareOutdatedError.
         self.firmware_max_chunk: int | None = None
-        # CAP-02: the MSG_OK_READY ack was extended past CAP-01's 2-byte
+        # The MSG_OK_READY ack extends past the 2-byte
         # buffer-size region to also carry the effective hardware revision and
         # the firmware identity string, so a single command exchange now yields
         # everything the connect-time gates need. Both stay None against
-        # firmware that predates CAP-02 (2-byte ack) — and None is a REJECT for
+        # firmware that predates the extension (2-byte ack) — and None is a REJECT for
         # the revision gate, never a pass. Populated by _decode_id_frame below.
         #
         # firmware_identity is the raw "<version>:<board>" string, matching what
@@ -174,13 +175,13 @@ class SerialCommunicator:
         # _probe_port does.
         self.firmware_identity: str | None = None
         self.hw_revision: int | None = None
-        # CAP-03: the firmware's advertised worst-case seconds for
+        # The firmware's advertised worst-case seconds for
         # one write block. The firmware ALREADY pads this figure -- only it
         # knows its own delay(500) VPE settle, the final full-block verify
         # pass and the per-pulse settle -- so the host applies no multiplier
         # of its own on top. None means "not advertised", and
         # downstream that means a safe default applies, never an error and
-        # never a refusal (mirroring CAP-01's own reversal of
+        # never a refusal (mirroring the buffer-size field's own reversal of
         # FirmwareOutdatedError into a safe default). Populated by
         # _decode_id_frame below. Consumed only on the write path.
         self.write_block_budget_s: int | None = None
@@ -256,7 +257,7 @@ class SerialCommunicator:
         crc = _crc8_ccitt(json_bytes)
         body = cobs_encode(json_bytes + bytes([crc]))
         frame = body + b"\x00"
-        # PHASE-53 FAULT INJECTION — only active when _fault_inject_outgoing is set.
+        # FAULT INJECTION — only active when _fault_inject_outgoing is set.
         # Production path: attribute is None by default → no-op.
         # Hook is set only within fault_inject_cycle / dev fault-inject scope and
         # cleared after the single corrupted transfer.
@@ -364,9 +365,9 @@ class SerialCommunicator:
             self.seen_message_ids.add(msg_id)
             if msg_id == MSG_OK_READY:
                 params_bytes = body[1:-1]  # strip id byte and trailing CRC
-                # CAP-01 buffer size occupies the first 2 bytes in BOTH the
-                # legacy 2-byte ack and the CAP-02 extended ack, so the length
-                # test is >= 2 rather than == 2. Against CAP-02 firmware the
+                # The buffer size occupies the first 2 bytes in BOTH the
+                # legacy 2-byte ack and the extended ack, so the length
+                # test is >= 2 rather than == 2. Against extended-ack firmware the
                 # old == 2 form silently skipped this and fell back to the 512
                 # floor; widening it is what restores full-size chunking.
                 if len(params_bytes) >= 2:
@@ -377,8 +378,8 @@ class SerialCommunicator:
                     # firmware_max_chunk unset so the 512 floor applies.
                     if 1 <= value <= 4096:
                         self.firmware_max_chunk = value
-                # CAP-02 tail: [hw_revision u8][ver_len u8][ver bytes]. Absent
-                # on pre-CAP-02 firmware, which leaves both attributes None —
+                # Identity tail: [hw_revision u8][ver_len u8][ver bytes]. Absent
+                # on firmware that predates it, which leaves both attributes None —
                 # and None is a reject for the revision gate, never a pass.
                 # A truncated or malformed length prefix also leaves
                 # firmware_identity None rather than yielding a partial string,
@@ -390,7 +391,7 @@ class SerialCommunicator:
                         self.firmware_identity = params_bytes[4:ver_end].decode(
                             "ascii", errors="replace"
                         )
-                        # CAP-03, appended AFTER CAP-02's variable-length identity tail.
+                        # The budget is appended AFTER the variable-length identity tail.
                         # The offset MUST be the COMPUTED ver_end, never a fixed index: a
                         # fixed index works on whichever board's identity string happens to
                         # be that length and silently misreads on the next. Offsets 2 and 3
@@ -404,7 +405,7 @@ class SerialCommunicator:
                             value = struct.unpack(
                                 ">H", params_bytes[ver_end : ver_end + 2]
                             )[0]
-                            # Plausibility clamp, mirroring CAP-01's [1, 4096]
+                            # Plausibility clamp, mirroring the [1, 4096] buffer-size one
                             # in spirit: a hostile or corrupt ack
                             # must not be able to install an unbounded host
                             # timeout. Values outside this range leave
@@ -417,8 +418,7 @@ class SerialCommunicator:
     # =================================================================
     # DO NOT MODIFY — v1.9 RCA territory
     # The body of this generator is the host-side baseline for v1.9's
-    # read-bug RCA. Phase 26 baseline binaries (.planning/v1.6/
-    # consistency-check-runs/W27C512-leonardo-20260526-*-v2*/) were
+    # read-bug RCA. The v1.6 baseline binaries were
     # captured against this exact body. Structural-only changes here
     # (e.g. type hints on the signature) are OK; any change to the
     # byte-by-byte read loop, the magic-preamble dispatch, the
@@ -455,7 +455,7 @@ class SerialCommunicator:
         magic_len = len(MAGIC_PREAMBLE)
         while time.time() - start_time < timeout:
             try:
-                chunk = self.connection.read(1)  # type: ignore[union-attr]  # Phase 42 D-06: GATE-1.8d ring-fence — narrow body untouched
+                chunk = self.connection.read(1)  # type: ignore[union-attr]
             except serial.SerialException as e:
                 raise SerialError(
                     f"Serial error reading from {self.port_name}: {e}"
@@ -487,7 +487,7 @@ class SerialCommunicator:
 
                 # Read length field (u16 big-endian, W-04: 2 bytes MSB then LSB).
                 try:
-                    len_bytes = self.connection.read(2)  # type: ignore[union-attr]  # Phase 42 D-06
+                    len_bytes = self.connection.read(2)  # type: ignore[union-attr]
                 except serial.SerialException as e:
                     raise SerialError(
                         f"Serial error reading from {self.port_name}: {e}"
@@ -503,7 +503,7 @@ class SerialCommunicator:
 
                 # Read body (`frame_len` bytes: id + params + crc).
                 try:
-                    body = self.connection.read(frame_len)  # type: ignore[union-attr]  # Phase 42 D-06
+                    body = self.connection.read(frame_len)  # type: ignore[union-attr]
                 except serial.SerialException as e:
                     raise SerialError(
                         f"Serial error reading from {self.port_name}: {e}"
@@ -516,16 +516,16 @@ class SerialCommunicator:
                     transport_counters.record_resync_body_truncated()
                     continue
 
-                # Consume the trailing terminator (D-04: anchor, not
-                # delimiter — present but its identity is not enforced).
+                # Consume the trailing terminator: an anchor, not a
+                # delimiter — present but its identity is not enforced.
                 try:
-                    _terminator = self.connection.read(1)  # type: ignore[union-attr]  # Phase 42 D-06
+                    _terminator = self.connection.read(1)  # type: ignore[union-attr]
                 except serial.SerialException as e:
                     raise SerialError(
                         f"Serial error reading from {self.port_name}: {e}"
                     ) from e
-                # _terminator is intentionally not checked: per CONTEXT §D-04
-                # the byte is a re-sync anchor, not a delimiter.
+                # _terminator is intentionally not checked: the byte is a
+                # re-sync anchor, not a delimiter.
 
                 decoded = self._decode_id_frame(frame_len, body)
                 if decoded is not None:
@@ -834,7 +834,7 @@ class SerialCommunicator:
                 communicator._fault_inject_outgoing = fault_inject_outgoing
             communicator.consume_remaining_input()
 
-            # CAP-02: send the user's actual command straight away. The
+            # Send the user's actual command straight away. The
             # dedicated CMD_FW_VERSION pre-probe this replaces cost a full
             # command exchange (2 acks) on every single connect; MSG_OK_READY
             # now carries the firmware identity AND the effective hardware
@@ -890,7 +890,7 @@ class SerialCommunicator:
             # line and no VPP/VPE rail, reads one text ack and disconnects.
             #
             # Without the waiver the gate is a deadlock: firmware that predates
-            # the CAP-02 identity tail (every stable release, and every beta up
+            # the identity tail (every stable release, and every beta up
             # to 3.0.0b1x) sends a bare 2-byte MSG_OK_READY, so `fw`,
             # `fw --install` and `fw --force` all abort here — the one command
             # whose job is to replace that firmware is blocked by its

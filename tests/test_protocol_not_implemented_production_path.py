@@ -42,9 +42,7 @@ from firestarter.serial_comm import SerialCommunicator
 
 from .conftest import _FakeSerial, build_frame
 
-# ---------------------------------------------------------------------------
 # Shared test helper (mirrors test_cli_handlers.make_app_context)
-# ---------------------------------------------------------------------------
 
 PROTOCOL_VALUE = 0x0B  # example rejected protocol byte (maps to algorithm 0x0B)
 FW_VERSION_MSG = "FW: 3.0.0, HW: Rev2, Cmd: 0x0d"
@@ -120,9 +118,7 @@ def _feed_fw_handshake_then_0xbb(fake_ser: _FakeSerial) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Test B: expect_ack unit — raises ProtocolNotImplementedError on 0xBB frame
-# ---------------------------------------------------------------------------
 
 
 def test_b_expect_ack_raises_protocol_not_implemented_on_0xbb() -> None:
@@ -145,9 +141,7 @@ def test_b_expect_ack_raises_protocol_not_implemented_on_0xbb() -> None:
     assert "Protocol 0x0b not implemented" in str(exc_info.value)
 
 
-# ---------------------------------------------------------------------------
 # Test C: _probe_port propagation — raises ProtocolNotImplementedError (not None)
-# ---------------------------------------------------------------------------
 
 
 def test_c_probe_port_propagates_protocol_not_implemented_error() -> None:
@@ -190,11 +184,6 @@ def test_c_probe_port_propagates_protocol_not_implemented_error() -> None:
                 command_to_send={"state": 1},
                 config_manager=MagicMock(),
             )
-
-
-# ---------------------------------------------------------------------------
-# Test D: MAIN-phase WR-02 — _main_phase_read_data + _main_phase_send_data
-# ---------------------------------------------------------------------------
 
 
 def test_d_main_phase_read_data_raises_protocol_not_implemented_on_0xbb() -> None:
@@ -256,9 +245,7 @@ def test_d_main_phase_send_data_raises_protocol_not_implemented_on_0xbb() -> Non
         os.unlink(input_path)
 
 
-# ---------------------------------------------------------------------------
 # Test E: negative control — non-0xBB ERROR at probe time -> generic path
-# ---------------------------------------------------------------------------
 
 
 def test_e_non_0xbb_error_at_probe_time_surfaces_as_generic_path() -> None:
@@ -271,9 +258,6 @@ def test_e_non_0xbb_error_at_probe_time_surfaces_as_generic_path() -> None:
     """
     from firestarter.exceptions import ProgrammerNotFoundError
 
-    # CAP-02: the user's command is the first thing on the wire (the dedicated
-    # CMD_FW_VERSION pre-probe is retired), so its ack is the first response.
-    # MSG_ERR_NOT_SUPPORTED (0xa5) — generic error, NOT 0xBB
     fake_ser = _FakeSerial()
     fake_ser.feed(build_frame(MSG_ERR_NOT_SUPPORTED, bytes([0x00])))
 
@@ -306,9 +290,7 @@ def test_e_non_0xbb_error_at_probe_time_surfaces_as_generic_path() -> None:
         assert "No compatible programmer found" in str(exc_info.value)
 
 
-# ---------------------------------------------------------------------------
 # Test A: PRIMARY proof — fed 0xBB frame -> CLI "Unsupported protocol:", exit 1
-# ---------------------------------------------------------------------------
 
 
 def test_a_cli_read_0xbb_at_probe_time_surfaces_unsupported_protocol(

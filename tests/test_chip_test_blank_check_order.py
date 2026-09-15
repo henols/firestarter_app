@@ -33,7 +33,7 @@ This module was written and observed RED against the unmodified
 """
 
 from firestarter.chip_test import (
-    _SDP_LEG_STEP_ORDER,  # test-internal: the D-06 six-op order (v1.30 Phase 134)
+    _SDP_LEG_STEP_ORDER,
     OP_BLANK_CHECK,
     OP_ERASE,
     derive_plan,
@@ -54,16 +54,6 @@ _CHIP_ERASABLE = "M8720"
 # blank-check here is genuinely actionable -- the write is irrecoverable and
 # only UV light erases.
 _CHIP_UV = "AM27512"
-# AT28C256: protocol 0x0D (EEPROM_POLL / 28C family) -- auto-erases per page
-# during write. Phase 153 (ERASE-03/ERASE-04) restored FLAG_CAN_ERASE for
-# this family (a real AN-0544B software chip erase now exists in
-# `configure_eeprom28c`), so erase IS a real, executable, supported step
-# for this chip -- but blank-check stays NA regardless: no step in the
-# plan can ever leave the device blank (each page write auto-erases
-# internally), which is a family fact about page-writes, not about
-# whether erase itself is executable. Also one of the v1.30 SDP-ALLOW
-# chips (43/84), so its write_scope="full" plan carries the six-step SDP
-# leg too, after erase and the (still-NA) blank-check.
 _CHIP_AUTO_ERASE_28C = "AT28C256"
 
 

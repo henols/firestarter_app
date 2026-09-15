@@ -77,10 +77,8 @@ _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
 # Upstream protocol_id / firmware dispatch key for configure_eeprom28c (0x0D).
 _ALGORITHM_0X0D = 13
 
-# ---------------------------------------------------------------------------
 # Shared helpers -- both the real-DB tests and the non-vacuity tests call
 # these, so the non-vacuity legs exercise the same code the real tests do.
-# ---------------------------------------------------------------------------
 
 
 def _select_0x0d_chips(db: dict) -> list[tuple[str, dict]]:
@@ -180,29 +178,6 @@ def _assert_partition_matches_committed(
     )
 
 
-# ---------------------------------------------------------------------------
-# The committed ALLOW snapshot -- GATE-08 / D-06 / correction F-01.
-#
-# What it is: the ALLOW half of the `0x0D` SDP partition, snapshotted
-# Phase 131 plan 131-03, measured 43 of 84. Prior value: none, first
-# snapshot.
-#
-# Why it is a committed snapshot and not a derivation: D-06 leg 1 asked for
-# the partition to be recomputed from `chip_database.json` plus the
-# committed `flags` bit-15 decode and compared against what
-# `sdp_capability()` computes. That is not implementable in this repo,
-# measured 2026-08-03: `chip_database.json` contains ZERO occurrences of the
-# string "flags" (no per-chip protection metadata is shipped), and
-# `tools/infoic*.xml` -- the bit-15 source -- is gitignored
-# (`.gitignore:29`, pattern `tools/infoic*.xml`) and absent from the working
-# tree. Implementing leg 1 literally would recompute the partition using the
-# very function under test -- self-parity, which passes whenever both sides
-# drift together, and which is precisely the hole this gate exists to close
-# (correction F-01, PITFALLS P-10). So the independent side here is instead
-# a committed, sorted, manufacturer-qualified 43-entry ALLOW list; the
-# measured side comes from `_partition_0x0d`, which calls the production
-# `sdp_capability_for_entry` predicate.
-#
 # Change protocol: a chip may move ALLOW->REFUSE ONLY with a decode reason
 # -- its `flags` bit changed, or the decode was wrong -- and NEVER with a
 # test-outcome reason. Narrowing this list to green a failing field report
@@ -256,9 +231,7 @@ _COMMITTED_SDP_ALLOW_ENTRIES: tuple[str, ...] = (
 )
 
 
-# ---------------------------------------------------------------------------
 # Test 1: real-DB count
-# ---------------------------------------------------------------------------
 
 
 def test_exactly_84_algorithm_0x0d_entries() -> None:
@@ -281,9 +254,7 @@ def test_exactly_84_algorithm_0x0d_entries() -> None:
     )
 
 
-# ---------------------------------------------------------------------------
 # Test 2: per-element chip_id_check invariant
-# ---------------------------------------------------------------------------
 
 
 def test_all_0x0d_chips_have_chip_id_check_false() -> None:
@@ -297,9 +268,7 @@ def test_all_0x0d_chips_have_chip_id_check_false() -> None:
     _assert_chip_id_check_false(selected)
 
 
-# ---------------------------------------------------------------------------
 # Test 3: companion fact -- the field that actually gates firmware behaviour
-# ---------------------------------------------------------------------------
 
 
 def test_all_0x0d_chips_have_chip_id_value_zero_sentinel() -> None:
@@ -324,11 +293,6 @@ def test_all_0x0d_chips_have_chip_id_value_zero_sentinel() -> None:
         "branch when handle->chip_id > 0 (eeprom_28c.cpp:eeprom28c_write_init). "
         f"Offending chips: {offenders}"
     )
-
-
-# ---------------------------------------------------------------------------
-# Test 4: non-vacuity proof (TRACE-05)
-# ---------------------------------------------------------------------------
 
 
 def test_synthetic_chip_id_check_true_is_flagged_non_vacuous() -> None:
@@ -367,11 +331,6 @@ def test_synthetic_chip_id_check_true_is_flagged_non_vacuous() -> None:
         )
 
 
-# ---------------------------------------------------------------------------
-# Test 5: GATE-08 anti-narrowing element-wise parity
-# ---------------------------------------------------------------------------
-
-
 def test_sdp_partition_matches_committed_allow_list_element_wise() -> None:
     """GATE-08 / D-06 leg 1 (as amended by correction F-01): the measured
     0x0D ALLOW partition must equal `_COMMITTED_SDP_ALLOW_ENTRIES` exactly,
@@ -386,11 +345,6 @@ def test_sdp_partition_matches_committed_allow_list_element_wise() -> None:
     db = json.loads(_DB_FILE.read_text(encoding="utf-8"))
     allow, _refuse = _partition_0x0d(db)
     _assert_partition_matches_committed(allow, _COMMITTED_SDP_ALLOW_ENTRIES)
-
-
-# ---------------------------------------------------------------------------
-# Test 6: GATE-08 anti-narrowing literal triple
-# ---------------------------------------------------------------------------
 
 
 def test_sdp_partition_counts_are_43_41_84() -> None:
@@ -426,11 +380,6 @@ def test_sdp_partition_counts_are_43_41_84() -> None:
         "A divergence from test_exactly_84_algorithm_0x0d_entries means "
         "_partition_0x0d dropped an entry."
     )
-
-
-# ---------------------------------------------------------------------------
-# Test 7: non-vacuity proof for the narrowing gate (GATE-08's anti-hollow half)
-# ---------------------------------------------------------------------------
 
 
 def test_partition_flags_a_moved_chip_non_vacuous() -> None:
@@ -513,14 +462,6 @@ def test_partition_flags_a_moved_chip_non_vacuous() -> None:
         )
 
 
-# ---------------------------------------------------------------------------
-# GATE-08 leg 1 (Phase 136.1 Plan 02, PROV-02/03): a genuinely
-# infoic.xml-derived comparison, via chip_database.json's own committed
-# `protect_on_after` field (Plan 136.1-01) -- ADDED alongside, never instead
-# of, the hand-curated `_COMMITTED_SDP_ALLOW_ENTRIES` snapshot above.
-# ---------------------------------------------------------------------------
-
-
 def _partition_from_protect_on_after_field(db: dict) -> tuple[list[str], list[str]]:
     """Partition every algorithm==13 (0x0D) chip into ALLOW/REFUSE lists of
     `"MFR/PART_NUMBER"` keys, reading `chip["programming"]["protect_on_after"]`
@@ -573,11 +514,6 @@ def _assert_two_partitions_match(
     )
 
 
-# ---------------------------------------------------------------------------
-# Test 8: GATE-08 leg 1 -- production transcription vs. infoic-derived field
-# ---------------------------------------------------------------------------
-
-
 def test_sdp_partition_matches_infoic_derived_field_element_wise() -> None:
     """GATE-08 leg 1 (Phase 136.1 Plan 02, PROV-02/03): the production
     transcription (`_partition_0x0d`, `SDP_CAPABLE_TOKENS`-based) must equal,
@@ -618,9 +554,7 @@ def test_sdp_partition_matches_infoic_derived_field_element_wise() -> None:
         )
 
 
-# ---------------------------------------------------------------------------
 # Test 9: non-vacuous proof for leg 1's own narrowing gate
-# ---------------------------------------------------------------------------
 
 
 def test_partition_flags_a_moved_chip_via_db_field_non_vacuous() -> None:

@@ -53,7 +53,11 @@ from firestarter.chip_test import (
     sdp_oracle_applicable,
 )
 from firestarter.config import ConfigManager, get_config_dir
-from firestarter.constants import FLAG_CHIP_ENABLE, FLAG_OUTPUT_ENABLE
+from firestarter.constants import (
+    FIRESTARTER_RELEASES_URL,
+    FLAG_CHIP_ENABLE,
+    FLAG_OUTPUT_ENABLE,
+)
 from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import (
     AutoCapture,
@@ -1214,6 +1218,14 @@ def fw(
         releases = app.firmware_manager.list_releases(
             channel_filter=channel_filter, board=board
         )
+        if releases is None:
+            click.echo(
+                f"Could not list firmware releases for board {board}: the release "
+                f"endpoint {FIRESTARTER_RELEASES_URL} could not be read. No release "
+                "information was retrieved.",
+                err=True,
+            )
+            sys.exit(1)
         if json_output:
             import json as _json
 
@@ -1224,6 +1236,8 @@ def fw(
                 print(
                     f"{r['version']:<12} {r['channel']:<14} {r['published']:<22} {r['asset_url']}"  # noqa: E501
                 )
+            if not releases:
+                print(f"No releases found for board {board}.")
         sys.exit(0)
 
     # SimpleNamespace adapter for the magic-default helper (zero churn).
@@ -2420,12 +2434,12 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     )
 
     # EpromOperator.comm is a transient per-operation connection torn down
-    # after every operator call (see 112-02-SUMMARY.md) -- there is no live
+    # after every operator call -- there is no live
     # comm to read programmer_info off of after run_plan returns without
     # opening a new, extraneous connection, which would violate the
     # orchestrator-only contract. Both identity values instead
     # come off the hardware-revision read's OWN connection: its
-    # find_and_connect triggers the CAP-02 setup ack, which sets
+    # find_and_connect triggers the identity setup ack, which sets
     # comm.firmware_identity before the HARDWARE_REVISION dispatch even
     # runs, so one orchestrator-safe energize/query read (Part A,
     # hardware.py) yields both fields with zero extra connections.
@@ -2552,7 +2566,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     console.print(f"[dim]Report written to {json_file}[/dim]")
 
     # Unconditional: every run reaches the filing ask, not only
-    # an explicit --submit run -- Plan 121-11 owns submit_report's internal
+    # an explicit --submit run. submit_report owns the internal
     # dedup-before-ask / ask-anyway-on-failure / comment-on-duplicate logic.
     from firestarter import submit as submit_mod
 

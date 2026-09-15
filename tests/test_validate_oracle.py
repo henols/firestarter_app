@@ -58,9 +58,7 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
-# ---------------------------------------------------------------------------
 # Negative control (T-71-VACUOUS mitigation)
-# ---------------------------------------------------------------------------
 
 
 class TestNegativeControl:
@@ -143,9 +141,7 @@ class TestNegativeControl:
         )
 
 
-# ---------------------------------------------------------------------------
 # uno328pb hard N/A (T-71-UNO328 mitigation)
-# ---------------------------------------------------------------------------
 
 
 class TestUno328pbNA:
@@ -240,9 +236,7 @@ class TestUno328pbNA:
         operator.write_cycle_eprom.assert_not_called()  # type: ignore[attr-defined]
 
 
-# ---------------------------------------------------------------------------
 # r1 precondition (T-71-STALECAL mitigation)
-# ---------------------------------------------------------------------------
 
 
 class TestR1Precondition:
@@ -350,9 +344,7 @@ class TestR1Precondition:
         operator.write_cycle_eprom.assert_called_once()  # type: ignore[attr-defined]
 
 
-# ---------------------------------------------------------------------------
 # Leonardo authoritative vs advisory (T-71-WRONGBOARD mitigation)
-# ---------------------------------------------------------------------------
 
 
 class TestLeonardoAuthoritativePass:
@@ -501,9 +493,7 @@ class TestLeonardoAuthoritativePass:
         )
 
 
-# ---------------------------------------------------------------------------
 # retry_count in emitted cell
-# ---------------------------------------------------------------------------
 
 
 class TestRetryCount:

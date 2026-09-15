@@ -43,9 +43,6 @@ import json
 import os
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Path seams (S-2): self-contained, not conftest.py-dependent.
-# ---------------------------------------------------------------------------
 _FA_DIR = Path(__file__).parent.parent
 _DB_FILE = _FA_DIR / "firestarter" / "data" / "chip_database.json"
 
@@ -63,10 +60,8 @@ _BASELINE_FILE = Path(
 _VCC_MARGIN_RAIL_MV = 4000
 
 
-# ---------------------------------------------------------------------------
 # Shared helpers -- both the real-DB tests and the non-vacuity test call
 # these, so the non-vacuity leg exercises the same code the real tests do.
-# ---------------------------------------------------------------------------
 
 
 def _mv(value) -> int:
@@ -132,9 +127,7 @@ def _index_baseline(db: dict) -> dict[tuple[str, str, int], dict]:
     return indexed
 
 
-# ---------------------------------------------------------------------------
 # Test 1: zero chips remain at the 4000 mV margin rail
-# ---------------------------------------------------------------------------
 
 
 def test_zero_chips_at_margin_rail():
@@ -152,9 +145,7 @@ def test_zero_chips_at_margin_rail():
     )
 
 
-# ---------------------------------------------------------------------------
 # Test 2: exactly 56 movers, every one landing on its own vdd_mv
-# ---------------------------------------------------------------------------
 
 
 def test_exactly_56_chips_moved_4000_to_5000_onto_their_own_vdd():
@@ -200,9 +191,7 @@ def test_exactly_56_chips_moved_4000_to_5000_onto_their_own_vdd():
     )
 
 
-# ---------------------------------------------------------------------------
 # Test 3: no-decrease guard
-# ---------------------------------------------------------------------------
 
 
 def test_no_chip_vcc_ever_decreases():
@@ -239,11 +228,6 @@ def test_no_chip_vcc_ever_decreases():
     )
 
 
-# ---------------------------------------------------------------------------
-# Test 4 (DATA-04): the decode table itself is unedited
-# ---------------------------------------------------------------------------
-
-
 def test_vcc_voltages_table_unedited_and_no_new_part_keyed_dict():
     """VCC_VOLTAGES[0x02] still decodes to 4000 -- the margin-rail
     substitution sits AFTER the decode table, never inside it (D-01). And
@@ -264,9 +248,7 @@ def test_vcc_voltages_table_unedited_and_no_new_part_keyed_dict():
     )
 
 
-# ---------------------------------------------------------------------------
 # Test 5: non-vacuity proof
-# ---------------------------------------------------------------------------
 
 
 def test_synthetic_chip_at_margin_rail_is_flagged_non_vacuous():

@@ -98,11 +98,6 @@ def _run(name: str, *, runs: int = 2):
     return writes, write_result
 
 
-# ---------------------------------------------------------------------------
-# The recipe assignment (D-2)
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.parametrize(
     "chip,expected",
     [
@@ -135,11 +130,6 @@ def test_every_other_step_keeps_the_default_recipe() -> None:
         if step.op in (ct.OP_WRITE, ct.OP_WRITE_PARTIAL, ct.OP_VERIFY):
             continue
         assert step.cycle_payload == ct.CYCLE_PAYLOAD_SAME, step.op
-
-
-# ---------------------------------------------------------------------------
-# The UV tranche arithmetic (D-2/D-6) -- pure, no chip
-# ---------------------------------------------------------------------------
 
 
 def test_tranches_cost_no_extra_bits() -> None:
@@ -227,9 +217,7 @@ def test_tranche_images_reject_a_length_disagreement() -> None:
     assert ct.uv_tranche_images(b"\xff" * 8, b"\x00" * 8, 0) == []
 
 
-# ---------------------------------------------------------------------------
 # End to end, one test per recipe
-# ---------------------------------------------------------------------------
 
 
 def test_uv_cycles_write_different_images_to_the_SAME_slot() -> None:
@@ -320,11 +308,6 @@ def test_uv_write_target_reports_the_per_cycle_tranche_not_the_slot_total() -> N
     )
     assert target.bits_cleared == slot_total // 2
     assert "tranche 2/2" in target.current_source
-
-
-# ---------------------------------------------------------------------------
-# D-4 (no full-device UV write) and D-9 (rig life)
-# ---------------------------------------------------------------------------
 
 
 def test_uv_write_is_always_one_slot_never_the_whole_device() -> None:

@@ -792,7 +792,7 @@ def derive_plan(name: str, db: Any, *, write_scope: str) -> Plan:
             # a user-override shape. Delete-versus-keep was considered and
             # keep won: routing that row into the generic flag-keyed
             # fallback below would name the internal FLAG_CAN_ERASE
-            # mechanism, which DEVTEST-01 forbids. The reason must instead
+            # mechanism, which a user-facing reason must never do. It must
             # state only what is true of a row that actually reaches here --
             # its recorded electrical type does not describe an
             # electrically-erasable part, so no erase step is planned for
@@ -1028,8 +1028,7 @@ _DESTRUCTIVE_GATE_REASON = (
     "chip-ID mismatch — destructive steps gated (chip left pristine)"
 )
 
-# The SDP leg's own gate-closure reasons,
-# consumed by plan 134-04's baseline gate. Both name the family FACT (the
+# The SDP leg's own gate-closure reasons. Both name the family FACT (the
 # baseline write/read-back transition did not complete; the part is left as
 # found) -- never a mechanism name, and never `_DESTRUCTIVE_GATE_REASON`'s
 # chip-ID wording, which would mislead a reader into thinking chip-ID
@@ -1859,8 +1858,7 @@ def run_plan(
                 # rather than calling `_dispatch_sdp` directly because
                 # `run_plan` does not have `eprom_data` in scope -- the
                 # resolve happens inside `_run_step` -- and this reuses
-                # the resolver, the dispatch arm, and plan 133-02's
-                # exception mapping.
+                # the resolver, the dispatch arm and the exception mapping.
                 #
                 # A nested `def` (not a `lambda: _run_step(...)`) so the
                 # returned `StepResult` is DISCARDED as a statement, not an
@@ -3703,8 +3701,7 @@ def _dispatch_sdp_leg(
 # "only N of M tests ran -- pass --destructive on a scrap chip for the rest"
 # banner belongs to the report model and the dev test handler.
 #
-# Applicable-only counting (109-CONTEXT.md "Claude's Discretion", LOCKED by
-# 109-PATTERNS.md): M excludes NA/inapplicable slots (blank-check NA on
+# Applicable-only counting: M excludes NA/inapplicable slots (blank-check NA on
 # SRAM/FRAM, id NA when the DB's chip-id sentinel is 0, erase NA on UV /
 # non-FLAG_CAN_ERASE) so the banner never inflates M with never-achievable
 # slots. M is computed from the SINGLE derived `Plan` object's `steps`

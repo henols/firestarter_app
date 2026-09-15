@@ -102,12 +102,9 @@ _PORTLESS_FLASH_METHODS = frozenset({FLASH_METHOD_DFU})
 # below is left completely untouched — rewriting it into a strategy object is
 # explicitly out of scope here (and for whatever lands next).
 #
-# The pending todo `avrdude-mcu-detection-fallback` was reviewed during Phase
-# 127 and deliberately not folded into this router, precisely because it
-# targets `_install_with_avrdude`, the frozen function this deviation protects.
-#
-# See `.planning/phases/127-host-dfu-installer/127-NONREGRESSION.md` for the
-# phase evidence artifact carrying this same record.
+# The pending todo `avrdude-mcu-detection-fallback` is deliberately not folded
+# into this router, precisely because it targets `_install_with_avrdude`, the
+# frozen function this deviation protects.
 def flash_method(board: str | None) -> str:
     """Return the install method for a board name (case-insensitive)."""
     return _BOARD_FLASH_METHODS.get((board or "").lower(), FLASH_METHOD_AVRDUDE)
@@ -150,6 +147,17 @@ def _pick_asset(assets: object, board: str) -> str | None:
         if url:
             return url
     return None
+
+
+def _endpoint_for_channel(
+    channel: Literal["stable", "pre", "pinned"], version: str | None
+) -> str:
+    """Return the endpoint URL the given release channel resolves through."""
+    if channel == "pre":
+        return FIRESTARTER_RELEASES_URL
+    if channel == "pinned" and version:
+        return FIRESTARTER_RELEASE_BY_TAG_URL.format(tag=version)
+    return FIRESTARTER_RELEASE_URL
 
 
 class FirmwareManager:
@@ -405,7 +413,7 @@ class FirmwareManager:
         self,
         channel_filter: Literal["all", "pre", "stable"] = "all",
         board: str = "uno",
-    ) -> List[ReleaseInfo]:  # noqa: UP006
+    ) -> List[ReleaseInfo] | None:  # noqa: UP006
         """Enumerate available firmware releases sorted by PEP 440 version descending.
 
         Omits draft releases and releases without a board-matching .hex asset.
@@ -416,13 +424,16 @@ class FirmwareManager:
         channel_filter='stable' → stable only.
 
         Returns a flat list of ReleaseInfo dicts (version, tag, channel,
-        published, asset_url).
+        published, asset_url), or `None` if the fetch itself did not succeed.
+        `None` means the fetch did not succeed; `[]` means it succeeded and
+        no release carried a board-matching asset — the two states are
+        distinguishable and must never be conflated.
         """
         try:
             all_releases = self._fetch_all_releases()
         except requests.RequestException as e:
             logger.error(f"Failed to fetch releases for list: {e}")
-            return []
+            return None
 
         out: List[ReleaseInfo] = []  # noqa: UP006
         for r in all_releases:
@@ -937,5 +948,14 @@ class FirmwareManager:
                         f"Could not remove temporary firmware file {hex_file}: {e}"
                     )
             return install_success
+
+        if not latest_version or not download_url:
+            endpoint = _endpoint_for_channel(channel, pinned_version)
+            logger.error(
+                f"Could not resolve a firmware release for {board_to_use} from "
+                f"{endpoint}. The installed firmware version was not compared "
+                "against any release."
+            )
+            return False
 
         return True  # No installation performed, but process completed as expected
