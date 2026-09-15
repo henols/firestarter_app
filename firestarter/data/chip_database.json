@@ -1346,6 +1346,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000dac1",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -1368,6 +1369,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da45",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -1390,6 +1392,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000da46",
         "infoic_page_size_raw": 256,
+        "page_size": 256,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2416,6 +2419,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f35",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2438,6 +2442,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fba",
         "infoic_page_size_raw": 256,
+        "page_size": 256,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2460,6 +2465,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f3b",
         "infoic_page_size_raw": 512,
+        "page_size": 512,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2482,6 +2488,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fc4",
         "infoic_page_size_raw": 256,
+        "page_size": 256,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2504,6 +2511,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fdc",
         "infoic_page_size_raw": 64,
+        "page_size": 64,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2526,6 +2534,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fdc",
         "infoic_page_size_raw": 64,
+        "page_size": 64,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2548,6 +2557,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f5d",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2570,6 +2580,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fd5",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2592,6 +2603,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fda",
         "infoic_page_size_raw": 256,
+        "page_size": 256,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2614,6 +2626,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f5b",
         "infoic_page_size_raw": 512,
+        "page_size": 512,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2636,6 +2649,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fa4",
         "infoic_page_size_raw": 256,
+        "page_size": 256,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2658,6 +2672,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001fdc",
         "infoic_page_size_raw": 64,
+        "page_size": 64,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -2680,6 +2695,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x00001f3d",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -12651,6 +12667,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf07",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -12673,6 +12690,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf10",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -12695,6 +12713,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf5d",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -12717,6 +12736,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf08",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -12739,6 +12759,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf12",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -12761,6 +12782,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000bf3d",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -15866,6 +15888,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000dac1",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -15934,6 +15957,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000dac8",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
@@ -15956,6 +15980,7 @@
         "chip_id_check": true,
         "chip_id_value": "0x0000dac1",
         "infoic_page_size_raw": 128,
+        "page_size": 128,
         "protect_off_before": true,
         "protect_on_after": true,
         "pulse_duration_us": 0
