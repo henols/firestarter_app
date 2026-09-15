@@ -71,19 +71,32 @@ def test_protection_status_param_shape_is_two_u8() -> None:
     )
 
 
-def test_error_band_last_free_id_unspent() -> None:
-    """0xBF -- the ERROR band's single free id (C-11) -- is not present in CATALOG.
+def test_error_band_fully_spent_0xa0_through_0xbf() -> None:
+    """The ERROR band (0xA0-0xBF) is now fully spent -- all 32 ids allocated.
 
-    RESEARCH.md's C-11 measured the ERROR band (0xA0-0xBF) at 31 of 32 ids
-    used, with no documented band-extension procedure. This phase's design
-    deliberately spent a DATA-band id instead and left 0xBF alone; this is
-    the durable guard against a future plan spending it without noticing it
-    was the last one.
+    Replaces test_error_band_last_free_id_unspent (LOCK-02), which asserted
+    that 0xBF -- the band's one-time last free id -- stayed unspent. A later
+    phase deliberately spent 0xBF on a new ERROR message; that is exactly
+    the event the old guard existed to catch, and it caught it. The scarce
+    resource the old guard protected is now fully consumed, so this guard
+    protects the fact of that exhaustion instead: the whole band is
+    allocated, and any future plan needing a new ERROR-severity id must
+    either extend the band past 0xBF or use a different severity band --
+    a decision this test does not make and does not assume.
     """
     all_ids = set(CATALOG.keys())
-    assert 0xBF not in all_ids, (
-        "0xBF is the ERROR band's single free id (C-11) and must stay unspent -- "
-        "found it present in CATALOG"
+    error_band_ids = set(range(0xA0, 0xC0))
+    missing = sorted(error_band_ids - all_ids)
+    assert not missing, (
+        "the ERROR band 0xA0-0xBF must be fully spent (32 of 32) -- found "
+        f"free ids {missing!r}"
+    )
+    wrong_severity = sorted(
+        i for i in error_band_ids if CATALOG[i].severity != SEVERITY_ERROR
+    )
+    assert not wrong_severity, (
+        "every id in 0xA0-0xBF must carry SEVERITY_ERROR -- found non-ERROR "
+        f"severity at {[hex(i) for i in wrong_severity]!r}"
     )
 
 
