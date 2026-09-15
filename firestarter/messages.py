@@ -12,7 +12,7 @@ tools/catalog/codegen.py from tools/catalog/messages.toml,
 then synced here. Edit the catalog there and re-sync.
 
 Catalog version: 1
-Total messages: 77
+Total messages: 78
 """
 
 from dataclasses import dataclass
@@ -121,6 +121,7 @@ MSG_ERR_PROTOCOL_NOT_IMPLEMENTED = 0xBB
 MSG_ERR_FL4_BOOT_BLOCK_LOCKED = 0xBC
 MSG_ERR_MAX_PULSES = 0xBD
 MSG_ERR_ENERGY_CAP = 0xBE
+MSG_ERR_FL4_PAGE_SIZE = 0xBF
 MSG_DATA_PROGRESS = 0xE0
 MSG_DATA_PROTECTION_STATUS = 0xE1
 MSG_DATA_SENDING = 0xE2
@@ -760,6 +761,15 @@ CATALOG: dict[int, MessageDef] = {
         format="Byte at 0x%06x exhausted its per-byte program-energy budget after %d pulses",
         params=(("u24", "hex_addr"), ("u8", "dec")),
         param_bytes=4,
+        wire_format="id_frame",
+    ),
+    0xBF: MessageDef(
+        id=0xBF,
+        name="MSG_ERR_FL4_PAGE_SIZE",
+        severity=SEVERITY_ERROR,
+        format="page size %u rejected -- write refused",
+        params=(("u16", "dec"),),
+        param_bytes=2,
         wire_format="id_frame",
     ),
     0xE0: MessageDef(
