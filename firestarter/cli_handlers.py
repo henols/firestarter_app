@@ -24,6 +24,7 @@ from firestarter import __version__ as version
 from firestarter import (
     flash4_erase_gate,
     jp5_gate,
+    page_size_gate,
     sdp_honesty,  # unreadable_state_caveat(), called not re-authored
     transport_counters,
 )
@@ -74,6 +75,7 @@ from firestarter.exceptions import (
     FirmwareOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
+    PageSizeUnavailableError,
     Pin1HazardRefusedError,
     ProtocolNotImplementedError,
     SerialError,
@@ -212,6 +214,8 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
             # Raised by the USB DFU install path. The message is already
             # operator-actionable (how to enter the bootloader, or how to install
             # pyusb), so it is rendered verbatim rather than prefixed.
+            raise click.ClickException(str(e)) from e
+        except PageSizeUnavailableError as e:
             raise click.ClickException(str(e)) from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
@@ -757,6 +761,7 @@ def write(
 
     if not jp5_gate.confirm_or_refuse(eprom, eprom_data.get("bus-config"), "write"):
         sys.exit(1)
+    page_size_gate.require_page_size(eprom, eprom_data, "write")
 
     ok = app.eprom_operator.write_eprom(
         eprom,

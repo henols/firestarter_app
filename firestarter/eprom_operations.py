@@ -59,6 +59,7 @@ from firestarter.exceptions import (
 from firestarter.frame_parser import _crc8_ccitt, cobs_encode
 from firestarter.jp5_gate import require_acknowledged
 from firestarter.messages import MSG_DATA_PROTECTION_STATUS, MSG_WARN_SDP_UNLOCK_SKIPPED
+from firestarter.page_size_gate import require_page_size
 from firestarter.sdp_capability import SDP_PROTOCOL_ID
 from firestarter.serial_comm import (
     CONNECTION_STABILIZE_DELAY,
@@ -2005,6 +2006,7 @@ class EpromOperator:
             "write",
             pin1_hazard_acknowledged,
         )
+        require_page_size(eprom_name, eprom_data_dict, "write")
 
         with self._operation_context(
             eprom_name,
