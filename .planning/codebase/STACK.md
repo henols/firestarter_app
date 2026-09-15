@@ -4,7 +4,7 @@
 
 ## Languages
 **Primary:**
-- Python 3.11+ - All application logic (enforced via `requires-python = ">=3.11"` in `pyproject.toml`; see `henols/firestarter_prom` `.planning/notes/python-floor-decision.md` for why and the standing rule for the next move)
+- Python 3.11+ - All application logic (enforced via `requires-python = ">=3.11"` in `pyproject.toml`; see `henols/firestarter` `.planning/notes/python-floor-decision.md` for why and the standing rule for the next move)
 - Bash - Test scripts (`firestarter_test.sh`, `write_test.sh`)
 
 ## Runtime
