@@ -7,7 +7,7 @@ Permission is hereby granted under MIT license.
 Firestarter -- v1.2 log-message catalog (host side)
 
 DO NOT EDIT, and do not regenerate from this repository.
-Generated in the firestarter_prom meta repo by its
+Generated in the henols/firestarter meta repo by its
 tools/catalog/codegen.py from tools/catalog/messages.toml,
 then synced here. Edit the catalog there and re-sync.
 

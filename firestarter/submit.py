@@ -53,13 +53,13 @@ from firestarter.diagnostic_report import is_submittable
 # ---------------------------------------------------------------------------
 
 # Hardcoded, never remote-inferred. Target is the project-wide tracker,
-# NOT the repo this code lives in: `henols/firestarter_prom` is the single
+# NOT the repo this code lives in: `henols/firestarter` is the single
 # repository for issue tracking per firestarter_prom#6 ("New GitHub issues must
 # be allowed only in henols/firestarter_prom"; creation is to be disabled in
 # `henols/firestarter_fw` and `henols/firestarter_app`). A `dev test` report spans
 # host + firmware + shield and cannot reliably attribute itself to one layer,
 # so the cross-repository tracker is also the only correct destination for it.
-SUBMIT_REPO = "henols/firestarter_prom"
+SUBMIT_REPO = "henols/firestarter"
 # GSD_INBOX_LABEL is a maintainer-side triage tag ONLY (quick 260728-ahy):
 # never sent on the `gh issue create` argv (that arg is triage/write-gated and a
 # community tester lacks it); a maintainer applies it post-hoc via

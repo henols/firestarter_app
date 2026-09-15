@@ -470,7 +470,7 @@ def test_build_issue_url_not_derived_from_git_remote():
     assert submit.SUBMIT_REPO in url
     # Literal on purpose: the project-wide tracker per firestarter_prom#6,
     # NOT the repo this code lives in. A silent retarget must fail here.
-    assert submit.SUBMIT_REPO == "henols/firestarter_prom"
+    assert submit.SUBMIT_REPO == "henols/firestarter"
 
 
 # gh_available + submit_via_gh (list argv, stdin body)
@@ -502,7 +502,7 @@ def test_submit_via_gh_exact_argv_and_stdin_body():
     run_fn = Mock(
         return_value=Mock(
             returncode=0,
-            stdout="https://github.com/henols/firestarter_prom/issues/1\n",
+            stdout="https://github.com/henols/firestarter/issues/1\n",
         )
     )
     result = submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
@@ -523,7 +523,7 @@ def test_submit_via_gh_exact_argv_and_stdin_body():
         capture_output=True,
         check=False,
     )
-    assert result == "https://github.com/henols/firestarter_prom/issues/1"
+    assert result == "https://github.com/henols/firestarter/issues/1"
 
 
 def test_submit_via_gh_returns_none_on_failure():
@@ -536,7 +536,7 @@ def test_submit_via_gh_argv_carries_nothing_permission_gated():
     run_fn = Mock(
         return_value=Mock(
             returncode=0,
-            stdout="https://github.com/henols/firestarter_prom/issues/1\n",
+            stdout="https://github.com/henols/firestarter/issues/1\n",
         )
     )
     submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
@@ -560,14 +560,14 @@ def test_submit_via_gh_argv_targets_the_project_wide_tracker():
     run_fn = Mock(
         return_value=Mock(
             returncode=0,
-            stdout="https://github.com/henols/firestarter_prom/issues/1\n",
+            stdout="https://github.com/henols/firestarter/issues/1\n",
         )
     )
     submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
     argv = run_fn.call_args[0][0]
     assert isinstance(argv, list)
     repo_idx = argv.index("--repo")
-    assert argv[repo_idx + 1] == "henols/firestarter_prom"
+    assert argv[repo_idx + 1] == "henols/firestarter"
     assert "henols/firestarter_app" not in " ".join(argv)
     assert "shell" not in run_fn.call_args.kwargs
 
@@ -606,7 +606,7 @@ def test_submit_via_gh_success_prints_nothing():
     run_fn = Mock(
         return_value=Mock(
             returncode=0,
-            stdout="https://github.com/henols/firestarter_prom/issues/1\n",
+            stdout="https://github.com/henols/firestarter/issues/1\n",
         )
     )
     console = Mock()
@@ -647,7 +647,7 @@ def test_gh_create_argv_carries_no_permission_gated_flag(flag):
     run_fn = Mock(
         return_value=Mock(
             returncode=0,
-            stdout="https://github.com/henols/firestarter_prom/issues/1\n",
+            stdout="https://github.com/henols/firestarter/issues/1\n",
         )
     )
     submit.submit_via_gh("My Title", "My Body", run_fn=run_fn)
@@ -1131,7 +1131,7 @@ def test_tty_confirm_gh_available_dispatches_to_gh_not_browser():
             Mock(returncode=0),  # gh auth status
             Mock(
                 returncode=0,
-                stdout="https://github.com/henols/firestarter_prom/issues/9\n",
+                stdout="https://github.com/henols/firestarter/issues/9\n",
             ),  # gh issue create
         ]
     )
@@ -1439,7 +1439,7 @@ def test_no_duplicate_asks_once_and_dispatches_to_create_on_yes():
             Mock(returncode=0),  # gh auth status
             Mock(
                 returncode=0,
-                stdout="https://github.com/henols/firestarter_prom/issues/9\n",
+                stdout="https://github.com/henols/firestarter/issues/9\n",
             ),  # gh issue create
         ]
     )
