@@ -6,7 +6,7 @@ Command-line tool for the **Firestarter EPROM programmer** — an Arduino with a
 Relatively-Universal-ROM-Programmer (RURP) shield. It reads, writes, erases and verifies EPROM,
 EEPROM, Flash and SRAM chips, from a database of 746 parts across 59 manufacturers.
 
-**New here?** Start at [firestarter_prom](https://github.com/henols/firestarter_prom) — what
+**New here?** Start at [firestarter](https://github.com/henols/firestarter) — what
 Firestarter is, what hardware you need, and how to read your first chip.
 
 ## Table of contents
@@ -48,7 +48,7 @@ installs the latest stable release.
 
 **The CLI and the firmware are upgraded together.** A mismatched pair fails with a timeout or a
 decode error — see
-[Breaking Changes](https://github.com/henols/firestarter_prom/wiki/Breaking-Changes).
+[Breaking Changes](https://github.com/henols/firestarter/wiki/Breaking-Changes).
 
 ## Usage
 
@@ -93,17 +93,17 @@ Settings live in `~/.firestarter/config.json`, managed with `firestarter config`
 
 You can add or override chips with your own `~/.firestarter/database.json`; entries there take
 precedence over the shipped database. The field reference is
-[Chip Database Fields](https://github.com/henols/firestarter_prom/wiki/Chip-Database-Fields).
+[Chip Database Fields](https://github.com/henols/firestarter/wiki/Chip-Database-Fields).
 
 ## Documentation
 
-Everything else is on the **[Firestarter wiki](https://github.com/henols/firestarter_prom/wiki)** —
+Everything else is on the **[Firestarter wiki](https://github.com/henols/firestarter/wiki)** —
 supported chips and protocols, pin maps and adapters, shield revisions, and how to test a chip
 against real hardware.
 
 ## Contributing
 
-See the [Contributing](https://github.com/henols/firestarter_prom/wiki/Contributing) wiki page for where to report a problem and where to open a pull request.
+See the [Contributing](https://github.com/henols/firestarter/wiki/Contributing) wiki page for where to report a problem and where to open a pull request.
 
 ## License
 
