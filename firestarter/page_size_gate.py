@@ -13,6 +13,15 @@ window auto-commits mid-load, past the point the firmware polls. Only an
 exact, database-sourced page size is safe, and there is no fallback value
 that is ever safe to guess.
 
+`require_page_size` accepts only a page size this protocol can actually
+carry: a non-zero power of two no greater than 512, the same ceiling
+`flash_5v_page_mask` enforces in `firestarter_fw/src/proms/flash_5v_page.cpp`.
+A recorded value outside that set -- a non-power-of-two, or anything above
+the ceiling -- is refused with the same fail-closed exception as an absent
+page size, so a user database override that never passed the database
+generator's validator cannot reach the firmware state machine and fail deep
+instead of at this named, pre-serial refusal.
+
 Like `flash4_erase_gate.py` and `jp5_gate.py`, this is a pure predicate over
 its arguments: no transport I/O, no environment reads, no serial access --
 an already-resolved wire dict is the whole input, which is what lets both
@@ -44,10 +53,24 @@ from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID
 
 _WRITE_OPERATIONS = frozenset({"write"})
 
+# The concrete accepted set, mirroring flash_5v_page_mask's non-zero,
+# power-of-two, <= FLASH_5V_PAGE_SIZE_MAX (512) test. Named explicitly
+# rather than recomputed, so a reader can compare it against the firmware's
+# ceiling by eye.
+_ACCEPTED_PAGE_SIZES: frozenset[int] = frozenset(
+    {1, 2, 4, 8, 16, 32, 64, 128, 256, 512}
+)
+
 _REFUSAL_FORMAT = (
     "{chip_name}: no page size is recorded for this chip, and a protocol "
     "0x05 write is refused. A guessed page size can silently destroy data "
     "in either direction on this protocol."
+)
+
+_INVALID_PAGE_SIZE_FORMAT = (
+    "{chip_name}: the recorded page size {page_size} is not one this "
+    "protocol accepts, and a protocol 0x05 write is refused. The accepted "
+    "page sizes are a power of two no greater than 512."
 )
 
 _ALIGNMENT_REFUSAL_FORMAT = (
@@ -88,7 +111,10 @@ def require_page_size(
     This is the fail-CLOSED direction, the opposite of
     `flash4_erase_gate.is_flash4`'s documented fail-open polarity: absent
     evidence that a real page size exists means the part is not provably
-    safe to write.
+    safe to write. A recorded value that is not a member of
+    `_ACCEPTED_PAGE_SIZES` -- non-power-of-two, above the 512 ceiling, or a
+    transport-saturated value -- is refused for the same reason: it is not
+    provably safe, even though something was recorded.
     """
     if operation not in _WRITE_OPERATIONS:
         return
@@ -98,6 +124,12 @@ def require_page_size(
     if not page_size:
         raise PageSizeUnavailableError(
             _REFUSAL_FORMAT.format(chip_name=chip_name.upper())
+        )
+    if page_size not in _ACCEPTED_PAGE_SIZES:
+        raise PageSizeUnavailableError(
+            _INVALID_PAGE_SIZE_FORMAT.format(
+                chip_name=chip_name.upper(), page_size=page_size
+            )
         )
 
 

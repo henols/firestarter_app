@@ -5,22 +5,31 @@ Copyright (c) 2024 Henrik Olsson
 Permission is hereby granted under MIT license.
 
 Phase 194 Plan 05 -- host-side, pre-connect refusal for a protocol 0x05 write
-against a chip with no recorded page size (D-05/D-07).
+against a chip with no recorded page size (D-05/D-07). Extended in Phase 195
+Plan 03 (D-05) so the host refuses the same set of page sizes the firmware
+refuses -- a value that is zero, a non-power-of-two, or above the 512
+ceiling -- not only an absent one.
 
-Four properties, matching page_size_gate.py's contract:
+Five properties, matching page_size_gate.py's contract:
 
   1. Refusal: EpromOperator.write_eprom raises PageSizeUnavailableError,
      naming the chip, BEFORE `_operation_context` is ever entered -- no
-     serial port is opened.
-  2. Pass-through: the same call against a chip whose wire dict carries a
-     non-zero page size reaches `_operation_context` -- proving the guard
-     is not a blanket refusal.
+     serial port is opened. Covers an absent page size, a non-power-of-two
+     value, a value above the firmware's 512 ceiling, and a
+     transport-saturated value -- the same four native rejection classes
+     `test_val_5v_page.cpp` exercises firmware-side.
+  2. Pass-through: the same call against a chip whose wire dict carries an
+     accepted page size (64, 128, 256 or 512) reaches `_operation_context`
+     -- proving the guard is not a blanket refusal.
   3. No-op: a write against another algorithm, and a non-write operation
      against a protocol 0x05 chip with no page size, both pass without
      raising.
   4. Rendering: PageSizeUnavailableError surfaces through map_typed_errors
      as a Click exception carrying the guard's own text verbatim, with no
      generic "Programmer error:" prefix in front of it.
+  5. Wording: the refusal message for a recorded-but-invalid value names
+     the offending value and never claims that no page size is recorded --
+     that claim would be untrue for a chip that recorded 96.
 """
 
 from unittest.mock import Mock, patch
@@ -96,6 +105,54 @@ def test_write_eprom_with_page_size_reaches_operation_context(tmp_path):
 
     payload = tmp_path / "in.bin"
     payload.write_bytes(b"\x00" * page_size)
+
+    operator = _make_operator()
+    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+        ctx_mock.return_value.__enter__ = Mock(return_value=(None, 0, "write"))
+        ctx_mock.return_value.__exit__ = Mock(return_value=False)
+        result = operator.write_eprom("W29C020", eprom_data, str(payload))
+
+    ctx_mock.assert_called_once()
+    assert result is False
+
+
+@pytest.mark.parametrize("bad_page_size", [96, 1024, 65535])
+def test_write_eprom_invalid_page_size_refuses_before_operation_context(
+    tmp_path, bad_page_size
+):
+    """D-05: the host refuses the same set of page sizes the firmware
+    refuses -- a non-power-of-two (96), a value above the 512 ceiling
+    (1024), and a transport-saturated value (65535) -- mirroring the
+    firmware's own four native rejection classes host-side."""
+    eprom_data = _protocol_0x05_data_with_page_size()
+    eprom_data["page-size"] = bad_page_size
+
+    payload = tmp_path / "in.bin"
+    payload.write_bytes(b"\x00" * 64)
+
+    operator = _make_operator()
+    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+        with pytest.raises(PageSizeUnavailableError) as exc_info:
+            operator.write_eprom("W29C020", eprom_data, str(payload))
+        ctx_mock.assert_not_called()
+
+    message = str(exc_info.value)
+    assert "W29C020" in message
+    assert str(bad_page_size) in message
+    assert "no page size is recorded" not in message
+
+
+@pytest.mark.parametrize("valid_page_size", [64, 128, 256, 512])
+def test_write_eprom_valid_page_size_reaches_operation_context(
+    tmp_path, valid_page_size
+):
+    """The positive control for D-05: the widened predicate still passes
+    every page size the firmware itself accepts."""
+    eprom_data = _protocol_0x05_data_with_page_size()
+    eprom_data["page-size"] = valid_page_size
+
+    payload = tmp_path / "in.bin"
+    payload.write_bytes(b"\x00" * valid_page_size)
 
     operator = _make_operator()
     with patch.object(EpromOperator, "_operation_context") as ctx_mock:
