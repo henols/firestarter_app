@@ -45,7 +45,12 @@ from rich.prompt import Confirm
 # it imports no serial-transport or hardware-manager class -- so importing
 # `VERDICT_NA` from it here does not breach the ORCHESTRATOR-ONLY
 # invariant stated in this module's docstring.
-from firestarter.chip_test import STATUS_COMPLETE, STATUS_ERROR, VERDICT_NA
+from firestarter.chip_test import (
+    STATUS_COMPLETE,
+    STATUS_ERROR,
+    VERDICT_NA,
+    resolve_error_name,
+)
 from firestarter.diagnostic_report import is_submittable
 
 # ---------------------------------------------------------------------------
@@ -251,6 +256,53 @@ def _reason_text(verdict: Any, reason: Any) -> str:
     return str(reason) if reason else "-"
 
 
+def _error_text(verdict: Any, error_code: Any, error_name: Any = None) -> str:
+    """`(verdict, error_code, error_name)` -> a markdown Error cell.
+
+    Keyed on the VERDICT for the `NA` case only, mirroring `_reason_text`:
+    an `NA` step's Error cell is suppressed to `-` regardless of its
+    payload, since an inapplicable step has nothing to disclose. Every
+    other verdict, `SKIPPED` included, renders its code -- a SKIPPED
+    step's `error_code` is frequently the disclosure the step exists to
+    surface.
+
+    `error_code` is coerced with `int()`, the same tolerant shape
+    `_runs_text`/`_duration_text` already use; anything that cannot be
+    coerced (`None`, a non-numeric string, a non-finite float, an
+    arbitrary object) renders `-` and never raises.
+
+    `error_name` wins over catalog resolution when the caller supplied a
+    truthy one -- this is the field 260916-nb9 added to a serialized
+    report's steps. Otherwise the name is resolved via
+    `resolve_error_name`, the one canonical `firestarter.messages.CATALOG`
+    authority `codec.py` and `serial_comm.py` already read. A code absent
+    from the catalog renders the bare decimal.
+    """
+    if verdict == VERDICT_NA:
+        return "-"
+    try:
+        code = int(error_code)
+    except (TypeError, ValueError, OverflowError):
+        return "-"
+    name = error_name if error_name else resolve_error_name(code)
+    if name:
+        return f"{name} ({code})"
+    return str(code)
+
+
+def _error_cells(rows: Any) -> list[str] | None:
+    """Maps `(verdict, error_code, error_name)` triples through
+    `_error_text`; returns `None` when every resulting cell is the absent
+    placeholder `-` -- the single signal both markdown tables key their
+    Error-column-presence branch on, so the two tables can never disagree
+    on when the column appears.
+    """
+    cells = [_error_text(verdict, code, name) for verdict, code, name in rows]
+    if all(cell == "-" for cell in cells):
+        return None
+    return cells
+
+
 def build_body(
     sanitized_dict: dict[str, Any], results: Any, *, include_json: bool = True
 ) -> str:
@@ -297,15 +349,30 @@ def build_body(
     if elapsed is not None:
         lines.append(f"elapsed: {_duration_text(elapsed)}")
     lines.append("")
-    lines.append("| Step | Verdict | Runs | Took | Reason |")
-    lines.append("| ---- | ------- | ---- | ---- | ------ |")
-    for step in sanitized_dict.get("steps", []):
+    steps = sanitized_dict.get("steps", [])
+    error_cells = _error_cells(
+        (step.get("verdict"), step.get("error_code"), step.get("error_name"))
+        for step in steps
+    )
+    if error_cells is None:
+        lines.append("| Step | Verdict | Runs | Took | Reason |")
+        lines.append("| ---- | ------- | ---- | ---- | ------ |")
+    else:
+        lines.append("| Step | Verdict | Runs | Took | Error | Reason |")
+        lines.append("| ---- | ------- | ---- | ---- | ----- | ------ |")
+    for idx, step in enumerate(steps):
         reason = _reason_text(step.get("verdict"), step.get("reason"))
         took = _duration_text(step.get("duration_s"))
         runs = _runs_text(step.get("run_count"))
-        lines.append(
-            f"| {step.get('op')} | {step.get('verdict')} | {runs} | {took} | {reason} |"
-        )
+        if error_cells is None:
+            lines.append(
+                f"| {step.get('op')} | {step.get('verdict')} | {runs} | {took} | {reason} |"
+            )
+        else:
+            lines.append(
+                f"| {step.get('op')} | {step.get('verdict')} | {runs} | {took} | "
+                f"{error_cells[idx]} | {reason} |"
+            )
     body = "\n".join(lines)
     if include_json:
         body += "\n\n```json\n" + json.dumps(sanitized_dict, indent=2) + "\n```"

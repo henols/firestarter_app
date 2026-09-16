@@ -491,8 +491,7 @@ def test_build_body_emits_the_error_column_when_a_step_carries_a_code():
     assert "| Step | Verdict | Runs | Took | Error | Reason |" in body
     assert "| id | OK | 1 | 0.03s | - | - |" in body
     assert (
-        "| write | BAD | 2 | 41.9s | MSG_ERR_OP_TIMEOUT (183) | op timed out |"
-        in body
+        "| write | BAD | 2 | 41.9s | MSG_ERR_OP_TIMEOUT (183) | op timed out |" in body
     )
 
 

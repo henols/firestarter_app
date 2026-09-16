@@ -2542,19 +2542,31 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # module-level import here would tighten an already-layered graph for
     # one formatter.
     from firestarter.submit import _duration_text as submit_duration_text
+    from firestarter.submit import _error_cells as submit_error_cells
     from firestarter.submit import _reason_text as submit_reason_text
     from firestarter.submit import _runs_text as submit_runs_text
 
     canonical_heading_name = (
         report_dict["auto_capture"]["canonical_part_number"] or chip
     )
-    md_lines = [
-        f"# dev test -- {canonical_heading_name}",
-        "",
-        "| Step | Verdict | Runs | Took | Reason |",
-        "| ---- | ------- | ---- | ---- | ------ |",
-    ]
-    for r in results:
+    error_cells = submit_error_cells(
+        (r.verdict, r.error_code, getattr(r, "error_name", None)) for r in results
+    )
+    if error_cells is None:
+        md_lines = [
+            f"# dev test -- {canonical_heading_name}",
+            "",
+            "| Step | Verdict | Runs | Took | Reason |",
+            "| ---- | ------- | ---- | ---- | ------ |",
+        ]
+    else:
+        md_lines = [
+            f"# dev test -- {canonical_heading_name}",
+            "",
+            "| Step | Verdict | Runs | Took | Error | Reason |",
+            "| ---- | ------- | ---- | ---- | ----- | ------ |",
+        ]
+    for idx, r in enumerate(results):
         # `Took` mirrors submit.build_body's own column (schema 1.5) so the
         # saved artifact and the filed issue body carry the same timings.
         # `Runs` does the same for `run_count` (schema 1.7, quick task
@@ -2568,7 +2580,13 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
         took = submit_duration_text(r.duration_s)
         runs = submit_runs_text(r.run_count)
         reason = submit_reason_text(r.verdict, r.reason)
-        md_lines.append(f"| {r.op} | {r.verdict} | {runs} | {took} | {reason} |")
+        if error_cells is None:
+            md_lines.append(f"| {r.op} | {r.verdict} | {runs} | {took} | {reason} |")
+        else:
+            md_lines.append(
+                f"| {r.op} | {r.verdict} | {runs} | {took} | "
+                f"{error_cells[idx]} | {reason} |"
+            )
     md_lines.append("")
     md_lines.append(report.to_json_block())
     md_file = out_path / f"dev-test-{safe_chip}.md"
