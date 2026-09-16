@@ -449,6 +449,53 @@ def test_build_body_includes_json_by_default():
     assert '"chip": "X"' in body
 
 
+def test_error_text_resolves_the_catalog_name_for_a_known_code():
+    assert submit._error_text("BAD", 183, None) == "MSG_ERR_OP_TIMEOUT (183)"
+
+
+def test_error_text_returns_placeholder_for_no_code():
+    assert submit._error_text("OK", None, None) == "-"
+
+
+def test_error_cells_returns_none_when_every_cell_is_the_placeholder():
+    rows = [("OK", None, None), ("NA", 183, None)]
+    assert submit._error_cells(rows) is None
+
+
+def test_error_cells_returns_the_full_list_when_any_cell_is_real():
+    rows = [("OK", None, None), ("BAD", 183, None)]
+    assert submit._error_cells(rows) == ["-", "MSG_ERR_OP_TIMEOUT (183)"]
+
+
+def test_build_body_emits_the_error_column_when_a_step_carries_a_code():
+    sanitized = {
+        "steps": [
+            {
+                "op": "id",
+                "verdict": "OK",
+                "reason": "",
+                "duration_s": 0.03,
+                "run_count": 1,
+            },
+            {
+                "op": "write",
+                "verdict": "BAD",
+                "reason": "op timed out",
+                "duration_s": 41.875,
+                "run_count": 2,
+                "error_code": 183,
+            },
+        ]
+    }
+    body = submit.build_body(sanitized, [], include_json=False)
+    assert "| Step | Verdict | Runs | Took | Error | Reason |" in body
+    assert "| id | OK | 1 | 0.03s | - | - |" in body
+    assert (
+        "| write | BAD | 2 | 41.9s | MSG_ERR_OP_TIMEOUT (183) | op timed out |"
+        in body
+    )
+
+
 def test_build_issue_url_targets_hardcoded_repo():
     url = submit.build_issue_url("My Title", "My Body")
     assert url.startswith(f"https://github.com/{submit.SUBMIT_REPO}/issues/new?")

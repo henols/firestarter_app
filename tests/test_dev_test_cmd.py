@@ -905,6 +905,30 @@ class TestReportDestination:
         # `run_count`) so the saved artifact states the repeat policy.
         assert "| Step | Verdict | Runs | Took | Reason |" in md_text
 
+    def test_md_artifact_carries_the_firmware_error_name_on_a_failing_step(
+        self, runner: CliRunner
+    ) -> None:
+        """A blank-check step that fails with a recorded firmware
+        `last_firmware_error_code` reaches the saved `dev-test-<chip>.md`
+        table with the resolved symbolic name alongside the decimal code."""
+        from firestarter.messages import MSG_ERR_NOT_BLANK
+
+        operator = make_clean_operator()
+        operator.check_eprom_blank.return_value = False
+        operator.last_firmware_error_code = MSG_ERR_NOT_BLANK
+        operator.last_firmware_error_message = "not blank"
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code in (0, 1), result.output
+        md_text = (_reports_dir() / f"dev-test-{_CHIP_NO_ID}.md").read_text()
+        assert "| Step | Verdict | Runs | Took | Error | Reason |" in md_text
+        blank_check_row = next(
+            line for line in md_text.splitlines() if line.startswith("| blank-check")
+        )
+        assert "MSG_ERR_NOT_BLANK (176)" in blank_check_row
+
     def test_md_artifact_na_row_suppresses_reason_everywhere(
         self, runner: CliRunner
     ) -> None:
