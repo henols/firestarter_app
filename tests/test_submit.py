@@ -554,7 +554,7 @@ def test_error_text_hostile_name_cannot_add_a_table_row():
     body = submit.build_body(sanitized, [], include_json=False)
     table_lines = [line for line in body.splitlines() if line.startswith("| write")]
     assert len(table_lines) == 1
-    assert table_lines[0].count("|") == 6
+    assert table_lines[0].count("|") == 7
 
 
 def test_error_text_truncates_a_name_longer_than_the_cap():

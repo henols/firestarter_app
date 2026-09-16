@@ -256,6 +256,22 @@ def _reason_text(verdict: Any, reason: Any) -> str:
     return str(reason) if reason else "-"
 
 
+_ERROR_NAME_MAX_LEN = 64
+
+
+def _sanitize_error_name(name: str) -> str:
+    """Strips `|`, `\\n` and `\\r` and caps at `_ERROR_NAME_MAX_LEN`.
+
+    Applied to a resolved error name only, never to the code (already an
+    `int` by then and cannot carry markup): a replayed report's
+    `error_name` crosses a trust boundary into a public issue body, and
+    an unsanitized pipe or newline could break out of its table cell or
+    forge an extra row.
+    """
+    clean = name.replace("|", "").replace("\n", "").replace("\r", "")
+    return clean[:_ERROR_NAME_MAX_LEN]
+
+
 def _error_text(verdict: Any, error_code: Any, error_name: Any = None) -> str:
     """`(verdict, error_code, error_name)` -> a markdown Error cell.
 
@@ -276,7 +292,9 @@ def _error_text(verdict: Any, error_code: Any, error_name: Any = None) -> str:
     report's steps. Otherwise the name is resolved via
     `resolve_error_name`, the one canonical `firestarter.messages.CATALOG`
     authority `codec.py` and `serial_comm.py` already read. A code absent
-    from the catalog renders the bare decimal.
+    from the catalog renders the bare decimal. The resolved name is
+    always passed through `_sanitize_error_name` before it reaches the
+    cell, whichever source it came from.
     """
     if verdict == VERDICT_NA:
         return "-"
@@ -286,7 +304,7 @@ def _error_text(verdict: Any, error_code: Any, error_name: Any = None) -> str:
         return "-"
     name = error_name if error_name else resolve_error_name(code)
     if name:
-        return f"{name} ({code})"
+        return f"{_sanitize_error_name(str(name))} ({code})"
     return str(code)
 
 
