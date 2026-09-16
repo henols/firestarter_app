@@ -321,6 +321,53 @@ def _error_cells(rows: Any) -> list[str] | None:
     return cells
 
 
+def _log_capture_lines(report_dict: dict[str, Any]) -> list[str]:
+    """The captured-warning/error-line diagnostics section, shared verbatim
+    between `dev-test-<chip>.md` (`cli_handlers.py`'s `md_lines`) and this
+    module's own `build_body` -- one formatter, two surfaces, so neither
+    can drift from the other on when the section appears or how an entry
+    renders.
+
+    NOT redundant with the fenced JSON block that already carries the same
+    `log_capture` mapping: `submit_via_browser` drops the fenced JSON block
+    entirely once the encoded issue URL crosses `_URL_ESCALATE_BYTES`, so on
+    an escalated browser submission this section is the ONLY surface the
+    captured lines survive on.
+
+    Returns an empty list -- no section at all -- when `report_dict` carries
+    no `log_capture` key, a `None` value, or a mapping whose `entries` list
+    is empty, matching `build_body`'s own `elapsed` conditional above. Reads
+    `report_dict` as already SANITIZED when called from `build_body` (never
+    the raw report); `cli_handlers.py` passes its own unsanitized
+    `report_dict` instead, exactly as the saved `.json`/`.md` artifacts stay
+    unsanitized by design (T-nbb-08).
+    """
+    block = report_dict.get("log_capture")
+    if not block:
+        return []
+    entries = block.get("entries") or []
+    if not entries:
+        return []
+    lines = [
+        "",
+        (
+            f"captured log lines (captured={block.get('captured')}, "
+            f"dropped={block.get('dropped')}, truncated={block.get('truncated')}):"
+        ),
+        "```text",
+    ]
+    for entry in entries:
+        step = entry.get("step") or "-"
+        repeat = entry.get("repeat") or 1
+        suffix = f" (x{repeat})" if repeat > 1 else ""
+        lines.append(
+            f"[{step}] {entry.get('source')} {entry.get('level')}: "
+            f"{entry.get('message')}{suffix}"
+        )
+    lines.append("```")
+    return lines
+
+
 def build_body(
     sanitized_dict: dict[str, Any], results: Any, *, include_json: bool = True
 ) -> str:
@@ -391,6 +438,7 @@ def build_body(
                 f"| {step.get('op')} | {step.get('verdict')} | {runs} | {took} | "
                 f"{error_cells[idx]} | {reason} |"
             )
+    lines.extend(_log_capture_lines(sanitized_dict))
     body = "\n".join(lines)
     if include_json:
         body += "\n\n```json\n" + json.dumps(sanitized_dict, indent=2) + "\n```"

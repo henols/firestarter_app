@@ -64,6 +64,18 @@ Test taxonomy, matching the plan's behavior list:
 
   Drift guard
     test_firmware_logger_name_matches_serial_comm_rurp_logger_name
+
+  Publish-path rendering and safety (Task 3)
+    test_diagnostics_section_renders_after_step_table_in_a_fenced_block
+    test_repeat_above_one_renders_count_and_repeat_of_one_does_not
+    test_heading_states_captured_dropped_and_truncated_counts
+    test_zero_entries_renders_no_section
+    test_none_log_capture_renders_no_section_and_does_not_raise
+    test_saved_md_and_issue_body_share_the_same_section_text
+    test_scrub_reaches_every_vector_inside_a_captured_message
+    test_triple_backtick_in_a_captured_message_cannot_close_the_fence
+    test_dedup_fingerprint_unaffected_by_log_capture_contents
+    test_full_block_diagnostics_section_stays_under_4000_chars
 """
 
 from __future__ import annotations
@@ -338,3 +350,248 @@ def test_firmware_logger_name_matches_serial_comm_rurp_logger_name() -> None:
     from firestarter import serial_comm
 
     assert log_capture.FIRMWARE_LOGGER_NAME == serial_comm.rurp_logger.name
+
+
+def _block(entries, **overrides) -> dict:
+    block = {
+        "entries": entries,
+        "captured": len(entries),
+        "dropped": 0,
+        "truncated": 0,
+        "max_entries": MAX_ENTRIES,
+        "max_line_chars": MAX_LINE_CHARS,
+    }
+    block.update(overrides)
+    return block
+
+
+def test_diagnostics_section_renders_after_step_table_in_a_fenced_block() -> None:
+    from firestarter.submit import build_body, sanitize_dict
+    from tests.test_diagnostic_report import _minimal_report
+
+    report = _minimal_report()
+    report.log_capture = _block(
+        [
+            {
+                "step": "write",
+                "source": "firmware",
+                "level": "ERROR",
+                "message": "boom",
+                "repeat": 1,
+            }
+        ]
+    )
+    sanitized = sanitize_dict(report.to_dict())
+    body = build_body(sanitized, report.results, include_json=False)
+
+    table_idx = body.index("| Step | Verdict")
+    fence_idx = body.index("```text")
+    assert fence_idx > table_idx
+    assert "[write] firmware ERROR: boom" in body
+
+
+def test_repeat_above_one_renders_count_and_repeat_of_one_does_not() -> None:
+    from firestarter.submit import build_body, sanitize_dict
+    from tests.test_diagnostic_report import _minimal_report
+
+    report = _minimal_report()
+    report.log_capture = _block(
+        [
+            {
+                "step": "write",
+                "source": "firmware",
+                "level": "ERROR",
+                "message": "boom",
+                "repeat": 3,
+            },
+            {
+                "step": "verify",
+                "source": "host",
+                "level": "WARNING",
+                "message": "once",
+                "repeat": 1,
+            },
+        ]
+    )
+    sanitized = sanitize_dict(report.to_dict())
+    body = build_body(sanitized, report.results, include_json=False)
+
+    assert "[write] firmware ERROR: boom (x3)" in body
+    assert "[verify] host WARNING: once" in body
+    assert "once (x" not in body
+
+
+def test_heading_states_captured_dropped_and_truncated_counts() -> None:
+    from firestarter.submit import build_body, sanitize_dict
+    from tests.test_diagnostic_report import _minimal_report
+
+    report = _minimal_report()
+    report.log_capture = _block(
+        [
+            {
+                "step": "write",
+                "source": "firmware",
+                "level": "ERROR",
+                "message": "boom",
+                "repeat": 1,
+            }
+        ],
+        captured=7,
+        dropped=2,
+        truncated=1,
+    )
+    sanitized = sanitize_dict(report.to_dict())
+    body = build_body(sanitized, report.results, include_json=False)
+
+    assert "captured=7" in body
+    assert "dropped=2" in body
+    assert "truncated=1" in body
+
+
+def test_zero_entries_renders_no_section() -> None:
+    from firestarter.submit import build_body, sanitize_dict
+    from tests.test_diagnostic_report import _minimal_report
+
+    report = _minimal_report()
+    report.log_capture = _block([])
+    sanitized = sanitize_dict(report.to_dict())
+    body = build_body(sanitized, report.results, include_json=False)
+
+    assert "```text" not in body
+    assert "captured=" not in body
+
+
+def test_none_log_capture_renders_no_section_and_does_not_raise() -> None:
+    from firestarter.submit import build_body, sanitize_dict
+    from tests.test_diagnostic_report import _minimal_report
+
+    report = _minimal_report()
+    assert report.log_capture is None
+    sanitized = sanitize_dict(report.to_dict())
+    body = build_body(sanitized, report.results, include_json=False)
+
+    assert "```text" not in body
+
+
+def test_saved_md_and_issue_body_share_the_same_section_text() -> None:
+    from firestarter.submit import _log_capture_lines, sanitize_dict
+    from tests.test_diagnostic_report import _minimal_report
+
+    report = _minimal_report()
+    report.log_capture = _block(
+        [
+            {
+                "step": "write",
+                "source": "firmware",
+                "level": "ERROR",
+                "message": "boom",
+                "repeat": 1,
+            }
+        ]
+    )
+    raw_dict = report.to_dict()
+    sanitized = sanitize_dict(raw_dict)
+    assert _log_capture_lines(raw_dict) == _log_capture_lines(sanitized)
+
+
+def test_scrub_reaches_every_vector_inside_a_captured_message() -> None:
+    from firestarter.submit import _log_capture_lines, sanitize_dict
+    from tests.test_diagnostic_report import _minimal_report
+
+    report = _minimal_report()
+    report.log_capture = _block(
+        [
+            {
+                "step": "write",
+                "source": "host",
+                "level": "WARNING",
+                "message": (
+                    "seen at /home/theoperator/logs, port /dev/ttyACM0, "
+                    "scratch /tmp/fs_scratch_1, run by theoperator"
+                ),
+                "repeat": 1,
+            }
+        ]
+    )
+    sanitized = sanitize_dict(report.to_dict(), user="theoperator")
+    rendered = "\n".join(_log_capture_lines(sanitized))
+
+    assert "/home/theoperator" not in rendered
+    assert "/dev/ttyACM0" not in rendered
+    assert "/tmp/fs_scratch_1" not in rendered
+    assert "theoperator" not in rendered
+    assert "/home/<user>" in rendered
+    assert "/dev/tty<redacted>" in rendered
+    assert "/tmp/<redacted>" in rendered
+    assert "<user>" in rendered
+
+
+def test_triple_backtick_in_a_captured_message_cannot_close_the_fence() -> None:
+    from firestarter import submit
+
+    log_capture.install()
+    logging.getLogger("RURP").error("payload ```escape``` attempt")
+    snapshot = log_capture.snapshot()
+    log_capture.uninstall()
+
+    from tests.test_diagnostic_report import _minimal_report
+
+    report = _minimal_report()
+    report.log_capture = snapshot
+    sanitized = submit.sanitize_dict(report.to_dict())
+    body = submit.build_body(sanitized, report.results, include_json=False)
+
+    assert "```escape```" not in body
+    assert body.count("```text") == 1
+    after_open = body.split("```text", 1)[1]
+    closing_idx = after_open.index("```")
+    inner = after_open[:closing_idx]
+    assert "```" not in inner
+
+
+def test_dedup_fingerprint_unaffected_by_log_capture_contents() -> None:
+    from firestarter.diagnostic_report import dedup_fingerprint
+    from tests.test_diagnostic_report import _minimal_report
+
+    report_a = _minimal_report()
+    report_b = _minimal_report()
+    report_b.log_capture = _block(
+        [
+            {
+                "step": "write",
+                "source": "host",
+                "level": "WARNING",
+                "message": "a completely different diagnostic line",
+                "repeat": 1,
+            }
+        ]
+    )
+    assert dedup_fingerprint(report_a) == dedup_fingerprint(report_b)
+
+
+def test_full_block_diagnostics_section_stays_under_4000_chars() -> None:
+    """ "Both bounds" means the two the module itself declares --
+    `MAX_ENTRIES` entries (a fully overflowed ring) each at `MAX_LINE_CHARS`
+    (the longest a stored message can be) -- not an unbounded op-name
+    length or an arbitrarily large `repeat` count, neither of which
+    `log_capture.py` bounds at all. `write` is `OP_WRITE`, the shortest
+    real op name and also the one this whole quick task exists to
+    diagnose (issue #86)."""
+    from firestarter.submit import _log_capture_lines, sanitize_dict
+    from tests.test_diagnostic_report import _minimal_report
+
+    entries = [
+        {
+            "step": "write",
+            "source": "firmware",
+            "level": "ERROR",
+            "message": "X" * MAX_LINE_CHARS,
+            "repeat": 1,
+        }
+        for _ in range(MAX_ENTRIES)
+    ]
+    report = _minimal_report()
+    report.log_capture = _block(entries, captured=MAX_ENTRIES, dropped=5, truncated=3)
+    sanitized = sanitize_dict(report.to_dict())
+    section = "\n".join(_log_capture_lines(sanitized))
+    assert len(section) < 4000

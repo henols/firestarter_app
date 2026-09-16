@@ -2547,6 +2547,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # one formatter.
     from firestarter.submit import _duration_text as submit_duration_text
     from firestarter.submit import _error_cells as submit_error_cells
+    from firestarter.submit import _log_capture_lines as submit_log_capture_lines
     from firestarter.submit import _reason_text as submit_reason_text
     from firestarter.submit import _runs_text as submit_runs_text
 
@@ -2591,6 +2592,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
                 f"| {r.op} | {r.verdict} | {runs} | {took} | "
                 f"{error_cells[idx]} | {reason} |"
             )
+    md_lines.extend(submit_log_capture_lines(report_dict))
     md_lines.append("")
     md_lines.append(report.to_json_block())
     md_file = out_path / f"dev-test-{safe_chip}.md"
