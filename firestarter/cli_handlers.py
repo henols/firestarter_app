@@ -75,6 +75,7 @@ from firestarter.exceptions import (
     FirmwareOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
+    PageAlignmentError,
     PageSizeUnavailableError,
     Pin1HazardRefusedError,
     ProtocolNotImplementedError,
@@ -216,6 +217,8 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
             # pyusb), so it is rendered verbatim rather than prefixed.
             raise click.ClickException(str(e)) from e
         except PageSizeUnavailableError as e:
+            raise click.ClickException(str(e)) from e
+        except PageAlignmentError as e:
             raise click.ClickException(str(e)) from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
@@ -762,6 +765,9 @@ def write(
     if not jp5_gate.confirm_or_refuse(eprom, eprom_data.get("bus-config"), "write"):
         sys.exit(1)
     page_size_gate.require_page_size(eprom, eprom_data, "write")
+    page_size_gate.require_page_alignment(
+        eprom, eprom_data, "write", address, input_file
+    )
 
     ok = app.eprom_operator.write_eprom(
         eprom,

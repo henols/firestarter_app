@@ -102,6 +102,19 @@ class PageSizeUnavailableError(EpromOperationError):
     pass
 
 
+class PageAlignmentError(EpromOperationError):
+    """Raised when a protocol 0x05 write's start address or payload length is
+    not a whole multiple of the chip's page size.
+
+    Fired by page_size_gate.require_page_alignment before any wire dict
+    reaches the transport and before any serial byte is emitted, because a
+    protocol 0x05 page commit erases every byte of the touched page that was
+    not loaded, and that erase cannot be undone once the load has started.
+    """
+
+    pass
+
+
 class HardwareOperationError(Exception):
     """Custom exception for hardware operation failures."""
 

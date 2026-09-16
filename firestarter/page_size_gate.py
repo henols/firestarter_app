@@ -13,10 +13,13 @@ window auto-commits mid-load, past the point the firmware polls. Only an
 exact, database-sourced page size is safe, and there is no fallback value
 that is ever safe to guess.
 
-Like `flash4_erase_gate.py` and `jp5_gate.py`, this is a pure predicate: no
-I/O, no environment reads, no serial access -- an already-resolved wire dict
-is the whole input, which is what lets both call sites run this before
-anything touches hardware.
+Like `flash4_erase_gate.py` and `jp5_gate.py`, this is a pure predicate over
+its arguments: no transport I/O, no environment reads, no serial access --
+an already-resolved wire dict is the whole input, which is what lets both
+call sites run this before anything touches hardware. The one exception is
+`require_page_alignment`, which performs a single filesystem size probe of
+the payload path the operator named; that probe fails closed like
+everything else in this module.
 
 The polarity here is the deliberate OPPOSITE of `flash4_erase_gate.is_flash4`.
 That gate fails open on absent evidence, because guessing wrong there merely
@@ -31,10 +34,12 @@ gates.
 
 from __future__ import annotations
 
+import os
 from typing import Any, Mapping  # noqa: UP035
 
+from firestarter.address_parser import parse_address
 from firestarter.constants import JSON_KEY_PAGE_SIZE
-from firestarter.exceptions import PageSizeUnavailableError
+from firestarter.exceptions import PageAlignmentError, PageSizeUnavailableError
 from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID
 
 _WRITE_OPERATIONS = frozenset({"write"})
@@ -43,6 +48,14 @@ _REFUSAL_FORMAT = (
     "{chip_name}: no page size is recorded for this chip, and a protocol "
     "0x05 write is refused. A guessed page size can silently destroy data "
     "in either direction on this protocol."
+)
+
+_ALIGNMENT_REFUSAL_FORMAT = (
+    "{chip_name}: write refused -- page size is {page_size} bytes, start "
+    "address is {start:#x}, and payload length is {length} bytes. Both the "
+    "start address and the length must be a whole multiple of the page "
+    "size, because a partial page write erases every byte of the touched "
+    "page that was not sent."
 )
 
 
@@ -85,4 +98,53 @@ def require_page_size(
     if not page_size:
         raise PageSizeUnavailableError(
             _REFUSAL_FORMAT.format(chip_name=chip_name.upper())
+        )
+
+
+def require_page_alignment(
+    chip_name: str,
+    programmer_data: Mapping[str, Any] | None,
+    operation: str,
+    address_str: str | None,
+    input_file_path: str,
+) -> None:
+    """The fail-closed, pre-connect alignment guard. Raises on refusal,
+    returns on pass.
+
+    Returns immediately when `operation` is not a write, and again when
+    `programmer_data` does not describe a protocol 0x05 part -- neither
+    early return touches the filesystem. Otherwise resolves the page size,
+    the start address, and the payload length, raising `PageAlignmentError`
+    on any input it cannot resolve, and again unless both the start address
+    and the payload length are a whole multiple of the page size. A zero
+    payload length satisfies that second clause and is never refused --
+    an empty payload drives no page cycle at all.
+    """
+    if operation not in _WRITE_OPERATIONS:
+        return
+    if not requires_page_size(programmer_data):
+        return
+    page_size = (programmer_data or {}).get(JSON_KEY_PAGE_SIZE)
+    if not page_size:
+        raise PageAlignmentError(_REFUSAL_FORMAT.format(chip_name=chip_name.upper()))
+    try:
+        start = parse_address(address_str) or 0
+    except ValueError as e:
+        raise PageAlignmentError(
+            f"{chip_name.upper()}: could not parse address {address_str!r}"
+        ) from e
+    try:
+        length = os.path.getsize(input_file_path)
+    except OSError as e:
+        raise PageAlignmentError(
+            f"{chip_name.upper()}: could not read payload file {input_file_path!r}: {e}"
+        ) from e
+    if start % page_size != 0 or length % page_size != 0:
+        raise PageAlignmentError(
+            _ALIGNMENT_REFUSAL_FORMAT.format(
+                chip_name=chip_name.upper(),
+                page_size=page_size,
+                start=start,
+                length=length,
+            )
         )

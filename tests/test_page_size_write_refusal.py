@@ -89,15 +89,19 @@ def test_write_eprom_no_page_size_refuses_with_no_programmer_available():
         ctx_mock.assert_not_called()
 
 
-def test_write_eprom_with_page_size_reaches_operation_context():
+def test_write_eprom_with_page_size_reaches_operation_context(tmp_path):
     eprom_data = _protocol_0x05_data_with_page_size()
-    assert eprom_data.get("page-size")
+    page_size = eprom_data.get("page-size")
+    assert page_size
+
+    payload = tmp_path / "in.bin"
+    payload.write_bytes(b"\x00" * page_size)
 
     operator = _make_operator()
     with patch.object(EpromOperator, "_operation_context") as ctx_mock:
         ctx_mock.return_value.__enter__ = Mock(return_value=(None, 0, "write"))
         ctx_mock.return_value.__exit__ = Mock(return_value=False)
-        result = operator.write_eprom("W29C020", eprom_data, "in.bin")
+        result = operator.write_eprom("W29C020", eprom_data, str(payload))
 
     ctx_mock.assert_called_once()
     assert result is False
@@ -159,17 +163,19 @@ def test_generic_eprom_operation_error_still_maps_to_programmer_error():
     assert exc_info.value.message == "Programmer error: some programmer failure"
 
 
-def test_page_size_unavailable_renders_through_cli_write_command():
+def test_page_size_unavailable_renders_through_cli_write_command(tmp_path):
     message = (
         "W29C512: no page size is recorded for this chip, and a protocol "
         "0x05 write is refused."
     )
+    payload = tmp_path / "in.bin"
+    payload.write_bytes(b"\x00" * 128)
     operator = Mock(spec=EpromOperator)
     operator.write_eprom.side_effect = PageSizeUnavailableError(message)
     app = make_app_context(eprom_operator=operator)
 
     runner = CliRunner()
-    result = runner.invoke(cli, ["write", "W29C512", "in.bin"], obj=app)
+    result = runner.invoke(cli, ["write", "W29C512", str(payload)], obj=app)
 
     assert result.exit_code == 1
     assert message in result.output
