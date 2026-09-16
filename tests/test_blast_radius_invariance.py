@@ -198,21 +198,24 @@ _DB_DIFF_KEYS = [
     "proposed_disposition",
 ]
 
-"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits twenty keys per
+"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits twenty-one keys per
 step, UNCONDITIONALLY (Phase 178 plan 01 adds `status`, schema 1.8; Phase
 181 plan 07 adds the four `fingerprint_*` siblings (RPT-A2) and `divergence`
-(RPT-A3); Phase 181 plan 08 adds `chip_id_detected` (RPT-A5)) -- taken from
-`sst27sf512-six-step`'s first (`id`) step, whose five `write_*` fields, four
-`fingerprint_*` siblings and `divergence` all stay `None` because `id`
-carries no write target, no fingerprint and no read-step comparison, but
-`chip_id_detected` IS populated on this step (it is the id step), and all
-twenty KEYS are present regardless. The pin is over the key SET, not over
-which values are non-`None`."""
+(RPT-A3); Phase 181 plan 08 adds `chip_id_detected` (RPT-A5); quick task
+260916-nb9 adds `error_name` (schema 2.1), the catalog-resolved name beside
+the existing `error_code` integer) -- taken from `sst27sf512-six-step`'s
+first (`id`) step, whose five `write_*` fields, four `fingerprint_*`
+siblings and `divergence` all stay `None` because `id` carries no write
+target, no fingerprint and no read-step comparison, but `chip_id_detected`
+IS populated on this step (it is the id step), and all twenty-one KEYS are
+present regardless. The pin is over the key SET, not over which values are
+non-`None`."""
 _STEPS_ELEMENT_0_KEYS = [
     "chip_id_detected",
     "divergence",
     "duration_s",
     "error_code",
+    "error_name",
     "fingerprint",
     "fingerprint_bad",
     "fingerprint_bad_pct",
@@ -547,16 +550,17 @@ def test_schema_version_is_pinned() -> None:
     bakes in, all in one expression, so a constant rename and a value
     change are both caught. Phase 178 plan 01 moved this to `1.8` (D-07,
     the `run_status` export). Phase 181 plan 01 moved this to `2.0`
-    (D-3/RPT-E1)."""
+    (D-3/RPT-E1). Quick task 260916-nb9 moved this to `2.1` for the
+    additive per-step `error_name` key."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
     report = build_shape(_TRACER_SHAPE_ID)
     baked = report.to_dict()["schema_version"]
-    assert SCHEMA_VERSION == "2.0" == baked, (
+    assert SCHEMA_VERSION == "2.1" == baked, (
         f"SCHEMA_VERSION drifted: constant={SCHEMA_VERSION!r}, baked="
-        f"{baked!r}, expected '2.0' (Phase 181 plan 01 took it there; the "
-        "bump was mechanically free because both parsers accept "
-        "schema_version by presence only and the dedup hash never reads it)"
+        f"{baked!r}, expected '2.1' (260916-nb9 took it there; the bump "
+        "was mechanically free because both parsers accept schema_version "
+        "by presence only and the dedup hash never reads it)"
     )
 
 

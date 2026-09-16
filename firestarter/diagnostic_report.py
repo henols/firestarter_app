@@ -42,13 +42,14 @@ from firestarter.chip_test import (
     _write_step_was_refused,
     coverage_tag,
     repeat_policy_tag,
+    resolve_error_name,
 )
 
 # ---------------------------------------------------------------------------
 # Module constants -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "2.0"  # baked into to_dict() output
+SCHEMA_VERSION = "2.1"  # baked into to_dict() output
 NOT_MEASURED = "not measured"  # honest fallback, never a false 0
 # Distinct from NOT_MEASURED: this field was never ASKED, rather than asked and
 # empty. Reusing NOT_MEASURED would conflate the two.
@@ -904,6 +905,7 @@ class DiagnosticReport:
             # carrying its `NOT-RUN: <reason>` prose -- out of scope here.
             "reason": "" if result.verdict == VERDICT_NA else result.reason,
             "error_code": result.error_code,
+            "error_name": resolve_error_name(result.error_code),
             "fingerprint": (
                 result.fingerprint.classification if result.fingerprint else None
             ),

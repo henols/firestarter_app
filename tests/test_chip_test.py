@@ -1684,6 +1684,22 @@ def test_coverage_tag_empty_for_a_run_with_no_write_step():
     assert coverage_tag([]) == ""
 
 
+def test_resolve_error_name_names_the_issue_86_ids():
+    from firestarter.chip_test import resolve_error_name
+
+    assert resolve_error_name(183) == "MSG_ERR_OP_TIMEOUT"
+    assert resolve_error_name(175) == "MSG_ERR_VERIFY"
+    assert resolve_error_name(185) == "MSG_ERR_CHIP_ID_MISMATCH"
+
+
+def test_resolve_error_name_is_exhaustive_over_the_catalog():
+    from firestarter.chip_test import resolve_error_name
+    from firestarter.messages import CATALOG
+
+    for msg_id, entry in CATALOG.items():
+        assert resolve_error_name(msg_id) == entry.name
+
+
 def test_marginal_on_disagreeing_write_runs():
     operator = _mock_operator()
     # write#1 True, write#2 False -- the AM27C020 write#1/write#2 case.

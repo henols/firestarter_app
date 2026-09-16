@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from firestarter import messages
 from firestarter.chip_resolver import resolve_chip
 from firestarter.constants import (
     FLAG_CAN_ERASE,  # 0x02 -- do NOT redefine; import
@@ -1049,8 +1050,10 @@ class StepResult:
 
     `verdict` is one of OK/BAD/NA/SKIPPED/marginal. `error_code` carries the
     exact firmware `response.id` captured off `EpromOperationError.error_code`
-    when the step raised; `None` otherwise. `fingerprint` is attached
-    only for the write/verify step. `run_count` is
+    when the step raised; `None` otherwise. Its catalog name is resolved by
+    `resolve_error_name` at serialization time, never stored here, so the
+    integer and its name can never disagree in a filed report. `fingerprint`
+    is attached only for the write/verify step. `run_count` is
     the number of times the underlying operator method was actually invoked
     for this step (1 for single-run steps; N for multi-run destructive/verify
     steps). `divergence` carries the read-step byte-level divergence
@@ -1173,6 +1176,23 @@ def coverage_tag(results: list[StepResult]) -> str:
                 return COVERAGE_TAG_FULL_DEVICE
             return ""
     return ""
+
+
+def resolve_error_name(error_code: int | None) -> str | None:
+    """The `messages.CATALOG` name for a step's `error_code`, or `None`.
+
+    `None` in, `None` out. An `error_code` with no entry in `CATALOG` also
+    returns `None` rather than raising -- a garbled or unrecognized
+    firmware `response.id` degrades to an unnamed integer, never a crash.
+
+    Reads `CATALOG` only, never `DEBUG_CATALOG`: the two registries collide
+    on nine ids under different names, and `error_code` is always a
+    top-level `response.id`, the namespace `CATALOG` alone describes.
+    """
+    if error_code is None:
+        return None
+    entry = messages.CATALOG.get(error_code)
+    return entry.name if entry is not None else None
 
 
 @dataclass
