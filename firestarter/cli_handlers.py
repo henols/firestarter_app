@@ -24,6 +24,7 @@ from firestarter import __version__ as version
 from firestarter import (
     flash4_erase_gate,
     jp5_gate,
+    log_capture,
     page_size_gate,
     sdp_honesty,  # unreadable_state_caveat(), called not re-authored
     transport_counters,
@@ -2455,6 +2456,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # runs, so one orchestrator-safe energize/query read (Part A,
     # hardware.py) yields both fields with zero extra connections.
     transport_counters.reset()
+    log_capture.install()
     identity = app.hardware_manager.read_programmer_identity()
     auto_capture = AutoCapture(
         host_version=version,
@@ -2523,6 +2525,8 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     report.elapsed = (
         None if cli_start is None else round(time.monotonic() - cli_start, 3)
     )
+    report.log_capture = log_capture.snapshot()
+    log_capture.uninstall()
     report.render(console)
 
     # The report is ALWAYS persisted, unconditionally, to the reports

@@ -46,6 +46,7 @@ from firestarter.exceptions import (
     ProgrammerNotFoundError,
     SerialError,
 )
+from firestarter.log_capture import step_scope
 from firestarter.sdp_capability import sdp_capability  # the SDP leg's derivation source
 
 # ---------------------------------------------------------------------------
@@ -2528,21 +2529,22 @@ def _run_step(
     same unchanged-threading contract; `False` is the default because a
     single-cycle caller has no prior cycles to have failed.
     """
-    start = time.monotonic()
-    result = _run_step_untimed(
-        name,
-        step,
-        operator,
-        db,
-        runs=runs,
-        sampler=sampler,
-        write_context=write_context,
-        collect_fingerprint=collect_fingerprint,
-        prior_cycles_failed=prior_cycles_failed,
-    )
-    if result.duration_s is None and result.verdict in _RAN_VERDICTS:
-        result.duration_s = round(time.monotonic() - start, 3)
-    return result
+    with step_scope(step.op):
+        start = time.monotonic()
+        result = _run_step_untimed(
+            name,
+            step,
+            operator,
+            db,
+            runs=runs,
+            sampler=sampler,
+            write_context=write_context,
+            collect_fingerprint=collect_fingerprint,
+            prior_cycles_failed=prior_cycles_failed,
+        )
+        if result.duration_s is None and result.verdict in _RAN_VERDICTS:
+            result.duration_s = round(time.monotonic() - start, 3)
+        return result
 
 
 def _run_step_untimed(

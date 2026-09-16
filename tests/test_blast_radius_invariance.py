@@ -101,11 +101,12 @@ from .fixtures.report_shapes import (
 _HEX12_RE = re.compile(r"^[0-9a-f]{12}$")
 
 """D-07's first pin: `DiagnosticReport.to_dict()`
-(`firestarter/diagnostic_report.py:771-790`) emits fifteen top-level keys
+(`firestarter/diagnostic_report.py:771-790`) emits sixteen top-level keys
 today (Phase 178 plan 01 added `run_status`, schema 1.8; Phase 178 plan 04
 adds `rail_reading_disclosure`, the ATTR-06 sentence; Phase 181 plan 01
 adds `is_uv`, RPT-A4's carry-through of `Plan.is_uv`; Phase 181 plan 06
-adds `elapsed`, RPT-D2's stored whole-command wall-clock measurement)."""
+adds `elapsed`, RPT-D2's stored whole-command wall-clock measurement; quick
+task 260916-nbb adds `log_capture`, the captured-warning/error-line block)."""
 _TO_DICT_KEYS = [
     "auto_capture",
     "banner",
@@ -115,6 +116,7 @@ _TO_DICT_KEYS = [
     "generated",
     "is_submittable",
     "is_uv",
+    "log_capture",
     "rail_reading_disclosure",
     "run_status",
     "schema_version",
@@ -590,14 +592,15 @@ def test_schema_version_is_pinned() -> None:
     change are both caught. Phase 178 plan 01 moved this to `1.8` (D-07,
     the `run_status` export). Phase 181 plan 01 moved this to `2.0`
     (D-3/RPT-E1). Quick task 260916-nb9 moved this to `2.1` for the
-    additive per-step `error_name` key."""
+    additive per-step `error_name` key. Quick task 260916-nbb moved this to
+    `2.2` for the additive top-level `log_capture` key."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
     report = build_shape(_TRACER_SHAPE_ID)
     baked = report.to_dict()["schema_version"]
-    assert SCHEMA_VERSION == "2.1" == baked, (
+    assert SCHEMA_VERSION == "2.2" == baked, (
         f"SCHEMA_VERSION drifted: constant={SCHEMA_VERSION!r}, baked="
-        f"{baked!r}, expected '2.1' (260916-nb9 took it there; the bump "
+        f"{baked!r}, expected '2.2' (260916-nbb took it there; the bump "
         "was mechanically free because both parsers accept schema_version "
         "by presence only and the dedup hash never reads it)"
     )
@@ -645,7 +648,7 @@ def test_the_to_dict_key_pin_reddens_on_a_planted_added_and_removed_key() -> Non
     report = build_shape("sst27sf512-six-step")
     d = report.to_dict()
     keys = sorted(d)
-    assert len(keys) == 15
+    assert len(keys) == 16
     assert keys.count("is_uv") == 1
 
     added = dict(d)
