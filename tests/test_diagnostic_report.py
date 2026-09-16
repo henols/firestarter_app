@@ -1288,6 +1288,30 @@ def test_step_dict_keys_error_name_unconditionally():
     assert all("error_name" in step_row for step_row in d["steps"])
 
 
+def test_step_dict_error_name_null_for_a_null_error_code():
+    report = _minimal_report()
+    assert report.results[0].error_code is None
+
+    d = report.to_dict()
+
+    assert d["steps"][0]["error_code"] is None
+    assert d["steps"][0]["error_name"] is None
+    assert "error_name" in d["steps"][0]
+
+
+def test_step_dict_error_name_null_for_an_unrecognized_error_code():
+    """The report keeps the evidence it has -- the raw integer under
+    `error_code` -- and declines to invent a name for an id in neither
+    registry rather than raising."""
+    report = _minimal_report()
+    report.results[0].error_code = 54
+
+    d = report.to_dict()
+
+    assert d["steps"][0]["error_code"] == 54
+    assert d["steps"][0]["error_name"] is None
+
+
 def test_dedup_fingerprint_sensitive_to_sdp_step_verdict_change():
     """D-11's re-key proof: two reports whose step lists differ ONLY in an
     SDP step's verdict produce DIFFERENT dedup_fingerprint values -- this is

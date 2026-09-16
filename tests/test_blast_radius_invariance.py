@@ -323,6 +323,28 @@ def test_dedup_fingerprint_is_frozen(shape_id: str, expected: str) -> None:
     )
 
 
+def test_schema_bump_rekeys_no_frozen_hash() -> None:
+    """The 2.0 -> 2.1 bump (`error_name`, quick task 260916-nb9) adds a key
+    `dedup_fingerprint` never reads (its allow-list is explicit and does
+    not reflect over `to_dict()`), so every one of the 19 `FROZEN_HASHES`
+    literals above must still agree. `test_dedup_fingerprint_is_frozen` is
+    the actual gate, parametrized over all 19; this test states in its own
+    failure message what a red there would mean: the allow-list grew a
+    reflective read and the re-key must be reviewed as a commit separate
+    from any behaviour change."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    assert len(FROZEN_HASHES) == 19
+    for shape_id, expected in FROZEN_HASHES.items():
+        computed = dedup_fingerprint(build_shape(shape_id))
+        assert computed == expected, (
+            f"{shape_id} re-keyed by the 2.0 -> 2.1 bump: expected "
+            f"{expected}, got {computed}. This means dedup_fingerprint's "
+            "allow-list grew a reflective read of to_dict() -- review the "
+            "re-key as a commit separate from the schema bump."
+        )
+
+
 def test_frozen_hashes_are_twelve_lowercase_hex_chars() -> None:
     for shape_id, expected in FROZEN_HASHES.items():
         assert _HEX12_RE.match(expected), (
@@ -541,6 +563,23 @@ def test_to_dict_steps_element_0_key_list_is_pinned() -> None:
     assert keys == _STEPS_ELEMENT_0_KEYS, (
         f"to_dict()['steps'][0] keys drifted from the pinned D-07 shape; "
         f"expected {_STEPS_ELEMENT_0_KEYS}, got {keys}"
+    )
+
+
+def test_steps_element_0_key_pin_is_sensitive_to_the_error_name_key() -> None:
+    """Proves `_STEPS_ELEMENT_0_KEYS` was updated to a set that is actually
+    sensitive to `error_name` rather than merely widened to accept it --
+    copying the in-process-mutation idiom of
+    `test_to_dict_key_list_pins_are_sensitive_to_added_and_removed_keys`
+    below. Never mutates a file on disk."""
+    d = build_shape(_TRACER_SHAPE_ID).to_dict()
+    step_0 = dict(d["steps"][0])
+    assert sorted(step_0) == _STEPS_ELEMENT_0_KEYS
+
+    del step_0["error_name"]
+    assert sorted(step_0) != _STEPS_ELEMENT_0_KEYS, (
+        "deleting error_name did not move the sorted key list away from "
+        "the pinned constant -- the pin is not sensitive to this key"
     )
 
 
