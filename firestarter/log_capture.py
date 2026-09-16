@@ -33,6 +33,7 @@ states about itself.
 from __future__ import annotations
 
 import logging
+import re
 from collections import deque
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -42,12 +43,38 @@ MAX_ENTRIES = 20
 MAX_LINE_CHARS = 160
 FIRMWARE_LOGGER_NAME = "RURP"
 
-_entries: "deque[dict[str, Any]]" = deque(maxlen=MAX_ENTRIES)
+_entries: deque[dict[str, Any]] = deque(maxlen=MAX_ENTRIES)
 _captured = 0
 _dropped = 0
 _truncated = 0
 _current_step: str | None = None
-_handler: "_CaptureHandler | None" = None
+_handler: _CaptureHandler | None = None
+
+_LINE_BREAK_RUN_RE = re.compile(r"[\r\n\t]+")
+_NON_PRINTABLE_RE = re.compile(r"[^\x20-\x7e]")
+_BACKTICK_FENCE_RE = re.compile(r"`{3,}")
+
+
+def _normalize(message: str) -> tuple[str, bool]:
+    """Apply the fixed four-step normalization pipeline to a raw record
+    message, returning the stored text and whether truncation fired.
+
+    Order is fixed and load-bearing: collapse whitespace, drop non-printable
+    characters, neutralize backtick fences, THEN truncate -- truncation
+    reading the length of the already-normalized text is what keeps the
+    length bound the last word regardless of how much raw text a run of
+    CR/LF/tab characters or non-printable bytes collapsed away. Cutting to
+    `MAX_LINE_CHARS - 3` characters plus a three-dot suffix is what keeps
+    every returned string at or under `MAX_LINE_CHARS` exactly.
+    """
+    text = _LINE_BREAK_RUN_RE.sub(" ", message).strip()
+    text = _NON_PRINTABLE_RE.sub("", text)
+    text = _BACKTICK_FENCE_RE.sub(lambda m: "'" * len(m.group(0)), text)
+    truncated = False
+    if len(text) > MAX_LINE_CHARS:
+        text = text[: MAX_LINE_CHARS - 3] + "..."
+        truncated = True
+    return text, truncated
 
 
 class _CaptureHandler(logging.Handler):
@@ -57,27 +84,49 @@ class _CaptureHandler(logging.Handler):
     leaked prior instance is always found and removed."""
 
     def emit(self, record: logging.LogRecord) -> None:
+        """Normalize, then either collapse into the last entry or append a
+        new one.
+
+        Collapse is keyed on the tuple of step, source, level and the
+        NORMALIZED message, and only ever compares against the last entry --
+        never any earlier one, so a re-sync storm cannot reach backward
+        through an unrelated line in between. Collapse is not cosmetic: the
+        two re-sync warnings `serial_comm._read_and_parse_lines` can emit
+        from inside a byte loop would otherwise evict every other captured
+        line from the ring one bad cable at a time, and the exported block
+        would report a cable when the chip was the actual finding. The
+        handler never raises: a formatting failure on a third-party record
+        must not break a run that is otherwise fine.
+        """
         global _captured, _dropped, _truncated
         try:
-            message = record.getMessage()
-            was_truncated = False
-            if len(message) > MAX_LINE_CHARS:
-                message = message[: MAX_LINE_CHARS - 3] + "..."
-                was_truncated = True
+            message, was_truncated = _normalize(record.getMessage())
             source = "firmware" if record.name == FIRMWARE_LOGGER_NAME else "host"
-            entry: dict[str, Any] = {
-                "step": _current_step,
-                "source": source,
-                "level": record.levelname,
-                "message": message,
-                "repeat": 1,
-            }
+            level = record.levelname
+            step = _current_step
             _captured += 1
             if was_truncated:
                 _truncated += 1
+            if (
+                _entries
+                and _entries[-1]["step"] == step
+                and _entries[-1]["source"] == source
+                and _entries[-1]["level"] == level
+                and _entries[-1]["message"] == message
+            ):
+                _entries[-1]["repeat"] += 1
+                return
             if len(_entries) == _entries.maxlen:
                 _dropped += _entries[0]["repeat"]
-            _entries.append(entry)
+            _entries.append(
+                {
+                    "step": step,
+                    "source": source,
+                    "level": level,
+                    "message": message,
+                    "repeat": 1,
+                }
+            )
         except Exception:
             pass
 
