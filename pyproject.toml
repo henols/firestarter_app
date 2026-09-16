@@ -169,6 +169,7 @@ module = [
     "firestarter.exceptions",
     "firestarter.serial_comm",
     "firestarter.sdp_honesty",
+    "firestarter.log_capture",
 ]
 disallow_untyped_defs = true
 check_untyped_defs = true

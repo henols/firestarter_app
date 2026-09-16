@@ -101,11 +101,12 @@ from .fixtures.report_shapes import (
 _HEX12_RE = re.compile(r"^[0-9a-f]{12}$")
 
 """D-07's first pin: `DiagnosticReport.to_dict()`
-(`firestarter/diagnostic_report.py:771-790`) emits fifteen top-level keys
+(`firestarter/diagnostic_report.py:771-790`) emits sixteen top-level keys
 today (Phase 178 plan 01 added `run_status`, schema 1.8; Phase 178 plan 04
 adds `rail_reading_disclosure`, the ATTR-06 sentence; Phase 181 plan 01
 adds `is_uv`, RPT-A4's carry-through of `Plan.is_uv`; Phase 181 plan 06
-adds `elapsed`, RPT-D2's stored whole-command wall-clock measurement)."""
+adds `elapsed`, RPT-D2's stored whole-command wall-clock measurement; quick
+task 260916-nbb adds `log_capture`, the captured-warning/error-line block)."""
 _TO_DICT_KEYS = [
     "auto_capture",
     "banner",
@@ -115,6 +116,7 @@ _TO_DICT_KEYS = [
     "generated",
     "is_submittable",
     "is_uv",
+    "log_capture",
     "rail_reading_disclosure",
     "run_status",
     "schema_version",
@@ -198,21 +200,24 @@ _DB_DIFF_KEYS = [
     "proposed_disposition",
 ]
 
-"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits twenty keys per
+"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits twenty-one keys per
 step, UNCONDITIONALLY (Phase 178 plan 01 adds `status`, schema 1.8; Phase
 181 plan 07 adds the four `fingerprint_*` siblings (RPT-A2) and `divergence`
-(RPT-A3); Phase 181 plan 08 adds `chip_id_detected` (RPT-A5)) -- taken from
-`sst27sf512-six-step`'s first (`id`) step, whose five `write_*` fields, four
-`fingerprint_*` siblings and `divergence` all stay `None` because `id`
-carries no write target, no fingerprint and no read-step comparison, but
-`chip_id_detected` IS populated on this step (it is the id step), and all
-twenty KEYS are present regardless. The pin is over the key SET, not over
-which values are non-`None`."""
+(RPT-A3); Phase 181 plan 08 adds `chip_id_detected` (RPT-A5); quick task
+260916-nb9 adds `error_name` (schema 2.1), the catalog-resolved name beside
+the existing `error_code` integer) -- taken from `sst27sf512-six-step`'s
+first (`id`) step, whose five `write_*` fields, four `fingerprint_*`
+siblings and `divergence` all stay `None` because `id` carries no write
+target, no fingerprint and no read-step comparison, but `chip_id_detected`
+IS populated on this step (it is the id step), and all twenty-one KEYS are
+present regardless. The pin is over the key SET, not over which values are
+non-`None`."""
 _STEPS_ELEMENT_0_KEYS = [
     "chip_id_detected",
     "divergence",
     "duration_s",
     "error_code",
+    "error_name",
     "fingerprint",
     "fingerprint_bad",
     "fingerprint_bad_pct",
@@ -318,6 +323,28 @@ def test_dedup_fingerprint_is_frozen(shape_id: str, expected: str) -> None:
         "deliberate, land the behaviour change and the re-key of this "
         "literal as SEPARATE commits, so the re-key stays a reviewable unit."
     )
+
+
+def test_schema_bump_rekeys_no_frozen_hash() -> None:
+    """The 2.0 -> 2.1 bump (`error_name`, quick task 260916-nb9) adds a key
+    `dedup_fingerprint` never reads (its allow-list is explicit and does
+    not reflect over `to_dict()`), so every one of the 19 `FROZEN_HASHES`
+    literals above must still agree. `test_dedup_fingerprint_is_frozen` is
+    the actual gate, parametrized over all 19; this test states in its own
+    failure message what a red there would mean: the allow-list grew a
+    reflective read and the re-key must be reviewed as a commit separate
+    from any behaviour change."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    assert len(FROZEN_HASHES) == 19
+    for shape_id, expected in FROZEN_HASHES.items():
+        computed = dedup_fingerprint(build_shape(shape_id))
+        assert computed == expected, (
+            f"{shape_id} re-keyed by the 2.0 -> 2.1 bump: expected "
+            f"{expected}, got {computed}. This means dedup_fingerprint's "
+            "allow-list grew a reflective read of to_dict() -- review the "
+            "re-key as a commit separate from the schema bump."
+        )
 
 
 def test_frozen_hashes_are_twelve_lowercase_hex_chars() -> None:
@@ -541,22 +568,41 @@ def test_to_dict_steps_element_0_key_list_is_pinned() -> None:
     )
 
 
+def test_steps_element_0_key_pin_is_sensitive_to_the_error_name_key() -> None:
+    """Proves `_STEPS_ELEMENT_0_KEYS` was updated to a set that is actually
+    sensitive to `error_name` rather than merely widened to accept it --
+    copying the in-process-mutation idiom of
+    `test_to_dict_key_list_pins_are_sensitive_to_added_and_removed_keys`
+    below. Never mutates a file on disk."""
+    d = build_shape(_TRACER_SHAPE_ID).to_dict()
+    step_0 = dict(d["steps"][0])
+    assert sorted(step_0) == _STEPS_ELEMENT_0_KEYS
+
+    del step_0["error_name"]
+    assert sorted(step_0) != _STEPS_ELEMENT_0_KEYS, (
+        "deleting error_name did not move the sorted key list away from "
+        "the pinned constant -- the pin is not sensitive to this key"
+    )
+
+
 def test_schema_version_is_pinned() -> None:
     """The triple-equality idiom (`tests/test_diagnostic_report.py:734`):
     the imported constant, the literal, and the value `to_dict()` actually
     bakes in, all in one expression, so a constant rename and a value
     change are both caught. Phase 178 plan 01 moved this to `1.8` (D-07,
     the `run_status` export). Phase 181 plan 01 moved this to `2.0`
-    (D-3/RPT-E1)."""
+    (D-3/RPT-E1). Quick task 260916-nb9 moved this to `2.1` for the
+    additive per-step `error_name` key. Quick task 260916-nbb moved this to
+    `2.2` for the additive top-level `log_capture` key."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
     report = build_shape(_TRACER_SHAPE_ID)
     baked = report.to_dict()["schema_version"]
-    assert SCHEMA_VERSION == "2.0" == baked, (
+    assert SCHEMA_VERSION == "2.2" == baked, (
         f"SCHEMA_VERSION drifted: constant={SCHEMA_VERSION!r}, baked="
-        f"{baked!r}, expected '2.0' (Phase 181 plan 01 took it there; the "
-        "bump was mechanically free because both parsers accept "
-        "schema_version by presence only and the dedup hash never reads it)"
+        f"{baked!r}, expected '2.2' (260916-nbb took it there; the bump "
+        "was mechanically free because both parsers accept schema_version "
+        "by presence only and the dedup hash never reads it)"
     )
 
 
@@ -602,7 +648,7 @@ def test_the_to_dict_key_pin_reddens_on_a_planted_added_and_removed_key() -> Non
     report = build_shape("sst27sf512-six-step")
     d = report.to_dict()
     keys = sorted(d)
-    assert len(keys) == 15
+    assert len(keys) == 16
     assert keys.count("is_uv") == 1
 
     added = dict(d)

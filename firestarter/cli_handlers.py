@@ -24,6 +24,8 @@ from firestarter import __version__ as version
 from firestarter import (
     flash4_erase_gate,
     jp5_gate,
+    log_capture,
+    page_size_gate,
     sdp_honesty,  # unreadable_state_caveat(), called not re-authored
     transport_counters,
 )
@@ -74,6 +76,8 @@ from firestarter.exceptions import (
     FirmwareOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
+    PageAlignmentError,
+    PageSizeUnavailableError,
     Pin1HazardRefusedError,
     ProtocolNotImplementedError,
     SerialError,
@@ -212,6 +216,10 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
             # Raised by the USB DFU install path. The message is already
             # operator-actionable (how to enter the bootloader, or how to install
             # pyusb), so it is rendered verbatim rather than prefixed.
+            raise click.ClickException(str(e)) from e
+        except PageSizeUnavailableError as e:
+            raise click.ClickException(str(e)) from e
+        except PageAlignmentError as e:
             raise click.ClickException(str(e)) from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
@@ -757,6 +765,10 @@ def write(
 
     if not jp5_gate.confirm_or_refuse(eprom, eprom_data.get("bus-config"), "write"):
         sys.exit(1)
+    page_size_gate.require_page_size(eprom, eprom_data, "write")
+    page_size_gate.require_page_alignment(
+        eprom, eprom_data, "write", address, input_file
+    )
 
     ok = app.eprom_operator.write_eprom(
         eprom,
@@ -2444,6 +2456,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # runs, so one orchestrator-safe energize/query read (Part A,
     # hardware.py) yields both fields with zero extra connections.
     transport_counters.reset()
+    log_capture.install()
     identity = app.hardware_manager.read_programmer_identity()
     auto_capture = AutoCapture(
         host_version=version,
@@ -2512,6 +2525,8 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     report.elapsed = (
         None if cli_start is None else round(time.monotonic() - cli_start, 3)
     )
+    report.log_capture = log_capture.snapshot()
+    log_capture.uninstall()
     report.render(console)
 
     # The report is ALWAYS persisted, unconditionally, to the reports
@@ -2531,19 +2546,32 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     # module-level import here would tighten an already-layered graph for
     # one formatter.
     from firestarter.submit import _duration_text as submit_duration_text
+    from firestarter.submit import _error_cells as submit_error_cells
+    from firestarter.submit import _log_capture_lines as submit_log_capture_lines
     from firestarter.submit import _reason_text as submit_reason_text
     from firestarter.submit import _runs_text as submit_runs_text
 
     canonical_heading_name = (
         report_dict["auto_capture"]["canonical_part_number"] or chip
     )
-    md_lines = [
-        f"# dev test -- {canonical_heading_name}",
-        "",
-        "| Step | Verdict | Runs | Took | Reason |",
-        "| ---- | ------- | ---- | ---- | ------ |",
-    ]
-    for r in results:
+    error_cells = submit_error_cells(
+        (r.verdict, r.error_code, getattr(r, "error_name", None)) for r in results
+    )
+    if error_cells is None:
+        md_lines = [
+            f"# dev test -- {canonical_heading_name}",
+            "",
+            "| Step | Verdict | Runs | Took | Reason |",
+            "| ---- | ------- | ---- | ---- | ------ |",
+        ]
+    else:
+        md_lines = [
+            f"# dev test -- {canonical_heading_name}",
+            "",
+            "| Step | Verdict | Runs | Took | Error | Reason |",
+            "| ---- | ------- | ---- | ---- | ----- | ------ |",
+        ]
+    for idx, r in enumerate(results):
         # `Took` mirrors submit.build_body's own column (schema 1.5) so the
         # saved artifact and the filed issue body carry the same timings.
         # `Runs` does the same for `run_count` (schema 1.7, quick task
@@ -2557,7 +2585,14 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
         took = submit_duration_text(r.duration_s)
         runs = submit_runs_text(r.run_count)
         reason = submit_reason_text(r.verdict, r.reason)
-        md_lines.append(f"| {r.op} | {r.verdict} | {runs} | {took} | {reason} |")
+        if error_cells is None:
+            md_lines.append(f"| {r.op} | {r.verdict} | {runs} | {took} | {reason} |")
+        else:
+            md_lines.append(
+                f"| {r.op} | {r.verdict} | {runs} | {took} | "
+                f"{error_cells[idx]} | {reason} |"
+            )
+    md_lines.extend(submit_log_capture_lines(report_dict))
     md_lines.append("")
     md_lines.append(report.to_json_block())
     md_file = out_path / f"dev-test-{safe_chip}.md"

@@ -89,6 +89,32 @@ class ChipNotImplementedError(EpromOperationError):
     pass
 
 
+class PageSizeUnavailableError(EpromOperationError):
+    """Raised when a protocol 0x05 write targets a chip with no recorded page size.
+
+    Fired by page_size_gate.require_page_size before any wire dict reaches the
+    transport and before any serial byte is emitted — the host will not drive
+    hardware for a protocol 0x05 chip whose page size is unknown. A guessed
+    page size on this protocol destroys data in both directions, so absent
+    evidence is never treated as safe.
+    """
+
+    pass
+
+
+class PageAlignmentError(EpromOperationError):
+    """Raised when a protocol 0x05 write's start address or payload length is
+    not a whole multiple of the chip's page size.
+
+    Fired by page_size_gate.require_page_alignment before any wire dict
+    reaches the transport and before any serial byte is emitted, because a
+    protocol 0x05 page commit erases every byte of the touched page that was
+    not loaded, and that erase cannot be undone once the load has started.
+    """
+
+    pass
+
+
 class HardwareOperationError(Exception):
     """Custom exception for hardware operation failures."""
 

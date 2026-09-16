@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 import os
 import re
 from pathlib import Path
@@ -598,6 +599,48 @@ def test_a_real_invocation_saves_a_nonnegative_elapsed_stable_across_to_dict_cal
     assert embedded["elapsed"] == data["elapsed"]
 
 
+def test_a_firmware_error_line_emitted_mid_write_lands_in_the_saved_log_capture_block(
+    runner: CliRunner,
+) -> None:
+    """A firmware-side ERROR record emitted while the write step is running
+    reaches the saved `dev-test-<chip>.json` under `log_capture.entries`,
+    tagged with the write step's own op name and `source: firmware` -- the
+    end-to-end tracer for the whole capture path (`log_capture.step_scope`
+    inside `chip_test._run_step`, `log_capture.install()`/`snapshot()`/
+    `uninstall()` bracketing the run in `cli_handlers.dev_test`, and the new
+    `DiagnosticReport.log_capture` field reaching `to_dict()`).
+
+    Asserted by identity and content only -- never by an absolute
+    root-handler count, since pytest attaches its own handlers to the root
+    logger for its own purposes. Invoked with `--fast` (`runs=1`) so the
+    write step dispatches exactly once and the sentinel is emitted exactly
+    once, independent of whether consecutive-duplicate collapse (Task 2)
+    has landed yet."""
+    sentinel = "SENTINEL-260916-nbb write failed mid-pulse"
+
+    def _write_with_firmware_error(*args, **kwargs):
+        logging.getLogger("RURP").error(sentinel)
+        return True
+
+    operator = make_clean_operator()
+    operator.write_eprom.side_effect = _write_with_firmware_error
+    app = make_app_context(
+        eprom_operator=operator, hardware_manager=make_hardware_manager()
+    )
+    result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID, "--fast"], obj=app)
+    assert result.exit_code == 0, result.output
+
+    data = _load_report(_CHIP_NO_ID)
+    log_capture_block = data["log_capture"]
+    assert log_capture_block is not None
+    matches = [e for e in log_capture_block["entries"] if e["message"] == sentinel]
+    assert len(matches) == 1, log_capture_block["entries"]
+    entry = matches[0]
+    assert entry["source"] == "firmware"
+    assert entry["level"] == "ERROR"
+    assert entry["step"] == OP_WRITE
+
+
 def test_a_clean_run_saves_a_populated_chip_id_actual_equal_to_expected(
     runner: CliRunner,
 ) -> None:
@@ -904,6 +947,30 @@ class TestReportDestination:
         # `Runs` column added by quick task 260822-aq6 (schema 1.7 per-step
         # `run_count`) so the saved artifact states the repeat policy.
         assert "| Step | Verdict | Runs | Took | Reason |" in md_text
+
+    def test_md_artifact_carries_the_firmware_error_name_on_a_failing_step(
+        self, runner: CliRunner
+    ) -> None:
+        """A blank-check step that fails with a recorded firmware
+        `last_firmware_error_code` reaches the saved `dev-test-<chip>.md`
+        table with the resolved symbolic name alongside the decimal code."""
+        from firestarter.messages import MSG_ERR_NOT_BLANK
+
+        operator = make_clean_operator()
+        operator.check_eprom_blank.return_value = False
+        operator.last_firmware_error_code = MSG_ERR_NOT_BLANK
+        operator.last_firmware_error_message = "not blank"
+        app = make_app_context(
+            eprom_operator=operator, hardware_manager=make_hardware_manager()
+        )
+        result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code in (0, 1), result.output
+        md_text = (_reports_dir() / f"dev-test-{_CHIP_NO_ID}.md").read_text()
+        assert "| Step | Verdict | Runs | Took | Error | Reason |" in md_text
+        blank_check_row = next(
+            line for line in md_text.splitlines() if line.startswith("| blank-check")
+        )
+        assert "MSG_ERR_NOT_BLANK (176)" in blank_check_row
 
     def test_md_artifact_na_row_suppresses_reason_everywhere(
         self, runner: CliRunner

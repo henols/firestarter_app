@@ -1240,7 +1240,7 @@ def test_hold_state_is_str_never_bool():
     assert not isinstance(value, bool)
 
 
-def test_schema_version_2_0_single_sourced():
+def test_schema_version_2_2_single_sourced():
     """`to_dict()["schema_version"]` equals the IMPORTED `SCHEMA_VERSION`
     (never a literal restated here), and the production module bumps the
     constant to its new value in exactly ONE place (single-sourced, D-10) --
@@ -1255,8 +1255,12 @@ def test_schema_version_2_0_single_sourced():
     again for the 1.6 -> 1.7 bump (quick task 260822-aq6), which added the
     additive per-step `run_count` key, again for the 1.7 -> 1.8 bump
     (Phase 178 plan 01, D-07), which added the top-level `run_status` and
-    per-step `status` keys, and again for the 1.8 -> 2.0 bump (Phase 181
-    plan 01, D-13/RPT-E1), which added the top-level `is_uv` key."""
+    per-step `status` keys, again for the 1.8 -> 2.0 bump (Phase 181
+    plan 01, D-13/RPT-E1), which added the top-level `is_uv` key, again
+    for the 2.0 -> 2.1 bump (quick task 260916-nb9), which added the
+    additive per-step `error_name` key, and again for the 2.1 -> 2.2 bump
+    (quick task 260916-nbb), which added the additive top-level
+    `log_capture` key."""
     import inspect
 
     from firestarter import diagnostic_report as dr_mod
@@ -1265,7 +1269,49 @@ def test_schema_version_2_0_single_sourced():
     assert report.to_dict()["schema_version"] == dr_mod.SCHEMA_VERSION
 
     source = inspect.getsource(dr_mod)
-    assert source.count('"2.0"') == 1
+    assert source.count('"2.2"') == 1
+
+
+def test_step_dict_emits_the_resolved_error_name_beside_the_code():
+    report = _minimal_report()
+    report.results[0].error_code = 183
+
+    d = report.to_dict()
+
+    assert d["steps"][0]["error_code"] == 183
+    assert d["steps"][0]["error_name"] == "MSG_ERR_OP_TIMEOUT"
+
+
+def test_step_dict_keys_error_name_unconditionally():
+    report = _minimal_report()
+
+    d = report.to_dict()
+
+    assert all("error_name" in step_row for step_row in d["steps"])
+
+
+def test_step_dict_error_name_null_for_a_null_error_code():
+    report = _minimal_report()
+    assert report.results[0].error_code is None
+
+    d = report.to_dict()
+
+    assert d["steps"][0]["error_code"] is None
+    assert d["steps"][0]["error_name"] is None
+    assert "error_name" in d["steps"][0]
+
+
+def test_step_dict_error_name_null_for_an_unrecognized_error_code():
+    """The report keeps the evidence it has -- the raw integer under
+    `error_code` -- and declines to invent a name for an id in neither
+    registry rather than raising."""
+    report = _minimal_report()
+    report.results[0].error_code = 54
+
+    d = report.to_dict()
+
+    assert d["steps"][0]["error_code"] == 54
+    assert d["steps"][0]["error_name"] is None
 
 
 def test_dedup_fingerprint_sensitive_to_sdp_step_verdict_change():
@@ -1517,19 +1563,23 @@ def test_dedup_fingerprint_slot_run_hash_is_unchanged_by_coverage_tag():
     assert dedup_fingerprint(fixed_report) == "a0a50436ae3d"
 
 
-def test_schema_version_is_two_oh():
-    """PROV-04: the imported constant equals `"2.0"`, and a freshly built
+def test_schema_version_is_two_two():
+    """PROV-04: the imported constant equals `"2.2"`, and a freshly built
     report's `to_dict()["schema_version"]` equals the IMPORTED constant --
     never a restated literal in the second assertion. This is the only
     place in the suite that pins WHICH version this phase shipped; every
-    other site (including `test_schema_version_2_0_single_sourced` above)
+    other site (including `test_schema_version_2_2_single_sourced` above)
     keeps importing the constant. 2.0 (Phase 181 plan 01, D-13/RPT-E1)
     added the top-level `is_uv` key -- RPT-A4's carry-through of
-    `Plan.is_uv`. Both consumers accept `schema_version` by presence only
-    and the dedup hash never reads it, so the bump is mechanically free."""
+    `Plan.is_uv`. 2.1 (quick task 260916-nb9) added the per-step
+    `error_name` key, the catalog-resolved name beside `error_code`. 2.2
+    (quick task 260916-nbb) added the top-level `log_capture` key, the
+    captured-warning/error-line block. Every consumer accepts
+    `schema_version` by presence only and the dedup hash never reads it, so
+    the bump is mechanically free."""
     from firestarter.diagnostic_report import SCHEMA_VERSION
 
-    assert SCHEMA_VERSION == "2.0"
+    assert SCHEMA_VERSION == "2.2"
 
     report = _minimal_report()
     assert report.to_dict()["schema_version"] == SCHEMA_VERSION

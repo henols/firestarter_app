@@ -28,8 +28,9 @@ Coverage:
      3.3V) would have violated.
   4. DATA-04: `VCC_VOLTAGES[0x02]` still decodes to 4000 -- the decode table
      itself is never edited, only the value read from it afterward; and
-     `_PAGE_SIZE_BY_PART` still has exactly 2 entries (no new
-     part-number-keyed dict was introduced as a sibling).
+     the generator carries no `_PAGE_SIZE_BY_PART` attribute at all -- no
+     part-number-keyed page-size table exists, curated or otherwise
+     (Phase 194 D-01).
   5. Non-vacuity (S-5): a synthetic in-memory chip carrying `vcc_mv == 4000`
      makes the SAME offender-collecting helper Test 1 calls raise -- proves
      Test 1 is capable of failing, not a vacuous always-pass check.
@@ -231,8 +232,9 @@ def test_no_chip_vcc_ever_decreases():
 def test_vcc_voltages_table_unedited_and_no_new_part_keyed_dict():
     """VCC_VOLTAGES[0x02] still decodes to 4000 -- the margin-rail
     substitution sits AFTER the decode table, never inside it (D-01). And
-    _PAGE_SIZE_BY_PART still has exactly 2 entries -- no new
-    part-number-keyed sibling dict was introduced (DATA-04)."""
+    the generator carries no _PAGE_SIZE_BY_PART attribute at all -- the
+    page size is generated from upstream provenance, never curated
+    (Phase 194 D-01, DATA-04)."""
     from tools import build_db
 
     assert build_db.VCC_VOLTAGES[0x02] == 4000, (
@@ -242,9 +244,9 @@ def test_vcc_voltages_table_unedited_and_no_new_part_keyed_dict():
     assert build_db._VCC_MARGIN_RAIL_MV == 4000, (
         "_VCC_MARGIN_RAIL_MV must be single-sourced from VCC_VOLTAGES[0x02]"
     )
-    assert len(build_db._PAGE_SIZE_BY_PART) == 2, (
-        "_PAGE_SIZE_BY_PART must still have exactly 2 entries -- the "
-        "margin-rail rule must not introduce a new part-number-keyed dict"
+    assert not hasattr(build_db, "_PAGE_SIZE_BY_PART"), (
+        "build_db must carry no part-number-keyed page-size table -- the "
+        "page size is generated from upstream provenance, never curated"
     )
 
 

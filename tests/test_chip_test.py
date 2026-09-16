@@ -1684,6 +1684,56 @@ def test_coverage_tag_empty_for_a_run_with_no_write_step():
     assert coverage_tag([]) == ""
 
 
+def test_resolve_error_name_names_the_issue_86_ids():
+    from firestarter.chip_test import resolve_error_name
+
+    assert resolve_error_name(183) == "MSG_ERR_OP_TIMEOUT"
+    assert resolve_error_name(175) == "MSG_ERR_VERIFY"
+    assert resolve_error_name(185) == "MSG_ERR_CHIP_ID_MISMATCH"
+
+
+def test_resolve_error_name_is_exhaustive_over_the_catalog():
+    from firestarter.chip_test import resolve_error_name
+    from firestarter.messages import CATALOG
+
+    for msg_id, entry in CATALOG.items():
+        assert resolve_error_name(msg_id) == entry.name
+
+
+def test_resolve_error_name_null_for_a_null_code():
+    from firestarter.chip_test import resolve_error_name
+
+    assert resolve_error_name(None) is None
+
+
+def test_resolve_error_name_null_for_an_id_in_neither_registry():
+    from firestarter.chip_test import resolve_error_name
+
+    assert resolve_error_name(54) is None
+
+
+def test_resolve_error_name_never_falls_back_to_debug_catalog():
+    """Id 6 is `DBG_CMD_FINISHED` in `DEBUG_CATALOG` only -- `error_code` is
+    always a top-level `response.id`, a namespace `CATALOG` alone describes,
+    so a fallback there would put a wrong name on a real failure."""
+    from firestarter.chip_test import resolve_error_name
+
+    name = resolve_error_name(6)
+
+    assert name is None
+    assert name != "DBG_CMD_FINISHED"
+
+
+def test_resolve_error_name_never_raises_over_the_unnamed_range():
+    from firestarter.chip_test import resolve_error_name
+    from firestarter.messages import CATALOG
+
+    for msg_id in range(256):
+        if msg_id in CATALOG:
+            continue
+        assert resolve_error_name(msg_id) is None
+
+
 def test_marginal_on_disagreeing_write_runs():
     operator = _mock_operator()
     # write#1 True, write#2 False -- the AM27C020 write#1/write#2 case.

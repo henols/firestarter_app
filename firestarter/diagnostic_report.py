@@ -42,13 +42,14 @@ from firestarter.chip_test import (
     _write_step_was_refused,
     coverage_tag,
     repeat_policy_tag,
+    resolve_error_name,
 )
 
 # ---------------------------------------------------------------------------
 # Module constants -- single sources of truth
 # ---------------------------------------------------------------------------
 
-SCHEMA_VERSION = "2.0"  # baked into to_dict() output
+SCHEMA_VERSION = "2.2"  # baked into to_dict() output
 NOT_MEASURED = "not measured"  # honest fallback, never a false 0
 # Distinct from NOT_MEASURED: this field was never ASKED, rather than asked and
 # empty. Reusing NOT_MEASURED would conflate the two.
@@ -730,6 +731,21 @@ class DiagnosticReport:
     builds its hash from an explicit allow-list with no reflection over
     dataclass fields, so this field's absence from that list is the whole
     exclusion mechanism."""
+    log_capture: dict[str, Any] | None = None
+    """The `log_capture.snapshot()` mapping, carried and serialised
+    verbatim -- this class builds no such mapping itself. Follows
+    `db_diff`'s honesty convention: `None` means no capture window ran (a
+    synthetic report built directly in a unit test), a mapping means one
+    did, and an empty `entries` list inside that mapping means the window
+    ran and captured nothing. STAMPED by `cli_handlers.py` before the first
+    render, exactly as `elapsed` is: `to_dict()` runs three times per run
+    (console render, the saved `.json`, `to_json_block()` inside the `.md`),
+    so a live read of the sink here would answer a different question on
+    each of the three calls. Deliberately excluded from `dedup_fingerprint`'s
+    hash input, same mechanism as `run_status` and `elapsed` above -- that
+    function builds its hash from an explicit allow-list with no reflection
+    over dataclass fields, so this field's absence from that list is the
+    whole exclusion mechanism."""
 
     def _utc_now(self) -> str:
         return datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -904,6 +920,7 @@ class DiagnosticReport:
             # carrying its `NOT-RUN: <reason>` prose -- out of scope here.
             "reason": "" if result.verdict == VERDICT_NA else result.reason,
             "error_code": result.error_code,
+            "error_name": resolve_error_name(result.error_code),
             "fingerprint": (
                 result.fingerprint.classification if result.fingerprint else None
             ),
@@ -1004,6 +1021,7 @@ class DiagnosticReport:
             "run_status": self.run_status,
             "is_uv": self.plan.is_uv,
             "rail_reading_disclosure": _RAIL_READING_DISCLOSURE,
+            "log_capture": self.log_capture,
         }
 
     def render(self, console: Any = None) -> Any:

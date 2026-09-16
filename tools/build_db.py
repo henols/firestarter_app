@@ -93,27 +93,6 @@ NMOS_TRUE_VPP_MV: dict[str, int] = {
 # Chips requiring VPP above this cannot be programmed on any RURP revision.
 RURP_VPP_CEILING_MV = 25000
 
-# Datasheet-sourced per-chip page size, keyed on the canonical part number
-# (first alias in the comma-separated list). Every entry needs a [CITED:]
-# datasheet reference from an in-repo PDF — do NOT author [ASSUMED] values.
-# Absent chips omit page_size entirely; algorithm 0x0D falls back to the
-# firmware's own AT28C floor constant, and this map is deliberately not
-# extended to cover that fallback.
-_PAGE_SIZE_BY_PART: dict[str, int] = {
-    # [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C040.pdf §6.2
-    #         "Every page contains 256 bytes of data."]
-    "W29C040": 256,
-    # W29C042 shares the same DB entry as W29C040 (same family, same page structure)
-    # but is not individually documented in the in-repo datasheet — omitted per
-    # page-size discipline. The shared entry gets W29C040's citation via part-number lookup.
-    # [CITED: firestarter/datasheets/0x05-FLASH-AMD-STD/W29C020.pdf §6.2
-    #         "Every page contains 128 bytes of data." + FEATURES "128 bytes per page"]
-    "W29C020": 128,
-    # W29C020C and W29C022 share the same DB entry as W29C020 (same family).
-    # Not individually documented in the in-repo datasheet — omitted per page-size
-    # discipline. The shared entry gets W29C020's citation via part-number lookup.
-}
-
 # Algorithm sentinel for non-supported chips.
 # dispatch(0x00, None) falls into the mem_type fallback chain (protocol==0 path):
 #   _ALGO_MEM_TYPE.get(0x00) → None → {1:..., 4:..., 3:..., 5:...}.get(None, "ERROR")
@@ -432,11 +411,8 @@ def main():
                 variant = int(ic.get("variant"), 16)
                 proto_id = int(ic.get("protocol_id"), 16)
                 flags = int(ic.get("flags"), 16)
-                # Raw, un-curated upstream page_size. NOT the same key as the
-                # datasheet-curated _PAGE_SIZE_BY_PART below: same English word,
-                # two different sources, never to be conflated even when their
-                # values agree. This raw field also feeds programming.page_size
-                # when the <ic>'s own protocol_id is 0x0D.
+                # Raw, un-curated upstream page_size. This raw field also
+                # feeds programming.page_size.
                 raw_page_size = int(ic.get("page_size", "0x0"), 16)
                 voltages = int(ic.get("voltages"), 16)
                 mem_size = int(ic.get("code_memory_size"), 16)
@@ -629,12 +605,6 @@ def main():
                     # else: leave _support_status as "supported" — M2732A (21V)
                     # is within the RURP ceiling.
 
-                # Canonical part-number key (first alias, @PACKAGE suffix
-                # stripped) — hoisted here because the page_size emit arm
-                # below needs it in both its lookup and
-                # its guard condition; previously recomputed twice inline.
-                _canon = name.split(",")[0].split("@")[0].strip()
-
                 chip_entry = {
                     # Upstream `name` is a comma-separated alias list where each
                     # alias may carry an @PACKAGE suffix (e.g.,
@@ -696,22 +666,14 @@ def main():
                         "infoic_page_size_raw": raw_page_size,
                         # page_size is keyed on PROVENANCE, not on the part: an
                         # upstream record filed under 0x07/0x0B says nothing about
-                        # a 28C page buffer. Two disjoint arms:
-                        #   1. datasheet-curated _PAGE_SIZE_BY_PART, else
-                        #   2. this <ic>'s OWN upstream protocol_id == 0x0D →
-                        #      emit raw_page_size.
-                        # Arm 2 reads _upstream_proto_id, captured before classify()
-                        # reassigns it — so rows promoted into 0x0D from another
-                        # protocol never match, and keep the firmware's AT28C floor.
-                        # Neither arm firing means the field is omitted.
+                        # a 28C page buffer. Reads _upstream_proto_id, captured
+                        # before classify() reassigns it — so rows promoted into
+                        # 0x0D from another protocol never match, and keep the
+                        # firmware's AT28C floor.
                         **(
-                            {"page_size": _PAGE_SIZE_BY_PART[_canon]}
-                            if _canon in _PAGE_SIZE_BY_PART
-                            else (
-                                {"page_size": raw_page_size}
-                                if _upstream_proto_id == 0x0D
-                                else {}
-                            )
+                            {"page_size": raw_page_size}
+                            if _upstream_proto_id in (0x0D, 0x05)
+                            else {}
                         ),
                     },
                     "pinout": pinout_key,
@@ -773,6 +735,20 @@ def main():
         )
     else:
         print(f"Supplement: {EXTRA_CHIPS_FILE} not found — skipping merge.")
+
+    for mfg_name, mfg_chips in complete_db.items():
+        for chip in mfg_chips:
+            emitted_page_size = chip.get("programming", {}).get("page_size")
+            if emitted_page_size is not None and (
+                emitted_page_size <= 0
+                or emitted_page_size > 512
+                or (emitted_page_size & (emitted_page_size - 1))
+            ):
+                raise ValueError(
+                    f"{mfg_name}/{chip.get('part_number')} would emit "
+                    f"page_size {emitted_page_size!r}, which is not a power "
+                    f"of two in [1, 512] — refusing to write {OUTPUT_FILE}"
+                )
 
     with open(OUTPUT_FILE, "w") as f:
         json.dump(complete_db, f, indent=2, sort_keys=True)

@@ -19,21 +19,23 @@ chip_database.json entries carrying programming.algorithm == 13
 protocol (0x07/0x0B) and must NOT gain a page_size the promoting protocol
 never corroborated.
 
-Coverage (11 legs):
+Coverage (12 legs):
   1. Exactly 84 rows carry programming.algorithm == 13.
   2. Exactly 18 of those 84 carry programming.page_size, and their
      (manufacturer, part_number) set equals the 18 named upstream-native
      rows below.
   3. Of the 18, exactly 15 carry 128 and exactly 3 carry 64.
-  4. Across all 746 rows, exactly 20 carry programming.page_size
-     (18 native + 2 curated _PAGE_SIZE_BY_PART rows).
+  4. Across all 746 rows, exactly 45 carry programming.page_size
+     (18 upstream-native 0x0D rows + 27 upstream-native 0x05 rows -- no
+     curated carrier remains, per Phase 194 D-01/D-02).
   5. Every emitted page_size anywhere in the database is a power of two in
      [1, 512] -- a shared module-level helper, so the leg-10 synthetic test
      calls the exact same code the real-DB test calls.
   6. Provenance: every row carrying programming.page_size is either one of
-     the two curated rows or one of the 18 named native rows -- nothing
-     else. Power-of-two-ness alone is NOT sufficient (256 is a power of two
-     and would be wrong on a promoted row) -- a second shared helper.
+     the 18 named native 0x0D rows or one of the 27 named native 0x05
+     rows -- nothing else. Power-of-two-ness alone is NOT sufficient (256
+     is a power of two and would be wrong on a promoted row) -- a second
+     shared helper.
   7. AT28C256 non-change: the gh#21 part is a PROMOTED row (upstream
      protocol_id 0x07) and this phase cannot change its behaviour at all.
   8. support_status byte-unchanged for all 84 algorithm==13 rows against
@@ -45,6 +47,11 @@ Coverage (11 legs):
  11. Synthetic non-vacuity, provenance: a one-chip in-memory DB with a
      PROMOTED-shaped row carrying page_size: 256 IS flagged by the leg-6
      helper.
+ 12. The 27-row two-halves table (D-08's host half): for every one of the
+     27 upstream-native 0x05 rows, the emitted page_size equals that row's
+     own infoic_page_size_raw, and for exactly the 18 whose old
+     capacity-bracket derivation was already correct, the emitted value
+     also equals what that derivation produces.
 
 Growing either identity set below requires a fresh provenance measurement
 against 149-RESEARCH.md section "D-01 Verification" -- the same
@@ -55,6 +62,8 @@ wire_dict_expected_deltas_149.json).
 import json
 from pathlib import Path
 
+from tests.test_lock_status_class_partition import _ALGORITHM_0X05_KEYS
+
 # Absolute paths (independent of cwd), mirroring test_sdp_db_invariant.py /
 # test_b15_page_size_corroboration.py's path idiom.
 _FA_DIR = Path(__file__).parent.parent
@@ -63,14 +72,14 @@ _EXTRA_CHIPS_FILE = _FA_DIR / "tools" / "extra_chips.json"
 _BASELINE_FILE = _FA_DIR / "tools" / "baseline" / "chip_database.baseline.json"
 
 _ALGORITHM_0X0D = 13
+_ALGORITHM_0X05 = 5
 
-# The 2 pre-existing datasheet-curated _PAGE_SIZE_BY_PART rows (both
-# upstream algorithm 0x05, unrelated to the 0x0D provenance rule below).
-_CURATED_PAGE_SIZE_IDENTITIES = frozenset(
-    {
-        ("WINBOND", "W29C020,W29C020C,W29C022"),
-        ("WINBOND", "W29C040,W29C042"),
-    }
+_NATIVE_0X05_PAGE_SIZE_IDENTITIES = frozenset(
+    tuple(key.split("/", 1)) for key in _ALGORITHM_0X05_KEYS
+)
+assert len(_NATIVE_0X05_PAGE_SIZE_IDENTITIES) == 27, (
+    "the imported 0x05 identity set must carry exactly 27 members -- a "
+    "partial import from _ALGORITHM_0X05_KEYS must fail loudly, not silently"
 )
 
 _NATIVE_0X0D_PAGE_SIZE_IDENTITIES_128 = frozenset(
@@ -104,7 +113,7 @@ _NATIVE_0X0D_PAGE_SIZE_IDENTITIES = (
 )
 
 _ALL_PROVENANCE_CORROBORATED_IDENTITIES = (
-    _CURATED_PAGE_SIZE_IDENTITIES | _NATIVE_0X0D_PAGE_SIZE_IDENTITIES
+    _NATIVE_0X0D_PAGE_SIZE_IDENTITIES | _NATIVE_0X05_PAGE_SIZE_IDENTITIES
 )
 
 _AT28C256_PART_NUMBER_PREFIX = "AT28C256,"
@@ -159,9 +168,9 @@ def _range_offenders(db: dict) -> list[str]:
 
 def _provenance_offenders(db: dict) -> list[str]:
     """Return a list naming every page_size carrier whose (manufacturer,
-    part_number) identity is neither one of the 2 curated rows nor one of
-    the 18 named upstream-native 0x0D rows. An empty list means the
-    invariant holds.
+    part_number) identity is neither one of the 18 named upstream-native
+    0x0D rows nor one of the 27 named upstream-native 0x05 rows. An empty
+    list means the invariant holds.
 
     Power-of-two-ness alone is NOT sufficient here -- 256 is a power of two
     and would still be wrong on a promoted (non-native) row.
@@ -230,18 +239,15 @@ def test_18_native_carriers_split_15_at_128_and_3_at_64() -> None:
     assert {(m, p) for m, p, _v in at_64} == _NATIVE_0X0D_PAGE_SIZE_IDENTITIES_64
 
 
-# Leg 4: across all 746 rows, exactly 20 carry page_size (18 native + 2
-# curated).
-
-
-def test_exactly_20_page_size_carriers_across_all_746_rows() -> None:
+def test_exactly_45_page_size_carriers_across_all_746_rows() -> None:
     db = _load_db(_DB_FILE)
     total_rows = sum(len(chips) for chips in db.values())
     assert total_rows == 746, f"expected 746 total rows, found {total_rows}"
     carriers = _select_page_size_carriers(db)
-    assert len(carriers) == 20, (
-        f"expected exactly 20 page_size carriers (18 native + 2 curated) "
-        f"across all 746 rows, found {len(carriers)}: "
+    assert len(carriers) == 45, (
+        f"expected exactly 45 page_size carriers (18 upstream-native 0x0D "
+        f"+ 27 upstream-native 0x05) across all 746 rows, found "
+        f"{len(carriers)}: "
         f"{[(m, c.get('part_number', '?')) for m, c in carriers]}"
     )
 
@@ -258,17 +264,13 @@ def test_every_page_size_is_a_power_of_two_in_range() -> None:
     )
 
 
-# Leg 6: provenance -- every carrier is curated or one of the 18 named
-# native rows. Power-of-two alone is not sufficient.
-
-
 def test_every_page_size_carrier_is_curated_or_native_0x0d() -> None:
     db = _load_db(_DB_FILE)
     offenders = _provenance_offenders(db)
     assert not offenders, (
-        f"every page_size carrier must be either one of the 2 curated "
-        f"_PAGE_SIZE_BY_PART rows or one of the 18 named upstream-native "
-        f"0x0D rows; offenders: {offenders}"
+        f"every page_size carrier must be either one of the 18 named "
+        f"upstream-native 0x0D rows or one of the 27 named upstream-native "
+        f"0x05 rows; no curated carrier remains; offenders: {offenders}"
     )
 
 
@@ -417,3 +419,111 @@ def test_synthetic_promoted_row_page_size_is_flagged_by_provenance_helper() -> N
         "though its value is a power of two in range"
     )
     assert "SYNTH-PROMOTED-NOT-NATIVE" in offenders[0]
+
+
+def _select_0x05_chips(db: dict) -> list[tuple[str, dict]]:
+    """Select every (manufacturer, chip) pair with programming.algorithm == 5."""
+    selected = []
+    for mfr, chips in db.items():
+        for chip in chips:
+            if chip["programming"]["algorithm"] == _ALGORITHM_0X05:
+                selected.append((mfr, chip))
+    return selected
+
+
+def _old_capacity_derived_page_size(size_bytes: int) -> int:
+    """The page-size derivation flash_5v_page_page_size() used to compute
+    from a chip's capacity alone, before Phase 194 D-06 deleted it from the
+    firmware. Written out here because this test is now the only place it
+    survives -- without it, the no-regression half of D-08 would be an
+    assertion rather than a measurement.
+    """
+    if size_bytes <= 65536:
+        return 64
+    if size_bytes <= 262144:
+        return 128
+    return 256
+
+
+def test_all_27_algorithm_5_rows_carry_their_real_page_and_18_match_the_old_derivation() -> (
+    None
+):
+    """D-08's host half, both halves in one leg.
+
+    Half (a): for every one of the 27 upstream-native 0x05 rows, the
+    emitted page_size equals that row's own infoic_page_size_raw -- the
+    part's real page, taken from the row's own upstream provenance.
+
+    Half (b): for exactly the 18 whose old capacity-bracket derivation was
+    already correct, the emitted page_size also equals what that
+    derivation produces. The other 9 differ, and each differs by exactly a
+    factor of two, with the emitted (real) value the larger of the pair --
+    the measured shape of gh#67.
+    """
+    db = _load_db(_DB_FILE)
+    rows = _select_0x05_chips(db)
+    assert len(rows) == 27, (
+        f"expected exactly 27 rows with programming.algorithm == 5, found {len(rows)}"
+    )
+
+    missing_page_size = [
+        f"{mfr}/{chip.get('part_number', '?')}"
+        for mfr, chip in rows
+        if not chip["programming"].get("page_size")
+    ]
+    assert not missing_page_size, (
+        f"every algorithm-5 row must carry a non-empty programming.page_size; "
+        f"offenders: {missing_page_size}"
+    )
+
+    not_real_page = [
+        f"{mfr}/{chip.get('part_number', '?')}: "
+        f"page_size={chip['programming']['page_size']} "
+        f"infoic_page_size_raw={chip['programming']['infoic_page_size_raw']}"
+        for mfr, chip in rows
+        if chip["programming"]["page_size"]
+        != chip["programming"]["infoic_page_size_raw"]
+    ]
+    assert not not_real_page, (
+        f"every algorithm-5 row's emitted page_size must equal its own "
+        f"infoic_page_size_raw (the part's real page); offenders: {not_real_page}"
+    )
+
+    same = [
+        (mfr, chip)
+        for mfr, chip in rows
+        if chip["programming"]["page_size"]
+        == _old_capacity_derived_page_size(chip["electrical"]["size_bytes"])
+    ]
+    diff = [
+        (mfr, chip)
+        for mfr, chip in rows
+        if chip["programming"]["page_size"]
+        != _old_capacity_derived_page_size(chip["electrical"]["size_bytes"])
+    ]
+    same_names = [f"{mfr}/{chip.get('part_number', '?')}" for mfr, chip in same]
+    diff_names = [f"{mfr}/{chip.get('part_number', '?')}" for mfr, chip in diff]
+
+    assert len(same) == 18, (
+        f"expected exactly 18 of the 27 rows to match the old capacity-bracket "
+        f"derivation (no-regression half of D-08), found {len(same)}: {same_names}"
+    )
+    assert len(diff) == 9, (
+        f"expected exactly 9 of the 27 rows to differ from the old "
+        f"capacity-bracket derivation (the corrected half of D-08), found "
+        f"{len(diff)}: {diff_names}"
+    )
+
+    not_double = [
+        f"{mfr}/{chip.get('part_number', '?')}: "
+        f"page_size={chip['programming']['page_size']} "
+        f"old_derived={_old_capacity_derived_page_size(chip['electrical']['size_bytes'])}"
+        for mfr, chip in diff
+        if chip["programming"]["page_size"]
+        != 2 * _old_capacity_derived_page_size(chip["electrical"]["size_bytes"])
+    ]
+    assert not not_double, (
+        f"every one of the 9 corrected rows must differ from the old "
+        f"derivation by exactly a factor of two, with the emitted value the "
+        f"larger of the pair; offenders: {not_double}"
+    )
