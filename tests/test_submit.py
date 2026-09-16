@@ -495,6 +495,99 @@ def test_build_body_emits_the_error_column_when_a_step_carries_a_code():
     )
 
 
+@pytest.mark.parametrize(
+    "verdict,error_code,expected",
+    [
+        ("NA", 183, "-"),
+        ("SKIPPED", 176, "MSG_ERR_NOT_BLANK (176)"),
+        ("BAD", 175, "MSG_ERR_VERIFY (175)"),
+        ("BAD", 185, "MSG_ERR_CHIP_ID_MISMATCH (185)"),
+    ],
+)
+def test_error_text_verdict_policy(verdict, error_code, expected):
+    assert submit._error_text(verdict, error_code, None) == expected
+
+
+def test_error_text_unknown_code_degrades_to_the_bare_decimal():
+    from firestarter.messages import CATALOG
+
+    unknown_code = 153
+    assert unknown_code not in CATALOG, (
+        "fixture setup error: the chosen id must genuinely not be a "
+        "CATALOG key for this test to be non-vacuous"
+    )
+    assert submit._error_text("BAD", unknown_code, None) == "153"
+
+
+@pytest.mark.parametrize(
+    "malformed_code",
+    ["not-a-code", float("nan"), float("inf"), object()],
+)
+def test_error_text_malformed_code_degrades_without_raising(malformed_code):
+    assert submit._error_text("BAD", malformed_code, None) == "-"
+
+
+def test_error_text_explicit_error_name_wins_over_catalog_resolution():
+    assert submit._error_text("BAD", 183, "CUSTOM_NAME") == "CUSTOM_NAME (183)"
+
+
+def test_error_text_strips_pipe_and_newline_characters_from_a_hostile_name():
+    hostile = "EVIL | injected\r\nrow"
+    cell = submit._error_text("BAD", 183, hostile)
+    assert "|" not in cell
+    assert "\n" not in cell
+    assert "\r" not in cell
+
+
+def test_error_text_hostile_name_cannot_add_a_table_row():
+    sanitized = {
+        "steps": [
+            {
+                "op": "write",
+                "verdict": "BAD",
+                "reason": "op timed out",
+                "error_code": 183,
+                "error_name": "EVIL | injected\r\nrow | extra",
+            }
+        ]
+    }
+    body = submit.build_body(sanitized, [], include_json=False)
+    table_lines = [line for line in body.splitlines() if line.startswith("| write")]
+    assert len(table_lines) == 1
+    assert table_lines[0].count("|") == 6
+
+
+def test_error_text_truncates_a_name_longer_than_the_cap():
+    long_name = "X" * 100
+    cell = submit._error_text("BAD", 183, long_name)
+    name_part = cell.rsplit(" (", 1)[0]
+    assert len(name_part) == 64
+    assert name_part == "X" * 64
+
+
+def test_build_body_column_omission_is_render_layer_only():
+    sanitized = {
+        "steps": [{"op": "id", "verdict": "OK", "reason": "", "error_code": None}]
+    }
+    body = submit.build_body(sanitized, [], include_json=True)
+    table_half, json_half = body.split("```json", 1)
+    assert "| Step | Verdict | Runs | Took | Reason |" in table_half
+    assert "Error" not in table_half.split("\n")[3]
+
+
+def test_build_body_column_omission_still_carries_error_code_in_the_json_block():
+    sanitized = {
+        "steps": [
+            {"op": "id", "verdict": "OK", "reason": "", "error_code": None},
+            {"op": "sdp-lock", "verdict": "NA", "reason": "", "error_code": 183},
+        ]
+    }
+    body = submit.build_body(sanitized, [], include_json=True)
+    table_half, json_half = body.split("```json", 1)
+    assert "Error" not in table_half
+    assert '"error_code": 183' in json_half
+
+
 def test_build_issue_url_targets_hardcoded_repo():
     url = submit.build_issue_url("My Title", "My Body")
     assert url.startswith(f"https://github.com/{submit.SUBMIT_REPO}/issues/new?")
