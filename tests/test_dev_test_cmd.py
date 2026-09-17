@@ -511,7 +511,7 @@ def test_dev_test_output_trim_console_shrunk_payload_intact(
 
     help_result = runner.invoke(cli, ["dev", "test", "--help"])
     assert help_result.exit_code == 0, help_result.output
-    assert len(help_result.output.strip().splitlines()) <= 17
+    assert len(help_result.output.strip().splitlines()) <= 20
 
     app = make_app_context(
         eprom_operator=make_clean_operator(),
@@ -661,20 +661,20 @@ def test_a_clean_run_saves_a_populated_chip_id_actual_equal_to_expected(
 
 
 class TestZeroOptionSurface:
-    """`dev test` takes CHIP plus exactly one option; each removed flag errors.
+    """`dev test` takes CHIP plus exactly two options; each removed flag errors.
 
-    REVERSAL, stated rather than smuggled (quick task 260822-aq6): Phase 121
-    D-05 gave this command a deliberate ZERO-option surface, and this class
-    is the gate that held it. `--fast` reverses that decision for exactly
-    one option -- the operator asked for an opt-out from the N>=2 repeat
-    policy while keeping the accurate N>=2 run as the default. The gate is
-    NARROWED to the new surface, not deleted: the option set is still
-    pinned exactly (so a second option cannot slip in unnoticed), and every
-    sibling test below -- the three removed flags and the removed
+    SECOND REVERSAL, stated rather than smuggled (quick task 260917-8pj,
+    same voice as the `--fast` reversal below): Phase 121 D-05 gave this
+    command a deliberate ZERO-option surface; `--fast` reversed that for
+    one option, and `--submit` now reverses it for a second -- the
+    operator asked for an explicit-consent unattended filing flag. The
+    gate is NARROWED to the new surface, not deleted: the option set is
+    still pinned exactly (so a third option cannot slip in unnoticed), and
+    every sibling test below -- the two removed flags and the removed
     confirm-bypass short flag -- is untouched.
     """
 
-    def test_dev_test_has_exactly_the_fast_option(self) -> None:
+    def test_dev_test_has_exactly_the_fast_and_submit_options(self) -> None:
         import click
 
         test_cmd = cli.commands["dev"].commands["test"]
@@ -683,9 +683,11 @@ class TestZeroOptionSurface:
         arguments = [p for p in params if isinstance(p, click.Argument)]
         assert len(arguments) == 1
         assert arguments[0].name == "chip"
-        assert [o.name for o in options] == ["fast"]
+        assert [o.name for o in options] == ["fast", "submit"]
         assert options[0].is_flag
         assert options[0].default is False
+        assert options[1].is_flag
+        assert options[1].default is False
 
     def test_fast_option_help_states_it_is_the_weaker_test(self) -> None:
         """The flag's help must name the COST, not just the speed. The
@@ -711,17 +713,13 @@ class TestZeroOptionSurface:
         assert "marginal" in help_text
         assert "accurate" in help_text
 
-    # Removed long-option NAMEs only (no leading dashes) -- the leading
-    # "--" is joined on at call time below so this source file never
-    # spells out the four-flag literals it exists to prove are gone.
     @pytest.mark.parametrize(
         "opt_name,opt_value",
         [
             ("destructive", None),
             ("output" + "-dir", "somewhere"),
-            ("submit", None),
         ],
-        ids=["destructive", "output-dir", "submit"],
+        ids=["destructive", "output-dir"],
     )
     def test_dev_test_rejects_each_removed_flag(
         self, runner: CliRunner, opt_name: str, opt_value: str | None
@@ -742,7 +740,7 @@ class TestZeroOptionSurface:
     ) -> None:
         """The confirm-bypass short flag (formerly -y/--yes) is gone too --
         kept as its own test since "-y" has no long-form spelling to build
-        dynamically like the other three removed flags above."""
+        dynamically like the other two removed flags above."""
         app = make_app_context(
             eprom_operator=make_clean_operator(),
             hardware_manager=make_hardware_manager(),
@@ -750,6 +748,93 @@ class TestZeroOptionSurface:
         result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID, "-y"], obj=app)
         assert result.exit_code == 2, result.output
         assert "no such option" in result.output.lower()
+
+
+class TestSubmitFlagWiring:
+    """`--submit` reaches `submit_report`'s consent argument, and only
+    that flag moves it -- proven on a TTY and off one, for a fast run and
+    an accurate one, without moving the exit code."""
+
+    def test_bare_run_passes_auto_submit_false_on_a_tty(
+        self, runner: CliRunner
+    ) -> None:
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(),
+        )
+        with (
+            patch("sys.stdin.isatty", return_value=True),
+            patch("firestarter.submit.submit_report") as mock_submit,
+        ):
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+        mock_submit.assert_called_once()
+        assert mock_submit.call_args.kwargs["auto_submit"] is False
+
+    def test_bare_run_passes_auto_submit_false_off_a_tty(
+        self, runner: CliRunner
+    ) -> None:
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(),
+        )
+        with (
+            patch("sys.stdin.isatty", return_value=False),
+            patch("firestarter.submit.submit_report") as mock_submit,
+        ):
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+        assert result.exit_code == 0, result.output
+        mock_submit.assert_called_once()
+        assert mock_submit.call_args.kwargs["auto_submit"] is False
+
+    def test_submit_flag_passes_auto_submit_true(self, runner: CliRunner) -> None:
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(),
+        )
+        with patch("firestarter.submit.submit_report") as mock_submit:
+            result = runner.invoke(
+                cli, ["dev", "test", _CHIP_NO_ID, "--submit"], obj=app
+            )
+        assert result.exit_code == 0, result.output
+        mock_submit.assert_called_once()
+        assert mock_submit.call_args.kwargs["auto_submit"] is True
+
+    def test_fast_and_submit_together_is_accepted_and_files(
+        self, runner: CliRunner
+    ) -> None:
+        """OP-1: `--fast --submit` is accepted with no mutual-exclusion
+        refusal -- a fast run's `repeat_policy_tag` re-keys its own
+        `dedup_fingerprint`, which is the protection that matters."""
+        app = make_app_context(
+            eprom_operator=make_clean_operator(),
+            hardware_manager=make_hardware_manager(),
+        )
+        with patch("firestarter.submit.submit_report") as mock_submit:
+            result = runner.invoke(
+                cli, ["dev", "test", _CHIP_NO_ID, "--fast", "--submit"], obj=app
+            )
+        assert result.exit_code == 0, result.output
+        mock_submit.assert_called_once()
+        assert mock_submit.call_args.kwargs["auto_submit"] is True
+
+    def test_exit_code_is_unchanged_by_the_submit_flag(self, runner: CliRunner) -> None:
+        with patch("firestarter.submit.submit_report"):
+            app_without = make_app_context(
+                eprom_operator=make_clean_operator(),
+                hardware_manager=make_hardware_manager(),
+            )
+            result_without = runner.invoke(
+                cli, ["dev", "test", _CHIP_NO_ID], obj=app_without
+            )
+            app_with = make_app_context(
+                eprom_operator=make_clean_operator(),
+                hardware_manager=make_hardware_manager(),
+            )
+            result_with = runner.invoke(
+                cli, ["dev", "test", _CHIP_NO_ID, "--submit"], obj=app_with
+            )
+        assert result_without.exit_code == result_with.exit_code
 
 
 class TestUVWriteHasNoPrompt:

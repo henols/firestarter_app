@@ -2409,9 +2409,20 @@ _ALWAYS_WRITES_PASS_COUNT = 7
         "test."
     ),
 )
+@click.option(
+    "--submit",
+    is_flag=True,
+    default=False,
+    help=(
+        "File the report to the project tracker with no prompt, through "
+        "the authenticated gh CLI. This publishes a public issue with no "
+        "human in the loop. Prints a URL and files nothing when gh is "
+        "unavailable."
+    ),
+)
 @click.pass_obj
 @map_typed_errors
-def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
+def dev_test(app: "AppContext", chip: str, fast: bool, submit: bool) -> None:
     """Run the community chip-validation sweep for CHIP.
 
     Writes to the chip every run (no read-only mode); saves a diagnostic
@@ -2593,12 +2604,11 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
 
     console.print(f"[dim]Report written to {json_file}[/dim]")
 
-    # Unconditional: every run reaches the filing ask, not only
-    # an explicit --submit run. submit_report owns the internal
-    # dedup-before-ask / ask-anyway-on-failure / comment-on-duplicate logic.
     from firestarter import submit as submit_mod
 
-    submit_mod.submit_report(report, chip, json_file, console=console)
+    submit_mod.submit_report(
+        report, chip, json_file, console=console, auto_submit=submit
+    )
 
     if not results:
         sys.exit(0)
