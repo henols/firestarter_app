@@ -275,7 +275,7 @@ _SHIPPED_OPS_SEQUENCE = {
     # are NA/run_count=0.
     "verdict_run_count": [
         ("NA", 0),
-        ("OK", 1),
+        ("OK", 2),
         ("OK", 2),
         ("OK", 2),
         ("OK", 2),
@@ -1716,16 +1716,17 @@ def test_derive_plan_allow_adds_no_cli_option():
     `params` -- an exit-code-only check would pass vacuously even if an
     option were added with a harmless default.
 
-    NARROWED (quick task 260822-aq6, widened again for `--compare-reads`):
-    this assertion was written as `options == []` because at the time LEG-01's
-    claim ("this leg needs no new option") and the state of the command
-    ("zero options") were the same sentence. They are no longer. `--fast`
-    and `--compare-reads` -- both unrelated to SDP -- now exist, so the
-    absolute form would fail for a reason LEG-01 never claimed anything
-    about. The assertion below keeps LEG-01's real content by pinning the
-    option set EXACTLY: the leg still contributes nothing, and a future SDP
-    option cannot slip in. The canonical home for the option surface itself
-    is `tests/test_dev_test_cmd.py::TestZeroOptionSurface`.
+    NARROWED (quick task 260822-aq6), recorded rather than silently
+    relaxed: this assertion was written as `options == []` because at the
+    time LEG-01's claim ("this leg needs no new option") and the state of
+    the command ("zero options") were the same sentence. They are no longer.
+    `--fast` -- unrelated to SDP, and a deliberate reversal of Phase 121
+    D-05's zero-option surface -- now exists, so the absolute form would
+    fail for a reason LEG-01 never claimed anything about. The assertion
+    below keeps LEG-01's real content by pinning the option set EXACTLY:
+    the leg still contributes nothing, and a future SDP option cannot slip
+    in. The canonical home for the option surface itself is
+    `tests/test_dev_test_cmd.py::TestZeroOptionSurface`.
     """
     import click
 
@@ -1734,11 +1735,11 @@ def test_derive_plan_allow_adds_no_cli_option():
     options = [
         p for p in cli_handlers_mod.dev_test.params if isinstance(p, click.Option)
     ]
-    assert [o.name for o in options] == ["fast", "compare_reads"], (
+    assert [o.name for o in options] == ["fast"], (
         f"dev_test carries unexpected click.Option instance(s): "
         f"{[o.name for o in options]!r} -- LEG-01 requires the SDP leg to "
-        "add no CLI option, so the options here must be only the ones "
-        "unrelated quick tasks introduced"
+        "add no CLI option, so the only option here must be the one quick "
+        "task 260822-aq6 introduced"
     )
 
 

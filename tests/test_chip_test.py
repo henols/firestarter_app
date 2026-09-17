@@ -2076,9 +2076,7 @@ def test_agreeing_and_diverging_divergence_mappings_share_the_same_key_set():
         return True
 
     diverging_operator.read_eprom.side_effect = _read_side_effect
-    diverging = _result(
-        run_plan(plan, diverging_operator, _REAL_DB, runs=2, read_runs=2), OP_READ
-    )
+    diverging = _result(run_plan(plan, diverging_operator, _REAL_DB, runs=2, read_runs=2), OP_READ)
 
     assert sorted(agreeing.divergence) == sorted(diverging.divergence)
 
