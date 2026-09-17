@@ -2391,16 +2391,8 @@ def _is_uv_eprom(app: "AppContext", chip: str) -> bool:
     return is_uv_eprom(full)
 
 
-# The write-pass number backing a real sweep
-# invariant -- a full ALLOW-shaped run makes 6 write passes over the write
-# region (the shipped write/verify/erase steps write twice, plus this
-# the SDP leg's baseline/inhibited/restore writes).
-# `tests/test_dev_test_cmd.py` derives this same number from a live
-# `derive_plan` result and asserts it equals this constant; if that test
-# ever measures a different number, change THIS constant, never the test.
-# (The console notice this constant used to feed was removed; the
-# invariant itself, and this constant, stay.)
-_ALWAYS_WRITES_PASS_COUNT = 6
+_DEFAULT_RUNS = 3
+_ALWAYS_WRITES_PASS_COUNT = 7
 
 
 @dev.command(name="test")
@@ -2410,7 +2402,7 @@ _ALWAYS_WRITES_PASS_COUNT = 6
     is_flag=True,
     default=False,
     help=(
-        "Run one write/verify cycle instead of two. WEAKER TEST: with "
+        "Run one write/verify cycle instead of three. WEAKER TEST: with "
         "nothing to compare, an intermittent write cannot be reported "
         "marginal and read nondeterminism goes unmeasured; such reports "
         "never count toward community agreement. Omit it for the accurate "
@@ -2425,8 +2417,9 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     Writes to the chip every run (no read-only mode); saves a diagnostic
     report under the config dir's reports directory and offers to file it
     as a GitHub issue. Exit code: 0 clear, 2 marginal, 1 bad (including a
-    chip-ID mismatch). The write/verify block runs as a CYCLE, twice, and the
-    cycles are compared -- a rig-health check for rail droop or bad contact.
+    chip-ID mismatch). The write/verify block runs as a CYCLE, three times,
+    and the read step runs three times too -- the cycles are compared, a
+    rig-health check for rail droop or bad contact.
     """
     # hard-fail BEFORE any hardware is energized when the chip name
     # is absent from the DB entirely (case A). Keyed strictly off
@@ -2486,7 +2479,7 @@ def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
         plan,
         app.eprom_operator,
         app.db,
-        runs=1 if fast else 2,
+        runs=1 if fast else _DEFAULT_RUNS,
         allow_single_run=fast,
         sampler=sampler,
     )

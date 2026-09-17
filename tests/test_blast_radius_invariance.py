@@ -405,6 +405,47 @@ def test_dedup_fingerprint_moves_one_step_either_side_of_the_frozen_shape() -> N
     assert longer_fp != frozen
 
 
+def test_run_count_2_and_3_hash_identically_while_1_differs() -> None:
+    """The CLI default moved from 2 to 3; `repeat_policy_tag` fires only at
+    `run_count == 1`, so `dedup_fingerprint` must be byte-identical between
+    a run_count of 2 and 3 -- no already-filed community report's group
+    changes -- while a run_count of 1 still carries the degraded marker and
+    differs from both."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    step_specs = [
+        ("id", "OK", None, ""),
+        ("read", "OK", None, ""),
+        ("write", "OK", "indeterminate", ""),
+        ("verify", "OK", "indeterminate", ""),
+        ("erase", "OK", None, ""),
+    ]
+    at_2 = build_shape_from_step_specs(
+        chip="SST27SF512",
+        protocol="7",
+        step_specs=step_specs,
+        run_counts={"read": 2, "write": 2, "verify": 2},
+    )
+    at_3 = build_shape_from_step_specs(
+        chip="SST27SF512",
+        protocol="7",
+        step_specs=step_specs,
+        run_counts={"read": 3, "write": 3, "verify": 3},
+    )
+    at_1 = build_shape_from_step_specs(
+        chip="SST27SF512",
+        protocol="7",
+        step_specs=step_specs,
+        run_counts={"read": 1, "write": 1, "verify": 1},
+    )
+    fp_2 = dedup_fingerprint(at_2)
+    fp_3 = dedup_fingerprint(at_3)
+    fp_1 = dedup_fingerprint(at_1)
+    assert fp_2 == fp_3
+    assert fp_1 != fp_2
+    assert fp_1 != fp_3
+
+
 def test_build_db_diff_ladder_pin_for_tracer_shape() -> None:
     """Post-Phase-177 arm: D-4/D-6's match bucket moves the tracer's own
     `write`/`verify` classification from `indeterminate` to `match`

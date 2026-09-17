@@ -31,7 +31,6 @@ Coverage (post-121-09):
 
 from __future__ import annotations
 
-import inspect
 import json
 import logging
 import os
@@ -52,10 +51,10 @@ from firestarter.chip_test import (
     VERDICT_OK,
     StepResult,
     derive_plan,
-    run_plan,
 )
 from firestarter.cli_handlers import (
     _ALWAYS_WRITES_PASS_COUNT,
+    _DEFAULT_RUNS,
     _dev_test_exit_code,
     cli,
 )
@@ -345,7 +344,7 @@ def make_restore_failed_operator() -> Mock:
     the second-to-last call left behind, never pattern A.
 
     A full ALLOW-chip run makes exactly `_ALWAYS_WRITES_PASS_COUNT`
-    `write_eprom` calls in a fixed order (the shipped `write` step's two
+    `write_eprom` calls in a fixed order (the shipped `write` step's three
     runs, then the leg's four single-run writes: baseline-b, baseline-a,
     inhibited, restored -- the SAME order `_ALWAYS_WRITES_PASS_COUNT`'s
     own derivation proves) -- so the LAST call by GLOBAL index is always
@@ -512,13 +511,7 @@ def test_dev_test_output_trim_console_shrunk_payload_intact(
 
     help_result = runner.invoke(cli, ["dev", "test", "--help"])
     assert help_result.exit_code == 0, help_result.output
-    # Ceiling raised 14 -> 16 (quick task 260822-aq6). The whole increase
-    # is the Options block `--fast` brings with it: two docstring lines
-    # naming the N>=2 default plus the flag's own four wrapped help
-    # lines. Kept a TIGHT pin at the real number rather than a loose one,
-    # so the next accidental growth still trips it -- that is what this
-    # assertion is for.
-    assert len(help_result.output.strip().splitlines()) <= 16
+    assert len(help_result.output.strip().splitlines()) <= 17
 
     app = make_app_context(
         eprom_operator=make_clean_operator(),
@@ -837,9 +830,9 @@ class TestSamplerBracketing:
         filling vpp/vpe_before_mv and vpp/vpe_after_mv from the mock
         hardware manager.
 
-        run_plan's default runs=2 means the OP_WRITE branch calls
-        write_eprom twice, and the sampler fires before+after EACH call
-        (chip_test.py _dispatch_multi_run) -- 4 total sample_vpp_mv/
+        dev test's default runs=3 means the OP_WRITE branch calls
+        write_eprom three times, and the sampler fires before+after EACH
+        call (chip_test.py _dispatch_multi_run) -- 6 total sample_vpp_mv/
         sample_vpe_mv calls, with the LAST before/after pair winning the
         report's single before/after slot.
 
@@ -849,27 +842,26 @@ class TestSamplerBracketing:
         below alongside the values themselves."""
         operator = make_clean_operator()
         hw = make_hardware_manager(
-            vpp_values=[20900, 17400, 20800, 17300],
-            vpe_values=[5000, 4900, 4950, 4850],
+            vpp_values=[20900, 17400, 20800, 17300, 20700, 17200],
+            vpe_values=[5000, 4900, 4950, 4850, 4900, 4800],
         )
         app = make_app_context(eprom_operator=operator, hardware_manager=hw)
         result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
         assert result.exit_code == 0, result.output
         data = _load_report(_CHIP_NO_ID)
         voltage = data["voltage"]
-        # Last before/after pair wins (second write run's bracket).
-        assert voltage["vpp_before_mv"] == 20800
-        assert voltage["vpp_after_mv"] == 17300
-        assert voltage["vpe_before_mv"] == 4950
-        assert voltage["vpe_after_mv"] == 4850
+        assert voltage["vpp_before_mv"] == 20700
+        assert voltage["vpp_after_mv"] == 17200
+        assert voltage["vpe_before_mv"] == 4900
+        assert voltage["vpe_after_mv"] == 4800
         assert sorted(voltage) == [
             "vpe_after_mv",
             "vpe_before_mv",
             "vpp_after_mv",
             "vpp_before_mv",
         ]
-        assert hw.sample_vpp_mv.call_count == 4
-        assert hw.sample_vpe_mv.call_count == 4
+        assert hw.sample_vpp_mv.call_count == 6
+        assert hw.sample_vpe_mv.call_count == 6
 
 
 class TestReportDestination:
@@ -1341,9 +1333,9 @@ class TestExitCodeMapping:
         assert result.exit_code == 1, result.output
 
     def test_marginal_disagreement_exits_2(self, runner: CliRunner) -> None:
-        """Write runs disagreeing (True then False) -> marginal -> exit 2."""
+        """Write runs disagreeing (True, False, True) -> marginal -> exit 2."""
         operator = make_clean_operator()
-        operator.write_eprom.side_effect = [True, False]
+        operator.write_eprom.side_effect = [True, False, True]
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )
@@ -1368,7 +1360,7 @@ class TestExitCodeMapping:
         [
             ({}, 0),
             ({"write_eprom.return_value": False}, 1),
-            ({"write_eprom.side_effect": [True, False]}, 2),
+            ({"write_eprom.side_effect": [True, False, True]}, 2),
         ],
         ids=["ok", "bad", "marginal"],
     )
@@ -1694,22 +1686,22 @@ class TestWritePassCountDerivedFromLivePlanD09:
     data invariant -- the write-pass count is DERIVED from a live plan,
     never a restated literal -- which is exactly what
     `_ALWAYS_WRITES_PASS_COUNT` still backs (it feeds no console output
-    now, but the six-write-pass fact it pins is still true and still
+    now, but the seven-write-pass fact it pins is still true and still
     measured here)."""
 
     def test_pass_count_is_derived_from_a_live_plan_never_a_literal(self) -> None:
         """Derive the plan for AT28C256 (the module's own ALLOW chip) at
         `write_scope="full"` -- the scope `dev test` itself resolves for a
         non-UV chip -- and compute the number of write passes FROM the
-        plan: `run_plan`'s own `runs` default for the shipped multi-run
+        plan: the CLI's own `_DEFAULT_RUNS` for the shipped multi-run
         write step (`OP_WRITE`/`OP_WRITE_PARTIAL`), plus one pass for each
         of the leg's four single-run write ops (`_SDP_LEG_OPS`) that are
-        `supported=True`. Never restate `6` (or any other number) as a
+        `supported=True`. Never restate `7` (or any other number) as a
         literal here -- if this ever measures a different number than
         `_ALWAYS_WRITES_PASS_COUNT`, the constant is wrong, not this test.
         """
         plan = derive_plan(_CHIP_ALLOW, _REAL_DB, write_scope="full")
-        runs = inspect.signature(run_plan).parameters["runs"].default
+        runs = _DEFAULT_RUNS
 
         write_passes = 0
         for step in plan.steps:
