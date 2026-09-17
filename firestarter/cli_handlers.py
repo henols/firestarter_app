@@ -2412,24 +2412,14 @@ _ALWAYS_WRITES_PASS_COUNT = 6
     help=(
         "Run one write/verify cycle instead of two. WEAKER TEST: with "
         "nothing to compare, an intermittent write cannot be reported "
-        "marginal; such reports never count toward community agreement. "
-        "Omit it for the accurate test."
-    ),
-)
-@click.option(
-    "--compare-reads",
-    is_flag=True,
-    default=False,
-    help=(
-        "Read the chip twice instead of once and report byte-level "
-        "divergence between the passes. The read step is a single pass "
-        "by default. --fast always reads once, so this flag has no "
-        "effect alongside it."
+        "marginal and read nondeterminism goes unmeasured; such reports "
+        "never count toward community agreement. Omit it for the accurate "
+        "test."
     ),
 )
 @click.pass_obj
 @map_typed_errors
-def dev_test(app: "AppContext", chip: str, fast: bool, compare_reads: bool) -> None:
+def dev_test(app: "AppContext", chip: str, fast: bool) -> None:
     """Run the community chip-validation sweep for CHIP.
 
     Writes to the chip every run (no read-only mode); saves a diagnostic
@@ -2437,7 +2427,6 @@ def dev_test(app: "AppContext", chip: str, fast: bool, compare_reads: bool) -> N
     as a GitHub issue. Exit code: 0 clear, 2 marginal, 1 bad (including a
     chip-ID mismatch). The write/verify block runs as a CYCLE, twice, and the
     cycles are compared -- a rig-health check for rail droop or bad contact.
-    The read step is a single pass; --compare-reads runs it twice to compare.
     """
     # hard-fail BEFORE any hardware is energized when the chip name
     # is absent from the DB entirely (case A). Keyed strictly off
@@ -2486,12 +2475,18 @@ def dev_test(app: "AppContext", chip: str, fast: bool, compare_reads: bool) -> N
     # Always built: every run writes now, so there is no
     # non-destructive mode left that would have no write step to bracket.
     sampler = _make_sampler(app, report)
+    # `--fast` is the ONLY caller that opts out of
+    # the N>=2 repeat policy, and it must say so twice: `runs=1` asks for the
+    # single-run plan and `allow_single_run=True` unlocks `run_plan`'s
+    # fail-closed guard. Both are required deliberately -- a caller that
+    # passes `runs=1` alone still fails the whole plan, so the weaker policy
+    # can only ever be reached on purpose. The default path passes neither
+    # and is byte-for-byte the pre-existing call.
     results = run_plan(
         plan,
         app.eprom_operator,
         app.db,
         runs=1 if fast else 2,
-        read_runs=1 if fast else (2 if compare_reads else 1),
         allow_single_run=fast,
         sampler=sampler,
     )
