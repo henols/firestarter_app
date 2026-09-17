@@ -59,6 +59,13 @@ runs these steps in order:
 The second job installs `.[test,py32]`, proves `pyusb` imports and records its resolved version,
 then runs `pytest tests/test_pyusb_api_surface.py -q`.
 
+**A push to `beta` publishes this package.** `beta-release.yml` fires on every push to `beta`. Its
+`github` job cuts a GitHub pre-release. Its `pypi` job then calls `publish.yml` directly, with
+`secrets: inherit`, and **uploads to PyPI**. It calls the workflow rather than waiting on the
+`release: published` trigger, because a release created by a bot cannot cascade on the default
+token. **There is no path filter**, so a documentation-only push publishes a new version too. A
+PyPI version can never be reused.
+
 **`mypy` is not a CI gate.** It runs only in the local `pre-commit` config, which runs
 `ruff-check`, then `ruff-format`, then `mypy`.
 
