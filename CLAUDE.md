@@ -19,15 +19,26 @@ not overridable by a plan, task, skill, or subagent instruction.
   were a comment.
 - If code needs explaining, make the code clearer: better names, smaller functions, a named
   constant in `constants.py`.
+- **The rule is not "no GSD citations".** You delete `Phase 194` from a comment and keep the
+  comment. This still breaks the rule. Add no `#` comment line, for any reason, however helpful
+  it seems. State the rule in these words when you spawn a subagent that touches source.
+- Before each commit, run this check. It must print nothing:
+  `git diff --cached | /usr/bin/grep -E '^\+\s*#' | /usr/bin/grep -v '^\+\s*#!'`
+- Deleting one clause from an existing comment reflows the rest. Read the remainder. Confirm it
+  still parses and that every pronoun still has an antecedent.
 
 ## Development Commands
 
 ```bash
-pip install -e .                    # install in dev mode
+pip install -e '.[test]'            # install in dev mode; the [test] extra is what CI installs
 firestarter --help                  # verify install
 ./firestarter_test.sh [EPROM]       # hardware integration test
 python tools/build_db.py            # regenerate chip database from infoic.xml
 ```
+
+**CI runs Python 3.11.** The devcontainer runs a later Python. A later interpreter turns some
+snapshot failures into collection errors, so a green local run does not prove a green CI run.
+Run the suite on 3.11 before you trust it.
 
 ## Architecture
 
@@ -90,38 +101,62 @@ Firmware responses are prefix-tagged lines: `OK:`, `DATA:`, `MAIN:`, `END:`, `ER
 
 ### Database Pipeline
 
-`tools/build_db.py` parses `tools/infoic.xml` (minipro chip database XML) and outputs `firestarter/data/chip_database.json`.
+`tools/build_db.py` **fetches** `infoic.xml` (the minipro chip database XML) over the network.
+`MINIPRO_XML_URL` pins the fetch to minipro commit `a8efaedc`, which keeps the build reproducible.
+This repo vendors no copy of the XML. The script writes `firestarter/data/chip_database.json`.
+
+It then merges `tools/extra_chips.json`. That file is the one sanctioned place for a physically
+real chip that `infoic.xml` does not list. Do not add a field to a generated row anywhere else.
 
 Key fields per chip entry:
 - `algorithm` — upstream `protocol_id` integer (primary dispatch key)
 - `vpp_mv` — VPP voltage in millivolts (decoded from `voltages` field)
-- `pinout` — DIP pinout key (`DIP24_2716`, `DIP28_27256`, `DIP28_27512`, `DIP28_2764`, `DIP32_STD`)
+- `pinout` — DIP pinout key. The shipped database uses 16 keys: `DIP24_2532`, `DIP24_2716`,
+  `DIP24_2732`, `DIP24_2816`, `DIP24_6116`, `DIP28_27256`, `DIP28_27512`, `DIP28_2764`,
+  `DIP28_28C64`, `DIP28_28C256`, `DIP28_JEDEC_SRAM_8K`, `DIP32_27C020`, `DIP32_27C801`,
+  `DIP32_28C512_EEPROM`, `DIP32_SST39SF040`, `DIP32_STD`.
+
+`part_number` can hold several names in one comma-joined string, such as `W27C512,W27E512`. An
+exact-string match on a single part number therefore misses rows. Split the field before you
+match it.
 
 Known protocols (chips with unknown protocol_id are skipped with a warning):
 `0x05, 0x06, 0x07, 0x08, 0x0B, 0x0D, 0x0E, 0x10, 0x27, 0x28, 0x29, 0x35, 0x39`
 
-Protocol overrides (WARNING-5): `build_db.py` applies an inline 3-predicate
-conditional after deriving `_etype` and before constructing `chip_entry`. When
-`pinout_key == "DIP28_2764"` AND `proto_id == 0x07` (EPROM_STD) AND
-`_etype == "Flash/EEPROM"`, the chip's `algorithm` is flipped to `0x0D`
-(EEPROM_POLL) so firmware dispatch reaches `configure_eeprom28c` (pure 5V VCC,
-no VPP regulator engagement) instead of `configure_eprom`. Rationale: on the
-`DIP28_2764` pinout, socket pin 1 maps to the VPP regulator output line and
-`configure_eprom` asserts `P1_VPP_ENABLE` (12V) on every write pulse; on the
-~23 affected 28C-family 5V EEPROMs, physical pin 1 is the A14 address line,
-not VPP, so 12V on pin 1 is a hardware-damage path. Scope: ~23 chips across 6
-manufacturers — ATMEL (AT28C/BV family), MICROCHIP memory (28C/28LV family),
-NEC (UPD28C family), XICOR (X28C family), ST (M28256), EXEL (XLE2865A). 7 chips
-remain on the `0x07`/`configure_eprom` path and still legitimately need 12V VPP
-(W27C512, SST27SF512, SST27VF512, W27C257, W27E257, SST27SF256, SST27VF256) — but
-they are electrically-erasable EEPROMs (`electrical.type="EEPROM"`, `flags&0x10`),
-NOT genuine UV-EPROMs; see cca7d62. They sit on `DIP28_27512` or `DIP28_27256`
-pinouts which DO have a real vpp-pin, so 12V on that pin is correct. See `WARNING-5`
-in `.planning/v1.0-MILESTONE-AUDIT.md` and the phase folder
-`.planning/phases/13-close-gap-warning-5-at28c256-64-5v-eeprom-override-12v-on-we/`.
+### 5V-EEPROM promotion to `0x0D` (the rule the audit called WARNING-5)
+
+`classify()` in `tools/build_db.py` promotes 5V-EEPROM pinout clusters to `algorithm 0x0D`.
+Firmware dispatch then reaches `configure_eeprom28c` (pure 5V VCC, no VPP regulator) instead of
+`configure_eprom`. Two arms do the promotion:
+
+1. `pinout_key` is `DIP24_2816`. Promote for any protocol.
+2. `proto_id` is `0x07`, `0x08` or `0x0B`, **and** either `pinout_key` is `DIP28_28C64` or
+   `DIP28_28C256`, or `pinout_key` is `DIP28_2764` with `flags & 0x10` set.
+
+Genuine 5V flash on the same DIP28 layout keeps its flash algorithm. A later arm handles it.
+**Do not broaden either arm.**
+
+**Why the promotion exists.** On the `DIP28_2764` pinout, socket pin 1 maps to the VPP regulator
+output line. `configure_eprom` asserts `P1_VPP_ENABLE` (12V) on every write pulse. On the affected
+28C-family 5V EEPROMs, physical pin 1 is the A14 address line, not VPP. 12V on pin 1 damages the
+part.
+
+**Measured scope, against the shipped `chip_database.json`:** 84 rows carry `algorithm 13`, across
+15 vendors — AMD, ATMEL, CATALYST(CSI), CYPRESS, EXEL, FUJITSU, HITACHI, MAXWELL, MICROCHIP memory,
+NEC, SAMSUNG, SGS-THOMSON, ST, WED and XICOR. Those rows sit on four pinouts: `DIP24_2816` (19
+rows), `DIP28_28C64` (35), `DIP28_28C256` (12) and `DIP32_28C512_EEPROM` (18).
+
+Seven chips stay on the `0x07` and `configure_eprom` path. They still need 12V VPP: W27C512,
+SST27SF512, SST27VF512, W27C257, W27E257, SST27SF256 and SST27VF256. They are
+electrically-erasable EEPROMs (`electrical.type` is `EEPROM`, `flags & 0x10` set), not UV-EPROMs.
+See `cca7d62`. They sit on `DIP28_27512` or `DIP28_27256`. Both pinouts have a real VPP pin, so 12V
+on that pin is correct.
+
+Origin record: `.planning/milestones/v1.0-MILESTONE-AUDIT.md`, section `WARNING-5`. The phase
+folder that closed it was archived at milestone close and no longer exists at its original path.
 
 ### Constants
 
-`firestarter/constants.py` must stay in sync with `firestarter_fw/include/firestarter.h` in the firmware sub-repo. Both define the same flag bit values and command codes. Additionally, the `RURP_CONTROL_REGISTER_BITS` block in `constants.py` (CTRL_* names) mirrors the control-register-bit declarations in `firestarter_fw/include/rurp_pinout.h` (Phase 33 / v1.7 — silkscreen-label code-alias migration). Keep CTRL_* names + hex values in sync with the firmware header. Additionally, the `RURP_HARDWARE_REVISIONS` block in `constants.py` (REVISION_* names) mirrors the hardware-revision enum declarations in `firestarter_fw/include/rurp_shield.h` (Phase 34 / v1.7 — shield-version-detect design + firmware plumbing). Keep REVISION_* names + byte values in sync with the firmware enum; `0xFF` is reserved as the EEPROM-override-absent sentinel and `0xFE` (`REVISION_UNKNOWN`) is reserved for the ADC-band-gap fall-through. Additionally, the wiki page `Shield Revisions` is a subset clone of meta-repo `.planning/v1.7-SHIELD-REVS.md` sections §1 (inventory) / §6 (per-rev capability matrix) / §7 (silkscreen → code alias table) / §9 (per-rev ADC band table) (Phase 35 / v1.7 — close); if any of those four sections change in the meta-repo, update the wiki page in lockstep.
+`firestarter/constants.py` must stay in sync with `firestarter_fw/include/firestarter.h` in the firmware sub-repo. Both define the same flag bit values and command codes. Additionally, the `RURP_CONTROL_REGISTER_BITS` block in `constants.py` (CTRL_* names) mirrors the control-register-bit declarations in `firestarter_fw/include/rurp_pinout.h` (Phase 33 / v1.7 — silkscreen-label code-alias migration). Keep CTRL_* names + hex values in sync with the firmware header. Additionally, the `RURP_HARDWARE_REVISIONS` block in `constants.py` (REVISION_* names) mirrors the hardware-revision enum declarations in `firestarter_fw/include/rurp_shield.h` (Phase 34 / v1.7 — shield-version-detect design + firmware plumbing). Keep REVISION_* names + byte values in sync with the firmware enum; `0xFF` is reserved as the EEPROM-override-absent sentinel and `0xFE` (`REVISION_UNKNOWN`) is reserved for the ADC-band-gap fall-through. Additionally, the wiki page `Shield Revisions` is a subset clone of meta-repo `.planning/milestones/v1.7-SHIELD-REVS.md` sections §1 (inventory) / §6 (per-rev capability matrix) / §7 (silkscreen → code alias table) / §9 (per-rev ADC band table) (Phase 35 / v1.7 — close); if any of those four sections change in the meta-repo, update the wiki page in lockstep.
 
 **Tooling gate (v1.8):** `ruff check` + `ruff format --check` + `pytest --cov-fail-under=70` — all enforced by `.github/workflows/ci.yml` on every PR. `mypy` (strict on 8 modules per Phase 42 D-06: `main.py`, `cli_handlers.py`, `chip_resolver.py`, `frame_parser.py`, `codec.py`, `address_parser.py`, `exceptions.py`, `serial_comm.py`) is wired in the local `pre-commit` config only and is **not** a CI gate; `pre-commit` runs `ruff-check` → `ruff-format` → `mypy` locally.
