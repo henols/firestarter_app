@@ -776,6 +776,7 @@ def submit_report(
     console: Any = None,
     find_prior_report_fn: Any = find_prior_report,
     comment_via_gh_fn: Any = comment_via_gh,
+    auto_submit: bool = False,
 ) -> None:
     """The single submission entry point (SUB-01/02) -- composes every
     Plan-02 builder over the ALREADY-COMPLETED `report`/`saved_json_path`;
@@ -798,20 +799,40 @@ def submit_report(
     "the check runs first" holds universally, not merely on
     an interactive run.
 
-    Step 4 (off-TTY): prints the issue URL and returns WITHOUT
-    ever calling `confirm_fn`, `submit_via_gh`, or `comment_via_gh_fn` --
-    filing nothing (v1.21 SUB-01's ban on silent off-TTY submission
-    survives the removal of the explicit flag). The Step 3 dedup
-    outcome is included in this output: the existing issue is named when
-    one was found, or an explicit line states the check could not run
-    when it was not. Quick task 260821-spg stopped echoing the sanitized
-    body itself here: the full report is already persisted under the
-    config dir's `reports` directory (that path is printed by the
-    caller), so nothing is lost, and `body` still reaches every
-    downstream seam sanitized (`build_issue_url`, `gh`, the browser tier).
+    Step 3.5 (`auto_submit` consent branch -- runs BEFORE the TTY branch,
+    so it behaves identically whether stdin is a TTY or not, and
+    `isatty_fn` is never called under it): a found prior issue gets a
+    comment through `comment_via_gh_fn` and files nothing new; a `None`
+    return from that prints the failure reason and stops -- it never
+    degrades to the browser, which cannot file anything unattended. With
+    no prior issue found, filing goes through `submit_via_gh` if and only
+    if `gh_available()`; a `None` return prints the failure reason, a URL
+    prints as filed. When the dedup check itself could not run, this
+    branch files anyway (operator decision OP-2 -- a duplicate public
+    issue is judged less costly than an unattended run that silently
+    files nothing) and discloses that fact twice: one console line, and
+    one sentence appended to the body handed to `gh` (every other path's
+    body stays exactly what `build_body` returned). When `gh` is absent
+    or unauthenticated, this branch prints the same prefilled
+    `build_issue_url` output the off-TTY path below prints, plus a plain
+    statement that nothing was filed and why -- it never opens a browser,
+    because an unattended run has nobody at the tab to press Submit.
 
-    Step 5 (the ask -- EVERY interactive run): when Step 3
-    found a duplicate, names it and asks whether to add this run's
+    Step 4 (off-TTY, `auto_submit` false): prints the issue URL and
+    returns WITHOUT ever calling `confirm_fn`, `submit_via_gh`, or
+    `comment_via_gh_fn` -- filing nothing. The off-TTY path still files
+    nothing WITHOUT consent; `auto_submit` is the seam that lets a caller
+    supply it. The Step 3 dedup outcome is included in this output: the
+    existing issue is named when one was found, or an explicit line
+    states the check could not run when it was not. Quick task 260821-spg
+    stopped echoing the sanitized body itself here: the full report is
+    already persisted under the config dir's `reports` directory (that
+    path is printed by the caller), so nothing is lost, and `body` still
+    reaches every downstream seam sanitized (`build_issue_url`, `gh`, the
+    browser tier).
+
+    Step 5 (the ask -- EVERY interactive run without `auto_submit`): when
+    Step 3 found a duplicate, names it and asks whether to add this run's
     evidence as a comment (worded as "you appear to have already reported
     this", never as a certainty, per F-5's eventually-consistent search
     index caveat), explaining that the fingerprint excludes measured
@@ -857,6 +878,50 @@ def submit_report(
 
     fingerprint = report_dict["dedup_fingerprint"]
     prior_url, dedup_ran = find_prior_report_fn(fingerprint, run_fn=run_fn)
+
+    if auto_submit:
+        if prior_url:
+            comment_url = comment_via_gh_fn(
+                prior_url, body, run_fn=run_fn, console=console
+            )
+            if comment_url is None:
+                _print(
+                    "The gh comment failed -- nothing else was filed.",
+                    console=console,
+                )
+            else:
+                _print(f"Comment added: {comment_url}", console=console)
+            return
+
+        if gh_available(which_fn=which_fn, run_fn=run_fn):
+            file_body = body
+            if not dedup_ran:
+                _print(
+                    "Note: the duplicate check could not run (gh absent, "
+                    "unauthenticated, or offline) -- filing anyway.",
+                    console=console,
+                )
+                file_body = body + (
+                    "\n\n_The duplicate check could not run before this "
+                    "report was filed (gh absent, unauthenticated, or "
+                    "offline)._"
+                )
+            url = submit_via_gh(title, file_body, run_fn=run_fn, console=console)
+            if url is None:
+                _print("The gh tier failed to file the report.", console=console)
+            elif url:
+                _print(f"Report filed: {url}", console=console)
+            else:
+                _print(f"Report filed to {SUBMIT_REPO}.", console=console)
+            return
+
+        url = build_issue_url(title, body)
+        _print(url, console=console)
+        _print(
+            "Note: gh is absent or unauthenticated -- nothing was filed.",
+            console=console,
+        )
+        return
 
     if not isatty_fn():
         url = build_issue_url(title, body)
