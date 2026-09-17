@@ -1725,7 +1725,10 @@ def test_derive_plan_allow_adds_no_cli_option():
     fail for a reason LEG-01 never claimed anything about. The assertion
     below keeps LEG-01's real content by pinning the option set EXACTLY:
     the leg still contributes nothing, and a future SDP option cannot slip
-    in. The canonical home for the option surface itself is
+    in. WIDENED AGAIN for the same reason when `--submit` was added, also
+    unrelated to SDP: the set grows as the command gains options the leg did
+    not put there, and the exact-match form is what still proves the leg put
+    none of them there. The canonical home for the option surface itself is
     `tests/test_dev_test_cmd.py::TestZeroOptionSurface`.
     """
     import click
@@ -1735,11 +1738,11 @@ def test_derive_plan_allow_adds_no_cli_option():
     options = [
         p for p in cli_handlers_mod.dev_test.params if isinstance(p, click.Option)
     ]
-    assert [o.name for o in options] == ["fast"], (
+    assert [o.name for o in options] == ["fast", "submit"], (
         f"dev_test carries unexpected click.Option instance(s): "
         f"{[o.name for o in options]!r} -- LEG-01 requires the SDP leg to "
-        "add no CLI option, so the only option here must be the one quick "
-        "task 260822-aq6 introduced"
+        "add no CLI option, so every option here must be one some other "
+        "change introduced"
     )
 
 
