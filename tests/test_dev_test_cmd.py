@@ -498,7 +498,12 @@ def test_dev_test_output_trim_console_shrunk_payload_intact(
     stays short; a real off-TTY run's console output carries neither the
     issue body's markdown table header nor a transport_health row label;
     and that SAME run's saved JSON still has transport_health,
-    is_submittable and db_diff keys -- console trimmed, payload intact."""
+    is_submittable and db_diff keys -- console trimmed, payload intact.
+
+    The `--help` ceiling below is re-measured and re-pinned tightly at the
+    real line count every time the Options block grows, most recently by
+    `--compare-reads`'s own entry plus one added docstring sentence, so the
+    next accidental growth still trips it."""
     import firestarter.cli_handlers as cli_handlers_mod
 
     for name in (
@@ -512,13 +517,7 @@ def test_dev_test_output_trim_console_shrunk_payload_intact(
 
     help_result = runner.invoke(cli, ["dev", "test", "--help"])
     assert help_result.exit_code == 0, help_result.output
-    # Ceiling raised 14 -> 16 (quick task 260822-aq6). The whole increase
-    # is the Options block `--fast` brings with it: two docstring lines
-    # naming the N>=2 default plus the flag's own four wrapped help
-    # lines. Kept a TIGHT pin at the real number rather than a loose one,
-    # so the next accidental growth still trips it -- that is what this
-    # assertion is for.
-    assert len(help_result.output.strip().splitlines()) <= 16
+    assert len(help_result.output.strip().splitlines()) <= 21
 
     app = make_app_context(
         eprom_operator=make_clean_operator(),
@@ -668,20 +667,21 @@ def test_a_clean_run_saves_a_populated_chip_id_actual_equal_to_expected(
 
 
 class TestZeroOptionSurface:
-    """`dev test` takes CHIP plus exactly one option; each removed flag errors.
+    """`dev test` takes CHIP plus exactly two options; each removed flag
+    errors.
 
     REVERSAL, stated rather than smuggled (quick task 260822-aq6): Phase 121
     D-05 gave this command a deliberate ZERO-option surface, and this class
-    is the gate that held it. `--fast` reverses that decision for exactly
-    one option -- the operator asked for an opt-out from the N>=2 repeat
-    policy while keeping the accurate N>=2 run as the default. The gate is
-    NARROWED to the new surface, not deleted: the option set is still
-    pinned exactly (so a second option cannot slip in unnoticed), and every
-    sibling test below -- the three removed flags and the removed
+    is the gate that held it. `--fast` reversed that decision for one
+    option; `--compare-reads` (quick task 260917-706) adds a second, opting
+    into the two-pass read comparison the default run no longer performs.
+    The gate is NARROWED to the new surface, not deleted: the option set is
+    still pinned exactly (so a third option cannot slip in unnoticed), and
+    every sibling test below -- the three removed flags and the removed
     confirm-bypass short flag -- is untouched.
     """
 
-    def test_dev_test_has_exactly_the_fast_option(self) -> None:
+    def test_dev_test_has_exactly_the_fast_and_compare_reads_options(self) -> None:
         import click
 
         test_cmd = cli.commands["dev"].commands["test"]
@@ -690,9 +690,10 @@ class TestZeroOptionSurface:
         arguments = [p for p in params if isinstance(p, click.Argument)]
         assert len(arguments) == 1
         assert arguments[0].name == "chip"
-        assert [o.name for o in options] == ["fast"]
-        assert options[0].is_flag
-        assert options[0].default is False
+        assert [o.name for o in options] == ["fast", "compare_reads"]
+        for option in options:
+            assert option.is_flag
+            assert option.default is False
 
     def test_fast_option_help_states_it_is_the_weaker_test(self) -> None:
         """The flag's help must name the COST, not just the speed. The
@@ -717,6 +718,23 @@ class TestZeroOptionSurface:
         assert "weaker" in help_text
         assert "marginal" in help_text
         assert "accurate" in help_text
+
+    def test_compare_reads_help_discloses_fast_takes_precedence(self) -> None:
+        """The precedence between the two flags must be DISCLOSED to the
+        reader, not merely applied: `--fast` always wins over
+        `--compare-reads`, so the newer flag's own help text has to name
+        `--fast` and say so."""
+        import click
+
+        import firestarter.cli_handlers as cli_handlers_mod
+
+        compare_reads = next(
+            p
+            for p in cli_handlers_mod.dev_test.params
+            if isinstance(p, click.Option) and p.name == "compare_reads"
+        )
+        help_text = (compare_reads.help or "").lower()
+        assert "--fast" in help_text
 
     # Removed long-option NAMEs only (no leading dashes) -- the leading
     # "--" is joined on at call time below so this source file never
@@ -757,6 +775,50 @@ class TestZeroOptionSurface:
         result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID, "-y"], obj=app)
         assert result.exit_code == 2, result.output
         assert "no such option" in result.output.lower()
+
+    @pytest.mark.parametrize(
+        "flags,expected_runs,expected_read_runs,expected_allow_single_run",
+        [
+            ([], 2, 1, False),
+            (["--compare-reads"], 2, 2, False),
+            (["--fast"], 1, 1, True),
+            (["--fast", "--compare-reads"], 1, 1, True),
+        ],
+        ids=["default", "compare-reads", "fast", "fast-and-compare-reads"],
+    )
+    def test_flag_combinations_wire_runs_and_read_runs_onto_run_plan(
+        self,
+        runner: CliRunner,
+        flags: list[str],
+        expected_runs: int,
+        expected_read_runs: int,
+        expected_allow_single_run: bool,
+    ) -> None:
+        """The four flag combinations each pass their documented `runs` /
+        `read_runs` / `allow_single_run` triple to `run_plan` -- `--fast`
+        wins over `--compare-reads` when both are given, so `read_runs`
+        stays `1` on that last combination."""
+        import firestarter.cli_handlers as cli_handlers_mod
+
+        recorded: dict[str, object] = {}
+
+        def _spy(*args, **kwargs):
+            recorded["runs"] = kwargs["runs"]
+            recorded["read_runs"] = kwargs["read_runs"]
+            recorded["allow_single_run"] = kwargs["allow_single_run"]
+            return run_plan(*args, **kwargs)
+
+        with patch.object(cli_handlers_mod, "run_plan", side_effect=_spy):
+            app = make_app_context(
+                eprom_operator=make_clean_operator(),
+                hardware_manager=make_hardware_manager(),
+            )
+            result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID, *flags], obj=app)
+
+        assert result.exit_code == 0, result.output
+        assert recorded["runs"] == expected_runs
+        assert recorded["read_runs"] == expected_read_runs
+        assert recorded["allow_single_run"] == expected_allow_single_run
 
 
 class TestUVWriteHasNoPrompt:
