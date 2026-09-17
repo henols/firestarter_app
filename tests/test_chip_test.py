@@ -1581,10 +1581,11 @@ def test_repeat_policy_tag_marks_a_single_run_plan():
 
 
 def test_repeat_policy_tag_ignores_ops_that_are_single_run_by_design():
-    """`run_count == 1` is NORMAL for the id check, the blank check and all
-    six SDP-leg ops -- those dispatch arms hard-set it. Reading them as a
-    degraded repeat policy would tag every AT28C256 sweep as `--fast` and
-    split its dedup group for no reason."""
+    """`run_count == 1` is NORMAL for the id check, the blank check, all six
+    SDP-leg ops, and the read step (single-pass by default) -- none of those
+    dispatch arms are in `_REPEAT_POLICY_OPS`. Reading any of them as a
+    degraded repeat policy would tag every default AT28C256 sweep as
+    `--fast` and split its dedup group for no reason."""
     import firestarter.chip_test as chip_test_mod
     from firestarter.chip_test import (
         OP_BLANK_CHECK,
@@ -1597,13 +1598,15 @@ def test_repeat_policy_tag_ignores_ops_that_are_single_run_by_design():
     step_result = chip_test_mod.StepResult
     by_design = [
         step_result(op=op, verdict=VERDICT_OK, run_count=1)
-        for op in (OP_ID, OP_BLANK_CHECK, OP_SDP_LOCK, OP_WRITE_INHIBITED)
+        for op in (
+            OP_ID,
+            OP_BLANK_CHECK,
+            OP_SDP_LOCK,
+            OP_WRITE_INHIBITED,
+            OP_READ,
+        )
     ]
-    # A real N>=2 write/read alongside them, so the list is a plausible sweep.
-    by_design += [
-        step_result(op=OP_READ, verdict=VERDICT_OK, run_count=2),
-        step_result(op=OP_WRITE, verdict=VERDICT_OK, run_count=2),
-    ]
+    by_design.append(step_result(op=OP_WRITE, verdict=VERDICT_OK, run_count=2))
 
     assert repeat_policy_tag(by_design) == ""
 
@@ -1624,6 +1627,55 @@ def test_repeat_policy_tag_ignores_steps_that_never_ran():
         )
         == ""
     )
+
+
+def test_default_run_reads_once_and_keeps_the_repeat_policy_tag_empty():
+    """The fingerprint-stability property: a default `run_plan` call reads
+    the chip exactly once for its read step while the write step still
+    repeats `runs` times, and `repeat_policy_tag` stays the empty string --
+    so `dedup_fingerprint` never re-keys an already-filed accurate run."""
+    from firestarter.chip_test import repeat_policy_tag
+
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_READ, supported=True, reason=""),
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    read_result = _result(results, OP_READ)
+    write_result = _result(results, OP_WRITE)
+    assert read_result.run_count == 1
+    assert write_result.run_count == 2
+    assert operator.read_eprom.call_count == 1
+    assert read_result.divergence is None
+    assert repeat_policy_tag(results) == ""
+
+
+def test_compare_reads_opt_in_restores_the_two_pass_read():
+    """`read_runs=2` is the opt-in: the read step runs twice, records a real
+    five-key `divergence` mapping, and the repeat-policy tag stays empty --
+    the two-pass comparison never counts as a degraded repeat."""
+    from firestarter.chip_test import repeat_policy_tag
+
+    operator = _mock_operator()
+    operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\xaa" * 32)
+    plan = _plan_with_steps(
+        Step(op=OP_READ, supported=True, reason=""),
+        Step(op=OP_WRITE, supported=True, reason="", destructive=True),
+    )
+    results = run_plan(plan, operator, _REAL_DB, runs=2, read_runs=2)
+
+    read_result = _result(results, OP_READ)
+    assert read_result.run_count == 2
+    assert read_result.divergence == {
+        "repeat_divergent": False,
+        "cmp_len": 32,
+        "bad": 0,
+        "pct": 0.0,
+        "first_offset": None,
+    }
+    assert repeat_policy_tag(results) == ""
 
 
 # coverage_tag (quick-devtest-coverage-dedup, follow-up to 260821-wna)
@@ -1969,7 +2021,7 @@ def test_read_step_disagreement_is_divergence_metric_not_marginal():
 
     operator.read_eprom.side_effect = _read_side_effect
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, _REAL_DB, runs=2, read_runs=2)
 
     read_result = _result(results, OP_READ)
     assert read_result.verdict == VERDICT_OK  # never a verdict flip
@@ -1989,7 +2041,7 @@ def test_read_step_agreement_records_a_zero_bad_divergence_mapping():
     operator = _mock_operator()
     operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\xaa" * 32)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, _REAL_DB, runs=2, read_runs=2)
 
     read_result = _result(results, OP_READ)
     assert read_result.verdict == VERDICT_OK
@@ -2010,7 +2062,7 @@ def test_agreeing_and_diverging_divergence_mappings_share_the_same_key_set():
     operator = _mock_operator()
     operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\xaa" * 32)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    agreeing = _result(run_plan(plan, operator, _REAL_DB, runs=2), OP_READ)
+    agreeing = _result(run_plan(plan, operator, _REAL_DB, runs=2, read_runs=2), OP_READ)
 
     diverging_operator = _mock_operator()
     call_results = [b"\x00" * 64, b"\xff" * 64]
@@ -2024,7 +2076,7 @@ def test_agreeing_and_diverging_divergence_mappings_share_the_same_key_set():
         return True
 
     diverging_operator.read_eprom.side_effect = _read_side_effect
-    diverging = _result(run_plan(plan, diverging_operator, _REAL_DB, runs=2), OP_READ)
+    diverging = _result(run_plan(plan, diverging_operator, _REAL_DB, runs=2, read_runs=2), OP_READ)
 
     assert sorted(agreeing.divergence) == sorted(diverging.divergence)
 
@@ -2072,7 +2124,7 @@ def test_the_agreeing_branch_never_calls_the_per_byte_diff_primitive(monkeypatch
     operator = _mock_operator()
     operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\x5a" * 128)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, _REAL_DB, runs=2, read_runs=2)
 
     read_result = _result(results, OP_READ)
     assert read_result.divergence["bad"] == 0
@@ -2126,7 +2178,7 @@ def test_read_step_last_run_failure_yields_bad():
     operator = _mock_operator()
     operator.read_eprom.side_effect = _alternating_read_side_effect(True, False)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, _REAL_DB, runs=2, read_runs=2)
 
     read_result = _result(results, OP_READ)
     assert read_result.verdict == VERDICT_BAD
@@ -2145,7 +2197,7 @@ def test_read_step_first_run_failure_with_passing_last_run_yields_ok():
     operator = _mock_operator()
     operator.read_eprom.side_effect = _alternating_read_side_effect(False, True)
     plan = _plan_with_steps(Step(op=OP_READ, supported=True, reason=""))
-    results = run_plan(plan, operator, _REAL_DB, runs=2)
+    results = run_plan(plan, operator, _REAL_DB, runs=2, read_runs=2)
 
     read_result = _result(results, OP_READ)
     assert read_result.verdict == VERDICT_OK

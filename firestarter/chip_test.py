@@ -1115,13 +1115,7 @@ def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> Ste
     )
 
 
-# The ops whose `StepResult.run_count` is EXACTLY `run_plan`'s `runs` kwarg
-# -- the multi-run destructive/verify set plus the
-# read step, which `_dispatch_read` also loops `runs` times. Deliberately
-# NOT every op: `_dispatch_id`, the blank-check arm and all six SDP-leg ops
-# hard-set `run_count=1` BY DESIGN and would otherwise read as a degraded
-# repeat policy on a perfectly normal run.
-_REPEAT_POLICY_OPS = _MULTI_RUN_OPS | {OP_READ}
+_REPEAT_POLICY_OPS = _MULTI_RUN_OPS
 
 # The degraded-policy marker. Spelled as the kwarg
 # value it describes rather than the CLI flag that produces it: `run_plan`
@@ -1135,6 +1129,13 @@ def repeat_policy_tag(results: list[StepResult]) -> str:
     A single-run plan is strictly WEAKER: with one run there is nothing to
     compare, so no step can ever return `marginal` and no read divergence is
     computed. This tag keeps such a run out of the N>=2 promotion groups.
+
+    `_REPEAT_POLICY_OPS` is the write/verify/erase multi-run set only. The
+    read step is excluded because it now carries its own `read_runs` count
+    whose default is a single pass -- a member `OP_READ` would make every
+    default run emit the degraded marker and re-key every already-filed
+    fingerprint. The id check, the blank check and all six SDP-leg ops
+    hard-set `run_count=1` by design and are excluded for the same reason.
 
     Keyed on run_count == 1. A SKIPPED or NA step carries 0 and is ignored.
 
@@ -1671,12 +1672,23 @@ def _run_cycle_block(
     ]
 
 
+def _runs_for_step(op: str, *, runs: int, read_runs: int) -> int:
+    """The run count `run_plan`'s per-step dispatch owes `op`.
+
+    The read step is governed by its own `read_runs` count, independent of
+    the write/verify/erase repeat; every other op still takes the plan-wide
+    `runs`.
+    """
+    return read_runs if op == OP_READ else runs
+
+
 def run_plan(
     plan: Plan,
     operator: Any,
     db: Any,
     *,
     runs: int = 2,
+    read_runs: int = 1,
     allow_single_run: bool = False,
     sampler: Any = None,
 ) -> list[StepResult]:
@@ -1695,14 +1707,17 @@ def run_plan(
     body has its own try/except. An `EpromOperationError` becomes BAD carrying
     its error_code; a `resolve_chip` refusal becomes SKIPPED/NA with a reason.
 
-    Destructive and verify steps run `runs` times (default 2). When per-run
-    outcomes DISAGREE the verdict is `marginal`, never coerced to a confident
-    OK or BAD. `runs < 2` is rejected before any operator call unless the
-    caller passes `allow_single_run=True` -- a deliberately weaker mode that
-    forfeits the marginal detector and the read-divergence metric, tagged by
-    `repeat_policy_tag` so it cannot join an accurate run's dedup group.
-    Read-step disagreement is reported as a byte-level divergence metric only,
-    never as a verdict flip.
+    `runs`, `allow_single_run` and the marginal detector govern the
+    write/verify/erase repeat ONLY. Destructive and verify steps run `runs`
+    times (default 2); when per-run outcomes DISAGREE the verdict is
+    `marginal`, never coerced to a confident OK or BAD. `runs < 2` is
+    rejected before any operator call unless the caller passes
+    `allow_single_run=True` -- a deliberately weaker mode that forfeits the
+    marginal detector, tagged by `repeat_policy_tag` so it cannot join an
+    accurate run's dedup group. The read step runs `read_runs` times
+    (default 1, a single pass) independently of `runs`; the read-divergence
+    metric therefore requires `read_runs >= 2` and is reported as a
+    byte-level divergence metric only, never as a verdict flip.
 
     `sampler` is an optional opaque callable; this engine never imports
     hardware.py. It is invoked around EACH write call only -- never around
@@ -1730,6 +1745,20 @@ def run_plan(
                     "step requires at least 2 runs to compare -- "
                     "pass allow_single_run=True to run a deliberately "
                     "weaker single-run plan"
+                ),
+                run_count=0,
+            )
+        ]
+
+    if read_runs < 1:
+        return [
+            StepResult(
+                op="__plan__",
+                verdict=VERDICT_BAD,
+                reason=(
+                    f"read_runs must be >= 1 (got {read_runs}); a zero-pass "
+                    "read would report a verdict for an operator call that "
+                    "never happened"
                 ),
                 run_count=0,
             )
@@ -1848,7 +1877,7 @@ def run_plan(
                 step,
                 operator,
                 db,
-                runs=runs,
+                runs=_runs_for_step(step.op, runs=runs, read_runs=read_runs),
                 sampler=sampler,
                 write_context=write_context,
             )
@@ -2813,10 +2842,10 @@ def _dispatch_read(
     `divergence` (D-11, mirroring PRUNE-03) is a mapping whenever a
     comparison was possible -- both an agreeing and a disagreeing pair of
     runs -- with `bad` zero on agreement rather than the mapping being
-    absent; it stays `None` only when no comparison was possible (a
-    single-run `--fast` read, or a read whose runs all produced empty
-    bytes). The agreeing branch derives its five values directly rather
-    than calling `_diff_offsets`: the sha equality already proves zero
+    absent; it stays `None` whenever fewer than two passes ran -- the
+    default single-pass read, a `--fast` read, or a read whose passes all
+    produced empty bytes. The agreeing branch derives its five values
+    directly rather than calling `_diff_offsets`: the sha equality already proves zero
     mismatches, and that primitive walks the whole compared range in a
     Python-level comprehension, so calling it on the common path would add
     a full-image compare for information already known. Both outcomes

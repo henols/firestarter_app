@@ -453,30 +453,32 @@ def test_a_failing_first_cycle_keeps_the_fingerprint_read_back() -> None:
     every region slice come back short and this test would pass for the
     wrong reason. `derive_plan`'s own unconditional `read` step (present on
     every protocol, a separate read-repeatability diagnostic) contributes a
-    fixed baseline of `runs` calls regardless of the fingerprint gate; the
+    fixed single-pass baseline regardless of the fingerprint gate -- the
+    read step's own `read_runs` default, independent of `runs` -- and the
     gate's own contribution is measured as the DELTA above that baseline."""
     operator, _writes = _cycle_operator(_ERASABLE)
     operator.write_eprom.side_effect = [False, True]
     plan = ct.derive_plan(_ERASABLE, _REAL_DB, write_scope="full")
-    runs = 2
+    read_baseline = 1
 
-    ct.run_plan(plan, operator, _REAL_DB, runs=runs)
+    ct.run_plan(plan, operator, _REAL_DB, runs=2)
 
-    assert operator.read_eprom.call_count > runs
+    assert operator.read_eprom.call_count > read_baseline
 
 
 def test_an_all_passing_two_cycle_run_performs_zero_fingerprint_read_backs() -> None:
     """The adjacency edge's neighbour: no failure injected anywhere in the
     two-cycle run, so the fingerprint is synthesized with zero device
     reads and `read_eprom.call_count` stays at exactly the `read` step's
-    own fixed baseline of `runs` calls -- zero ADDED by the gate."""
+    own fixed single-pass baseline (its `read_runs` default, independent of
+    `runs`) -- zero ADDED by the gate."""
     operator, _writes = _cycle_operator(_ERASABLE)
     plan = ct.derive_plan(_ERASABLE, _REAL_DB, write_scope="full")
-    runs = 2
+    read_baseline = 1
 
-    ct.run_plan(plan, operator, _REAL_DB, runs=runs)
+    ct.run_plan(plan, operator, _REAL_DB, runs=2)
 
-    assert operator.read_eprom.call_count == runs
+    assert operator.read_eprom.call_count == read_baseline
 
 
 def _probe_shaped_target(*, current_is_probe_read: bool) -> ct.WriteTarget:
