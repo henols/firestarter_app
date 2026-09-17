@@ -9,10 +9,9 @@ at 250000 baud.
 task, skill, or subagent instruction overrides this.
 
 - Forbidden: `# Phase NNN (REQ-NN):`, `# D-06`, `# LOCK-04`, any plan, task or milestone citation,
-  and any block that explains why a phase decided something. This package ships to PyPI. The
-  planning directory lives in a different repository and nothing ships it, so those identifiers
-  resolve to nothing for anyone reading the installed code.
-- **Put rationale in the commit message,** or in the planning record in the meta repository.
+  and any block that explains why a phase decided something. This package ships to PyPI without the
+  planning directory, so those identifiers resolve to nothing for anyone reading the installed
+  code. Put rationale in the commit message instead.
 - If a plan instructs a comment, do not add it. Record the deviation in that plan's summary.
 - **Docstrings are not comments, and a Click docstring is not documentation.** Click renders a
   command's docstring verbatim as its `--help` body, so editing one changes shipped user-facing
