@@ -29,10 +29,9 @@ task, skill, or subagent instruction overrides this.
   check reports a file it does not govern.
 - Deleting one clause from an existing comment reflows the rest. Read the remainder. Confirm it
   still parses and that every pronoun still has an antecedent.
-- CI enforces this. `tools/planning_citation_gate.py` is the gate. It reads comment text only. It
-  skips string literals and Python docstrings. It exits 2 when it scans no files, so a wrong path
-  cannot pass it vacuously. It scans `firestarter`, `tests` and `tools`. **It does not scan `.md`,
-  so it does not check this file.**
+- **No CI gate enforces this any more.** A scanner used to fail the build on a planning citation in
+  source. It was removed by operator decision, so the pre-commit check above is now the only thing
+  standing between this rule and a slow return of the comment debt a previous sweep deleted. Run it.
 
 ## Development Commands
 
@@ -52,11 +51,10 @@ the suite on 3.11 before you trust it.
 `.github/workflows/ci.yml` has two jobs. The main job pins Python 3.11, installs `.[test]`, and
 runs these steps in order:
 
-1. `tools/planning_citation_gate.py firestarter tests tools` — the comment gate described above.
-2. `ruff check firestarter/ tests/`
-3. `ruff format --check firestarter/ tests/`
-4. `pytest tests/ --cov=firestarter --cov-report=term-missing --cov-fail-under=70`
-5. A smoke test: `pip install -e .` then `firestarter --help`.
+1. `ruff check firestarter/ tests/`
+2. `ruff format --check firestarter/ tests/`
+3. `pytest tests/ --cov=firestarter --cov-report=term-missing --cov-fail-under=70`
+4. A smoke test: `pip install -e .` then `firestarter --help`.
 
 The second job installs `.[test,py32]`, proves `pyusb` imports and records its resolved version,
 then runs `pytest tests/test_pyusb_api_surface.py -q`.
@@ -64,9 +62,9 @@ then runs `pytest tests/test_pyusb_api_surface.py -q`.
 **`mypy` is not a CI gate.** It runs only in the local `pre-commit` config, which runs
 `ruff-check`, then `ruff-format`, then `mypy`.
 
-**`ruff` lints only `firestarter/` and `tests/`.** `tools/` is outside the `ruff` and `mypy` gates,
-though the comment gate does scan it. The `ruff` rule selection is `E`, `F`, `I` and `UP`, with
-`E501` ignored. A `# noqa` code outside that selection is inert.
+**`ruff` lints only `firestarter/` and `tests/`.** `tools/` is outside every CI gate. The `ruff`
+rule selection is `E`, `F`, `I` and `UP`, with `E501` ignored. A `# noqa` code outside that
+selection is inert.
 
 **`mypy` is strict on ten modules**, through a `disallow_untyped_defs` and `check_untyped_defs`
 override in `pyproject.toml`: `main`, `cli_handlers`, `chip_resolver`, `frame_parser`, `codec`,
@@ -125,7 +123,6 @@ serial_comm.py                      # send over serial, handle response
   `HardwareOperationError`.
 - `firestarter/main.py` — the Click CLI entry point.
 - `tools/build_db.py` — the database pipeline. It fetches the upstream `infoic.xml` and writes JSON.
-- `tools/planning_citation_gate.py` — the comment gate described at the top of this file.
 
 ### Wire Protocol
 
