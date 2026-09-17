@@ -577,9 +577,13 @@ def _build_m27c512_full_comma_joined_name() -> DiagnosticReport:
 
 @functools.cache
 def _build_m27c512_full_runs_1() -> DiagnosticReport:
-    """The all-OK shape run with `runs=1`: the real `repeat_policy_tag`
-    fires on the read step's `run_count` of one and appends the degraded
-    marker -- never a tag string appended by hand."""
+    """The all-OK shape run with `runs=1`. `write`/`verify` land SKIPPED
+    under the fixed-return double regardless of `runs` (the same
+    saturation gate `_build_m27c512_full_all_ok` hits), so `repeat_policy_tag`
+    -- which now keys on the write/verify/erase multi-run ops only -- never
+    fires here: this shape's fingerprint is identical to
+    `m27c512-full-all-ok`'s, since `runs=1` vs `runs=2` makes no observable
+    difference once neither op actually dispatches."""
     return _build_real_path_report(
         chip="m27c512", write_scope="full", operator=_fixed_return_operator(), runs=1
     )
@@ -739,7 +743,7 @@ FROZEN_HASHES: dict[str, str] = {
     "m27c512-full-blank-check-bad": "e42f1567967a",
     "m27c512-full-canonical-name": "776846bf2dc8",
     "m27c512-full-comma-joined-name": "37ad34d39a19",
-    "m27c512-full-runs-1": "e4838f7bb1d3",
+    "m27c512-full-runs-1": "6d3afbc52315",
     "at28c256-full-all-ok-sdp": "050ad3830704",
     "sst27sf512-full-all-ok": "14d306256076",
     "w27e257-full-all-ok": "3a9f95aba65e",

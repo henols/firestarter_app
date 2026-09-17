@@ -673,8 +673,8 @@ class TestZeroOptionSurface:
     REVERSAL, stated rather than smuggled (quick task 260822-aq6): Phase 121
     D-05 gave this command a deliberate ZERO-option surface, and this class
     is the gate that held it. `--fast` reversed that decision for one
-    option; `--compare-reads` (quick task 260917-706) adds a second, opting
-    into the two-pass read comparison the default run no longer performs.
+    option; `--compare-reads` adds a second, opting into the two-pass read
+    comparison the default run no longer performs.
     The gate is NARROWED to the new surface, not deleted: the option set is
     still pinned exactly (so a third option cannot slip in unnoticed), and
     every sibling test below -- the three removed flags and the removed
