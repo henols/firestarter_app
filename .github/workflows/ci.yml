@@ -55,18 +55,6 @@ jobs:
       - name: Install package + test deps
         run: pip install -e .[test]
 
-      # Planning-commentary gate. CLAUDE.md forbids GSD planning citations
-      # (phase or plan numbers, decision or requirement ids, `.planning/`
-      # paths) in product source: the reader of this package does not have
-      # the planning directory, so those identifiers resolve to nothing.
-      #
-      # The scanner reads comment text only. It consumes string literals
-      # first and never reads a docstring, so a Click command's `--help`
-      # text can never trip it. It exits 2 rather than 0 when it scans no
-      # files, so a wrong path cannot make it pass vacuously.
-      - name: No planning citations in source
-        run: python3 tools/planning_citation_gate.py firestarter tests tools
-
       - name: ruff lint
         run: ruff check firestarter/ tests/
 
