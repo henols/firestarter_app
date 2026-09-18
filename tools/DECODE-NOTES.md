@@ -227,7 +227,7 @@ X88C64P: type=1  protocol_id=0x34  variant=0x3100  flags=0x00414200
 
 ---
 
-## 5. FM1608 identity (no decode change — already correct in the DB)
+## 5. FM1608 identity (Phase 197 D-08 deleted the relabel — the row now reads SRAM)
 
 **Live ground-truth tuple** `[VERIFIED: infoic.xml INFOIC2PLUS @ a8efaedc]`:
 
@@ -238,11 +238,19 @@ FM1608: type=4  protocol_id=0x07  variant=0x4126  flags=0x00000000
 
 `type == 4` (`MP_SRAM`, `[VERIFIED: minipro minipro.h#L70 @ a8efaedc]`) is the
 authoritative FRAM/NVRAM-class signal — **not** the variant. The principled classifier
-emits `algorithm = 0x28` (decimal 40, `SRAM_STD`) for type=4 chips, and the existing
-Phase-84 cosmetic `SRAM → FRAM` relabel then applies, with pinout
-`DIP28_JEDEC_SRAM_8K`. The recurring "FM1608 0x40" in old notes is a **decimal-40 ↔
-hex-0x28 conflation** — the true identity is `proto 0x07 + type 4 + variant 0x4126`,
-classified by `type`, classifier output `algorithm = 40 (0x28)`.
+emits `algorithm = 0x28` (decimal 40, `SRAM_STD`) for type=4 chips, by type, with pinout
+`DIP28_JEDEC_SRAM_8K`. **Updated 2026-09-18 (Phase 197, D-08):** the Phase-84 cosmetic
+`SRAM → FRAM` relabel that used to apply here has been deleted — every host site treats
+`SRAM` and `FRAM` identically, and the label was arbitrary among FM1608's own Ramtron
+SRAM-class siblings (`FM1208`, `FM16W08`, `FM1808`, `FM18L08`), which already read
+`SRAM`. The row now emits `electrical.type: "SRAM"` rather than `"FRAM"`, and
+`electrical.vcc_mv` takes the SRAM single-rail rewrite (`build_db.py`'s
+`if _etype == "SRAM": chip_entry["electrical"]["vcc_mv"] = chip_entry["electrical"]["vdd_mv"]`)
+that the `FRAM` label had been bypassing — `vcc_mv` moves from its raw-decoded 3300 to
+5000, matching `vdd_mv` and its `SRAM`-labelled Ramtron siblings. The recurring "FM1608
+0x40" in old notes is a **decimal-40 ↔ hex-0x28 conflation** — the true identity is
+`proto 0x07 + type 4 + variant 0x4126`, classified by `type`, classifier output
+`algorithm = 40 (0x28)`.
 
 ---
 
@@ -288,3 +296,72 @@ classified by `type`, classifier output `algorithm = 40 (0x28)`.
   §"Honest Gaps".
 - `.planning/phases/86-variant-decode-correct-db-regen/86-CONTEXT.md` — D-04, D-05,
   D-10, D-11.
+
+---
+
+## 8. `pulse_delay` unit finding (PULSE-01, Phase 197 — the decode rule survives)
+
+**Verdict: the "microseconds for all protocols" decode rule is CONFIRMED**, and the
+finding is that `infoic.xml` carries a bulk family default rather than a per-part
+value.
+
+**What `interpret_timing` does today** `[VERIFIED: build_db.py:339-380]`: raw
+`pulse_delay` is parsed as hex and returned verbatim as microseconds, with no
+multiplier, for `proto_id in (0x07, 0x08, 0x0B)`; every other `proto_id`, including the
+adjacent `0x0D`, returns `0`. The membership test is exact protocol-id equality, not a
+range — `0x0D` is not adjacent in behaviour, only adjacent in value. `interpret_timing`
+is called with the `proto_id` produced **after** `classify()` runs, so a row that
+`classify()` promotes into `0x0D` (the 5V-EEPROM promotion documented at CLAUDE.md
+"5V-EEPROM promotion to `0x0D`") emits `pulse_duration_us: 0` on the shipped row, not
+its raw upstream value — the promotion changes which branch of `interpret_timing` a row
+takes, even though the raw `pulse_delay` field itself never changes.
+
+**The positive confirmation.** `FUJITSU/MBM27C4001` carries raw `pulse_delay=0x0064`
+(100). Its own datasheet (`datasheets/MBM27C4001.pdf`, page 8, AC CHARACTERISTICS)
+states Programming Pulse Width `tPW` min 95, typ **100**, max 105 µs, and the front page
+states *"Fast programming: 0.1ms pulse"*. Raw `0x0064` decoded as 100 µs is exactly the
+datasheet's typical value, in the datasheet's own unit — a positive match, not merely an
+absence of contradiction.
+
+**The falsification of "per-part value".** Across every `proto_id` 0x07/0x08 `<ic>`
+entry in the pinned `infoic.xml` (a8efaedc), before the DIP filter — **675 entries** —
+raw `pulse_delay=0x0064` (100) accounts for **462** of them (68.4%). Two Fujitsu parts
+share that identical raw value with different datasheet answers: `FUJITSU/MBM27C4001`
+(100 µs, confirmed above) and `FUJITSU/MBM27C1001` (500 µs, per its own datasheet's AC
+CHARACTERISTICS table). The same raw input cannot correctly decode to two different
+values for two different parts, so the 462-way share is a bulk family default upstream
+carries for an entire class of parts, not a measurement made per part.
+
+**No uniform multiplier is coherent.** The raw ladder spans `0x0001` (1) to `0x2710`
+(10000) — four orders of magnitude. A multiplier that maps 100 → 500 (×5) also maps
+10000 → 50000 and 1 → 5; a 5 µs program pulse is not a value any EPROM datasheet
+specifies. Plain microseconds is the only reading consistent with the full ladder, and
+`MBM27C4001` pins it exactly.
+
+**What `pulse_duration_us` means on the wire** `[VERIFIED: firestarter_fw/src/proms/eprom.cpp,
+src/proms/eprom_params.cpp, include/eprom_params.h]` — this settles which datasheet
+number to record when a datasheet states two. The firmware runs a verify-per-pulse loop,
+not a single fixed pulse: `handle->pulse_delay` is the per-byte program pulse width in
+µs, applied up to `max_pulses` times (25 for protocols `0x07`/`0x08`) with a verify after
+each, and `overprogram_factor` is **0** on all three of `0x07`/`0x08`/`0x0B`'s parameter
+rows — no over-program margin pulse is ever emitted on any target. The value to record
+is therefore the fast-algorithm **initial** programming pulse width (`tPW`), never a
+conventional single-shot width. For `FUJITSU/MBM27128` that is the Quick Pro figure of
+1000 µs (`TPW = 1 ms ± 50 µs`, datasheet Figure 3), not the conventional 50 ms
+single-shot pulse on the same datasheet's preceding page. A corrected value still yields
+an incomplete fast algorithm for the same reason: the datasheet's `tOPW` over-program
+pulse is never implemented, whatever value `pulse_duration_us` carries.
+
+**Empty-input behaviour is fail-closed, not fail-open, and is provably dead against the
+pinned upstream.** A missing or unparseable `pulse_delay` raises
+(`f"chip with protocol {protocol_id:#04x} has unparseable pulse_delay {raw_hex!r} —
+refusing to default to 0 us"`) rather than defaulting to `0`. Against the pinned
+`infoic.xml` this branch never fires for any of the 746 shipped rows, so
+`tests/test_build_db_interpret_timing.py` — unchanged by Phase 197 and still green — is
+this branch's only coverage; the branch is real, fail-closed code, exercised only by
+that module's own synthetic input, not by any live chip.
+
+Sources: `.planning/phases/197-the-override-mechanism-and-the-program-pulse/197-RESEARCH.md`
+§ "PULSE-01 — The Falsification Job"; `197-PULSE-INVENTORY.md` (the rows this finding
+does not correct); `tools/datasheet_overrides.json` entries `FUJITSU/MBM27128`,
+`FUJITSU/MBM27C1000`, `FUJITSU/MBM27C1001`.
