@@ -324,7 +324,7 @@ _DATASHEET_OVERRIDES_FILE = Path(
 )
 
 _UNSOURCED = "UNSOURCED"
-_EXPECTED_UNSOURCED_COUNT = 0
+_EXPECTED_UNSOURCED_COUNT = 6
 
 
 def _is_git_tracked(repo_root, relative_path):

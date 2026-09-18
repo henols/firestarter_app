@@ -5,5 +5,47 @@
     "fields": {
       "programming.pulse_duration_us": { "was": 100, "is": 500 }
     }
+  },
+  "INTEL/M2716": {
+    "datasheet": "UNSOURCED",
+    "note": "Value 25000 is inherited verbatim from the deleted NMOS_TRUE_VPP_MV hardcode, whose own comment cited an Intel datasheet for 25V VPP on the Intel NMOS 2716. No Intel datasheet for the 2716 is vendored in this repository, so that citation cannot be verified here. Closed by: Intel's own 2716 datasheet, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vpp_mv": { "was": 18000, "is": 25000 }
+    }
+  },
+  "INTEL/M2732": {
+    "datasheet": "UNSOURCED",
+    "note": "Value 25000 is inherited verbatim from the deleted NMOS_TRUE_VPP_MV hardcode, whose own comment cited an Intel datasheet for 25V VPP on the Intel NMOS 2732. No Intel datasheet for the 2732 is vendored in this repository, so that citation cannot be verified here. Closed by: Intel's own 2732 datasheet, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vpp_mv": { "was": 18000, "is": 25000 }
+    }
+  },
+  "SGS-THOMSON/M2716": {
+    "datasheet": "UNSOURCED",
+    "note": "Value 25000 is inherited verbatim from the deleted NMOS_TRUE_VPP_MV hardcode, which sourced this figure from an Intel datasheet for the Intel NMOS 2716 and applied it to this SGS-THOMSON row with no SGS-THOMSON-specific datasheet backing it. No SGS-THOMSON datasheet for this part is vendored in this repository. Closed by: SGS-THOMSON's own datasheet for ETC2716/M2716, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vpp_mv": { "was": 18000, "is": 25000 }
+    }
+  },
+  "SGS-THOMSON/M2732A": {
+    "datasheet": "UNSOURCED",
+    "note": "Value 21000 is inherited verbatim from the deleted NMOS_TRUE_VPP_MV hardcode, which sourced this figure from an Intel datasheet for the Intel NMOS 2732A and applied it to this SGS-THOMSON row with no SGS-THOMSON-specific datasheet backing it. No SGS-THOMSON datasheet for this part is vendored in this repository. Closed by: SGS-THOMSON's own datasheet for M2732A, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vpp_mv": { "was": 18000, "is": 21000 }
+    }
+  },
+  "ST/M2716": {
+    "datasheet": "UNSOURCED",
+    "note": "Value 25000 is inherited verbatim from the deleted NMOS_TRUE_VPP_MV hardcode, which sourced this figure from an Intel datasheet for the Intel NMOS 2716 and applied it to this ST row with no ST-specific datasheet backing it. No ST datasheet for this part is vendored in this repository. Closed by: ST's own datasheet for ETC2716/M2716, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vpp_mv": { "was": 18000, "is": 25000 }
+    }
+  },
+  "ST/M2732A": {
+    "datasheet": "UNSOURCED",
+    "note": "Value 21000 is inherited verbatim from the deleted NMOS_TRUE_VPP_MV hardcode, which sourced this figure from an Intel datasheet for the Intel NMOS 2732A and applied it to this ST row with no ST-specific datasheet backing it. No ST datasheet for this part is vendored in this repository. Closed by: ST's own datasheet for M2732A, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vpp_mv": { "was": 18000, "is": 21000 }
+    }
   }
 }

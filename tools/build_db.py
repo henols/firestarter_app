@@ -59,12 +59,6 @@ PROTOCOL_MAP = {
 # flags. Masking the full byte yields Unknown/0 mV whenever the option bits are
 # set — e.g. SST27VF512 has voltages=0x0001, and 0x01 is not a key here.
 # [minipro database.c + tl866a.c, tl866ii_vpp_voltages[]]
-#
-# Upstream caps VPP at 18 V, which some antique Intel NMOS parts exceed:
-# M2716 and M2732 need 25 V, M2732A needs 21 V. They report 18 V here because
-# upstream aliases them under generic 2716/2732 entries. The 25 V parts are
-# unprogrammable on this shield regardless (~22 V max); for the rest the
-# operator must override via ~/.firestarter/database.json.
 VPP_MV = {
     0x00: 12000,
     0x10: 9000,
@@ -84,14 +78,6 @@ VPP_MV = {
     0xF0: 18000,
 }
 
-# NMOS VPP correction: promotes the comment above to applied code.
-# Matched against part_number aliases; "highest VPP wins" for entries with
-# multiple NMOS aliases (e.g., INTEL/2732,2732A,M2732,M2732A).
-NMOS_TRUE_VPP_MV: dict[str, int] = {
-    "M2716": 25000,  # Intel NMOS 2716: 25V VPP (datasheet)
-    "M2732": 25000,  # Intel NMOS 2732: 25V VPP (datasheet)
-    "M2732A": 21000,  # Intel NMOS 2732A: 21V VPP (later variant)
-}
 # RURP boost regulator theoretical ceiling (build_db.py comment + hw evidence).
 # Chips requiring VPP above this cannot be programmed on any RURP revision.
 RURP_VPP_CEILING_MV = 25000
@@ -581,10 +567,8 @@ def main():
 
                 # Initialize support classification fields.
                 # These defaults are overridden at the two inclusion gates below
-                # and at the NMOS VPP override block before chip_entry construction.
                 _support_status = "supported"
                 _unsupported_reason = None
-                _nmos_vpp_mv = None
 
                 # Site A: Unknown-protocol gate.
                 # X88C64P (proto 0x34) is a confirmed DIP-parallel NovRAM —
@@ -734,23 +718,7 @@ def main():
                         _etype = _relabel_etype
                         break
 
-                # NMOS VPP correction.
-                # Must run AFTER all fm1608/WARNING-5 overrides (ordering invariant).
-                # "Highest VPP wins": iterate all aliases; the match with the highest
-                # VPP determines the final voltage + status (conservative — avoids
-                # M2732/M2732A match-order ambiguity on combined entries like
-                # INTEL/2732,2732A,M2732,M2732A).
-                part_aliases = {a.split("@")[0].strip() for a in name.split(",")}
-                for nmos_key, nmos_vpp in NMOS_TRUE_VPP_MV.items():
-                    if nmos_key in part_aliases:
-                        if _nmos_vpp_mv is None or nmos_vpp > _nmos_vpp_mv:
-                            _nmos_vpp_mv = nmos_vpp
-
-                _d_vpp_mv = (
-                    _nmos_vpp_mv
-                    if _nmos_vpp_mv is not None
-                    else VPP_MV.get(voltages & 0xF0, 0)
-                )
+                _d_vpp_mv = VPP_MV.get(voltages & 0xF0, 0)
                 _d_vcc_mv = VCC_VOLTAGES.get((voltages >> 8) & 0x0F, 5000)
                 _d_vdd_mv = VCC_VOLTAGES.get((voltages >> 12) & 0x0F, 5000)
                 _d_pulse = interpret_timing(ic.get("pulse_delay"), proto_id)
