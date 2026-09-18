@@ -71,6 +71,26 @@ Plan 197-03 adds the two whole-file legs, the sort gate and the type check:
   16. `test_well_formed_multi_entry_file_loads_without_raising` -- the
       control that proves the five new legs are not unconditional: a
       correctly-shaped multi-entry file loads cleanly.
+
+Plan 198-02 adds the 0x06 carve-out structural check, the planted-mutation
+proof that the twelve held entries are load-bearing, and the vdd/vcc
+predicate pinned against the emitted database (D-05, D-06):
+  19. `test_exactly_twelve_held_0x06_carveout_entries` -- the shipped file
+      carries exactly twelve entries whose sole field pair is
+      `electrical.vdd_mv` was 1800 / is 5000, all `UNSOURCED`, all ending
+      in a `Closed by:` sentence, derived from the file rather than
+      hardcoded.
+  20. `TestHeldEntryIsLoadBearing` -- a synthetic held entry applied to a
+      matching decoded view yields 5000; the same entry with its `is`
+      mutated yields the mutated value instead, proving the emitted number
+      tracks the entry rather than merely agreeing with it; applied to a
+      non-matching decoded view it raises, naming the stale pair.
+  21. `TestVddBelowVccPredicate` -- over the emitted database, exactly 28
+      rows have `vdd_mv` strictly below `vcc_mv`, that set equals the
+      `vcc_mv == 5500` set, and the three buckets (below/equal/above)
+      partition the whole row population with none left uncounted. This is
+      a test, not a build-time assertion -- nothing in `build_db.py` hangs
+      off this predicate.
 """
 
 import json
@@ -402,3 +422,102 @@ class TestShippedOverrideFileContract:
         with open(_DATASHEET_OVERRIDES_FILE, encoding="utf-8") as f:
             data = json.load(f)
         assert len(data) == _EXPECTED_ENTRY_COUNT, sorted(data)
+
+    def test_exactly_twelve_held_0x06_carveout_entries(self):
+        with open(_DATASHEET_OVERRIDES_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        held_pair = {"electrical.vdd_mv": {"was": 1800, "is": 5000}}
+        held = {k: v for k, v in data.items() if v.get("fields") == held_pair}
+        assert len(held) == 12, sorted(held)
+        assert all(v["datasheet"] == _UNSOURCED for v in held.values()), sorted(
+            k for k, v in held.items() if v["datasheet"] != _UNSOURCED
+        )
+        assert all("Closed by:" in v["note"] for v in held.values()), sorted(
+            k for k, v in held.items() if "Closed by:" not in v["note"]
+        )
+
+
+_HELD_ROW_KEY = "EXEL/XL2804A"
+_HELD_ALIAS_SET = {"XL2804A"}
+_HELD_FIELDS = {"electrical.vdd_mv": {"was": 1800, "is": 5000}}
+
+
+class TestHeldEntryIsLoadBearing:
+    """A planted-mutation proof (D-06's discretion clause) that the 12 held
+    override entries actually do the work, rather than merely coinciding
+    with a value the decode happens to already hold."""
+
+    def test_held_entry_writes_its_is_value(self):
+        overrides = {_HELD_ROW_KEY: {"fields": dict(_HELD_FIELDS)}}
+        decoded = _decoded()
+        decoded["electrical.vdd_mv"] = 1800
+        build_db.apply_datasheet_override(overrides, "EXEL", _HELD_ALIAS_SET, decoded)
+        assert decoded["electrical.vdd_mv"] == 5000, decoded
+
+    def test_mutated_is_value_is_what_gets_emitted(self):
+        overrides = {
+            _HELD_ROW_KEY: {"fields": {"electrical.vdd_mv": {"was": 1800, "is": 4200}}}
+        }
+        decoded = _decoded()
+        decoded["electrical.vdd_mv"] = 1800
+        build_db.apply_datasheet_override(overrides, "EXEL", _HELD_ALIAS_SET, decoded)
+        assert decoded["electrical.vdd_mv"] == 4200, decoded
+
+    def test_stale_was_against_a_non_matching_decode_raises(self):
+        overrides = {_HELD_ROW_KEY: {"fields": dict(_HELD_FIELDS)}}
+        decoded = _decoded()
+        decoded["electrical.vdd_mv"] = 5500
+        with pytest.raises(ValueError) as exc:
+            build_db.apply_datasheet_override(
+                overrides, "EXEL", _HELD_ALIAS_SET, decoded
+            )
+        message = str(exc.value)
+        assert "1800" in message, message
+        assert "5500" in message, message
+
+
+class TestVddBelowVccPredicate:
+    """D-06's key predicate, pinned against the emitted database rather
+    than restated from a document. No value hangs off this predicate --
+    per D-06 and the standing prohibition, this is a test, not a build-time
+    assertion."""
+
+    def test_the_28_row_group_is_exact_and_matches_the_5500_rail(self):
+        with open(
+            _APP_ROOT / "firestarter" / "data" / "chip_database.json",
+            encoding="utf-8",
+        ) as f:
+            data = json.load(f)
+        rows = [r for rs in data.values() for r in rs]
+        below = [
+            r for r in rows if r["electrical"]["vdd_mv"] < r["electrical"]["vcc_mv"]
+        ]
+        at_5500 = [r for r in rows if r["electrical"]["vcc_mv"] == 5500]
+        assert len(below) == 28, len(below)
+        assert {id(r) for r in below} == {id(r) for r in at_5500}, (
+            len(below),
+            len(at_5500),
+        )
+
+    def test_the_three_buckets_partition_the_whole_population(self):
+        with open(
+            _APP_ROOT / "firestarter" / "data" / "chip_database.json",
+            encoding="utf-8",
+        ) as f:
+            data = json.load(f)
+        rows = [r for rs in data.values() for r in rs]
+        below = [
+            r for r in rows if r["electrical"]["vdd_mv"] < r["electrical"]["vcc_mv"]
+        ]
+        equal = [
+            r for r in rows if r["electrical"]["vdd_mv"] == r["electrical"]["vcc_mv"]
+        ]
+        above = [
+            r for r in rows if r["electrical"]["vdd_mv"] > r["electrical"]["vcc_mv"]
+        ]
+        assert len(below) + len(equal) + len(above) == len(rows), (
+            len(below),
+            len(equal),
+            len(above),
+            len(rows),
+        )
