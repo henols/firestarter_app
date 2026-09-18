@@ -571,3 +571,42 @@ def test_the_182_delta_layer_is_capable_of_failing() -> None:
         f"the failure-capability leg must report EXACTLY the one mutated "
         f"record {some_key!r} and no other -- got: {diff}"
     )
+
+
+def test_the_197_delta_layer_is_capable_of_failing() -> None:
+    doc = json.loads(_GOLDEN.read_text(encoding="utf-8"))
+    recorded = doc["records"]
+
+    deltas_149 = json.loads(_DELTAS_149.read_text(encoding="utf-8"))["deltas"]
+    deltas_153 = json.loads(_DELTAS_153.read_text(encoding="utf-8"))["deltas"]
+    deltas_182 = json.loads(_DELTAS_182.read_text(encoding="utf-8"))["deltas"]
+    deltas_194 = json.loads(_DELTAS_194.read_text(encoding="utf-8"))["deltas"]
+    deltas_197 = json.loads(_DELTAS_197.read_text(encoding="utf-8"))["deltas"]
+
+    composed = copy.deepcopy(recorded)
+    for key, delta_wire in deltas_149.items():
+        composed[key].update(delta_wire)
+    for key, delta_wire in deltas_153.items():
+        composed[key].update(delta_wire)
+    for key, delta_wire in deltas_182.items():
+        composed[key].update(delta_wire)
+    for key, delta_wire in deltas_194.items():
+        composed[key].update(delta_wire)
+    for key, delta_wire in deltas_197.items():
+        composed[key].update(delta_wire)
+
+    mutated = copy.deepcopy(composed)
+    some_key = next(iter(sorted(deltas_197)))
+    mutated[some_key]["pulse-delay"] = mutated[some_key].get("pulse-delay", 0) + 100000
+
+    diff = _describe_record_diff(composed, mutated)
+
+    assert diff != "(no difference detected)", (
+        "non-vacuity failure: mutating one of the 3 records' pulse-delay "
+        "did not produce a reported diff -- the 197 delta layer's gate is "
+        "incapable of failing"
+    )
+    assert diff == f"changed={{'{some_key}': ['pulse-delay']}}", (
+        f"the failure-capability leg must report EXACTLY the one mutated "
+        f"record {some_key!r} and no other -- got: {diff}"
+    )
