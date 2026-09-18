@@ -368,84 +368,158 @@ does not correct); `tools/datasheet_overrides.json` entries `FUJITSU/MBM27128`,
 
 ---
 
-## 9. The voltage word's two nibbles and VPP byte (VOLT-01, Phase 198 — the VPP decode is completed and the mask is corrected)
+## 9. The voltage word's two nibbles and VPP byte (VOLT-01, Phase 198 — the two nibbles and the VPP byte select a programmer rail index, not a chip requirement)
 
-**Verdict: the VPP byte's low nibble carries option flags, not part of the rail index, and
-`0xF1`/`0xF2` are two additional rail indices that are exempt from the mask rather than
-sharing one with it.** This task completes `VPP_MV` and fixes the decode that previously
-collapsed those two indices onto `0xF0`.
+**Verdict: the voltage word's two nibbles and the VPP byte select a programmer rail index,
+not a chip requirement.** The value a row's `voltages` field decodes to names which slot in
+the connected programmer model's internal DAC table drives that pin — not a transcription of
+the part's own datasheet figure. `198-01` and `198-02` each shipped a decode-table
+completion (`VPP_MV`, `VCC_VOLTAGES`); this section is the general finding those two
+completions are instances of, with its evidence and its limits.
 
-**What the decode does today** `[VERIFIED: build_db.py, the `_d_vpp_mv` assignment
-immediately after `classify()` runs]`: the full low byte of `voltages` is bound once, then
-looked up directly in `VPP_MV` when it is one of the two exact-match indices, and otherwise
-masked with `& 0xF0` and looked up with a `0` default — the same `.get(idx, default)`
-fallback idiom `_d_vcc_mv` and `_d_vdd_mv` already use.
+**What the decode does today** `[VERIFIED: build_db.py, the `_d_vpp_mv` / `_d_vcc_mv` /
+`_d_vdd_mv` assignment immediately after `classify()` runs]`: three lookups run against the
+same 16-bit `voltages` word. `_d_vpp_mv` reads the low byte — exact-matched first against the
+two non-zero-low-nibble keys `0xF1`/`0xF2`, then masked `& 0xF0` and looked up in `VPP_MV`
+with a `0` default. `_d_vcc_mv` reads bits 11-8 and `_d_vdd_mv` reads bits 15-12, both looked
+up in `VCC_VOLTAGES` with a `5000` default. Each table carries a
+`[VERIFIED: minipro <file>#<lines> @ a8efaedc — <array>[]]` marker naming the specific
+upstream C array it transcribes.
 
-**The witness row that is why the mask exists at all.** `SST27VF512` carries
-`voltages=0x0001`. `0x01` is not a `VPP_MV` key on its own; masking to `0x00` recovers the
-part's real 12000 mV rail. Without the mask, this row and the 141 others sharing a non-zero
-low nibble on a mapped high nibble would silently decode to the `0` default. The
-`0x00`/`0x01` and `0x70`/`0x71` pairings visible in the low-byte census — the same rail
-index, once with the low nibble clear and once with it set — corroborate that the low nibble
-carries an independent bit rather than being part of the rail index itself. This generator
-finds no named upstream constant for that bit; it is this generator's own working reading of
-the census, not an upstream-attested fact.
+`VPP_MV` is completed from upstream's `xg_vpp_voltages[]` `[VERIFIED: database.c#L161-L170 @
+a8efaedc]`, a strict, conflict-free superset of `tl866ii_vpp_voltages[]`: the sixteen indices
+already shipped are byte-identical between the two tables, and `xg_vpp_voltages[]` adds
+exactly `0xF1` (25000 mV) and `0xF2` (21000 mV) beyond them, matched against the full low
+byte before the `& 0xF0` mask is applied so they are not collapsed onto `0xF0`.
+`VCC_VOLTAGES` is completed from `xg_vcc_voltages[]` `[VERIFIED: database.c#L182-L190 @
+a8efaedc]`, likewise a strict, conflict-free superset of `tl866ii_vcc_voltages[]`: the six
+shipped indices (`0x00`-`0x05`) are byte-identical, and `xg_vcc_voltages[]` adds nine more
+(`0x06`=1800 … `0x0E`=6250). Both completions are decoder completion, not correction — one
+encoding implemented to different depths by different upstream tables, never `tl866a_*`'s
+genuinely different encoding, which conflicts on 4 of 6 shared VCC indices and 8 of 8 shared
+VPP indices.
 
-**The two exact-match indices, and why they are exempt from the mask.** `0xF1` and `0xF2`
-are themselves distinct rail indices — 25000 mV and 21000 mV — not `0xF0` with option bits
-set. Masking them would collapse both onto `0xF0`'s 18000 mV, silently under-reporting the
-rail by 7000 mV or 3000 mV. They are therefore matched against the full low byte before the
-mask is ever applied, and the set of low bytes eligible for that exact match is derived from
-`VPP_MV` itself — the keys whose low nibble is non-zero — so a future addition to the table
-with a non-zero low nibble extends the exempt set automatically.
-
-**The corrected VPP table provenance.** The two new entries come from upstream's
-`xg_vpp_voltages[]` `[VERIFIED: database.c#L161-L170 @ a8efaedc]`, which is a strict,
-conflict-free superset of `tl866ii_vpp_voltages[]`: the sixteen indices the table already
-shipped are byte-identical between the two tables, and `xg_vpp_voltages[]` adds exactly
-`0xf1` (25 V) and `0xf2` (21 V) beyond them. No filtered row carries either index today, so
-regenerating with this change alone reproduces the shipped database byte-for-byte — the
-change completes the decode without altering a single emitted value.
-
-**The completed `VCC_VOLTAGES` and its corrected provenance (D-01).** `VCC_VOLTAGES` is
-completed from upstream's `xg_vcc_voltages[]` `[VERIFIED: database.c#L182-L190 @ a8efaedc]`,
-which is a strict, conflict-free superset of `tl866ii_vcc_voltages[]`: the six indices
-already shipped (`0x00`-`0x05`) are byte-identical between the two tables, and
-`xg_vcc_voltages[]` adds exactly nine more beyond them — `0x06`=1800, `0x07`=2500,
-`0x08`=3000, `0x09`=1200, `0x0A`=4750, `0x0B`=5250, `0x0C`=5750, `0x0D`=6000 and `0x0E`=6250.
-This is completion, not correction, on the same shape as the `VPP_MV` completion above.
-`tl866a_vcc_voltages[]` conflicts on four of those six shared indices and must not be used.
-
-`VCC_VOLTAGES[0x02]` still resolves to 4000 under the completed table — the `xg` table
-agrees with the one already shipped on index `0x02` — so `_VCC_MARGIN_RAIL_MV` is unchanged
-and needed no edit.
-
-**A falsified citation, found and corrected.** The table and the `_VCC_MARGIN_RAIL_MV` block
-immediately below it each carried the identical marker `[VERIFIED: minipro
-database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]`. At the pinned sha, lines 130-135
-are `tl866a_vpp_voltages[]` plus the start of `tl866a_vcc_voltages[]` — not
-`tl866ii_vcc_voltages[]`, which lives at lines 154-159, and not `xg_vcc_voltages[]`, which
-lives at lines 182-190. Both instances of the marker named the wrong table and the wrong
-line range. This phase found the citation false and deleted both copies rather than
-rewriting them in place; the corrected provenance lives here instead.
+**A falsified citation, found and corrected.** `VCC_VOLTAGES` and the
+`_VCC_MARGIN_RAIL_MV` block immediately below it each carried the identical marker
+`[VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]`. At the pinned
+sha, lines 130-135 are `tl866a_vpp_voltages[]` plus the start of `tl866a_vcc_voltages[]` —
+not `tl866ii_vcc_voltages[]` (which lives at L154-L159) and not `xg_vcc_voltages[]`
+(L182-L190). Both copies named the wrong table and the wrong line range; both were deleted
+rather than rewritten in place, and the corrected provenance lives here.
 
 **The twelve-row carve-out at vdd index `0x06` (D-04, D-05).** Twelve rows — seven EXEL,
 three ST and two SGS-THOMSON 28C-class parts carrying voltage word `0x64xx` — decode to
 1800 mV under the completed table. 1.8 V is not credible as a program rail for a 5 V
 28C-class parallel EEPROM, so these twelve keep the `vdd_mv: 5000` they emitted before the
 table was completed, held there by twelve explicit `UNSOURCED` entries in
-`tools/datasheet_overrides.json` rather than by leaving `0x06` out of the table. The 5000
-each holds is itself the unmapped-index fallback these rows emitted before completion — not
-a decode, and not a figure any datasheet in this repository supports. Omitting `0x06` from
-the table would regenerate byte-identically too, but the twelve rows would then reach 5000
-through the same silent fallback this phase is otherwise closing, reading as an oversight
-rather than a decision.
+`tools/datasheet_overrides.json` rather than by leaving `0x06` out of the table.
+`198-VOLT03-DISPOSITION.md` disposes of these twelve, and the sixteen rows at vdd index
+`0x04`, in full — with all 28 rows' evidence and honesty limit.
 
-Plan `198-03` completes this section with the general finding that the voltage word's
-nibbles select a programmer rail index rather than a chip requirement (D-15); this task's
-scope is limited to the VPP and VCC decode completions above and to preserving, rather than
-losing, what the comment blocks it replaced held.
+**The positive confirmation.** Three vendored Fujitsu datasheets — `MBM27128.pdf`,
+`MBM27C1001.pdf`, `MBM27C4001.pdf` — all state a program VCC of 6.0 V ± 0.25 V. All three rows
+decode to vdd index `0x04`, which `VCC_VOLTAGES` maps to 5500 mV; `tools/datasheet_overrides.json`
+now holds each at the datasheet's 6000 mV instead. A model whose rail table is asked to
+represent "6.0 V ± 0.25 V" and answers "5500" is reporting which rail the model selects, not
+the part's datasheet figure — and the model's own 6500 mV rail (index `0x05`) sits closer to
+that band than index `0x04` does, which is itself evidence that the index selects a model
+slot rather than tracking the datasheet value. This is a positive match to the datasheet's
+own stated figure, not merely an absence of contradiction.
 
-Sources: `.planning/phases/198-the-two-voltage-nibbles/198-RESEARCH.md` F-1, F-2, F-5, F-6,
-F-12; `database.c#L125-L126 @ a8efaedc`; `database.c#L161-L170 @ a8efaedc`;
-`database.c#L182-L190 @ a8efaedc`.
+**The falsification of the rival reading — that these are chip requirements.** The same
+index means different volts on different programmer models: VPP index `0x00` is 12 V on the
+TL866-II (`tl866ii_vpp_voltages[]`) and 12.5 V on the TL866A (`tl866a_vpp_voltages[]`); index
+`0x20` is 9.5 V on the TL866-II and 21 V on the TL866A. A chip requirement cannot mean two
+different voltages depending on which programmer model happens to be plugged in — only a
+model-side table slot can. Upstream's own comment says as much, quoted verbatim
+`[VERIFIED: database.c#L125-L126 @ a8efaedc]`:
+
+> "These are not raw DAC output values, but rather indices into internal lookup tables
+> defined in the firmware."
+
+**Cite lines 125-126, not 123.** The phase context that opened this work cited
+`database.c:123`; at the pinned sha, line 123 reads
+`* The Vcc and Vpp settings are linked through the 'voltages'`, a different line of the same
+four-line comment block. The quoted sentence is exact and the argument is unaffected — a
+phase whose subject is decode provenance does not propagate a citation it has measured as
+wrong.
+
+**The arithmetic argument — the sharpest single piece of evidence, and it is arithmetic
+rather than appeal.** The three Fujitsu datasheets' band is 5.75-6.25 V. The model's two
+nearest rails, `VCC_VOLTAGES[0x04]` = 5500 and `VCC_VOLTAGES[0x05]` = 6500, are 5.5 V and
+6.5 V. Neither 5.5 nor 6.5 lies inside 5.75-6.25. A field that cannot represent the datasheet
+value is not recording the datasheet value — it is picking the nearest thing the model can
+actually drive.
+
+**A second instance of the same pattern: saturation at the model maximum.** 28 rows carry
+VPP low byte `0xF0`, decoding to 18000 mV — the largest entry `VPP_MV` shipped before this
+phase's completion, i.e. the TL866-II's VPP ceiling. That group includes all eight NMOS
+2716/2732 rows and `MBM27128`, which a separate community report (gh#71) measured as needing
+21 V. Twenty-eight rows landing on the exact model maximum, several needing more than that
+maximum can deliver, is the same finding as the arithmetic argument above: the field records
+what the model can select, and clamps there when the part's own requirement exceeds it.
+
+**The edge case and dead branch (D-16).** Upstream's `xg_vpp_voltages[]` carries two further
+indices beyond `0xF0`: `0xF1` = 25000 and `0xF2` = 21000 — exactly the two figures Phase
+197's six `UNSOURCED` NMOS override entries already hold as `is` values, independently of
+this phase's decode work. This was checked and closed rather than left as a loose thread: no
+filtered row carries either `0xF1` or `0xF2` today, so completing `VPP_MV` to include them is
+provably a zero-diff change — regenerating with the completed table reproduces the
+previously-committed database byte-for-byte. No test can exercise either branch until
+upstream ships an `infoic.xml` row carrying one of these two low bytes; until then, both
+entries are real, reachable code with no live chip to reach them. Record this deliberately:
+it is a tempting false lead — a decodable 25 V or 21 V value sitting right there in the
+table — that this phase's own research nearly rediscovered, and the saturation-at-the-maximum
+pattern above is direct, independent evidence for the section's verdict.
+
+**The surviving silent fallback (D-03).** The `.get(idx, default)` idiom on all three lookups
+was offered a fail-closed alternative — raise on an unmapped index instead of defaulting —
+and the offer was declined; the generator keeps defaulting rather than stopping the build.
+Nothing mechanical reports a future unmapped index, so it is named here instead: after this
+phase's table completions, no row in the 767-row filtered population reaches any of the
+three defaults today. A later `infoic.xml` update that introduces a genuinely new index would
+silently reuse this same fallback, unannounced.
+
+**The `vdd < vcc` predicate (D-06).** Decoded vdd strictly below decoded vcc selects exactly
+28 rows and nothing else, against 373 rows where the two are equal and 366 where vdd is
+greater — 28 + 373 + 366 = 767, the full filtered population. The predicate is documented
+here, not shipped as a build-time assertion in `build_db.py`; no value hangs off it this
+phase. `198-VOLT03-DISPOSITION.md` disposes of the 28 rows the predicate selects.
+
+**The limits, named rather than hedged:**
+
+- **The datasheet corroboration is n = 3, and all three are Fujitsu.** The positive-
+  confirmation evidence above rests on three datasheets from one manufacturer. No claim is
+  made that Fujitsu's 6.0 V ± 0.25 V figure generalises to any other manufacturer's parts at
+  the same index.
+- **No claim is made about the 167 rows at vdd index `0x4` this phase does not reach.**
+  `VCC_VOLTAGES[0x04]` = 5500 is the same index the three corrected Fujitsu rows carried
+  before their override; 167 further rows decode to that same index and this phase leaves
+  every one of them unexamined. **Cross-reference: Phase 200 owns them**, one datasheet per
+  row, under the same discipline this phase used for the three it did examine.
+- **The finding does not assert that any particular row's emitted value is correct.** It
+  asserts what the field *is* — a programmer rail index — not that any given row's decoded or
+  overridden voltage is the right one for that part.
+- **The low nibble's option-flag reading is this generator's own working reading, not
+  upstream-attested.** No named constant in `minipro.h` or `database.c` documents the VPP
+  byte's low nibble as an option-flag field; the reading is corroborated only by the
+  `0x00`/`0x01` and `0x70`/`0x71` pairing pattern in the low-byte census — the same rail
+  index appearing twice, once with the low nibble clear and once set. The two powerdown bits
+  upstream *does* name — `LAST_JEDEC_BIT_IS_POWERDOWN_ENABLE` and `POWERDOWN_MODE_DISABLE`
+  `[VERIFIED: minipro.h#L84-L85 @ a8efaedc]` — sit at bit positions 12 and 13, inside the
+  **vdd** nibble, not the VPP byte's low nibble, and are scoped in their own comment to the
+  ATF20V10C/ATF16V8C PLD variants this generator's `type in {1, 4}` filter excludes entirely.
+  That is itself a second, independent instance of this section's own claim: the same bit
+  positions mean different things depending on which part family owns the row.
+
+Plan `198-03` completes this section with the general finding above (D-15); plans `198-01`
+and `198-02` established the two decode-table completions, the falsified-citation correction
+and the twelve-row carve-out this section folds in as evidence for it.
+
+Sources: `.planning/phases/198-the-two-voltage-nibbles/198-RESEARCH.md` F-1, F-2, F-4, F-13;
+`.planning/phases/198-the-two-voltage-nibbles/198-VOLT03-DISPOSITION.md`;
+`.planning/phases/198-the-two-voltage-nibbles/198-REGEN-DIFF.md`;
+`tools/datasheet_overrides.json` entries `FUJITSU/MBM27128`, `FUJITSU/MBM27C1001`,
+`FUJITSU/MBM27C4001`, and the twelve `0x06`-carve-out entries; `database.c#L125-L126 @
+a8efaedc`; `database.c#L161-L170 @ a8efaedc`; `database.c#L182-L190 @ a8efaedc`;
+`minipro.h#L84-L85 @ a8efaedc`.
