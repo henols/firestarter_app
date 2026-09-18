@@ -377,19 +377,102 @@ _OVERRIDABLE_DECODED_FIELDS = (
 )
 
 
+def _validate_datasheet_overrides_shape(path, data):
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"{path}: top-level JSON value is {type(data).__name__}, not "
+            f"an object — refusing to load a malformed override file"
+        )
+    keys = list(data)
+    sorted_keys = sorted(keys)
+    for i, (found, expected) in enumerate(zip(keys, sorted_keys)):
+        if found != expected:
+            raise ValueError(
+                f"{path}: top-level key {found!r} at position {i} breaks "
+                f"ascending order — expected {expected!r} there — refusing "
+                f"to load an unsorted override file"
+            )
+    app_root = os.path.dirname(os.path.dirname(os.path.abspath(path)))
+    for entry_key, entry in data.items():
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"{entry_key}: override entry is {type(entry).__name__}, "
+                f"not an object — refusing to load a malformed override "
+                f"entry"
+            )
+        for required_key in ("datasheet", "fields"):
+            if required_key not in entry:
+                raise ValueError(
+                    f"{entry_key}: override entry is missing required key "
+                    f"{required_key!r} — refusing to load an incomplete "
+                    f"override entry"
+                )
+        fields = entry["fields"]
+        if not isinstance(fields, dict) or not fields:
+            raise ValueError(
+                f"{entry_key}: fields map {fields!r} is empty or not an "
+                f"object — refusing to load an override entry with "
+                f"nothing to apply"
+            )
+        for field_path, pair in fields.items():
+            if not isinstance(pair, dict) or set(pair) != {"was", "is"}:
+                raise ValueError(
+                    f"{entry_key}: field {field_path!r} value {pair!r} is "
+                    f"not a {{'was', 'is'}} pair — refusing to load a "
+                    f"malformed field entry"
+                )
+        datasheet = entry["datasheet"]
+        is_unsourced = datasheet == "UNSOURCED"
+        is_valid_path = (
+            isinstance(datasheet, str)
+            and not os.path.isabs(datasheet)
+            and os.path.exists(os.path.join(app_root, datasheet))
+        )
+        if not is_unsourced and not is_valid_path:
+            raise ValueError(
+                f"{entry_key}: datasheet {datasheet!r} is neither a "
+                f"repository-relative path nor the exact token "
+                f"'UNSOURCED' — refusing to load an unverifiable citation"
+            )
+        if is_unsourced and not entry.get("note"):
+            raise ValueError(
+                f"{entry_key}: datasheet is 'UNSOURCED' but note is "
+                f"{entry.get('note')!r} — refusing to load an unsourced "
+                f"entry with no explanation"
+            )
+
+
 def load_datasheet_overrides(path):
     if not os.path.exists(path):
         return {}
     with open(path) as f:
-        return json.load(f)
+        data = json.load(f)
+    _validate_datasheet_overrides_shape(path, data)
+    return data
 
 
-def apply_datasheet_override(overrides, mfg_name, alias_set, decoded):
-    for alias in alias_set:
+def check_all_override_keys_consumed(overrides, consumed_keys):
+    unmatched = sorted(set(overrides) - set(consumed_keys))
+    if unmatched:
+        raise ValueError(
+            f"{unmatched!r} matched no row's MANUFACTURER/ALIAS in the "
+            f"decoded database — refusing to write {OUTPUT_FILE} with a "
+            f"dead override entry"
+        )
+
+
+def apply_datasheet_override(
+    overrides, mfg_name, alias_set, decoded, consumed_keys=None
+):
+    if consumed_keys is None:
+        consumed_keys = set()
+    written_by = {}
+    for alias in sorted(alias_set):
         entry_key = f"{mfg_name}/{alias}"
         entry = overrides.get(entry_key)
         if entry is None:
             continue
+        consumed_keys.add(entry_key)
         for field_path, pair in entry.get("fields", {}).items():
             if field_path not in decoded:
                 raise ValueError(
@@ -398,9 +481,29 @@ def apply_datasheet_override(overrides, mfg_name, alias_set, decoded):
                     f"{list(_OVERRIDABLE_DECODED_FIELDS)!r} — refusing to "
                     f"apply an unknown field path"
                 )
+            if field_path in written_by:
+                raise ValueError(
+                    f"{written_by[field_path]!r} and {entry_key!r} both "
+                    f"target {field_path!r} on the same row — refusing to "
+                    f"apply two overrides to one field"
+                )
             was = pair["was"]
             is_ = pair["is"]
             live = decoded[field_path]
+            if type(was) is not type(live):
+                raise ValueError(
+                    f"{entry_key}: {field_path!r} recorded prior {was!r} "
+                    f"({type(was).__name__}) does not match the live "
+                    f"decode's type {type(live).__name__} ({live!r}) — "
+                    f"refusing to coerce"
+                )
+            if type(is_) is not type(live):
+                raise ValueError(
+                    f"{entry_key}: {field_path!r} override value {is_!r} "
+                    f"({type(is_).__name__}) does not match the live "
+                    f"decode's type {type(live).__name__} ({live!r}) — "
+                    f"refusing to coerce"
+                )
             if was != live:
                 raise ValueError(
                     f"{entry_key}: recorded prior {was!r} for {field_path!r} "
@@ -414,6 +517,7 @@ def apply_datasheet_override(overrides, mfg_name, alias_set, decoded):
                     f"override"
                 )
             decoded[field_path] = is_
+            written_by[field_path] = entry_key
     return decoded
 
 
@@ -430,6 +534,7 @@ def main():
     complete_db = {}
     total_chips = 0
     _datasheet_overrides = load_datasheet_overrides(DATASHEET_OVERRIDES_FILE)
+    _consumed_override_keys = set()
 
     print("Processing and enriching data...")
 
@@ -659,7 +764,11 @@ def main():
                     "programming.pulse_duration_us": _d_pulse,
                 }
                 apply_datasheet_override(
-                    _datasheet_overrides, mfg_name, _chip_aliases, _decoded_view
+                    _datasheet_overrides,
+                    mfg_name,
+                    _chip_aliases,
+                    _decoded_view,
+                    consumed_keys=_consumed_override_keys,
                 )
                 mem_size = _decoded_view["electrical.size_bytes"]
                 pin_count = _decoded_view["electrical.pin_count"]
@@ -764,6 +873,8 @@ def main():
 
             if chips:
                 complete_db[mfg_name] = chips
+
+    check_all_override_keys_consumed(_datasheet_overrides, _consumed_override_keys)
 
     # Merge tools/extra_chips.json after the decode loop, before the JSON write.
     # These are real parts absent from infoic.xml entirely (2516, 2532), so they

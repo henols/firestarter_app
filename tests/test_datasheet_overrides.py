@@ -37,6 +37,32 @@ Coverage:
      either a repository-relative path that exists and is git-tracked, or
      the exact token `UNSOURCED` with a non-empty `note`, and the number of
      `UNSOURCED` entries is pinned as an exact count.
+
+Plan 197-03 adds the two whole-file legs, the sort gate and the type check:
+  9. `test_unmatched_override_key_raises_after_the_loop_not_inside_it` --
+     a key matching no row's alias set produces no event from
+     `apply_datasheet_override` itself; only the separate
+     `check_all_override_keys_consumed` call, made after the decode loop,
+     raises `ValueError` naming the unmatched key.
+  10. `test_duplicate_target_raises_naming_both_keys` -- two override keys
+      resolving to the same row (`INTEL/M2732` and `INTEL/M2732A`) and the
+      same field path raise `ValueError` naming both keys.
+  11. `test_unsorted_file_raises_naming_first_out_of_order_key` -- a
+      top-level key order that is not ascending raises `ValueError` naming
+      the offending key and the key expected in its place.
+  12. `test_type_mismatch_float_vs_int_raises_without_coercion` -- a JSON
+      float `was` against a decoded integer raises `ValueError` rather than
+      comparing equal.
+  13. `test_boolean_does_not_satisfy_integer_type_check` -- a JSON `true`
+      `was` against a decoded integer raises `ValueError`, proving `bool`
+      does not satisfy an integer type check via `==`.
+  14. `test_missing_datasheet_key_raises` -- an entry missing `datasheet`
+      raises `ValueError` naming the entry key.
+  15. `test_missing_or_empty_fields_raises` -- an entry with an empty
+      `fields` map raises `ValueError` naming the entry key.
+  16. `test_well_formed_multi_entry_file_loads_without_raising` -- the
+      control that proves the five new legs are not unconditional: a
+      correctly-shaped multi-entry file loads cleanly.
 """
 
 import json
@@ -143,6 +169,151 @@ def test_case_differing_key_matches_no_row():
     decoded = _decoded()
     build_db.apply_datasheet_override(overrides, "fujitsu", {"mbm27c1000"}, decoded)
     assert decoded == _DECODED_TEMPLATE, decoded
+
+
+def test_unmatched_override_key_raises_after_the_loop_not_inside_it():
+    overrides = {
+        _ROW_KEY: {
+            "datasheet": "UNSOURCED",
+            "note": "test fixture, no row will ever match this alias set",
+            "fields": {"programming.pulse_duration_us": {"was": 100, "is": 500}},
+        }
+    }
+    decoded = _decoded()
+    consumed = set()
+    result = build_db.apply_datasheet_override(
+        overrides, "NOBODY", {"NOTHING"}, decoded, consumed_keys=consumed
+    )
+    assert result == _DECODED_TEMPLATE, result
+    assert consumed == set(), consumed
+    with pytest.raises(ValueError) as exc:
+        build_db.check_all_override_keys_consumed(overrides, consumed)
+    message = str(exc.value)
+    assert _ROW_KEY in message, message
+
+
+def test_duplicate_target_raises_naming_both_keys():
+    overrides = {
+        "INTEL/M2732": {
+            "datasheet": "UNSOURCED",
+            "note": "test fixture",
+            "fields": {"electrical.vpp_mv": {"was": 18000, "is": 25000}},
+        },
+        "INTEL/M2732A": {
+            "datasheet": "UNSOURCED",
+            "note": "test fixture",
+            "fields": {"electrical.vpp_mv": {"was": 18000, "is": 21000}},
+        },
+    }
+    decoded = _decoded()
+    decoded["electrical.vpp_mv"] = 18000
+    with pytest.raises(ValueError) as exc:
+        build_db.apply_datasheet_override(
+            overrides, "INTEL", {"M2732", "M2732A"}, decoded
+        )
+    message = str(exc.value)
+    assert "'INTEL/M2732'" in message, message
+    assert "'INTEL/M2732A'" in message, message
+
+
+def test_unsorted_file_raises_naming_first_out_of_order_key(tmp_path):
+    override_file = tmp_path / "overrides.json"
+    entry = {
+        "datasheet": "UNSOURCED",
+        "note": "test fixture",
+        "fields": {"electrical.vpp_mv": {"was": 18000, "is": 25000}},
+    }
+    override_file.write_text(
+        json.dumps({"ZEBRA/ALPHA": entry, "ALPHA/ZEBRA": entry}), encoding="utf-8"
+    )
+    with pytest.raises(ValueError) as exc:
+        build_db.load_datasheet_overrides(str(override_file))
+    message = str(exc.value)
+    assert "ZEBRA/ALPHA" in message, message
+    assert "ALPHA/ZEBRA" in message, message
+
+
+def test_type_mismatch_float_vs_int_raises_without_coercion():
+    overrides = {
+        _ROW_KEY: {
+            "fields": {"programming.pulse_duration_us": {"was": 100.0, "is": 500}}
+        }
+    }
+    decoded = _decoded()
+    with pytest.raises(ValueError) as exc:
+        build_db.apply_datasheet_override(overrides, "FUJITSU", _ALIAS_SET, decoded)
+    message = str(exc.value)
+    assert _ROW_KEY in message, message
+    assert "programming.pulse_duration_us" in message, message
+    assert "100.0" in message, message
+
+
+def test_boolean_does_not_satisfy_integer_type_check():
+    overrides = {_ROW_KEY: {"fields": {"electrical.pin_count": {"was": True, "is": 2}}}}
+    decoded = _decoded()
+    decoded["electrical.pin_count"] = 1
+    with pytest.raises(ValueError) as exc:
+        build_db.apply_datasheet_override(overrides, "FUJITSU", _ALIAS_SET, decoded)
+    message = str(exc.value)
+    assert _ROW_KEY in message, message
+    assert "electrical.pin_count" in message, message
+
+
+def test_missing_datasheet_key_raises(tmp_path):
+    override_file = tmp_path / "overrides.json"
+    override_file.write_text(
+        json.dumps(
+            {
+                _ROW_KEY: {
+                    "fields": {"programming.pulse_duration_us": {"was": 100, "is": 500}}
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError) as exc:
+        build_db.load_datasheet_overrides(str(override_file))
+    message = str(exc.value)
+    assert _ROW_KEY in message, message
+    assert "datasheet" in message, message
+
+
+def test_missing_or_empty_fields_raises(tmp_path):
+    override_file = tmp_path / "overrides.json"
+    override_file.write_text(
+        json.dumps({_ROW_KEY: {"datasheet": "UNSOURCED", "note": "x", "fields": {}}}),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError) as exc:
+        build_db.load_datasheet_overrides(str(override_file))
+    message = str(exc.value)
+    assert _ROW_KEY in message, message
+    assert "fields" in message, message
+
+
+def test_well_formed_multi_entry_file_loads_without_raising(tmp_path):
+    override_file = tmp_path / "overrides.json"
+    override_file.write_text(
+        json.dumps(
+            {
+                "ALPHA/ONE": {
+                    "datasheet": "UNSOURCED",
+                    "note": "x",
+                    "fields": {"electrical.vpp_mv": {"was": 18000, "is": 25000}},
+                },
+                "ZEBRA/TWO": {
+                    "datasheet": "UNSOURCED",
+                    "note": "y",
+                    "fields": {
+                        "programming.pulse_duration_us": {"was": 100, "is": 500}
+                    },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = build_db.load_datasheet_overrides(str(override_file))
+    assert set(result) == {"ALPHA/ONE", "ZEBRA/TWO"}, result
 
 
 _DATASHEET_OVERRIDES_FILE = Path(
