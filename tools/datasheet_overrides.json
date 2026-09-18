@@ -1,7 +1,21 @@
 {
+  "FUJITSU/MBM27128": {
+    "datasheet": "datasheets/MBM27128.pdf",
+    "note": "Figure 3, the Quick Pro flow chart on page 4-20, specifies TPW = 1 ms +/- 50 us with VCC = 6V +/- 0.25V, VPP = 21V +/- 0.5V and an X = 20 pulse ceiling. Page 4-19's conventional procedure specifies a 50 ms pulse and is the wrong reading here: the firmware consumes this field as the initial pulse width of a verify-per-pulse loop capped at 25 pulses with overprogram_factor = 0 on protocols 0x07 and 0x08, which is the fast Quick Pro algorithm's shape and not the conventional single-shot one. Note also that the corrected value still yields an incomplete Quick Pro, because the firmware never emits the datasheet's tOPW over-program pulse.",
+    "fields": {
+      "programming.pulse_duration_us": { "was": 200, "is": 1000 }
+    }
+  },
   "FUJITSU/MBM27C1000": {
     "datasheet": "datasheets/MBM27C1000.pdf",
     "note": "AC CHARACTERISTICS (Single Byte Programming), p.4-68: tPW 0.475/0.50/0.525 ms",
+    "fields": {
+      "programming.pulse_duration_us": { "was": 100, "is": 500 }
+    }
+  },
+  "FUJITSU/MBM27C1001": {
+    "datasheet": "datasheets/MBM27C1001.pdf",
+    "note": "Page 9-90's AC CHARACTERISTICS table: tPW 0.475/0.50/0.525 ms, N 1 to 25, tOPW 1.4/1.5/39.4 ms, measured at VCC1 6V +/- 0.25V and VPP2 12.5V +/- 0.3V.",
     "fields": {
       "programming.pulse_duration_us": { "was": 100, "is": 500 }
     }

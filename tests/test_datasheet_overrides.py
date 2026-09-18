@@ -38,6 +38,14 @@ Coverage:
      the exact token `UNSOURCED` with a non-empty `note`, and the number of
      `UNSOURCED` entries is pinned as an exact count.
 
+Plan 197-05 adds the MBM27C4001 no-op-is-refused proof and pins the total entry count:
+  17. `test_mbm27c4001_noop_entry_raises` -- a synthetic override entry for
+      FUJITSU/MBM27C4001 with `was` equal to `is` (100) raises `ValueError`,
+      proving the rule that keeps this row out of the shipped file is itself
+      covered rather than merely obeyed.
+  18. `test_total_entry_count_is_pinned_exactly` -- the shipped file holds
+      exactly 9 top-level entries.
+
 Plan 197-03 adds the two whole-file legs, the sort gate and the type check:
   9. `test_unmatched_override_key_raises_after_the_loop_not_inside_it` --
      a key matching no row's alias set produces no event from
@@ -325,6 +333,29 @@ _DATASHEET_OVERRIDES_FILE = Path(
 
 _UNSOURCED = "UNSOURCED"
 _EXPECTED_UNSOURCED_COUNT = 6
+_EXPECTED_ENTRY_COUNT = 9
+
+_MBM27C4001_ALIAS_SET = {"MBM27C4001"}
+
+
+def test_mbm27c4001_noop_entry_raises():
+    overrides = {
+        "FUJITSU/MBM27C4001": {
+            "datasheet": "datasheets/MBM27C4001.pdf",
+            "note": "test fixture: MBM27C4001's own datasheet confirms 100 is already correct",
+            "fields": {"programming.pulse_duration_us": {"was": 100, "is": 100}},
+        }
+    }
+    decoded = _decoded()
+    decoded["programming.pulse_duration_us"] = 100
+    with pytest.raises(ValueError) as exc:
+        build_db.apply_datasheet_override(
+            overrides, "FUJITSU", _MBM27C4001_ALIAS_SET, decoded
+        )
+    message = str(exc.value)
+    assert "FUJITSU/MBM27C4001" in message, message
+    assert "programming.pulse_duration_us" in message, message
+    assert "100" in message, message
 
 
 def _is_git_tracked(repo_root, relative_path):
@@ -366,3 +397,8 @@ class TestShippedOverrideFileContract:
             data = json.load(f)
         unsourced = [k for k, v in data.items() if v.get("datasheet") == _UNSOURCED]
         assert len(unsourced) == _EXPECTED_UNSOURCED_COUNT, unsourced
+
+    def test_total_entry_count_is_pinned_exactly(self):
+        with open(_DATASHEET_OVERRIDES_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        assert len(data) == _EXPECTED_ENTRY_COUNT, sorted(data)
