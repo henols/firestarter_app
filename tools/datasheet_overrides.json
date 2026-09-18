@@ -1,4 +1,53 @@
 {
+  "EXEL/XL2804A": {
+    "datasheet": "UNSOURCED",
+    "note": "The completed VCC decode maps vdd index 0x06 to 1800 mV. 1.8 V is not credible as a program rail for the XL2804A, a 5 V 28C-class parallel EEPROM. The 5000 mV held here is the unmapped-index fallback this row emitted before the decode table was completed, not a decode, and not a figure any datasheet in this repository supports. No EXEL datasheet for the XL2804A is vendored in this repository. Closed by: EXEL's own datasheet for the XL2804A, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vdd_mv": { "was": 1800, "is": 5000 }
+    }
+  },
+  "EXEL/XL2816A": {
+    "datasheet": "UNSOURCED",
+    "note": "The completed VCC decode maps vdd index 0x06 to 1800 mV. 1.8 V is not credible as a program rail for the XL2816A, a 5 V 28C-class parallel EEPROM. The 5000 mV held here is the unmapped-index fallback this row emitted before the decode table was completed, not a decode, and not a figure any datasheet in this repository supports. No EXEL datasheet for the XL2816A is vendored in this repository. Closed by: EXEL's own datasheet for the XL2816A, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vdd_mv": { "was": 1800, "is": 5000 }
+    }
+  },
+  "EXEL/XLE2865A": {
+    "datasheet": "UNSOURCED",
+    "note": "The completed VCC decode maps vdd index 0x06 to 1800 mV. 1.8 V is not credible as a program rail for the XLE2865A, a 5 V 28C-class parallel EEPROM. The 5000 mV held here is the unmapped-index fallback this row emitted before the decode table was completed, not a decode, and not a figure any datasheet in this repository supports. No EXEL datasheet for the XLE2865A is vendored in this repository. Closed by: EXEL's own datasheet for the XLE2865A, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vdd_mv": { "was": 1800, "is": 5000 }
+    }
+  },
+  "EXEL/XLE28C16B": {
+    "datasheet": "UNSOURCED",
+    "note": "The completed VCC decode maps vdd index 0x06 to 1800 mV. 1.8 V is not credible as a program rail for the XLE28C16B, a 5 V 28C-class parallel EEPROM. The 5000 mV held here is the unmapped-index fallback this row emitted before the decode table was completed, not a decode, and not a figure any datasheet in this repository supports. No EXEL datasheet for the XLE28C16B is vendored in this repository. Closed by: EXEL's own datasheet for the XLE28C16B, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vdd_mv": { "was": 1800, "is": 5000 }
+    }
+  },
+  "EXEL/XLE28C256": {
+    "datasheet": "UNSOURCED",
+    "note": "The completed VCC decode maps vdd index 0x06 to 1800 mV. 1.8 V is not credible as a program rail for the XLE28C256, a 5 V 28C-class parallel EEPROM. The 5000 mV held here is the unmapped-index fallback this row emitted before the decode table was completed, not a decode, and not a figure any datasheet in this repository supports. No EXEL datasheet for the XLE28C256 is vendored in this repository. Closed by: EXEL's own datasheet for the XLE28C256, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vdd_mv": { "was": 1800, "is": 5000 }
+    }
+  },
+  "EXEL/XLE28C64A": {
+    "datasheet": "UNSOURCED",
+    "note": "The completed VCC decode maps vdd index 0x06 to 1800 mV. 1.8 V is not credible as a program rail for the XLE28C64A, a 5 V 28C-class parallel EEPROM. The 5000 mV held here is the unmapped-index fallback this row emitted before the decode table was completed, not a decode, and not a figure any datasheet in this repository supports. No EXEL datasheet for the XLE28C64A is vendored in this repository. Closed by: EXEL's own datasheet for the XLE28C64A, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vdd_mv": { "was": 1800, "is": 5000 }
+    }
+  },
+  "EXEL/XLE28C64B": {
+    "datasheet": "UNSOURCED",
+    "note": "The completed VCC decode maps vdd index 0x06 to 1800 mV. 1.8 V is not credible as a program rail for the XLE28C64B, a 5 V 28C-class parallel EEPROM. The 5000 mV held here is the unmapped-index fallback this row emitted before the decode table was completed, not a decode, and not a figure any datasheet in this repository supports. No EXEL datasheet for the XLE28C64B is vendored in this repository. Closed by: EXEL's own datasheet for the XLE28C64B, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vdd_mv": { "was": 1800, "is": 5000 }
+    }
+  },
   "FUJITSU/MBM27128": {
     "datasheet": "datasheets/MBM27128.pdf",
     "note": "Figure 3, the Quick Pro flow chart on page 4-20, specifies TPW = 1 ms +/- 50 us with VCC = 6V +/- 0.25V, VPP = 21V +/- 0.5V and an X = 20 pulse ceiling. Page 4-19's conventional procedure specifies a 50 ms pulse and is the wrong reading here: the firmware consumes this field as the initial pulse width of a verify-per-pulse loop capped at 25 pulses with overprogram_factor = 0 on protocols 0x07 and 0x08, which is the fast Quick Pro algorithm's shape and not the conventional single-shot one. Note also that the corrected value still yields an incomplete Quick Pro, because the firmware never emits the datasheet's tOPW over-program pulse. This entry's electrical.vdd_mv field also comes from that same Figure 3 table's VCC = 6V +/- 0.25V figure.",
@@ -59,6 +108,20 @@
       "electrical.vpp_mv": { "was": 18000, "is": 21000 }
     }
   },
+  "SGS-THOMSON/M28C64": {
+    "datasheet": "UNSOURCED",
+    "note": "The completed VCC decode maps vdd index 0x06 to 1800 mV. 1.8 V is not credible as a program rail for the M28C64, a 5 V 28C-class parallel EEPROM. The 5000 mV held here is the unmapped-index fallback this row emitted before the decode table was completed, not a decode, and not a figure any datasheet in this repository supports. No SGS-THOMSON datasheet for the M28C64 is vendored in this repository. Closed by: SGS-THOMSON's own datasheet for the M28C64, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vdd_mv": { "was": 1800, "is": 5000 }
+    }
+  },
+  "SGS-THOMSON/M28C64-xxW": {
+    "datasheet": "UNSOURCED",
+    "note": "The completed VCC decode maps vdd index 0x06 to 1800 mV. 1.8 V is not credible as a program rail for the M28C64-xxW, a 5 V 28C-class parallel EEPROM. The 5000 mV held here is the unmapped-index fallback this row emitted before the decode table was completed, not a decode, and not a figure any datasheet in this repository supports. No SGS-THOMSON datasheet for the M28C64-xxW is vendored in this repository. Closed by: SGS-THOMSON's own datasheet for the M28C64-xxW, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vdd_mv": { "was": 1800, "is": 5000 }
+    }
+  },
   "ST/M2716": {
     "datasheet": "UNSOURCED",
     "note": "Value 25000 is inherited verbatim from the deleted NMOS_TRUE_VPP_MV hardcode, which sourced this figure from an Intel datasheet for the Intel NMOS 2716 and applied it to this ST row with no ST-specific datasheet backing it. No ST datasheet for this part is vendored in this repository. Closed by: ST's own datasheet for ETC2716/M2716, vendored and git-tracked under datasheets/.",
@@ -71,6 +134,27 @@
     "note": "Value 21000 is inherited verbatim from the deleted NMOS_TRUE_VPP_MV hardcode, which sourced this figure from an Intel datasheet for the Intel NMOS 2732A and applied it to this ST row with no ST-specific datasheet backing it. No ST datasheet for this part is vendored in this repository. Closed by: ST's own datasheet for M2732A, vendored and git-tracked under datasheets/.",
     "fields": {
       "electrical.vpp_mv": { "was": 18000, "is": 21000 }
+    }
+  },
+  "ST/M28C64": {
+    "datasheet": "UNSOURCED",
+    "note": "The completed VCC decode maps vdd index 0x06 to 1800 mV. 1.8 V is not credible as a program rail for the M28C64, a 5 V 28C-class parallel EEPROM. The 5000 mV held here is the unmapped-index fallback this row emitted before the decode table was completed, not a decode, and not a figure any datasheet in this repository supports. No ST datasheet for the M28C64 is vendored in this repository. Closed by: ST's own datasheet for the M28C64, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vdd_mv": { "was": 1800, "is": 5000 }
+    }
+  },
+  "ST/M28C64-xxW": {
+    "datasheet": "UNSOURCED",
+    "note": "The completed VCC decode maps vdd index 0x06 to 1800 mV. 1.8 V is not credible as a program rail for the M28C64-xxW, a 5 V 28C-class parallel EEPROM. The 5000 mV held here is the unmapped-index fallback this row emitted before the decode table was completed, not a decode, and not a figure any datasheet in this repository supports. No ST datasheet for the M28C64-xxW is vendored in this repository. Closed by: ST's own datasheet for the M28C64-xxW, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vdd_mv": { "was": 1800, "is": 5000 }
+    }
+  },
+  "ST/M28LV64": {
+    "datasheet": "UNSOURCED",
+    "note": "The completed VCC decode maps vdd index 0x06 to 1800 mV. This part is a low-voltage (LV) EEPROM, so this entry makes no claim that 5 V is right for it -- only that 1.8 V is not credible for a low-voltage part either, and that the 5000 mV held here is the unmapped-index fallback this row emitted before the decode table was completed, not a decode, and not a figure any datasheet in this repository supports. No ST datasheet for the M28LV64 is vendored in this repository. Closed by: ST's own datasheet for the M28LV64, vendored and git-tracked under datasheets/.",
+    "fields": {
+      "electrical.vdd_mv": { "was": 1800, "is": 5000 }
     }
   }
 }

@@ -112,7 +112,6 @@ KNOWN_PROTOCOLS = {
     # NOT 0x35 or 0x39 — removed
 }
 
-# [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
 VCC_VOLTAGES = {
     0x00: 5000,
     0x01: 3300,
@@ -120,9 +119,17 @@ VCC_VOLTAGES = {
     0x03: 4500,  # BUG-1 fix: was missing from v1.12
     0x04: 5500,
     0x05: 6500,
+    0x06: 1800,
+    0x07: 2500,
+    0x08: 3000,
+    0x09: 1200,
+    0x0A: 4750,
+    0x0B: 5250,
+    0x0C: 5750,
+    0x0D: 6000,
+    0x0E: 6250,
 }
 
-# [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
 # VCC_VOLTAGES index 0x02 is the TL866's low-margin VCC *verify* rail, not an
 # operating supply — no part here has a 4.0 V nominal VCC. Any chip whose
 # decoded vcc_mv lands on this rail is being misreported. Written as a lookup

@@ -7,8 +7,8 @@ Permission is hereby granted under MIT license.
 Phase 148 Plan 06 -- DATA-01, DATA-04 (D-01/D-02/D-03).
 
 Defect class this closes: `infoic.xml`'s VCC nibble `2` decodes FAITHFULLY to
-4000 mV (`VCC_VOLTAGES[0x02]`, [VERIFIED: minipro database.c#L130-L135 @
-a8efaedc -- tl866ii_vcc_voltages[]]) -- that decode is not the defect. The
+4000 mV (`VCC_VOLTAGES[0x02]`, [VERIFIED: minipro database.c#L182-L190 @
+a8efaedc -- xg_vcc_voltages[]]) -- that decode is not the defect. The
 defect is semantic: 4000 mV is the TL866's low-margin VCC *verify* rail, not
 any part's operating supply, and firestarter surfaced it as though it were.
 `build_db.py`'s post-construction margin-rail substitution

@@ -407,10 +407,45 @@ shipped are byte-identical between the two tables, and `xg_vpp_voltages[]` adds 
 regenerating with this change alone reproduces the shipped database byte-for-byte — the
 change completes the decode without altering a single emitted value.
 
+**The completed `VCC_VOLTAGES` and its corrected provenance (D-01).** `VCC_VOLTAGES` is
+completed from upstream's `xg_vcc_voltages[]` `[VERIFIED: database.c#L182-L190 @ a8efaedc]`,
+which is a strict, conflict-free superset of `tl866ii_vcc_voltages[]`: the six indices
+already shipped (`0x00`-`0x05`) are byte-identical between the two tables, and
+`xg_vcc_voltages[]` adds exactly nine more beyond them — `0x06`=1800, `0x07`=2500,
+`0x08`=3000, `0x09`=1200, `0x0A`=4750, `0x0B`=5250, `0x0C`=5750, `0x0D`=6000 and `0x0E`=6250.
+This is completion, not correction, on the same shape as the `VPP_MV` completion above.
+`tl866a_vcc_voltages[]` conflicts on four of those six shared indices and must not be used.
+
+`VCC_VOLTAGES[0x02]` still resolves to 4000 under the completed table — the `xg` table
+agrees with the one already shipped on index `0x02` — so `_VCC_MARGIN_RAIL_MV` is unchanged
+and needed no edit.
+
+**A falsified citation, found and corrected.** The table and the `_VCC_MARGIN_RAIL_MV` block
+immediately below it each carried the identical marker `[VERIFIED: minipro
+database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]`. At the pinned sha, lines 130-135
+are `tl866a_vpp_voltages[]` plus the start of `tl866a_vcc_voltages[]` — not
+`tl866ii_vcc_voltages[]`, which lives at lines 154-159, and not `xg_vcc_voltages[]`, which
+lives at lines 182-190. Both instances of the marker named the wrong table and the wrong
+line range. This phase found the citation false and deleted both copies rather than
+rewriting them in place; the corrected provenance lives here instead.
+
+**The twelve-row carve-out at vdd index `0x06` (D-04, D-05).** Twelve rows — seven EXEL,
+three ST and two SGS-THOMSON 28C-class parts carrying voltage word `0x64xx` — decode to
+1800 mV under the completed table. 1.8 V is not credible as a program rail for a 5 V
+28C-class parallel EEPROM, so these twelve keep the `vdd_mv: 5000` they emitted before the
+table was completed, held there by twelve explicit `UNSOURCED` entries in
+`tools/datasheet_overrides.json` rather than by leaving `0x06` out of the table. The 5000
+each holds is itself the unmapped-index fallback these rows emitted before completion — not
+a decode, and not a figure any datasheet in this repository supports. Omitting `0x06` from
+the table would regenerate byte-identically too, but the twelve rows would then reach 5000
+through the same silent fallback this phase is otherwise closing, reading as an oversight
+rather than a decision.
+
 Plan `198-03` completes this section with the general finding that the voltage word's
 nibbles select a programmer rail index rather than a chip requirement (D-15); this task's
-scope is limited to the VPP decode completion above and to preserving, rather than losing,
-what the comment block it replaced held.
+scope is limited to the VPP and VCC decode completions above and to preserving, rather than
+losing, what the comment blocks it replaced held.
 
-Sources: `.planning/phases/198-the-two-voltage-nibbles/198-RESEARCH.md` F-1, F-2, F-12;
-`database.c#L125-L126 @ a8efaedc`; `database.c#L161-L170 @ a8efaedc`.
+Sources: `.planning/phases/198-the-two-voltage-nibbles/198-RESEARCH.md` F-1, F-2, F-5, F-6,
+F-12; `database.c#L125-L126 @ a8efaedc`; `database.c#L161-L170 @ a8efaedc`;
+`database.c#L182-L190 @ a8efaedc`.

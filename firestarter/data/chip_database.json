@@ -5460,7 +5460,7 @@
         "size_bytes": 2048,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 13000
       },
       "part_number": "NMC27C16B,NMC27C16BQ",
@@ -5682,7 +5682,7 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6000,
         "vpp_mv": 12500
       },
       "part_number": "MBM27C1000P,MBM27C1000",
@@ -5748,7 +5748,7 @@
         "size_bytes": 262144,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6000,
         "vpp_mv": 12500
       },
       "part_number": "MBM27C2000P,MBM27C2000",
@@ -6148,7 +6148,7 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6000,
         "vpp_mv": 12500
       },
       "part_number": "HN27C301AG,HN27C301AP,HN27C301AFP",
@@ -6170,7 +6170,7 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6000,
         "vpp_mv": 12500
       },
       "part_number": "HN27C301G",
@@ -9373,7 +9373,7 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6000,
         "vpp_mv": 12500
       },
       "part_number": "M5M27C101K",
@@ -10482,7 +10482,7 @@
         "size_bytes": 2048,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 18000
       },
       "part_number": "NMC27C16",
@@ -10504,7 +10504,7 @@
         "size_bytes": 2048,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 13000
       },
       "part_number": "NMC27C16B",
@@ -10526,7 +10526,7 @@
         "size_bytes": 2048,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 18000
       },
       "part_number": "NMC27C16Q",
@@ -10638,7 +10638,7 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 12500
       },
       "part_number": "MSM27C1000",
@@ -10660,7 +10660,7 @@
         "size_bytes": 262144,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 12500
       },
       "part_number": "MSM27C2000",
@@ -11376,7 +11376,7 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 13000
       },
       "part_number": "M27C1000",
