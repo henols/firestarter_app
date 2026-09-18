@@ -19,7 +19,7 @@ any later plan in this phase touches the schema the wire dict is derived
 from.
 
 Coverage:
-  1. test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_197_deltas --
+  1. test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_197_and_198_deltas --
      the live 746-chip capture equals the committed golden's `records` PLUS
      exactly the 18 named Phase 149 deltas
      (`tests/golden/wire_dict_expected_deltas_149.json`) PLUS exactly the 84
@@ -30,14 +30,18 @@ Coverage:
      25 named Phase 194 deltas
      (`tests/golden/wire_dict_expected_deltas_194.json`) PLUS exactly the
      3 named Phase 197 deltas
-     (`tests/golden/wire_dict_expected_deltas_197.json`) -- the golden
+     (`tests/golden/wire_dict_expected_deltas_197.json`) PLUS exactly the
+     2 named Phase 198 deltas
+     (`tests/golden/wire_dict_expected_deltas_198.json`) -- the golden
      itself (`wire_dict_baseline.json`) is preserved byte-unchanged and is
      NEVER re-captured to make this or any future phase's change disappear.
-     The golden is composed with five ORDERED, FIELD-DISJOINT delta
+     The golden is composed with six ORDERED, FIELD-DISJOINT delta
      layers: 149 sets `page-size`, 153 sets `flags`, 182 sets `bus-config`,
      194 sets `page-size` on a disjoint key set from 149, 197 sets
      `pulse-delay` on three Fujitsu records disjoint from all four prior
-     layers, and every pairwise combination is field-disjoint, which is
+     layers, 198 sets `vpp_mv` on two Fujitsu records that share one key
+     with the 197 layer (`FUJITSU|MBM27C1001|7`) but no field (`pulse-delay`
+     vs `vpp_mv`), and every pairwise combination is field-disjoint, which is
      what makes `dict.update` composition order-independent. Assertions, in
      order: (a) anti-laundering -- the golden's own page-size-carrying
      record set is exactly Phase 148's original two; (b) 149-layer
@@ -58,17 +62,23 @@ Coverage:
      least"; 197-layer non-vacuity -- every 197 delta key exists in the
      golden and the golden's own record for it does NOT already carry the
      delta's `pulse-delay` value; 197-layer exact count --
-     len(deltas_197) == 3, not "at least"; (f) field-disjointness -- for
-     every pairwise combination of the five layers' shared keys, the two
+     len(deltas_197) == 3, not "at least"; 198-layer non-vacuity -- every
+     198 delta key exists in the golden and the golden's own record for it
+     does NOT already carry the delta's `vpp_mv` value; 198-layer exact
+     count -- len(deltas_198) == 2, not "at least"; (f) field-disjointness --
+     for every pairwise combination of the six layers' shared keys, the two
      delta layers' field sets do not intersect -- the 194-with-149 pair is
      the one that matters among the first four, since both carry
      `page-size` and only key-disjointness (27 upstream-native 0x05 rows
-     against 18 upstream-native 0x0D rows) keeps the check passing; (g)
-     golden-plus-all-five-deltas equals live, reusing
+     against 18 upstream-native 0x0D rows) keeps the check passing, and the
+     198-with-197 pair is the one that matters for the new layer, since both
+     carry the key `FUJITSU|MBM27C1001|7` and only field-disjointness
+     (`pulse-delay` vs `vpp_mv`) keeps that pair passing; (g)
+     golden-plus-all-six-deltas equals live, reusing
      `_describe_record_diff` unchanged in the failure message. A future
-     phase adding a SIXTH layer should add a sixth delta file and a sixth
-     set of legs here, rather than editing any existing delta file or
-     folding a sixth layer's entries into one of these five.
+     phase adding a SEVENTH layer should add a seventh delta file and a
+     seventh set of legs here, rather than editing any existing delta file
+     or folding a seventh layer's entries into one of these six.
   2. test_wire_key_union_is_exactly_nine_keys -- the union of wire keys
      across the live capture is exactly the nine measured keys; the message
      names anything added or removed. Unchanged by Phase 149 -- `page-size`
@@ -90,14 +100,17 @@ Coverage:
   6. test_exactly_84_records_change_flags_and_no_other_field_moves --
      Phase 153's own exhaustive scope proof: recomputes the changed set
      between (golden + the 149 layer + the 182 layer + the 194 layer + the
-     197 layer) and live, asserts the total record count is 746 in the SAME
-     test so the 84 is meaningful, asserts the changed-key count is exactly
-     84, and asserts the union of changed field names across all of them is
-     exactly the single-element set {"flags"}. The 194 and 197 layers are
-     composed into the expected side here for the same reason 149 and 182
-     already are: excluding a known, already-proven layer from "expected"
-     would otherwise surface its own records as an unexplained additional
-     change, diluting this leg's exhaustive-scope claim about 153 alone.
+     197 layer + the 198 layer) and live, asserts the total record count is
+     746 in the SAME test so the 84 is meaningful, asserts the changed-key
+     count is exactly 84, and asserts the union of changed field names
+     across all of them is exactly the single-element set {"flags"}. The
+     194, 197 and 198 layers are composed into the expected side here for
+     the same reason 149 and 182 already are: excluding a known,
+     already-proven layer from "expected" would otherwise surface its own
+     records as an unexplained additional change, diluting this leg's
+     exhaustive-scope claim about 153 alone -- composing the 198 layer keeps
+     the count at 84 rather than letting it float to 86, since the two
+     Phase 198 records would otherwise show up here as unexplained changes.
      This is the leg that would catch a second, unnoticed wire change
      riding along with this one.
   7. test_the_153_delta_layer_is_capable_of_failing -- reuses
@@ -116,6 +129,11 @@ Coverage:
      the golden, applies the 149, 153, 182, 194 and 197 delta layers,
      mutates exactly one of the 3 records' `pulse-delay`, and asserts the
      helper reports exactly that one record as changed.
+  10. test_the_198_delta_layer_is_capable_of_failing -- mirrors test 9 for
+      the 198 layer: reuses `_describe_record_diff`, takes a deep copy of
+      the golden, applies the 149, 153, 182, 194, 197 and 198 delta layers,
+      mutates exactly one of the 2 records' `vpp_mv`, and asserts the
+      helper reports exactly that one record as changed.
 """
 
 import copy
@@ -131,6 +149,7 @@ _DELTAS_153 = _HERE / "golden" / "wire_dict_expected_deltas_153.json"
 _DELTAS_182 = _HERE / "golden" / "wire_dict_expected_deltas_182.json"
 _DELTAS_194 = _HERE / "golden" / "wire_dict_expected_deltas_194.json"
 _DELTAS_197 = _HERE / "golden" / "wire_dict_expected_deltas_197.json"
+_DELTAS_198 = _HERE / "golden" / "wire_dict_expected_deltas_198.json"
 
 _GOLDEN_PAGE_SIZE_RECORD_KEYS = {
     "WINBOND|W29C020,W29C020C,W29C022|7",
@@ -230,6 +249,7 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
     deltas_182 = json.loads(_DELTAS_182.read_text(encoding="utf-8"))["deltas"]
     deltas_194 = json.loads(_DELTAS_194.read_text(encoding="utf-8"))["deltas"]
     deltas_197 = json.loads(_DELTAS_197.read_text(encoding="utf-8"))["deltas"]
+    deltas_198 = json.loads(_DELTAS_198.read_text(encoding="utf-8"))["deltas"]
 
     golden_page_size_keys = {
         key for key, wire in recorded.items() if "page-size" in wire
@@ -350,6 +370,25 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
         f"{sorted(deltas_197)}"
     )
 
+    missing_from_golden_198 = sorted(k for k in deltas_198 if k not in recorded)
+    already_present_198 = sorted(
+        k
+        for k in deltas_198
+        if k in recorded and recorded[k].get("vpp_mv") == deltas_198[k].get("vpp_mv")
+    )
+    assert not missing_from_golden_198, (
+        f"198 delta keys not found in the golden: {missing_from_golden_198}"
+    )
+    assert not already_present_198, (
+        "198 delta keys whose golden record already carries the delta's "
+        f"vpp_mv value (the delta would prove nothing): {already_present_198}"
+    )
+
+    assert len(deltas_198) == 2, (
+        f"expected exactly 2 Phase 198 deltas, found {len(deltas_198)}: "
+        f"{sorted(deltas_198)}"
+    )
+
     layer_pairs = (
         ("149", deltas_149, "153", deltas_153),
         ("149", deltas_149, "182", deltas_182),
@@ -361,6 +400,11 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
         ("197", deltas_197, "153", deltas_153),
         ("197", deltas_197, "182", deltas_182),
         ("197", deltas_197, "194", deltas_194),
+        ("198", deltas_198, "149", deltas_149),
+        ("198", deltas_198, "153", deltas_153),
+        ("198", deltas_198, "182", deltas_182),
+        ("198", deltas_198, "194", deltas_194),
+        ("198", deltas_198, "197", deltas_197),
     )
     field_collisions = {}
     for name_a, layer_a, name_b, layer_b in layer_pairs:
@@ -372,10 +416,10 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
         if pair_collisions:
             field_collisions[f"{name_a}x{name_b}"] = pair_collisions
     assert not field_collisions, (
-        "the 149, 153, 182, 194 and 197 delta layers are not field-disjoint "
-        f"on their shared keys -- collisions: {field_collisions}. "
-        "Field-disjointness is what makes the dict.update composition "
-        "order-independent."
+        "the 149, 153, 182, 194, 197 and 198 delta layers are not "
+        f"field-disjoint on their shared keys -- collisions: "
+        f"{field_collisions}. Field-disjointness is what makes the "
+        "dict.update composition order-independent."
     )
 
     expected = copy.deepcopy(recorded)
@@ -388,6 +432,8 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
     for key, delta_wire in deltas_194.items():
         expected[key].update(delta_wire)
     for key, delta_wire in deltas_197.items():
+        expected[key].update(delta_wire)
+    for key, delta_wire in deltas_198.items():
         expected[key].update(delta_wire)
 
     live = _capture_wire_dicts(_REAL_DB)
@@ -402,7 +448,9 @@ def test_live_capture_matches_golden_plus_the_149_and_153_and_182_and_194_and_19
         "the 25 named Phase 194 deltas "
         "(tests/golden/wire_dict_expected_deltas_194.json) plus exactly "
         "the 3 named Phase 197 deltas "
-        "(tests/golden/wire_dict_expected_deltas_197.json); "
+        "(tests/golden/wire_dict_expected_deltas_197.json) plus exactly "
+        "the 2 named Phase 198 deltas "
+        "(tests/golden/wire_dict_expected_deltas_198.json); "
         "if this is a legitimate NEW wire-value change, it must be added "
         "to a delta list deliberately, naming which chips and which keys "
         f"moved, in the commit message. Diff: {_describe_record_diff(expected, live)}"
@@ -470,6 +518,7 @@ def test_exactly_84_records_change_flags_and_no_other_field_moves() -> None:
     deltas_182 = json.loads(_DELTAS_182.read_text(encoding="utf-8"))["deltas"]
     deltas_194 = json.loads(_DELTAS_194.read_text(encoding="utf-8"))["deltas"]
     deltas_197 = json.loads(_DELTAS_197.read_text(encoding="utf-8"))["deltas"]
+    deltas_198 = json.loads(_DELTAS_198.read_text(encoding="utf-8"))["deltas"]
 
     expected = copy.deepcopy(recorded)
     for key, delta_wire in deltas_149.items():
@@ -479,6 +528,8 @@ def test_exactly_84_records_change_flags_and_no_other_field_moves() -> None:
     for key, delta_wire in deltas_194.items():
         expected[key].update(delta_wire)
     for key, delta_wire in deltas_197.items():
+        expected[key].update(delta_wire)
+    for key, delta_wire in deltas_198.items():
         expected[key].update(delta_wire)
 
     live = _capture_wire_dicts(_REAL_DB)
@@ -607,6 +658,48 @@ def test_the_197_delta_layer_is_capable_of_failing() -> None:
         "incapable of failing"
     )
     assert diff == f"changed={{'{some_key}': ['pulse-delay']}}", (
+        f"the failure-capability leg must report EXACTLY the one mutated "
+        f"record {some_key!r} and no other -- got: {diff}"
+    )
+
+
+def test_the_198_delta_layer_is_capable_of_failing() -> None:
+    doc = json.loads(_GOLDEN.read_text(encoding="utf-8"))
+    recorded = doc["records"]
+
+    deltas_149 = json.loads(_DELTAS_149.read_text(encoding="utf-8"))["deltas"]
+    deltas_153 = json.loads(_DELTAS_153.read_text(encoding="utf-8"))["deltas"]
+    deltas_182 = json.loads(_DELTAS_182.read_text(encoding="utf-8"))["deltas"]
+    deltas_194 = json.loads(_DELTAS_194.read_text(encoding="utf-8"))["deltas"]
+    deltas_197 = json.loads(_DELTAS_197.read_text(encoding="utf-8"))["deltas"]
+    deltas_198 = json.loads(_DELTAS_198.read_text(encoding="utf-8"))["deltas"]
+
+    composed = copy.deepcopy(recorded)
+    for key, delta_wire in deltas_149.items():
+        composed[key].update(delta_wire)
+    for key, delta_wire in deltas_153.items():
+        composed[key].update(delta_wire)
+    for key, delta_wire in deltas_182.items():
+        composed[key].update(delta_wire)
+    for key, delta_wire in deltas_194.items():
+        composed[key].update(delta_wire)
+    for key, delta_wire in deltas_197.items():
+        composed[key].update(delta_wire)
+    for key, delta_wire in deltas_198.items():
+        composed[key].update(delta_wire)
+
+    mutated = copy.deepcopy(composed)
+    some_key = next(iter(sorted(deltas_198)))
+    mutated[some_key]["vpp_mv"] = mutated[some_key].get("vpp_mv", 0) + 100000
+
+    diff = _describe_record_diff(composed, mutated)
+
+    assert diff != "(no difference detected)", (
+        "non-vacuity failure: mutating one of the 2 records' vpp_mv "
+        "did not produce a reported diff -- the 198 delta layer's gate is "
+        "incapable of failing"
+    )
+    assert diff == f"changed={{'{some_key}': ['vpp_mv']}}", (
         f"the failure-capability leg must report EXACTLY the one mutated "
         f"record {some_key!r} and no other -- got: {diff}"
     )
