@@ -5694,7 +5694,7 @@
         "infoic_page_size_raw": 0,
         "protect_off_before": false,
         "protect_on_after": false,
-        "pulse_duration_us": 100
+        "pulse_duration_us": 500
       },
       "support_status": "supported"
     },

@@ -21,6 +21,9 @@ PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
 # Curated non-upstream chip supplement, merged post-decode (see
 # the EXTRA_CHIPS block in main()). Physically-real chips absent from infoic.xml.
 EXTRA_CHIPS_FILE = os.path.join(os.path.dirname(__file__), "extra_chips.json")
+DATASHEET_OVERRIDES_FILE = os.path.join(
+    os.path.dirname(__file__), "datasheet_overrides.json"
+)
 
 # 2. PINOUT LIBRARY (The Missing Physical Layer)
 
@@ -364,6 +367,56 @@ def interpret_timing(raw_hex, protocol_id):
     return 0
 
 
+_OVERRIDABLE_DECODED_FIELDS = (
+    "electrical.size_bytes",
+    "electrical.pin_count",
+    "electrical.vpp_mv",
+    "electrical.vcc_mv",
+    "electrical.vdd_mv",
+    "programming.pulse_duration_us",
+)
+
+
+def load_datasheet_overrides(path):
+    if not os.path.exists(path):
+        return {}
+    with open(path) as f:
+        return json.load(f)
+
+
+def apply_datasheet_override(overrides, mfg_name, alias_set, decoded):
+    for alias in alias_set:
+        entry_key = f"{mfg_name}/{alias}"
+        entry = overrides.get(entry_key)
+        if entry is None:
+            continue
+        for field_path, pair in entry.get("fields", {}).items():
+            if field_path not in decoded:
+                raise ValueError(
+                    f"{entry_key}: override names field path {field_path!r}, "
+                    f"which is not one of the overridable decoded fields "
+                    f"{list(_OVERRIDABLE_DECODED_FIELDS)!r} — refusing to "
+                    f"apply an unknown field path"
+                )
+            was = pair["was"]
+            is_ = pair["is"]
+            live = decoded[field_path]
+            if was != live:
+                raise ValueError(
+                    f"{entry_key}: recorded prior {was!r} for {field_path!r} "
+                    f"does not match the live decode {live!r} — refusing to "
+                    f"apply a stale override"
+                )
+            if was == is_:
+                raise ValueError(
+                    f"{entry_key}: {field_path!r} override value {is_!r} "
+                    f"equals the recorded prior {was!r} — refusing a no-op "
+                    f"override"
+                )
+            decoded[field_path] = is_
+    return decoded
+
+
 def main():
     print(f"Fetching database from: {MINIPRO_XML_URL}")
     try:
@@ -376,6 +429,7 @@ def main():
 
     complete_db = {}
     total_chips = 0
+    _datasheet_overrides = load_datasheet_overrides(DATASHEET_OVERRIDES_FILE)
 
     print("Processing and enriching data...")
 
@@ -586,22 +640,42 @@ def main():
                     if nmos_key in part_aliases:
                         if _nmos_vpp_mv is None or nmos_vpp > _nmos_vpp_mv:
                             _nmos_vpp_mv = nmos_vpp
-                if _nmos_vpp_mv is not None:
-                    if _nmos_vpp_mv > RURP_VPP_CEILING_MV:
-                        _support_status = "vpp-exceeds-max"
-                        # Reason string begins with
-                        # "VPP <x>V exceeds programmer max (<ceil>V)" so the host
-                        # can render it verbatim.
-                        # Uses "programmer max" (not "RURP ceiling") per SC#2 wording.
-                        _unsupported_reason = (
-                            f"VPP {_nmos_vpp_mv // 1000}V exceeds programmer max "
-                            f"({RURP_VPP_CEILING_MV // 1000}V)"
-                        )
-                        # Demote to NON_DISPATCHABLE_ALGO so dispatch()
-                        # returns ERROR instead of configure_eprom (HARD invariant).
-                        proto_id = NON_DISPATCHABLE_ALGO
-                    # else: leave _support_status as "supported" — M2732A (21V)
-                    # is within the RURP ceiling.
+
+                _d_vpp_mv = (
+                    _nmos_vpp_mv
+                    if _nmos_vpp_mv is not None
+                    else VPP_MV.get(voltages & 0xF0, 0)
+                )
+                _d_vcc_mv = VCC_VOLTAGES.get((voltages >> 8) & 0x0F, 5000)
+                _d_vdd_mv = VCC_VOLTAGES.get((voltages >> 12) & 0x0F, 5000)
+                _d_pulse = interpret_timing(ic.get("pulse_delay"), proto_id)
+
+                _decoded_view = {
+                    "electrical.size_bytes": mem_size,
+                    "electrical.pin_count": pin_count,
+                    "electrical.vpp_mv": _d_vpp_mv,
+                    "electrical.vcc_mv": _d_vcc_mv,
+                    "electrical.vdd_mv": _d_vdd_mv,
+                    "programming.pulse_duration_us": _d_pulse,
+                }
+                apply_datasheet_override(
+                    _datasheet_overrides, mfg_name, _chip_aliases, _decoded_view
+                )
+                mem_size = _decoded_view["electrical.size_bytes"]
+                pin_count = _decoded_view["electrical.pin_count"]
+                _d_vpp_mv = _decoded_view["electrical.vpp_mv"]
+                _d_vcc_mv = _decoded_view["electrical.vcc_mv"]
+                _d_vdd_mv = _decoded_view["electrical.vdd_mv"]
+                _d_pulse = _decoded_view["programming.pulse_duration_us"]
+
+                if _d_vpp_mv > RURP_VPP_CEILING_MV:
+                    _support_status = "vpp-exceeds-max"
+                    _unsupported_reason = (
+                        f"VPP {_d_vpp_mv // 1000}V exceeds programmer max "
+                        f"({RURP_VPP_CEILING_MV // 1000}V)"
+                    )
+                    proto_id = NON_DISPATCHABLE_ALGO
+                    _d_pulse = interpret_timing(ic.get("pulse_delay"), proto_id)
 
                 chip_entry = {
                     # Upstream `name` is a comma-separated alias list where each
@@ -625,33 +699,13 @@ def main():
                         "type": _etype,
                         "size_bytes": mem_size,
                         "pin_count": pin_count,
-                        # VPP code occupies bits 7-4 of the 16-bit voltages field
-                        # (the HIGH nibble of the low byte). Bits 3-0 carry option
-                        # flags. Masking with 0xF0 extracts only the VPP nibble.
-                        # BUG-B fix: was voltages & 0xFF (caused 0mV for chips with
-                        # flags bits set, e.g. SST27VF512 voltages=0x0001).
-                        # NMOS correction (Site C): override vpp/vpp_mv when
-                        # _nmos_vpp_mv is set (M2716/M2732/M2732A corrected voltage).
-                        "vpp_mv": (
-                            _nmos_vpp_mv
-                            if _nmos_vpp_mv is not None
-                            else VPP_MV.get(voltages & 0xF0, 0)
-                        ),
-                        # BUG-3 fix: vcc at bits 11-8, vdd at bits 15-12.
-                        # v1.12 had them swapped (vdd at bits 11-8, vcc at bits 15-12).
-                        # [VERIFIED: minipro database.c#L921-L923 @ a8efaedc]
-                        "vcc_mv": VCC_VOLTAGES.get(
-                            (voltages >> 8) & 0x0F, 5000
-                        ),  # bits 11-8
-                        "vdd_mv": VCC_VOLTAGES.get(
-                            (voltages >> 12) & 0x0F, 5000
-                        ),  # bits 15-12
+                        "vpp_mv": _d_vpp_mv,
+                        "vcc_mv": _d_vcc_mv,
+                        "vdd_mv": _d_vdd_mv,
                     },
                     "programming": {
                         "algorithm": proto_id,
-                        "pulse_duration_us": interpret_timing(
-                            ic.get("pulse_delay"), proto_id
-                        ),
+                        "pulse_duration_us": _d_pulse,
                         "chip_id_check": True if (flags & 0x20) else False,
                         "chip_id_value": ic.get("chip_id"),
                         # flags bit 14 = MP_OFF_PROTECT_BEFORE, bit 15 =

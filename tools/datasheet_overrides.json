@@ -1,0 +1,9 @@
+{
+  "FUJITSU/MBM27C1000": {
+    "datasheet": "datasheets/MBM27C1000.pdf",
+    "note": "AC CHARACTERISTICS (Single Byte Programming), p.4-68: tPW 0.475/0.50/0.525 ms",
+    "fields": {
+      "programming.pulse_duration_us": { "was": 100, "is": 500 }
+    }
+  }
+}
