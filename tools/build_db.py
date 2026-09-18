@@ -145,8 +145,6 @@ _VCC_MARGIN_RAIL_MV = VCC_VOLTAGES[0x02]
 # have been DELETED. The principled resolve_pinout_key
 # function below is the sole pinout-selection path.
 
-_PGM_ON_PIN31_MAX_SIZE = 262144
-
 with open(PINOUT_FILE) as _f:
     VALID_PINOUT_KEYS = set(json.load(_f).keys())
 
@@ -238,7 +236,7 @@ def resolve_pinout_key(
                     key = "DIP32_27C801"
                 elif proto_id == 0x08 and variant_lo == 0x02:
                     key = "DIP32_STD"
-                elif proto_id == 0x08 and mem_size <= _PGM_ON_PIN31_MAX_SIZE:
+                elif proto_id == 0x08 and (mem_size - 1).bit_length() <= 18:
                     key = "DIP32_27C020"
                 else:
                     key = "DIP32_STD"
