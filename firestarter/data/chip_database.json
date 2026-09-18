@@ -11018,8 +11018,8 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "FRAM",
-        "vcc_mv": 3300,
+        "type": "SRAM",
+        "vcc_mv": 5000,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },

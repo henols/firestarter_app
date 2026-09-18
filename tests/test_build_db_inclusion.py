@@ -60,9 +60,13 @@ class TestVariantDecodeClassification:
     """VAR-03 (Phase 86): FM1608 + X88C64 classification, pinned BEFORE the
     Plan-02 classifier rewrite so Plan 02 is a refactor-under-test.
 
-    These two assertions describe the POST-Plan-02 state:
-      - FM1608  : GREEN against the current DB (already algorithm 40 / FRAM /
-                  DIP28_JEDEC_SRAM_8K — the type=4 SRAM arm + Phase-84 relabel).
+    These two assertions describe the POST-Plan-02 state, as amended by
+    197-04 (D-08/D-17):
+      - FM1608  : GREEN against the current DB (algorithm 40 / SRAM /
+                  DIP28_JEDEC_SRAM_8K — the type=4 SRAM arm; the Phase-84
+                  'FRAM' relabel was deleted as a defect in 197-04, which
+                  also moved electrical.vcc_mv from 3300 to 5000 because the
+                  relabel had been bypassing the SRAM single-rail rewrite).
       - X88C64  : RED against the current DB (electrical.type is 'UV-EPROM' today
                   because flags & 0x10 == 0 makes the flags rule miss the 0x34
                   XICOR NovRAM/EEPROM). Plan 02's proto_id==0x34 -> EEPROM arm
@@ -75,8 +79,11 @@ class TestVariantDecodeClassification:
 
     def test_fm1608_resolves_sram_std(self):
         """FM1608 (RAMTRON) must classify as algorithm 40 (0x28 SRAM_STD),
-        electrical.type 'FRAM' (Phase-84 cosmetic relabel survives), and pinout
-        'DIP28_JEDEC_SRAM_8K'. GREEN against the current DB.
+        electrical.type 'SRAM' (the 197-04 relabel deletion makes FM1608
+        consistent with its Ramtron siblings FM1208/FM16W08/FM1808/FM18L08,
+        which already read SRAM), electrical.vcc_mv 5000 (up from 3300 --
+        the relabel had been bypassing the SRAM single-rail rewrite), and
+        pinout 'DIP28_JEDEC_SRAM_8K'. GREEN against the current DB.
         """
         db = _load_db()
         found = []
@@ -89,14 +96,20 @@ class TestVariantDecodeClassification:
         for mfg, chip in found:
             algo = chip.get("programming", {}).get("algorithm")
             etype = chip.get("electrical", {}).get("type")
+            vcc_mv = chip.get("electrical", {}).get("vcc_mv")
             pinout = chip.get("pinout")
             assert algo == 40, (
                 f"{mfg}/{chip.get('part_number')}: expected programming.algorithm=40 "
                 f"(0x28 SRAM_STD via type=4 arm), got {algo!r}"
             )
-            assert etype == "FRAM", (
-                f"{mfg}/{chip.get('part_number')}: expected electrical.type='FRAM' "
-                f"(Phase-84 cosmetic relabel), got {etype!r}"
+            assert etype == "SRAM", (
+                f"{mfg}/{chip.get('part_number')}: expected electrical.type='SRAM' "
+                f"(197-04 deleted the FRAM relabel), got {etype!r}"
+            )
+            assert vcc_mv == 5000, (
+                f"{mfg}/{chip.get('part_number')}: expected electrical.vcc_mv=5000 "
+                f"(SRAM single-rail rewrite, no longer bypassed by the relabel), "
+                f"got {vcc_mv!r}"
             )
             assert pinout == "DIP28_JEDEC_SRAM_8K", (
                 f"{mfg}/{chip.get('part_number')}: expected pinout='DIP28_JEDEC_SRAM_8K', "

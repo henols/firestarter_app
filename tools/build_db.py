@@ -671,19 +671,6 @@ def main():
                     type_int, proto_id, pm_idx, flags, pinout_key, mem_size
                 )
 
-                # Label-only per-chip relabel, keyed on part_number. Runs after
-                # classification and must NOT touch proto_id / pinout / vpp /
-                # algorithm.
-                #
-                # SST39SF040 deliberately KEEPS Flash/EEPROM: relabelling it to
-                # 'Flash' flips FLAG_CAN_ERASE off and breaks its auto-erase.
-                _ETYPE_RELABEL = {"FM1608": "FRAM"}
-                part_aliases_set = {a.split("@")[0].strip() for a in name.split(",")}
-                for _relabel_pn, _relabel_etype in _ETYPE_RELABEL.items():
-                    if _relabel_pn in part_aliases_set:
-                        _etype = _relabel_etype
-                        break
-
                 _d_vpp_mv = VPP_MV.get(voltages & 0xF0, 0)
                 _d_vcc_mv = VCC_VOLTAGES.get((voltages >> 8) & 0x0F, 5000)
                 _d_vdd_mv = VCC_VOLTAGES.get((voltages >> 12) & 0x0F, 5000)
