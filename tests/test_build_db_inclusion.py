@@ -563,15 +563,17 @@ class TestUnsupportedReasonStrings:
             )
 
     def test_at28c16_named_arm_reason_mentions_adapter_doc(self):
-        """AT28C16 (adapter-required) unsupported_reason references the adapter wiki page.
+        """AT28C16 (adapter-required) unsupported_reason carries the
+        hardware-damage guard's own wording, not a named-arm override.
 
-        D-03 named arm must produce a reason string that:
-          1. Starts with 'adapter required:' (existing invariant)
-          2. References 'AT28C04 Adapter' (the named-arm adapter wiki page title;
-             Phase 168 MIGRATE-04 D-14 repointed this from a firestarter/doc/
-             path to the wiki page name, since the path stops existing)
-          3. Does NOT contain 'DIP24_2716 pinout maps to the 12V VPP rail' (that is the
-             old generic Site B wording; named arm overwrites it)
+        D-07 as amended by D-15 deleted the named arm and its part-number
+        list; the hardware-damage guard is now the sole writer of this reason
+        string. The reason must:
+          1. Start with 'adapter required:' (existing invariant — the guard's
+             own text starts the same way)
+          2. Contain 'socket pin 21 = WE' (the guard's own wording)
+          3. NOT reference the adapter wiki page — that wording died with the
+             named arm; the guard's reason cites no wiki page at all
         """
         db = _load_db()
         found = []
@@ -588,9 +590,13 @@ class TestUnsupportedReasonStrings:
             assert reason.startswith("adapter required:"), (
                 f"{mfg}/{chip.get('part_number')}: reason must start with 'adapter required:', got: {reason!r}"
             )
-            assert "AT28C04 Adapter" in reason, (
-                f"{mfg}/{chip.get('part_number')}: named-arm reason must reference "
-                f"'AT28C04 Adapter' (the adapter wiki page), got: {reason!r}"
+            assert "socket pin 21 = WE" in reason, (
+                f"{mfg}/{chip.get('part_number')}: guard reason must contain "
+                f"'socket pin 21 = WE', got: {reason!r}"
+            )
+            assert "AT28C04 Adapter" not in reason, (
+                f"{mfg}/{chip.get('part_number')}: reason must not reference the "
+                f"retired adapter wiki page, got: {reason!r}"
             )
 
     def test_x88c64p_reason_does_not_say_serial_parallel_hybrid(self):

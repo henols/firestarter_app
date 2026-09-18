@@ -632,43 +632,9 @@ def main():
                     # returns ERROR instead of configure_eprom (HARD invariant).
                     proto_id = NON_DISPATCHABLE_ALGO
 
-                # AT28C04/AT28C16 family. Runs after the guard above so its reason
-                # string wins.
-                #
-                # These arrive as proto_id 0x0D (configure_eeprom28c, pure 5V, no
-                # VPP), so the guard above does NOT fire and proto_id stays 0x0D —
-                # a real dispatchable handler. They are refused in-host by
-                # support_status="adapter-required", which chip_resolver rejects
-                # before any wire dict is built. This arm therefore sets only
-                # support_status + reason and must NOT touch proto_id.
-                #
-                # The reason string must start with "adapter required:" —
-                # test_adapter_required_reason_starts_with_adapter_required.
-                _AT28C_DIP24_NAMES = {
-                    "AT28C04",
-                    "AT28HC04",
-                    "AT28C04E",
-                    "AT28C04F",
-                    "AT28C16",
-                    "AT28HC16",
-                    "AT28HC16L",
-                    "AT28C16E",
-                    "AT28C16F",
-                    "28C04A",
-                    "28C04AF",
-                    "28C16A",
-                    "28C16AF",
-                    "UPD28C04",
-                }
                 _chip_aliases = {
                     a.split("@")[0].strip() for a in name.split(",") if a.strip()
                 }
-                if _chip_aliases & _AT28C_DIP24_NAMES:
-                    _support_status = "adapter-required"
-                    _unsupported_reason = (
-                        "adapter required: AT28C04/AT28C16 DIP24 chip — requires a physical "
-                        "DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
-                    )
 
                 # --- SYNTHESIZE "COMPLETE" DATA ---
 
