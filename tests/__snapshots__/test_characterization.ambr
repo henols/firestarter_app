@@ -759,12 +759,12 @@
   | MBM2732,MBM2732A,MB…| FUJITSU          |   24 |            | UV-EPROM    | 18.0v|
   | MBM2764             | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
   | MBM27C1000P,MBM27C1…| FUJITSU          |   32 | 0x04E5     | UV-EPROM    | 12.5v|
-  | MBM27C1001          | FUJITSU          |   32 | 0x04E5     | UV-EPROM    | 12.0v|
+  | MBM27C1001          | FUJITSU          |   32 | 0x04E5     | UV-EPROM    | 12.5v|
   | MBM27C128P          | FUJITSU          |   28 |            | UV-EPROM    | 18.0v|
   | MBM27C2000P,MBM27C2…| FUJITSU          |   32 | 0x040B     | UV-EPROM    | 12.5v|
   | MBM27C2001          | FUJITSU          |   32 |            | UV-EPROM    | 12.0v|
   | MBM27C256A          | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
-  | MBM27C4001          | FUJITSU          |   32 | 0x04F4     | UV-EPROM    | 12.0v|
+  | MBM27C4001          | FUJITSU          |   32 | 0x04F4     | UV-EPROM    | 12.5v|
   | MBM27C512           | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
   | MBM27C64            | FUJITSU          |   28 |            | UV-EPROM    | 18.0v|
   | MBM28F010           | FUJITSU          |   32 | 0x048F     | Flash/EEPROM| 12.0v|

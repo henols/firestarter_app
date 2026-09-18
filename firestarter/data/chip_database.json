@@ -5594,7 +5594,7 @@
         "size_bytes": 16384,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5500,
+        "vdd_mv": 6000,
         "vpp_mv": 18000
       },
       "part_number": "MBM27128",
@@ -5704,8 +5704,8 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5500,
-        "vpp_mv": 12000
+        "vdd_mv": 6000,
+        "vpp_mv": 12500
       },
       "part_number": "MBM27C1001",
       "pinout": "DIP32_27C020",
@@ -5814,8 +5814,8 @@
         "size_bytes": 524288,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5500,
-        "vpp_mv": 12000
+        "vdd_mv": 6000,
+        "vpp_mv": 12500
       },
       "part_number": "MBM27C4001",
       "pinout": "DIP32_STD",
