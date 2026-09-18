@@ -365,3 +365,52 @@ Sources: `.planning/phases/197-the-override-mechanism-and-the-program-pulse/197-
 § "PULSE-01 — The Falsification Job"; `197-PULSE-INVENTORY.md` (the rows this finding
 does not correct); `tools/datasheet_overrides.json` entries `FUJITSU/MBM27128`,
 `FUJITSU/MBM27C1000`, `FUJITSU/MBM27C1001`.
+
+---
+
+## 9. The voltage word's two nibbles and VPP byte (VOLT-01, Phase 198 — the VPP decode is completed and the mask is corrected)
+
+**Verdict: the VPP byte's low nibble carries option flags, not part of the rail index, and
+`0xF1`/`0xF2` are two additional rail indices that are exempt from the mask rather than
+sharing one with it.** This task completes `VPP_MV` and fixes the decode that previously
+collapsed those two indices onto `0xF0`.
+
+**What the decode does today** `[VERIFIED: build_db.py, the `_d_vpp_mv` assignment
+immediately after `classify()` runs]`: the full low byte of `voltages` is bound once, then
+looked up directly in `VPP_MV` when it is one of the two exact-match indices, and otherwise
+masked with `& 0xF0` and looked up with a `0` default — the same `.get(idx, default)`
+fallback idiom `_d_vcc_mv` and `_d_vdd_mv` already use.
+
+**The witness row that is why the mask exists at all.** `SST27VF512` carries
+`voltages=0x0001`. `0x01` is not a `VPP_MV` key on its own; masking to `0x00` recovers the
+part's real 12000 mV rail. Without the mask, this row and the 141 others sharing a non-zero
+low nibble on a mapped high nibble would silently decode to the `0` default. The
+`0x00`/`0x01` and `0x70`/`0x71` pairings visible in the low-byte census — the same rail
+index, once with the low nibble clear and once with it set — corroborate that the low nibble
+carries an independent bit rather than being part of the rail index itself. This generator
+finds no named upstream constant for that bit; it is this generator's own working reading of
+the census, not an upstream-attested fact.
+
+**The two exact-match indices, and why they are exempt from the mask.** `0xF1` and `0xF2`
+are themselves distinct rail indices — 25000 mV and 21000 mV — not `0xF0` with option bits
+set. Masking them would collapse both onto `0xF0`'s 18000 mV, silently under-reporting the
+rail by 7000 mV or 3000 mV. They are therefore matched against the full low byte before the
+mask is ever applied, and the set of low bytes eligible for that exact match is derived from
+`VPP_MV` itself — the keys whose low nibble is non-zero — so a future addition to the table
+with a non-zero low nibble extends the exempt set automatically.
+
+**The corrected VPP table provenance.** The two new entries come from upstream's
+`xg_vpp_voltages[]` `[VERIFIED: database.c#L161-L170 @ a8efaedc]`, which is a strict,
+conflict-free superset of `tl866ii_vpp_voltages[]`: the sixteen indices the table already
+shipped are byte-identical between the two tables, and `xg_vpp_voltages[]` adds exactly
+`0xf1` (25 V) and `0xf2` (21 V) beyond them. No filtered row carries either index today, so
+regenerating with this change alone reproduces the shipped database byte-for-byte — the
+change completes the decode without altering a single emitted value.
+
+Plan `198-03` completes this section with the general finding that the voltage word's
+nibbles select a programmer rail index rather than a chip requirement (D-15); this task's
+scope is limited to the VPP decode completion above and to preserving, rather than losing,
+what the comment block it replaced held.
+
+Sources: `.planning/phases/198-the-two-voltage-nibbles/198-RESEARCH.md` F-1, F-2, F-12;
+`database.c#L125-L126 @ a8efaedc`; `database.c#L161-L170 @ a8efaedc`.

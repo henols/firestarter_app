@@ -54,11 +54,6 @@ PROTOCOL_MAP = {
     # 0x3C: NOT IN MINIPRO SOURCE — invented; remove entirely
 }
 
-# Key on (voltages & 0xF0), NOT (voltages & 0xFF). The low byte packs two
-# fields: bits 7-4 are the VPP index (these table keys), bits 3-0 are option
-# flags. Masking the full byte yields Unknown/0 mV whenever the option bits are
-# set — e.g. SST27VF512 has voltages=0x0001, and 0x01 is not a key here.
-# [minipro database.c + tl866a.c, tl866ii_vpp_voltages[]]
 VPP_MV = {
     0x00: 12000,
     0x10: 9000,
@@ -76,7 +71,11 @@ VPP_MV = {
     0xD0: 16500,
     0xE0: 17000,
     0xF0: 18000,
+    0xF1: 25000,
+    0xF2: 21000,
 }
+
+_VPP_EXACT_LOW_BYTES = frozenset(k for k in VPP_MV if k & 0x0F)
 
 # RURP boost regulator theoretical ceiling (build_db.py comment + hw evidence).
 # Chips requiring VPP above this cannot be programmed on any RURP revision.
@@ -671,7 +670,12 @@ def main():
                     type_int, proto_id, pm_idx, flags, pinout_key, mem_size
                 )
 
-                _d_vpp_mv = VPP_MV.get(voltages & 0xF0, 0)
+                _voltages_lo = voltages & 0xFF
+                _d_vpp_mv = (
+                    VPP_MV[_voltages_lo]
+                    if _voltages_lo in _VPP_EXACT_LOW_BYTES
+                    else VPP_MV.get(_voltages_lo & 0xF0, 0)
+                )
                 _d_vcc_mv = VCC_VOLTAGES.get((voltages >> 8) & 0x0F, 5000)
                 _d_vdd_mv = VCC_VOLTAGES.get((voltages >> 12) & 0x0F, 5000)
                 _d_pulse = interpret_timing(ic.get("pulse_delay"), proto_id)
