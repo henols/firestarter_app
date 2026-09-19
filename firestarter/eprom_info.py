@@ -17,6 +17,59 @@ from firestarter.ic_layout import EpromSpecBuilder  # Import renamed class
 
 logger = logging.getLogger("EpromConsolePresenter")
 
+# The shield's programming VCC rail is fixed hardware — it is not a firmware
+# constant with a header counterpart, so it lives here rather than in
+# firestarter/constants.py (that module mirrors three firmware headers and
+# every entry there must change in the same commit pair as its header; this
+# value has none).
+_SHIELD_FIXED_VCC_MV = 5000
+
+
+def _format_v_prose(mv: int) -> str:
+    """Render a millivolt integer as prose voltage, e.g. `6.0 V` for 6000.
+
+    Delegates to `format_mv` and re-spells only the unit suffix (lowercase
+    `v` -> space + capital `V`), so the numeric rendering has exactly one
+    definition in the project. The field-row cell spells the same value
+    `6.0v` via `format_mv` directly; the warning prose spells it `6.0 V`.
+    Both spellings are deliberate (D-04) and both call the same formatter.
+    """
+    return format_mv(mv).replace("v", " V")
+
+
+def programming_vcc_over_rail_mv(raw_config_data: dict | None) -> int | None:
+    """Return the decoded `electrical.vdd_mv` when it exceeds the shield's
+    fixed rail, else `None`.
+
+    D-03: the predicate is `vdd_mv > _SHIELD_FIXED_VCC_MV`, not
+    `vdd_mv > vcc_mv` — the shield delivers a fixed rail regardless of what a
+    row's `vcc_mv` says.
+
+    D-06: this must fail open. `raw_config_data` may be `None`, its
+    `electrical` key may be absent, and `vdd_mv` may be absent, `None`, `0`,
+    or (from a hand-edited `~/.firestarter/database.json` override) a
+    non-numeric string. `EpromDatabase` merges that operator file over the
+    packaged database unless `skip_local_override=True`, and `_map_data`'s
+    own comment names a stale override missing electrical keys as a real
+    anticipated case — so the fail-open branch below is not speculative,
+    even though the live 746-row shipped database has zero rows that reach
+    it (every row gets a non-zero int from `build_db.py`'s own `.get(...,
+    5000)` default).
+
+    Chained `.get()` is used deliberately, unlike `_map_data`'s direct
+    indexing on `vcc_mv`/`vpp_mv` — that style exists so a stale override
+    fails loudly, which is the opposite of what D-06 requires here.
+    """
+    if not raw_config_data:
+        return None
+    try:
+        vdd_mv = int((raw_config_data.get("electrical") or {}).get("vdd_mv", 0) or 0)
+    except (TypeError, ValueError):
+        return None
+    if vdd_mv > _SHIELD_FIXED_VCC_MV:
+        return vdd_mv
+    return None
+
 
 class EpromConsolePresenter:
     """
@@ -146,6 +199,18 @@ class EpromConsolePresenter:
                     "unsupported_reason", ""
                 )
 
+        # Inject the elevated-programming-supply row/warning data into
+        # combined_data. Gated on the predicate returning a value, so a part
+        # at or below the shield's rail gets no new key at all — D-06's
+        # fail-open, and the same reason the 462 at-or-below-5000 rows keep
+        # byte-stable `info` output. Mirrors the support_status injection
+        # immediately above, which uses the same raw_config_data seam.
+        if raw_config_data:
+            over_rail_mv = programming_vcc_over_rail_mv(raw_config_data)
+            if over_rail_mv is not None:
+                combined_data["programming_vcc_mv"] = over_rail_mv
+                combined_data["programming_vcc_str"] = format_mv(over_rail_mv)
+
         if eprom_data_for_programmer:
             combined_data["programmer_config_json_str"] = self._json_output_formatted(
                 eprom_data_for_programmer
@@ -248,6 +313,10 @@ class EpromConsolePresenter:
         if "can_erase_str" in chip_data:
             logger.info(f"{'Can be erased:': <{pos}}{chip_data.get('can_erase_str')}")
         logger.info(f"{'VCC:': <{pos}}{chip_data.get('vcc_str')}")
+        if "programming_vcc_str" in chip_data:
+            logger.info(
+                f"{'Programming VCC:': <{pos}}{chip_data.get('programming_vcc_str')}"
+            )
         if "vpp_str" in chip_data:
             logger.info(f"{'VPP:': <{pos}}{chip_data.get('vpp_str')}")
         if "chip_id_hex" in chip_data:
@@ -256,6 +325,26 @@ class EpromConsolePresenter:
             logger.info(
                 f"{'Pulse delay:': <{pos}}{chip_data.get('pulse_delay_us_str')}"
             )
+
+        # This part's programming supply decodes above the shield's fixed
+        # rail (D-03). Gated on the same "programming_vcc_str" key the row
+        # above is gated on, so the row and the warning can never disagree
+        # about whether a part is elevated. D-05: state and proceed — this
+        # must never become a refusal. D-04 (amended 2026-09-19): the
+        # sentence states what the value decodes to, not what the part
+        # requires — DECODE-NOTES.md § 9 established that most of these
+        # values are a programmer rail-table slot rather than a transcribed
+        # datasheet requirement, so the sentence claims exactly what is
+        # known and nothing more.
+        if "programming_vcc_str" in chip_data:
+            rail_v = _format_v_prose(_SHIELD_FIXED_VCC_MV)
+            logger.warning("")
+            logger.warning(
+                f"WARNING: this part's programming supply decodes to "
+                f"{_format_v_prose(chip_data['programming_vcc_mv'])}; the shield "
+                f"supplies a fixed {rail_v}."
+            )
+            logger.warning(f"Programming will be attempted at {rail_v}.")
 
         if chip_data.get("no_pinout_warning"):
             logger.warning("")
