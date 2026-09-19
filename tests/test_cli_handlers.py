@@ -17,6 +17,7 @@ the 11 remaining commands plus TRAP-specific coverage:
     separate verdict tests proving the handler does NOT bool-to-int wrap.
 """
 
+import logging
 from unittest.mock import Mock
 
 import pytest
@@ -121,6 +122,88 @@ def test_info_unknown_chip_error_path(runner: CliRunner) -> None:
     """`firestarter info NOPE_NOT_A_CHIP` exits 1 with chip-not-found error."""
     result = runner.invoke(cli, ["info", "NOPE_NOT_A_CHIP"])
     assert result.exit_code == 1
+
+
+def test_info_elevated_programming_vcc_warns(
+    runner: CliRunner, caplog: pytest.LogCaptureFixture
+) -> None:
+    """`firestarter info MBM27C1000` warns that its programming supply
+    decodes above the shield's fixed rail (Phase 200, VCC-01/D-04/D-06).
+
+    Measured fact this test depends on: the `cli` group short-circuits
+    `_setup_logging` when `ctx.obj` is already an `AppContext`
+    (`cli_handlers.py`'s test-mode short-circuit), so under `CliRunner` the
+    root logger keeps its ambient level rather than the `INFO` level
+    `_setup_logging` would otherwise set. Under pytest that ambient level is
+    `WARNING`, so every `logger.info` field row, including
+    `Programming VCC:`, never passes the logger's own level check.
+
+    Assertions run against `caplog.text`, not `result.output`: pytest
+    installs its own log-capturing handler on the root logger for every
+    test, which satisfies `Logger.callHandlers`'s "a handler processed this
+    record" condition and so suppresses Python's `logging.lastResort`
+    stderr fallback that `CliRunner` would otherwise pick up. Measured this
+    session — under a bare interpreter (no pytest) the same invocation's
+    `result.output` does contain the warning text via that fallback; under
+    pytest it is always `''` regardless of what was logged, so asserting
+    against `result.output` here would pass vacuously. `caplog.text` is the
+    correct capture surface inside pytest, and it still proves the
+    log-level separation: `Programming VCC:` is absent from `caplog.text`
+    for the same level-filtering reason it is absent from a real terminal.
+
+    Wrapped in `caplog.at_level(logging.WARNING, logger="EpromConsolePresenter")`
+    rather than relying on the ambient root level: measured this session
+    that a sibling test invoking `cli` WITHOUT a pre-built `ctx.obj` (e.g.
+    `test_info_unknown_chip_error_path`) runs the real `_setup_logging`,
+    which sets the *root* logger's level to `INFO` for the rest of the
+    process — there is no teardown that restores it. Running this test
+    after such a sibling, without pinning the level explicitly here, would
+    let `Programming VCC:` leak into `caplog.text` and fail the log-level
+    assertion depending on test order. `at_level` sets the named logger's
+    level for the duration of the `with` block regardless of what a prior
+    test left behind, so this test's outcome does not depend on execution
+    order. Injects a REAL `EpromConsolePresenter(db)` — the default Mock
+    presenter returns `None` from `prepare_detailed_eprom_data` and would
+    mask the feature entirely.
+    """
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
+        result = runner.invoke(cli, ["info", "MBM27C1000"], obj=app)
+    assert result.exit_code == 0
+    assert (
+        "WARNING: this part's programming supply decodes to 6.0 V; the "
+        "shield supplies a fixed 5.0 V." in caplog.text
+    )
+    assert "Programming will be attempted at 5.0 V." in caplog.text
+    assert "Programming VCC:" not in caplog.text
+    assert "not found in database" not in caplog.text
+
+
+def test_info_five_volt_part_emits_no_programming_vcc_warning(
+    runner: CliRunner, caplog: pytest.LogCaptureFixture
+) -> None:
+    """`firestarter info W27C512` emits neither the row nor the warning
+    (Phase 200, D-06 fail-open).
+
+    W27C512 is one of the 462 rows at or below 5000 mV `vdd_mv` — its
+    silence here is D-06's fail-open path observed end to end through the
+    real CLI and a real presenter, not an incidental absence of output.
+    Asserts against `caplog.text` for the same reason
+    `test_info_elevated_programming_vcc_warns` does: under pytest,
+    `result.output` is always empty when `ctx.obj` is pre-built, so it
+    would pass this assertion vacuously regardless of behavior. Wrapped in
+    the same `caplog.at_level(...)` for the same order-independence reason
+    documented there.
+    """
+    db = EpromDatabase(skip_local_override=True)
+    app = make_app_context(db=db, eprom_presenter=EpromConsolePresenter(db))
+    with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
+        result = runner.invoke(cli, ["info", "W27C512"], obj=app)
+    assert result.exit_code == 0
+    assert "decodes to" not in caplog.text
+    assert "Programming VCC" not in caplog.text
+    assert "not found in database" not in caplog.text
 
 
 def test_info_happy_path_no_crash(runner: CliRunner) -> None:
