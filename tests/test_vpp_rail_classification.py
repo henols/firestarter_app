@@ -28,6 +28,24 @@ Coverage:
   5. BOUNDARY -- the filter is at-or-above 18000, not strictly above: a row
      one millivolt below the floor is excluded, and a row sitting exactly
      on the floor is counted.
+  6. NON-VACUITY, INJECTED ROW -- a synthetic 31st row injected into an
+     in-memory deep copy at or above the floor shifts the measured total
+     to 31, proving the total assertion can actually fail.
+  7. NON-VACUITY, REWRITTEN ALGORITHM -- rewriting one drop-resistor row's
+     algorithm to the direct-VPE algorithm, in an in-memory deep copy,
+     shifts the path histogram, proving the path assertion can fail.
+  8. NON-VACUITY, REWRITTEN STATUS -- rewriting one row's support_status in
+     an in-memory deep copy breaks the all-supported claim, proving that
+     assertion can fail too.
+  9. SOURCE-SHAPE GUARD -- reads this module's own source and asserts every
+     census and non-vacuity test exists by name, that the load-bearing
+     count definitions have not been quietly relaxed, and that none of a
+     named list of weakening idioms has crept in.
+
+None of the three non-vacuity mutations ever touches chip_database.json on
+disk -- each loads the database once and mutates a `copy.deepcopy` of it,
+following the same discipline test_wire_dict_equivalence.py's non-vacuity
+legs use for the delta layers.
 
 The algorithm-to-VPP-path mapping is a deliberate mirror of the firmware's
 protocol-keyed parameter table. The host has no access to that table -- the
@@ -70,6 +88,7 @@ database.
 """
 
 import collections
+import copy
 import json
 from pathlib import Path
 
@@ -261,3 +280,147 @@ def test_boundary_is_at_or_above_not_strictly_above() -> None:
         f"a row exactly at the {_VPP_CENSUS_FLOOR_MV} mV floor must be "
         f"counted, found {at_rows}"
     )
+
+
+def test_injecting_a_synthetic_row_makes_the_total_go_to_31() -> None:
+    """Non-vacuity, defect class closed: a census helper that silently
+    matched anything -- an empty row list, a swallowed exception, a filter
+    that never selected -- would pass every other test in this module.
+    Injecting a synthetic row at the floor into an in-memory deep copy of
+    the loaded database must shift the measured total from 30 to 31. The
+    original database on disk is never written to.
+    """
+    db = _load_db()
+    mutated = copy.deepcopy(db)
+    manufacturer = next(iter(sorted(mutated)))
+    mutated[manufacturer].append(
+        {
+            "part_number": "SYNTHETIC-THIRTY-FIRST-ROW",
+            "support_status": "supported",
+            "electrical": {"vpp_mv": _VPP_CENSUS_FLOOR_MV, "pin_count": 28},
+            "programming": {"algorithm": 0x07},
+        }
+    )
+
+    baseline_rows, _, _, _ = _census(db)
+    mutated_rows, _, _, _ = _census(mutated)
+
+    assert len(baseline_rows) == 30
+    assert len(mutated_rows) == 31, (
+        f"injecting one synthetic row at the floor into an in-memory deep "
+        f"copy must shift the total from 30 to 31, measured "
+        f"{len(mutated_rows)}"
+    )
+
+
+def test_rewriting_an_algorithm_shifts_the_path_histogram() -> None:
+    """Non-vacuity, defect class closed: a path split that could never
+    disagree with the mirrored mapping would pass even if the mapping were
+    deleted entirely. Rewriting one drop-resistor row's algorithm to the
+    direct-VPE algorithm, in an in-memory deep copy, must shift the path
+    histogram from 10/20 to 9/21.
+    """
+    db = _load_db()
+    mutated = copy.deepcopy(db)
+    rows, _, _, _ = _census(mutated)
+    drop_resistor_chip = next(
+        chip
+        for _, chip in rows
+        if _ALGORITHM_TO_VPP_PATH.get(chip["programming"]["algorithm"])
+        == "drop-resistor"
+    )
+    drop_resistor_chip["programming"]["algorithm"] = 0x0B
+
+    _, _, mutated_path_histogram, _ = _census(mutated)
+
+    assert mutated_path_histogram == {"drop-resistor": 9, "direct-vpe": 21}, (
+        f"rewriting one drop-resistor row's algorithm to the direct-VPE "
+        f"algorithm, in an in-memory deep copy, must shift the path "
+        f"histogram to 9 and 21, measured {mutated_path_histogram}"
+    )
+
+
+def test_rewriting_support_status_breaks_the_all_supported_claim() -> None:
+    """Non-vacuity, defect class closed: an all-supported claim that could
+    never disagree would pass even over a database where D-01 no longer
+    holds. Rewriting one row's support_status, in an in-memory deep copy,
+    must break the all-30-supported claim.
+    """
+    db = _load_db()
+    mutated = copy.deepcopy(db)
+    rows, _, _, _ = _census(mutated)
+    some_chip = rows[0][1]
+    some_chip["support_status"] = "adapter-required"
+
+    mutated_rows, _, _, mutated_status_histogram = _census(mutated)
+
+    assert mutated_status_histogram != {"supported": len(mutated_rows)}, (
+        f"rewriting one row's support_status, in an in-memory deep copy, "
+        f"must break the all-supported claim, measured "
+        f"{mutated_status_histogram}"
+    )
+    assert mutated_status_histogram.get("adapter-required") == 1
+
+
+_REQUIRED_TEST_NAMES = (
+    "test_row_total_and_voltage_histogram_match_post_override_state",
+    "test_path_histogram_has_no_unmapped_algorithm",
+    "test_every_row_in_the_census_is_supported",
+    "test_per_path_algorithm_and_pin_count_are_uniform",
+    "test_boundary_is_at_or_above_not_strictly_above",
+    "test_injecting_a_synthetic_row_makes_the_total_go_to_31",
+    "test_rewriting_an_algorithm_shifts_the_path_histogram",
+    "test_rewriting_support_status_breaks_the_all_supported_claim",
+)
+
+_DEFINITION_GUARD_COUNTS = {
+    "_EXPECTED_TOTAL_ROWS" + " = 30": 1,
+    "_EXPECTED_VOLTAGE_HISTOGRAM" + " = {18000: 21, 21000: 3, 25000: 6}": 1,
+    "_EXPECTED_PATH_HISTOGRAM" + ' = {"drop-resistor": 10, "direct-vpe": 20}': 1,
+    "=" + "= 30": 1,
+    "=" + "= 31": 1,
+}
+
+_WEAKENING_IDIOMS = (
+    "x" + "fail",
+    "pytest.mark." + "skip",
+    "issub" + "set",
+    "firestarter" + "_fw",
+    ">" + "= 30",
+    ">" + "= 10",
+    ">" + "= 20",
+)
+
+
+def test_module_source_shape_guards_against_weakening() -> None:
+    """Source-shape guard: a later reader cannot quietly relax an exact
+    count to a floor, delete a non-vacuity leg, or reach for an
+    expected-failure marker instead of fixing a real regression, without
+    this test noticing. Reads this module's own source rather than
+    re-deriving the census, because the claim is about the FILE, not the
+    database.
+
+    Every entry in `_DEFINITION_GUARD_COUNTS` and `_WEAKENING_IDIOMS` above
+    is assembled from two or more string fragments joined with `+`, rather
+    than written as one contiguous literal. A guard written as one
+    contiguous literal would count or match itself: `_DEFINITION_GUARD_COUNTS`
+    would inflate every count by one for its own definition line, and
+    `_WEAKENING_IDIOMS` would report its own list as containing every
+    idiom it exists to forbid.
+    """
+    source = Path(__file__).read_text(encoding="utf-8")
+
+    for name in _REQUIRED_TEST_NAMES:
+        needle = "def " + name + "("
+        assert needle in source, f"expected test {name!r} to exist by name"
+
+    for literal, expected_count in _DEFINITION_GUARD_COUNTS.items():
+        actual_count = source.count(literal)
+        assert actual_count == expected_count, (
+            f"expected {literal!r} to occur exactly {expected_count} "
+            f"time(s) in the module source, found {actual_count} -- a "
+            f"load-bearing count may have been relaxed"
+        )
+
+    for idiom in _WEAKENING_IDIOMS:
+        assert idiom not in source, f"weakening idiom {idiom!r} found in module source"
