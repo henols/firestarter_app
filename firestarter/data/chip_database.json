@@ -5595,7 +5595,7 @@
         "type": "UV-EPROM",
         "vcc_mv": 5000,
         "vdd_mv": 6000,
-        "vpp_mv": 18000
+        "vpp_mv": 21000
       },
       "part_number": "MBM27128",
       "pinout": "DIP28_2764",

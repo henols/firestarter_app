@@ -754,7 +754,7 @@
   | NMC27C32B,NMC27C32BQ| FAIRCHILD        |   24 |            | UV-EPROM    | 13.0v|
   | MB85R256H           | FUJITSU          |   28 |            | EEPROM      | 12.0v|
   | MBM2716             | FUJITSU          |   24 |            | UV-EPROM    | 12.0v|
-  | MBM27128            | FUJITSU          |   28 |            | UV-EPROM    | 18.0v|
+  | MBM27128            | FUJITSU          |   28 |            | UV-EPROM    | 21.0v|
   | MBM27256            | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
   | MBM2732,MBM2732A,MB…| FUJITSU          |   24 |            | UV-EPROM    | 18.0v|
   | MBM2764             | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|

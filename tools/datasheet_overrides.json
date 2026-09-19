@@ -50,9 +50,10 @@
   },
   "FUJITSU/MBM27128": {
     "datasheet": "datasheets/MBM27128.pdf",
-    "note": "Figure 3, the Quick Pro flow chart on page 4-20, specifies TPW = 1 ms +/- 50 us with VCC = 6V +/- 0.25V, VPP = 21V +/- 0.5V and an X = 20 pulse ceiling. Page 4-19's conventional procedure specifies a 50 ms pulse and is the wrong reading here: the firmware consumes this field as the initial pulse width of a verify-per-pulse loop capped at 25 pulses with overprogram_factor = 0 on protocols 0x07 and 0x08, which is the fast Quick Pro algorithm's shape and not the conventional single-shot one. Note also that the corrected value still yields an incomplete Quick Pro, because the firmware never emits the datasheet's tOPW over-program pulse. This entry's electrical.vdd_mv field also comes from that same Figure 3 table's VCC = 6V +/- 0.25V figure.",
+    "note": "Figure 3, the Quick Pro flow chart on page 4-20, specifies TPW = 1 ms +/- 50 us with VCC = 6V +/- 0.25V, VPP = 21V +/- 0.5V and an X = 20 pulse ceiling. Page 4-19's conventional procedure specifies a 50 ms pulse and is the wrong reading here: the firmware consumes this field as the initial pulse width of a verify-per-pulse loop capped at 25 pulses with overprogram_factor = 0 on protocols 0x07 and 0x08, which is the fast Quick Pro algorithm's shape and not the conventional single-shot one. Note also that the corrected value still yields an incomplete Quick Pro, because the firmware never emits the datasheet's tOPW over-program pulse. This entry's electrical.vdd_mv field also comes from that same Figure 3 table's VCC = 6V +/- 0.25V figure. This entry's electrical.vpp_mv field also comes from that same Figure 3 Quick Pro table's VPP = 21V +/- 0.5V figure.",
     "fields": {
       "programming.pulse_duration_us": { "was": 200, "is": 1000 },
+      "electrical.vpp_mv": { "was": 18000, "is": 21000 },
       "electrical.vdd_mv": { "was": 5500, "is": 6000 }
     }
   },
