@@ -523,3 +523,215 @@ Sources: `.planning/phases/198-the-two-voltage-nibbles/198-RESEARCH.md` F-1, F-2
 `FUJITSU/MBM27C4001`, and the twelve `0x06`-carve-out entries; `database.c#L125-L126 @
 a8efaedc`; `database.c#L161-L170 @ a8efaedc`; `database.c#L182-L190 @ a8efaedc`;
 `minipro.h#L84-L85 @ a8efaedc`.
+
+---
+
+## 10. What the rails actually deliver, and the firmware's routing decision that follows (RAIL-01, RAIL-02, RAIL-04, Phase 199 — the generator's 25 V ceiling stays theoretical; the measured, smaller deliverable maximum is now a firmware routing ceiling)
+
+**Verdict: `RURP_VPP_CEILING_MV = 25000` keeps its job as the generator's refusal gate and remains a
+regulator's theoretical figure, while what the shield actually delivers at the socket is a separate,
+smaller, measured number that now lives in firmware as a routing ceiling, not in this generator.**
+Plan `199-02` measured the two socket-pin-1 figures on the bench; plan `199-03` turned the
+drop-resistor figure into a firmware constant and a routing comparison; plan `199-04` turned the
+30-row disposition below into a test the generator's build can fail; this plan (`199-05`) is where
+all three meet and where gh#71's reporter gets an answer.
+
+**What the ceiling is and why it stays (D-01, D-02).** `RURP_VPP_CEILING_MV = 25000`, defined in
+`firestarter_app/tools/build_db.py`, is compared strictly greater-than against each row's decoded
+`vpp_mv`; the six rows sitting exactly on 25000 stay `supported` because of that strictness. No
+row's `support_status` moved in this phase and none moves as a result of this section. Replacing the
+ceiling with a measured figure was considered and declined: a measured maximum near 16–18 V would
+flip all thirty rows below to `vpp-exceeds-max`, and `chip_resolver.py` turns any non-`supported` row
+into a `ChipNotImplementedError` — the silent refusal this milestone's activation decisions forbid.
+The generator gained no second constant; whatever ceiling the routing decision needs lives in
+firmware instead, described below.
+
+**What was measured (D-04, D-05, D-07).** One bench session, 2026-09-19, on one shield identified by
+its operator by silkscreen as **Rev 2.0** — `hw_revision` cannot distinguish Rev 2.0 from **Rev 2.2**
+from the modified **Rev 0**, so the identification is an operator statement, not an instrument
+reading. Socket empty, pot at maximum and untouched between readings, meter at **socket pin 1**
+against board ground. Two control-register composites, both held and read at that one pot setting:
+`0x188` (`REGULATOR | VPE-DROP | P1`, the standard drop-resistor path) measured **17380 mV**, and
+`0x088` (`REGULATOR | P1`, drop bit clear — VPE routed directly to pin 1) measured **22140 mV**. The
+rail was held by the firmware's own `while (!rurp_user_button_pressed()) delay(200);` loop at the
+tail of `dt_set_registers()`, entered after the host had already disconnected — no `firestarter`
+command ran while either rail was held. A method that instead holds the serial port open does not
+work on this rig: closing the port de-asserts DTR, which resets the board and drops the rail before
+a reading can be taken.
+
+**What the programmer's own monitor said, and why it is not the same measurement (D-05).** Two
+bounded one-second sampling windows (`firestarter vpp -t 1`, `firestarter vpe -t 1`), with the
+recording rule fixed before either was opened: take the last frame in the window, unless the last
+three frames disagree by more than one 100 mV step. Both windows emitted two identical frames. The
+drop-resistor monitor read **18700 mV** against the 17380 mV meter figure — a signed difference of
++1320 mV, **+7.59 %**. The direct-VPE monitor read **23900 mV** against the 22140 mV meter figure — a
+signed difference of +1760 mV, **+7.95 %**. Both figures fall inside this project's separately
+measured ratiometric ADC figure of roughly 7.5 % (range 6.8–8.3 %), which they corroborate rather
+than replace; that instrument's standing operational rule is unchanged by this session — a pot target
+is set from a meter reading, never from the firmware's own figure.
+
+**The routing decision — route it, in firmware, on path capability (D-21).** `eprom_hv_route_mask`
+(`firestarter_fw/src/proms/eprom.cpp`) makes the decision. `FLAG_VPE_AS_VPP` is checked first and
+still wins over the table with no table read — it is the pre-existing manual override for the
+25 V NMOS parts and the manual-pot workflow. Failing that, and failing an unresolved protocol closed
+toward the drop path, the function reads the protocol's `vpp_path` column
+(`firestarter_fw/src/proms/eprom_params.cpp` assigns `VPP_PATH_DROP_RESISTOR` to protocols `0x07` and
+`0x08` and `VPP_PATH_DIRECT_VPE` to `0x0B`); a `VPP_PATH_DIRECT_VPE` row already routes the undropped
+rail. The addition this phase records: a `VPP_PATH_DROP_RESISTOR` row whose required `vpp_mv` is
+strictly greater than `RURP_VPP_DROP_PATH_MAX_DELIVERABLE_MV` also routes the undropped rail.
+`eprom_check_vpp` calls the same `eprom_hv_route_mask` before it reads anything, unchanged by this
+phase, so its acceptance window already follows whichever rail was routed. This is a firmware
+decision and no host-side rule sets it: the host and the firmware ship on independent channels — a
+host pinned at an old version, or carrying a threshold measured on a different shield, would
+mis-route a high-voltage rail onto a socket pin if the decision lived on that side instead. No host
+module exists for this; none is named because none was built.
+
+**Why the trigger is path capability and not the live reading — the sharpest finding in this section
+(D-22).** `eprom_check_vpp`'s existing acceptance check fires `MSG_WARN_VPP_LOW` when the read rail
+sits below 95 % of the required voltage. Measured against the bench pair, that reading-based rule
+would have caught almost none of the rows this phase exists to rescue. At a required 18000 mV the
+95 % threshold is 17100 mV; the drop-path monitor reads 18700 mV, which is above the threshold, so
+the check stays silent — while the socket itself, at 17380 mV, is 620 mV short. At a required 21000
+mV the threshold is 19950 mV; the same 18700 mV monitor reading is now below it, so the check does
+fire, and this is the one row (`FUJITSU/MBM27128`) whose shortfall (3620 mV) exceeds the roughly
++7.6 % monitor error enough to be caught anyway. A trigger built on the ADC reading would therefore
+have silently missed nine of the ten drop-resistor rows this section's classification names below.
+Routing is decided on what the path itself can deliver at any pot setting; the ADC-based acceptance
+check is left exactly as it was and, because it already calls `eprom_hv_route_mask`, continues to
+verify whichever rail the path-capability decision routed. **Consequence (D-23):** future calibration
+of that ADC improves the verification leg only — it is never a precondition for the routing decision
+being correct, because the routing decision was deliberately built not to depend on it.
+
+**A ceiling, not a threshold (D-22, carrying D-15's surviving substance).** The undropped route does
+not deliver a fixed voltage; it delivers whatever the pot is set to. `RURP_VPP_DROP_PATH_MAX_DELIVERABLE_MV`
+therefore does not mean "17380 mV is what a routed part receives" — it means no pot setting lets the
+drop-resistor path exceed 17380 mV, so any part requiring more must take the direct-VPE route
+instead. One pot sets both rails, so a part now routed onto the undropped rail still needs the pot
+set near its own required voltage; the firmware's existing ±5 %/+500 mV window is what adjudicates
+that, unchanged by this phase, and a first attempt on a newly-routed part can hard-error there if the
+pot is not set close enough.
+
+**The posture change, and the documentation that now reflects it (D-12, reversed).** Before this
+work, `FLAG_VPE_AS_VPP` was the only route to the undropped rail besides the `vpp_path` table column
+itself, and `eprom_hv_route_mask`'s own resolution-order documentation in `eprom.cpp`, along with the
+declaration comment above it in `include/eprom.h`, both said so. Both sites were corrected in the
+same commits that added the ceiling comparison: the `eprom.cpp` block gained a fourth documented
+resolution step covering the new comparison, and its two prior steps were reworded to say that the
+override is no longer the only route to the undropped rail; the `eprom.h` declaration now says the
+route comes from the `vpp_path` column "though not from that column alone." The posture changed and
+the firmware's own documentation now says so — this is not a stale sentence left standing.
+
+**The classification (D-17, D-18), re-measured from the live generated database.** Filtering every
+row whose `electrical.vpp_mv` is at or above 18000 mV, and mapping each row's `programming.algorithm`
+through the same algorithm-to-path table `eprom_params.cpp` carries, yields exactly the state
+`tests/test_vpp_rail_classification.py` asserts: **30 rows**, voltage histogram **21 at 18000 mV, 3
+at 21000 mV, 6 at 25000 mV**, every one `support_status: supported`. Ten rows sit on the
+drop-resistor path (algorithm `0x07`, pinout `DIP28_2764`, `vpp-pin: [1]`); twenty sit on the
+direct-VPE path (algorithm `0x0B`, pinout `DIP24_2716`/`DIP24_2732`/`DIP24_2532`, `vpp-pin: [21]`).
+The drop-resistor path's measured 17380 mV ceiling reaches **none** of the thirty: the nine rows at
+18000 mV are short by 620 mV, and the tenth (`FUJITSU/MBM27128`, at 21000 mV) is short by 3620 mV.
+With the routing change, every one of the thirty now takes the direct-VPE route: the measured direct
+figure of 22140 mV at socket pin 1 covers all ten former drop-resistor rows, worst margin 1140 mV
+(`FUJITSU/MBM27128` at 21000 mV).
+
+| Path | Required VPP | Manufacturer | Part Number | Algorithm | Pinout | Reason |
+|---|---|---|---|---|---|---|
+| drop-resistor | 21000 mV | FUJITSU | MBM27128 | 0x07 | DIP28_2764 | Corrected 2026-09-19 from its own vendored datasheet (`datasheets/MBM27128.pdf`, Figure 3) — the gh#71 correction, 18000 → 21000. |
+| drop-resistor | 18000 mV | FUJITSU | MBM27C128P | 0x07 | DIP28_2764 | Upstream decode: VPP low byte `0xF0` saturates at the decode table's largest entry (18000 mV) — the model's own maximum, not a per-part measurement. |
+| drop-resistor | 18000 mV | FUJITSU | MBM27C64 | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
+| drop-resistor | 18000 mV | HITACHI | HN27C64G | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
+| drop-resistor | 18000 mV | HITACHI | HN27C64FP | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
+| drop-resistor | 18000 mV | INTEL | 2764 | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
+| drop-resistor | 18000 mV | INTEL | 27128,D27128 | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
+| drop-resistor | 18000 mV | MITSUBISHI | M5M27C128 | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
+| drop-resistor | 18000 mV | NEC | UPD2764,UPD2764C,UPD2764D | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
+| drop-resistor | 18000 mV | TI | TMS2764 | 0x07 | DIP28_2764 | Upstream decode, `0xF0` saturation, as above. |
+| direct-vpe | 25000 mV | INTEL | 2732,2732A,M2732,M2732A | 0x0B | DIP24_2732 | Held by an `UNSOURCED` Phase 197 override entry — no datasheet citation. |
+| direct-vpe | 25000 mV | INTEL | M2716,M2716M | 0x0B | DIP24_2716 | Held by an `UNSOURCED` Phase 197 override entry — no datasheet citation. |
+| direct-vpe | 25000 mV | SGS-THOMSON | ETC2716,M2716 | 0x0B | DIP24_2716 | Held by an `UNSOURCED` Phase 197 override entry — no datasheet citation. |
+| direct-vpe | 25000 mV | ST | ETC2716,M2716 | 0x0B | DIP24_2716 | Held by an `UNSOURCED` Phase 197 override entry — no datasheet citation. |
+| direct-vpe | 25000 mV | TEXAS INSTRUMENTS | 2516 | 0x0B | DIP24_2716 | Hardcoded in the non-upstream supplement (`tools/extra_chips.json`), `UNVERIFIED`, not write-graduated — comes from neither the decode nor the override file. |
+| direct-vpe | 25000 mV | TEXAS INSTRUMENTS | 2532 | 0x0B | DIP24_2532 | Hardcoded in the non-upstream supplement (`tools/extra_chips.json`), `UNVERIFIED`, not write-graduated — comes from neither the decode nor the override file. |
+| direct-vpe | 21000 mV | SGS-THOMSON | M2732A | 0x0B | DIP24_2732 | Held by an `UNSOURCED` Phase 197 override entry — no datasheet citation. |
+| direct-vpe | 21000 mV | ST | M2732A | 0x0B | DIP24_2732 | Held by an `UNSOURCED` Phase 197 override entry — no datasheet citation. |
+| direct-vpe | 18000 mV | AMD | AM2716 | 0x0B | DIP24_2716 | Upstream decode, `0xF0` saturation, as above. |
+| direct-vpe | 18000 mV | AMD | AM2732,AM2732A | 0x0B | DIP24_2732 | Upstream decode, `0xF0` saturation, as above. |
+| direct-vpe | 18000 mV | FAIRCHILD | NMC27C16 | 0x0B | DIP24_2716 | Upstream decode, `0xF0` saturation, as above. |
+| direct-vpe | 18000 mV | FAIRCHILD | NMC27C16Q | 0x0B | DIP24_2716 | Upstream decode, `0xF0` saturation, as above. |
+| direct-vpe | 18000 mV | FAIRCHILD | NMC27C32,NMC27C32E,NMC27C32EH,NMC27C32H,NMC27C32Q | 0x0B | DIP24_2732 | Upstream decode, `0xF0` saturation, as above. |
+| direct-vpe | 18000 mV | FUJITSU | MBM2732,MBM2732A,MBM27C32,MBM27C32A | 0x0B | DIP24_2732 | Upstream decode, `0xF0` saturation, as above. |
+| direct-vpe | 18000 mV | NSC | NMC27C16 | 0x0B | DIP24_2716 | Upstream decode, `0xF0` saturation, as above. |
+| direct-vpe | 18000 mV | NSC | NMC27C16Q | 0x0B | DIP24_2716 | Upstream decode, `0xF0` saturation, as above. |
+| direct-vpe | 18000 mV | SGS-THOMSON | ETC2732 | 0x0B | DIP24_2732 | Upstream decode, `0xF0` saturation, as above. |
+| direct-vpe | 18000 mV | ST | ETC2732 | 0x0B | DIP24_2732 | Upstream decode, `0xF0` saturation, as above. |
+| direct-vpe | 18000 mV | TI | TMS2716 | 0x0B | DIP24_2716 | Upstream decode, `0xF0` saturation, as above. |
+| direct-vpe | 18000 mV | TI | TMS2732A | 0x0B | DIP24_2732 | Upstream decode, `0xF0` saturation, as above. |
+
+The shipped constant, for the mechanical equality this phase's own gate proves against the bench
+record and against `firestarter_fw/include/rurp_pinout.h`:
+
+```
+RURP_VPP_DROP_PATH_MAX_DELIVERABLE_MV = 17380
+```
+
+In prose, for a human reader: the drop-resistor path's measured deliverable maximum is **17.38 V** at
+socket pin 1, one Rev 2.0 shield, pot at maximum, socket empty
+`[VERIFIED: .planning/phases/199-what-the-rails-can-actually-deliver/199-BENCH-RECORD.md § "Measured
+figures", bench session 2026-09-19]`.
+
+**The limits, named rather than hedged:**
+
+- **One shield, one session, one pot setting.** These are figures for this Rev 2.0 board at maximum
+  pot, not a specification, not a fleet figure and not a tolerance band. The **Rev 2.2** board is
+  unmeasured and named as such here rather than assumed identical. The modified **Rev 0** could
+  contribute no monitor figure in any case: `hw_read_voltage` refuses on Rev 0, and `eprom_check_vpp`
+  returns early there before it ever reads a voltage.
+- **The monitor-versus-meter difference is a combined instrument-plus-switch-path discrepancy this
+  session cannot decompose**, because the monitor commands assert no socket-routing bit while the
+  meter reads at the socket through one. This project's separately measured ratiometric figure for
+  the instrument alone (roughly 7.5 %, range 6.8–8.3 %) is the only instrument-only number this
+  project has; both figures measured here fall inside that range and corroborate it without replacing
+  it. Its standing operational rule stands: set any pot target from a meter reading, never from the
+  firmware's own figure.
+- **The monitor's wire format carries whole volts plus one tenths digit**, so every firmware-reported
+  figure here sits on a 100 mV grid and is never finer than that, independently of accuracy.
+- **The direct-VPE-to-pin-21 destination was not measured.** The twenty direct-VPE rows above receive
+  VPE through `CTRL_VPE_ENABLE` to **pin 21**, a different physical destination from the socket-pin-1
+  figure this section classifies them against — `CTRL_VPE_ENABLE` and `CTRL_VPP_P1_ENABLE` route to
+  different pins. This is stated here as an approximation, not corrected by any figure in this
+  record; in particular nothing here licenses the inference that the six rows at 25000 mV are out of
+  reach.
+- **The classification test mirrors a firmware table the host cannot read**, so it detects a
+  database-side change only. A firmware-side repointing of an algorithm onto a different rail would
+  pass this database-side test silently.
+- **The two Texas Instruments supplement rows at a hardcoded 25000 mV are `UNVERIFIED` and not
+  write-graduated** — see the table above; they come from neither the infoic.xml decode nor a
+  datasheet-cited override.
+- **The shortfall warning gap.** Where a part's requirement exceeds what the routed rail delivers,
+  the only operator-facing signal is the firmware's existing low-VPP warning
+  (`MSG_WARN_VPP_LOW`, `eprom_check_vpp`), which names the measured rail and the required voltage and
+  proceeds. Its trigger is a 5 % window applied to a reading this session measured as roughly 7.6 %
+  high, so a real shortfall smaller than that combined margin can pass without ever firing the
+  warning — named here as a limit, not solved by anything in this phase.
+- **Nothing was written to any of the thirty parts in this work.** No claim is made that any of them
+  now programs; this section records what a rail delivers and what the firmware decides about it, not
+  a write outcome.
+
+The bench session established the two socket-pin-1 figures and the paired ADC error; the firmware
+plan turned the drop-resistor figure into `RURP_VPP_DROP_PATH_MAX_DELIVERABLE_MV` and a routing
+comparison proven by a native test suite to read no voltage; the classification-census test turned
+the thirty-row disposition above into an assertion the generator's own build can fail. This section
+is the record a reader with the installed package, and neither a planning directory nor a bench log,
+can find all three in.
+
+Sources: `.planning/phases/199-what-the-rails-can-actually-deliver/199-BENCH-RECORD.md` §§ "Measured
+figures", "Task 2 — The two hold windows", "Task 3 — Paired ADC reads and the error figures", "Limits";
+`.planning/phases/199-what-the-rails-can-actually-deliver/199-03-FIRMWARE-NOTES.md` §§ 1–3;
+`.planning/phases/199-what-the-rails-can-actually-deliver/199-CONTEXT.md` D-01, D-02, D-04, D-05,
+D-06, D-07, D-12, D-17, D-18, D-21, D-22, D-23; `firestarter_app/tools/build_db.py`
+(`RURP_VPP_CEILING_MV`); `firestarter_fw/include/rurp_pinout.h`
+(`RURP_VPP_DROP_PATH_MAX_DELIVERABLE_MV`); `firestarter_fw/src/proms/eprom.cpp`
+(`eprom_hv_route_mask`, `eprom_check_vpp`); `firestarter_fw/include/eprom.h`;
+`firestarter_fw/src/proms/eprom_params.cpp` (the protocol-keyed `vpp_path` table);
+`firestarter_app/tests/test_vpp_rail_classification.py`; `firestarter_app/firestarter/diagnostic_report.py`
+(`_RAIL_READING_DISCLOSURE`).
