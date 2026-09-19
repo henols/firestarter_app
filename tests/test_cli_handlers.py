@@ -171,11 +171,7 @@ def test_info_elevated_programming_vcc_warns(
     with caplog.at_level(logging.WARNING, logger="EpromConsolePresenter"):
         result = runner.invoke(cli, ["info", "MBM27C1000"], obj=app)
     assert result.exit_code == 0
-    assert (
-        "WARNING: this part's programming supply decodes to 6.0 V; the "
-        "shield supplies a fixed 5.0 V." in caplog.text
-    )
-    assert "Programming will be attempted at 5.0 V." in caplog.text
+    assert "WARNING: Programming VCC decodes to 6.0 V; using 5.0 V." in caplog.text
     assert "Programming VCC:" not in caplog.text
     assert "not found in database" not in caplog.text
 

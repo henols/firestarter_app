@@ -513,8 +513,7 @@
   Chip ID:            0x4e5
   Pulse delay:        500µS
   
-  WARNING: this part's programming supply decodes to 6.0 V; the shield supplies a fixed 5.0 V.
-  Programming will be attempted at 5.0 V.
+  WARNING: Programming VCC decodes to 6.0 V; using 5.0 V.
   
          32-DIP package
           -----v-----
@@ -572,8 +571,7 @@
   Chip ID:            0x4f4
   Pulse delay:        100µS
   
-  WARNING: this part's programming supply decodes to 6.0 V; the shield supplies a fixed 5.0 V.
-  Programming will be attempted at 5.0 V.
+  WARNING: Programming VCC decodes to 6.0 V; using 5.0 V.
   
          32-DIP package
           -----v-----

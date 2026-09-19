@@ -340,11 +340,10 @@ class EpromConsolePresenter:
             rail_v = _format_v_prose(_SHIELD_FIXED_VCC_MV)
             logger.warning("")
             logger.warning(
-                f"WARNING: this part's programming supply decodes to "
-                f"{_format_v_prose(chip_data['programming_vcc_mv'])}; the shield "
-                f"supplies a fixed {rail_v}."
+                f"WARNING: Programming VCC decodes to "
+                f"{_format_v_prose(chip_data['programming_vcc_mv'])}; "
+                f"using {rail_v}."
             )
-            logger.warning(f"Programming will be attempted at {rail_v}.")
 
         if chip_data.get("no_pinout_warning"):
             logger.warning("")
