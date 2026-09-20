@@ -165,13 +165,16 @@ class FakeChip:
         input_file_path: str,
         operation_flags: int = 0,
         address_str: str | None = None,
-    ) -> bool:
+        full: bool = False,
+    ) -> int:
+        # 202-01 D-10: int, 0 == match, 1 == mismatch (matches the real
+        # EpromOperator.verify_eprom contract).
         self.calls.append(("verify_eprom", {"address_str": address_str}))
         start = _parse_addr_or_size(address_str) or 0
         expected = Path(input_file_path).read_bytes()
         end = start + len(expected)
         actual = bytes(self.data[start:end])
-        return actual == expected
+        return 0 if actual == expected else 1
 
     def read_eprom(
         self,

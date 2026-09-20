@@ -63,7 +63,10 @@ def _cycle_operator(name: str, *, blank: bool = False):
     operator = Mock(spec=_OPERATOR_METHODS)
     operator.check_eprom_id.return_value = (True, eprom_data.get("chip-id") or 0)
     operator.check_eprom_blank.return_value = blank
-    for method in ("verify_eprom", "erase_eprom", "sdp_lock", "sdp_unlock"):
+    # 202-01 D-10: verify_eprom now returns an int (0 == match), unlike the
+    # other three, which stay bare bools.
+    operator.verify_eprom.return_value = 0
+    for method in ("erase_eprom", "sdp_lock", "sdp_unlock"):
         getattr(operator, method).return_value = True
 
     def _read(_name, data, output_file=None, address_str=None, size_str=None, **_kw):

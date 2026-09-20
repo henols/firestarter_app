@@ -795,7 +795,9 @@ def _mock_operator(**returns):
     op.read_eprom.return_value = True
     op.check_eprom_blank.return_value = True
     op.write_eprom.return_value = True
-    op.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match); the
+    # multi-run dispatch's `== 0` adapter reads this as success only at 0.
+    op.verify_eprom.return_value = 0
     op.erase_eprom.return_value = True
     op.sdp_lock.return_value = True
     op.sdp_unlock.return_value = True
@@ -854,8 +856,9 @@ def _sdp_leg_readback_operator():
         return True
 
     def _verify_eprom(name, eprom_data, source_path, *_args, **_kwargs):
+        # 202-01 D-10: int, 0 == match -- see the return_value comment above.
         expected = Path(source_path).read_bytes()
-        return expected == state["image"]
+        return 0 if expected == state["image"] else 1
 
     def _sdp_lock(name, eprom_data):
         state["locked"] = True
@@ -1776,7 +1779,8 @@ def test_agreeing_destructive_runs_report_confident_bad():
 
 def test_marginal_on_disagreeing_verify_runs():
     operator = _mock_operator()
-    operator.verify_eprom.side_effect = [True, False]
+    # 202-01 D-10: int, 0 == match, 1 == mismatch.
+    operator.verify_eprom.side_effect = [0, 1]
     plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
     results = run_plan(plan, operator, _REAL_DB, runs=2)
 
@@ -2814,7 +2818,8 @@ def _gated_allow_operator():
     operator.check_eprom_id.return_value = (True, None)
     operator.check_eprom_blank.return_value = True
     operator.erase_eprom.return_value = True
-    operator.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    operator.verify_eprom.return_value = 0
     operator.write_eprom.return_value = True
 
     def _read_eprom(name, eprom_data, output_file=None, **kwargs):

@@ -395,7 +395,9 @@ def _fixed_return_operator(**returns: Any) -> Mock:
     op.read_eprom.return_value = True
     op.check_eprom_blank.return_value = True
     op.write_eprom.return_value = True
-    op.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match); the
+    # multi-run dispatch's `== 0` adapter reads this as success only at 0.
+    op.verify_eprom.return_value = 0
     op.erase_eprom.return_value = True
     op.sdp_lock.return_value = True
     op.sdp_unlock.return_value = True
@@ -445,8 +447,9 @@ def _sdp_aware_operator() -> Mock:
         return True
 
     def _verify_eprom(name, eprom_data, source_path, *_args, **_kwargs):
+        # 202-01 D-10: int, 0 == match -- see the return_value comment above.
         expected = Path(source_path).read_bytes()
-        return expected == state["image"]
+        return 0 if expected == state["image"] else 1
 
     def _sdp_lock(name, eprom_data):
         state["locked"] = True

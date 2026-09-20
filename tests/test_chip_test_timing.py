@@ -56,7 +56,8 @@ def _operator(*, id_sleep: float = 0.0) -> Mock:
     op.check_eprom_id.side_effect = check_id
     op.check_eprom_blank.return_value = True
     op.read_eprom.return_value = True
-    op.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    op.verify_eprom.return_value = 0
     op.erase_eprom.return_value = True
     op.write_eprom.return_value = True
     op.sdp_lock.return_value = True

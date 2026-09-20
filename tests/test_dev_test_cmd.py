@@ -155,7 +155,8 @@ def make_clean_operator() -> Mock:
     operator.read_eprom.side_effect = _clean_read
     operator.check_eprom_blank.return_value = True
     operator.write_eprom.return_value = True
-    operator.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
     return operator
 
@@ -227,7 +228,8 @@ def make_leaked_lock_operator(
     operator = Mock(spec=EpromOperator)
     operator.check_eprom_id.return_value = (True, None)
     operator.check_eprom_blank.return_value = True
-    operator.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
     operator.write_eprom.side_effect = _write
     operator.read_eprom.side_effect = _read
@@ -289,7 +291,8 @@ def make_held_lock_operator(
     operator = Mock(spec=EpromOperator)
     operator.check_eprom_id.return_value = (True, None)
     operator.check_eprom_blank.return_value = True
-    operator.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
     operator.write_eprom.side_effect = _write
     operator.read_eprom.side_effect = _read
@@ -328,7 +331,8 @@ def make_clean_notrun_operator() -> Mock:
     operator.write_eprom.side_effect = ChipNotFoundError(
         "simulated: operation not implemented on this host build (test fixture)"
     )
-    operator.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
     operator.read_eprom.return_value = True
     return operator
@@ -385,7 +389,8 @@ def make_restore_failed_operator() -> Mock:
     operator = Mock(spec=EpromOperator)
     operator.check_eprom_id.return_value = (True, None)
     operator.check_eprom_blank.return_value = True
-    operator.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
     operator.write_eprom.side_effect = _write
     operator.read_eprom.side_effect = _read
@@ -1704,7 +1709,8 @@ class TestExitFloorD15:
         operator.check_eprom_id.return_value = (True, None)
         operator.check_eprom_blank.return_value = True
         operator.write_eprom.return_value = True
-        operator.verify_eprom.return_value = True
+        # 202-01 D-10: verify_eprom now returns an int (0 == match).
+        operator.verify_eprom.return_value = 0
         operator.erase_eprom.return_value = True
         operator.read_eprom.side_effect = _all_zero_read
         app = make_app_context(
