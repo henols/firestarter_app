@@ -92,6 +92,17 @@ CONNECT_COST_STRUCTURAL_FLOOR_S = (
     CONNECTION_STABILIZE_DELAY + _CONSUME_REMAINING_INPUT_WINDOW_S
 )
 
+# 202-04 D-08: bounded acceptance window for the read-abort discrimination in
+# `verify_eprom`. Derived, not picked: the firmware's own ack wait
+# (`op_wait_for_ack`, firestarter_fw/src/operation_utils.cpp:94-108) times out
+# after 1 s, polled at 10 ms, and the resulting MSG_ERR_TIMEOUT frame then has
+# to traverse the link at 250000 baud -- a few milliseconds at most for a
+# single short frame. 3.0 s is roughly three times that worst-case latency and
+# far below any plausible gap between two unrelated operations, so a genuine
+# timeout that arrives outside this window is never mistaken for this host's
+# own deliberate stop.
+READ_ABORT_ACCEPTANCE_WINDOW_S = 3.0
+
 
 def _raise_for_error_response(response, message: str) -> None:
     """Raise ProtocolNotImplementedError for id 0xBB, EpromOperationError otherwise.
@@ -419,6 +430,21 @@ class EpromOperator:
         # host device path and it has no firmware message id to report.
         self.last_firmware_error_code: int | None = None
         self.last_firmware_error_message: str | None = None
+        # 202-04 D-06/D-08: set by `_main_phase_read_data` the moment an
+        # `abort_predicate` fires -- a monotonic timestamp, not a wall clock,
+        # so the bounded acceptance window below is immune to a system clock
+        # step. `None` before any run, and reset to `None` at the top of
+        # `_run_state_machine` alongside the firmware-error fields above, so
+        # a stale value from a previous operation can never leak into a
+        # later one's discrimination test.
+        self._read_abort_stopped_at: float | None = None
+        # 202-04 D-08: whether THIS call's caller actually requested the
+        # abort mechanism (the default, non-`--full` verify path). Set
+        # explicitly (True or False) by `verify_eprom` before every drive --
+        # never left to a prior call's value -- so a genuine timeout on a
+        # `--full` run, which never sets an abort_predicate, can never be
+        # mistaken for this host's own doing.
+        self._read_abort_intended: bool = False
 
     def _calculate_buffer_size(self) -> int:
         # firmware_max_chunk is populated by the
@@ -606,6 +632,7 @@ class EpromOperator:
         # operation's failure.
         self.last_firmware_error_code = None
         self.last_firmware_error_message = None
+        self._read_abort_stopped_at = None
         try:
             with logging_redirect_tqdm():
                 # --- INIT Phase ---
@@ -877,6 +904,7 @@ class EpromOperator:
         start_addr: int,
         end_addr: int,
         process_data_chunk_callback: Callable,
+        abort_predicate: Callable[[], bool] | None = None,
     ):
         """Main phase handler for reading data.
 
@@ -886,6 +914,26 @@ class EpromOperator:
           - DATA response with payload set → MSG_DATA_CHUNK; extract raw bytes.
           - DATA response with no payload  → MSG_DATA_SENDING (zero-param batch
             starter, which arrives before the chunk frame); skip and continue.
+
+        202-04 D-06: `abort_predicate`, when given, is consulted after each
+        delivered chunk has been fed to the callback and the address/progress
+        advanced. Defaulted to `None` so the four pre-existing callers
+        (`read_eprom`, both `consistency_check_eprom` drives, and the hexdump
+        drive) are byte-for-byte unchanged -- none of them pass it, and the
+        chunk callback's return value stays ignored exactly as before.
+
+        Once the predicate returns true, the loop stops acking -- it does
+        NOT raise and does NOT break. Raising here would unwind the loop
+        without consuming the ERROR frame the firmware's own ack-wait
+        timeout produces, leaving unread bytes on the port, which is the
+        opposite of what D-06 buys: the firmware's `op_wait_for_ack`
+        (1 s, polled at 10 ms) times out, emits MSG_ERR_TIMEOUT, and the
+        dispatch loop's `command_done()` still runs on that error path to
+        leave the port clean (D-06/D-07). After the stop, no further chunk
+        is fed to the callback, acked, or counted toward progress -- this is
+        what keeps `compared` a well-defined quantity for D-09's honest
+        span reporting: a payload the firmware sent after the host chose to
+        stop must never silently widen what "compared" means.
         """
         from firestarter.messages import (
             MSG_DATA_CHUNK,  # local import avoids circular  # noqa: F401
@@ -895,6 +943,7 @@ class EpromOperator:
         if data_size > 0:
             progress.start(data_size)
 
+        stopped = False
         while True:
             response = self.comm.get_response()
             if response.type == "MAIN":
@@ -911,9 +960,23 @@ class EpromOperator:
                     if not payload:
                         logger.warning("Received MSG_DATA_CHUNK with empty payload.")
                         continue
+                    if stopped:
+                        # Draining post-stop: keep consuming responses (so the
+                        # port empties and the terminating MAIN/ERROR frame is
+                        # read) without touching the callback, the ack, or the
+                        # progress bar again. See docstring above.
+                        continue
                     process_data_chunk_callback(start_addr, payload)
                     start_addr += len(payload)
                     progress.update(len(payload))
+                    if abort_predicate is not None and abort_predicate():
+                        stopped = True
+                        self._read_abort_stopped_at = time.monotonic()
+                        logger.info(
+                            f"Read stopped in flight at 0x{start_addr:06x} "
+                            "(abort predicate fired)."
+                        )
+                        continue
                     self.comm.send_ack()
                 else:
                     # MSG_DATA_SENDING (zero-param batch-start ack): no data yet;
