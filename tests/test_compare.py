@@ -11,6 +11,11 @@ own unit tests must not need anything beyond that either.
 
 from __future__ import annotations
 
+import tracemalloc
+from collections.abc import Iterator
+
+import pytest
+
 from firestarter.compare import (
     MAX_RETAINED_RANGES,
     CompareAccumulator,
@@ -18,6 +23,55 @@ from firestarter.compare import (
     MismatchRange,
     render_compare_lines,
 )
+
+# CMP-03 / T-202-01 peak-allocation ceiling (RESEARCH.md "Measured: the
+# mechanism works, with enormous margin"): the streaming shape peaked at
+# 4231 B clean and 86738 B on the all-differing 512 KiB case; the
+# materialised shape (a device-sized offset list -- exactly what D-02
+# forbids) peaked at 22571672 B; the tracemalloc noise floor is 88 B. A
+# 1 MiB ceiling sits ~12x above the worst measured streaming peak and ~21x
+# below the materialised one, so it cannot realistically flake.
+PEAK_ALLOCATION_CEILING_BYTES = 1_048_576
+
+
+def _iter_chunks(
+    size: int, chunk_size: int, pattern: str, *, differ_offset: int = 0x400
+) -> Iterator[tuple[int, bytes, bytes]]:
+    """Yield `(address, expected, actual)` chunk triples for a simulated
+    device of `size` bytes, delivered `chunk_size` bytes at a time -- the
+    same shape `_main_phase_read_data` hands to a real callback. Only ever
+    materialises one chunk's worth of bytes at a time, so the generator
+    itself does not contribute a device-sized allocation to a traced peak.
+
+    `pattern` is one of "all_match" (byte-identical), "single_byte" (one
+    differing byte at `differ_offset`), "all_differ" (every byte differs)
+    or "alternating" (every other byte differs -- the pattern that
+    maximises the coalesced range count, per D-16).
+    """
+    address = 0
+    while address < size:
+        length = min(chunk_size, size - address)
+        expected = bytes((address + i) & 0xFF for i in range(length))
+        if pattern == "all_match":
+            actual = expected
+        elif pattern == "single_byte":
+            if address <= differ_offset < address + length:
+                mutated = bytearray(expected)
+                mutated[differ_offset - address] ^= 0xFF
+                actual = bytes(mutated)
+            else:
+                actual = expected
+        elif pattern == "all_differ":
+            actual = bytes(b ^ 0xFF for b in expected)
+        elif pattern == "alternating":
+            actual = bytes(
+                (b ^ 0xFF) if (address + i) % 2 == 0 else b
+                for i, b in enumerate(expected)
+            )
+        else:
+            raise ValueError(f"unknown pattern {pattern!r}")
+        yield address, expected, actual
+        address += length
 
 
 class TestCompareAccumulatorCleanCompare:
@@ -230,3 +284,53 @@ class TestRenderCompareLines:
         assert lines[1].startswith("…")
         assert "3" in lines[1]
         assert "9" in lines[1]
+
+
+class TestCompareAccumulatorPeakAllocation:
+    """CMP-03 / T-202-01: peak traced allocation for a 512 KiB compare stays
+    under `PEAK_ALLOCATION_CEILING_BYTES` across all four fault patterns,
+    and does not grow when the simulated device size doubles."""
+
+    @pytest.mark.parametrize(
+        "pattern",
+        ["all_match", "single_byte", "all_differ", "alternating"],
+    )
+    def test_peak_allocation_under_ceiling(self, pattern: str) -> None:
+        size = 512 * 1024
+        chunk_size = 1024
+        acc = CompareAccumulator()
+
+        tracemalloc.start()
+        for address, expected, actual in _iter_chunks(size, chunk_size, pattern):
+            acc.feed(address, expected, actual)
+        acc.finalise()
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
+        assert peak < PEAK_ALLOCATION_CEILING_BYTES
+
+    def test_peak_allocation_flat_in_device_size(self) -> None:
+        """A materialised device-sized offset list would grow ~4x when the
+        device size quadruples; the streaming shape does not grow at all.
+        This turns CMP-03's 'bounded independently of device size' into a
+        measured property rather than a single threshold, and it is the
+        assertion that survives a machine with different allocator
+        behaviour than the one RESEARCH.md measured on."""
+        chunk_size = 1024
+
+        def _peak_for(size: int) -> int:
+            acc = CompareAccumulator()
+            tracemalloc.start()
+            for address, expected, actual in _iter_chunks(
+                size, chunk_size, "single_byte"
+            ):
+                acc.feed(address, expected, actual)
+            acc.finalise()
+            _, peak = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+            return peak
+
+        peak_128k = _peak_for(128 * 1024)
+        peak_512k = _peak_for(512 * 1024)
+
+        assert peak_512k <= peak_128k * 2
