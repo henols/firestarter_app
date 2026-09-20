@@ -209,6 +209,15 @@ class CompareAccumulator:
 
         # Tier 3: a per-chunk offset list, bounded by chunk_len and
         # discarded at the end of this call -- NOT a device-sized list.
+        # Rejected alternative: a counter-only shape that avoids per-chunk
+        # lists entirely (an int-XOR-and-scan or a per-offset accumulation
+        # with no list at all). RESEARCH.md measured that shape at 21.4s
+        # against this list-based path's 1.9s for the worst-case 512 KiB
+        # all-differing chunk stream -- a ~79 KB smaller peak (7347 B vs
+        # 86430 B) bought at roughly 11x the runtime. The list is kept
+        # because the runtime cost of avoiding it is not worth the memory
+        # saved, and both shapes are already far under the peak-allocation
+        # ceiling (see tests/test_compare.py's PEAK_ALLOCATION_CEILING_BYTES).
         offs = [o for o in range(chunk_len) if expected[o] != actual[o]]
         if not offs:
             self._close_open_range()
