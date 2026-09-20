@@ -2379,7 +2379,15 @@ class EpromOperator:
 
             # Standing prohibition this plan carries: a compare that did not
             # cover the whole declared region is never reported as a match.
-            if result.bad == 0 and result.compared == result.total:
+            # CMP-04 "empty" edge (202-04 Task 3): a zero-length region is a
+            # degenerate case of the same trap, not a separate one -- a
+            # zero-length read-back compares byte-for-byte as PERFECT
+            # equality (`compared` trivially equals `total` at 0), so
+            # without this explicit `result.total > 0` guard an empty input
+            # file (or a `--size 0` region, once 202-05 adds `--size`) would
+            # silently report a clean pass despite nothing having actually
+            # been compared.
+            if result.total > 0 and result.bad == 0 and result.compared == result.total:
                 logger.info(
                     f"Verify for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
                 )
