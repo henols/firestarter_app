@@ -47,6 +47,7 @@ from firestarter.constants import (
     FLAG_VPE_AS_VPP,
     JSON_KEY_READ_SETTLING_DELAY,
     JSON_KEY_READ_STROBE_US,
+    JSON_KEY_REGION_END,
 )
 from firestarter.exceptions import (
     EpromOperationError,
@@ -462,6 +463,7 @@ class EpromOperator:
         address: str | None = None,
         size: str | None = None,
         fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
+        region_length: int | None = None,
     ) -> Tuple[Dict | None, int]:  # noqa: UP006
         """
         Prepares for an EPROM operation: uses pre-fetched EPROM data, sets up command, and connects.
@@ -497,6 +499,24 @@ class EpromOperator:
                 logger.error(f"Invalid size format: {size}")
                 return None, 0
 
+        # BLANK-01 / D-05: the write-init blank check on the firmware side must
+        # scope to the region this operation actually touches, not the whole
+        # device. region_length is the payload size in bytes; the wire carries
+        # an absolute EXCLUSIVE end address so the firmware never has to redo
+        # this arithmetic against a scan cursor that moves across chunks (see
+        # RESEARCH.md C-3). One code path, no branch on address presence: the
+        # key is emitted on every write and verify, not only when --address is
+        # given. region_length greater than zero is deliberate: a zero-length
+        # payload at address 0 would compute an end of 0, which the firmware
+        # reads as absent (whole device) -- emitting nothing reaches that same
+        # outcome explicitly instead of by numeric coincidence.
+        if (
+            region_length is not None
+            and region_length > 0
+            and cmd in (COMMAND_WRITE, COMMAND_VERIFY)
+        ):
+            command_dict[JSON_KEY_REGION_END] = addr + region_length
+
         try:
             self.comm = SerialCommunicator.find_and_connect(
                 command_dict,
@@ -523,12 +543,17 @@ class EpromOperator:
         address: str | None = None,
         size: str | None = None,
         fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
+        region_length: int | None = None,
     ):
         """A context manager to handle EPROM operation setup and teardown.
 
         ``fault_inject_outgoing`` (dev-only) is forwarded to
         ``find_and_connect`` so the setup command frame can be corrupted at connection
         time. Default None keeps the production path byte-identical.
+
+        ``region_length`` (BLANK-01 / D-05) is forwarded to ``_setup_operation``
+        by keyword, trailing the existing positional six -- it must not be
+        inserted among them.
         """
         command_dict, buffer_size = self._setup_operation(
             eprom_name,
@@ -538,6 +563,7 @@ class EpromOperator:
             address,
             size,
             fault_inject_outgoing=fault_inject_outgoing,
+            region_length=region_length,
         )
         if not command_dict or not self.comm:
             yield None, None, None  # Yield None to indicate setup failure
@@ -2011,12 +2037,23 @@ class EpromOperator:
             eprom_name, eprom_data_dict, "write", address_str, input_file_path
         )
 
+        # BLANK-01 / D-05: guarded so a missing file keeps surfacing exactly
+        # where it does today (_main_phase_send_data, after connecting, for
+        # non-0x05 parts that require_page_alignment returns early for)
+        # rather than moving earlier. An unguarded getsize would change that
+        # ordering, which this plan is not authorised to do.
+        try:
+            region_length = os.path.getsize(input_file_path)
+        except OSError:
+            region_length = None
+
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
             COMMAND_WRITE,
             operation_flags,
             address_str,
+            region_length=region_length,
         ) as (cmd_data, buf_size, op_name):
             if not cmd_data:
                 return False
@@ -2112,12 +2149,23 @@ class EpromOperator:
         operation_flags: int = 0,
         address_str: str | None = None,
     ) -> bool:
+        # BLANK-01 / D-07: verify shares one dict-construction path with
+        # write (_operation_context -> _setup_operation), so it must supply
+        # region_length itself -- unlike write_eprom it does not call
+        # require_page_alignment, which is where that computation already
+        # lives on the write path.
+        try:
+            region_length = os.path.getsize(input_file_path)
+        except OSError:
+            region_length = None
+
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
             COMMAND_VERIFY,
             operation_flags,
             address_str,
+            region_length=region_length,
         ) as (cmd_data, buf_size, op_name):
             if not cmd_data:
                 return False
