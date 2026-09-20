@@ -473,3 +473,247 @@ class TestCompareAccumulatorFastPathStructure:
             "the equality fast path must precede any per-offset loop, or "
             "a clean chunk pays per-offset cost it should have skipped"
         )
+
+
+class TestCompareAccumulatorAdjacencyAndOverlap:
+    """CMP-03/CMP-05: a span straddling a chunk boundary coalesces into one
+    range; two spans separated by exactly one matching byte stay two
+    ranges; two touching spans merge into one; and no two retained ranges
+    ever touch or overlap."""
+
+    def test_span_straddling_chunk_boundary_is_one_range(self) -> None:
+        """`eprom_operations.py:905-912`'s chunk loop hands `feed()`
+        monotonically increasing absolute addresses -- a span can
+        genuinely straddle a chunk boundary, and the open range must
+        survive across the two `feed()` calls rather than closing early."""
+        acc = CompareAccumulator()
+        e1 = bytes(1024)
+        a1 = bytearray(e1)
+        a1[1020:1024] = b"\x01\x01\x01\x01"  # addresses 1020-1023
+        acc.feed(0, e1, bytes(a1))
+        e2 = bytes(1024)
+        a2 = bytearray(e2)
+        a2[0:4] = b"\x01\x01\x01\x01"  # addresses 1024-1027, contiguous
+        acc.feed(1024, e2, bytes(a2))
+
+        result = acc.finalise()
+
+        assert len(result.ranges) == 1
+        rng = result.ranges[0]
+        assert (rng.start, rng.end, rng.count) == (1020, 1027, 8)
+
+    def test_two_spans_separated_by_one_matching_byte_stay_two_ranges(self) -> None:
+        expected = bytearray(b"\x00" * 10)
+        actual = bytearray(expected)
+        actual[3] = 1
+        actual[4] = 1
+        # byte 5 matches -- the one separating byte.
+        actual[6] = 1
+        actual[7] = 1
+
+        acc = CompareAccumulator()
+        acc.feed(0, bytes(expected), bytes(actual))
+        result = acc.finalise()
+
+        assert len(result.ranges) == 2
+        assert (result.ranges[0].start, result.ranges[0].end) == (3, 4)
+        assert (result.ranges[1].start, result.ranges[1].end) == (6, 7)
+
+    def test_two_touching_spans_merge_into_one_range(self) -> None:
+        """Two runs of mismatches with no matching byte between them must
+        coalesce into a single `MismatchRange`, not two."""
+        expected = bytearray(b"\x00" * 10)
+        actual = bytearray(expected)
+        actual[3] = 1
+        actual[4] = 1
+        actual[5] = 1  # touches -- no matching byte between 4 and 5
+        actual[6] = 1
+
+        acc = CompareAccumulator()
+        acc.feed(0, bytes(expected), bytes(actual))
+        result = acc.finalise()
+
+        assert len(result.ranges) == 1
+        assert (
+            result.ranges[0].start,
+            result.ranges[0].end,
+            result.ranges[0].count,
+        ) == (
+            3,
+            6,
+            4,
+        )
+
+    def test_no_two_retained_ranges_touch_or_overlap(self) -> None:
+        acc = CompareAccumulator()
+        for offset in range(0, MAX_RETAINED_RANGES * 8, 8):
+            expected = bytes(4)
+            actual = bytearray(expected)
+            actual[0] = 1
+            actual[1] = 1
+            acc.feed(offset, bytes(expected), bytes(actual))
+
+        result = acc.finalise()
+
+        for left, right in zip(result.ranges, result.ranges[1:]):
+            assert left.end + 1 < right.start
+
+
+class TestCompareAccumulatorOrdering:
+    """CMP-03/CMP-05: `ranges` is sorted ascending by `start`, and the same
+    input produces the same ordering on every run."""
+
+    def test_ranges_sorted_ascending_by_start(self) -> None:
+        expected = bytearray(b"\x00" * 32)
+        actual = bytearray(expected)
+        actual[20] = 1
+        actual[2] = 1
+        actual[27] = 1
+
+        acc = CompareAccumulator()
+        acc.feed(0, bytes(expected), bytes(actual))
+        result = acc.finalise()
+
+        starts = [r.start for r in result.ranges]
+        assert starts == sorted(starts)
+        assert len(result.ranges) == 3
+
+    def test_identical_feed_sequence_produces_equal_range_lists(self) -> None:
+        def _drive() -> CompareResult:
+            acc = CompareAccumulator()
+            for address, expected, actual in _iter_chunks(
+                64 * 1024, 1024, "alternating"
+            ):
+                acc.feed(address, expected, actual)
+            return acc.finalise()
+
+        result_a = _drive()
+        result_b = _drive()
+
+        assert result_a.ranges == result_b.ranges
+        assert result_a == result_b
+
+
+class TestCompareAccumulatorEmptyAndSingleByte:
+    """CMP-03 empty case: a zero-length read-back compares as perfect
+    equality byte-for-byte -- only a length gate (owned by the caller, not
+    this module) distinguishes it from a genuine clean pass. The engine's
+    job is to report that honestly (a well-formed, zero-valued
+    `CompareResult`) rather than defensively raising or inventing a
+    nonzero total."""
+
+    def test_no_feed_calls_returns_well_formed_empty_result(self) -> None:
+        acc = CompareAccumulator()
+
+        result = acc.finalise()
+
+        assert result.total == 0
+        assert result.compared == 0
+        assert result.bad == 0
+        assert result.ranges == []
+        assert result.extra_ranges == 0
+        assert result.extra_bytes == 0
+        assert result.compared_end == result.compared_start - 1
+
+    def test_single_matching_byte_chunk(self) -> None:
+        acc = CompareAccumulator()
+        acc.feed(0x100, b"\x42", b"\x42")
+
+        result = acc.finalise()
+
+        assert result.compared == 1
+        assert result.bad == 0
+        assert result.ranges == []
+
+    def test_single_differing_byte_chunk(self) -> None:
+        acc = CompareAccumulator()
+        acc.feed(0x100, b"\x42", b"\x43")
+
+        result = acc.finalise()
+
+        assert result.compared == 1
+        assert result.bad == 1
+        assert len(result.ranges) == 1
+        assert (
+            result.ranges[0].start,
+            result.ranges[0].end,
+            result.ranges[0].count,
+        ) == (
+            0x100,
+            0x100,
+            1,
+        )
+
+
+class TestCompareAccumulatorRangeCapBoundary:
+    """D-16: the retained-range cap at exactly `MAX_RETAINED_RANGES - 1`,
+    `MAX_RETAINED_RANGES` and `MAX_RETAINED_RANGES + 1` coalesced ranges,
+    using the module's real default cap -- unlike
+    `TestCompareAccumulatorRangeCap` above, which overrides `max_ranges`
+    to a small custom value."""
+
+    @staticmethod
+    def _feed_n_isolated_ranges(acc: CompareAccumulator, n: int) -> None:
+        for i in range(n):
+            offset = i * 4
+            expected = bytes(2)
+            actual = bytearray(expected)
+            actual[0] = 1
+            acc.feed(offset, bytes(expected), bytes(actual))
+
+    def test_one_below_cap_retains_everything(self) -> None:
+        acc = CompareAccumulator()
+        self._feed_n_isolated_ranges(acc, MAX_RETAINED_RANGES - 1)
+        result = acc.finalise()
+
+        assert len(result.ranges) == MAX_RETAINED_RANGES - 1
+        assert result.extra_ranges == 0
+        assert result.extra_bytes == 0
+
+    def test_exactly_at_cap_retains_everything(self) -> None:
+        acc = CompareAccumulator()
+        self._feed_n_isolated_ranges(acc, MAX_RETAINED_RANGES)
+        result = acc.finalise()
+
+        assert len(result.ranges) == MAX_RETAINED_RANGES
+        assert result.extra_ranges == 0
+        assert result.extra_bytes == 0
+
+    def test_one_beyond_cap_retains_exactly_the_cap(self) -> None:
+        acc = CompareAccumulator()
+        self._feed_n_isolated_ranges(acc, MAX_RETAINED_RANGES + 1)
+        result = acc.finalise()
+
+        assert len(result.ranges) == MAX_RETAINED_RANGES
+        assert result.extra_ranges == 1
+        assert result.extra_bytes == 1  # the one dropped range is 1 byte wide
+
+
+class TestCompareAccumulatorAlternatingPrecision:
+    """D-16's stated worst case: the alternating pattern over a 512 KiB
+    device produces ~262144 coalesced single-byte ranges. The retained
+    list caps at `MAX_RETAINED_RANGES` but the tail counters must stay
+    exact -- the standing prohibition this plan carries (`must_haves.
+    prohibitions`): the cap may bound what is SHOWN, never what is
+    COUNTED."""
+
+    def test_extra_ranges_and_extra_bytes_exact_for_512kib_alternating(self) -> None:
+        size = 512 * 1024
+        chunk_size = 1024
+        chunks = list(_iter_chunks(size, chunk_size, "alternating"))
+        acc = CompareAccumulator()
+
+        for address, expected, actual in chunks:
+            acc.feed(address, expected, actual)
+        result = acc.finalise()
+
+        # Every even absolute address differs, every odd one matches, so
+        # every mismatch is an isolated 1-byte range: the true range count
+        # is exactly half the device size.
+        true_total_range_count = size // 2
+
+        assert len(result.ranges) == MAX_RETAINED_RANGES
+        assert result.extra_ranges + MAX_RETAINED_RANGES == true_total_range_count
+        assert result.extra_bytes + sum(r.count for r in result.ranges) == result.bad
+        assert isinstance(result.bad, int)
+        assert all(isinstance(r.count, int) for r in result.ranges)

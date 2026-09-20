@@ -249,6 +249,15 @@ class CompareAccumulator:
     def _close_open_range(self) -> None:
         if self._open_range is None:
             return
+        # D-16's cap bounds what is SHOWN (the retained `_ranges` list),
+        # never what is COUNTED: a range past `_max_ranges` still adds to
+        # `_extra_ranges`/`_extra_bytes` exactly, so `render_compare_lines`'s
+        # tail line and any consumer reading these counters directly stay
+        # honest arbitrarily far past the cap. This is the standing
+        # prohibition this module carries -- a count or classification must
+        # never read as covering more of the device than was actually
+        # counted, and the retained-range cap must never be the thing that
+        # silently narrows what got counted.
         if len(self._ranges) < self._max_ranges:
             self._ranges.append(self._open_range)
         else:
