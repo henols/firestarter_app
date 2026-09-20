@@ -457,21 +457,36 @@ def test_write_b_decouples_skip_erase_phase92(runner: CliRunner) -> None:
 
 
 def test_verify_happy_path(runner: CliRunner) -> None:
-    """`firestarter verify W27C512 in.bin` exits 0 when verify_eprom returns True."""
+    """`firestarter verify W27C512 in.bin` exits 0 when verify_eprom returns 0.
+
+    202-01 D-10: verify_eprom returns an int (0 match / 1 mismatch /
+    2 transport-hardware-or-refusal); cli_handlers.verify now `sys.exit`s
+    directly on that int.
+    """
     operator = Mock(spec=EpromOperator)
-    operator.verify_eprom.return_value = True
+    operator.verify_eprom.return_value = 0
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["verify", "W27C512", "in.bin"], obj=app)
     assert result.exit_code == 0
 
 
-def test_verify_operator_returns_false(runner: CliRunner) -> None:
-    """`firestarter verify W27C512 in.bin` exits 1 when verify returns False."""
+def test_verify_operator_returns_mismatch(runner: CliRunner) -> None:
+    """`firestarter verify W27C512 in.bin` exits 1 when verify_eprom returns 1."""
     operator = Mock(spec=EpromOperator)
-    operator.verify_eprom.return_value = False
+    operator.verify_eprom.return_value = 1
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["verify", "W27C512", "in.bin"], obj=app)
     assert result.exit_code == 1
+
+
+def test_verify_operator_returns_setup_failure(runner: CliRunner) -> None:
+    """`firestarter verify W27C512 in.bin` exits 2 when verify_eprom returns 2
+    (D-10: transport, hardware, or a pre-wire region refusal)."""
+    operator = Mock(spec=EpromOperator)
+    operator.verify_eprom.return_value = 2
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["verify", "W27C512", "in.bin"], obj=app)
+    assert result.exit_code == 2
 
 
 def test_blank_happy_path(runner: CliRunner) -> None:

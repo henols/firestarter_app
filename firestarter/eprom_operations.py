@@ -24,6 +24,11 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from firestarter import transport_counters
 from firestarter.address_parser import parse_address, parse_size
+from firestarter.compare import (
+    MAX_RETAINED_RANGES,
+    CompareAccumulator,
+    render_compare_lines,
+)
 from firestarter.config import ConfigManager
 from firestarter.constants import (
     COMMAND_BLANK_CHECK,
@@ -2148,7 +2153,17 @@ class EpromOperator:
         input_file_path: str,
         operation_flags: int = 0,
         address_str: str | None = None,
-    ) -> bool:
+        full: bool = False,
+    ) -> int:
+        """Compare `input_file_path` against a fresh read of the chip.
+
+        202-01 D-01/D-02/D-04/D-10: this reads the chip with COMMAND_READ and
+        compares chunk by chunk on the host through `compare.py`'s streaming
+        accumulator -- it no longer pushes the file to the firmware's own
+        verify ordinal (COMMAND_VERIFY stays in constants.py; nothing on this
+        path composes it). Returns 0 on a match, 1 on a mismatch, 2 on a
+        setup, transport, or I/O failure (D-10, confirmed).
+        """
         # BLANK-01 / D-07: verify shares one dict-construction path with
         # write (_operation_context -> _setup_operation), so it must supply
         # region_length itself -- unlike write_eprom it does not call
@@ -2159,34 +2174,78 @@ class EpromOperator:
         except OSError:
             region_length = None
 
+        # 202-01 D-01/D-04/D-17: verify has no --size flag yet (that lands in
+        # 202-05), but its read must still stop at the file's length by
+        # default, not run to the whole chip. The only wire-level way to
+        # bound a COMMAND_READ to region_length, without a --size CLI value,
+        # is to reuse _setup_operation's existing "COMMAND_READ + size"
+        # override -- it only needs `size` as a string. Without this, a file
+        # shorter than the whole chip would read the whole chip and the D-04
+        # pull callback below would run past the file's EOF.
+        size_str = str(region_length) if region_length is not None else None
+
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
-            COMMAND_VERIFY,
+            COMMAND_READ,
             operation_flags,
             address_str,
+            size_str,
             region_length=region_length,
-        ) as (cmd_data, buf_size, op_name):
+        ) as (cmd_data, _, op_name):
             if not cmd_data:
-                return False
+                return 2
 
             logger.info(f"Verifying {input_file_path} against {eprom_name.upper()}")
             start_time = time.time()
-
-            is_ok, _ = self._run_state_machine(
-                op_name,
-                main_phase_handler=self._main_phase_send_data,
-                input_file_path=input_file_path,
-                buffer_size=buf_size,
+            region_start = cmd_data.get("address", 0)
+            max_ranges = MAX_RETAINED_RANGES if full else 1
+            accumulator = CompareAccumulator(
+                addr_base=region_start, max_ranges=max_ranges
             )
 
-            if is_ok:
+            try:
+                with open(input_file_path, "rb") as file_handle:
+
+                    def _expected(offset: int, length: int) -> bytes:
+                        file_handle.seek(offset - region_start)
+                        return file_handle.read(length)
+
+                    def _process_chunk(address: int, payload: bytes) -> None:
+                        accumulator.feed(
+                            address, _expected(address, len(payload)), payload
+                        )
+
+                    is_ok, _ = self._run_state_machine(
+                        op_name,
+                        main_phase_handler=self._main_phase_read_data,
+                        start_addr=cmd_data.get("address", 0),
+                        end_addr=cmd_data.get("memory-size", 0),
+                        process_data_chunk_callback=_process_chunk,
+                    )
+            except IOError as e:  # noqa: UP024
+                logger.error(f"File I/O error with {input_file_path}: {e}")
+                return 2
+
+            if not is_ok:
+                logger.error(f"Verify for {eprom_name.upper()} failed.")
+                return 2
+
+            result = accumulator.finalise()
+            if region_length is not None:
+                result.total = region_length
+            for line in render_compare_lines(result):
+                logger.info(line)
+
+            # Standing prohibition this plan carries: a compare that did not
+            # cover the whole declared region is never reported as a match.
+            if result.bad == 0 and result.compared == result.total:
                 logger.info(
                     f"Verify for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
                 )
-            else:
-                logger.error(f"Verify for {eprom_name.upper()} failed.")
-            return is_ok
+                return 0
+            logger.error(f"Verify for {eprom_name.upper()} failed.")
+            return 1
 
     def erase_eprom(
         self,

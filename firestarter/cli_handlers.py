@@ -801,6 +801,11 @@ def write(
     is_flag=True,
     help="Force, even if the VPP or chip id doesn't match.",
 )
+@click.option(
+    "--full",
+    is_flag=True,
+    help="Report every mismatching range, not just the first.",
+)
 @click.pass_obj
 @map_typed_errors
 def verify(
@@ -809,17 +814,24 @@ def verify(
     input_file: str,
     address: str | None,
     force: bool,
+    full: bool,
 ) -> None:
-    """Verifies the content of an EPROM."""
+    """Verifies the content of an EPROM.
+
+    Exits 0 on a match, 1 on a mismatch, 2 on a transport, hardware, or
+    setup failure. The three are distinct: a transport failure is not
+    reported as a mismatch.
+    """
     eprom_data = resolve_chip(eprom, db=app.db)
-    ok = app.eprom_operator.verify_eprom(
+    verdict = app.eprom_operator.verify_eprom(
         eprom,
         eprom_data,
         input_file,
         address_str=address,
         operation_flags=_build_op_flags(force=force),
+        full=full,
     )
-    sys.exit(0 if ok else 1)
+    sys.exit(verdict)
 
 
 @cli.command(name="blank")

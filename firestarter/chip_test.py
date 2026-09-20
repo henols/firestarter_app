@@ -30,6 +30,16 @@ from typing import Any
 
 from firestarter import messages
 from firestarter.chip_resolver import resolve_chip
+from firestarter.compare import (
+    _BIT_CLUSTER_THRESHOLD,
+    _FF_RATIO_THRESHOLD,
+    FP_ADDRESS_LINE,
+    FP_BLANK_CONTACT,
+    FP_INDETERMINATE,
+    FP_MATCH,
+    FP_TRANSPORT,
+    Fingerprint,
+)
 from firestarter.constants import (
     FLAG_CAN_ERASE,  # 0x02 -- do NOT redefine; import
     FLAG_SKIP_BLANK_CHECK,
@@ -135,32 +145,12 @@ def _diff_offsets(
 # ---------------------------------------------------------------------------
 # Four-bucket byte-mismatch fingerprint classifier
 # ---------------------------------------------------------------------------
-
-# The four locked outcome labels -- never coerce an ambiguous
-# distribution into one of the first three; fall back to indeterminate.
-FP_BLANK_CONTACT = "blank/contact"
-FP_ADDRESS_LINE = "address-line"
-FP_TRANSPORT = "transport"
-FP_INDETERMINATE = "indeterminate"
-FP_MATCH = "match"
-
-# Candidate thresholds (Claude's discretion) -- direction is
-# HIGH-confidence, exact numbers are tunable/bench-informed later. A wrong
-# number only produces more `indeterminate`, never a false confident label.
-_FF_RATIO_THRESHOLD = 0.98  # blank/contact: >= this fraction of actual == 0xFF
-_BIT_CLUSTER_THRESHOLD = 0.9  # address-line: >= this fraction of mismatches
-# share one polarity of one high address bit
-
-
-@dataclass
-class Fingerprint:
-    """Verdict + raw evidence for a single expected-vs-actual byte compare."""
-
-    total: int
-    bad: int
-    bad_pct: float
-    classification: str
-    evidence: dict = field(default_factory=dict)
+#
+# FP_BLANK_CONTACT, FP_ADDRESS_LINE, FP_TRANSPORT, FP_INDETERMINATE, FP_MATCH,
+# the two thresholds and the Fingerprint dataclass all moved to
+# firestarter.compare (202-01 D-01) -- imported above and re-exported at this
+# module's top level, so every existing importer of chip_test.Fingerprint /
+# chip_test.FP_* keeps resolving them unchanged.
 
 
 def classify_fingerprint(
@@ -3094,13 +3084,18 @@ def _firmware_error(operator: Any) -> tuple[int | None, str]:
     """The firmware's own id + text for the operation that just failed.
 
     Debug session w27c512-devtest-all-bad. `write_eprom`/`verify_eprom`/
-    `erase_eprom`/`check_eprom_blank` all return a bare bool, and
-    `eprom_operations._run_state_machine` catches the `EpromOperationError`
+    `erase_eprom`/`check_eprom_blank` all returned a bare bool at the time,
+    and `eprom_operations._run_state_machine` catches the `EpromOperationError`
     that carried the firmware's `response.id` -- so `_run_step`'s
     `except EpromOperationError` handler can never fire for those four ops
     and every BAD step in a report came out with `error_code: null` and
     `reason: ""`. `EpromOperator` now records the pair on itself (see its
     `__init__`); this reads it back.
+
+    `verify_eprom` returns an int, not a bare bool, since 202-01 D-10 --
+    the multi-run dispatch site (`outcomes.append(... == 0)`) is what adapts
+    that int back to this function's bool contract, so the description above
+    still holds for every caller here.
 
     `getattr` with defaults, not attribute access: every test double in this
     suite is a hand-rolled stand-in for `EpromOperator`, none of them carry
@@ -3324,6 +3319,10 @@ def _dispatch_multi_run(
                 )
                 _sample(sampler, "after")
             elif op == OP_VERIFY:
+                # 202-01 D-10: verify_eprom now returns an int (0 == match),
+                # not a bool. The == 0 adapter here is what keeps `outcomes`
+                # a list of bools, so all() / set()-uniqueness below stay
+                # unchanged; the real migration is phase 206's job.
                 outcomes.append(
                     operator.verify_eprom(
                         name,
@@ -3331,6 +3330,7 @@ def _dispatch_multi_run(
                         tmp_source_path,
                         address_str=_address_arg(region_start),
                     )
+                    == 0
                 )
             elif op == OP_ERASE:
                 outcomes.append(operator.erase_eprom(name, eprom_data))

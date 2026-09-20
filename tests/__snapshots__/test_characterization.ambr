@@ -331,9 +331,14 @@
   
     Verifies the content of an EPROM.
   
+    Exits 0 on a match, 1 on a mismatch, 2 on a transport, hardware, or setup
+    failure. The three are distinct: a transport failure is not reported as a
+    mismatch.
+  
   Options:
     -a, --address TEXT  Verify start address in dec/hex
     -f, --force         Force, even if the VPP or chip id doesn't match.
+    --full              Report every mismatching range, not just the first.
     --help              Show this message and exit.
   
   '''
