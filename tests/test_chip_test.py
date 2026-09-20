@@ -779,7 +779,9 @@ def _mock_operator(**returns):
     op = Mock(spec=_OPERATOR_METHODS)
     op.check_eprom_id.return_value = (True, 0x1234)
     op.read_eprom.return_value = True
-    op.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank), the
+    # same convention verify_eprom adopted in 202-01.
+    op.check_eprom_blank.return_value = 0
     op.write_eprom.return_value = True
     # 202-01 D-10: verify_eprom now returns an int (0 == match); the
     # multi-run dispatch's `== 0` adapter reads this as success only at 0.
@@ -822,7 +824,8 @@ def _sdp_leg_readback_operator():
 
     op = Mock(spec=_OPERATOR_METHODS)
     op.check_eprom_id.return_value = (True, 0x1234)
-    op.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    op.check_eprom_blank.return_value = 0
     op.erase_eprom.return_value = True
 
     def _write_eprom(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
@@ -1075,6 +1078,30 @@ def test_id_mismatch_does_not_gate_non_destructive_steps():
     assert _result(results, OP_BLANK_CHECK).verdict == VERDICT_OK
     operator.read_eprom.assert_called()
     operator.check_eprom_blank.assert_called_once()
+
+
+def test_blank_check_step_records_pass_verdict_when_operator_returns_zero():
+    """202-05 D-10: `check_eprom_blank` now returns an int (0 == blank, the
+    same convention `verify_eprom` adopted in 202-01). A mocked operator
+    returning 0 must record the passing OK verdict through the dispatch's
+    `== 0` adapter."""
+    operator = _mock_operator(check_eprom_blank=0)
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    assert _result(results, OP_BLANK_CHECK).verdict == VERDICT_OK
+
+
+def test_blank_check_step_records_bad_verdict_when_operator_returns_one():
+    """The paired negative: an operator returning 1 (not blank) must not be
+    read as success through the same `== 0` adapter."""
+    operator = _mock_operator(check_eprom_blank=1)
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    assert _result(results, OP_BLANK_CHECK).verdict == VERDICT_BAD
 
 
 """The two-axis status vocabulary (178-CONTEXT.md D-01/D-02/D-12, 178-02):
@@ -1408,7 +1435,8 @@ def test_a_bad_blank_check_does_not_force_a_read_back_on_a_passing_write():
     """The gate is PER STEP, not per run: a `blank-check` step reporting BAD
     must not force a fingerprint read-back on an unrelated passing `write`
     step in the same plan."""
-    operator = _mock_operator(check_eprom_blank=False)
+    # 202-05 D-10: 1 (not 0) is now check_eprom_blank's "not blank" verdict.
+    operator = _mock_operator(check_eprom_blank=1)
     plan = _plan_with_steps(
         Step(op=OP_BLANK_CHECK, supported=True, reason=""),
         Step(op=OP_WRITE, supported=True, reason="", destructive=True),
@@ -2371,7 +2399,8 @@ def test_write_region_via_run_plan_uv_part_full_scope_uses_the_top_slot():
     operator.check_eprom_id.return_value = (True, expected_id)
     # Blank -- the state that used to trigger the full-device branch. It no
     # longer changes the region at all, which is the point of this test.
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     captured: dict = {}
     operator.write_eprom.side_effect = _capturing_write(captured)
     operator.read_eprom.side_effect = _writes_fill_at_requested_region(0xFF)
@@ -2822,7 +2851,8 @@ def _gated_allow_operator():
     a = generate_pattern(*region)
     operator = Mock(spec=_OPERATOR_METHODS)
     operator.check_eprom_id.return_value = (True, None)
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     operator.erase_eprom.return_value = True
     # 202-01 D-10: verify_eprom now returns an int (0 == match).
     operator.verify_eprom.return_value = 0
@@ -3150,7 +3180,8 @@ def test_every_slot_saturated_write_is_skipped_never_ok():
     name = "M27C512"
     plan = derive_plan(name, _REAL_DB, write_scope="full")
     chip = FakeChip.uv_all_saturated(65536, 256)
-    assert chip.check_eprom_blank(name, {}) is False  # sanity: not the D-C path
+    # 202-05 D-10: FakeChip.check_eprom_blank now returns an int (0 == blank).
+    assert chip.check_eprom_blank(name, {}) == 1  # sanity: not the D-C path
 
     results = run_plan(plan, chip, _REAL_DB)
 

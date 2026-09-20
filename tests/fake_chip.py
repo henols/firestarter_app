@@ -208,11 +208,17 @@ class FakeChip:
 
     def check_eprom_blank(
         self, name: str, eprom_data: dict[str, Any], operation_flags: int = 0
-    ) -> bool:
+    ) -> int:
+        """Returns an int (202-05 D-10, mirroring `verify_eprom`'s own
+        202-01 migration): 0 == blank, 1 == not blank. `blank_override`
+        stays bool internally (the caller-facing verdict, not the wire
+        contract) -- only this method's own return value changed shape."""
         self.calls.append(("check_eprom_blank", {}))
         if self.blank_override is not None:
-            return self.blank_override
-        return bytes(self.data) == b"\xff" * self.memory_size
+            is_blank = self.blank_override
+        else:
+            is_blank = bytes(self.data) == b"\xff" * self.memory_size
+        return 0 if is_blank else 1
 
     def check_eprom_id(
         self, name: str, eprom_data: dict[str, Any], operation_flags: int = 0
@@ -312,13 +318,14 @@ class WriteInitPreflightChip(FakeChip):
 
     def check_eprom_blank(
         self, name: str, eprom_data: dict[str, Any], operation_flags: int = 0
-    ) -> bool:
+    ) -> int:
+        """Returns an int (202-05 D-10) -- see `FakeChip.check_eprom_blank`."""
         self.last_firmware_error_code = None
         self.last_firmware_error_message = None
-        is_blank = super().check_eprom_blank(name, eprom_data, operation_flags)
-        if not is_blank:
+        verdict = super().check_eprom_blank(name, eprom_data, operation_flags)
+        if verdict != 0:
             self.last_firmware_error_code = MSG_ERR_NOT_BLANK
             self.last_firmware_error_message = (
                 "Error: EPROM not blank at address 0x000000, value 0xAB"
             )
-        return is_blank
+        return verdict

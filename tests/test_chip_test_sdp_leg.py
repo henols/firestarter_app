@@ -232,7 +232,8 @@ def _mock_operator(**returns):
     op = Mock(spec=_OPERATOR_METHODS)
     op.check_eprom_id.return_value = (True, 0x1234)
     op.read_eprom.return_value = True
-    op.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    op.check_eprom_blank.return_value = 0
     op.write_eprom.return_value = True
     # 202-01 D-10: verify_eprom now returns an int (0 == match); the
     # multi-run dispatch's `== 0` adapter reads this as success only at 0.
@@ -981,7 +982,8 @@ def _readback_operator(payload: bytes, *, write_ok: bool = True, **returns):
     """
     op = Mock(spec=_OPERATOR_METHODS)
     op.check_eprom_id.return_value = (True, 0x1234)
-    op.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    op.check_eprom_blank.return_value = 0
     op.erase_eprom.return_value = True
     # 202-01 D-10: verify_eprom now returns an int (0 == match).
     op.verify_eprom.return_value = 0
@@ -1333,7 +1335,8 @@ def _dead_write_path_operator():
     a = generate_pattern(*region)
     operator = Mock(spec=_OPERATOR_METHODS)
     operator.check_eprom_id.return_value = (True, 0x1234)
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     operator.erase_eprom.return_value = True
     # 202-01 D-10: verify_eprom now returns an int (0 == match).
     operator.verify_eprom.return_value = 0
@@ -2315,7 +2318,8 @@ def test_sdp_leg_length_gate_passes_against_a_full_size_readback_double():
 
     operator = Mock(spec=_OPERATOR_METHODS)
     operator.check_eprom_id.return_value = (True, 0x1234)
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     operator.erase_eprom.return_value = True
     # 202-01 D-10: verify_eprom now returns an int (0 == match).
     operator.verify_eprom.return_value = 0

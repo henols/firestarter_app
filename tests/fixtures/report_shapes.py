@@ -393,7 +393,8 @@ def _fixed_return_operator(**returns: Any) -> Mock:
     op = Mock(spec=_OPERATOR_METHODS)
     op.check_eprom_id.return_value = (True, 0x1234)
     op.read_eprom.return_value = True
-    op.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    op.check_eprom_blank.return_value = 0
     op.write_eprom.return_value = True
     # 202-01 D-10: verify_eprom now returns an int (0 == match); the
     # multi-run dispatch's `== 0` adapter reads this as success only at 0.
@@ -430,7 +431,8 @@ def _sdp_aware_operator() -> Mock:
 
     op = Mock(spec=_OPERATOR_METHODS)
     op.check_eprom_id.return_value = (True, 0x1234)
-    op.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    op.check_eprom_blank.return_value = 0
     op.erase_eprom.return_value = True
 
     def _write_eprom(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
@@ -553,7 +555,8 @@ def _build_m27c512_full_blank_check_bad() -> DiagnosticReport:
     return _build_real_path_report(
         chip="m27c512",
         write_scope="full",
-        operator=_fixed_return_operator(check_eprom_blank=False),
+        # 202-05 D-10: check_eprom_blank's "not blank" verdict is now 1.
+        operator=_fixed_return_operator(check_eprom_blank=1),
         runs=2,
     )
 

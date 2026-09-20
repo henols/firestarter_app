@@ -442,7 +442,8 @@ def test_a_non_uv_blank_check_failure_is_still_bad() -> None:
     chip state is needed, and `spec=` keeps a typo'd operator method an
     `AttributeError` rather than a silently-truthy `Mock`."""
     operator = Mock(spec=_OPERATOR_METHODS)
-    operator.check_eprom_blank.return_value = False
+    # 202-05 D-10: check_eprom_blank's "not blank" verdict is now 1.
+    operator.check_eprom_blank.return_value = 1
     step = ct.Step(op=ct.OP_BLANK_CHECK, supported=True, reason="")
     ed = ct.resolve_chip("m27c512", db=_REAL_DB)
     result = ct._dispatch_step("m27c512", step, ed, operator, runs=1)

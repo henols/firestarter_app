@@ -62,9 +62,12 @@ def _cycle_operator(name: str, *, blank: bool = False):
     writes: list[tuple[str | None, bytes]] = []
     operator = Mock(spec=_OPERATOR_METHODS)
     operator.check_eprom_id.return_value = (True, eprom_data.get("chip-id") or 0)
-    operator.check_eprom_blank.return_value = blank
+    # 202-05 D-10: check_eprom_blank now returns an int too (0 == blank),
+    # the same convention verify_eprom adopted in 202-01.
+    operator.check_eprom_blank.return_value = 0 if blank else 1
     # 202-01 D-10: verify_eprom now returns an int (0 == match), unlike the
-    # other three, which stay bare bools.
+    # remaining bare-bool methods (write_eprom/erase_eprom/sdp_lock/
+    # sdp_unlock).
     operator.verify_eprom.return_value = 0
     for method in ("erase_eprom", "sdp_lock", "sdp_unlock"):
         getattr(operator, method).return_value = True

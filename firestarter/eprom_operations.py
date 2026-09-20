@@ -330,6 +330,17 @@ def build_flags(
     return flags
 
 
+def _blank_expected_bytes(_offset: int, length: int) -> bytes:
+    """`check_eprom_blank`'s D-04 pull callback: the constant blank byte,
+    exactly `length` bytes -- never a device-sized buffer, no matter how
+    large a single chunk's `length` is. `_offset` is unused; the blank
+    constant does not depend on address. Module-level (not a closure inside
+    `check_eprom_blank`) so it is directly unit-testable without driving a
+    whole compare.
+    """
+    return b"\xff" * length
+
+
 def hexdump(address, data, width=16):
     """
     Prints a hexdump similar to xxd.
@@ -2213,6 +2224,112 @@ class EpromOperator:
                 logger.error(f"Write to {eprom_name.upper()} failed.")
             return is_ok
 
+    def _drive_region_compare(
+        self,
+        cmd_data: dict,
+        op_name: str,
+        expected: Callable[[int, int], bytes],
+        *,
+        full: bool,
+        region_length: int | None,
+    ) -> int:
+        """The one host-side compare drive `verify_eprom` and
+        `check_eprom_blank` share (202-05 D-02): both callers open a
+        COMMAND_READ and feed `_main_phase_read_data`'s delivered payload
+        into one `CompareAccumulator` through their own D-04 pull callback
+        (`verify_eprom` seeks its input file; `check_eprom_blank` returns a
+        constant blank-byte string) -- everything past that point (the
+        abort predicate, the D-08 abort-vs-fault discrimination, the D-13/
+        D-14 rendering, and the D-10 int verdict) is identical for both, and
+        used to be two copies of the same logic before this plan.
+
+        Returns 0 on a match, 1 on a mismatch, 2 on a transport/hardware
+        failure. Deliberately does not log a caller-specific success/failure
+        line -- `verify_eprom` and `check_eprom_blank` each already have
+        their own elapsed-time wording, and duplicating it here would be a
+        second place that wording could drift.
+        """
+        region_start = cmd_data.get("address", 0)
+        max_ranges = MAX_RETAINED_RANGES if full else 1
+        accumulator = CompareAccumulator(addr_base=region_start, max_ranges=max_ranges)
+
+        def _process_chunk(address: int, payload: bytes) -> None:
+            accumulator.feed(address, expected(address, len(payload)), payload)
+
+        # 202-04 D-06: the default (non-`--full`) path passes
+        # `accumulator.has_mismatch` as the abort predicate, so the read
+        # stops acking the instant the first mismatch is fed. `--full`
+        # passes no predicate at all -- D-16's cap already bounds `--full`'s
+        # output, so its complete scan is a separate code path only in what
+        # it passes here, not a second accumulator or a second cap.
+        # `has_mismatch` is a property, not a method -- wrap it so
+        # `_main_phase_read_data` gets a zero-arg callable per its
+        # `abort_predicate` contract.
+        abort_kwargs: dict = {}
+        if not full:
+            abort_kwargs["abort_predicate"] = lambda: accumulator.has_mismatch
+
+        # D-08: record intent BEFORE the drive, always (True or False) --
+        # never left over from a previous call -- so a genuine timeout on a
+        # `--full` run (which never sets an abort_predicate) can never be
+        # attributed to a stop that was never requested.
+        self._read_abort_intended = not full
+
+        is_ok, _ = self._run_state_machine(
+            op_name,
+            main_phase_handler=self._main_phase_read_data,
+            start_addr=cmd_data.get("address", 0),
+            end_addr=cmd_data.get("memory-size", 0),
+            process_data_chunk_callback=_process_chunk,
+            **abort_kwargs,
+        )
+
+        aborted = False
+        if not is_ok:
+            # D-08: the deliberate stop and a genuine timeout both surface
+            # here as `_run_state_machine` returning `(False, ...)` with
+            # `last_firmware_error_code == MSG_ERR_TIMEOUT` -- the two are
+            # wire-identical. Accept the error as this host's own doing ONLY
+            # when all four hold: the default path actually asked for a stop
+            # (`_read_abort_intended`), the read loop actually recorded one
+            # (`stopped_at` is not `None`), the firmware's own error id is
+            # exactly the timeout id (not some other fault wearing its
+            # clothes), and the stop happened recently enough that this
+            # error frame could plausibly be its consequence (the bounded
+            # window). Any single condition failing means a real fault: take
+            # the exit-2 path exactly as before -- a mismatching chip whose
+            # read failed for an unrelated reason must never be reported as
+            # a mismatch, and this host's own deliberate abort must never be
+            # reported as hardware trouble.
+            stopped_at = self._read_abort_stopped_at
+            aborted = (
+                self._read_abort_intended
+                and stopped_at is not None
+                and self.last_firmware_error_code == MSG_ERR_TIMEOUT
+                and (time.monotonic() - stopped_at) <= READ_ABORT_ACCEPTANCE_WINDOW_S
+            )
+            if not aborted:
+                return 2
+
+        result = accumulator.finalise(aborted=aborted)
+        if region_length is not None:
+            result.total = region_length
+        for line in render_compare_lines(result):
+            logger.info(line)
+
+        # Standing prohibition this plan carries: a compare that did not
+        # cover the whole declared region is never reported as a match.
+        # CMP-04 "empty" edge (202-04): a zero-length region is a degenerate
+        # case of the same trap, not a separate one -- a zero-length
+        # read-back compares byte-for-byte as PERFECT equality (`compared`
+        # trivially equals `total` at 0), so without this explicit
+        # `result.total > 0` guard an empty input file (or a `--size 0`
+        # region) would silently report a clean pass despite nothing having
+        # actually been compared.
+        if result.total > 0 and result.bad == 0 and result.compared == result.total:
+            return 0
+        return 1
+
     def verify_eprom(
         self,
         eprom_name: str,
@@ -2238,16 +2355,21 @@ class EpromOperator:
         than draining the rest of the chip. `full=True` passes no predicate,
         so a full scan always reads (and reports) the whole region. The
         deliberate stop yields a `MSG_ERR_TIMEOUT` frame wire-identical to a
-        genuine timeout; the four-condition discrimination below is what
-        keeps that abort from ever being reported as exit-2 hardware trouble,
-        and keeps a genuine fault from ever being reported as a clean-looking
-        abort. Progress-bar choice (left to discretion by CONTEXT.md): on an
-        abort the bar simply stops advancing at the compared byte count (the
-        loop in `_main_phase_read_data` stops calling `progress.update()`
-        once stopped) and is closed there by `_run_state_machine`'s
-        `finally` -- it is never advanced to the region total, since a bar
-        that completes after a stop would claim progress the compare did not
-        make (the same dishonesty D-09 guards against at the summary line).
+        genuine timeout; the four-condition discrimination in
+        `_drive_region_compare` is what keeps that abort from ever being
+        reported as exit-2 hardware trouble, and keeps a genuine fault from
+        ever being reported as a clean-looking abort. Progress-bar choice
+        (left to discretion by CONTEXT.md): on an abort the bar simply stops
+        advancing at the compared byte count (the loop in
+        `_main_phase_read_data` stops calling `progress.update()` once
+        stopped) and is closed there by `_run_state_machine`'s `finally` --
+        it is never advanced to the region total, since a bar that completes
+        after a stop would claim progress the compare did not make (the same
+        dishonesty D-09 guards against at the summary line).
+
+        202-05 D-02: the compare drive itself (accumulator, abort predicate,
+        D-08 discrimination, rendering, D-10 verdict) lives in
+        `_drive_region_compare`, shared verbatim with `check_eprom_blank`.
         """
         # 202-01 D-01/D-02: unlike write_eprom, verify_eprom computes its own
         # region_length here -- it does not call require_page_alignment,
@@ -2264,14 +2386,11 @@ class EpromOperator:
         except OSError:
             region_length = None
 
-        # 202-01 D-01/D-04/D-17: verify has no --size flag yet (that lands in
-        # 202-05), but its read must still stop at the file's length by
-        # default, not run to the whole chip. The only wire-level way to
-        # bound a COMMAND_READ to region_length, without a --size CLI value,
-        # is to reuse _setup_operation's existing "COMMAND_READ + size"
-        # override -- it only needs `size` as a string. Without this, a file
-        # shorter than the whole chip would read the whole chip and the D-04
-        # pull callback below would run past the file's EOF.
+        # 202-01 D-01/D-04/D-17: an explicit --size wins when given; without
+        # one, verify's region is the input file's length. Either way the
+        # only wire-level way to bound a COMMAND_READ to that length is
+        # _setup_operation's existing "COMMAND_READ + size" override -- it
+        # only needs `size` as a string.
         size_str = str(region_length) if region_length is not None else None
 
         with self._operation_context(
@@ -2288,10 +2407,6 @@ class EpromOperator:
             logger.info(f"Verifying {input_file_path} against {eprom_name.upper()}")
             start_time = time.time()
             region_start = cmd_data.get("address", 0)
-            max_ranges = MAX_RETAINED_RANGES if full else 1
-            accumulator = CompareAccumulator(
-                addr_base=region_start, max_ranges=max_ranges
-            )
 
             try:
                 with open(input_file_path, "rb") as file_handle:
@@ -2300,100 +2415,24 @@ class EpromOperator:
                         file_handle.seek(offset - region_start)
                         return file_handle.read(length)
 
-                    def _process_chunk(address: int, payload: bytes) -> None:
-                        accumulator.feed(
-                            address, _expected(address, len(payload)), payload
-                        )
-
-                    # 202-04 D-06: the default (non-`--full`) path passes
-                    # `accumulator.has_mismatch` as the abort predicate, so
-                    # the read stops acking the instant the first mismatch is
-                    # fed. `--full` passes no predicate at all -- D-16's cap
-                    # already bounds `--full`'s output, so its complete scan
-                    # is a separate code path only in what it passes here,
-                    # not a second accumulator or a second cap.
-                    # `has_mismatch` is a property, not a method -- wrap it so
-                    # `_main_phase_read_data` gets a zero-arg callable per its
-                    # `abort_predicate` contract.
-                    abort_kwargs: dict = {}
-                    if not full:
-                        abort_kwargs["abort_predicate"] = lambda: (
-                            accumulator.has_mismatch
-                        )
-
-                    # D-08: record intent BEFORE the drive, always (True or
-                    # False) -- never left over from a previous call -- so a
-                    # genuine timeout on a `--full` run (which never sets an
-                    # abort_predicate) can never be attributed to a stop that
-                    # was never requested.
-                    self._read_abort_intended = not full
-
-                    is_ok, _ = self._run_state_machine(
+                    verdict = self._drive_region_compare(
+                        cmd_data,
                         op_name,
-                        main_phase_handler=self._main_phase_read_data,
-                        start_addr=cmd_data.get("address", 0),
-                        end_addr=cmd_data.get("memory-size", 0),
-                        process_data_chunk_callback=_process_chunk,
-                        **abort_kwargs,
+                        _expected,
+                        full=full,
+                        region_length=region_length,
                     )
             except IOError as e:  # noqa: UP024
                 logger.error(f"File I/O error with {input_file_path}: {e}")
                 return 2
 
-            aborted = False
-            if not is_ok:
-                # D-08: the deliberate stop and a genuine timeout both
-                # surface here as `_run_state_machine` returning `(False,
-                # ...)` with `last_firmware_error_code == MSG_ERR_TIMEOUT` --
-                # the two are wire-identical. Accept the error as this
-                # host's own doing ONLY when all four hold: the default
-                # path actually asked for a stop (`_read_abort_intended`),
-                # the read loop actually recorded one (`stopped_at` is not
-                # `None`), the firmware's own error id is exactly the
-                # timeout id (not some other fault wearing its clothes), and
-                # the stop happened recently enough that this error frame
-                # could plausibly be its consequence (the bounded window).
-                # Any single condition failing means a real fault: log it
-                # and take the exit-2 path exactly as before -- a
-                # mismatching chip whose read failed for an unrelated reason
-                # must never be reported as a mismatch, and this host's own
-                # deliberate abort must never be reported as hardware
-                # trouble.
-                stopped_at = self._read_abort_stopped_at
-                aborted = (
-                    self._read_abort_intended
-                    and stopped_at is not None
-                    and self.last_firmware_error_code == MSG_ERR_TIMEOUT
-                    and (time.monotonic() - stopped_at)
-                    <= READ_ABORT_ACCEPTANCE_WINDOW_S
-                )
-                if not aborted:
-                    logger.error(f"Verify for {eprom_name.upper()} failed.")
-                    return 2
-
-            result = accumulator.finalise(aborted=aborted)
-            if region_length is not None:
-                result.total = region_length
-            for line in render_compare_lines(result):
-                logger.info(line)
-
-            # Standing prohibition this plan carries: a compare that did not
-            # cover the whole declared region is never reported as a match.
-            # CMP-04 "empty" edge (202-04 Task 3): a zero-length region is a
-            # degenerate case of the same trap, not a separate one -- a
-            # zero-length read-back compares byte-for-byte as PERFECT
-            # equality (`compared` trivially equals `total` at 0), so
-            # without this explicit `result.total > 0` guard an empty input
-            # file (or a `--size 0` region, once 202-05 adds `--size`) would
-            # silently report a clean pass despite nothing having actually
-            # been compared.
-            if result.total > 0 and result.bad == 0 and result.compared == result.total:
+            if verdict == 0:
                 logger.info(
                     f"Verify for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
                 )
-                return 0
-            logger.error(f"Verify for {eprom_name.upper()} failed.")
-            return 1
+            else:
+                logger.error(f"Verify for {eprom_name.upper()} failed.")
+            return verdict
 
     def erase_eprom(
         self,
@@ -2530,8 +2569,35 @@ class EpromOperator:
     _SRAM_PROTO_IDS = frozenset({0x0E, 0x27, 0x28, 0x29})
 
     def check_eprom_blank(
-        self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
-    ) -> bool:
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        operation_flags: int = 0,
+        address_str: str | None = None,
+        size_str: str | None = None,
+        full: bool = False,
+    ) -> int:
+        """Compare the chip against a constant blank byte through the same
+        engine `verify_eprom` uses (202-05 D-02/D-04/D-10/D-12).
+
+        This reads the chip with COMMAND_READ and compares it, chunk by
+        chunk, against an all-0xFF expected side supplied by a D-04 pull
+        callback (`_blank_expected_bytes` below) -- it no longer composes
+        COMMAND_BLANK_CHECK (COMMAND_BLANK_CHECK stays in constants.py;
+        nothing on this path sends it). Returns 0 on an all-blank chip, 1 on
+        at least one non-blank byte, 2 on a setup/transport failure or a
+        refusal.
+
+        A part with no factory-blank state (SRAM/FRAM, or any protocol whose
+        firmware handler leaves CMD_BLANK_CHECK's main-op NULL) has no blank
+        verdict to report -- reporting it as "not blank" answers a question
+        the part does not have. D-12 keeps the pre-wire short-circuit
+        exactly where it was, before any command is composed, and changes
+        only its return value: 2, an honest refusal, in place of the old
+        false "not blank" verdict. `derive_plan` (chip_test.py) marks these
+        parts' blank-check step unsupported up front and never dispatches to
+        this method for them, so `dev test` is unaffected by this change.
+        """
         # SRAM/FRAM blank-check short-circuit — detect before issuing any
         # firmware command.  configure_sram() leaves a NULL main-op for
         # CMD_BLANK_CHECK, so the firmware emits 0xA4 MSG_ERR_EMPTY_INPUT.
@@ -2547,24 +2613,42 @@ class EpromOperator:
                 "SRAM/FRAM are volatile or byte-rewritable — they have no "
                 "factory-blank state and the firmware has no blank-check op for them."
             )
-            return False
+            return 2
 
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
-            COMMAND_BLANK_CHECK,
+            COMMAND_READ,
             operation_flags,
+            address_str,
+            size_str,
         ) as (cmd_data, _, op_name):
             if not cmd_data:
-                return False
+                return 2
+
             logger.info(f"Blank checking EPROM {eprom_name.upper()}")
             start_time = time.time()
-            is_ok, final_msg = self._run_state_machine(op_name)
-            if is_ok:
+            # The declared region length: whichever of address/size resolved
+            # onto cmd_data's own address/memory-size pair -- mirrors
+            # verify_eprom's `os.path.getsize`-derived region_length, just
+            # sourced from the wire dict instead of a file, since blank has
+            # no input file of its own.
+            region_length = cmd_data.get("memory-size", 0) - cmd_data.get("address", 0)
+
+            verdict = self._drive_region_compare(
+                cmd_data,
+                op_name,
+                _blank_expected_bytes,
+                full=full,
+                region_length=region_length,
+            )
+            if verdict == 0:
                 logger.info(
-                    f"Blank check for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {final_msg or ''}"  # noqa: E501
+                    f"Blank check for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
                 )
-            return is_ok
+            else:
+                logger.error(f"Blank check for {eprom_name.upper()} failed.")
+            return verdict
 
     def check_eprom_id(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0

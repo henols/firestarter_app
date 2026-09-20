@@ -23,7 +23,11 @@ same real part.
   shares ``_main_phase_read_data`` with ``read_eprom`` instead of
   ``_main_phase_send_data`` with ``write_eprom``; this module's Test 4 is
   the proof that verify's calls stay argument-free and can never inherit
-  the write path's budget.
+  the write path's budget. Since 202-05 D-02, ``check_eprom_blank`` ALSO
+  shares ``_main_phase_read_data`` (with ``verify_eprom``/``read_eprom``)
+  instead of ``_main_phase_simple`` -- only ``erase_eprom`` still occupies
+  the payload-free ``_main_phase_simple``/``_execute_phase`` group the
+  driver docstring below describes.
 - D-13: the write's INIT/END phases (``_execute_phase``) are untouched --
   they keep their bare, argument-free ``get_response()`` call regardless of
   what MAIN-phase budget was advertised.
@@ -52,7 +56,8 @@ module exercises (the Uno floor is 512 B, decoded via
 write/verify drivers' recorded call list has a fixed, known shape: exactly
 ``[INIT call, MAIN call #1 (OK_REQ_DATA or DATA_CHUNK), MAIN call #2
 (MAIN_DONE), END call]`` -- four calls, in that order, for either method.
-The simple-operation driver (``check_eprom_blank`` / ``erase_eprom``, no
+The simple-operation driver (``erase_eprom`` alone, as of 202-05 -- see the
+D-12 note above; ``check_eprom_blank`` moved onto the read-pull shape, no
 ``main_phase_handler``, no data file) has three: ``[INIT, MAIN, END]``.
 
 The recorder itself wraps ``SerialCommunicator.get_response`` with an
@@ -277,11 +282,15 @@ def _drive_write_and_record_timeouts(
 def _drive_simple_operation_and_record_timeouts(
     make_comm, fake_serial, *, operation: str
 ):
-    """Drive ``check_eprom_blank`` / ``erase_eprom`` (both fall through to
-    ``_main_phase_simple`` -- no ``main_phase_handler``, no data file, no
-    ``MSG_OK_REQ_DATA``) against ``_REAL_27C_CHIP``, recording every
-    ``get_response`` timeout. D-12's negative proof for the OTHER shared
-    machinery ``write_eprom`` never touches at all.
+    """Drive ``erase_eprom`` (falls through to ``_main_phase_simple`` -- no
+    ``main_phase_handler``, no data file, no ``MSG_OK_REQ_DATA``) against
+    ``_REAL_27C_CHIP``, recording every ``get_response`` timeout. D-12's
+    negative proof for the OTHER shared machinery ``write_eprom`` never
+    touches at all.
+
+    202-05 D-02: ``check_eprom_blank`` no longer belongs here -- it shares
+    ``_main_phase_read_data`` with ``verify_eprom``/``read_eprom`` now (see
+    ``_drive_blank_check_and_record_timeouts`` below).
 
     Feeds exactly ``MSG_INIT_DONE``, ``MSG_MAIN_DONE``, ``MSG_END_DONE`` --
     the recorded call list is always exactly ``[INIT, MAIN, END]``.
@@ -313,6 +322,58 @@ def _drive_simple_operation_and_record_timeouts(
     ):
         method = getattr(operator, operation)
         ok = method(_REAL_27C_CHIP, programmer_dict)
+    return ok, calls
+
+
+def _drive_blank_check_and_record_timeouts(make_comm, fake_serial):
+    """Drive ``check_eprom_blank`` against ``_REAL_27C_CHIP``, recording
+    every ``get_response`` timeout.
+
+    202-05 D-02: ``check_eprom_blank`` now shares ``_main_phase_read_data``
+    with ``verify_eprom``/``read_eprom`` (it composes COMMAND_READ, not a
+    payload-free simple command) -- it no longer belongs to the
+    ``_main_phase_simple`` group ``erase_eprom`` alone now occupies. This
+    driver mirrors ``_drive_data_operation_and_record_timeouts``'s verify
+    shape: an explicit ``size_str`` bounds the read to one small chunk, and
+    the fed ``MSG_DATA_CHUNK`` is all-0xFF so the driven blank-check is
+    genuinely blank (``ok == 0``) rather than incidentally passing this
+    module's timeout assertions while failing its own compare.
+
+    Feeds exactly ``MSG_INIT_DONE``, ``MSG_DATA_CHUNK`` (4 bytes of 0xFF),
+    ``MSG_MAIN_DONE``, ``MSG_END_DONE`` -- the recorded call list is
+    ``[INIT, MAIN, MAIN, END]``, the same shape ``_main_phase_calls``
+    expects.
+
+    Returns ``(ok, calls)``.
+    """
+    from firestarter.chip_resolver import resolve_chip
+    from firestarter.database import EpromDatabase
+    from firestarter.eprom_operations import EpromOperator
+
+    blank_bytes = b"\xff\xff\xff\xff"
+    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+    fake_serial.feed(build_frame(MSG_DATA_CHUNK, blank_bytes))
+    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        return make_comm()
+
+    db = EpromDatabase(skip_local_override=True)
+    programmer_dict = resolve_chip(_REAL_27C_CHIP, db=db)
+
+    calls: list = []
+    operator = EpromOperator(ConfigManager())
+    with (
+        patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ),
+        _recording_get_response_patch(calls),
+    ):
+        ok = operator.check_eprom_blank(
+            _REAL_27C_CHIP, programmer_dict, size_str=str(len(blank_bytes))
+        )
     return ok, calls
 
 
@@ -412,10 +473,13 @@ def test_non_write_paths_keep_default_timeout(tmp_path, make_comm, fake_serial) 
     this test's job below is to prove the call stays bare (never gains an
     explicit override), not that a resolution mechanism ran.
 
-    ``check_eprom_blank`` and ``erase_eprom`` exercise the OTHER shared
-    machinery (``_main_phase_simple`` / ``_execute_phase``) that this plan
-    never touches at all -- their calls must stay truly bare, both before
-    and after 202-01.
+    ``erase_eprom`` exercises the OTHER shared machinery
+    (``_main_phase_simple`` / ``_execute_phase``) that this plan never
+    touches at all -- its calls must stay truly bare, both before and after
+    202-01. ``check_eprom_blank`` moved onto the SAME read-pull shape as
+    verify in 202-05 -- its MAIN-phase calls must stay bare for the same
+    reason verify's do (no write-style budget parameter exists on that code
+    path at all).
 
     A genuinely dead board must still report in ten seconds on every one of
     these -- inheriting the write path's multi-minute budget would turn a
@@ -437,10 +501,10 @@ def test_non_write_paths_keep_default_timeout(tmp_path, make_comm, fake_serial) 
     )
 
     blank_serial, blank_comm = _fresh_serial_and_comm()
-    blank_ok, blank_calls = _drive_simple_operation_and_record_timeouts(
-        blank_comm, blank_serial, operation="check_eprom_blank"
+    blank_ok, blank_calls = _drive_blank_check_and_record_timeouts(
+        blank_comm, blank_serial
     )
-    assert blank_ok is True, "D-12: the driven blank-check must complete successfully"
+    assert blank_ok == 0, "202-05 D-10: the driven blank-check must report blank (0)"
 
     erase_serial, erase_comm = _fresh_serial_and_comm()
     erase_ok, erase_calls = _drive_simple_operation_and_record_timeouts(
@@ -455,8 +519,7 @@ def test_non_write_paths_keep_default_timeout(tmp_path, make_comm, fake_serial) 
         timeouts = [_timeout_of(c) for c in calls]
         assert all(t is None for t in timeouts), (
             f"D-12: {label}'s get_response calls must stay argument-free "
-            "(bare get_response()) -- _main_phase_simple/_execute_phase are "
-            f"untouched by this plan; got {timeouts}"
+            f"(bare get_response()); got {timeouts}"
         )
         assert 120.0 not in timeouts, (
             f"D-12: {label} must never see the write-path's 120.0 fallback "

@@ -2589,7 +2589,14 @@ def _dispatch_step(
     if step.op == OP_ID:
         return _dispatch_id(name, eprom_data, operator)
     if step.op == OP_BLANK_CHECK:
-        is_ok = operator.check_eprom_blank(name, eprom_data)
+        # 202-05 D-10: check_eprom_blank now returns an int (0 == blank,
+        # mirroring verify_eprom's own 202-01 migration) rather than a bare
+        # bool -- compare against 0 so this dispatch's existing bool-based
+        # verdict semantics survive the return-type change unchanged. The
+        # real migration to the 3-way (0/1/2) verdict is phase 206's job
+        # (CONTEXT.md); this arm still folds 1 (not blank) and 2 (refusal)
+        # into the same "not ok" branch exactly as the old False did.
+        is_ok = operator.check_eprom_blank(name, eprom_data) == 0
         # Debug session w27c512-devtest-all-bad: a failing blank-check now
         # carries the firmware's own id and text. This is the step where it
         # matters most -- mem_util_blank_check emits MSG_ERR_NOT_BLANK with

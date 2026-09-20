@@ -140,7 +140,8 @@ def mock_operator(**returns):
     op = Mock(spec=OPERATOR_METHODS)
     op.check_eprom_id.return_value = (True, 0x1234)
     op.read_eprom.return_value = True
-    op.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    op.check_eprom_blank.return_value = 0
     op.write_eprom.return_value = True
     # 202-01 D-10: verify_eprom now returns an int (0 == match); the
     # multi-run dispatch's `== 0` adapter reads this as success only at 0.

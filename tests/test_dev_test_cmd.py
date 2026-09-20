@@ -153,7 +153,8 @@ def make_clean_operator() -> Mock:
     operator = Mock(spec=EpromOperator)
     operator.check_eprom_id.return_value = (True, None)
     operator.read_eprom.side_effect = _clean_read
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     operator.write_eprom.return_value = True
     # 202-01 D-10: verify_eprom now returns an int (0 == match).
     operator.verify_eprom.return_value = 0
@@ -227,7 +228,8 @@ def make_leaked_lock_operator(
 
     operator = Mock(spec=EpromOperator)
     operator.check_eprom_id.return_value = (True, None)
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     # 202-01 D-10: verify_eprom now returns an int (0 == match).
     operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
@@ -290,7 +292,8 @@ def make_held_lock_operator(
 
     operator = Mock(spec=EpromOperator)
     operator.check_eprom_id.return_value = (True, None)
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     # 202-01 D-10: verify_eprom now returns an int (0 == match).
     operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
@@ -327,7 +330,8 @@ def make_clean_notrun_operator() -> Mock:
     """
     operator = Mock(spec=EpromOperator)
     operator.check_eprom_id.return_value = (True, None)
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     operator.write_eprom.side_effect = ChipNotFoundError(
         "simulated: operation not implemented on this host build (test fixture)"
     )
@@ -388,7 +392,8 @@ def make_restore_failed_operator() -> Mock:
 
     operator = Mock(spec=EpromOperator)
     operator.check_eprom_id.return_value = (True, None)
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     # 202-01 D-10: verify_eprom now returns an int (0 == match).
     operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
@@ -1039,7 +1044,8 @@ class TestReportDestination:
         from firestarter.messages import MSG_ERR_NOT_BLANK
 
         operator = make_clean_operator()
-        operator.check_eprom_blank.return_value = False
+        # 202-05 D-10: check_eprom_blank's "not blank" verdict is now 1.
+        operator.check_eprom_blank.return_value = 1
         operator.last_firmware_error_code = MSG_ERR_NOT_BLANK
         operator.last_firmware_error_message = "not blank"
         app = make_app_context(
@@ -1707,7 +1713,8 @@ class TestExitFloorD15:
 
         operator = Mock(spec=EpromOperator)
         operator.check_eprom_id.return_value = (True, None)
-        operator.check_eprom_blank.return_value = True
+        # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+        operator.check_eprom_blank.return_value = 0
         operator.write_eprom.return_value = True
         # 202-01 D-10: verify_eprom now returns an int (0 == match).
         operator.verify_eprom.return_value = 0
@@ -2158,13 +2165,15 @@ class TestBlankCheckAfterEraseKaq:
     ) -> None:
         """M8720 (an executable-erase chip): an honest simulation of a used
         device that only becomes blank once erase has actually run --
-        `check_eprom_blank`'s closure returns `operator.erase_eprom.called`.
-        With blank-check now positioned AFTER erase, the closure observes
-        True and the step verdicts OK; the whole run exits 0."""
+        `check_eprom_blank`'s closure returns 0 once
+        `operator.erase_eprom.called` is true. With blank-check now
+        positioned AFTER erase, the closure observes that and the step
+        verdicts OK; the whole run exits 0."""
         operator = make_clean_operator()
 
-        def _blank_only_after_erase(name: str, eprom_data: dict) -> bool:
-            return bool(operator.erase_eprom.called)
+        def _blank_only_after_erase(name: str, eprom_data: dict) -> int:
+            # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+            return 0 if operator.erase_eprom.called else 1
 
         operator.check_eprom_blank.side_effect = _blank_only_after_erase
         app = make_app_context(
@@ -2183,8 +2192,8 @@ class TestBlankCheckAfterEraseKaq:
         ever leave the device blank (each page write auto-erases
         internally), so blank-check is emitted NA -- `run_plan` skips an
         unsupported step WITHOUT any operator call. A non-blank device
-        (`check_eprom_blank.return_value = False`) must not matter at all:
-        the run still exits 0 and the operator method is never dispatched.
+        (`check_eprom_blank.return_value = 1`) must not matter at all: the
+        run still exits 0 and the operator method is never dispatched.
 
         AT28C256 is also one of the 43 SDP-ALLOW chips, so its plan carries
         the six-step SDP leg -- `make_held_lock_operator()` (this suite's
@@ -2194,7 +2203,8 @@ class TestBlankCheckAfterEraseKaq:
         genuinely succeed and do not confound this test's own exit-0
         assertion with an unrelated SDP-leg BAD/NOT-HELD."""
         operator = make_held_lock_operator()
-        operator.check_eprom_blank.return_value = False
+        # 202-05 D-10: check_eprom_blank's "not blank" verdict is now 1.
+        operator.check_eprom_blank.return_value = 1
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )

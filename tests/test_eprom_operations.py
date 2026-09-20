@@ -1690,9 +1690,11 @@ class TestSramBlankCheckShortCircuit:
     def test_sram_blank_check_short_circuits_before_setup(self, monkeypatch) -> None:
         """FM1608-class SRAM chip: check_eprom_blank must NOT call _setup_operation.
 
-        The host short-circuit should fire immediately, returning False (not
-        applicable) without reaching the firmware command layer.  This test
-        MUST FAIL until Task 2 implements the short-circuit (RED gate).
+        The host short-circuit should fire immediately, returning 2 (D-12:
+        a refusal, not a "not blank" verdict -- a part with no factory-blank
+        state has no blank verdict to report) without reaching the firmware
+        command layer.  This test MUST FAIL until Task 2 implements the
+        short-circuit (RED gate).
         """
         setup_called = []
 
@@ -1710,8 +1712,9 @@ class TestSramBlankCheckShortCircuit:
             "SRAM blank-check must short-circuit BEFORE _setup_operation; "
             f"_setup_operation was called with: {setup_called}"
         )
-        # Result must be False (blank-check not applicable to SRAM/FRAM).
-        assert result is False
+        # 202-05 D-12: the result must be 2, an honest refusal -- not a
+        # "not blank" verdict, and not the old bare False.
+        assert result == 2
 
     def test_eeprom_blank_check_still_reaches_setup(self, monkeypatch) -> None:
         """Negative control: W27C512 (EEPROM, 0x07) must still reach _setup_operation.
@@ -1737,6 +1740,147 @@ class TestSramBlankCheckShortCircuit:
             f"call list: {setup_called}"
         )
         assert setup_called[0][0] == "W27C512"
+
+
+# Minimal eprom_data_dict for the blank-check host-side-read tests below --
+# a small `memory-size` so a single fed MSG_DATA_CHUNK covers the whole
+# declared region without needing an explicit --size (that CLI option lands
+# in Task 2; `check_eprom_blank`'s own region-length computation from
+# cmd_data's address/memory-size pair does not need it to be exercised).
+_BLANK_EPROM_DATA: dict = {
+    "memory-size": 8,
+    "flags": 0,
+    "cmd": 1,
+}
+
+
+class TestCheckEpromBlankHostSideRead:
+    """CMP-02 / phase 202 success criterion 1, second command: `firestarter
+    blank <chip>` completes against firmware that still carries the
+    blank-check ordinal without ever composing a command dict whose `cmd`
+    is that ordinal (COMMAND_BLANK_CHECK, 4) -- it composes only
+    COMMAND_READ (1) and compares chunk by chunk on the host against a
+    constant blank byte (202-05 D-02/D-04/D-10).
+    """
+
+    def test_no_composed_command_dict_carries_the_blank_check_ordinal(
+        self, make_comm, fake_serial
+    ) -> None:
+        """Collect EVERY composed `command_dict` via the `find_and_connect`
+        side-effect idiom -- no entry's `cmd` is COMMAND_BLANK_CHECK (4) and
+        at least one is COMMAND_READ (1)."""
+        from firestarter.constants import COMMAND_BLANK_CHECK, COMMAND_READ
+
+        payload = b"\xff" * 8
+
+        command_dicts: list[dict] = []
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            command_dicts.append(dict(command_dict))
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+        written = _capture_written_frames(fake_serial)
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA))
+
+        assert verdict == 0
+        assert command_dicts, "find_and_connect was never called"
+        assert all(cd["cmd"] != COMMAND_BLANK_CHECK for cd in command_dicts)
+        assert any(cd["cmd"] == COMMAND_READ for cd in command_dicts)
+        # Sanity: the driven exchange actually wrote bytes on the wire (acks).
+        assert written
+
+    def test_all_blank_chip_returns_zero(self, make_comm, fake_serial) -> None:
+        payload = b"\xff" * 8
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA))
+
+        assert verdict == 0
+
+    def test_one_non_blank_byte_returns_one(self, make_comm, fake_serial) -> None:
+        payload = bytearray(b"\xff" * 8)
+        payload[3] = 0x00
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(payload)))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA))
+
+        assert verdict == 1
+
+    def test_setup_failure_returns_two(self) -> None:
+        """The entry guard returns 2, matching `verify_eprom`'s own
+        setup-failure convention."""
+        from firestarter.exceptions import SerialError
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=SerialError("no board attached"),
+        ):
+            verdict = operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA))
+
+        assert verdict == 2
+
+
+class TestCheckEpromBlankSharesTheOneCompareDrive:
+    """D-02: `verify_eprom` and `check_eprom_blank` must not carry two
+    copies of the accumulator loop -- both call the SAME shared private
+    drive helper rather than each rolling their own."""
+
+    def test_both_methods_call_the_shared_drive_helper(self) -> None:
+        import inspect
+
+        verify_src = inspect.getsource(EpromOperator.verify_eprom)
+        blank_src = inspect.getsource(EpromOperator.check_eprom_blank)
+        assert "_drive_region_compare" in verify_src
+        assert "_drive_region_compare" in blank_src
+
+
+class TestBlankExpectedBytesPullCallback:
+    """D-04: `check_eprom_blank`'s pull callback allocates at most the
+    requested chunk length per call -- never a device-sized buffer, no
+    matter how large a single requested length is."""
+
+    def test_allocates_exactly_the_requested_length(self) -> None:
+        from firestarter.eprom_operations import _blank_expected_bytes
+
+        for length in (1, 512, 4096, 524288):  # up to 512 KiB in one call
+            result = _blank_expected_bytes(1234, length)
+            assert len(result) == length
+            assert result == b"\xff" * length
 
 
 # pin the SDP payload-free wire shape + the emitted
