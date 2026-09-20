@@ -805,9 +805,15 @@ def _region_refusal_exit_code(
     `verify` and `blank`.
 
     An explicit `--size` wins when given. Without one, the declared region
-    length is `input_file`'s own length (`verify`) or the whole chip
-    (`input_file=None`, `blank`'s own default -- nothing to bound there, so
-    no file-shorter-than-size refusal applies to it).
+    length is `input_file`'s own length (`verify`) or the rest of the chip
+    from `--address` onward (`input_file=None`, `blank`'s default) -- the
+    whole chip only when `--address` is also absent. `blank -a <addr>` with
+    no `--size` still declares a real, boundable region ("from `addr` to
+    the chip's end"), not "nothing to bound" -- CR-01 (202-05 code review):
+    an earlier version of this function left `length` as `None` whenever
+    both `--size` and `input_file` were absent, which skipped the
+    past-chip-end check entirely for exactly this case and let a malformed
+    `--address` reach the wire.
 
     Both refusals are decided HERE, in the CLI tier, before either command
     ever calls into `EpromOperator` -- `_operation_context` is what opens
@@ -815,6 +821,12 @@ def _region_refusal_exit_code(
     happens. Returns an exit code (always 2) to refuse with, or `None` when
     the region is acceptable and the caller should proceed to the real
     operation.
+
+    Boundary, stated explicitly (CR-01): a start address exactly equal to
+    `memory-size` is past the last addressable byte (valid addresses are
+    `[0, memory-size)`) and is refused, with no region left to declare from
+    it; `start == memory-size - 1` with no `--size` is the last valid byte
+    and declares a 1-byte region, which is accepted.
 
     A malformed `--address`/`--size` string is deliberately NOT this
     function's job: `_setup_operation`'s own `parse_address`/`parse_size`
@@ -850,6 +862,20 @@ def _region_refusal_exit_code(
             )
             return 2
 
+    mem_size = eprom_data.get("memory-size")
+
+    # CR-01: a start address at or past the chip's declared size is refused
+    # unconditionally, before any length is even resolved -- there is no
+    # addressable byte left to declare a region from, regardless of whether
+    # --size was given. Checked first so the length-based check below never
+    # has to reason about a negative or zero "rest of chip" length.
+    if mem_size is not None and start >= mem_size:
+        click.echo(
+            f"{eprom.upper()}: refused -- the start address 0x{start:X} is "
+            f"at or past this chip's declared size (0x{mem_size:X})."
+        )
+        return 2
+
     if explicit_size is not None:
         length: int | None = explicit_size
     elif input_file is not None:
@@ -857,10 +883,15 @@ def _region_refusal_exit_code(
             length = os.path.getsize(input_file)
         except OSError:
             length = None
+    elif mem_size is not None:
+        # blank's default (no --size): the declared region is the rest of
+        # the chip from `start` onward, not "nothing to bound" -- the
+        # `start >= mem_size` guard above already ruled out a non-positive
+        # length here, so this is always a real, positive length.
+        length = mem_size - start
     else:
-        length = None  # blank's whole-chip default: nothing to bound here
+        length = None
 
-    mem_size = eprom_data.get("memory-size")
     if length is not None and mem_size is not None and start + length > mem_size:
         click.echo(
             f"{eprom.upper()}: refused -- the region 0x{start:X}-"

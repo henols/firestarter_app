@@ -668,6 +668,99 @@ def test_region_past_chip_end_is_refused_before_opening_the_port(
     operator.check_eprom_blank.assert_not_called()
 
 
+# CR-01 (202-05 code review): `-a` alone (no `--size`) against `blank` used to
+# skip the past-chip-end check entirely -- `_region_refusal_exit_code` left
+# `length` as `None` whenever both `--size` and `input_file` were absent, on
+# the reasoning that blank's whole-chip default has "nothing to bound". That
+# reasoning only holds when `start == 0`; with `-a` given and no `-s`, the
+# declared region is "the rest of the chip from `addr` onward", a real,
+# boundable length. These legs are the mirror image of
+# `test_region_past_chip_end_is_refused_before_opening_the_port` above,
+# which only ever supplied `-a` AND `-s` together and so never exercised
+# this path.
+
+
+@pytest.mark.parametrize("command", ["verify", "blank"])
+def test_address_alone_past_chip_end_is_refused_before_opening_the_port(
+    runner: CliRunner, tmp_path, command: str
+) -> None:
+    """`-a <past-end-address>` with NO `--size` must still be refused with
+    exit 2 and must never open the serial connection -- CR-01's exact
+    repro, generalised to both commands. W27C512 is 65536 (0x10000) bytes;
+    `-a 0x10001` is one byte past its end."""
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+
+    args = [command, "W27C512"]
+    if command == "verify":
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(b"\x01")
+        args.append(str(input_file))
+    args += ["-a", "0x10001"]
+
+    with pytest.MonkeyPatch.context() as mp:
+        connect_spy = Mock()
+        mp.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect", connect_spy
+        )
+        result = runner.invoke(cli, args, obj=app)
+
+    assert result.exit_code == 2, result.output
+    assert "10001" in result.output.upper() or "65536" in result.output
+    connect_spy.assert_not_called()
+    operator.verify_eprom.assert_not_called()
+    operator.check_eprom_blank.assert_not_called()
+
+
+@pytest.mark.parametrize("command", ["verify", "blank"])
+def test_address_alone_exactly_at_chip_end_is_refused(
+    runner: CliRunner, tmp_path, command: str
+) -> None:
+    """`-a <memory-size>` exactly, with no `--size`, is past the last
+    addressable byte (valid addresses are `[0, memory-size)`) and must be
+    refused -- the explicit boundary decision CR-01 records. W27C512 is
+    65536 (0x10000) bytes, so `-a 0x10000` starts exactly at its end."""
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+
+    args = [command, "W27C512"]
+    if command == "verify":
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(b"\x01")
+        args.append(str(input_file))
+    args += ["-a", "0x10000"]
+
+    with pytest.MonkeyPatch.context() as mp:
+        connect_spy = Mock()
+        mp.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect", connect_spy
+        )
+        result = runner.invoke(cli, args, obj=app)
+
+    assert result.exit_code == 2, result.output
+    connect_spy.assert_not_called()
+    operator.verify_eprom.assert_not_called()
+    operator.check_eprom_blank.assert_not_called()
+
+
+def test_blank_address_alone_at_last_valid_byte_is_not_refused(
+    runner: CliRunner,
+) -> None:
+    """The negative control CR-01 requires: `-a <memory-size - 1>` with no
+    `--size` is the LAST valid byte (one-byte region ending exactly at the
+    chip's declared size) and must NOT be refused -- proving the new guard
+    doesn't satisfy itself by refusing everything. W27C512 is 65536
+    (0x10000) bytes, so `-a 0xFFFF` is its last valid address."""
+    operator = Mock(spec=EpromOperator)
+    operator.check_eprom_blank.return_value = 0
+    app = make_app_context(eprom_operator=operator)
+
+    result = runner.invoke(cli, ["blank", "W27C512", "-a", "0xFFFF"], obj=app)
+
+    assert result.exit_code == 0, result.output
+    operator.check_eprom_blank.assert_called_once()
+
+
 def test_region_scoped_verify_composes_a_command_dict_bounding_exact_region(
     runner: CliRunner, make_comm, fake_serial, tmp_path, monkeypatch
 ) -> None:
