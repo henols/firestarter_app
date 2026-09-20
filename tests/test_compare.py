@@ -1,12 +1,17 @@
-"""Tests for `firestarter/compare.py` -- the 202-01 streaming comparison
-engine (D-01/D-02/D-04/D-05/D-13/D-16).
+"""Tests for `firestarter/compare.py` -- the 202-01/202-02/202-03 streaming
+comparison engine (D-01/D-02/D-03/D-04/D-05/D-13/D-14/D-16).
 
 Drives `CompareAccumulator` directly from a synthetic generator of
 (address, bytes) chunk pairs -- no operator, no serial, no bench hardware.
 This is deliberate: the engine is stdlib-only (see the module's own
-import-set invariant, separately pinned by
-`test_eprom_operations.py::TestVerifyEpromHostSideRead`'s AST check), so its
-own unit tests must not need anything beyond that either.
+import-set invariant, separately pinned by an AST scan in this file), so
+most of this file's tests need nothing beyond that either. The one
+deliberate exception is the D-03 corpus (`TestClassifyFingerprintCorpus`),
+which imports `firestarter.chip_test` and a fixture from
+`tests/test_chip_test.py` on purpose -- proving the STREAMED path and the
+DELEGATING `chip_test.classify_fingerprint` agree is the entire point of
+that class, so it cannot stay import-light the way the rest of this file
+does.
 """
 
 from __future__ import annotations
@@ -20,6 +25,14 @@ from collections.abc import Iterator
 
 import pytest
 
+# The only two names in this file that reach outside `firestarter.compare`
+# and stdlib -- used exclusively by the D-03 corpus (`TestClassifyFingerprintCorpus`)
+# below, nowhere else in this file. `_SCATTERED_OFFSETS` is reused verbatim
+# from `tests/test_chip_test.py` rather than re-derived (per the plan): it
+# is the one hand-tuned input in the suite already measured to sit below
+# the 0.9 clustering threshold (~0.81) -- a fresh set of offsets risks
+# landing in address-line by accident.
+from firestarter.chip_test import classify_fingerprint
 from firestarter.compare import (
     FP_ADDRESS_LINE,
     FP_BLANK_CONTACT,
@@ -29,11 +42,13 @@ from firestarter.compare import (
     MAX_RETAINED_RANGES,
     CompareAccumulator,
     CompareResult,
+    Fingerprint,
     MismatchRange,
     classify_streamed,
     diff_summary,
     render_compare_lines,
 )
+from tests.test_chip_test import _SCATTERED_OFFSETS
 
 # CMP-03 / T-202-01 peak-allocation ceiling (RESEARCH.md "Measured: the
 # mechanism works, with enormous margin"): the streaming shape peaked at
@@ -963,3 +978,261 @@ class TestDiffSummary:
 
         assert not hasattr(summary, "diff_offsets")
         assert summary.bad == 4
+
+
+def _batch_classify_fingerprint_reference(
+    expected: bytes,
+    actual: bytes,
+    *,
+    repeat_divergent: bool | None = None,
+    addr_base: int = 0,
+) -> Fingerprint:
+    """A transcription of `chip_test.classify_fingerprint`'s PRE-refactor
+    batch body (as it stood before 202-03 D-02), held here so the D-03
+    corpus below compares two INDEPENDENT computations rather than one
+    against itself. Deliberately duplicated, not imported or delegated --
+    delegating to `classify_streamed` here would make the whole corpus
+    vacuous (both sides would be the same code)."""
+    cmp_len = min(len(expected), len(actual))
+    diff_offsets = [o for o in range(cmp_len) if expected[o] != actual[o]]
+    bad = len(diff_offsets)
+    bad_pct = 100.0 * bad / cmp_len if cmp_len else 0.0
+    first_offset = diff_offsets[0] if diff_offsets else None
+
+    ff_count = sum(1 for b in actual[:cmp_len] if b == 0xFF)
+    ff_ratio = (ff_count / cmp_len) if cmp_len else 0.0
+
+    evidence: dict = {
+        "ff_ratio": ff_ratio,
+        "repeat_divergent": repeat_divergent,
+        "first_offset": first_offset,
+        "bit_clustering": {},
+    }
+
+    if ff_ratio >= 0.98:
+        return Fingerprint(
+            total=cmp_len,
+            bad=bad,
+            bad_pct=bad_pct,
+            classification=FP_BLANK_CONTACT,
+            evidence=evidence,
+        )
+
+    suspected_line = None
+    best_score = 0.0
+    if bad and cmp_len > (1 << 8):
+        max_bit = (cmp_len - 1).bit_length()
+        for k in range(8, max_bit):
+            mask = 1 << k
+            set_count = sum(1 for o in diff_offsets if (addr_base + o) & mask)
+            clear_count = bad - set_count
+            score = max(set_count, clear_count) / bad
+            evidence["bit_clustering"][k] = score
+            if score > best_score:
+                best_score = score
+                suspected_line = k
+
+    if suspected_line is not None and best_score >= 0.9:
+        evidence["suspected_line"] = suspected_line
+        evidence["cluster_score"] = best_score
+        return Fingerprint(
+            total=cmp_len,
+            bad=bad,
+            bad_pct=bad_pct,
+            classification=FP_ADDRESS_LINE,
+            evidence=evidence,
+        )
+
+    if bad == 0:
+        return Fingerprint(
+            total=cmp_len,
+            bad=bad,
+            bad_pct=bad_pct,
+            classification=FP_MATCH,
+            evidence=evidence,
+        )
+
+    if repeat_divergent is True:
+        return Fingerprint(
+            total=cmp_len,
+            bad=bad,
+            bad_pct=bad_pct,
+            classification=FP_TRANSPORT,
+            evidence=evidence,
+        )
+
+    return Fingerprint(
+        total=cmp_len,
+        bad=bad,
+        bad_pct=bad_pct,
+        classification=FP_INDETERMINATE,
+        evidence=evidence,
+    )
+
+
+def _corpus_pattern(length: int, multiplier: int = 7) -> bytes:
+    """A cheap non-0xFF, non-address-derived byte pattern for corpus rows
+    that don't care about content, only about mismatch POSITIONS -- kept
+    local so this file adds no dependency on `chip_test.generate_pattern`."""
+    return bytes((i * multiplier) & 0xFF for i in range(length))
+
+
+# D-03's corpus: (name, expected, actual, kwargs) rows, each with a comment
+# recording why it is in the table. Spans all five buckets (rows 1-6) and
+# the four traps RESEARCH.md named (rows 7-12): the 256/257 clustering
+# boundary, a bit-index tie, and zero-/unequal-length inputs.
+_CORPUS: list[tuple[str, bytes, bytes, dict]] = []
+
+# 1. blank/contact: read-back is near-all 0xFF despite a non-blank expected
+# pattern -- every byte "differs" from `expected`, but the ff_ratio gate
+# fires before that mismatch count is ever consulted.
+_near_all_ff_expected = _corpus_pattern(256)
+_CORPUS.append(("near_all_ff_blank_contact", _near_all_ff_expected, b"\xff" * 256, {}))
+
+# 2. address-line, addr_base=0: a clean power-of-two high-bit clustering
+# fault -- the baseline Pitfall-3 comparison pairs with row 3 below.
+_al0_len = 0x400
+_al0_expected = bytes(_al0_len)
+_al0_actual = bytearray(_al0_expected)
+for _i in range(_al0_len):
+    if _i & 0x100:
+        _al0_actual[_i] = 0x01
+_CORPUS.append(
+    ("address_line_addr_base_zero", _al0_expected, bytes(_al0_actual), {"addr_base": 0})
+)
+
+# 3. address-line, addr_base=0x8000: same fault pattern, non-zero base --
+# proves clustering keys on the ABSOLUTE address (addr_base + offset), not
+# the raw offset (Pitfall 3), and that the candidate-bit RANGE bound stays
+# keyed to the compared LENGTH, not the addr_base-inflated absolute address.
+_al_base = 0x8000
+_al1_len = 0x400
+_al1_expected = bytes(_al1_len)
+_al1_actual = bytearray(_al1_expected)
+for _i in range(_al1_len):
+    if (_al_base + _i) & 0x100:
+        _al1_actual[_i] = 0x01
+_CORPUS.append(
+    (
+        "address_line_addr_base_nonzero",
+        _al1_expected,
+        bytes(_al1_actual),
+        {"addr_base": _al_base},
+    )
+)
+
+# 4/5. Reuses the suite's one hand-tuned scattered-offset list (measured
+# clustering ~0.81, below the 0.9 threshold): repeat_divergent=True ->
+# transport, repeat_divergent=False -> indeterminate. Same fault pattern,
+# opposite verdicts -- pins that the divergent-across-runs SIGNAL, not the
+# byte pattern, is what discriminates buckets 4 and 5.
+_scattered_len = 1024
+_scattered_expected = _corpus_pattern(_scattered_len, multiplier=11)
+_scattered_actual = bytearray(_scattered_expected)
+for _o in _SCATTERED_OFFSETS:
+    _scattered_actual[_o] ^= 0x01
+_CORPUS.append(
+    (
+        "scattered_transport",
+        _scattered_expected,
+        bytes(_scattered_actual),
+        {"repeat_divergent": True},
+    )
+)
+_CORPUS.append(
+    (
+        "scattered_indeterminate",
+        _scattered_expected,
+        bytes(_scattered_actual),
+        {"repeat_divergent": False},
+    )
+)
+
+# 6. match: a byte-identical compare, zero mismatches.
+_clean_pattern = _corpus_pattern(128, multiplier=3)
+_CORPUS.append(("clean_match", _clean_pattern, _clean_pattern, {}))
+
+# 7. A compared length that is not a power of two (300), with several
+# scattered mismatches -- exercises the clustering range at a length whose
+# bit_length() boundary doesn't line up with a round number.
+_npot_len = 300
+_npot_expected = _corpus_pattern(_npot_len, multiplier=5)
+_npot_actual = bytearray(_npot_expected)
+for _o in (10, 50, 90, 130, 170, 210, 250, 290):
+    _npot_actual[_o] ^= 0x01
+_CORPUS.append(("non_power_of_two_length", _npot_expected, bytes(_npot_actual), {}))
+
+# 8. Exactly 256 bytes: `cmp_len > (1 << 8)` is a strict `>`, so 256 never
+# enters clustering at all -- `tests/test_chip_test_sdp_leg.py` already
+# depends on this for the batch classifier.
+_len256_expected = bytes(256)
+_len256_actual = bytearray(_len256_expected)
+_len256_actual[0] = 0x01
+_CORPUS.append(("exactly_256_bytes", _len256_expected, bytes(_len256_actual), {}))
+
+# 9. Exactly 257 bytes: one byte over the boundary, clustering now runs.
+_len257_expected = bytes(257)
+_len257_actual = bytearray(_len257_expected)
+_len257_actual[0] = 0x01
+_CORPUS.append(("exactly_257_bytes", _len257_expected, bytes(_len257_actual), {}))
+
+# 10. A tie between two candidate bit indices (8 and 9): every mismatch
+# sits where BOTH bits are set, so both score 1.0 -- the classifier must
+# resolve to the LOWER index (8).
+_tie_len = 1024
+_tie_expected = bytes(_tie_len)
+_tie_actual = bytearray(_tie_expected)
+for _addr in range(0x300, 0x400):
+    _tie_actual[_addr] = 0x01
+_CORPUS.append(("bit_index_tie", _tie_expected, bytes(_tie_actual), {}))
+
+# 11. Zero-length: both buffers empty -- must return a zero total, zero bad
+# count and zero blank ratio, never raise.
+_CORPUS.append(("zero_length", b"", b"", {}))
+
+# 12. Unequal-length: compares over the common prefix only, never raises.
+_CORPUS.append(("unequal_length", b"\x01\x02\x03\x04\x05", b"\x01\x02\x09", {}))
+
+
+class TestClassifyFingerprintCorpus:
+    """D-03: the streamed path (`chip_test.classify_fingerprint`, delegating
+    to `classify_streamed`) and an independently transcribed batch
+    reference must agree on the WHOLE `Fingerprint` object, not a
+    field-by-field subset -- a whole-object comparison catches a field the
+    refactor forgot to populate, which a hand-written field list would also
+    forget to check."""
+
+    @pytest.mark.parametrize(
+        "name,expected,actual,kwargs",
+        _CORPUS,
+        ids=[row[0] for row in _CORPUS],
+    )
+    def test_streamed_and_batch_reference_agree(
+        self, name: str, expected: bytes, actual: bytes, kwargs: dict
+    ) -> None:
+        reference = _batch_classify_fingerprint_reference(expected, actual, **kwargs)
+        streamed = classify_fingerprint(expected, actual, **kwargs)
+
+        assert streamed == reference, (
+            f"corpus row {name!r}: classify_fingerprint (streamed, delegating) "
+            f"disagrees with the independently transcribed batch reference"
+        )
+
+    def test_corpus_covers_all_five_buckets(self) -> None:
+        buckets = {
+            _batch_classify_fingerprint_reference(
+                expected, actual, **kwargs
+            ).classification
+            for _name, expected, actual, kwargs in _CORPUS
+        }
+
+        assert buckets == {
+            FP_BLANK_CONTACT,
+            FP_ADDRESS_LINE,
+            FP_MATCH,
+            FP_TRANSPORT,
+            FP_INDETERMINATE,
+        }
+
+    def test_corpus_has_at_least_twelve_rows(self) -> None:
+        assert len(_CORPUS) >= 12

@@ -31,15 +31,27 @@ from typing import Any
 from firestarter import messages
 from firestarter.chip_resolver import resolve_chip
 from firestarter.compare import (
-    _BIT_CLUSTER_THRESHOLD,
-    _FF_RATIO_THRESHOLD,
-    FP_ADDRESS_LINE,
-    FP_BLANK_CONTACT,
-    FP_INDETERMINATE,
+    _FF_RATIO_THRESHOLD,  # noqa: F401 -- re-exported; see comment below
+    FP_ADDRESS_LINE,  # noqa: F401 -- re-exported; see comment below
+    FP_BLANK_CONTACT,  # noqa: F401 -- re-exported; see comment below
+    FP_INDETERMINATE,  # noqa: F401 -- re-exported; see comment below
     FP_MATCH,
-    FP_TRANSPORT,
+    FP_TRANSPORT,  # noqa: F401 -- re-exported; see comment below
+    CompareAccumulator,
     Fingerprint,
+    classify_streamed,
+    diff_summary,
 )
+
+# 202-03 (D-02): `classify_fingerprint`'s body no longer references
+# `FP_ADDRESS_LINE`, `FP_BLANK_CONTACT`, `FP_INDETERMINATE`, `FP_TRANSPORT`
+# or `_FF_RATIO_THRESHOLD` directly -- it delegates to `classify_streamed`,
+# which owns that logic now. They stay imported here anyway: several test
+# modules (`tests/test_chip_test_sdp_leg.py`, `tests/test_diagnostic_report.py`)
+# import them FROM `firestarter.chip_test`, not `firestarter.compare` --
+# the same re-export contract 202-01 established for `Fingerprint`/`FP_MATCH`
+# (kept test churn at zero then; breaking it now would be an unrelated,
+# unrequested test rewrite).
 from firestarter.constants import (
     FLAG_CAN_ERASE,  # 0x02 -- do NOT redefine; import
     FLAG_SKIP_BLANK_CHECK,
@@ -115,34 +127,6 @@ def prepass_images(length: int) -> tuple[bytes, bytes]:
 
 
 # ---------------------------------------------------------------------------
-# Shared byte-diff-offset helper -- reused, not reimplemented
-# ---------------------------------------------------------------------------
-#
-# Mirrors the exact divergence math in `consistency_check_eprom`
-# (eprom_operations.py:842-863): cmp_len / diff_offsets / pct / first
-# divergence offset. This is the ONE divergence primitive `classify_fingerprint`
-# consumes -- do NOT add a second parallel divergence implementation
-# elsewhere in this codebase. The math is small enough to
-# copy rather than import, keeping this module import-light (no dependency
-# on eprom_operations.py).
-
-
-def _diff_offsets(
-    expected: bytes, actual: bytes
-) -> tuple[int, list[int], float, int | None]:
-    """Return (cmp_len, diff_offsets, pct, first) for two byte arrays.
-
-    `cmp_len` is `min(len(expected), len(actual))` -- unequal-length inputs
-    are compared only over their common prefix and never raise.
-    """
-    cmp_len = min(len(expected), len(actual))
-    diff_offsets = [o for o in range(cmp_len) if expected[o] != actual[o]]
-    pct = 100.0 * len(diff_offsets) / cmp_len if cmp_len else 0.0
-    first = diff_offsets[0] if diff_offsets else None
-    return cmp_len, diff_offsets, pct, first
-
-
-# ---------------------------------------------------------------------------
 # Four-bucket byte-mismatch fingerprint classifier
 # ---------------------------------------------------------------------------
 #
@@ -151,6 +135,12 @@ def _diff_offsets(
 # firestarter.compare (202-01 D-01) -- imported above and re-exported at this
 # module's top level, so every existing importer of chip_test.Fingerprint /
 # chip_test.FP_* keeps resolving them unchanged.
+#
+# `_diff_offsets` -- the module-local divergence primitive this classifier
+# used to consume directly -- retired in 202-03 (D-02). The math it copied
+# now lives once, in `firestarter.compare.diff_summary` / `classify_streamed`,
+# and this function delegates to it rather than reimplementing the
+# math a second time.
 
 
 def classify_fingerprint(
@@ -162,12 +152,14 @@ def classify_fingerprint(
 ) -> Fingerprint:
     """Classify a byte-mismatch pattern into one of five honest buckets.
 
-    Consumes the shared `_diff_offsets` divergence primitive (the
-    same math `consistency_check_eprom` uses for run1-vs-run2 divergence,
-    here applied to expected-pattern-vs-read-back). Never writes a second
-    divergence implementation.
+    202-03 (D-02): delegates to `compare.classify_streamed` via a single
+    `CompareAccumulator` fed over the common prefix -- this function is a
+    thin wrapper, not a second implementation of the divergence math.
+    `classify_streamed`'s docstring and the D-03 corpus in
+    `tests/test_compare.py` are what actually prove this produces the same
+    `Fingerprint` the batch implementation used to compute directly.
 
-    Classification order is LOCKED:
+    Classification order is LOCKED (enforced in `compare.classify_streamed`):
       1. blank/contact  -- cheapest, most common false-PASS source
       2. address-line   -- power-of-two high-bit clustering (needs addr_base
                             to map offsets to ABSOLUTE addresses, Pitfall 3)
@@ -178,92 +170,11 @@ def classify_fingerprint(
       5. indeterminate   -- fallback; NEVER coerce an ambiguous distribution
                             into a confident label.
     """
-    cmp_len, diff_offsets, bad_pct, first_offset = _diff_offsets(expected, actual)
-    bad = len(diff_offsets)
-
-    ff_count = sum(1 for b in actual[:cmp_len] if b == 0xFF)
-    ff_ratio = (ff_count / cmp_len) if cmp_len else 0.0
-
-    evidence: dict = {
-        "ff_ratio": ff_ratio,
-        "repeat_divergent": repeat_divergent,
-        "first_offset": first_offset,
-        "bit_clustering": {},
-    }
-
-    # 1. blank/contact: read-back is near-all 0xFF (un-driven bus / contact
-    # fault). Checked first regardless of whether there are zero mismatches
-    # (a perfect verify) or the pattern never matched at all.
-    if ff_ratio >= _FF_RATIO_THRESHOLD:
-        return Fingerprint(
-            total=cmp_len,
-            bad=bad,
-            bad_pct=bad_pct,
-            classification=FP_BLANK_CONTACT,
-            evidence=evidence,
-        )
-
-    # 2. address-line: mismatches concentrate on one polarity of a single
-    # high address bit (A8+). Map each mismatch offset to its ABSOLUTE
-    # address (addr_base + offset) before clustering (Pitfall 3) -- else
-    # the signal is computed against the wrong bits. Candidate bits are
-    # restricted to those that can actually vary within [0, cmp_len), i.e.
-    # 8 <= k < ceil(log2(cmp_len)); bits at or above that never toggle
-    # within the compared region and would spuriously "cluster" at 100%.
-    suspected_line = None
-    best_score = 0.0
-    if bad and cmp_len > (1 << 8):
-        max_bit = (cmp_len - 1).bit_length()
-        for k in range(8, max_bit):
-            mask = 1 << k
-            set_count = sum(1 for o in diff_offsets if (addr_base + o) & mask)
-            clear_count = bad - set_count
-            score = max(set_count, clear_count) / bad
-            evidence["bit_clustering"][k] = score
-            if score > best_score:
-                best_score = score
-                suspected_line = k
-
-    if suspected_line is not None and best_score >= _BIT_CLUSTER_THRESHOLD:
-        evidence["suspected_line"] = suspected_line
-        evidence["cluster_score"] = best_score
-        return Fingerprint(
-            total=cmp_len,
-            bad=bad,
-            bad_pct=bad_pct,
-            classification=FP_ADDRESS_LINE,
-            evidence=evidence,
-        )
-
-    if bad == 0:
-        return Fingerprint(
-            total=cmp_len,
-            bad=bad,
-            bad_pct=bad_pct,
-            classification=FP_MATCH,
-            evidence=evidence,
-        )
-
-    # 3. transport: scattered (no dominant high bit, checked above) AND
-    # non-repeatable across the N>=2 runs (caller-supplied signal from
-    # run1-vs-run2 divergence -- the uno328pb signature).
-    if repeat_divergent is True:
-        return Fingerprint(
-            total=cmp_len,
-            bad=bad,
-            bad_pct=bad_pct,
-            classification=FP_TRANSPORT,
-            evidence=evidence,
-        )
-
-    # 4. indeterminate: never coerce an ambiguous distribution.
-    return Fingerprint(
-        total=cmp_len,
-        bad=bad,
-        bad_pct=bad_pct,
-        classification=FP_INDETERMINATE,
-        evidence=evidence,
-    )
+    cmp_len = min(len(expected), len(actual))
+    acc = CompareAccumulator(addr_base=addr_base)
+    acc.feed(addr_base, expected[:cmp_len], actual[:cmp_len])
+    result = acc.finalise()
+    return classify_streamed(result, repeat_divergent=repeat_divergent)
 
 
 def _synthesized_match_fingerprint(region_length: int) -> Fingerprint:
@@ -2174,8 +2085,8 @@ _UV_PROBE_BLOCK_LENGTH = 4096
 # A MIRROR of `eprom_operations._BOOT_BLOCK_SIZE` (16 KiB, W29C040 datasheet
 # section 6.6's two irreversible boot blocks, first and last). Mirrored
 # rather than imported: `chip_test.py` deliberately keeps no dependency on
-# `eprom_operations.py` (the same reasoning `_diff_offsets`'s own comment,
-# above, already records for the divergence primitive). `_PROTOCOL_FLASH4`
+# `eprom_operations.py` (the same reasoning `compare.diff_summary`'s own
+# comment records for the divergence primitive it owns). `_PROTOCOL_FLASH4`
 # (defined earlier in this module) is reused as the protocol id rather than
 # adding a second constant for it.
 _FLASH4_BOOT_BLOCK_LENGTH = 0x4000
@@ -2806,10 +2717,10 @@ def _dispatch_read(
     absent; it stays `None` only when no comparison was possible (a
     single-run `--fast` read, or a read whose runs all produced empty
     bytes). The agreeing branch derives its five values directly rather
-    than calling `_diff_offsets`: the sha equality already proves zero
-    mismatches, and that primitive walks the whole compared range in a
-    Python-level comprehension, so calling it on the common path would add
-    a full-image compare for information already known. Both outcomes
+    than calling `compare.diff_summary`: the sha equality already proves
+    zero mismatches, and that primitive walks the whole compared range
+    through a `CompareAccumulator`, so calling it on the common path would
+    add a full-image compare for information already known. Both outcomes
     carry the SAME five keys, so no consumer sees a ragged shape.
     """
     last_ok = True
@@ -2829,15 +2740,13 @@ def _dispatch_read(
         shas = [hashlib.sha256(b).hexdigest() for b in run_bytes]
         diverged = len(set(shas)) != 1
         if diverged:
-            cmp_len, diff_offsets, pct, first = _diff_offsets(
-                run_bytes[0], run_bytes[1]
-            )
+            summary = diff_summary(run_bytes[0], run_bytes[1])
             divergence = {
                 "repeat_divergent": True,
-                "cmp_len": cmp_len,
-                "bad": len(diff_offsets),
-                "pct": pct,
-                "first_offset": first,
+                "cmp_len": summary.cmp_len,
+                "bad": summary.bad,
+                "pct": summary.pct,
+                "first_offset": summary.first_offset,
             }
         else:
             divergence = {
@@ -3591,10 +3500,10 @@ def _dispatch_sdp_leg(
 
     # a. LENGTH gate FIRST (P-02). Measured:
     # `classify_fingerprint(A, b"")` returns `total=0, bad=0` -- an empty
-    # read-back reads as PERFECT equality, and `_diff_offsets` silently
-    # truncates to the common prefix and never raises. This gate runs
-    # before any `_diff_offsets`/`classify_fingerprint` call so that trap
-    # cannot fire.
+    # read-back reads as PERFECT equality, and the underlying
+    # `CompareAccumulator`/`diff_summary` primitive silently truncates to
+    # the common prefix and never raises. This gate runs before any
+    # `classify_fingerprint` call so that trap cannot fire.
     if len(actual) != region_length:
         return StepResult(
             op=op,
