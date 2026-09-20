@@ -422,35 +422,21 @@ def test_region_end_emitted_on_write(make_comm, fake_serial) -> None:
     assert captured["command_dict"][JSON_KEY_REGION_END] == 0x1000 + 256
 
 
-def test_region_end_emitted_on_verify(make_comm, fake_serial) -> None:
-    """D-05 / D-07: the same emission, for COMMAND_VERIFY -- write and
-    verify share one dict-construction path through _operation_context to
-    _setup_operation, so one change (and one test each) serves both.
-
-    Selected by `pytest -k region_end`.
-    """
-    from firestarter.constants import COMMAND_VERIFY, JSON_KEY_REGION_END
-
-    captured: dict = {}
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        captured["command_dict"] = command_dict
-        return make_comm()
-
-    operator = EpromOperator(ConfigManager())
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_fake_find_and_connect,
-    ):
-        operator._setup_operation(
-            "W27C512",
-            dict(_MINIMAL_EPROM_DATA),
-            COMMAND_VERIFY,
-            address="0x2000",
-            region_length=512,
-        )
-
-    assert captured["command_dict"][JSON_KEY_REGION_END] == 0x2000 + 512
+# RETIRED 202-01 (D-01/D-02/D-10): `test_region_end_emitted_on_verify` used to
+# live here. It drove `_setup_operation` directly with an explicit
+# COMMAND_VERIFY to prove `_setup_operation` emits JSON_KEY_REGION_END for
+# that ordinal -- true of the function in isolation, but `verify_eprom` no
+# longer composes COMMAND_VERIFY at all (it drives COMMAND_READ; see
+# `TestVerifyEpromHostSideRead` above), so the test passed while proving
+# nothing about shipped `verify` behaviour, and its docstring's claim that
+# "write and verify share one dict-construction path" was no longer true.
+# Retired rather than "fixed", because there is no real call site left for
+# it to pin: COMMAND_VERIFY's `_setup_operation` branch is now genuinely
+# dead in production, kept alive only by the constant staying in
+# `constants.py` pending phase 204's removal. `test_region_end_absent_for_read`
+# immediately below is what actually covers verify's wire shape now (it
+# proves COMMAND_READ never carries JSON_KEY_REGION_END); no replacement
+# test is needed here for verify specifically.
 
 
 def test_region_end_absent_for_read(make_comm, fake_serial) -> None:

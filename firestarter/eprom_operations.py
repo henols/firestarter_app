@@ -2164,11 +2164,16 @@ class EpromOperator:
         path composes it). Returns 0 on a match, 1 on a mismatch, 2 on a
         setup, transport, or I/O failure (D-10, confirmed).
         """
-        # BLANK-01 / D-07: verify shares one dict-construction path with
-        # write (_operation_context -> _setup_operation), so it must supply
-        # region_length itself -- unlike write_eprom it does not call
-        # require_page_alignment, which is where that computation already
-        # lives on the write path.
+        # 202-01 D-01/D-02: unlike write_eprom, verify_eprom computes its own
+        # region_length here -- it does not call require_page_alignment,
+        # which is where that computation already lives on the write path.
+        # This value is NOT forwarded to _operation_context as region_length
+        # below: that kwarg only reaches the wire as JSON_KEY_REGION_END for
+        # cmd in (COMMAND_WRITE, COMMAND_VERIFY) (_setup_operation's guard),
+        # and this path composes COMMAND_READ, so passing it there would be
+        # silently discarded. It is used locally instead, for `size_str`
+        # (below) and for `result.total` (D-10's incomplete-compare
+        # prohibition).
         try:
             region_length = os.path.getsize(input_file_path)
         except OSError:
@@ -2191,7 +2196,6 @@ class EpromOperator:
             operation_flags,
             address_str,
             size_str,
-            region_length=region_length,
         ) as (cmd_data, _, op_name):
             if not cmd_data:
                 return 2
