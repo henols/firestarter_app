@@ -34,7 +34,7 @@ from firestarter.messages import (
     MSG_MAIN_DONE,
 )
 
-from .conftest import build_frame
+from .conftest import _FakeSerial, build_frame
 from .fake_chip import WriteInitPreflightChip
 
 
@@ -1914,6 +1914,156 @@ def _capture_written_frames(fake_serial):
 
     fake_serial.write = _wrapped
     return written
+
+
+def _fresh_comm_pair():
+    """A fresh, independent `(fake_serial, comm_factory)` pair -- mirrors
+    `conftest.py`'s `fake_serial`/`make_comm` fixtures exactly (same
+    attribute set `SerialCommunicator.__new__` needs to bypass `__init__`).
+    Needed here because a single test drives FOUR separate operations: a
+    completed drive closes its `SerialCommunicator`'s fake serial port
+    (`_FakeSerial.close()` sets `is_open = False`), so each of the four
+    runs needs its own instance rather than reusing one across drives.
+    """
+    from firestarter.serial_comm import SerialCommunicator
+
+    serial = _FakeSerial()
+
+    def _factory():
+        instance = SerialCommunicator.__new__(SerialCommunicator)
+        instance.connection = serial
+        instance.port_name = "/dev/null"
+        instance.baud_rate = 250000
+        instance.timeout = 0.1
+        instance.programmer_info = None
+        instance._fault_inject_outgoing = None
+        instance.firmware_buffer_size = None
+        instance.firmware_max_chunk = None
+        instance.firmware_identity = None
+        instance.hw_revision = None
+        instance.write_block_budget_s = None
+        instance.seen_message_ids = set()
+        return instance
+
+    return serial, _factory
+
+
+def _run_and_capture(
+    method_callable, command_dicts: list[dict], written_frames: list, *, payload: bytes
+):
+    """Drive one `verify_eprom`/`check_eprom_blank` call end to end against
+    a fresh fake serial port, appending the composed `command_dict` (via
+    the `find_and_connect` capture idiom) and every frame the host wrote
+    (via `_capture_written_frames`) to the caller's shared lists. Feeds
+    exactly `MSG_INIT_DONE`, `MSG_DATA_CHUNK` (`payload`), `MSG_MAIN_DONE`,
+    `MSG_END_DONE`. Returns the call's own verdict.
+    """
+    serial, comm_factory = _fresh_comm_pair()
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        command_dicts.append(dict(command_dict))
+        return comm_factory()
+
+    serial.feed(build_frame(MSG_INIT_DONE, b""))
+    serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+    serial.feed(build_frame(MSG_MAIN_DONE, b""))
+    serial.feed(build_frame(MSG_END_DONE, b""))
+    written = _capture_written_frames(serial)
+
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=_fake_find_and_connect,
+    ):
+        verdict = method_callable()
+    written_frames.extend(written)
+    return verdict
+
+
+class TestOrdinalsNeverSentByVerifyOrBlank:
+    """CMP-01, CMP-02, phase success criterion 1: neither `verify` nor
+    `blank` ever composes a command dict carrying COMMAND_BLANK_CHECK (4)
+    or COMMAND_VERIFY (6), against firmware that still implements both --
+    proven across four runs (a clean verify, a mismatching verify, a clean
+    blank, and a non-blank blank), collected into a list rather than a
+    single slot so the assertion reads "no call across all four runs used
+    either ordinal", not "the last call used the read ordinal".
+
+    Both retired ordinals are still defined in `constants.py` and still
+    dereferenced by `COMMAND_NAMES` -- they are removed in phases 204 and
+    205, so a future reader must not mistake their continued presence there
+    for an oversight and prune them here.
+    """
+
+    def test_no_run_composes_either_retired_ordinal(self, tmp_path) -> None:
+        from firestarter.constants import (
+            COMMAND_BLANK_CHECK,
+            COMMAND_READ,
+            COMMAND_VERIFY,
+        )
+
+        command_dicts: list[dict] = []
+        written_frames: list = []
+
+        operator = EpromOperator(ConfigManager())
+
+        clean_file = tmp_path / "clean.bin"
+        clean_file.write_bytes(b"\x01\x02\x03\x04")
+        mismatch_file = tmp_path / "mismatch.bin"
+        mismatch_file.write_bytes(b"\x01\x02\x03\x04")
+
+        v_match = _run_and_capture(
+            lambda: operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(clean_file)
+            ),
+            command_dicts,
+            written_frames,
+            payload=b"\x01\x02\x03\x04",
+        )
+        v_mismatch = _run_and_capture(
+            lambda: operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(mismatch_file)
+            ),
+            command_dicts,
+            written_frames,
+            payload=b"\xff\x02\x03\x04",
+        )
+        b_match = _run_and_capture(
+            lambda: operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA)),
+            command_dicts,
+            written_frames,
+            payload=b"\xff" * 8,
+        )
+        b_mismatch = _run_and_capture(
+            lambda: operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA)),
+            command_dicts,
+            written_frames,
+            payload=b"\x00" + b"\xff" * 7,
+        )
+
+        assert v_match == 0
+        assert v_mismatch == 1
+        assert b_match == 0
+        assert b_mismatch == 1
+
+        assert command_dicts, "find_and_connect was never called across the four runs"
+        assert all(cd["cmd"] != COMMAND_BLANK_CHECK for cd in command_dicts), (
+            "a composed command dict carried the blank-check ordinal"
+        )
+        assert all(cd["cmd"] != COMMAND_VERIFY for cd in command_dicts), (
+            "a composed command dict carried the verify ordinal"
+        )
+        assert all(cd["cmd"] == COMMAND_READ for cd in command_dicts), (
+            "every composed command dict must carry the read ordinal"
+        )
+
+        # Alongside the command-dict proof: no raw frame the host WROTE to
+        # the wire carries either retired ordinal's JSON encoding either --
+        # a second, independent line of evidence at the byte level.
+        assert written_frames, "no bytes were ever written to the wire"
+        assert not any(
+            b'"cmd": 4' in w or b'"cmd":4' in w or b'"cmd": 6' in w or b'"cmd":6' in w
+            for w in written_frames
+        )
 
 
 class TestSdpOperationsWireShape:

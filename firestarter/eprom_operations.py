@@ -1072,10 +1072,14 @@ class EpromOperator:
             1 -- one or more reads diverge (FAIL -- bug detected)
             2 -- hardware / serial / timeout error (could not complete N reads)
 
-        This is the ONLY EpromOperator method that returns int rather than bool;
-        the 3-way verdict (PASS / FAIL / hardware-error) cannot fit in a bool.
-        Same exit-code convention as grep(1). Precedent for non-bool return:
-        check_eprom_id() returns Tuple[bool, Optional[int]] above.
+        This method pioneered the int-rather-than-bool return on
+        `EpromOperator` for this reason -- a 3-way verdict cannot fit in a
+        bool. `verify_eprom` (202-01) and `check_eprom_blank` (202-05) now
+        share the identical 0/1/2 convention under D-10, for the identical
+        reason: a match/mismatch/transport-failure verdict cannot fit in a
+        bool either. Same exit-code convention as grep(1). Earlier precedent
+        for non-bool return: check_eprom_id() returns Tuple[bool,
+        Optional[int]] above.
 
         Reuses _run_state_machine + _main_phase_read_data verbatim, so the
         diagnostic exercises the same code path the read bug lives in. Do NOT

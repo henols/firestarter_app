@@ -741,6 +741,80 @@ def test_verify_and_blank_docstrings_name_all_three_exit_codes() -> None:
         assert "2" in doc
 
 
+# Task 3: the exit-code matrix, with two distinct routes to 2 per command,
+# each distinguished from a Click usage error (which also exits 2, D-10's
+# accepted cost) by the message it prints.
+
+
+def test_map_typed_errors_still_exits_one_for_a_third_command(
+    runner: CliRunner,
+) -> None:
+    """D-11's scope bound, proven behaviourally (not just by source
+    inspection): `map_typed_errors` must still map a typed error to exit 1
+    for a command other than `verify`/`blank`, proving the decorator was
+    not widened to exit 2 for chip-op commands generally."""
+    from firestarter.exceptions import EpromOperationError
+
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.side_effect = EpromOperationError("simulated hardware fault")
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512"], obj=app)
+    assert result.exit_code == 1, result.output
+
+
+@pytest.mark.parametrize("command", ["verify", "blank"])
+def test_service_setup_failure_route_to_exit_2_names_its_own_message(
+    runner: CliRunner, tmp_path, caplog: pytest.LogCaptureFixture, command: str
+) -> None:
+    """The FIRST route to exit 2: a real `EpromOperator` setup failure
+    (a transport error before any command reaches the wire). Its own
+    logged message is what distinguishes it from a Click usage error, which
+    never reaches `EpromOperator`'s logger at all. Drives a REAL operator
+    (not a `Mock`) so the message asserted is genuinely service-emitted,
+    not read off a mock's configured return value.
+    """
+    from firestarter.exceptions import SerialError
+
+    args = [command, "W27C512"]
+    if command == "verify":
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(b"\x01\x02\x03\x04")
+        args.append(str(input_file))
+
+    operator = EpromOperator(ConfigManager())
+    app = make_app_context(eprom_operator=operator)
+
+    with (
+        caplog.at_level(logging.ERROR, logger="EpromOperator"),
+        pytest.MonkeyPatch.context() as mp,
+    ):
+        mp.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            Mock(side_effect=SerialError("no board attached")),
+        )
+        result = runner.invoke(cli, args, obj=app)
+
+    assert result.exit_code == 2, result.output
+    assert "Usage:" not in result.output
+    assert "Failed to setup operation" in caplog.text
+
+
+@pytest.mark.parametrize("command", ["verify", "blank"])
+def test_usage_error_also_exits_2_but_never_reaches_the_operator(
+    runner: CliRunner, command: str
+) -> None:
+    """Click's own `UsageError` also exits 2 (D-10's accepted cost) -- but
+    it prints a "Usage:" banner and never reaches the operator at all, so
+    it is never confused with a genuine transport/hardware/region verdict."""
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, [command, "--not-a-real-flag"], obj=app)
+    assert result.exit_code == 2, result.output
+    assert "Usage:" in result.output
+    operator.verify_eprom.assert_not_called()
+    operator.check_eprom_blank.assert_not_called()
+
+
 def test_erase_happy_path(runner: CliRunner) -> None:
     """`firestarter erase W27C512` exits 0 when erase_eprom returns True."""
     operator = Mock(spec=EpromOperator)
