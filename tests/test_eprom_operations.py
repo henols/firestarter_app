@@ -311,6 +311,23 @@ def test_read_timing_strobe_key_constant() -> None:
     assert JSON_KEY_READ_STROBE_US == "read-strobe-us"
 
 
+def test_region_end_key_constant() -> None:
+    """JSON_KEY_REGION_END must equal the firmware PROGMEM key string.
+
+    The firmware declares: const char key_region_end[] PROGMEM = "region-end";
+    (json_parser.c). If the host string drifts, the firmware silently ignores the param
+    (jsmn skips unknown keys) and a partial write silently falls back to a whole-device
+    blank check instead of a region-scoped one.
+
+    Selected by `pytest -k region_end`.
+    """
+    from firestarter.constants import (
+        JSON_KEY_REGION_END,  # type: ignore[attr-defined]
+    )
+
+    assert JSON_KEY_REGION_END == "region-end"
+
+
 def test_read_timing_settling_emitted_in_command() -> None:
     """consistency_check_eprom(..., read_settling_us=50) puts "read-settling-delay"
     in the JSON command dict sent to _setup_operation.
