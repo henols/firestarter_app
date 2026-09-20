@@ -21,10 +21,17 @@ from collections.abc import Iterator
 import pytest
 
 from firestarter.compare import (
+    FP_ADDRESS_LINE,
+    FP_BLANK_CONTACT,
+    FP_INDETERMINATE,
+    FP_MATCH,
+    FP_TRANSPORT,
     MAX_RETAINED_RANGES,
     CompareAccumulator,
     CompareResult,
     MismatchRange,
+    classify_streamed,
+    diff_summary,
     render_compare_lines,
 )
 
@@ -717,3 +724,242 @@ class TestCompareAccumulatorAlternatingPrecision:
         assert result.extra_bytes + sum(r.count for r in result.ranges) == result.bad
         assert isinstance(result.bad, int)
         assert all(isinstance(r.count, int) for r in result.ranges)
+
+
+class TestClassifyStreamed:
+    """202-03 (D-02/D-03): `classify_streamed`'s own direct unit coverage,
+    one test per bucket plus the two traps this task's acceptance criteria
+    name explicitly (the 256/257 clustering boundary, and the tie-break to
+    the lowest bit index). The D-03 EQUALITY corpus against a transcribed
+    batch reference lives separately, in `TestClassifyStreamedCorpus` below
+    (Task 2) -- these tests instead pin `classify_streamed`'s own behaviour
+    in isolation, independent of that comparison."""
+
+    def test_blank_contact_bucket(self) -> None:
+        length = 256
+        expected = bytes((i * 7) & 0xFF for i in range(length))
+        actual = b"\xff" * length
+        acc = CompareAccumulator()
+        acc.feed(0, expected, actual)
+        fp = classify_streamed(acc.finalise())
+
+        assert fp.classification == FP_BLANK_CONTACT
+        assert fp.total == length
+        assert fp.evidence["ff_ratio"] >= 0.98
+
+    def test_address_line_bucket(self) -> None:
+        length = 0x400
+        expected = bytes(length)
+        actual = bytearray(expected)
+        for i in range(length):
+            if i & 0x100:
+                actual[i] = 0x01
+        acc = CompareAccumulator()
+        acc.feed(0, bytes(expected), bytes(actual))
+        fp = classify_streamed(acc.finalise())
+
+        assert fp.classification == FP_ADDRESS_LINE
+        assert fp.evidence["suspected_line"] == 8
+
+    def test_match_bucket(self) -> None:
+        pattern = bytes((i * 3) & 0xFF for i in range(64))
+        acc = CompareAccumulator()
+        acc.feed(0, pattern, pattern)
+        fp = classify_streamed(acc.finalise())
+
+        assert fp.classification == FP_MATCH
+        assert fp.bad == 0
+
+    def test_transport_bucket(self) -> None:
+        # FP_TRANSPORT is unreachable through the real `verify`/`dev test`
+        # call path today (`repeat_divergent=True` never flows from a
+        # single-run compare) -- filed as CMP-F2, deliberately DEFERRED, not
+        # fixed here. Constructed directly, as the flagged measured project
+        # fact requires, rather than through any production call site.
+        length = 1024
+        expected = bytes((i * 11) & 0xFF for i in range(length))
+        actual = bytearray(expected)
+        for o in _SCATTERED_TEST_OFFSETS:
+            actual[o] ^= 0x01
+        acc = CompareAccumulator()
+        acc.feed(0, expected, bytes(actual))
+        fp = classify_streamed(acc.finalise(), repeat_divergent=True)
+
+        assert fp.classification == FP_TRANSPORT
+        assert fp.evidence["repeat_divergent"] is True
+
+    def test_indeterminate_bucket(self) -> None:
+        length = 1024
+        expected = bytes((i * 11) & 0xFF for i in range(length))
+        actual = bytearray(expected)
+        for o in _SCATTERED_TEST_OFFSETS:
+            actual[o] ^= 0x01
+        acc = CompareAccumulator()
+        acc.feed(0, expected, bytes(actual))
+        fp = classify_streamed(acc.finalise(), repeat_divergent=False)
+
+        assert fp.classification == FP_INDETERMINATE
+
+    def test_zero_length_is_match_not_raise(self) -> None:
+        acc = CompareAccumulator()
+        fp = classify_streamed(acc.finalise())
+
+        assert fp.total == 0
+        assert fp.bad == 0
+        assert fp.classification == FP_MATCH
+        assert fp.evidence["ff_ratio"] == 0.0
+
+    def test_evidence_key_set_non_address_line_path(self) -> None:
+        pattern = bytes(64)
+        acc = CompareAccumulator()
+        acc.feed(0, pattern, pattern)
+        fp = classify_streamed(acc.finalise())
+
+        assert set(fp.evidence) == {
+            "ff_ratio",
+            "repeat_divergent",
+            "first_offset",
+            "bit_clustering",
+        }
+
+    def test_evidence_key_set_address_line_path_has_two_more_keys(self) -> None:
+        length = 0x400
+        expected = bytes(length)
+        actual = bytearray(expected)
+        for i in range(length):
+            if i & 0x100:
+                actual[i] = 0x01
+        acc = CompareAccumulator()
+        acc.feed(0, bytes(expected), bytes(actual))
+        fp = classify_streamed(acc.finalise())
+
+        assert set(fp.evidence) == {
+            "ff_ratio",
+            "repeat_divergent",
+            "first_offset",
+            "bit_clustering",
+            "suspected_line",
+            "cluster_score",
+        }
+
+    def test_256_byte_region_bit_clustering_stays_empty(self) -> None:
+        """`cmp_len > (1 << 8)` is a strict `>` -- exactly 256 never enters
+        clustering. `tests/test_chip_test_sdp_leg.py` already depends on
+        this for the batch classifier; this pins it for the streamed one."""
+        length = 256
+        expected = bytes(length)
+        actual = bytearray(expected)
+        actual[0] = 0x01
+        acc = CompareAccumulator()
+        acc.feed(0, bytes(expected), bytes(actual))
+        fp = classify_streamed(acc.finalise())
+
+        assert fp.evidence["bit_clustering"] == {}
+
+    def test_257_byte_region_bit_clustering_nonempty(self) -> None:
+        length = 257
+        expected = bytes(length)
+        actual = bytearray(expected)
+        actual[0] = 0x01
+        acc = CompareAccumulator()
+        acc.feed(0, bytes(expected), bytes(actual))
+        fp = classify_streamed(acc.finalise())
+
+        assert fp.evidence["bit_clustering"] != {}
+
+    def test_tie_between_two_bit_indices_resolves_to_the_lower_one(self) -> None:
+        """Every mismatch sits where BOTH bit 8 (0x100) and bit 9 (0x200)
+        are set, so both candidate bits score 1.0 -- a genuine tie.
+        `classify_streamed` must scan ascending and keep only a STRICTLY
+        greater score, so bit 8 wins."""
+        length = 1024
+        expected = bytes(length)
+        actual = bytearray(expected)
+        for addr in range(0x300, 0x400):  # bits 8 and 9 both set here
+            actual[addr] = 0x01
+        acc = CompareAccumulator()
+        acc.feed(0, bytes(expected), bytes(actual))
+        fp = classify_streamed(acc.finalise())
+
+        assert fp.classification == FP_ADDRESS_LINE
+        assert fp.evidence["suspected_line"] == 8
+
+
+_SCATTERED_TEST_OFFSETS = [
+    3,
+    17,
+    40,
+    77,
+    101,
+    130,
+    190,
+    220,
+    300,
+    350,
+    410,
+    470,
+    500,
+    550,
+    600,
+    650,
+]
+"""16 hand-picked offsets in a 1024-byte region, none clustered on any one
+high bit (mirrors `tests/test_chip_test.py`'s own `_SCATTERED_OFFSETS`,
+defined independently here so this module keeps no dependency on
+`chip_test`'s test module -- verified: max clustering ~0.81, below the 0.9
+threshold)."""
+
+
+class TestDiffSummary:
+    """202-03 (D-02): `diff_summary` replaces `chip_test._diff_offsets` --
+    same four values, minus the materialised offset list."""
+
+    def test_equal_arrays_zero_bad(self) -> None:
+        a = bytes([1, 2, 3, 4])
+        b = bytes([1, 2, 3, 4])
+
+        summary = diff_summary(a, b)
+
+        assert summary.cmp_len == 4
+        assert summary.bad == 0
+        assert summary.pct == 0.0
+        assert summary.first_offset is None
+
+    def test_known_positions(self) -> None:
+        a = bytes(8)
+        b = bytearray(a)
+        b[2] = 0xFF
+        b[5] = 0xFF
+
+        summary = diff_summary(a, bytes(b))
+
+        assert summary.cmp_len == 8
+        assert summary.bad == 2
+        assert summary.first_offset == 2
+        assert summary.pct == 100.0 * 2 / 8
+
+    def test_unequal_length_compares_common_prefix_and_never_raises(self) -> None:
+        a = bytes([1, 2, 3, 4, 5])
+        b = bytes([1, 2, 9])
+
+        summary = diff_summary(a, b)
+
+        assert summary.cmp_len == 3
+        assert summary.bad == 1
+        assert summary.first_offset == 2
+
+    def test_zero_length_returns_zero_total_and_never_raises(self) -> None:
+        summary = diff_summary(b"", b"")
+
+        assert summary.cmp_len == 0
+        assert summary.bad == 0
+        assert summary.pct == 0.0
+        assert summary.first_offset is None
+
+    def test_result_carries_a_bad_count_not_an_offset_list(self) -> None:
+        """D-02: `diff_summary` must never expose a materialised list of
+        every mismatching offset -- `DiffSummary` has no such field."""
+        summary = diff_summary(b"\x00" * 4, b"\xff" * 4)
+
+        assert not hasattr(summary, "diff_offsets")
+        assert summary.bad == 4

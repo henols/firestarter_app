@@ -135,8 +135,28 @@ class CompareResult:
     compared fewer bytes than declared for some other reason."""
 
     fingerprint: Fingerprint | None = None
-    """Populated by `classify_streamed` (202-03). Always `None` in this
-    plan -- 202-01 does not classify, only compares."""
+    """Populated by `CompareAccumulator.finalise()` via `classify_streamed`
+    (202-03) -- every `finalise()` call sets this, clean or mismatching, so a
+    caller never has to ask separately."""
+
+    ff_count: int = 0
+    """Count of actual bytes equal to `0xFF` among the bytes actually
+    compared -- `classify_streamed`'s blank/contact ratio numerator
+    (202-03). A running counter, not recomputed from `ranges`."""
+
+    first_offset: int | None = None
+    """Offset of the first mismatching byte, relative to the accumulator's
+    `addr_base` -- `None` when `bad == 0`. Matches the batch
+    `classify_fingerprint`'s `evidence["first_offset"]` exactly (202-03)."""
+
+    bit_set_counts: dict[int, int] = field(default_factory=dict)
+    """Per absolute-address bit index, the running count of mismatching
+    bytes whose address has that bit set. Populated online for every
+    candidate bit `CompareAccumulator.feed()` could see so far -- the
+    correct candidate-bit RANGE (`8 <= k < (compared_length - 1).bit_length()`)
+    is only knowable at `finalise()`, so `classify_streamed` is what filters
+    this dict down to the keys the batch classifier would have emitted
+    (202-03)."""
 
 
 class CompareAccumulator:
@@ -270,14 +290,16 @@ class CompareAccumulator:
     ) -> CompareResult:
         """Close any open range and return a fresh, immutable-to-us
         `CompareResult`. `repeat_divergent` is accepted for forward
-        compatibility with `classify_streamed` (202-03); this plan does not
-        populate `fingerprint`.
+        compatibility with `classify_streamed`; this method does not yet
+        populate `fingerprint` itself -- 202-03 Task 3 wires that in, once
+        `classify_streamed` exists (Task 1) and every caller of the old
+        batch classifier has been re-pointed (Task 2).
 
         `total` defaults to `compared` -- a caller that knows the declared
         region size up front overrides `result.total` afterwards, since
         `CompareResult` is a plain, caller-mutable dataclass.
         """
-        _ = repeat_divergent  # unused until 202-03's classify_streamed
+        _ = repeat_divergent  # unused until Task 3 wires classify_streamed in
         self._close_open_range()
         compared_start = (
             self._compared_start
@@ -297,22 +319,204 @@ class CompareAccumulator:
             extra_ranges=self._extra_ranges,
             extra_bytes=self._extra_bytes,
             aborted=aborted,
-            fingerprint=None,
+            ff_count=self._ff_count,
+            first_offset=self._first_offset,
+            bit_set_counts=dict(self._set_count),
         )
 
 
-def render_compare_lines(result: CompareResult) -> list[str]:
-    """Render `result` into the D-13/D-16 report lines.
+# ---------------------------------------------------------------------------
+# Shared byte-diff-offset primitive -- owned here, imported by both sides
+# ---------------------------------------------------------------------------
+#
+# `diff_summary` is the ONE divergence primitive `classify_fingerprint`
+# (chip_test.py, via `classify_streamed` below) and `_dispatch_read`'s
+# multi-run consistency check both consume -- do NOT add a second parallel
+# divergence implementation elsewhere in this codebase. The math used to
+# live in `chip_test.py`, copied rather than imported so that module stayed
+# import-light (no dependency on this one). D-02 moves it here instead:
+# `classify_fingerprint` now delegates to the streaming accumulator this
+# module owns, so a second copy of the same math sitting in `chip_test.py`
+# would be exactly the "second implementation" this rule forbids.
+# `chip_test.py` imports this function; it does not reimplement it.
 
-    Returns, in order, one string per retained range in exactly the form
+
+@dataclass
+class DiffSummary:
+    """The four values `chip_test._diff_offsets` used to return, minus the
+    offset list itself (202-03, D-02) -- the one caller that consumed
+    `len(diff_offsets)` gets `bad` directly instead."""
+
+    cmp_len: int
+    bad: int
+    pct: float
+    first_offset: int | None
+
+
+def diff_summary(expected: bytes, actual: bytes) -> DiffSummary:
+    """Byte-diff two buffers over their common prefix; never raises.
+
+    Replaces `chip_test._diff_offsets` (202-03, D-02): feeds a single
+    `CompareAccumulator` rather than materialising a list of every
+    mismatching offset. `pct` matches `_diff_offsets`' exact expression --
+    `100.0 * bad / cmp_len` when `cmp_len` is non-zero, `0.0` otherwise --
+    and an empty or unequal-length pair compares over the shorter buffer
+    without raising, exactly as `_diff_offsets` did.
+    """
+    cmp_len = min(len(expected), len(actual))
+    acc = CompareAccumulator()
+    acc.feed(0, expected[:cmp_len], actual[:cmp_len])
+    result = acc.finalise()
+    pct = 100.0 * result.bad / cmp_len if cmp_len else 0.0
+    return DiffSummary(
+        cmp_len=cmp_len,
+        bad=result.bad,
+        pct=pct,
+        first_offset=result.first_offset,
+    )
+
+
+def classify_streamed(
+    result: CompareResult, *, repeat_divergent: bool | None = None
+) -> Fingerprint:
+    """Classify a streamed `CompareResult` into one of five honest buckets.
+
+    D-02: this is the divergence classifier `chip_test.classify_fingerprint`
+    delegates to -- there is exactly one implementation of this math, here.
+    Reproduces `chip_test.classify_fingerprint`'s batch output bit for bit
+    (D-03's corpus in `tests/test_compare.py` proves it), including its two
+    traps:
+
+    - The candidate bit-clustering range is `8 <= k < (cmp_len - 1).bit_length()`
+      where `cmp_len` is `result.compared` -- the number of bytes actually
+      compared, NOT an absolute address. `result.bit_set_counts` was
+      accumulated online using each chunk's own absolute top address as an
+      upper bound (a superset when `addr_base` is non-zero, since the base
+      itself inflates that bound), so this function is what narrows the
+      final `evidence["bit_clustering"]` dict down to exactly the keys the
+      batch classifier would have emitted -- computing the correct range
+      any earlier is impossible, since the total compared length is only
+      known once the compare ends.
+    - `suspected_line` selection scans `k` ascending from 8 and keeps a
+      STRICTLY greater score, so a tie resolves to the lowest bit -- the
+      `range(8, max_bit)` iteration order below preserves that.
+
+    Classification order is LOCKED, identical to the batch classifier:
+      1. blank/contact  -- cheapest, most common false-PASS source
+      2. address-line   -- power-of-two high-bit clustering
+      3. match          -- zero mismatches, checked AFTER buckets 1 and 2 so
+                            an all-0xFF perfect compare stays blank/contact
+                            rather than silently re-keying that population.
+      4. transport       -- scattered + non-repeatable across N>=2 runs
+      5. indeterminate   -- fallback; NEVER coerce an ambiguous distribution
+                            into a confident label.
+    """
+    cmp_len = result.compared
+    bad = result.bad
+    bad_pct = 100.0 * bad / cmp_len if cmp_len else 0.0
+
+    ff_ratio = (result.ff_count / cmp_len) if cmp_len else 0.0
+
+    evidence: dict = {
+        "ff_ratio": ff_ratio,
+        "repeat_divergent": repeat_divergent,
+        "first_offset": result.first_offset,
+        "bit_clustering": {},
+    }
+
+    # 1. blank/contact: read-back is near-all 0xFF (un-driven bus / contact
+    # fault). Checked first regardless of whether there are zero mismatches
+    # (a perfect verify) or the pattern never matched at all.
+    if ff_ratio >= _FF_RATIO_THRESHOLD:
+        return Fingerprint(
+            total=cmp_len,
+            bad=bad,
+            bad_pct=bad_pct,
+            classification=FP_BLANK_CONTACT,
+            evidence=evidence,
+        )
+
+    # 2. address-line: mismatches concentrate on one polarity of a single
+    # high address bit (A8+). Candidate bits are restricted to those that
+    # can actually vary within [0, cmp_len), i.e. 8 <= k < (cmp_len-1).bit_length();
+    # bits at or above that never toggle within the compared region and
+    # would spuriously "cluster" at 100% (see this function's docstring).
+    suspected_line = None
+    best_score = 0.0
+    if bad and cmp_len > (1 << 8):
+        max_bit = (cmp_len - 1).bit_length()
+        for k in range(8, max_bit):
+            set_count = result.bit_set_counts.get(k, 0)
+            clear_count = bad - set_count
+            score = max(set_count, clear_count) / bad
+            evidence["bit_clustering"][k] = score
+            if score > best_score:
+                best_score = score
+                suspected_line = k
+
+    if suspected_line is not None and best_score >= _BIT_CLUSTER_THRESHOLD:
+        evidence["suspected_line"] = suspected_line
+        evidence["cluster_score"] = best_score
+        return Fingerprint(
+            total=cmp_len,
+            bad=bad,
+            bad_pct=bad_pct,
+            classification=FP_ADDRESS_LINE,
+            evidence=evidence,
+        )
+
+    if bad == 0:
+        return Fingerprint(
+            total=cmp_len,
+            bad=bad,
+            bad_pct=bad_pct,
+            classification=FP_MATCH,
+            evidence=evidence,
+        )
+
+    # 3. transport: scattered (no dominant high bit, checked above) AND
+    # non-repeatable across the N>=2 runs (caller-supplied signal from
+    # run1-vs-run2 divergence -- the uno328pb signature).
+    if repeat_divergent is True:
+        return Fingerprint(
+            total=cmp_len,
+            bad=bad,
+            bad_pct=bad_pct,
+            classification=FP_TRANSPORT,
+            evidence=evidence,
+        )
+
+    # 4. indeterminate: never coerce an ambiguous distribution.
+    return Fingerprint(
+        total=cmp_len,
+        bad=bad,
+        bad_pct=bad_pct,
+        classification=FP_INDETERMINATE,
+        evidence=evidence,
+    )
+
+
+def render_compare_lines(result: CompareResult) -> list[str]:
+    """Render `result` into the D-13/D-16/D-14 report lines.
+
+    Returns, in order: one string per retained range in exactly the form
     `Mismatch 0xSTART-0xEND (N bytes)` with START and END as six-digit
     uppercase hex (D-13); then, when `result.extra_ranges` is non-zero, one
-    tail line built from `extra_ranges` and `extra_bytes` (D-16). Emits no
-    expected value and no actual value anywhere -- D-13 is an operator
-    decision taken twice, and D-15 records that CMP-04 and ROADMAP criterion
-    3 were already amended to match (commit 81414f98). Performs no echo and
-    imports no `click`, so `compare.py` stays usable from phases 203 and 206
-    (D-05).
+    tail line built from `extra_ranges` and `extra_bytes` (D-16); then, when
+    `result.fingerprint` is populated (finalise() always populates it --
+    202-03), exactly one bucket summary line in the form `{classification},
+    {bad} bad of {compared} compared of {total} (0xSTART-0xEND)` (D-14),
+    always last. Emits no expected value and no actual value anywhere --
+    D-13 is an operator decision taken twice, and D-15 records that CMP-04
+    and ROADMAP criterion 3 were already amended to match (commit
+    81414f98). Performs no echo and imports no `click`, so `compare.py`
+    stays usable from phases 203 and 206 (D-05).
+
+    D-09's reason for printing the span alongside the bucket: a compare
+    that stopped early only ever saw a prefix, and the blank/contact bucket
+    fires on a blank ratio at or above 0.98 -- so a short mostly-blank
+    prefix could otherwise read as a confident whole-chip verdict. The span
+    makes a truncated sample unmistakable.
     """
     lines = [
         f"Mismatch 0x{r.start:06X}-0x{r.end:06X} ({r.count} bytes)"
@@ -321,5 +525,12 @@ def render_compare_lines(result: CompareResult) -> list[str]:
     if result.extra_ranges:
         lines.append(
             f"… and {result.extra_ranges} more ranges, {result.extra_bytes} bytes"
+        )
+    if result.fingerprint is not None:
+        fp = result.fingerprint
+        lines.append(
+            f"{fp.classification}, {fp.bad} bad of {result.compared} compared "
+            f"of {result.total} "
+            f"(0x{result.compared_start:06X}-0x{result.compared_end:06X})"
         )
     return lines
