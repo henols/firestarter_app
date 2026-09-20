@@ -64,7 +64,11 @@ from firestarter.exceptions import (
 )
 from firestarter.frame_parser import _crc8_ccitt, cobs_encode
 from firestarter.jp5_gate import require_acknowledged
-from firestarter.messages import MSG_DATA_PROTECTION_STATUS, MSG_WARN_SDP_UNLOCK_SKIPPED
+from firestarter.messages import (
+    MSG_DATA_PROTECTION_STATUS,
+    MSG_ERR_TIMEOUT,
+    MSG_WARN_SDP_UNLOCK_SKIPPED,
+)
 from firestarter.page_size_gate import require_page_alignment, require_page_size
 from firestarter.sdp_capability import SDP_PROTOCOL_ID
 from firestarter.serial_comm import (
@@ -2226,6 +2230,24 @@ class EpromOperator:
         verify ordinal (COMMAND_VERIFY stays in constants.py; nothing on this
         path composes it). Returns 0 on a match, 1 on a mismatch, 2 on a
         setup, transport, or I/O failure (D-10, confirmed).
+
+        202-04 D-06/D-08/D-09: unless `full` is true, the drive passes
+        `accumulator.has_mismatch` as `_main_phase_read_data`'s
+        `abort_predicate`, so the read stops acking the moment the first
+        mismatching byte is fed -- the host breaks the read in flight rather
+        than draining the rest of the chip. `full=True` passes no predicate,
+        so a full scan always reads (and reports) the whole region. The
+        deliberate stop yields a `MSG_ERR_TIMEOUT` frame wire-identical to a
+        genuine timeout; the four-condition discrimination below is what
+        keeps that abort from ever being reported as exit-2 hardware trouble,
+        and keeps a genuine fault from ever being reported as a clean-looking
+        abort. Progress-bar choice (left to discretion by CONTEXT.md): on an
+        abort the bar simply stops advancing at the compared byte count (the
+        loop in `_main_phase_read_data` stops calling `progress.update()`
+        once stopped) and is closed there by `_run_state_machine`'s
+        `finally` -- it is never advanced to the region total, since a bar
+        that completes after a stop would claim progress the compare did not
+        make (the same dishonesty D-09 guards against at the summary line).
         """
         # 202-01 D-01/D-02: unlike write_eprom, verify_eprom computes its own
         # region_length here -- it does not call require_page_alignment,
@@ -2283,22 +2305,73 @@ class EpromOperator:
                             address, _expected(address, len(payload)), payload
                         )
 
+                    # 202-04 D-06: the default (non-`--full`) path passes
+                    # `accumulator.has_mismatch` as the abort predicate, so
+                    # the read stops acking the instant the first mismatch is
+                    # fed. `--full` passes no predicate at all -- D-16's cap
+                    # already bounds `--full`'s output, so its complete scan
+                    # is a separate code path only in what it passes here,
+                    # not a second accumulator or a second cap.
+                    # `has_mismatch` is a property, not a method -- wrap it so
+                    # `_main_phase_read_data` gets a zero-arg callable per its
+                    # `abort_predicate` contract.
+                    abort_kwargs: dict = {}
+                    if not full:
+                        abort_kwargs["abort_predicate"] = lambda: (
+                            accumulator.has_mismatch
+                        )
+
+                    # D-08: record intent BEFORE the drive, always (True or
+                    # False) -- never left over from a previous call -- so a
+                    # genuine timeout on a `--full` run (which never sets an
+                    # abort_predicate) can never be attributed to a stop that
+                    # was never requested.
+                    self._read_abort_intended = not full
+
                     is_ok, _ = self._run_state_machine(
                         op_name,
                         main_phase_handler=self._main_phase_read_data,
                         start_addr=cmd_data.get("address", 0),
                         end_addr=cmd_data.get("memory-size", 0),
                         process_data_chunk_callback=_process_chunk,
+                        **abort_kwargs,
                     )
             except IOError as e:  # noqa: UP024
                 logger.error(f"File I/O error with {input_file_path}: {e}")
                 return 2
 
+            aborted = False
             if not is_ok:
-                logger.error(f"Verify for {eprom_name.upper()} failed.")
-                return 2
+                # D-08: the deliberate stop and a genuine timeout both
+                # surface here as `_run_state_machine` returning `(False,
+                # ...)` with `last_firmware_error_code == MSG_ERR_TIMEOUT` --
+                # the two are wire-identical. Accept the error as this
+                # host's own doing ONLY when all four hold: the default
+                # path actually asked for a stop (`_read_abort_intended`),
+                # the read loop actually recorded one (`stopped_at` is not
+                # `None`), the firmware's own error id is exactly the
+                # timeout id (not some other fault wearing its clothes), and
+                # the stop happened recently enough that this error frame
+                # could plausibly be its consequence (the bounded window).
+                # Any single condition failing means a real fault: log it
+                # and take the exit-2 path exactly as before -- a
+                # mismatching chip whose read failed for an unrelated reason
+                # must never be reported as a mismatch, and this host's own
+                # deliberate abort must never be reported as hardware
+                # trouble.
+                stopped_at = self._read_abort_stopped_at
+                aborted = (
+                    self._read_abort_intended
+                    and stopped_at is not None
+                    and self.last_firmware_error_code == MSG_ERR_TIMEOUT
+                    and (time.monotonic() - stopped_at)
+                    <= READ_ABORT_ACCEPTANCE_WINDOW_S
+                )
+                if not aborted:
+                    logger.error(f"Verify for {eprom_name.upper()} failed.")
+                    return 2
 
-            result = accumulator.finalise()
+            result = accumulator.finalise(aborted=aborted)
             if region_length is not None:
                 result.total = region_length
             for line in render_compare_lines(result):
