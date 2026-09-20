@@ -570,21 +570,175 @@ def test_verify_cli_prints_range_line_and_bucket_summary_line(
 
 
 def test_blank_happy_path(runner: CliRunner) -> None:
-    """`firestarter blank W27C512` exits 0 when check_eprom_blank returns True."""
+    """`firestarter blank W27C512` exits 0 when check_eprom_blank returns 0.
+
+    202-05 D-10: check_eprom_blank returns an int (0 blank / 1 not blank /
+    2 transport-hardware-or-refusal); cli_handlers.blank now `sys.exit`s
+    directly on that int, the same shape 202-01 gave `verify`.
+    """
     operator = Mock(spec=EpromOperator)
-    operator.check_eprom_blank.return_value = True
+    operator.check_eprom_blank.return_value = 0
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["blank", "W27C512"], obj=app)
     assert result.exit_code == 0
 
 
-def test_blank_operator_returns_false(runner: CliRunner) -> None:
-    """`firestarter blank W27C512` exits 1 when check_eprom_blank returns False."""
+def test_blank_operator_returns_mismatch(runner: CliRunner) -> None:
+    """`firestarter blank W27C512` exits 1 when check_eprom_blank returns 1."""
     operator = Mock(spec=EpromOperator)
-    operator.check_eprom_blank.return_value = False
+    operator.check_eprom_blank.return_value = 1
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["blank", "W27C512"], obj=app)
     assert result.exit_code == 1
+
+
+def test_blank_operator_returns_setup_failure(runner: CliRunner) -> None:
+    """`firestarter blank W27C512` exits 2 when check_eprom_blank returns 2
+    (D-10: transport, hardware, or a pre-wire region refusal)."""
+    operator = Mock(spec=EpromOperator)
+    operator.check_eprom_blank.return_value = 2
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["blank", "W27C512"], obj=app)
+    assert result.exit_code == 2
+
+
+# CMP-08 / D-17: region options and the two pre-wire refusals, shared by
+# `verify` and `blank`.
+
+
+def test_verify_refuses_size_larger_than_input_file_before_opening_the_port(
+    runner: CliRunner, tmp_path
+) -> None:
+    """An explicit `--size` longer than the input file must be refused with
+    exit 2, naming both the file's actual length and the requested size --
+    and it must never open the serial connection."""
+    input_file = tmp_path / "in.bin"
+    input_file.write_bytes(b"\x01\x02\x03\x04")  # 4 bytes
+
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+
+    with pytest.MonkeyPatch.context() as mp:
+        connect_spy = Mock()
+        mp.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect", connect_spy
+        )
+        result = runner.invoke(
+            cli, ["verify", "W27C512", str(input_file), "-s", "64"], obj=app
+        )
+
+    assert result.exit_code == 2, result.output
+    assert "4" in result.output
+    assert "64" in result.output
+    connect_spy.assert_not_called()
+    operator.verify_eprom.assert_not_called()
+
+
+@pytest.mark.parametrize("command", ["verify", "blank"])
+def test_region_past_chip_end_is_refused_before_opening_the_port(
+    runner: CliRunner, tmp_path, command: str
+) -> None:
+    """A start address + size (or, for `blank`, size alone) whose sum
+    exceeds the chip's declared size must be refused with exit 2, naming
+    the chip's declared size -- and must never open the serial connection.
+    `-a 0x10000 -s 1` against W27C512 (a 65536-byte / 0x10000 chip) starts
+    exactly at the chip's end, so even one byte overruns it.
+    """
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+
+    args = [command, "W27C512"]
+    if command == "verify":
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(b"\x01")
+        args.append(str(input_file))
+    args += ["-a", "0x10000", "-s", "1"]
+
+    with pytest.MonkeyPatch.context() as mp:
+        connect_spy = Mock()
+        mp.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect", connect_spy
+        )
+        result = runner.invoke(cli, args, obj=app)
+
+    assert result.exit_code == 2, result.output
+    assert "10000" in result.output.upper() or "65536" in result.output
+    connect_spy.assert_not_called()
+    operator.verify_eprom.assert_not_called()
+    operator.check_eprom_blank.assert_not_called()
+
+
+def test_region_scoped_verify_composes_a_command_dict_bounding_exact_region(
+    runner: CliRunner, make_comm, fake_serial, tmp_path, monkeypatch
+) -> None:
+    """A region-scoped `verify` run composes a command dict whose start
+    address and end address (`address` + `memory-size`) bound exactly the
+    requested region -- proof that `-a`/`-s` genuinely reach the wire."""
+    monkeypatch.setattr(
+        cli_handlers_mod,
+        "resolve_chip",
+        lambda name, db=None: {"memory-size": 4096, "flags": 0, "cmd": 1},
+    )
+
+    payload = b"\xaa\xbb\xcc\xdd"
+    input_file = tmp_path / "in.bin"
+    input_file.write_bytes(payload)
+
+    command_dicts: list[dict] = []
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        command_dicts.append(dict(command_dict))
+        return make_comm()
+
+    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+    fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+    monkeypatch.setattr(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        _fake_find_and_connect,
+    )
+
+    operator = EpromOperator(ConfigManager())
+    app = make_app_context(eprom_operator=operator)
+
+    result = runner.invoke(
+        cli,
+        ["verify", "W27C512", str(input_file), "-a", "0x100", "-s", "4"],
+        obj=app,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert command_dicts, "find_and_connect was never called"
+    cd = command_dicts[0]
+    assert cd["address"] == 0x100
+    assert cd["memory-size"] == 0x100 + 4
+
+
+def test_map_typed_errors_never_exits_the_process_directly() -> None:
+    """D-11's scope bound, proven structurally: `map_typed_errors`'s own
+    source contains no direct process exit and no assignment overriding a
+    Click exception's exit code, so every path through it still exits 1."""
+    import inspect
+
+    source = inspect.getsource(cli_handlers_mod.map_typed_errors)
+    assert "sys.exit" not in source
+    assert "os._exit" not in source
+    assert "exit_code" not in source
+
+
+def test_verify_and_blank_docstrings_name_all_three_exit_codes() -> None:
+    """Both command docstrings must state the three exit codes -- this is
+    what `--help` prints, so an operator reading it sees the contract.
+    `.help` (not `.__doc__`, which reads Click's `Command` class docstring
+    on the wrapped `click.Command` object) is Click's own parsed rendering
+    of the function's docstring."""
+    for cmd in (cli_handlers_mod.verify, cli_handlers_mod.blank):
+        doc = cmd.help or ""
+        assert "0" in doc
+        assert "1" in doc
+        assert "2" in doc
 
 
 def test_erase_happy_path(runner: CliRunner) -> None:

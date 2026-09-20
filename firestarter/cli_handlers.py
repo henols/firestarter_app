@@ -9,6 +9,7 @@ import functools
 import hashlib
 import json
 import logging
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -29,6 +30,7 @@ from firestarter import (
     sdp_honesty,  # unreadable_state_caveat(), called not re-authored
     transport_counters,
 )
+from firestarter.address_parser import parse_address, parse_size
 from firestarter.channel import (
     BETA_ONLY_DEV_COMMANDS,
     available_boards,
@@ -791,10 +793,92 @@ def write(
     sys.exit(0 if ok else 1)
 
 
+def _region_refusal_exit_code(
+    *,
+    eprom: str,
+    eprom_data: dict,
+    address: str | None,
+    size: str | None,
+    input_file: str | None = None,
+) -> int | None:
+    """D-17 region resolution and its two pre-wire refusals, shared by
+    `verify` and `blank`.
+
+    An explicit `--size` wins when given. Without one, the declared region
+    length is `input_file`'s own length (`verify`) or the whole chip
+    (`input_file=None`, `blank`'s own default -- nothing to bound there, so
+    no file-shorter-than-size refusal applies to it).
+
+    Both refusals are decided HERE, in the CLI tier, before either command
+    ever calls into `EpromOperator` -- `_operation_context` is what opens
+    the serial port, and D-17 requires both refusals to fire before that
+    happens. Returns an exit code (always 2) to refuse with, or `None` when
+    the region is acceptable and the caller should proceed to the real
+    operation.
+
+    A malformed `--address`/`--size` string is deliberately NOT this
+    function's job: `_setup_operation`'s own `parse_address`/`parse_size`
+    `ValueError` handling already refuses that -- also before the wire,
+    also exit 2, via the existing setup-failure path. Returning `None` here
+    lets that path run rather than parsing the string a second time with
+    different error handling.
+    """
+    try:
+        start = parse_address(address) if address is not None else 0
+    except ValueError:
+        return None
+    start = start or 0
+
+    explicit_size: int | None = None
+    if size is not None:
+        try:
+            explicit_size = parse_size(size)
+        except ValueError:
+            return None
+
+    if explicit_size is not None and input_file is not None:
+        try:
+            file_length: int | None = os.path.getsize(input_file)
+        except OSError:
+            file_length = None
+        if file_length is not None and file_length < explicit_size:
+            click.echo(
+                f"{eprom.upper()}: refused -- the input file is {file_length} "
+                f"bytes, shorter than the requested --size of {explicit_size} "
+                "bytes. Comparing only the overlap would silently under-check "
+                "the file."
+            )
+            return 2
+
+    if explicit_size is not None:
+        length: int | None = explicit_size
+    elif input_file is not None:
+        try:
+            length = os.path.getsize(input_file)
+        except OSError:
+            length = None
+    else:
+        length = None  # blank's whole-chip default: nothing to bound here
+
+    mem_size = eprom_data.get("memory-size")
+    if length is not None and mem_size is not None and start + length > mem_size:
+        click.echo(
+            f"{eprom.upper()}: refused -- the region 0x{start:X}-"
+            f"0x{start + length:X} runs past this chip's declared size "
+            f"(0x{mem_size:X})."
+        )
+        return 2
+
+    return None
+
+
 @cli.command(name="verify")
 @click.argument("eprom", shell_complete=_complete_eprom)
 @click.argument("input_file")
 @click.option("-a", "--address", default=None, help="Verify start address in dec/hex")
+@click.option(
+    "-s", "--size", default=None, help="Size of the data to verify in dec/hex"
+)
 @click.option(
     "-f",
     "--force",
@@ -813,21 +897,37 @@ def verify(
     eprom: str,
     input_file: str,
     address: str | None,
+    size: str | None,
     force: bool,
     full: bool,
 ) -> None:
     """Verifies the content of an EPROM.
 
-    Exits 0 on a match, 1 on a mismatch, 2 on a transport, hardware, or
-    setup failure. The three are distinct: a transport failure is not
-    reported as a mismatch.
+    Exits 0 on a match, 1 on a mismatch, 2 on a transport, hardware, setup,
+    or region failure. The three are distinct: a transport failure is not
+    reported as a mismatch, and a region refusal -- an explicit --size
+    longer than the input file, or a region running past the chip's end --
+    is reported before the serial port ever opens.
+
+    Without --size, the compared region is the input file's own length;
+    with it, --size wins.
     """
     eprom_data = resolve_chip(eprom, db=app.db)
+    refusal = _region_refusal_exit_code(
+        eprom=eprom,
+        eprom_data=eprom_data,
+        address=address,
+        size=size,
+        input_file=input_file,
+    )
+    if refusal is not None:
+        sys.exit(refusal)
     verdict = app.eprom_operator.verify_eprom(
         eprom,
         eprom_data,
         input_file,
         address_str=address,
+        size_str=size,
         operation_flags=_build_op_flags(force=force),
         full=full,
     )
@@ -837,20 +937,58 @@ def verify(
 @cli.command(name="blank")
 @click.argument("eprom", shell_complete=_complete_eprom)
 @click.option(
+    "-a", "--address", default=None, help="Blank check start address in dec/hex"
+)
+@click.option(
+    "-s", "--size", default=None, help="Size of the data to blank check in dec/hex"
+)
+@click.option(
     "-f",
     "--force",
     is_flag=True,
     help="Force, even if the VPP or chip id doesn't match.",
 )
+@click.option(
+    "--full",
+    is_flag=True,
+    help="Report every non-blank range, not just the first.",
+)
 @click.pass_obj
 @map_typed_errors
-def blank(app: AppContext, eprom: str, force: bool) -> None:
-    """Checks if an EPROM is blank."""
+def blank(
+    app: AppContext,
+    eprom: str,
+    address: str | None,
+    size: str | None,
+    force: bool,
+    full: bool,
+) -> None:
+    """Checks if an EPROM is blank.
+
+    Exits 0 when blank, 1 when at least one byte is not blank, 2 on a
+    transport, hardware, setup, or region failure. The three are distinct:
+    a transport failure is not reported as a not-blank verdict, and a
+    region refusal -- a region running past the chip's end -- is reported
+    before the serial port ever opens.
+
+    Without --size, the checked region is the whole chip; with it, --size
+    wins.
+    """
     eprom_data = resolve_chip(eprom, db=app.db)
-    ok = app.eprom_operator.check_eprom_blank(
-        eprom, eprom_data, operation_flags=_build_op_flags(force=force)
+    refusal = _region_refusal_exit_code(
+        eprom=eprom, eprom_data=eprom_data, address=address, size=size
     )
-    sys.exit(0 if ok else 1)
+    if refusal is not None:
+        sys.exit(refusal)
+    verdict = app.eprom_operator.check_eprom_blank(
+        eprom,
+        eprom_data,
+        operation_flags=_build_op_flags(force=force),
+        address_str=address,
+        size_str=size,
+        full=full,
+    )
+    sys.exit(verdict)
 
 
 @cli.command(name="erase")

@@ -31,7 +31,6 @@ from firestarter.compare import (
 )
 from firestarter.config import ConfigManager
 from firestarter.constants import (
-    COMMAND_BLANK_CHECK,
     COMMAND_CHECK_CHIP_ID,
     COMMAND_DEV_ADDRESS,
     COMMAND_DEV_REGISTERS,
@@ -2337,6 +2336,7 @@ class EpromOperator:
         input_file_path: str,
         operation_flags: int = 0,
         address_str: str | None = None,
+        size_str: str | None = None,
         full: bool = False,
     ) -> int:
         """Compare `input_file_path` against a fresh read of the chip.
@@ -2370,6 +2370,12 @@ class EpromOperator:
         202-05 D-02: the compare drive itself (accumulator, abort predicate,
         D-08 discrimination, rendering, D-10 verdict) lives in
         `_drive_region_compare`, shared verbatim with `check_eprom_blank`.
+
+        202-05 D-17: `size_str`, when given, wins over the input file's own
+        length as the declared region. The two region refusals (an explicit
+        size shorter than the file; a region running past the chip's end)
+        are the CLI tier's job (`cli_handlers.verify`), fired before this
+        method -- and before the serial port -- are ever reached.
         """
         # 202-01 D-01/D-02: unlike write_eprom, verify_eprom computes its own
         # region_length here -- it does not call require_page_alignment,
@@ -2378,20 +2384,35 @@ class EpromOperator:
         # below: that kwarg only reaches the wire as JSON_KEY_REGION_END for
         # cmd in (COMMAND_WRITE, COMMAND_VERIFY) (_setup_operation's guard),
         # and this path composes COMMAND_READ, so passing it there would be
-        # silently discarded. It is used locally instead, for `size_str`
-        # (below) and for `result.total` (D-10's incomplete-compare
-        # prohibition).
+        # silently discarded. It is used locally instead, for the resolved
+        # size string (below) and for `result.total` (D-10's incomplete-
+        # compare prohibition).
         try:
-            region_length = os.path.getsize(input_file_path)
+            file_length = os.path.getsize(input_file_path)
         except OSError:
-            region_length = None
+            file_length = None
 
-        # 202-01 D-01/D-04/D-17: an explicit --size wins when given; without
-        # one, verify's region is the input file's length. Either way the
-        # only wire-level way to bound a COMMAND_READ to that length is
-        # _setup_operation's existing "COMMAND_READ + size" override -- it
-        # only needs `size` as a string.
-        size_str = str(region_length) if region_length is not None else None
+        # 202-05 D-17: an explicit --size wins when given; without one,
+        # verify's region is the input file's length, as before. The
+        # CLI tier (cli_handlers.verify) has already refused, before this
+        # call and before the port opens, an explicit --size shorter than
+        # the file or a region running past the chip's end -- this method
+        # trusts that and simply resolves the region it was asked for. A
+        # malformed --size string is not this method's job either: the
+        # existing `_setup_operation`/`parse_size` ValueError handling
+        # below still refuses it (cmd_data comes back falsy, exit 2).
+        if size_str is not None:
+            try:
+                region_length = parse_size(size_str)
+            except ValueError:
+                region_length = None
+        else:
+            region_length = file_length
+        resolved_size_str = (
+            size_str
+            if size_str is not None
+            else (str(file_length) if file_length is not None else None)
+        )
 
         with self._operation_context(
             eprom_name,
@@ -2399,7 +2420,7 @@ class EpromOperator:
             COMMAND_READ,
             operation_flags,
             address_str,
-            size_str,
+            resolved_size_str,
         ) as (cmd_data, _, op_name):
             if not cmd_data:
                 return 2
@@ -2597,6 +2618,13 @@ class EpromOperator:
         false "not blank" verdict. `derive_plan` (chip_test.py) marks these
         parts' blank-check step unsupported up front and never dispatches to
         this method for them, so `dev test` is unaffected by this change.
+
+        202-05 D-17: `size_str`, when given, wins over the whole-chip
+        default the same way it does for `verify_eprom`. The region-past-
+        the-chip's-end refusal is the CLI tier's job (`cli_handlers.blank`),
+        fired before this method -- and before the serial port -- is ever
+        reached; blank has no input file, so it carries no
+        file-shorter-than-size refusal at all.
         """
         # SRAM/FRAM blank-check short-circuit — detect before issuing any
         # firmware command.  configure_sram() leaves a NULL main-op for

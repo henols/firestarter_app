@@ -98,7 +98,8 @@ def test_blank_command_reaches_the_host_blank_check_call(
     assertion, not merely "no exception raised".
     """
     operator = Mock(spec=EpromOperator)
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     app = make_app_context(db=real_db, eprom_operator=operator)
 
     result = runner.invoke(cli, ["blank", _CHIP], obj=app)
@@ -126,7 +127,8 @@ def test_blank_command_reports_not_blank_correctly(
     reporting success.
     """
     operator = Mock(spec=EpromOperator)
-    operator.check_eprom_blank.return_value = False
+    # 202-05 D-10: check_eprom_blank's "not blank" verdict is now 1.
+    operator.check_eprom_blank.return_value = 1
     app = make_app_context(db=real_db, eprom_operator=operator)
 
     result = runner.invoke(cli, ["blank", _CHIP], obj=app)
