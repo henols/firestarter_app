@@ -122,8 +122,22 @@ def test_the_double_refuses_a_non_blank_write_without_the_flag() -> None:
     `eprom_operations._run_state_machine` catches the `EpromOperationError`
     and returns `(False, str(e))` (`eprom_operations.py:597-609`). Without
     this leg, every downstream leg asserting `verdict == OK` would be
-    theatre: a double that refuses nothing makes any PASS meaningless."""
-    chip, _full = _seeded_m27c512_double()
+    theatre: a double that refuses nothing makes any PASS meaningless.
+
+    Phase 201 (BLANK-01) scoped the real write-init blank check -- and this
+    fake, in lockstep -- to the write's OWN target region rather than the
+    whole device. `_seeded_m27c512_double`'s non-blank content sits
+    OUTSIDE the target slot deliberately (legs 3-6 below need exactly that
+    shape to exercise the witness/FLAG_SKIP_BLANK_CHECK policy), so it no
+    longer makes a region-scoped double refuse anything -- reusing it here
+    would make this leg theatre again, the opposite of its own purpose.
+    This leg therefore seeds its own double with the non-blank byte INSIDE
+    the write's target region, which is what a region-scoped refusal
+    actually requires."""
+    full = _REAL_DB.get_eprom("m27c512") or {}
+    mem_size = int(full.get("memory-size", 0) or 0)
+    chip = WriteInitPreflightChip(mem_size, uv=True)
+    chip.data[0xFF00:0xFF10] = bytes(range(16))
     ed = ct.resolve_chip("m27c512", db=_REAL_DB)
     fh = tempfile.NamedTemporaryFile(prefix="p179_", suffix=".bin", delete=False)
     fh.write(ct.generate_pattern(0xFF00, 256))

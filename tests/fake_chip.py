@@ -26,6 +26,7 @@ Two properties this double gets right that a plain `Mock` cannot:
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -262,10 +263,12 @@ class WriteInitPreflightChip(FakeChip):
         self.write_flags_seen: list[int] = []
         setattr(self, "check_eprom_id", Mock(return_value=(True, self.id_value)))
 
-    def _is_blank(self) -> bool:
+    def _is_blank(self, start: int = 0, end: int | None = None) -> bool:
         if self.blank_override is not None:
             return self.blank_override
-        return bytes(self.data) == b"\xff" * self.memory_size
+        if end is None:
+            end = self.memory_size
+        return bytes(self.data[start:end]) == b"\xff" * (end - start)
 
     def write_eprom(
         self,
@@ -279,7 +282,17 @@ class WriteInitPreflightChip(FakeChip):
         self.last_firmware_error_code = None
         self.last_firmware_error_message = None
         self.write_flags_seen.append(operation_flags)
-        if not (operation_flags & FLAG_SKIP_BLANK_CHECK) and not self._is_blank():
+        # BLANK-01 / BLANK-03 / D-16.2: scope the pre-flight check to the
+        # region this write actually touches -- the same start/end
+        # arithmetic FakeChip.write_eprom already does above (start from the
+        # address argument, end from the payload size) -- rather than the
+        # whole buffer. Before this, a non-blank byte anywhere outside the
+        # target region would refuse a write that real firmware now accepts.
+        start = _parse_addr_or_size(address_str) or 0
+        end = start + os.path.getsize(input_file_path)
+        if not (operation_flags & FLAG_SKIP_BLANK_CHECK) and not self._is_blank(
+            start, end
+        ):
             self.last_firmware_error_code = MSG_ERR_NOT_BLANK
             self.last_firmware_error_message = (
                 "Error: EPROM not blank at address 0x000000, value 0xAB"

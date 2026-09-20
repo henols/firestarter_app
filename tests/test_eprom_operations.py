@@ -18,13 +18,21 @@ Phase 44 Plan 03 additions (read_timing block):
 """
 
 import logging
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from firestarter.config import ConfigManager
 from firestarter.eprom_operations import EpromOperator
-from firestarter.messages import MSG_END_DONE, MSG_INIT_DONE, MSG_MAIN_DONE
+from firestarter.messages import (
+    MSG_END_DONE,
+    MSG_ERR_NOT_BLANK,
+    MSG_INIT_DONE,
+    MSG_MAIN_DONE,
+)
 
 from .conftest import build_frame
+from .fake_chip import WriteInitPreflightChip
 
 
 def test_run_state_machine_happy_path(make_comm, fake_serial, caplog) -> None:
@@ -326,6 +334,156 @@ def test_region_end_key_constant() -> None:
     )
 
     assert JSON_KEY_REGION_END == "region-end"
+
+
+def test_write_into_blank_region_of_non_blank_part_succeeds() -> None:
+    """BLANK-01 / BLANK-03: before the fake learned the region (this plan),
+    this leg passed VACUOUSLY -- `WriteInitPreflightChip._is_blank` compared
+    the WHOLE buffer, so it modelled the whole-device check exactly and
+    could never distinguish "blank at the target" from "blank everywhere".
+    A non-blank part with data at low addresses now accepts a write into a
+    genuinely blank region elsewhere on the device, matching the real
+    firmware's region-scoped write-init blank check (Phase 201, D-09/D-10).
+
+    Selected by `pytest -k region_end or blank_region`.
+    """
+    memory_size = 16384
+    chip = WriteInitPreflightChip(memory_size, uv=True)
+    chip.data[0x10:0x11] = b"\x00"  # non-blank, well outside the target region
+
+    fh = tempfile.NamedTemporaryFile(prefix="p201_", suffix=".bin", delete=False)
+    fh.write(b"\xaa" * 256)
+    fh.close()
+    try:
+        outcome = chip.write_eprom("test-part", {}, fh.name, 0, address_str="0x2000")
+    finally:
+        Path(fh.name).unlink()
+
+    assert outcome is True
+    assert chip.last_firmware_error_code is None
+
+
+def test_write_into_non_blank_region_is_still_refused() -> None:
+    """The paired negative control: a non-blank byte genuinely INSIDE the
+    target region still refuses the write -- the fix SCOPES the check, it
+    does not delete it. A programmed bit cannot be un-programmed on a UV
+    part, so a silently dropped refusal would be irreversible data loss.
+
+    Selected by `pytest -k region_end or blank_region`.
+    """
+    memory_size = 16384
+    chip = WriteInitPreflightChip(memory_size, uv=True)
+    chip.data[0x2010:0x2011] = b"\x00"  # non-blank, inside the target region
+
+    fh = tempfile.NamedTemporaryFile(prefix="p201_", suffix=".bin", delete=False)
+    fh.write(b"\xaa" * 256)
+    fh.close()
+    try:
+        outcome = chip.write_eprom("test-part", {}, fh.name, 0, address_str="0x2000")
+    finally:
+        Path(fh.name).unlink()
+
+    assert outcome is False
+    assert chip.last_firmware_error_code == MSG_ERR_NOT_BLANK
+
+
+def test_region_end_emitted_on_write(make_comm, fake_serial) -> None:
+    """D-05 / D-07: the command_dict `_setup_operation` returns for
+    COMMAND_WRITE carries JSON_KEY_REGION_END == address + region_length --
+    the wire key BLANK-01's firmware side reads to scope its write-init
+    blank check to this write's own region instead of the whole device.
+    Captured at the wire boundary (the dict SerialCommunicator.find_and_connect
+    receives), the same boundary TestSdpOperationsWireShape above uses.
+
+    Selected by `pytest -k region_end`.
+    """
+    from firestarter.constants import COMMAND_WRITE, JSON_KEY_REGION_END
+
+    captured: dict = {}
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        captured["command_dict"] = command_dict
+        return make_comm()
+
+    operator = EpromOperator(ConfigManager())
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=_fake_find_and_connect,
+    ):
+        operator._setup_operation(
+            "W27C512",
+            dict(_MINIMAL_EPROM_DATA),
+            COMMAND_WRITE,
+            address="0x1000",
+            region_length=256,
+        )
+
+    assert captured["command_dict"][JSON_KEY_REGION_END] == 0x1000 + 256
+
+
+def test_region_end_emitted_on_verify(make_comm, fake_serial) -> None:
+    """D-05 / D-07: the same emission, for COMMAND_VERIFY -- write and
+    verify share one dict-construction path through _operation_context to
+    _setup_operation, so one change (and one test each) serves both.
+
+    Selected by `pytest -k region_end`.
+    """
+    from firestarter.constants import COMMAND_VERIFY, JSON_KEY_REGION_END
+
+    captured: dict = {}
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        captured["command_dict"] = command_dict
+        return make_comm()
+
+    operator = EpromOperator(ConfigManager())
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=_fake_find_and_connect,
+    ):
+        operator._setup_operation(
+            "W27C512",
+            dict(_MINIMAL_EPROM_DATA),
+            COMMAND_VERIFY,
+            address="0x2000",
+            region_length=512,
+        )
+
+    assert captured["command_dict"][JSON_KEY_REGION_END] == 0x2000 + 512
+
+
+def test_region_end_absent_for_read(make_comm, fake_serial) -> None:
+    """D-05: the emission is guarded on cmd being COMMAND_WRITE or
+    COMMAND_VERIFY -- COMMAND_READ never carries JSON_KEY_REGION_END, so
+    the read path's existing `memory-size` narrowing (`:495`) stays
+    undisturbed. region_length is passed here too (not merely omitted) to
+    prove the guard is on `cmd`, not on the caller happening not to supply
+    a value.
+
+    Selected by `pytest -k region_end`.
+    """
+    from firestarter.constants import COMMAND_READ, JSON_KEY_REGION_END
+
+    captured: dict = {}
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        captured["command_dict"] = command_dict
+        return make_comm()
+
+    operator = EpromOperator(ConfigManager())
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=_fake_find_and_connect,
+    ):
+        operator._setup_operation(
+            "W27C512",
+            dict(_MINIMAL_EPROM_DATA),
+            COMMAND_READ,
+            address="0x1000",
+            region_length=256,
+        )
+
+    assert JSON_KEY_REGION_END not in captured["command_dict"]
 
 
 def test_read_timing_settling_emitted_in_command() -> None:
