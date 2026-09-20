@@ -23,6 +23,7 @@ from unittest.mock import Mock
 import pytest
 from click.testing import CliRunner
 
+import firestarter.cli_handlers as cli_handlers_mod
 from firestarter.cli_handlers import AppContext, cli
 from firestarter.config import ConfigManager
 from firestarter.database import EpromDatabase
@@ -30,6 +31,14 @@ from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
 from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
+from firestarter.messages import (
+    MSG_DATA_CHUNK,
+    MSG_END_DONE,
+    MSG_INIT_DONE,
+    MSG_MAIN_DONE,
+)
+
+from .conftest import build_frame
 
 
 @pytest.fixture
@@ -487,6 +496,77 @@ def test_verify_operator_returns_setup_failure(runner: CliRunner) -> None:
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["verify", "W27C512", "in.bin"], obj=app)
     assert result.exit_code == 2
+
+
+def test_verify_cli_prints_range_line_and_bucket_summary_line(
+    runner: CliRunner,
+    make_comm,
+    fake_serial,
+    tmp_path,
+    monkeypatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Task 3 acceptance criterion: a `CliRunner` invocation of `verify`
+    against a mismatching fake chip produces output containing both a
+    range line (D-13) and the bucket summary line
+    `CompareAccumulator.finalise()` now populates via `classify_streamed`
+    (D-14, 202-03).
+
+    Drives the REAL `EpromOperator.verify_eprom` (not a `Mock`) through the
+    fake-serial harness `tests/test_eprom_operations.py`'s
+    `TestVerifyEpromHostSideRead` uses, so the range/bucket lines
+    `eprom_operations.verify_eprom` logs are genuinely produced by
+    production code -- not read off a mock's return value. `resolve_chip`
+    is patched to a minimal chip dict (mirroring
+    `tests/test_eprom_operations.py::_MINIMAL_EPROM_DATA`) so this test
+    does not also need a real chip's full bus-config from the shipped DB.
+
+    Asserts against `caplog.text`, not `result.output`, for the measured
+    reason `test_info_elevated_programming_vcc_warns` documents above: this
+    test passes a pre-built `obj=app`, so `cli()`'s test-mode short-circuit
+    skips `_setup_logging` entirely, and under pytest `result.output` is
+    always empty regardless of what was logged -- asserting against it
+    would pass vacuously. `caplog.at_level(logging.INFO, ...)` is the
+    correct capture surface inside pytest for `logger.info` output, and it
+    is still a genuine `CliRunner` invocation of production code end to end.
+    """
+    monkeypatch.setattr(
+        cli_handlers_mod,
+        "resolve_chip",
+        lambda name, db=None: {"memory-size": 300, "flags": 0, "cmd": 1},
+    )
+
+    length = 300  # > 256 so the bucket line's clustering path is exercised
+    expected_bytes = bytes(length)
+    input_file = tmp_path / "in.bin"
+    input_file.write_bytes(expected_bytes)
+
+    actual_bytes = bytearray(expected_bytes)
+    actual_bytes[5] = 0x01  # one mismatch: a range line + a bucket line
+
+    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+    fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(actual_bytes)))
+    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        return make_comm()
+
+    monkeypatch.setattr(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        _fake_find_and_connect,
+    )
+
+    operator = EpromOperator(ConfigManager())
+    app = make_app_context(eprom_operator=operator)
+
+    with caplog.at_level(logging.INFO, logger="EpromOperator"):
+        result = runner.invoke(cli, ["verify", "W27C512", str(input_file)], obj=app)
+
+    assert result.exit_code == 1
+    assert "Mismatch 0x" in caplog.text
+    assert " bad of " in caplog.text
+    assert " compared of " in caplog.text
 
 
 def test_blank_happy_path(runner: CliRunner) -> None:

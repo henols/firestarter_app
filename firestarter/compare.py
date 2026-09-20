@@ -289,17 +289,18 @@ class CompareAccumulator:
         self, *, repeat_divergent: bool | None = None, aborted: bool = False
     ) -> CompareResult:
         """Close any open range and return a fresh, immutable-to-us
-        `CompareResult`. `repeat_divergent` is accepted for forward
-        compatibility with `classify_streamed`; this method does not yet
-        populate `fingerprint` itself -- 202-03 Task 3 wires that in, once
-        `classify_streamed` exists (Task 1) and every caller of the old
-        batch classifier has been re-pointed (Task 2).
+        `CompareResult`, with `fingerprint` already populated via
+        `classify_streamed` (202-03 Task 3) -- clean or mismatching, every
+        `finalise()` call classifies, so no caller has to ask separately.
+        `repeat_divergent` forwards straight through to `classify_streamed`.
 
         `total` defaults to `compared` -- a caller that knows the declared
         region size up front overrides `result.total` afterwards, since
-        `CompareResult` is a plain, caller-mutable dataclass.
+        `CompareResult` is a plain, caller-mutable dataclass. That override
+        happens AFTER this call, so `classify_streamed` (and the bucket line
+        `render_compare_lines` derives from it) always reasons about
+        `compared`, never a region size the accumulator was never told.
         """
-        _ = repeat_divergent  # unused until Task 3 wires classify_streamed in
         self._close_open_range()
         compared_start = (
             self._compared_start
@@ -309,7 +310,7 @@ class CompareAccumulator:
         compared_end = (
             compared_start - 1 if self._compared_end is None else self._compared_end
         )
-        return CompareResult(
+        result = CompareResult(
             total=self._compared,
             compared=self._compared,
             compared_start=compared_start,
@@ -323,6 +324,10 @@ class CompareAccumulator:
             first_offset=self._first_offset,
             bit_set_counts=dict(self._set_count),
         )
+        result.fingerprint = classify_streamed(
+            result, repeat_divergent=repeat_divergent
+        )
+        return result
 
 
 # ---------------------------------------------------------------------------

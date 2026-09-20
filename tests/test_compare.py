@@ -239,7 +239,8 @@ class TestCompareAccumulatorRangeCap:
 
 
 class TestRenderCompareLines:
-    """D-13's exact one-line-per-range format; D-16's tail line."""
+    """D-13's exact one-line-per-range format; D-16's tail line; D-14's
+    bucket summary line (202-03)."""
 
     def test_single_range_exact_text(self) -> None:
         result = CompareResult(
@@ -310,6 +311,114 @@ class TestRenderCompareLines:
         assert lines[1].startswith("…")
         assert "3" in lines[1]
         assert "9" in lines[1]
+
+    def test_no_bucket_line_when_fingerprint_is_none(self) -> None:
+        """A `CompareResult` built directly (bypassing `finalise()`) leaves
+        `fingerprint` at its default `None` -- `render_compare_lines` must
+        not synthesize a bucket line from nothing."""
+        result = CompareResult(
+            total=1,
+            compared=1,
+            compared_start=0,
+            compared_end=0,
+            bad=1,
+            ranges=[MismatchRange(start=0, end=0, count=1)],
+            extra_ranges=0,
+            extra_bytes=0,
+            aborted=False,
+        )
+
+        lines = render_compare_lines(result)
+
+        assert lines == ["Mismatch 0x000000-0x000000 (1 bytes)"]
+
+    def test_bucket_summary_line_exact_text(self) -> None:
+        """D-14's own worked example, verbatim."""
+        result = CompareResult(
+            total=65536,
+            compared=65536,
+            compared_start=0x000000,
+            compared_end=0x00FFFF,
+            bad=2305,
+            ranges=[],
+            extra_ranges=0,
+            extra_bytes=0,
+            aborted=False,
+            fingerprint=Fingerprint(
+                total=65536,
+                bad=2305,
+                bad_pct=100.0 * 2305 / 65536,
+                classification=FP_ADDRESS_LINE,
+                evidence={},
+            ),
+        )
+
+        lines = render_compare_lines(result)
+
+        assert lines[-1] == (
+            "address-line, 2305 bad of 65536 compared of 65536 (0x000000-0x00FFFF)"
+        )
+
+    def test_bucket_summary_line_is_last_and_exactly_one(self) -> None:
+        """Even with retained ranges AND an extra-ranges tail line present,
+        exactly one bucket summary line is emitted, and it comes last."""
+        result = CompareResult(
+            total=100,
+            compared=100,
+            compared_start=0,
+            compared_end=99,
+            bad=10,
+            ranges=[MismatchRange(start=0, end=0, count=1)],
+            extra_ranges=3,
+            extra_bytes=9,
+            aborted=False,
+            fingerprint=Fingerprint(
+                total=100,
+                bad=10,
+                bad_pct=10.0,
+                classification=FP_INDETERMINATE,
+                evidence={},
+            ),
+        )
+
+        lines = render_compare_lines(result)
+
+        assert len(lines) == 3
+        assert sum(1 for line in lines if line.startswith("indeterminate,")) == 1
+        assert lines[-1].startswith("indeterminate,")
+
+
+class TestFinaliseAlwaysClassifies:
+    """202-03 Task 3: `CompareAccumulator.finalise()` populates
+    `CompareResult.fingerprint` unconditionally -- clean or mismatching,
+    every `finalise()` call classifies, so `verify_eprom` and every other
+    caller gets a diagnosis without asking for one separately."""
+
+    def test_fingerprint_populated_on_a_clean_compare(self) -> None:
+        acc = CompareAccumulator()
+        acc.feed(0, b"\x00" * 16, b"\x00" * 16)
+
+        result = acc.finalise()
+
+        assert result.fingerprint is not None
+        assert result.fingerprint.classification == FP_MATCH
+
+    def test_fingerprint_populated_on_a_mismatching_compare(self) -> None:
+        acc = CompareAccumulator()
+        acc.feed(0, b"\x00" * 16, b"\x01" + b"\x00" * 15)
+
+        result = acc.finalise()
+
+        assert result.fingerprint is not None
+        assert result.fingerprint.bad == 1
+
+    def test_fingerprint_populated_on_an_empty_compare(self) -> None:
+        acc = CompareAccumulator()
+
+        result = acc.finalise()
+
+        assert result.fingerprint is not None
+        assert result.fingerprint.classification == FP_MATCH
 
 
 class TestCompareAccumulatorPeakAllocation:
@@ -1236,3 +1345,50 @@ class TestClassifyFingerprintCorpus:
 
     def test_corpus_has_at_least_twelve_rows(self) -> None:
         assert len(_CORPUS) >= 12
+
+
+_FORBIDDEN_MODULES = (
+    "firestarter.eprom_operations",
+    "firestarter.chip_test",
+    "firestarter.serial_comm",
+    "click",
+)
+
+
+class TestImportPurity:
+    """D-01: `compare.py`'s whole-tree import set names none of the four
+    forbidden modules. AST-based, not a substring grep -- this module's own
+    docstring names all four forbidden modules in prose describing this
+    very safety property, so a raw grep would false-positive on itself
+    (`test_diagnostic_report.py::test_report_module_is_orchestrator_only`'s
+    docstring records the same reasoning, mirroring the Phase-109 SAFE-02
+    lesson). Walks the WHOLE tree, not just module level: a function-local
+    lazy import would defeat D-01 exactly as thoroughly as a top-level
+    one -- `eprom_operations.py`'s own read path already shows this
+    codebase uses that shape deliberately, so it is not a hypothetical."""
+
+    def test_no_forbidden_import_anywhere_in_compare_py(self) -> None:
+        import firestarter.compare as compare_mod
+
+        src = inspect.getsource(compare_mod)
+        tree = ast.parse(src)
+
+        qualified_names: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                qualified_names.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    qualified_names.add(node.module)
+                    qualified_names.update(
+                        f"{node.module}.{alias.name}" for alias in node.names
+                    )
+                else:
+                    qualified_names.update(alias.name for alias in node.names)
+
+        for forbidden in _FORBIDDEN_MODULES:
+            for name in qualified_names:
+                assert name != forbidden and not name.startswith(f"{forbidden}."), (
+                    f"{name!r} in compare.py's import set reaches forbidden "
+                    f"module {forbidden!r} -- breaks D-01"
+                )

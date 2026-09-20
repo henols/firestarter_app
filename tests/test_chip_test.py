@@ -2283,9 +2283,20 @@ def test_dispatch_multi_run_uses_selector_for_uv_chip():
 
 
 def test_generate_pattern_and_classify_fingerprint_source_unchanged():
+    """202-03 (D-02): `classify_fingerprint` is now a thin delegating
+    wrapper around `compare.classify_streamed` -- the logic this guard
+    originally protected (that the two region-scoping constants never leak
+    into the pattern generator or the classifier) moved with it, to
+    `classify_streamed` and `CompareAccumulator.feed`. A guard that kept
+    inspecting only `classify_fingerprint`'s own handful of delegating
+    lines would still pass, but vacuously: it would no longer be looking at
+    the code that could actually leak those constants. A green test
+    guarding nothing is worse than either fixing it or deleting it --
+    fixed here by following the logic to where it now lives."""
     import inspect
 
     import firestarter.chip_test as chip_test_mod
+    import firestarter.compare as compare_mod
 
     gen_src = inspect.getsource(chip_test_mod.generate_pattern)
     assert "_WRITE_REGION_START" not in gen_src
@@ -2294,6 +2305,14 @@ def test_generate_pattern_and_classify_fingerprint_source_unchanged():
     classify_src = inspect.getsource(chip_test_mod.classify_fingerprint)
     assert "_WRITE_REGION_START" not in classify_src
     assert "_UV_WRITE_REGION_LENGTH" not in classify_src
+
+    streamed_src = inspect.getsource(compare_mod.classify_streamed)
+    assert "_WRITE_REGION_START" not in streamed_src
+    assert "_UV_WRITE_REGION_LENGTH" not in streamed_src
+
+    feed_src = inspect.getsource(compare_mod.CompareAccumulator.feed)
+    assert "_WRITE_REGION_START" not in feed_src
+    assert "_UV_WRITE_REGION_LENGTH" not in feed_src
 
 
 def _capturing_write(captured: dict):
