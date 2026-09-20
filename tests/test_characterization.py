@@ -350,6 +350,43 @@ def test_info_at28c256(snapshot):
     assert stderr == snapshot(name="test_info_at28c256_stderr")
 
 
+def test_info_mbm27c1000(snapshot):
+    """Pin info output for MBM27C1000 (Phase 200 VCC-01/VCC-02, rail-slot class).
+
+    MBM27C1000 is gh#70's reported part, so a reporter would recognise it, and
+    its `electrical.vdd_mv` of 6000 is `VCC_VOLTAGES[0x0D]` -- a decoded
+    programmer rail-table slot rather than a datasheet figure, the class 281
+    of the 284 elevated rows belong to (200-RESEARCH.md § G-1). This is the
+    real installed entry point, through the real `info` command, so the
+    committed snapshot is what an operator actually sees: the `Programming
+    VCC:` row between `VCC:` and `VPP:`, then the two-line shortfall warning.
+    See test_info_mbm27c4001 below for the datasheet-cited counterpart class.
+    """
+    stdout, stderr, rc = run_firestarter("info", "MBM27C1000")
+    assert rc == 0
+    assert stdout == snapshot
+    assert stderr == snapshot(name="test_info_mbm27c1000_stderr")
+
+
+def test_info_mbm27c4001(snapshot):
+    """Pin info output for MBM27C4001 (Phase 200 VCC-01/VCC-02, datasheet-cited class).
+
+    MBM27C4001 is one of exactly three rows in the 284 elevated-supply rows
+    whose `electrical.vdd_mv` comes from a cited datasheet rather than a
+    `VCC_VOLTAGES` rail slot -- the other two are FUJITSU/MBM27128 and
+    FUJITSU/MBM27C1001 (200-RESEARCH.md § G-1, measured against
+    `tools/datasheet_overrides.json` with the `part_number` field comma-split
+    first, per CLAUDE.md's Database Pipeline warning -- an exact-string match
+    misses multi-alias rows). Pinned alongside test_info_mbm27c1000 above so
+    the evidence for both the rail-slot class and the datasheet-backed class
+    is committed side by side.
+    """
+    stdout, stderr, rc = run_firestarter("info", "MBM27C4001")
+    assert rc == 0
+    assert stdout == snapshot
+    assert stderr == snapshot(name="test_info_mbm27c4001_stderr")
+
+
 def test_search_w27(snapshot):
     """Pin search results for 'W27' substring."""
     stdout, stderr, rc = run_firestarter("search", "W27")

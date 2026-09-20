@@ -2063,7 +2063,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -2086,7 +2086,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -2132,7 +2132,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -2155,7 +2155,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -5460,7 +5460,7 @@
         "size_bytes": 2048,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 13000
       },
       "part_number": "NMC27C16B,NMC27C16BQ",
@@ -5594,8 +5594,8 @@
         "size_bytes": 16384,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5500,
-        "vpp_mv": 18000
+        "vdd_mv": 6000,
+        "vpp_mv": 21000
       },
       "part_number": "MBM27128",
       "pinout": "DIP28_2764",
@@ -5606,7 +5606,7 @@
         "infoic_page_size_raw": 0,
         "protect_off_before": false,
         "protect_on_after": false,
-        "pulse_duration_us": 200
+        "pulse_duration_us": 1000
       },
       "support_status": "supported"
     },
@@ -5682,7 +5682,7 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6000,
         "vpp_mv": 12500
       },
       "part_number": "MBM27C1000P,MBM27C1000",
@@ -5694,7 +5694,7 @@
         "infoic_page_size_raw": 0,
         "protect_off_before": false,
         "protect_on_after": false,
-        "pulse_duration_us": 100
+        "pulse_duration_us": 500
       },
       "support_status": "supported"
     },
@@ -5704,8 +5704,8 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5500,
-        "vpp_mv": 12000
+        "vdd_mv": 6000,
+        "vpp_mv": 12500
       },
       "part_number": "MBM27C1001",
       "pinout": "DIP32_27C020",
@@ -5716,7 +5716,7 @@
         "infoic_page_size_raw": 0,
         "protect_off_before": false,
         "protect_on_after": false,
-        "pulse_duration_us": 100
+        "pulse_duration_us": 500
       },
       "support_status": "supported"
     },
@@ -5748,7 +5748,7 @@
         "size_bytes": 262144,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6000,
         "vpp_mv": 12500
       },
       "part_number": "MBM27C2000P,MBM27C2000",
@@ -5814,8 +5814,8 @@
         "size_bytes": 524288,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5500,
-        "vpp_mv": 12000
+        "vdd_mv": 6000,
+        "vpp_mv": 12500
       },
       "part_number": "MBM27C4001",
       "pinout": "DIP32_STD",
@@ -6148,7 +6148,7 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6000,
         "vpp_mv": 12500
       },
       "part_number": "HN27C301AG,HN27C301AP,HN27C301AFP",
@@ -6170,7 +6170,7 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6000,
         "vpp_mv": 12500
       },
       "part_number": "HN27C301G",
@@ -9118,7 +9118,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -9141,7 +9141,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -9164,7 +9164,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -9187,7 +9187,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -9373,7 +9373,7 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6000,
         "vpp_mv": 12500
       },
       "part_number": "M5M27C101K",
@@ -10052,7 +10052,7 @@
         "pulse_duration_us": 0
       },
       "support_status": "adapter-required",
-      "unsupported_reason": "adapter required: AT28C04/AT28C16 DIP24 chip \u2014 requires a physical DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
+      "unsupported_reason": "adapter required: requires a dedicated DIP24 EEPROM adapter or firmware handler \u2014 socket pin 21 = WE, which the RURP DIP24_2716 pinout maps to the 12V VPP rail (hardware-damage path)"
     },
     {
       "electrical": {
@@ -10482,7 +10482,7 @@
         "size_bytes": 2048,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 18000
       },
       "part_number": "NMC27C16",
@@ -10504,7 +10504,7 @@
         "size_bytes": 2048,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 13000
       },
       "part_number": "NMC27C16B",
@@ -10526,7 +10526,7 @@
         "size_bytes": 2048,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 18000
       },
       "part_number": "NMC27C16Q",
@@ -10638,7 +10638,7 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 12500
       },
       "part_number": "MSM27C1000",
@@ -10660,7 +10660,7 @@
         "size_bytes": 262144,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 12500
       },
       "part_number": "MSM27C2000",
@@ -11018,8 +11018,8 @@
       "electrical": {
         "pin_count": 28,
         "size_bytes": 8192,
-        "type": "FRAM",
-        "vcc_mv": 3300,
+        "type": "SRAM",
+        "vcc_mv": 5000,
         "vdd_mv": 5000,
         "vpp_mv": 12000
       },
@@ -11376,7 +11376,7 @@
         "size_bytes": 131072,
         "type": "UV-EPROM",
         "vcc_mv": 5000,
-        "vdd_mv": 5000,
+        "vdd_mv": 6250,
         "vpp_mv": 13000
       },
       "part_number": "M27C1000",

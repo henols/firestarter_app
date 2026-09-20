@@ -21,6 +21,9 @@ PINOUT_FILE = os.path.join(_DATA_DIR, "pinouts.json")
 # Curated non-upstream chip supplement, merged post-decode (see
 # the EXTRA_CHIPS block in main()). Physically-real chips absent from infoic.xml.
 EXTRA_CHIPS_FILE = os.path.join(os.path.dirname(__file__), "extra_chips.json")
+DATASHEET_OVERRIDES_FILE = os.path.join(
+    os.path.dirname(__file__), "datasheet_overrides.json"
+)
 
 # 2. PINOUT LIBRARY (The Missing Physical Layer)
 
@@ -51,17 +54,6 @@ PROTOCOL_MAP = {
     # 0x3C: NOT IN MINIPRO SOURCE — invented; remove entirely
 }
 
-# Key on (voltages & 0xF0), NOT (voltages & 0xFF). The low byte packs two
-# fields: bits 7-4 are the VPP index (these table keys), bits 3-0 are option
-# flags. Masking the full byte yields Unknown/0 mV whenever the option bits are
-# set — e.g. SST27VF512 has voltages=0x0001, and 0x01 is not a key here.
-# [minipro database.c + tl866a.c, tl866ii_vpp_voltages[]]
-#
-# Upstream caps VPP at 18 V, which some antique Intel NMOS parts exceed:
-# M2716 and M2732 need 25 V, M2732A needs 21 V. They report 18 V here because
-# upstream aliases them under generic 2716/2732 entries. The 25 V parts are
-# unprogrammable on this shield regardless (~22 V max); for the rest the
-# operator must override via ~/.firestarter/database.json.
 VPP_MV = {
     0x00: 12000,
     0x10: 9000,
@@ -79,16 +71,12 @@ VPP_MV = {
     0xD0: 16500,
     0xE0: 17000,
     0xF0: 18000,
+    0xF1: 25000,
+    0xF2: 21000,
 }
 
-# NMOS VPP correction: promotes the comment above to applied code.
-# Matched against part_number aliases; "highest VPP wins" for entries with
-# multiple NMOS aliases (e.g., INTEL/2732,2732A,M2732,M2732A).
-NMOS_TRUE_VPP_MV: dict[str, int] = {
-    "M2716": 25000,  # Intel NMOS 2716: 25V VPP (datasheet)
-    "M2732": 25000,  # Intel NMOS 2732: 25V VPP (datasheet)
-    "M2732A": 21000,  # Intel NMOS 2732A: 21V VPP (later variant)
-}
+_VPP_EXACT_LOW_BYTES = frozenset(k for k in VPP_MV if k & 0x0F)
+
 # RURP boost regulator theoretical ceiling (build_db.py comment + hw evidence).
 # Chips requiring VPP above this cannot be programmed on any RURP revision.
 RURP_VPP_CEILING_MV = 25000
@@ -124,7 +112,6 @@ KNOWN_PROTOCOLS = {
     # NOT 0x35 or 0x39 — removed
 }
 
-# [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
 VCC_VOLTAGES = {
     0x00: 5000,
     0x01: 3300,
@@ -132,9 +119,17 @@ VCC_VOLTAGES = {
     0x03: 4500,  # BUG-1 fix: was missing from v1.12
     0x04: 5500,
     0x05: 6500,
+    0x06: 1800,
+    0x07: 2500,
+    0x08: 3000,
+    0x09: 1200,
+    0x0A: 4750,
+    0x0B: 5250,
+    0x0C: 5750,
+    0x0D: 6000,
+    0x0E: 6250,
 }
 
-# [VERIFIED: minipro database.c#L130-L135 @ a8efaedc — tl866ii_vcc_voltages[]]
 # VCC_VOLTAGES index 0x02 is the TL866's low-margin VCC *verify* rail, not an
 # operating supply — no part here has a 4.0 V nominal VCC. Any chip whose
 # decoded vcc_mv lands on this rail is being misreported. Written as a lookup
@@ -144,8 +139,6 @@ _VCC_MARGIN_RAIL_MV = VCC_VOLTAGES[0x02]
 # DIP28_VARIANT_MAP, PIN_MAP_TO_PINOUT, and PIN_MAP_PROTO_TO_PINOUT
 # have been DELETED. The principled resolve_pinout_key
 # function below is the sole pinout-selection path.
-
-_PGM_ON_PIN31_MAX_SIZE = 262144
 
 with open(PINOUT_FILE) as _f:
     VALID_PINOUT_KEYS = set(json.load(_f).keys())
@@ -238,7 +231,7 @@ def resolve_pinout_key(
                     key = "DIP32_27C801"
                 elif proto_id == 0x08 and variant_lo == 0x02:
                     key = "DIP32_STD"
-                elif proto_id == 0x08 and mem_size <= _PGM_ON_PIN31_MAX_SIZE:
+                elif proto_id == 0x08 and (mem_size - 1).bit_length() <= 18:
                     key = "DIP32_27C020"
                 else:
                     key = "DIP32_STD"
@@ -366,6 +359,160 @@ def interpret_timing(raw_hex, protocol_id):
     return 0
 
 
+_OVERRIDABLE_DECODED_FIELDS = (
+    "electrical.size_bytes",
+    "electrical.pin_count",
+    "electrical.vpp_mv",
+    "electrical.vcc_mv",
+    "electrical.vdd_mv",
+    "programming.pulse_duration_us",
+)
+
+
+def _validate_datasheet_overrides_shape(path, data):
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"{path}: top-level JSON value is {type(data).__name__}, not "
+            f"an object — refusing to load a malformed override file"
+        )
+    keys = list(data)
+    sorted_keys = sorted(keys)
+    for i, (found, expected) in enumerate(zip(keys, sorted_keys)):
+        if found != expected:
+            raise ValueError(
+                f"{path}: top-level key {found!r} at position {i} breaks "
+                f"ascending order — expected {expected!r} there — refusing "
+                f"to load an unsorted override file"
+            )
+    app_root = os.path.dirname(os.path.dirname(os.path.abspath(path)))
+    for entry_key, entry in data.items():
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"{entry_key}: override entry is {type(entry).__name__}, "
+                f"not an object — refusing to load a malformed override "
+                f"entry"
+            )
+        for required_key in ("datasheet", "fields"):
+            if required_key not in entry:
+                raise ValueError(
+                    f"{entry_key}: override entry is missing required key "
+                    f"{required_key!r} — refusing to load an incomplete "
+                    f"override entry"
+                )
+        fields = entry["fields"]
+        if not isinstance(fields, dict) or not fields:
+            raise ValueError(
+                f"{entry_key}: fields map {fields!r} is empty or not an "
+                f"object — refusing to load an override entry with "
+                f"nothing to apply"
+            )
+        for field_path, pair in fields.items():
+            if not isinstance(pair, dict) or set(pair) != {"was", "is"}:
+                raise ValueError(
+                    f"{entry_key}: field {field_path!r} value {pair!r} is "
+                    f"not a {{'was', 'is'}} pair — refusing to load a "
+                    f"malformed field entry"
+                )
+        datasheet = entry["datasheet"]
+        is_unsourced = datasheet == "UNSOURCED"
+        is_valid_path = (
+            isinstance(datasheet, str)
+            and not os.path.isabs(datasheet)
+            and os.path.exists(os.path.join(app_root, datasheet))
+        )
+        if not is_unsourced and not is_valid_path:
+            raise ValueError(
+                f"{entry_key}: datasheet {datasheet!r} is neither a "
+                f"repository-relative path nor the exact token "
+                f"'UNSOURCED' — refusing to load an unverifiable citation"
+            )
+        if is_unsourced and not entry.get("note"):
+            raise ValueError(
+                f"{entry_key}: datasheet is 'UNSOURCED' but note is "
+                f"{entry.get('note')!r} — refusing to load an unsourced "
+                f"entry with no explanation"
+            )
+
+
+def load_datasheet_overrides(path):
+    if not os.path.exists(path):
+        return {}
+    with open(path) as f:
+        data = json.load(f)
+    _validate_datasheet_overrides_shape(path, data)
+    return data
+
+
+def check_all_override_keys_consumed(overrides, consumed_keys):
+    unmatched = sorted(set(overrides) - set(consumed_keys))
+    if unmatched:
+        raise ValueError(
+            f"{unmatched!r} matched no row's MANUFACTURER/ALIAS in the "
+            f"decoded database — refusing to write {OUTPUT_FILE} with a "
+            f"dead override entry"
+        )
+
+
+def apply_datasheet_override(
+    overrides, mfg_name, alias_set, decoded, consumed_keys=None
+):
+    if consumed_keys is None:
+        consumed_keys = set()
+    written_by = {}
+    for alias in sorted(alias_set):
+        entry_key = f"{mfg_name}/{alias}"
+        entry = overrides.get(entry_key)
+        if entry is None:
+            continue
+        consumed_keys.add(entry_key)
+        for field_path, pair in entry.get("fields", {}).items():
+            if field_path not in decoded:
+                raise ValueError(
+                    f"{entry_key}: override names field path {field_path!r}, "
+                    f"which is not one of the overridable decoded fields "
+                    f"{list(_OVERRIDABLE_DECODED_FIELDS)!r} — refusing to "
+                    f"apply an unknown field path"
+                )
+            if field_path in written_by:
+                raise ValueError(
+                    f"{written_by[field_path]!r} and {entry_key!r} both "
+                    f"target {field_path!r} on the same row — refusing to "
+                    f"apply two overrides to one field"
+                )
+            was = pair["was"]
+            is_ = pair["is"]
+            live = decoded[field_path]
+            if type(was) is not type(live):
+                raise ValueError(
+                    f"{entry_key}: {field_path!r} recorded prior {was!r} "
+                    f"({type(was).__name__}) does not match the live "
+                    f"decode's type {type(live).__name__} ({live!r}) — "
+                    f"refusing to coerce"
+                )
+            if type(is_) is not type(live):
+                raise ValueError(
+                    f"{entry_key}: {field_path!r} override value {is_!r} "
+                    f"({type(is_).__name__}) does not match the live "
+                    f"decode's type {type(live).__name__} ({live!r}) — "
+                    f"refusing to coerce"
+                )
+            if was != live:
+                raise ValueError(
+                    f"{entry_key}: recorded prior {was!r} for {field_path!r} "
+                    f"does not match the live decode {live!r} — refusing to "
+                    f"apply a stale override"
+                )
+            if was == is_:
+                raise ValueError(
+                    f"{entry_key}: {field_path!r} override value {is_!r} "
+                    f"equals the recorded prior {was!r} — refusing a no-op "
+                    f"override"
+                )
+            decoded[field_path] = is_
+            written_by[field_path] = entry_key
+    return decoded
+
+
 def main():
     print(f"Fetching database from: {MINIPRO_XML_URL}")
     try:
@@ -378,6 +525,8 @@ def main():
 
     complete_db = {}
     total_chips = 0
+    _datasheet_overrides = load_datasheet_overrides(DATASHEET_OVERRIDES_FILE)
+    _consumed_override_keys = set()
 
     print("Processing and enriching data...")
 
@@ -424,10 +573,8 @@ def main():
 
                 # Initialize support classification fields.
                 # These defaults are overridden at the two inclusion gates below
-                # and at the NMOS VPP override block before chip_entry construction.
                 _support_status = "supported"
                 _unsupported_reason = None
-                _nmos_vpp_mv = None
 
                 # Site A: Unknown-protocol gate.
                 # X88C64P (proto 0x34) is a confirmed DIP-parallel NovRAM —
@@ -491,43 +638,9 @@ def main():
                     # returns ERROR instead of configure_eprom (HARD invariant).
                     proto_id = NON_DISPATCHABLE_ALGO
 
-                # AT28C04/AT28C16 family. Runs after the guard above so its reason
-                # string wins.
-                #
-                # These arrive as proto_id 0x0D (configure_eeprom28c, pure 5V, no
-                # VPP), so the guard above does NOT fire and proto_id stays 0x0D —
-                # a real dispatchable handler. They are refused in-host by
-                # support_status="adapter-required", which chip_resolver rejects
-                # before any wire dict is built. This arm therefore sets only
-                # support_status + reason and must NOT touch proto_id.
-                #
-                # The reason string must start with "adapter required:" —
-                # test_adapter_required_reason_starts_with_adapter_required.
-                _AT28C_DIP24_NAMES = {
-                    "AT28C04",
-                    "AT28HC04",
-                    "AT28C04E",
-                    "AT28C04F",
-                    "AT28C16",
-                    "AT28HC16",
-                    "AT28HC16L",
-                    "AT28C16E",
-                    "AT28C16F",
-                    "28C04A",
-                    "28C04AF",
-                    "28C16A",
-                    "28C16AF",
-                    "UPD28C04",
-                }
                 _chip_aliases = {
                     a.split("@")[0].strip() for a in name.split(",") if a.strip()
                 }
-                if _chip_aliases & _AT28C_DIP24_NAMES:
-                    _support_status = "adapter-required"
-                    _unsupported_reason = (
-                        "adapter required: AT28C04/AT28C16 DIP24 chip — requires a physical "
-                        "DIP24-to-DIP32 adapter; see the wiki page AT28C04 Adapter"
-                    )
 
                 # --- SYNTHESIZE "COMPLETE" DATA ---
 
@@ -564,46 +677,46 @@ def main():
                     type_int, proto_id, pm_idx, flags, pinout_key, mem_size
                 )
 
-                # Label-only per-chip relabel, keyed on part_number. Runs after
-                # classification and must NOT touch proto_id / pinout / vpp /
-                # algorithm.
-                #
-                # SST39SF040 deliberately KEEPS Flash/EEPROM: relabelling it to
-                # 'Flash' flips FLAG_CAN_ERASE off and breaks its auto-erase.
-                _ETYPE_RELABEL = {"FM1608": "FRAM"}
-                part_aliases_set = {a.split("@")[0].strip() for a in name.split(",")}
-                for _relabel_pn, _relabel_etype in _ETYPE_RELABEL.items():
-                    if _relabel_pn in part_aliases_set:
-                        _etype = _relabel_etype
-                        break
+                _voltages_lo = voltages & 0xFF
+                _d_vpp_mv = (
+                    VPP_MV[_voltages_lo]
+                    if _voltages_lo in _VPP_EXACT_LOW_BYTES
+                    else VPP_MV.get(_voltages_lo & 0xF0, 0)
+                )
+                _d_vcc_mv = VCC_VOLTAGES.get((voltages >> 8) & 0x0F, 5000)
+                _d_vdd_mv = VCC_VOLTAGES.get((voltages >> 12) & 0x0F, 5000)
+                _d_pulse = interpret_timing(ic.get("pulse_delay"), proto_id)
 
-                # NMOS VPP correction.
-                # Must run AFTER all fm1608/WARNING-5 overrides (ordering invariant).
-                # "Highest VPP wins": iterate all aliases; the match with the highest
-                # VPP determines the final voltage + status (conservative — avoids
-                # M2732/M2732A match-order ambiguity on combined entries like
-                # INTEL/2732,2732A,M2732,M2732A).
-                part_aliases = {a.split("@")[0].strip() for a in name.split(",")}
-                for nmos_key, nmos_vpp in NMOS_TRUE_VPP_MV.items():
-                    if nmos_key in part_aliases:
-                        if _nmos_vpp_mv is None or nmos_vpp > _nmos_vpp_mv:
-                            _nmos_vpp_mv = nmos_vpp
-                if _nmos_vpp_mv is not None:
-                    if _nmos_vpp_mv > RURP_VPP_CEILING_MV:
-                        _support_status = "vpp-exceeds-max"
-                        # Reason string begins with
-                        # "VPP <x>V exceeds programmer max (<ceil>V)" so the host
-                        # can render it verbatim.
-                        # Uses "programmer max" (not "RURP ceiling") per SC#2 wording.
-                        _unsupported_reason = (
-                            f"VPP {_nmos_vpp_mv // 1000}V exceeds programmer max "
-                            f"({RURP_VPP_CEILING_MV // 1000}V)"
-                        )
-                        # Demote to NON_DISPATCHABLE_ALGO so dispatch()
-                        # returns ERROR instead of configure_eprom (HARD invariant).
-                        proto_id = NON_DISPATCHABLE_ALGO
-                    # else: leave _support_status as "supported" — M2732A (21V)
-                    # is within the RURP ceiling.
+                _decoded_view = {
+                    "electrical.size_bytes": mem_size,
+                    "electrical.pin_count": pin_count,
+                    "electrical.vpp_mv": _d_vpp_mv,
+                    "electrical.vcc_mv": _d_vcc_mv,
+                    "electrical.vdd_mv": _d_vdd_mv,
+                    "programming.pulse_duration_us": _d_pulse,
+                }
+                apply_datasheet_override(
+                    _datasheet_overrides,
+                    mfg_name,
+                    _chip_aliases,
+                    _decoded_view,
+                    consumed_keys=_consumed_override_keys,
+                )
+                mem_size = _decoded_view["electrical.size_bytes"]
+                pin_count = _decoded_view["electrical.pin_count"]
+                _d_vpp_mv = _decoded_view["electrical.vpp_mv"]
+                _d_vcc_mv = _decoded_view["electrical.vcc_mv"]
+                _d_vdd_mv = _decoded_view["electrical.vdd_mv"]
+                _d_pulse = _decoded_view["programming.pulse_duration_us"]
+
+                if _d_vpp_mv > RURP_VPP_CEILING_MV:
+                    _support_status = "vpp-exceeds-max"
+                    _unsupported_reason = (
+                        f"VPP {_d_vpp_mv // 1000}V exceeds programmer max "
+                        f"({RURP_VPP_CEILING_MV // 1000}V)"
+                    )
+                    proto_id = NON_DISPATCHABLE_ALGO
+                    _d_pulse = interpret_timing(ic.get("pulse_delay"), proto_id)
 
                 chip_entry = {
                     # Upstream `name` is a comma-separated alias list where each
@@ -627,33 +740,13 @@ def main():
                         "type": _etype,
                         "size_bytes": mem_size,
                         "pin_count": pin_count,
-                        # VPP code occupies bits 7-4 of the 16-bit voltages field
-                        # (the HIGH nibble of the low byte). Bits 3-0 carry option
-                        # flags. Masking with 0xF0 extracts only the VPP nibble.
-                        # BUG-B fix: was voltages & 0xFF (caused 0mV for chips with
-                        # flags bits set, e.g. SST27VF512 voltages=0x0001).
-                        # NMOS correction (Site C): override vpp/vpp_mv when
-                        # _nmos_vpp_mv is set (M2716/M2732/M2732A corrected voltage).
-                        "vpp_mv": (
-                            _nmos_vpp_mv
-                            if _nmos_vpp_mv is not None
-                            else VPP_MV.get(voltages & 0xF0, 0)
-                        ),
-                        # BUG-3 fix: vcc at bits 11-8, vdd at bits 15-12.
-                        # v1.12 had them swapped (vdd at bits 11-8, vcc at bits 15-12).
-                        # [VERIFIED: minipro database.c#L921-L923 @ a8efaedc]
-                        "vcc_mv": VCC_VOLTAGES.get(
-                            (voltages >> 8) & 0x0F, 5000
-                        ),  # bits 11-8
-                        "vdd_mv": VCC_VOLTAGES.get(
-                            (voltages >> 12) & 0x0F, 5000
-                        ),  # bits 15-12
+                        "vpp_mv": _d_vpp_mv,
+                        "vcc_mv": _d_vcc_mv,
+                        "vdd_mv": _d_vdd_mv,
                     },
                     "programming": {
                         "algorithm": proto_id,
-                        "pulse_duration_us": interpret_timing(
-                            ic.get("pulse_delay"), proto_id
-                        ),
+                        "pulse_duration_us": _d_pulse,
                         "chip_id_check": True if (flags & 0x20) else False,
                         "chip_id_value": ic.get("chip_id"),
                         # flags bit 14 = MP_OFF_PROTECT_BEFORE, bit 15 =
@@ -712,6 +805,8 @@ def main():
 
             if chips:
                 complete_db[mfg_name] = chips
+
+    check_all_override_keys_consumed(_datasheet_overrides, _consumed_override_keys)
 
     # Merge tools/extra_chips.json after the decode loop, before the JSON write.
     # These are real parts absent from infoic.xml entirely (2516, 2532), so they

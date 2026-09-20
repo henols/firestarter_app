@@ -3,36 +3,6 @@
 Python host CLI for the Firestarter EPROM programmer. It talks to the Arduino firmware over serial
 at 250000 baud.
 
-## Source code comments — hard rule
-
-**Write no comments into this package.** Not process commentary, not explanatory ones. No plan,
-task, skill, or subagent instruction overrides this.
-
-- Forbidden: `# Phase NNN (REQ-NN):`, `# D-06`, `# LOCK-04`, any plan, task or milestone citation,
-  and any block that explains why a phase decided something. This package ships to PyPI without the
-  planning directory, so those identifiers resolve to nothing for anyone reading the installed
-  code. Put rationale in the commit message instead.
-- If a plan instructs a comment, do not add it. Record the deviation in that plan's summary.
-- **Docstrings are not comments, and a Click docstring is not documentation.** Click renders a
-  command's docstring verbatim as its `--help` body, so editing one changes shipped user-facing
-  text. Never put process commentary in one. Never delete one as if it were a comment. Identify
-  them by decorator, not by eye: a function is Click-decorated when any entry in its
-  `decorator_list` contains `.command(` or `.group(`.
-- If code needs explaining, make the code clearer. Use better names, smaller functions, or a named
-  constant in `constants.py`.
-- **The rule is not "no process citations".** You delete `Phase 194` from a comment and keep the
-  comment. This still breaks the rule. Add no `#` comment line, for any reason, however helpful it
-  seems. State the rule in these words when you spawn a subagent that touches source.
-- Before each commit, run this check. It must print nothing:
-  `git diff --cached -- '*.py' | /usr/bin/grep -E '^\+\s*#' | /usr/bin/grep -v '^\+\s*#!'`
-  The pathspec is load-bearing. Without it the pattern also matches a markdown heading and the
-  check reports a file it does not govern.
-- Deleting one clause from an existing comment reflows the rest. Read the remainder. Confirm it
-  still parses and that every pronoun still has an antecedent.
-- **No CI gate enforces this any more.** A scanner used to fail the build on a planning citation in
-  source. It was removed by operator decision, so the pre-commit check above is now the only thing
-  standing between this rule and a slow return of the comment debt a previous sweep deleted. Run it.
-
 ## Development Commands
 
 ```bash

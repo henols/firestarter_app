@@ -60,9 +60,13 @@ class TestVariantDecodeClassification:
     """VAR-03 (Phase 86): FM1608 + X88C64 classification, pinned BEFORE the
     Plan-02 classifier rewrite so Plan 02 is a refactor-under-test.
 
-    These two assertions describe the POST-Plan-02 state:
-      - FM1608  : GREEN against the current DB (already algorithm 40 / FRAM /
-                  DIP28_JEDEC_SRAM_8K — the type=4 SRAM arm + Phase-84 relabel).
+    These two assertions describe the POST-Plan-02 state, as amended by
+    197-04 (D-08/D-17):
+      - FM1608  : GREEN against the current DB (algorithm 40 / SRAM /
+                  DIP28_JEDEC_SRAM_8K — the type=4 SRAM arm; the Phase-84
+                  'FRAM' relabel was deleted as a defect in 197-04, which
+                  also moved electrical.vcc_mv from 3300 to 5000 because the
+                  relabel had been bypassing the SRAM single-rail rewrite).
       - X88C64  : RED against the current DB (electrical.type is 'UV-EPROM' today
                   because flags & 0x10 == 0 makes the flags rule miss the 0x34
                   XICOR NovRAM/EEPROM). Plan 02's proto_id==0x34 -> EEPROM arm
@@ -75,8 +79,11 @@ class TestVariantDecodeClassification:
 
     def test_fm1608_resolves_sram_std(self):
         """FM1608 (RAMTRON) must classify as algorithm 40 (0x28 SRAM_STD),
-        electrical.type 'FRAM' (Phase-84 cosmetic relabel survives), and pinout
-        'DIP28_JEDEC_SRAM_8K'. GREEN against the current DB.
+        electrical.type 'SRAM' (the 197-04 relabel deletion makes FM1608
+        consistent with its Ramtron siblings FM1208/FM16W08/FM1808/FM18L08,
+        which already read SRAM), electrical.vcc_mv 5000 (up from 3300 --
+        the relabel had been bypassing the SRAM single-rail rewrite), and
+        pinout 'DIP28_JEDEC_SRAM_8K'. GREEN against the current DB.
         """
         db = _load_db()
         found = []
@@ -89,14 +96,20 @@ class TestVariantDecodeClassification:
         for mfg, chip in found:
             algo = chip.get("programming", {}).get("algorithm")
             etype = chip.get("electrical", {}).get("type")
+            vcc_mv = chip.get("electrical", {}).get("vcc_mv")
             pinout = chip.get("pinout")
             assert algo == 40, (
                 f"{mfg}/{chip.get('part_number')}: expected programming.algorithm=40 "
                 f"(0x28 SRAM_STD via type=4 arm), got {algo!r}"
             )
-            assert etype == "FRAM", (
-                f"{mfg}/{chip.get('part_number')}: expected electrical.type='FRAM' "
-                f"(Phase-84 cosmetic relabel), got {etype!r}"
+            assert etype == "SRAM", (
+                f"{mfg}/{chip.get('part_number')}: expected electrical.type='SRAM' "
+                f"(197-04 deleted the FRAM relabel), got {etype!r}"
+            )
+            assert vcc_mv == 5000, (
+                f"{mfg}/{chip.get('part_number')}: expected electrical.vcc_mv=5000 "
+                f"(SRAM single-rail rewrite, no longer bypassed by the relabel), "
+                f"got {vcc_mv!r}"
             )
             assert pinout == "DIP28_JEDEC_SRAM_8K", (
                 f"{mfg}/{chip.get('part_number')}: expected pinout='DIP28_JEDEC_SRAM_8K', "
@@ -563,15 +576,17 @@ class TestUnsupportedReasonStrings:
             )
 
     def test_at28c16_named_arm_reason_mentions_adapter_doc(self):
-        """AT28C16 (adapter-required) unsupported_reason references the adapter wiki page.
+        """AT28C16 (adapter-required) unsupported_reason carries the
+        hardware-damage guard's own wording, not a named-arm override.
 
-        D-03 named arm must produce a reason string that:
-          1. Starts with 'adapter required:' (existing invariant)
-          2. References 'AT28C04 Adapter' (the named-arm adapter wiki page title;
-             Phase 168 MIGRATE-04 D-14 repointed this from a firestarter/doc/
-             path to the wiki page name, since the path stops existing)
-          3. Does NOT contain 'DIP24_2716 pinout maps to the 12V VPP rail' (that is the
-             old generic Site B wording; named arm overwrites it)
+        D-07 as amended by D-15 deleted the named arm and its part-number
+        list; the hardware-damage guard is now the sole writer of this reason
+        string. The reason must:
+          1. Start with 'adapter required:' (existing invariant — the guard's
+             own text starts the same way)
+          2. Contain 'socket pin 21 = WE' (the guard's own wording)
+          3. NOT reference the adapter wiki page — that wording died with the
+             named arm; the guard's reason cites no wiki page at all
         """
         db = _load_db()
         found = []
@@ -588,9 +603,13 @@ class TestUnsupportedReasonStrings:
             assert reason.startswith("adapter required:"), (
                 f"{mfg}/{chip.get('part_number')}: reason must start with 'adapter required:', got: {reason!r}"
             )
-            assert "AT28C04 Adapter" in reason, (
-                f"{mfg}/{chip.get('part_number')}: named-arm reason must reference "
-                f"'AT28C04 Adapter' (the adapter wiki page), got: {reason!r}"
+            assert "socket pin 21 = WE" in reason, (
+                f"{mfg}/{chip.get('part_number')}: guard reason must contain "
+                f"'socket pin 21 = WE', got: {reason!r}"
+            )
+            assert "AT28C04 Adapter" not in reason, (
+                f"{mfg}/{chip.get('part_number')}: reason must not reference the "
+                f"retired adapter wiki page, got: {reason!r}"
             )
 
     def test_x88c64p_reason_does_not_say_serial_parallel_hybrid(self):

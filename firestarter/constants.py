@@ -145,6 +145,17 @@ JSON_KEY_READ_STROBE_US = "read-strobe-us"
 # (firestarter commit 58c6a3c) -- the PROGMEM string exists and is dispatched
 # from key_parsers[].
 JSON_KEY_PAGE_SIZE = "page-size"
+# Absolute, exclusive end address of the operation's region. Emitted by
+# _setup_operation in eprom_operations.py, not by database.py's
+# convert_to_programmer -- the region is a property of the operation (which
+# bytes are being written), not of the chip row.
+# Absent-semantics are the OPPOSITE of page-size above: absent means the
+# WHOLE DEVICE. page-size guards a destructive write, so refusing on
+# absence is the safe direction there; this field guards a relaxation of an
+# existing whole-device check, so falling back to the stricter existing
+# behaviour on absence is the safe direction here instead.
+# Firmware sync: json_parser.c (key_region_end).
+JSON_KEY_REGION_END = "region-end"
 
 # RURP Control Register Bits — mirror of firestarter/include/rurp_pinout.h
 # Documentary only — Python does not write the control register directly

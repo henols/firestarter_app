@@ -498,6 +498,122 @@
 # name: test_info_known_chip[test_info_known_chip_stderr]
   ''
 # ---
+# name: test_info_mbm27c1000
+  '''
+  Eprom Info          
+  Name:               MBM27C1000P,MBM27C1000
+  Manufacturer:       FUJITSU
+  Number of pins:     32
+  Memory size         0x20000
+  Type:               UV-EPROM
+  Can be erased:      no (UV erase only)
+  VCC:                5.0v
+  Programming VCC:    6.0v
+  VPP:                12.5v
+  Chip ID:            0x4e5
+  Pulse delay:        500µS
+  
+  WARNING: Programming VCC decodes to 6.0 V; using 5.0 V.
+  
+         32-DIP package
+          -----v-----
+    VPP -|  1     32 |- VCC   
+    A16 -|  2     31 |- R/W(WE)
+    A15 -|  3     30 |- A17   
+    A12 -|  4     29 |- A14   
+    A7  -|  5     28 |- A13   
+    A6  -|  6     27 |- A8    
+    A5  -|  7     26 |- A9    
+    A4  -|  8     25 |- A11   
+    A3  -|  9     24 |- OE    
+    A2  -| 10     23 |- A10   
+    A1  -| 11     22 |- CE    
+    A0  -| 12     21 |- D7    
+    D0  -| 13     20 |- D6    
+    D1  -| 14     19 |- D5    
+    D2  -| 15     18 |- D4    
+    GND -| 16     17 |- D3    
+          -----------
+  
+  Jumper config (Rev 0.1 & 1.0):
+    JP1:  ●(● ●) (5V, A13 = A13)
+    JP2:  ●(● ●) (5V, A17 = A17)
+    JP3:  ●(● ●) (28pin, 32pin = 32pin)
+  
+  Jumper config (Rev 2.0 & 2.1):
+    JP4: (● ●)   (28pin, 32pin = Closed)
+  
+  Protocol: EPROM - 32-pin UV/EE, 13V VPP (ID: 0x08)
+    - High-voltage EPROM algorithm for 32-pin devices
+    - Uses ≥12 V VPP and EPROM-style timing
+    - Covers classic 27C010/020/040 and EPROM-like 28C oddballs (Linkage/PTC)
+  
+  Flags: 0x00000020
+    - Provides readable manufacturer/device ID
+  
+  '''
+# ---
+# name: test_info_mbm27c1000[test_info_mbm27c1000_stderr]
+  ''
+# ---
+# name: test_info_mbm27c4001
+  '''
+  Eprom Info          
+  Name:               MBM27C4001
+  Manufacturer:       FUJITSU
+  Number of pins:     32
+  Memory size         0x80000
+  Type:               UV-EPROM
+  Can be erased:      no (UV erase only)
+  VCC:                5.0v
+  Programming VCC:    6.0v
+  VPP:                12.5v
+  Chip ID:            0x4f4
+  Pulse delay:        100µS
+  
+  WARNING: Programming VCC decodes to 6.0 V; using 5.0 V.
+  
+         32-DIP package
+          -----v-----
+    VPP -|  1     32 |- VCC   
+    A16 -|  2     31 |- A18   
+    A15 -|  3     30 |- A17   
+    A12 -|  4     29 |- A14   
+    A7  -|  5     28 |- A13   
+    A6  -|  6     27 |- A8    
+    A5  -|  7     26 |- A9    
+    A4  -|  8     25 |- A11   
+    A3  -|  9     24 |- OE    
+    A2  -| 10     23 |- A10   
+    A1  -| 11     22 |- CE    
+    A0  -| 12     21 |- D7    
+    D0  -| 13     20 |- D6    
+    D1  -| 14     19 |- D5    
+    D2  -| 15     18 |- D4    
+    GND -| 16     17 |- D3    
+          -----------
+  
+  Jumper config (Rev 0.1 & 1.0):
+    JP1:  ●(● ●) (5V, A13 = A13)
+    JP2:  ●(● ●) (5V, A17 = A17)
+    JP3:  ●(● ●) (28pin, 32pin = 32pin)
+  
+  Jumper config (Rev 2.0 & 2.1):
+    JP4: (● ●)   (28pin, 32pin = Closed)
+  
+  Protocol: EPROM - 32-pin UV/EE, 13V VPP (ID: 0x08)
+    - High-voltage EPROM algorithm for 32-pin devices
+    - Uses ≥12 V VPP and EPROM-style timing
+    - Covers classic 27C010/020/040 and EPROM-like 28C oddballs (Linkage/PTC)
+  
+  Flags: 0x00000020
+    - Provides readable manufacturer/device ID
+  
+  '''
+# ---
+# name: test_info_mbm27c4001[test_info_mbm27c4001_stderr]
+  ''
+# ---
 # name: test_list
   '''
   +---------------------+------------------+------+------------+-------------+------+
@@ -754,17 +870,17 @@
   | NMC27C32B,NMC27C32BQ| FAIRCHILD        |   24 |            | UV-EPROM    | 13.0v|
   | MB85R256H           | FUJITSU          |   28 |            | EEPROM      | 12.0v|
   | MBM2716             | FUJITSU          |   24 |            | UV-EPROM    | 12.0v|
-  | MBM27128            | FUJITSU          |   28 |            | UV-EPROM    | 18.0v|
+  | MBM27128            | FUJITSU          |   28 |            | UV-EPROM    | 21.0v|
   | MBM27256            | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
   | MBM2732,MBM2732A,MB…| FUJITSU          |   24 |            | UV-EPROM    | 18.0v|
   | MBM2764             | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
   | MBM27C1000P,MBM27C1…| FUJITSU          |   32 | 0x04E5     | UV-EPROM    | 12.5v|
-  | MBM27C1001          | FUJITSU          |   32 | 0x04E5     | UV-EPROM    | 12.0v|
+  | MBM27C1001          | FUJITSU          |   32 | 0x04E5     | UV-EPROM    | 12.5v|
   | MBM27C128P          | FUJITSU          |   28 |            | UV-EPROM    | 18.0v|
   | MBM27C2000P,MBM27C2…| FUJITSU          |   32 | 0x040B     | UV-EPROM    | 12.5v|
   | MBM27C2001          | FUJITSU          |   32 |            | UV-EPROM    | 12.0v|
   | MBM27C256A          | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
-  | MBM27C4001          | FUJITSU          |   32 | 0x04F4     | UV-EPROM    | 12.0v|
+  | MBM27C4001          | FUJITSU          |   32 | 0x04F4     | UV-EPROM    | 12.5v|
   | MBM27C512           | FUJITSU          |   28 |            | UV-EPROM    | 12.0v|
   | MBM27C64            | FUJITSU          |   28 |            | UV-EPROM    | 18.0v|
   | MBM28F010           | FUJITSU          |   32 | 0x048F     | Flash/EEPROM| 12.0v|
@@ -998,7 +1114,7 @@
   | PT28C020            | PTC              |   32 |            | EEPROM      | 12.0v|
   | PT28C040            | PTC              |   32 |            | EEPROM      | 12.0v|
   | FM1208              | RAMTRON          |   24 |            | SRAM        | -    |
-  | FM1608              | RAMTRON          |   28 |            | FRAM        | -    |
+  | FM1608              | RAMTRON          |   28 |            | SRAM        | -    |
   | FM16W08             | RAMTRON          |   28 |            | SRAM        | -    |
   | FM1808,FM1808B,FM18…| RAMTRON          |   28 |            | SRAM        | -    |
   | FM18L08             | RAMTRON          |   28 |            | SRAM        | -    |
