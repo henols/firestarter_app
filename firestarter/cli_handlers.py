@@ -710,9 +710,13 @@ def write(
                             still runs on electrically-erasable chips
       --skip-erase          skip the pre-write erase as well
 
-    On protocols 0x0D and 0x05 the write path performs no pre-write blank
-    check at all, so -b is a no-op on those families and is not needed to
-    write a non-blank part. It remains effective on every other protocol.
+    Before the write reaches the port, the host -- not the firmware --
+    checks that the target region is blank. Four protocol families never
+    receive that check: 0x0D (28C parallel) and 0x05 (flash4) auto-erase
+    per page immediately before each write, and the SRAM and FRAM
+    families have no blank state to check at all. -b has nothing to skip
+    on those four families; on every protocol outside this list, it is
+    still the way to skip the check.
 
     --skip-sdp-unlock applies to protocol-0x0D chips, where the firmware
     unlocks software data protection during write init. On any other protocol
