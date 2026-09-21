@@ -32,6 +32,7 @@ from firestarter.config import ConfigManager
 from firestarter.constants import COMMAND_READ, COMMAND_WRITE, FLAG_SKIP_ERASE
 from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator
+from firestarter.exceptions import ProgrammerNotFoundError
 from firestarter.messages import (
     MSG_DATA_CHUNK,
     MSG_END_DONE,
@@ -50,7 +51,7 @@ from firestarter.write_blank_guard import (
     requires_blank_check,
 )
 
-from .conftest import build_frame
+from .conftest import _FakeSerial, build_frame
 
 # The Uno-floor default `_calculate_buffer_size()` returns when
 # `firmware_max_chunk` is unset (`make_comm`'s default) -- used here only to
@@ -247,10 +248,33 @@ def _write_phase_frames() -> list[bytes]:
     ]
 
 
+def _comm_factory_for(serial: _FakeSerial):
+    """Build a `SerialCommunicator` factory wired to one specific fake
+    serial port, mirroring `tests/conftest.py`'s `make_comm` fixture and
+    `tests/test_write_skip_sdp_unlock.py`'s `_fresh_serial_and_comm` shape."""
+    from firestarter.serial_comm import SerialCommunicator
+
+    def _factory():
+        instance = SerialCommunicator.__new__(SerialCommunicator)
+        instance.connection = serial
+        instance.port_name = "/dev/null"
+        instance.baud_rate = 250000
+        instance.timeout = 0.1
+        instance.programmer_info = None
+        instance._fault_inject_outgoing = None
+        instance.firmware_buffer_size = None
+        instance.firmware_max_chunk = None
+        instance.firmware_identity = None
+        instance.hw_revision = None
+        instance.write_block_budget_s = None
+        instance.seen_message_ids = set()
+        return instance
+
+    return _factory
+
+
 def _drive_write_eprom(
     tmp_path,
-    make_comm,
-    fake_serial,
     *,
     eprom_name: str,
     eprom_data: dict,
@@ -262,30 +286,37 @@ def _drive_write_eprom(
     """Drive the genuine `EpromOperator.write_eprom` through `_FakeSerial`.
 
     `frame_scripts` is a list of already-built frame sequences (from
-    `_read_phase_frames`/`_write_phase_frames`), fed onto the fake serial
-    port's SHARED buffer, in order, BEFORE the drive -- `feed()` and
-    `write()` share one `BytesIO` and one write position
-    (`tests/conftest.py`'s `_FakeSerial`), so a script fed mid-drive would
-    desync the stream. Each connection `write_eprom` opens (the guard's own
-    read, then the write itself, in that order when both happen) reads from
-    this one pre-loaded stream.
+    `_read_phase_frames`/`_write_phase_frames`) -- one entry per connection
+    `write_eprom` opens, in order (the guard's own read, then the write
+    itself, when both happen). Each entry gets its OWN fresh `_FakeSerial`
+    instance, mirroring D-17's reality that every operation opens (and, on
+    completion, closes) its own port. Sharing a single fake serial port
+    across two connections desyncs it: the first connection's
+    `_disconnect_programmer()` closes the shared fake port
+    (`_FakeSerial.close()` sets `is_open = False`), so a second connection
+    reusing it fails with "Not connected" -- the exact pitfall
+    `tests/test_write_skip_sdp_unlock.py::_fresh_serial_and_comm` documents.
 
     Returns `(ok, opened)`: `write_eprom`'s return value, and the list of
     `command_dict["cmd"]` values `find_and_connect` observed, in call
     order.
     """
-    input_file = tmp_path / f"wbg_{id(fake_serial)}_{len(payload)}.bin"
+    input_file = tmp_path / f"wbg_{id(frame_scripts)}_{len(payload)}.bin"
     input_file.write_bytes(payload)
 
+    factories = []
     for script in frame_scripts:
+        serial = _FakeSerial()
         for frame in script:
-            fake_serial.feed(frame)
+            serial.feed(frame)
+        factories.append(_comm_factory_for(serial))
+    pending = iter(factories)
 
     opened: list[int] = []
 
     def _fake_find_and_connect(command_dict, config, **kwargs):
         opened.append(command_dict["cmd"])
-        return make_comm()
+        return next(pending)()
 
     operator = EpromOperator(ConfigManager())
     with patch(
@@ -302,9 +333,7 @@ def _drive_write_eprom(
     return ok, opened
 
 
-def test_write_to_non_blank_region_of_guarded_part_is_refused(
-    tmp_path, make_comm, fake_serial, caplog
-) -> None:
+def test_write_to_non_blank_region_of_guarded_part_is_refused(tmp_path, caplog) -> None:
     """WRITE-01 criterion 1 / D-04 / D-10 / D-11, end to end: a write to a
     non-blank region of a guarded, non-erase-exempt M27C512 is refused by
     the host with exactly one output line naming the first non-blank
@@ -318,8 +347,6 @@ def test_write_to_non_blank_region_of_guarded_part_is_refused(
     with caplog.at_level("ERROR", logger="EpromOperator"):
         ok, opened = _drive_write_eprom(
             tmp_path,
-            make_comm,
-            fake_serial,
             eprom_name="m27c512",
             eprom_data=_m27c512_data(),
             payload=payload,
@@ -334,3 +361,140 @@ def test_write_to_non_blank_region_of_guarded_part_is_refused(
 
     error_lines = [rec.message for rec in caplog.records if rec.levelname == "ERROR"]
     assert error_lines == ["Refusing write to M27C512: not blank at 0x00000A, v: 0xAB."]
+
+
+# ---------------------------------------------------------------------------
+# Integration level: the positive controls (Task 2, WRITE-06 criterion 5)
+# ---------------------------------------------------------------------------
+
+
+def test_write_into_blank_region_of_guarded_part_succeeds(tmp_path) -> None:
+    """WRITE-06 criterion 5, end to end: a write into a genuinely blank
+    region of a guarded, non-erase-exempt M27C512 proceeds through the
+    genuine host path -- the command sequence observed at
+    `find_and_connect` is exactly [COMMAND_READ, COMMAND_WRITE], in that
+    order."""
+    payload = b"\xaa" * 64
+    region_payload = b"\xff" * 64  # blank across the whole target region
+
+    ok, opened = _drive_write_eprom(
+        tmp_path,
+        eprom_name="m27c512",
+        eprom_data=_m27c512_data(),
+        payload=payload,
+        frame_scripts=[_read_phase_frames(region_payload), _write_phase_frames()],
+    )
+
+    assert ok is True
+    assert opened == [COMMAND_READ, COMMAND_WRITE]
+
+
+def test_write_into_blank_region_of_non_blank_part_succeeds_via_host_path(
+    tmp_path,
+) -> None:
+    """D-04, end to end: the guard reads the write's REGION only, not the
+    whole device. A non-blank byte that sits outside the target region
+    (here, an explicit non-zero `address_str` so the guard's own read never
+    requests byte 0 at all) does not stop the write -- only what the guard
+    actually reads (the region itself, all 0xFF here) governs the
+    verdict."""
+    payload = b"\xaa" * 64
+    region_payload = b"\xff" * 64  # blank across the whole target region
+
+    ok, opened = _drive_write_eprom(
+        tmp_path,
+        eprom_name="m27c512",
+        eprom_data=_m27c512_data(),
+        payload=payload,
+        frame_scripts=[_read_phase_frames(region_payload), _write_phase_frames()],
+        address_str="0x008000",
+    )
+
+    assert ok is True
+    assert opened == [COMMAND_READ, COMMAND_WRITE]
+
+
+def test_write_on_erase_exempt_part_pays_no_guard_read(tmp_path) -> None:
+    """An erase-capable part (W27C512, algorithm 7, flags 2 == FLAG_CAN_ERASE)
+    is erase-exempt (`is_erase_exempt`) -- the guard is skipped entirely and
+    the captured sequence is exactly [COMMAND_WRITE], with no guard read
+    paid at all."""
+    payload = b"\xaa" * 64
+
+    ok, opened = _drive_write_eprom(
+        tmp_path,
+        eprom_name="w27c512",
+        eprom_data=_w27c512_data(),
+        payload=payload,
+        frame_scripts=[_write_phase_frames()],
+    )
+
+    assert ok is True
+    assert opened == [COMMAND_WRITE]
+
+
+def test_write_of_zero_byte_input_file_pays_no_guard_read(tmp_path) -> None:
+    """Backstop truth: a guarded write whose input file is zero bytes
+    performs no guard read and behaves exactly as it does today, because
+    `_drive_region_compare` returns 1 for a zero-length region and would
+    otherwise refuse every empty write. `region_length` is falsy (0), so
+    `last_write_guard_verdict` stays `None` and the captured sequence is
+    exactly [COMMAND_WRITE]."""
+    ok, opened = _drive_write_eprom(
+        tmp_path,
+        eprom_name="m27c512",
+        eprom_data=_m27c512_data(),
+        payload=b"",
+        frame_scripts=[_write_phase_frames()],
+    )
+
+    assert ok is True
+    assert opened == [COMMAND_WRITE]
+
+
+def test_write_returns_false_when_guard_read_cannot_connect(tmp_path) -> None:
+    """`_run_write_blank_guard` returns 2 (transport/setup failure) when its
+    own `_operation_context` cannot connect -- `write_eprom` still returns
+    `False` and never reaches `COMMAND_WRITE`. Covers the `if not cmd_data:
+    return 2` branch inside `_run_write_blank_guard`."""
+    payload = b"\xaa" * 64
+    input_file = tmp_path / "wbg_transport_fail.bin"
+    input_file.write_bytes(payload)
+
+    def _raise_not_found(command_dict, config, **kwargs):
+        raise ProgrammerNotFoundError("No compatible programmer found on any port.")
+
+    operator = EpromOperator(ConfigManager())
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=_raise_not_found,
+    ):
+        ok = operator.write_eprom(
+            "m27c512",
+            _m27c512_data(),
+            str(input_file),
+        )
+
+    assert ok is False
+    assert operator.last_write_guard_verdict == 2
+
+
+def test_write_with_skip_blank_check_flag_pays_no_guard_read(tmp_path) -> None:
+    """WRITE-03 / D-09: `FLAG_SKIP_BLANK_CHECK` bypasses the guard on an
+    otherwise-guarded, non-exempt M27C512 -- the captured sequence is
+    exactly [COMMAND_WRITE], no guard read paid."""
+    from firestarter.constants import FLAG_SKIP_BLANK_CHECK
+
+    payload = b"\xaa" * 64
+
+    ok, opened = _drive_write_eprom(
+        tmp_path,
+        eprom_name="m27c512",
+        eprom_data=_m27c512_data(),
+        payload=payload,
+        frame_scripts=[_write_phase_frames()],
+        operation_flags=FLAG_SKIP_BLANK_CHECK,
+    )
+
+    assert ok is True
+    assert opened == [COMMAND_WRITE]

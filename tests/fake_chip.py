@@ -263,6 +263,19 @@ class WriteInitPreflightChip(FakeChip):
 
     `write_flags_seen` records every `operation_flags` value this instance
     is handed, which is what the UV-03 legs assert on.
+
+    Phase 203 (WRITE-01/WRITE-06): this double models the FIRMWARE
+    write-init pre-flight only -- it is a duck-typed replacement for the
+    whole `EpromOperator.write_eprom` method, not a subclass of
+    `EpromOperator` (`FakeChip` itself does not subclass it), so every test
+    driving a chip through this double exercises zero lines of
+    `firestarter/`. The HOST-side pre-write blank guard added in Phase 203
+    has its own coverage in `tests/test_write_blank_guard.py`, which drives
+    the genuine `EpromOperator.write_eprom` through a fake serial port
+    instead. A test asserting a host-path property (e.g. "the write is
+    refused before any COMMAND_WRITE reaches the wire") against THIS double
+    would pass regardless of what the real guard does, because this class
+    never calls it.
     """
 
     def __init__(self, memory_size: int, *, uv: bool = False):
