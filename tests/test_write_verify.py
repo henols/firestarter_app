@@ -28,9 +28,13 @@ Two layers of coverage, following `test_write_blank_guard.py`'s split:
 from __future__ import annotations
 
 import inspect
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+
+import pytest
+from click.testing import CliRunner
 
 from firestarter.chip_resolver import resolve_chip
+from firestarter.cli_handlers import cli
 from firestarter.config import ConfigManager
 from firestarter.database import EpromDatabase
 from firestarter.eprom_operations import EpromOperator, build_flags
@@ -45,6 +49,7 @@ from firestarter.messages import (
 )
 
 from .conftest import _FakeSerial, build_frame
+from .conftest import make_app_context as _make_app_context
 from .test_write_blank_guard import _m27c512_data
 
 # ---------------------------------------------------------------------------
@@ -581,3 +586,323 @@ def test_suppress_verdict_line_is_keyword_only_and_defaults_false() -> None:
         assert param.kind is inspect.Parameter.KEYWORD_ONLY
     return_annotation = inspect.signature(EpromOperator.write_eprom).return_annotation
     assert return_annotation in (bool, "bool")
+
+
+# =============================================================================
+# Task 3 -- `write --verify` and `--full` at the CLI tier
+#
+# The seven-arm exit-code table (`exit_code_contract_resolved` in
+# 203-03-PLAN.md), driven against a `Mock(spec=EpromOperator)` with fixed
+# `write_eprom`/`verify_eprom` return values and fixed `last_write_guard_verdict`
+# / `last_write_attempt_verdict`, one test per arm -- the
+# `tests/test_cli_handlers.py` house style (see its `test_verify_*` legs).
+# =============================================================================
+
+
+@pytest.fixture
+def runner() -> CliRunner:
+    return CliRunner()
+
+
+def _app_with_operator(operator: Mock):
+    return _make_app_context(eprom_operator=operator)
+
+
+def _run_write(runner: CliRunner, operator: Mock, extra_args: list[str] | None = None):
+    app = _app_with_operator(operator)
+    args = ["write", "W27C512", "in.bin", *(extra_args or [])]
+    return runner.invoke(cli, args, obj=app)
+
+
+def test_write_verify_help_lists_verify_and_full(runner: CliRunner) -> None:
+    import re
+
+    result = runner.invoke(cli, ["write", "--help"])
+    assert result.exit_code == 0
+    assert "--verify" in result.output
+    assert "--full" in result.output
+    # D-13: all three exit codes and the "plain write is unchanged" clause
+    # must be stated. Click wraps and re-indents help text, so collapse all
+    # whitespace runs to a single space before substring-matching.
+    collapsed = re.sub(r"\s+", " ", result.output)
+    assert "0 the write landed" in collapsed
+    assert "1 the invocation ended" in collapsed
+    assert "2 the transport" in collapsed
+    assert "Without --verify, write exits 0" in collapsed
+
+
+def test_write_full_without_verify_is_a_usage_error(runner: CliRunner) -> None:
+    operator = Mock(spec=EpromOperator)
+    result = _run_write(runner, operator, extra_args=["--full"])
+    assert result.exit_code != 0
+    assert operator.write_eprom.call_count == 0
+
+
+def test_write_without_verify_never_calls_verify_eprom_regardless_of_verdicts(
+    runner: CliRunner,
+) -> None:
+    """Arm irrelevant to plain write: `write` without `--verify` never calls
+    `verify_eprom`, and exits 0/1 purely off `write_eprom`'s bool, regardless
+    of what either cause-channel attribute holds."""
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = False
+    operator.last_write_guard_verdict = 2
+    operator.last_write_attempt_verdict = 2
+    result = _run_write(runner, operator)
+    assert result.exit_code == 1
+    assert operator.verify_eprom.call_count == 0
+
+    operator2 = Mock(spec=EpromOperator)
+    operator2.write_eprom.return_value = True
+    operator2.last_write_guard_verdict = 2
+    operator2.last_write_attempt_verdict = 2
+    result2 = _run_write(runner, operator2)
+    assert result2.exit_code == 0
+    assert operator2.verify_eprom.call_count == 0
+
+
+def test_write_verify_arm1_guard_refusal_exits_1_and_prints_nothing_more(
+    runner: CliRunner,
+) -> None:
+    """Arm 1: guard verdict 1. The guard already printed its own one line
+    (via logger, not click.echo) -- write's own output must be empty, a
+    line-list equality against the empty list."""
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = False
+    operator.last_write_guard_verdict = 1
+    operator.last_write_attempt_verdict = None
+    result = _run_write(runner, operator, extra_args=["--verify"])
+    assert result.exit_code == 1
+    assert operator.verify_eprom.call_count == 0
+    lines = [line for line in result.output.splitlines() if line.strip()]
+    assert lines == []
+
+
+def test_write_verify_arm2_guard_read_transport_failure_exits_2_no_write_line(
+    runner: CliRunner,
+) -> None:
+    """Arm 2: guard verdict 2 -- the guard read itself failed for a
+    transport/hardware reason, the write never ran. Exit 2, the NO-WRITE
+    line (not could-not-verify: nothing landed)."""
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = False
+    operator.last_write_guard_verdict = 2
+    operator.last_write_attempt_verdict = None
+    result = _run_write(runner, operator, extra_args=["--verify"])
+    assert result.exit_code == 2
+    assert operator.verify_eprom.call_count == 0
+    from firestarter.cli_handlers import (
+        _WRITE_VERIFY_VERDICT_NO_WRITE,
+        _WRITE_VERIFY_VERDICT_UNREADABLE,
+    )
+
+    expected = _WRITE_VERIFY_VERDICT_NO_WRITE.format(eprom="W27C512")
+    assert expected in result.output
+    unreadable = _WRITE_VERIFY_VERDICT_UNREADABLE.format(eprom="W27C512")
+    assert unreadable not in result.output
+
+
+def test_write_verify_arm3_write_transport_failure_exits_2_no_write_line(
+    runner: CliRunner,
+) -> None:
+    """Arm 3: the write itself was attempted and failed for a transport,
+    connection, or hardware reason (`last_write_attempt_verdict == 2`,
+    `last_write_guard_verdict` is NOT 1 or 2 -- e.g. None, the guard was
+    skipped). This is the arm a plan review found missing; it must exit 2,
+    not 1, and print the same no-write line as arm 2."""
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = False
+    operator.last_write_guard_verdict = None
+    operator.last_write_attempt_verdict = 2
+    result = _run_write(runner, operator, extra_args=["--verify"])
+    assert result.exit_code == 2
+    assert operator.verify_eprom.call_count == 0
+    from firestarter.cli_handlers import _WRITE_VERIFY_VERDICT_NO_WRITE
+
+    expected = _WRITE_VERIFY_VERDICT_NO_WRITE.format(eprom="W27C512")
+    assert expected in result.output
+
+
+def test_write_verify_arm4_host_or_firmware_decided_failure_exits_1(
+    runner: CliRunner,
+) -> None:
+    """Arm 4: the write failed for a reason the host or the firmware
+    decided (`last_write_attempt_verdict == 1`). Exit 1, the no-write
+    line."""
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = False
+    operator.last_write_guard_verdict = None
+    operator.last_write_attempt_verdict = 1
+    result = _run_write(runner, operator, extra_args=["--verify"])
+    assert result.exit_code == 1
+    assert operator.verify_eprom.call_count == 0
+    from firestarter.cli_handlers import _WRITE_VERIFY_VERDICT_NO_WRITE
+
+    expected = _WRITE_VERIFY_VERDICT_NO_WRITE.format(eprom="W27C512")
+    assert expected in result.output
+
+
+def test_write_verify_arm5_readback_transport_failure_exits_2_unreadable_line(
+    runner: CliRunner,
+) -> None:
+    """Arm 5: the write landed (`write_eprom` returns True) but the
+    read-back itself failed for a transport/hardware reason
+    (`verify_eprom` returns 2). This is the ONLY arm that prints the
+    could-not-verify line."""
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = True
+    operator.verify_eprom.return_value = 2
+    result = _run_write(runner, operator, extra_args=["--verify"])
+    assert result.exit_code == 2
+    assert operator.verify_eprom.call_count == 1
+    from firestarter.cli_handlers import _WRITE_VERIFY_VERDICT_UNREADABLE
+
+    expected = _WRITE_VERIFY_VERDICT_UNREADABLE.format(eprom="W27C512")
+    assert expected in result.output
+
+
+def test_write_verify_arm6_readback_mismatch_exits_1_mismatch_line(
+    runner: CliRunner,
+) -> None:
+    """Arm 6: the write landed; the read-back completed and mismatched
+    (`verify_eprom` returns 1). Exit 1, the mismatch line."""
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = True
+    operator.verify_eprom.return_value = 1
+    result = _run_write(runner, operator, extra_args=["--verify"])
+    assert result.exit_code == 1
+    from firestarter.cli_handlers import _WRITE_VERIFY_VERDICT_MISMATCH
+
+    expected = _WRITE_VERIFY_VERDICT_MISMATCH.format(eprom="W27C512")
+    assert expected in result.output
+
+
+def test_write_verify_arm7_readback_match_exits_0_ok_line(
+    runner: CliRunner,
+) -> None:
+    """Arm 7: the write landed; the read-back matched (`verify_eprom`
+    returns 0). Exit 0, the verified line, no 'successful' anywhere."""
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = True
+    operator.verify_eprom.return_value = 0
+    result = _run_write(runner, operator, extra_args=["--verify"])
+    assert result.exit_code == 0
+    from firestarter.cli_handlers import _WRITE_VERIFY_VERDICT_OK
+
+    expected = _WRITE_VERIFY_VERDICT_OK.format(eprom="W27C512")
+    assert expected in result.output
+    assert "successful" not in result.output.lower()
+
+
+def test_write_verify_full_flag_passed_through_as_true(runner: CliRunner) -> None:
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = True
+    operator.verify_eprom.return_value = 0
+    _run_write(runner, operator, extra_args=["--verify", "--full"])
+    assert operator.verify_eprom.call_args.kwargs["full"] is True
+
+
+def test_write_verify_alone_passes_full_false(runner: CliRunner) -> None:
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = True
+    operator.verify_eprom.return_value = 0
+    _run_write(runner, operator, extra_args=["--verify"])
+    assert operator.verify_eprom.call_args.kwargs["full"] is False
+
+
+def test_write_verify_suppresses_write_eprom_verdict_line_only_when_set(
+    runner: CliRunner,
+) -> None:
+    """`write_eprom` is called with `suppress_verdict_line=verify` -- True
+    under `--verify`, False on the plain path."""
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = True
+    operator.verify_eprom.return_value = 0
+    _run_write(runner, operator, extra_args=["--verify"])
+    assert operator.write_eprom.call_args.kwargs["suppress_verdict_line"] is True
+
+    operator2 = Mock(spec=EpromOperator)
+    operator2.write_eprom.return_value = True
+    _run_write(runner, operator2)
+    assert operator2.write_eprom.call_args.kwargs["suppress_verdict_line"] is False
+
+
+def test_could_not_verify_line_absent_from_the_other_six_arms(
+    runner: CliRunner,
+) -> None:
+    """The could-not-verify line (arm 5's own) must never appear on any of
+    the other six arms."""
+    from firestarter.cli_handlers import _WRITE_VERIFY_VERDICT_UNREADABLE
+
+    unreadable = _WRITE_VERIFY_VERDICT_UNREADABLE.format(eprom="W27C512")
+
+    arms: list[tuple[Mock, list[str]]] = []
+
+    op1 = Mock(spec=EpromOperator)
+    op1.write_eprom.return_value = False
+    op1.last_write_guard_verdict = 1
+    op1.last_write_attempt_verdict = None
+    arms.append((op1, ["--verify"]))
+
+    op2 = Mock(spec=EpromOperator)
+    op2.write_eprom.return_value = False
+    op2.last_write_guard_verdict = 2
+    op2.last_write_attempt_verdict = None
+    arms.append((op2, ["--verify"]))
+
+    op3 = Mock(spec=EpromOperator)
+    op3.write_eprom.return_value = False
+    op3.last_write_guard_verdict = None
+    op3.last_write_attempt_verdict = 2
+    arms.append((op3, ["--verify"]))
+
+    op4 = Mock(spec=EpromOperator)
+    op4.write_eprom.return_value = False
+    op4.last_write_guard_verdict = None
+    op4.last_write_attempt_verdict = 1
+    arms.append((op4, ["--verify"]))
+
+    op6 = Mock(spec=EpromOperator)
+    op6.write_eprom.return_value = True
+    op6.verify_eprom.return_value = 1
+    arms.append((op6, ["--verify"]))
+
+    op7 = Mock(spec=EpromOperator)
+    op7.write_eprom.return_value = True
+    op7.verify_eprom.return_value = 0
+    arms.append((op7, ["--verify"]))
+
+    for operator, extra_args in arms:
+        result = _run_write(runner, operator, extra_args=extra_args)
+        assert unreadable not in result.output, (operator, result.output)
+
+
+def test_verdict_constants_never_contain_the_forbidden_word() -> None:
+    """WRITE-05's structural guarantee, asserted over the four constants
+    themselves -- not over one rendered run."""
+    from firestarter.cli_handlers import (
+        _WRITE_VERIFY_VERDICT_MISMATCH,
+        _WRITE_VERIFY_VERDICT_NO_WRITE,
+        _WRITE_VERIFY_VERDICT_OK,
+        _WRITE_VERIFY_VERDICT_UNREADABLE,
+    )
+
+    for constant in (
+        _WRITE_VERIFY_VERDICT_OK,
+        _WRITE_VERIFY_VERDICT_MISMATCH,
+        _WRITE_VERIFY_VERDICT_UNREADABLE,
+        _WRITE_VERIFY_VERDICT_NO_WRITE,
+    ):
+        assert "successful" not in constant.lower()
+
+
+def test_write_verify_calls_verify_eprom_with_size_str_none_and_force_flag(
+    runner: CliRunner,
+) -> None:
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = True
+    operator.verify_eprom.return_value = 0
+    _run_write(runner, operator, extra_args=["--verify", "-f"])
+    kwargs = operator.verify_eprom.call_args.kwargs
+    assert kwargs["size_str"] is None
+    assert kwargs["suppress_verdict_line"] is True

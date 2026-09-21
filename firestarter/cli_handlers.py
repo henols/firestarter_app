@@ -567,6 +567,36 @@ def read(
     sys.exit(0 if ok else 1)
 
 
+# Phase 203 (D-13/D-14, `exit_code_contract_resolved` in 203-03-PLAN.md): the
+# four terminal lines `write --verify` can print. Module-level, format-
+# constant style (mirrors `write_blank_guard._REFUSAL_FORMAT`), specifically
+# so a test can assert whole sentences AND assert the forbidden word's
+# absence over the constants themselves, not over one rendered run.
+#
+# The rule that makes the branch below readable: the LINE is chosen by what
+# happened to the chip, the EXIT CODE by why the invocation ended. That is
+# why the three no-write arms (a guard-read transport failure, a
+# transport/connection failure during the write itself, and a host- or
+# firmware-decided write failure) all share one line and differ only in
+# exit code -- and why the could-not-verify line is reserved for the single
+# arm where a write genuinely landed and only the read-back failed. No
+# fifth constant is minted for the exit-2-vs-exit-1 split among the
+# no-write arms: the underlying cause stays visible in the log
+# (`_run_state_machine` already emits its own communication-error or
+# programmer-error line), so nothing is asked of the operator that only the
+# exit code could answer.
+_WRITE_VERIFY_VERDICT_OK = "Write to {eprom}: verified -- the read-back matches."
+_WRITE_VERIFY_VERDICT_MISMATCH = (
+    "Write to {eprom}: landed, but the read-back did not verify."
+)
+_WRITE_VERIFY_VERDICT_UNREADABLE = (
+    "Write to {eprom}: landed, but could not be verified -- the read-back failed."
+)
+_WRITE_VERIFY_VERDICT_NO_WRITE = (
+    "Write to {eprom}: did not complete -- nothing was verified."
+)
+
+
 @cli.command(name="write")
 @click.argument("eprom", shell_complete=_complete_eprom)
 @click.argument("input_file")
@@ -630,6 +660,32 @@ def read(
     "actually enabled, the write will then fail. Has NO EFFECT on any other "
     "protocol — the host warns and proceeds.",
 )
+# Phase 203 (D-13, the phase's one-way door -- confirmed at 203-03-PLAN.md's
+# Task 1 checkpoint, see 203-03-SUMMARY.md's "Checkpoint Decision" section):
+# --verify changes THIS INVOCATION's exit-code contract; plain `write`
+# (without this flag) is completely unchanged.
+@click.option(
+    "--verify",
+    "verify",
+    is_flag=True,
+    help="After a successful write, read the written region back and compare it "
+    "through the same engine `verify` uses. Changes THIS INVOCATION's exit-code "
+    "contract: 0 the write landed and the read-back matched, 1 the invocation "
+    "ended for a reason the host or the firmware decided (a blank-guard "
+    "refusal, a firmware error during the write, a malformed address, or a "
+    "read-back that completed and disagreed), 2 the transport or the hardware "
+    "failed in ANY phase of the run -- the guard read, the write itself, or "
+    "the read-back. Without --verify, write exits 0 on success and 1 on any "
+    "failure, exactly as before.",
+)
+@click.option(
+    "--full",
+    "full",
+    is_flag=True,
+    help="With --verify, report every coalesced mismatching range in the "
+    "read-back comparison, not just the first. Has no meaning and is refused "
+    "without --verify.",
+)
 @click.pass_obj
 @map_typed_errors
 def write(
@@ -643,6 +699,8 @@ def write(
     vpe_as_vpp: bool,
     pulse_us: int | None,
     skip_sdp_unlock: bool,
+    verify: bool,
+    full: bool,
 ) -> None:
     """Writes a binary file to an EPROM.
 
@@ -668,7 +726,17 @@ def write(
     protocol 0x0B before any high voltage is enabled. Using the flag always
     reports both the database pulse and the override, so a log captured
     without its command line still records which pulse was used.
+
+    --verify changes THIS INVOCATION's exit-code contract to 0/1/2 (see
+    --verify's own --help text for the full three-way split); plain write,
+    without the flag, keeps its existing 0/1 contract unchanged.
     """
+    if full and not verify:
+        raise click.UsageError(
+            "--full has no meaning without --verify: there is no read-back "
+            "comparison for it to apply to."
+        )
+
     eprom_data = resolve_chip(eprom, db=app.db)
 
     # A SEPARATE, sibling `if` -- never an
@@ -806,8 +874,74 @@ def write(
         # value" -- see that function's docstring).
         pulse_us=pulse_us or 0,
         pin1_hazard_acknowledged=True,
+        # Phase 203 (D-14): suppress write_eprom's own verdict line exactly
+        # when --verify is set, so the plain path (verify=False) is
+        # untouched byte-for-byte and the --verify path prints exactly one
+        # combined line instead of two.
+        suppress_verdict_line=verify,
     )
-    sys.exit(0 if ok else 1)
+
+    if not verify:
+        # The plain, unchanged 0/1 contract. Neither verdict attribute is
+        # ever read on this path -- D-13's widened contract applies to the
+        # --verify invocation only.
+        sys.exit(0 if ok else 1)
+
+    if ok:
+        # Phase 203 (D-13/D-16): the write landed -- read the same region
+        # back through Phase 202's engine. size_str=None resolves the
+        # region to the input file's own length, which is exactly the
+        # region this write just touched -- D-16's region for free, without
+        # computing it a second time here.
+        verdict = app.eprom_operator.verify_eprom(
+            eprom,
+            eprom_data,
+            input_file,
+            address_str=address,
+            size_str=None,
+            operation_flags=_build_op_flags(force=force),
+            full=full,
+            suppress_verdict_line=True,
+        )
+        verdict_line = {
+            0: _WRITE_VERIFY_VERDICT_OK,
+            1: _WRITE_VERIFY_VERDICT_MISMATCH,
+            2: _WRITE_VERIFY_VERDICT_UNREADABLE,
+        }[verdict]
+        click.echo(verdict_line.format(eprom=eprom.upper()))
+        sys.exit(verdict)
+
+    # ok is False: the write itself never completed. Read both cause
+    # channels -- every phase of a --verify invocation has one, so no arm
+    # of this branch has to guess (exit_code_contract_resolved's seven-arm
+    # table, arms 1-4). The LINE is chosen by what happened to the chip;
+    # the EXIT CODE by why the invocation ended.
+    guard_verdict = app.eprom_operator.last_write_guard_verdict
+    attempt_verdict = app.eprom_operator.last_write_attempt_verdict
+    if guard_verdict == 1:
+        # Arm 1: the guard refused. It already printed its own one line
+        # (D-11) -- print nothing more, because D-11's one-line property
+        # outranks D-14's verdict line for a refusal that never became a
+        # write.
+        sys.exit(1)
+    if guard_verdict == 2:
+        # Arm 2: the guard read itself failed for a transport or hardware
+        # reason. The write never ran -- the no-write line, not
+        # could-not-verify: nothing landed, and a line that says otherwise
+        # is the class of claim WRITE-05 exists to prevent.
+        click.echo(_WRITE_VERIFY_VERDICT_NO_WRITE.format(eprom=eprom.upper()))
+        sys.exit(2)
+    if attempt_verdict == 2:
+        # Arm 3: the write was attempted and the transport or the hardware
+        # failed under it -- the arm a plan review found missing, and the
+        # likeliest transport failure of the three (the write is the
+        # longest, most hardware-stressed leg of the run).
+        click.echo(_WRITE_VERIFY_VERDICT_NO_WRITE.format(eprom=eprom.upper()))
+        sys.exit(2)
+    # Arm 4: the write failed for a reason the host or the firmware
+    # decided (attempt_verdict == 1, or -- defensively -- any other value).
+    click.echo(_WRITE_VERIFY_VERDICT_NO_WRITE.format(eprom=eprom.upper()))
+    sys.exit(1)
 
 
 def _region_refusal_exit_code(
