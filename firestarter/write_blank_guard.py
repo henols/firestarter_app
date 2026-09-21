@@ -40,11 +40,13 @@ from __future__ import annotations
 
 from typing import Any, Mapping  # noqa: UP035
 
+from firestarter.address_parser import parse_address
 from firestarter.constants import (
     FLAG_CAN_ERASE,
     FLAG_SKIP_BLANK_CHECK,
     FLAG_SKIP_ERASE,
 )
+from firestarter.exceptions import NegativeStartAddressError
 from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID
 from firestarter.sdp_capability import SDP_PROTOCOL_ID
 
@@ -209,3 +211,53 @@ def refusal_text(chip_name: str, address: int, value: int) -> str:
     return _REFUSAL_FORMAT.format(
         chip_name=chip_name.upper(), address=address, value=value
     )
+
+
+_NEGATIVE_ADDRESS_REFUSAL_FORMAT = (
+    "{chip_name}: refused -- the start address {address_str!r} is negative."
+)
+
+
+def require_non_negative_address(chip_name: str, address_str: str | None) -> None:
+    """The fail-closed, pre-connect guard against a signed write start
+    address (folded todo `2026-09-16-reject-negative-write-start-address.md`,
+    host half only).
+
+    Both this guard's own region and `--verify`'s region are derived from
+    the same `address_str` this write uses, and a negative start would make
+    the host compute a region it never actually wrote or read: the
+    firmware's own JSON parser (`simple_strtoul`) consumes only `[0-9]`, so a
+    leading `-` makes the parse loop never run and the wire address silently
+    becomes 0 -- turning a latent wrong-destination defect into a
+    wrong-evidence one, because the host would then compare bytes it read
+    from `[0, ...)` against a region it labels `[address_str, ...)`. Lives in
+    this module, rather than `page_size_gate.py`, precisely because that
+    module's `require_page_alignment` early-returns for every non-0x05 part
+    (`page_size_gate.py:155-158`) and would miss every family this guard
+    protects.
+
+    Raises `NegativeStartAddressError` for a start address that parses as
+    negative -- decimal or hex, `-256` and `-0x100` alike. Returns `None`
+    for a `None` address, a non-negative address, and -- deliberately -- an
+    address that fails to parse at all: a malformed address stays the
+    existing handlers' job (`EpromOperator._setup_operation`'s own
+    `parse_address`/`ValueError` handling, `page_size_gate`'s own parse
+    handler), and this gate must not change that established error
+    contract.
+
+    Unlike `refusal_text` above, this refusal MAY carry a cause clause: it
+    is an input-validation refusal, not a safety refusal an operator could
+    route around by omitting evidence, so D-10's no-remedy rule does not
+    apply here. The two refusal styles living in one module are a deliberate
+    difference in kind, not an inconsistency.
+    """
+    try:
+        address = parse_address(address_str)
+    except ValueError:
+        return
+    if address is not None and address < 0:
+        raise NegativeStartAddressError(
+            _NEGATIVE_ADDRESS_REFUSAL_FORMAT.format(
+                chip_name=chip_name.upper(), address_str=address_str
+            )
+        )

@@ -115,6 +115,24 @@ class PageAlignmentError(EpromOperationError):
     pass
 
 
+class NegativeStartAddressError(EpromOperationError):
+    """Raised when a write's start address parses as negative.
+
+    Fired by write_blank_guard.require_non_negative_address, on every write
+    family -- guarded or not -- before any wire dict reaches the transport
+    and before any serial byte is emitted. Both the blank-guard's own region
+    and --verify's region are derived from this same address, so a signed
+    start would make the host compute a region it never actually wrote or
+    read. A negative start is never treated as 0: that clamp is exactly what
+    the firmware's own JSON parser does today (`simple_strtoul` consumes only
+    `[0-9]`, so a leading `-` makes the address silently become 0), and it is
+    the defect this refusal exists to catch on the host side instead of
+    silently reproducing it.
+    """
+
+    pass
+
+
 class HardwareOperationError(Exception):
     """Custom exception for hardware operation failures."""
 

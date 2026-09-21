@@ -29,6 +29,7 @@ from firestarter import (
     page_size_gate,
     sdp_honesty,  # unreadable_state_caveat(), called not re-authored
     transport_counters,
+    write_blank_guard,
 )
 from firestarter.address_parser import parse_address, parse_size
 from firestarter.channel import (
@@ -78,6 +79,7 @@ from firestarter.exceptions import (
     FirmwareOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
+    NegativeStartAddressError,
     PageAlignmentError,
     PageSizeUnavailableError,
     Pin1HazardRefusedError,
@@ -222,6 +224,12 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
         except PageSizeUnavailableError as e:
             raise click.ClickException(str(e)) from e
         except PageAlignmentError as e:
+            raise click.ClickException(str(e)) from e
+        except NegativeStartAddressError as e:
+            # Rendered verbatim, above the generic EpromOperationError arm
+            # below -- that arm prefixes "Programmer error: ", which would
+            # make this host-voiced refusal (write_blank_guard.py) read as a
+            # hardware fault instead of an input-validation refusal.
             raise click.ClickException(str(e)) from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
@@ -771,6 +779,15 @@ def write(
     page_size_gate.require_page_alignment(
         eprom, eprom_data, "write", address, input_file
     )
+    # Folded todo `2026-09-16-reject-negative-write-start-address.md`, host
+    # half: mirrors the two page_size_gate calls above -- called here, at
+    # the CLI tier, so a negative `-a` on `write` refuses before
+    # `app.eprom_operator.write_eprom` is ever invoked, on every write
+    # family (guarded or not). `write_eprom` also calls this gate itself
+    # (write_blank_guard.require_non_negative_address's own call site),
+    # which is what protects `dev test` and `dev write-cycle` -- callers
+    # that never go through this CLI handler at all.
+    write_blank_guard.require_non_negative_address(eprom, address)
 
     ok = app.eprom_operator.write_eprom(
         eprom,

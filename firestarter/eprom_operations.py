@@ -78,7 +78,11 @@ from firestarter.serial_comm import (
     SerialCommunicator,
 )
 from firestarter.utils import extract_hex_to_decimal
-from firestarter.write_blank_guard import refusal_text, requires_blank_check
+from firestarter.write_blank_guard import (
+    refusal_text,
+    require_non_negative_address,
+    requires_blank_check,
+)
 
 logger = logging.getLogger("EpromOperator")
 
@@ -2213,6 +2217,13 @@ class EpromOperator:
         require_page_alignment(
             eprom_name, eprom_data_dict, "write", address_str, input_file_path
         )
+        # Folded todo `2026-09-16-reject-negative-write-start-address.md`,
+        # host half: refuse a signed start address before it can reach
+        # either this write's own region arithmetic or the guard's, on
+        # every write family -- guarded or not. Placed after the other pure
+        # pre-connect gates and before the `os.path.getsize` block below, so
+        # it fires ahead of both the region length and the guard.
+        require_non_negative_address(eprom_name, address_str)
 
         # BLANK-01 / D-05: guarded so a missing file keeps surfacing exactly
         # where it does today (_main_phase_send_data, after connecting, for
