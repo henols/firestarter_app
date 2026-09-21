@@ -78,7 +78,17 @@ named exemption. `0x05` (flash4) auto-erases per page, and its
 `FLAG_CAN_ERASE` is deliberately CLEARED for a hardware-safety reason
 (`database.py:575-580`: setting it would route a 12V bulk erase onto a
 5V-only part), so it can never be read as a blank-state signal -- it must be
-named here instead. `0x0D` (28C parallel / SDP) also auto-erases per page.
+named here instead.
+
+`0x0D` (28C parallel / SDP, `SDP_PROTOCOL_ID`) also auto-erases per page
+(`eeprom_28c.cpp:379-384`) and never blank-checks at write-init. It carries
+84 shipped rows across 15 vendors -- the single largest exemption by row
+count, larger than every guarded protocol's own row count. D-01's prose
+names only SRAM/FRAM and flash4 by name; its own firmware table lists this
+family as unguarded too, and the row count is exactly why it is named here
+explicitly rather than left to be inferred from the table -- an omission
+this large reads as an oversight unless it is spelled out.
+
 Membership here is documentation only: `is_guarded_protocol` below decides
 guarded-ness from `GUARDED_PROTOCOL_IDS` alone, never from this set."""
 
