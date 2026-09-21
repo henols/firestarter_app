@@ -24,6 +24,7 @@ Two layers of coverage:
 
 from __future__ import annotations
 
+import ast
 from unittest.mock import patch
 
 from firestarter.chip_resolver import resolve_chip
@@ -498,3 +499,144 @@ def test_write_with_skip_blank_check_flag_pays_no_guard_read(tmp_path) -> None:
 
     assert ok is True
     assert opened == [COMMAND_WRITE]
+
+
+# ---------------------------------------------------------------------------
+# Regression: the slice moved nothing else (Task 3)
+# ---------------------------------------------------------------------------
+
+
+def _call_sites_for(func, target_name: str) -> list[ast.Call]:
+    """Every `ast.Call` node inside `func`'s body whose callee attribute
+    name is `target_name` -- e.g. every `self._drive_region_compare(...)`
+    call inside `verify_eprom`."""
+    import inspect
+    import textwrap
+
+    source = textwrap.dedent(inspect.getsource(func))
+    tree = ast.parse(source)
+    calls = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            callee = node.func
+            name = (
+                callee.attr
+                if isinstance(callee, ast.Attribute)
+                else callee.id
+                if isinstance(callee, ast.Name)
+                else None
+            )
+            if name == target_name:
+                calls.append(node)
+    return calls
+
+
+def test_verify_and_blank_never_pass_on_result() -> None:
+    """`verify_eprom` and `check_eprom_blank` must take the default
+    `on_result=None` path -- neither call site passes the `on_result`
+    keyword to `_drive_region_compare`. An AST walk proves this at the
+    source level rather than relying on behaviour alone."""
+    for func in (EpromOperator.verify_eprom, EpromOperator.check_eprom_blank):
+        calls = _call_sites_for(func, "_drive_region_compare")
+        assert calls, f"{func.__name__} no longer calls _drive_region_compare"
+        for call in calls:
+            keyword_names = {kw.arg for kw in call.keywords}
+            assert "on_result" not in keyword_names, (
+                f"{func.__name__} passes on_result to _drive_region_compare"
+            )
+
+
+def test_blank_run_on_non_blank_chip_still_emits_mismatch_line(
+    make_comm, fake_serial, caplog
+) -> None:
+    """Pairs with the structural AST test above: the default `on_result=None`
+    path is not just structurally present but behaviourally exercised --
+    `check_eprom_blank` on a non-blank fake still renders its `Mismatch`
+    range line through `render_compare_lines`, exactly as before this
+    plan's `on_result` parameter existed."""
+    payload = bytearray(b"\xff" * 8)
+    payload[3] = 0x00
+    payload = bytes(payload)
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        return make_comm()
+
+    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+    fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+    operator = EpromOperator(ConfigManager())
+    with (
+        caplog.at_level("INFO", logger="EpromOperator"),
+        patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ),
+    ):
+        verdict = operator.check_eprom_blank(
+            "W27C512", {"memory-size": 8, "flags": 0, "cmd": 1}
+        )
+
+    assert verdict == 1
+    messages = [rec.message for rec in caplog.records]
+    assert any("Mismatch 0x000003-0x000003 (1 bytes)" in m for m in messages)
+
+
+def test_predicate_module_reads_only_algorithm_and_flags_keys_ast() -> None:
+    """The stronger, structural form of the earlier behavioural test above:
+    parse `write_blank_guard.py`'s own source and collect every string
+    constant used as a `dict.get(...)` first argument or as a subscript
+    slice inside its function bodies. The collected set must be a subset of
+    `{"algorithm", "flags"}` -- an AST walk ignores comments, so the module
+    is free to NAME the keys it deliberately does not read (which is the
+    whole point of the comment at the bottom of the module) without that
+    prose tripping this test. This is the test that would have caught
+    `check_eprom_blank`'s inert `electrical-type`/`protocol-id` SRAM
+    short-circuit had it been a new predicate instead of pre-existing code.
+    """
+    import inspect
+
+    import firestarter.write_blank_guard as wbg
+
+    source = inspect.getsource(wbg)
+    tree = ast.parse(source)
+    read_keys: set[str] = set()
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef):
+            for inner in ast.walk(node):
+                if (
+                    isinstance(inner, ast.Call)
+                    and isinstance(inner.func, ast.Attribute)
+                    and inner.func.attr == "get"
+                    and inner.args
+                    and isinstance(inner.args[0], ast.Constant)
+                    and isinstance(inner.args[0].value, str)
+                ):
+                    read_keys.add(inner.args[0].value)
+                if isinstance(inner, ast.Subscript):
+                    slice_node = inner.slice
+                    if isinstance(slice_node, ast.Constant) and isinstance(
+                        slice_node.value, str
+                    ):
+                        read_keys.add(slice_node.value)
+
+    assert read_keys, "AST walk found no dict-key reads -- test authoring error"
+    assert read_keys <= {"algorithm", "flags"}, read_keys
+
+
+def test_predicate_fires_against_real_resolve_chip_dicts() -> None:
+    """A predicate whose unit tests pass against hand-built literals while a
+    real wire dict never reaches it is the exact failure this guards
+    against. Drive `is_guarded_protocol` and `requires_blank_check` with a
+    dict from the REAL `resolve_chip` for one guarded part (M27C512) and one
+    unguarded part (AT28C256, algorithm 13 / D-01 Fork A)."""
+    guarded = _m27c512_data()
+    unguarded = _at28c256_data()
+
+    assert is_guarded_protocol(guarded) is True
+    assert requires_blank_check(guarded, 0) is True
+
+    assert is_guarded_protocol(unguarded) is False
+    assert requires_blank_check(unguarded, 0) is False
