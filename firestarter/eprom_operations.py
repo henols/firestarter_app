@@ -27,6 +27,7 @@ from firestarter.address_parser import parse_address, parse_size
 from firestarter.compare import (
     MAX_RETAINED_RANGES,
     CompareAccumulator,
+    CompareResult,
     render_compare_lines,
 )
 from firestarter.config import ConfigManager
@@ -77,6 +78,7 @@ from firestarter.serial_comm import (
     SerialCommunicator,
 )
 from firestarter.utils import extract_hex_to_decimal
+from firestarter.write_blank_guard import refusal_text, requires_blank_check
 
 logger = logging.getLogger("EpromOperator")
 
@@ -444,6 +446,13 @@ class EpromOperator:
         # host device path and it has no firmware message id to report.
         self.last_firmware_error_code: int | None = None
         self.last_firmware_error_message: str | None = None
+        # WRITE-01 (Phase 203): the pre-write blank guard's own verdict --
+        # 0 blank/proceeded, 1 not blank/refused, 2 transport or setup
+        # failure, None when the guard was skipped entirely (no region,
+        # `FLAG_SKIP_BLANK_CHECK`, erase-exempt, or an unguarded protocol).
+        # Set by `write_eprom` on every call, so a stale value from an
+        # earlier write can never leak into a later one's reporting.
+        self.last_write_guard_verdict: int | None = None
         # 202-04 D-06/D-08: set by `_main_phase_read_data` the moment an
         # `abort_predicate` fires -- a monotonic timestamp, not a wall clock,
         # so the bounded acceptance window below is immune to a system clock
@@ -2077,6 +2086,88 @@ class EpromOperator:
         finally:
             self._disconnect_programmer()
 
+    def _run_write_blank_guard(
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        operation_flags: int,
+        address_str: str | None,
+        region_length: int,
+    ) -> int:
+        """WRITE-01 (Phase 203): the pre-write blank-guard read, called from
+        `write_eprom` between its pure pre-connect gates and its own
+        `_operation_context` (D-08). Region-scoped on every guarded family
+        (D-04): `address` .. `address + region_length`, computed by the
+        caller from the same `region_length` the write itself uses --
+        deliberately diverging from `flash_nor_unlock.cpp` /
+        `flash_intel.cpp`, which blank-check the whole device today.
+
+        Opens its OWN `_operation_context` with COMMAND_READ, the same
+        `operation_flags` (so `--force` still forces past the read's own
+        chip-ID check) and `str(region_length)` as the size -- mirroring
+        `verify_eprom`'s call shape, because `_drive_region_compare` reads
+        `cmd_data["memory-size"]` as the read's end address and
+        `_setup_operation` only narrows it for a `COMMAND_READ` with a size.
+
+        Fork D: the guard read shows no progress bar. It is not an
+        operation the operator asked for, and a bar that stops part-way and
+        is then followed by a refusal reads as a failure of the read rather
+        than a refusal of the write -- `--verify`'s own read (which the
+        operator DID ask for) keeps its bar. Suppressed with the
+        `consistency_check_eprom` precedent: swap `progress_callback` to a
+        truthy no-op, restore it in a `finally`.
+
+        Returns 0 (blank, proceed), 1 (not blank, refused -- and logs the
+        one-line D-10 refusal at `logger.error`), or 2 (transport or setup
+        failure, including a falsy `cmd_data`).
+        """
+        prior_callback = self.progress_callback
+        self.progress_callback = lambda *a, **kw: None
+        try:
+            with self._operation_context(
+                eprom_name,
+                eprom_data_dict,
+                COMMAND_READ,
+                operation_flags,
+                address_str,
+                str(region_length),
+            ) as (cmd_data, _, op_name):
+                if not cmd_data:
+                    return 2
+
+                region_start = cmd_data.get("address", 0)
+                captured: list[CompareResult] = []
+
+                def _on_result(result: CompareResult, _captured=captured) -> None:
+                    _captured.append(result)
+
+                verdict = self._drive_region_compare(
+                    cmd_data,
+                    op_name,
+                    _blank_expected_bytes,
+                    full=False,
+                    region_length=region_length,
+                    on_result=_on_result,
+                )
+
+                if verdict == 1 and captured:
+                    result = captured[0]
+                    first_offset = (
+                        result.first_offset if result.first_offset is not None else 0
+                    )
+                    first_actual = (
+                        result.first_actual if result.first_actual is not None else 0
+                    )
+                    logger.error(
+                        refusal_text(
+                            eprom_name, region_start + first_offset, first_actual
+                        )
+                    )
+
+                return verdict
+        finally:
+            self.progress_callback = prior_callback
+
     def write_eprom(
         self,
         eprom_name: str,
@@ -2132,6 +2223,40 @@ class EpromOperator:
             region_length = os.path.getsize(input_file_path)
         except OSError:
             region_length = None
+
+        # WRITE-01 / D-04 / D-07 / D-08 / D-11 (Phase 203): the host
+        # pre-write blank guard, region-scoped on every guarded family
+        # (D-04) -- deliberately diverging from `flash_nor_unlock.cpp` /
+        # `flash_intel.cpp`, which blank-check the whole device today. Runs
+        # here: after every pure pre-connect gate above (D-08), so a part
+        # refused on a pure ground is never read first, and before this
+        # write's own `_operation_context`, so it is a serial operation in
+        # its own right rather than one that could join the pure gates.
+        # Skipped (verdict recorded as `None`) when `region_length` is
+        # `None` or 0 -- a missing input file (`OSError` above) keeps
+        # surfacing exactly where it does today, at `_main_phase_send_data`
+        # once connected, and an empty input file is not refused by a
+        # zero-length compare (`_drive_region_compare` returns 1 for a
+        # zero-length region, which would otherwise refuse every empty
+        # write). The `return False` below sits BEFORE the `with` block --
+        # this write's own "Write to X failed." line never runs, so the
+        # guard's refusal is the only output (D-11, satisfied structurally
+        # rather than by wording).
+        if not region_length:
+            self.last_write_guard_verdict = None
+        elif not requires_blank_check(eprom_data_dict, operation_flags):
+            self.last_write_guard_verdict = None
+        else:
+            guard_verdict = self._run_write_blank_guard(
+                eprom_name,
+                eprom_data_dict,
+                operation_flags,
+                address_str,
+                region_length,
+            )
+            self.last_write_guard_verdict = guard_verdict
+            if guard_verdict != 0:
+                return False
 
         with self._operation_context(
             eprom_name,
@@ -2235,6 +2360,7 @@ class EpromOperator:
         *,
         full: bool,
         region_length: int | None,
+        on_result: Callable[[CompareResult], None] | None = None,
     ) -> int:
         """The one host-side compare drive `verify_eprom` and
         `check_eprom_blank` share (202-05 D-02): both callers open a
@@ -2251,6 +2377,19 @@ class EpromOperator:
         line -- `verify_eprom` and `check_eprom_blank` each already have
         their own elapsed-time wording, and duplicating it here would be a
         second place that wording could drift.
+
+        `on_result` (Phase 203, WRITE-01): keyword-only, default `None`.
+        When `None`, behaviour is byte-identical to before this parameter
+        existed -- the finalised `CompareResult` is rendered via
+        `render_compare_lines` exactly as today. When supplied, it is
+        called with the finalised `CompareResult` INSTEAD of rendering --
+        the caller has taken responsibility for its own output. This is
+        what the write guard (`_run_write_blank_guard`) uses: the guard
+        aborts at the first non-blank byte, so a rendered range would
+        always be one byte and the bucket would be classified from a
+        one-byte sample, exactly the confident-verdict-from-a-short-prefix
+        trap Phase 202's D-09 already named (D-11). `verify_eprom` and
+        `check_eprom_blank` pass nothing and stay byte-identical.
         """
         region_start = cmd_data.get("address", 0)
         max_ranges = MAX_RETAINED_RANGES if full else 1
@@ -2317,8 +2456,11 @@ class EpromOperator:
         result = accumulator.finalise(aborted=aborted)
         if region_length is not None:
             result.total = region_length
-        for line in render_compare_lines(result):
-            logger.info(line)
+        if on_result is not None:
+            on_result(result)
+        else:
+            for line in render_compare_lines(result):
+                logger.info(line)
 
         # Standing prohibition this plan carries: a compare that did not
         # cover the whole declared region is never reported as a match.

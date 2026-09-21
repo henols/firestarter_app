@@ -149,6 +149,15 @@ class CompareResult:
     `addr_base` -- `None` when `bad == 0`. Matches the batch
     `classify_fingerprint`'s `evidence["first_offset"]` exactly (202-03)."""
 
+    first_actual: int | None = None
+    """The actual byte value read at `first_offset` -- `None` when
+    `bad == 0`. WRITE-01 / D-10 (Phase 203): the host-side pre-write blank
+    guard refuses with a message naming the first non-blank address AND the
+    value read there, and this is the only place on the compare path that
+    value exists. Never surfaced by `render_compare_lines` -- Phase 202's
+    D-13 ("no expected or actual byte values are printed") governs *compare*
+    output, and a blank-guard refusal is not a compare report."""
+
     bit_set_counts: dict[int, int] = field(default_factory=dict)
     """Per absolute-address bit index, the running count of mismatching
     bytes whose address has that bit set. Populated online for every
@@ -192,6 +201,7 @@ class CompareAccumulator:
         self._bad = 0
         self._ff_count = 0
         self._first_offset: int | None = None
+        self._first_actual: int | None = None
         self._set_count: dict[int, int] = {}
         self._ranges: list[MismatchRange] = []
         self._open_range: MismatchRange | None = None
@@ -245,6 +255,7 @@ class CompareAccumulator:
 
         if self._first_offset is None:
             self._first_offset = address + offs[0] - self._addr_base
+            self._first_actual = actual[offs[0]]
         self._bad += len(offs)
 
         # Per-bit clustering evidence for 202-03's classify_streamed. The
@@ -322,6 +333,7 @@ class CompareAccumulator:
             aborted=aborted,
             ff_count=self._ff_count,
             first_offset=self._first_offset,
+            first_actual=self._first_actual,
             bit_set_counts=dict(self._set_count),
         )
         result.fingerprint = classify_streamed(
