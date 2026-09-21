@@ -456,7 +456,34 @@ class EpromOperator:
         # `FLAG_SKIP_BLANK_CHECK`, erase-exempt, or an unguarded protocol).
         # Set by `write_eprom` on every call, so a stale value from an
         # earlier write can never leak into a later one's reporting.
+        # Transient per-invocation operator state, in the same family as
+        # `last_firmware_error_code` above -- the CLI tier MUST read this
+        # immediately after the `write_eprom` call returns (WRITE-04/
+        # WRITE-05, `cli_handlers.write`'s `--verify` exit-code branch),
+        # because it is what lets `write_eprom` keep returning a plain
+        # `bool` instead of forcing a bool-to-int migration across the
+        # roughly forty bool-valued test sites and `chip_test.py`'s
+        # documented PRECONDITION contract.
         self.last_write_guard_verdict: int | None = None
+        # WRITE-04/WRITE-05 (Phase 203): the write phase's OWN cause channel,
+        # sibling of `last_write_guard_verdict` above -- the guard read has
+        # its cause channel, the read-back returns its cause as an int
+        # (`verify_eprom`), and this is the write phase's. States: `0` the
+        # write completed on the wire, `1` the write failed for a reason the
+        # host or the firmware decided (a firmware ERROR frame, or a
+        # malformed `-a` that never reached the wire), `2` the write failed
+        # for a transport, connection, or setup reason, `None` when the
+        # write phase was never attempted at all -- a pure gate raised, a
+        # guard refusal, or a guard-read failure. Reset to `None` at the very
+        # top of `write_eprom`, before any gate can raise, so a prior
+        # invocation's verdict can never leak into this one. The CLI tier
+        # reads this immediately after the `write_eprom` call, in the same
+        # breath as `last_write_guard_verdict` -- together the pair is what
+        # lets `write_eprom` keep its `-> bool` return type instead of
+        # forcing a bool-to-int migration across the roughly forty
+        # bool-valued test sites and `chip_test.py`'s documented
+        # PRECONDITION contract.
+        self.last_write_attempt_verdict: int | None = None
         # 202-04 D-06/D-08: set by `_main_phase_read_data` the moment an
         # `abort_predicate` fires -- a monotonic timestamp, not a wall clock,
         # so the bounded acceptance window below is immune to a system clock
@@ -2181,7 +2208,30 @@ class EpromOperator:
         address_str: str | None = None,
         pulse_us: int = 0,  # per-run pulse-width override (us; 0=not supplied, use the database value)
         pin1_hazard_acknowledged: bool = False,
+        *,
+        suppress_verdict_line: bool = False,
     ) -> bool:
+        """Write `input_file_path` to `eprom_name`, running the WRITE-01
+        pre-write blank guard first on every guarded family.
+
+        `suppress_verdict_line` (Phase 203, WRITE-05): keyword-only,
+        default `False`. When `True`, skip this method's own trailing
+        `Write to X successful (t).` / `Write to X failed.` log line
+        entirely -- both branches, not just a reworded one. The default
+        leaves every existing caller byte-identical. This exists so
+        `write --verify` can print ONE combined verdict line for the whole
+        invocation instead of this method's line followed by a second one
+        from the read-back -- and so the word D-14 forbids from a
+        `--verify` run is absent from this path *structurally*: because the
+        line is never emitted here at all, a later edit to one of the
+        CLI's own verdict lines cannot reintroduce it by drifting this
+        one's wording back in.
+        """
+        # WRITE-04/WRITE-05 (Phase 203): reset the write phase's own cause
+        # channel BEFORE any gate below can raise -- a gate that raises
+        # leaves this call's verdict at `None` ("never attempted"), and a
+        # prior invocation's verdict can never leak into this one.
+        self.last_write_attempt_verdict = None
         # per-run pulse override, riding the existing
         # "pulse-delay" DB-dict key rather than adding a new wire field or
         # command. Four recorded points:
@@ -2278,6 +2328,26 @@ class EpromOperator:
             region_length=region_length,
         ) as (cmd_data, buf_size, op_name):
             if not cmd_data:
+                # WRITE-04/WRITE-05: classify the cause before returning.
+                # `_setup_operation`'s `(None, 0)` return is reachable here,
+                # for COMMAND_WRITE, exactly two ways (pinned by
+                # test_setup_operation_has_exactly_three_none_zero_returns,
+                # tests/test_write_verify.py): `parse_address(address_str)`
+                # raising ValueError (reachable only when `address_str` is
+                # truthy -- the operator's own input was the cause), or
+                # `find_and_connect` failing (a transport or setup cause).
+                # The `parse_size` arm is gated on `cmd == COMMAND_READ` and
+                # is not reachable here at all. Re-parse purely to read the
+                # cause -- `_setup_operation` itself is not touched, its log
+                # line is not duplicated, and its return value and ordering
+                # are unchanged.
+                address_parse_failed = False
+                if address_str:
+                    try:
+                        parse_address(address_str)
+                    except ValueError:
+                        address_parse_failed = True
+                self.last_write_attempt_verdict = 1 if address_parse_failed else 2
                 return False
 
             logger.info(f"Writing {input_file_path} to {eprom_name.upper()}")
@@ -2299,6 +2369,26 @@ class EpromOperator:
                 eprom_data_dict=cmd_data,  # FIX-01b: boot-block hint context
                 response_timeout=self._write_block_timeout(),
             )
+
+            # WRITE-04/WRITE-05 (Phase 203): record the write phase's own
+            # cause HERE -- before the --skip-sdp-unlock ack block below,
+            # which flips `is_ok` to `False` AFTER a run that already
+            # succeeded on the wire. Recording first means that ack failure
+            # surfaces as exit 1 (host-decided), not exit 2: nothing on the
+            # wire actually failed, so calling it a transport failure would
+            # be wrong. `_run_state_machine` clears `last_firmware_error_code`
+            # on entry and sets it ONLY on its `EpromOperationError` arm (a
+            # real firmware ERROR frame); its `(SerialError,
+            # SerialTimeoutError)` arm deliberately leaves it `None` --
+            # `__init__`'s own comment on that field states this scoping,
+            # and this reads that existing, already-narrow contract rather
+            # than inventing or widening one.
+            if is_ok:
+                self.last_write_attempt_verdict = 0
+            else:
+                self.last_write_attempt_verdict = (
+                    2 if self.last_firmware_error_code is None else 1
+                )
 
             # When --skip-sdp-unlock was set,
             # require firmware's MSG_WARN_SDP_UNLOCK_SKIPPED (0x86) ack that it
@@ -2355,12 +2445,13 @@ class EpromOperator:
                     )
                     is_ok = False
 
-            if is_ok:
-                logger.info(
-                    f"Write to {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
-                )
-            else:
-                logger.error(f"Write to {eprom_name.upper()} failed.")
+            if not suppress_verdict_line:
+                if is_ok:
+                    logger.info(
+                        f"Write to {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
+                    )
+                else:
+                    logger.error(f"Write to {eprom_name.upper()} failed.")
             return is_ok
 
     def _drive_region_compare(
@@ -2495,8 +2586,20 @@ class EpromOperator:
         address_str: str | None = None,
         size_str: str | None = None,
         full: bool = False,
+        *,
+        suppress_verdict_line: bool = False,
     ) -> int:
         """Compare `input_file_path` against a fresh read of the chip.
+
+        `suppress_verdict_line` (Phase 203, WRITE-05): keyword-only, default
+        `False`, the same treatment `write_eprom` gets -- when `True`, skip
+        ONLY this method's own trailing `Verify for X successful (t).` /
+        `Verify for X failed.` line; the compare range lines rendered
+        through `_drive_region_compare` (a `Mismatch 0xSTART-0xEND (N
+        bytes)` line per retained range, plus the bucket summary) are
+        untouched, because those are the report `write --verify` is
+        supposed to produce on a mismatch. The default leaves every
+        existing caller (`verify`, `blank`) byte-identical.
 
         202-01 D-01/D-02/D-04/D-10: this reads the chip with COMMAND_READ and
         compares chunk by chunk on the host through `compare.py`'s streaming
@@ -2604,12 +2707,13 @@ class EpromOperator:
                 logger.error(f"File I/O error with {input_file_path}: {e}")
                 return 2
 
-            if verdict == 0:
-                logger.info(
-                    f"Verify for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
-                )
-            else:
-                logger.error(f"Verify for {eprom_name.upper()} failed.")
+            if not suppress_verdict_line:
+                if verdict == 0:
+                    logger.info(
+                        f"Verify for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
+                    )
+                else:
+                    logger.error(f"Verify for {eprom_name.upper()} failed.")
             return verdict
 
     def erase_eprom(
