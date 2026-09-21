@@ -480,6 +480,79 @@ def test_write_returns_false_when_guard_read_cannot_connect(tmp_path) -> None:
     assert operator.last_write_guard_verdict == 2
 
 
+def test_write_with_incomplete_guard_read_is_refused_and_no_write_reaches_the_wire(
+    tmp_path, caplog
+) -> None:
+    """Gap G1 (advisory WR-02): `_drive_region_compare` fails CLOSED when
+    the guard's own read stream ends before the whole target region
+    arrived -- `result.bad == 0` (no divergent byte was ever seen) but
+    `result.compared != result.total`, so the branch at the end of
+    `_drive_region_compare` returns verdict 1, not 0. The safety property
+    under test: an INCOMPLETE guard read REFUSES the write exactly like a
+    genuinely non-blank one does -- it must never be treated as a pass.
+
+    Driven by feeding the guard's read phase fewer DATA_CHUNK bytes (32)
+    than the write's own region_length (64) -- every delivered byte is
+    0xFF (matches the blank expectation), so no mismatch is ever recorded,
+    but the read still completes its own INIT/MAIN/END sequence normally
+    (`is_ok` is True at the state-machine level; nothing timed out). This
+    is what makes it a SHORT read, not a hardware/transport failure --
+    `last_write_guard_verdict` must read 1 (host-decided refusal), never 2
+    (transport failure)."""
+    payload = b"\xaa" * 64
+    short_region_payload = b"\xff" * 32  # 32 bytes delivered, region wants 64
+
+    with caplog.at_level("ERROR", logger="EpromOperator"):
+        ok, opened = _drive_write_eprom(
+            tmp_path,
+            eprom_name="m27c512",
+            eprom_data=_m27c512_data(),
+            payload=payload,
+            frame_scripts=[_read_phase_frames(short_region_payload)],
+        )
+
+    # Safety property 1: refused, not allowed.
+    assert ok is False
+    # Safety property 2: no COMMAND_WRITE ever reached find_and_connect.
+    assert opened == [COMMAND_READ]
+    assert COMMAND_WRITE not in opened
+
+    # Advisory WR-02 pinning (known-imperfect diagnostic, do NOT fix): with
+    # no observed divergent byte, `first_offset`/`first_actual` are both
+    # `None`, so `_run_write_blank_guard` substitutes 0 for each -- the
+    # refusal line therefore carries the SYNTHESIZED region_start/0x00
+    # pair, not an observed byte.
+    error_lines = [rec.message for rec in caplog.records if rec.levelname == "ERROR"]
+    assert error_lines == ["Refusing write to M27C512: not blank at 0x000000, v: 0x00."]
+
+    # Safety property 3: this is a host-decided refusal (verdict 1), not a
+    # transport failure (verdict 2) -- the read itself completed cleanly at
+    # the state-machine level, it just never covered the whole region.
+    operator = EpromOperator(ConfigManager())
+    # Re-derive the verdict the same way write_eprom does, using a second,
+    # freshly instrumented operator so this assertion is not coupled to
+    # `_drive_write_eprom`'s helper internals.
+    from unittest.mock import patch as _patch
+
+    input_file = tmp_path / "wbg_short_read_verdict.bin"
+    input_file.write_bytes(payload)
+    serial = _FakeSerial()
+    for frame in _read_phase_frames(short_region_payload):
+        serial.feed(frame)
+    factory = _comm_factory_for(serial)
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        return factory()
+
+    with _patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=_fake_find_and_connect,
+    ):
+        ok2 = operator.write_eprom("m27c512", _m27c512_data(), str(input_file))
+    assert ok2 is False
+    assert operator.last_write_guard_verdict == 1
+
+
 def test_write_with_skip_blank_check_flag_pays_no_guard_read(tmp_path) -> None:
     """WRITE-03 / D-09: `FLAG_SKIP_BLANK_CHECK` bypasses the guard on an
     otherwise-guarded, non-exempt M27C512 -- the captured sequence is

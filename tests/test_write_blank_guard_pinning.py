@@ -48,9 +48,10 @@ Coverage:
 from __future__ import annotations
 
 import pytest
+from click.testing import CliRunner
 
 from firestarter.chip_resolver import resolve_chip
-from firestarter.cli_handlers import _build_op_flags
+from firestarter.cli_handlers import _build_op_flags, cli
 from firestarter.constants import (
     FLAG_CAN_ERASE,
     FLAG_FORCE,
@@ -486,3 +487,82 @@ def test_cli_write_negative_address_refuses_on_an_unguarded_family_too():
 
 def test_cli_write_negative_address_refuses_on_a_guarded_family_too():
     _assert_cli_negative_address_refusal("m27c512", "-256")
+
+
+# ---------------------------------------------------------------------------
+# Gap G2 -- WRITE-03 truthfulness: help text coupled to the LIVE exempt set
+# ---------------------------------------------------------------------------
+
+
+def test_write_help_names_every_unguarded_family_in_the_live_exempt_set() -> None:
+    runner = CliRunner()
+    """`cli_handlers.write`'s docstring is the user-facing `write --help`
+    body, and it hardcodes which protocol families never receive the
+    blank-check. Nothing else couples that prose to
+    `NAMED_EXEMPT_PROTOCOL_IDS` -- if that set later widens (e.g. a fifth
+    exemption id is added), the existing pinning test on the SET itself
+    would fail, but the help text would stay green and silently stale.
+
+    This test derives its expectation FROM the live set, never from a
+    second hardcoded list, so it reds if the set and the help text drift
+    apart in either direction:
+
+    - every non-SRAM exempt id (today: 0x05, 0x0D) must appear as a hex
+      literal in the help body;
+    - the SRAM/FRAM ids must be represented by the family words, and the
+      stated COUNT of unguarded families must match what the live set
+      implies (one family per non-SRAM id, plus exactly one combined
+      "SRAM and FRAM" family for the whole SRAM_PROTOCOL_IDS subset) --
+      so a fifth exemption id changes the true family count and reds this
+      test even though it would not by itself be a new hex literal
+      omission.
+    """
+    import re
+
+    from firestarter.write_blank_guard import (
+        NAMED_EXEMPT_PROTOCOL_IDS,
+        SRAM_PROTOCOL_IDS,
+    )
+
+    result = runner.invoke(cli, ["write", "--help"])
+    assert result.exit_code == 0
+    # Click wraps and re-indents help text -- collapse whitespace runs
+    # before substring-matching (the idiom
+    # test_write_verify_help_lists_verify_and_full already uses).
+    collapsed = re.sub(r"\s+", " ", result.output)
+
+    non_sram_ids = sorted(NAMED_EXEMPT_PROTOCOL_IDS - SRAM_PROTOCOL_IDS)
+    for protocol_id in non_sram_ids:
+        hex_literal = f"0x{protocol_id:02X}"
+        assert hex_literal in collapsed, (
+            f"protocol id {hex_literal} is in NAMED_EXEMPT_PROTOCOL_IDS but "
+            f"never named in `write --help`"
+        )
+
+    assert "SRAM" in collapsed and "FRAM" in collapsed, (
+        "the SRAM/FRAM family must be named in `write --help`"
+    )
+
+    # Live-derived family count: one family per non-SRAM exempt id, plus
+    # two named families -- "SRAM" and "FRAM" -- for the whole
+    # SRAM_PROTOCOL_IDS subset (the prose names the two family WORDS, not
+    # one per backing protocol id). Today: {0x05, 0x0D} -> 2 non-SRAM
+    # families + SRAM + FRAM = 4.
+    expected_family_count = len(non_sram_ids) + (2 if SRAM_PROTOCOL_IDS else 0)
+    count_words = {
+        1: "One",
+        2: "Two",
+        3: "Three",
+        4: "Four",
+        5: "Five",
+        6: "Six",
+        7: "Seven",
+        8: "Eight",
+    }
+    expected_word = count_words.get(expected_family_count, str(expected_family_count))
+    assert f"{expected_word} protocol families" in collapsed, (
+        f"expected the help text to state '{expected_word} protocol "
+        f"families' (derived live from NAMED_EXEMPT_PROTOCOL_IDS = "
+        f"{sorted(NAMED_EXEMPT_PROTOCOL_IDS)}), but it was not found; "
+        f"collapsed help: {collapsed!r}"
+    )
