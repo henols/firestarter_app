@@ -1,5 +1,5 @@
 
-<p align="left"><img src="https://raw.githubusercontent.com/henols/firestarter_app/refs/heads/main/images/firestarter_logo.png" alt="Firestarter EPROM Programmer" width="200"></p>
+<p align="left"><img src="images/firestarter_logo.png" alt="Firestarter EPROM Programmer" width="500"></p>
 
 ----
 
