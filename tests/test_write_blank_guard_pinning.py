@@ -4,8 +4,10 @@ Copyright (c) 2026 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Phase 203 Plan 02 Task 1 -- pin the exact write-guard set (WRITE-02 / D-01 /
-D-02): the set the firmware pre-flights today, and no other.
+Phase 203 Plan 02 Tasks 1-2 -- pin the exact write-guard set (WRITE-02 / D-01
+/ D-02), and prove the bypass-flag and erase-exemption legs (WRITE-03 / D-03
+/ D-09). Task 3 extends this module with the negative-write-start-address
+gate (leg 9).
 
 Coverage:
   1. THE EXACT SET -- `GUARDED_PROTOCOL_IDS` and `NAMED_EXEMPT_PROTOCOL_IDS`
@@ -28,10 +30,11 @@ Coverage:
      carries no newline, and none of a forbidden-substring list built for
      THIS sentence (not copied from `flash4_erase_gate`'s, which forbids the
      word "write" -- a word this sentence legitimately contains).
-  7. THE FLAG LEGS -- `requires_blank_check` over `FLAG_SKIP_BLANK_CHECK`
-     and `FLAG_FORCE` (D-09's non-bypass) for a `flags: 0` guarded part.
-     Extended in Task 2 with the erase-capable dict, the `_build_op_flags`
-     mapping, and the `dev test` UV write-shortcut's own expression.
+  7. THE FLAG LEGS -- `requires_blank_check`/`is_erase_exempt` over
+     `FLAG_SKIP_BLANK_CHECK`, `FLAG_SKIP_ERASE` (D-03's re-arming), and
+     `FLAG_FORCE` (D-09's non-bypass), plus the `_build_op_flags` mapping
+     `-b`/`--skip-erase` actually produce, and the `dev test` UV
+     write-shortcut's `write_flags` expression fed straight into the guard.
   8. THE ABSENT-EVIDENCE LEG -- `is_guarded_protocol` fails CLOSED on
      `None`/`{}`/`{"algorithm": None}`, and is False for a protocol id in
      NEITHER set (Fork A), derived as a value no shipped row carries rather
@@ -41,7 +44,13 @@ Coverage:
 from __future__ import annotations
 
 from firestarter.chip_resolver import resolve_chip
-from firestarter.constants import FLAG_FORCE, FLAG_SKIP_BLANK_CHECK
+from firestarter.cli_handlers import _build_op_flags
+from firestarter.constants import (
+    FLAG_CAN_ERASE,
+    FLAG_FORCE,
+    FLAG_SKIP_BLANK_CHECK,
+    FLAG_SKIP_ERASE,
+)
 from firestarter.database import EpromDatabase
 from firestarter.exceptions import ChipNotFoundError, ChipNotImplementedError
 from firestarter.flash4_erase_gate import FLASH4_PROTOCOL_ID
@@ -54,6 +63,8 @@ from firestarter.write_blank_guard import (
     refusal_text,
     requires_blank_check,
 )
+
+from .test_write_blank_guard import _m27c512_data
 
 # ---------------------------------------------------------------------------
 # Leg 1: THE EXACT SET
@@ -232,6 +243,89 @@ def test_requires_blank_check_flag_legs_for_a_flags_zero_guarded_part():
     assert requires_blank_check(guarded, 0) is True
     assert requires_blank_check(guarded, FLAG_SKIP_BLANK_CHECK) is False
     assert requires_blank_check(guarded, FLAG_FORCE) is True
+
+
+def test_build_op_flags_blank_check_false_sets_only_the_skip_blank_check_bit():
+    """`-b`/`--no-blank-check` maps to exactly one bit."""
+    flags = _build_op_flags(blank_check=False)
+    assert flags & FLAG_SKIP_BLANK_CHECK
+    assert not (flags & FLAG_SKIP_ERASE)
+
+
+def test_build_op_flags_skip_erase_sets_only_the_skip_erase_bit():
+    """`--skip-erase` maps to exactly one bit, the OTHER one."""
+    flags = _build_op_flags(skip_erase=True)
+    assert flags & FLAG_SKIP_ERASE
+    assert not (flags & FLAG_SKIP_BLANK_CHECK)
+
+
+def test_requires_blank_check_skip_erase_rearms_the_guard_on_an_erase_capable_part():
+    """D-03: `--skip-erase` makes the exemption's premise -- "the erase
+    immediately above the check already guarantees blank" -- false, so the
+    guard re-arms even though `FLAG_CAN_ERASE` is still set."""
+    erase_capable = {"algorithm": 7, "flags": FLAG_CAN_ERASE}
+    assert requires_blank_check(erase_capable, 0) is False
+    assert requires_blank_check(erase_capable, FLAG_SKIP_ERASE) is True
+    assert (
+        requires_blank_check(erase_capable, FLAG_SKIP_ERASE | FLAG_SKIP_BLANK_CHECK)
+        is False
+    )
+
+
+def test_dev_test_uv_write_shortcut_keeps_working_and_the_unmasked_case_is_guarded():
+    """D-07: `dev test`'s monotonic-masked UV write shortcut keeps working
+    unchanged (the same `write_flags` expression
+    `chip_test._dispatch_multi_run` actually uses, fed straight into the
+    guard), and a non-masked UV target -- `write_flags == 0` -- is now
+    guarded by the host, which is the case where the firmware would have
+    refused the identical write anyway (RESEARCH section 11.1)."""
+    from firestarter.chip_test import (
+        WriteTarget,
+        _is_monotonic_masked_target,
+        bits_cleared_by,
+        bits_retained_by,
+        generate_pattern,
+        mask_write_pattern,
+    )
+
+    guarded = _m27c512_data()
+
+    region = (0x1000, 256)
+    current = b"\xff" * 256
+    desired = generate_pattern(*region)
+    masked_target = WriteTarget(
+        region=region,
+        pattern=mask_write_pattern(current, desired),
+        masked=True,
+        bits_cleared=bits_cleared_by(current, desired),
+        bits_retained=bits_retained_by(current, desired),
+        current_source="probe read (tranche 1/2)",
+        current=current,
+        current_is_probe_read=True,
+    )
+    unmasked_target = WriteTarget(
+        region=region,
+        pattern=desired,
+        masked=False,
+        bits_cleared=0,
+        bits_retained=0,
+        current_source="test fixture",
+    )
+
+    # The exact expression chip_test.py:3219-3221 uses at its OP_WRITE /
+    # OP_WRITE_PARTIAL dispatch site.
+    masked_write_flags = (
+        FLAG_SKIP_BLANK_CHECK if _is_monotonic_masked_target(masked_target) else 0
+    )
+    unmasked_write_flags = (
+        FLAG_SKIP_BLANK_CHECK if _is_monotonic_masked_target(unmasked_target) else 0
+    )
+
+    assert masked_write_flags == FLAG_SKIP_BLANK_CHECK
+    assert unmasked_write_flags == 0
+
+    assert requires_blank_check(guarded, masked_write_flags) is False
+    assert requires_blank_check(guarded, unmasked_write_flags) is True
 
 
 # ---------------------------------------------------------------------------

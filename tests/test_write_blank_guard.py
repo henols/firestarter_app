@@ -502,6 +502,136 @@ def test_write_with_skip_blank_check_flag_pays_no_guard_read(tmp_path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Plan 02 Task 2 -- the bypass, the re-arming, and the two dev callers
+# ---------------------------------------------------------------------------
+
+
+def test_write_with_skip_erase_on_erase_capable_part_refuses_a_non_blank_region(
+    tmp_path,
+) -> None:
+    """D-03, end to end: `--skip-erase` re-arms the guard on an
+    otherwise-erase-exempt W27C512 -- the exemption's premise ("the erase
+    immediately above the check already guarantees blank") is false when
+    the erase itself is skipped, so the guard fires exactly as it would on
+    a non-exempt part. Captured sequence is `[COMMAND_READ]`, no
+    `COMMAND_WRITE` ever reached."""
+    from firestarter.constants import FLAG_SKIP_ERASE
+
+    payload = b"\xaa" * 64
+    region_payload = bytearray(b"\xff" * 64)
+    region_payload[5] = 0x11
+    region_payload = bytes(region_payload)
+
+    ok, opened = _drive_write_eprom(
+        tmp_path,
+        eprom_name="w27c512",
+        eprom_data=_w27c512_data(),
+        payload=payload,
+        frame_scripts=[_read_phase_frames(region_payload)],
+        operation_flags=FLAG_SKIP_ERASE,
+    )
+
+    assert ok is False
+    assert opened == [COMMAND_READ]
+
+
+def test_write_no_blank_check_via_build_op_flags_on_erase_capable_part_pays_no_guard_read(
+    tmp_path,
+) -> None:
+    """The `-b` integration leg: drives `write_eprom` with the REAL
+    `_build_op_flags(blank_check=False)` output -- the exact value
+    `cli_handlers.write`'s `-b` option produces -- rather than the raw
+    `FLAG_SKIP_BLANK_CHECK` constant, proving the CLI-flag-to-guard plumbing
+    end to end on an erase-capable part. Captured sequence is exactly
+    `[COMMAND_WRITE]`, no read paid."""
+    from firestarter.cli_handlers import _build_op_flags
+
+    payload = b"\xaa" * 64
+
+    ok, opened = _drive_write_eprom(
+        tmp_path,
+        eprom_name="w27c512",
+        eprom_data=_w27c512_data(),
+        payload=payload,
+        frame_scripts=[_write_phase_frames()],
+        operation_flags=_build_op_flags(blank_check=False),
+    )
+
+    assert ok is True
+    assert opened == [COMMAND_WRITE]
+
+
+def _erase_phase_frames() -> list[bytes]:
+    """Wire frames for one complete, otherwise-successful COMMAND_ERASE
+    main phase -- `_main_phase_simple`'s shape: no data-request frame, no
+    data chunks, just INIT/MAIN/END completion."""
+    return [
+        build_frame(MSG_INIT_DONE, b""),
+        build_frame(MSG_MAIN_DONE, b""),
+        build_frame(MSG_END_DONE, b""),
+    ]
+
+
+def test_write_cycle_eprom_for_an_erase_capable_part_performs_no_guard_read(
+    tmp_path,
+) -> None:
+    """RESEARCH section 11.2 / D-07's flag-proxy argument: `write_cycle_eprom`
+    erases immediately before every write, so the exemption's premise holds
+    on every part this command can actually run on -- proven here through
+    the real `write_eprom` call inside `write_cycle_eprom`, not asserted in
+    isolation. The captured sequence is `[COMMAND_ERASE, COMMAND_WRITE,
+    COMMAND_READ]` -- erase, then write with NO guard read in between, then
+    write_cycle_eprom's own read-back (a real read this command always
+    performs, unrelated to the blank guard)."""
+    from firestarter.constants import COMMAND_ERASE
+
+    # A small, custom memory-size keeps the read-back frame script short --
+    # real W27C512 is 65536 bytes; only the erase-exempt flag combination
+    # (algorithm 7, FLAG_CAN_ERASE) matters for this test, not the real size.
+    eprom_data = dict(_w27c512_data())
+    eprom_data["memory-size"] = 16
+
+    payload = b"\xaa" * 16
+    source_file = tmp_path / "wbg_cycle_source.bin"
+    source_file.write_bytes(payload)
+
+    factories = []
+    for script in (
+        _erase_phase_frames(),
+        _write_phase_frames(),
+        _read_phase_frames(payload),
+    ):
+        serial = _FakeSerial()
+        for frame in script:
+            serial.feed(frame)
+        factories.append(_comm_factory_for(serial))
+    pending = iter(factories)
+
+    opened: list[int] = []
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        opened.append(command_dict["cmd"])
+        return next(pending)()
+
+    operator = EpromOperator(ConfigManager())
+    output_dir = tmp_path / "write-cycle-output"
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=_fake_find_and_connect,
+    ):
+        verdict = operator.write_cycle_eprom(
+            "w27c512",
+            eprom_data,
+            str(source_file),
+            runs=1,
+            output_dir=str(output_dir),
+        )
+
+    assert verdict == 0
+    assert opened == [COMMAND_ERASE, COMMAND_WRITE, COMMAND_READ]
+
+
+# ---------------------------------------------------------------------------
 # Regression: the slice moved nothing else (Task 3)
 # ---------------------------------------------------------------------------
 
