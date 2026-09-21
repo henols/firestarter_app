@@ -371,9 +371,12 @@
                             still runs on electrically-erasable chips
       --skip-erase          skip the pre-write erase as well
   
-    On protocols 0x0D and 0x05 the write path performs no pre-write blank check
-    at all, so -b is a no-op on those families and is not needed to write a non-
-    blank part. It remains effective on every other protocol.
+    Before the write reaches the port, the host -- not the firmware -- checks
+    that the target region is blank. Four protocol families never receive that
+    check: 0x0D (28C parallel) and 0x05 (flash4) auto-erase per page immediately
+    before each write, and the SRAM and FRAM families have no blank state to
+    check at all. -b has nothing to skip on those four families; on every
+    protocol outside this list, it is still the way to skip the check.
   
     --skip-sdp-unlock applies to protocol-0x0D chips, where the firmware unlocks
     software data protection during write init. On any other protocol it has no
@@ -387,6 +390,10 @@
     0x0B before any high voltage is enabled. Using the flag always reports both
     the database pulse and the override, so a log captured without its command
     line still records which pulse was used.
+  
+    --verify changes THIS INVOCATION's exit-code contract to 0/1/2 (see
+    --verify's own --help text for the full three-way split); plain write,
+    without the flag, keeps its existing 0/1 contract unchanged.
   
   Options:
     -b, --no-blank-check      Skip the blank check before write (erase still
@@ -410,6 +417,23 @@
                               is actually enabled, the write will then fail. Has
                               NO EFFECT on any other protocol — the host warns
                               and proceeds.
+    --verify                  After a successful write, read the written region
+                              back and compare it through the same engine
+                              `verify` uses. Changes THIS INVOCATION's exit-code
+                              contract: 0 the write landed and the read-back
+                              matched, 1 the invocation ended for a reason the
+                              host or the firmware decided (a blank-guard
+                              refusal, a firmware error during the write, a
+                              malformed address, or a read-back that completed
+                              and disagreed), 2 the transport or the hardware
+                              failed in ANY phase of the run -- the guard read,
+                              the write itself, or the read-back. Without
+                              --verify, write exits 0 on success and 1 on any
+                              failure, exactly as before.
+    --full                    With --verify, report every coalesced mismatching
+                              range in the read-back comparison, not just the
+                              first. Has no meaning and is refused without
+                              --verify.
     --help                    Show this message and exit.
   
   '''
@@ -1402,9 +1426,12 @@
                             still runs on electrically-erasable chips
       --skip-erase          skip the pre-write erase as well
   
-    On protocols 0x0D and 0x05 the write path performs no pre-write blank check
-    at all, so -b is a no-op on those families and is not needed to write a non-
-    blank part. It remains effective on every other protocol.
+    Before the write reaches the port, the host -- not the firmware -- checks
+    that the target region is blank. Four protocol families never receive that
+    check: 0x0D (28C parallel) and 0x05 (flash4) auto-erase per page immediately
+    before each write, and the SRAM and FRAM families have no blank state to
+    check at all. -b has nothing to skip on those four families; on every
+    protocol outside this list, it is still the way to skip the check.
   
     --skip-sdp-unlock applies to protocol-0x0D chips, where the firmware unlocks
     software data protection during write init. On any other protocol it has no
@@ -1418,6 +1445,10 @@
     0x0B before any high voltage is enabled. Using the flag always reports both
     the database pulse and the override, so a log captured without its command
     line still records which pulse was used.
+  
+    --verify changes THIS INVOCATION's exit-code contract to 0/1/2 (see
+    --verify's own --help text for the full three-way split); plain write,
+    without the flag, keeps its existing 0/1 contract unchanged.
   
   Options:
     -b, --no-blank-check      Skip the blank check before write (erase still
@@ -1441,6 +1472,23 @@
                               is actually enabled, the write will then fail. Has
                               NO EFFECT on any other protocol — the host warns
                               and proceeds.
+    --verify                  After a successful write, read the written region
+                              back and compare it through the same engine
+                              `verify` uses. Changes THIS INVOCATION's exit-code
+                              contract: 0 the write landed and the read-back
+                              matched, 1 the invocation ended for a reason the
+                              host or the firmware decided (a blank-guard
+                              refusal, a firmware error during the write, a
+                              malformed address, or a read-back that completed
+                              and disagreed), 2 the transport or the hardware
+                              failed in ANY phase of the run -- the guard read,
+                              the write itself, or the read-back. Without
+                              --verify, write exits 0 on success and 1 on any
+                              failure, exactly as before.
+    --full                    With --verify, report every coalesced mismatching
+                              range in the read-back comparison, not just the
+                              first. Has no meaning and is refused without
+                              --verify.
     --help                    Show this message and exit.
   
   '''
