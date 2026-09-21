@@ -4,10 +4,9 @@ Copyright (c) 2026 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Phase 203 Plan 02 Tasks 1-2 -- pin the exact write-guard set (WRITE-02 / D-01
-/ D-02), and prove the bypass-flag and erase-exemption legs (WRITE-03 / D-03
-/ D-09). Task 3 extends this module with the negative-write-start-address
-gate (leg 9).
+Phase 203 Plan 02 -- pin the exact write-guard set (WRITE-02 / D-01 / D-02),
+prove the bypass-flag and erase-exemption legs (WRITE-03 / D-03 / D-09), and
+close the folded negative-write-start-address todo on its host half.
 
 Coverage:
   1. THE EXACT SET -- `GUARDED_PROTOCOL_IDS` and `NAMED_EXEMPT_PROTOCOL_IDS`
@@ -39,9 +38,16 @@ Coverage:
      `None`/`{}`/`{"algorithm": None}`, and is False for a protocol id in
      NEITHER set (Fork A), derived as a value no shipped row carries rather
      than asserted as a literal.
+  9. THE NEGATIVE START ADDRESS GATE -- `require_non_negative_address`
+     raises `NegativeStartAddressError` for a negative decimal or hex
+     address, is a no-op for `None`, a valid address, and an unparseable
+     one, and the CLI-level refusal fires before `write_eprom` is ever
+     called, on a guarded family and an unguarded one alike.
 """
 
 from __future__ import annotations
+
+import pytest
 
 from firestarter.chip_resolver import resolve_chip
 from firestarter.cli_handlers import _build_op_flags
@@ -65,6 +71,14 @@ from firestarter.write_blank_guard import (
 )
 
 from .test_write_blank_guard import _m27c512_data
+
+# NOTE (Task 3, leg 9): `NegativeStartAddressError` and
+# `require_non_negative_address` are imported LOCALLY inside each leg-9 test
+# function below, not at module scope -- keeping them out of this module's
+# import block is what let the RED phase for this task fail per-test (an
+# ImportError inside the specific new test) rather than as a whole-module
+# collection crash that would have also blocked every already-green leg
+# 1-8 test above from running at all.
 
 # ---------------------------------------------------------------------------
 # Leg 1: THE EXACT SET
@@ -362,3 +376,113 @@ def test_is_guarded_protocol_false_for_an_id_in_neither_set():
     assert _UNCLASSIFIED_ALGORITHM_ID not in NAMED_EXEMPT_PROTOCOL_IDS
     assert _UNCLASSIFIED_ALGORITHM_ID not in _SHIPPED_ALGORITHM_VALUES
     assert is_guarded_protocol({"algorithm": _UNCLASSIFIED_ALGORITHM_ID}) is False
+
+
+# ---------------------------------------------------------------------------
+# Leg 9: THE NEGATIVE START ADDRESS GATE
+# ---------------------------------------------------------------------------
+
+
+def test_require_non_negative_address_raises_for_a_negative_decimal_address():
+    from firestarter.exceptions import NegativeStartAddressError
+    from firestarter.write_blank_guard import require_non_negative_address
+
+    with pytest.raises(NegativeStartAddressError):
+        require_non_negative_address("m27c512", "-256")
+
+
+def test_require_non_negative_address_raises_for_a_negative_hex_address():
+    from firestarter.exceptions import NegativeStartAddressError
+    from firestarter.write_blank_guard import require_non_negative_address
+
+    with pytest.raises(NegativeStartAddressError):
+        require_non_negative_address("m27c512", "-0x100")
+
+
+def test_require_non_negative_address_is_a_no_op_for_none_and_a_valid_address():
+    from firestarter.write_blank_guard import require_non_negative_address
+
+    assert require_non_negative_address("m27c512", None) is None
+    assert require_non_negative_address("m27c512", "0x100") is None
+
+
+def test_require_non_negative_address_is_a_no_op_for_an_unparseable_address():
+    """A malformed address stays the existing handlers' job -- this gate's
+    error contract must not change it."""
+    from firestarter.write_blank_guard import require_non_negative_address
+
+    assert require_non_negative_address("m27c512", "notanumber") is None
+
+
+def test_write_eprom_negative_start_address_refuses_before_operation_context(
+    tmp_path,
+):
+    """The operator-tier half: `dev test` and `dev write-cycle` call
+    `write_eprom` directly, bypassing `cli_handlers.write` entirely, so the
+    gate must also fire from inside `write_eprom` itself -- mirrors
+    `test_page_size_alignment_refusal.test_write_eprom_unaligned_start_refuses_before_operation_context`'s
+    proven pattern."""
+    from unittest.mock import patch
+
+    from firestarter.config import ConfigManager
+    from firestarter.eprom_operations import EpromOperator
+    from firestarter.exceptions import NegativeStartAddressError
+
+    payload = tmp_path / "probe.bin"
+    payload.write_bytes(b"\xaa" * 4)
+
+    operator = EpromOperator(ConfigManager())
+    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+        with pytest.raises(NegativeStartAddressError) as exc_info:
+            operator.write_eprom(
+                "m27c512", _m27c512_data(), str(payload), address_str="-256"
+            )
+        ctx_mock.assert_not_called()
+
+    assert "M27C512" in str(exc_info.value)
+
+
+def _assert_cli_negative_address_refusal(chip_name: str, address_arg: str) -> None:
+    """The CLI-tier half: `CliRunner` + `Mock(spec=EpromOperator)`, proving
+    the refusal fires -- and `write_eprom` is never reached -- before
+    `app.eprom_operator.write_eprom` is ever invoked. Covers a guarded
+    family (M27C512) and an unguarded one (the 28C-parallel AT28C256)
+    alike, so the refusal is not accidentally scoped to the guarded set."""
+    import tempfile
+    from unittest.mock import Mock
+
+    from click.testing import CliRunner
+
+    from firestarter.cli_handlers import cli
+    from firestarter.eprom_operations import EpromOperator
+
+    from .conftest import make_app_context
+
+    runner = CliRunner()
+    eprom_operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=eprom_operator)
+
+    with tempfile.NamedTemporaryFile(suffix=".bin") as tmp:
+        tmp.write(b"\xaa" * 4)
+        tmp.flush()
+        result = runner.invoke(
+            cli, ["write", chip_name, tmp.name, "-a", address_arg], obj=app
+        )
+
+    assert result.exit_code == 1
+    lines = result.output.splitlines()
+    assert len(lines) == 1
+    assert lines[0] == (
+        f"Error: {chip_name.upper()}: refused -- the start address "
+        f"{address_arg!r} is negative."
+    )
+    assert "Programmer error" not in result.output
+    eprom_operator.write_eprom.assert_not_called()
+
+
+def test_cli_write_negative_address_refuses_on_an_unguarded_family_too():
+    _assert_cli_negative_address_refusal("at28c256", "-256")
+
+
+def test_cli_write_negative_address_refuses_on_a_guarded_family_too():
+    _assert_cli_negative_address_refusal("m27c512", "-256")
