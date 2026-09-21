@@ -484,6 +484,20 @@ class EpromOperator:
         # bool-valued test sites and `chip_test.py`'s documented
         # PRECONDITION contract.
         self.last_write_attempt_verdict: int | None = None
+        # 203-CR-01: the physical port `write_eprom`'s own COMMAND_WRITE
+        # connect actually reached, captured inside that connect's own
+        # `_operation_context` block (before its `finally` tears `self.comm`
+        # down). `None` until a write's own connect succeeds; reset to
+        # `None` at the very top of `write_eprom`, in the same breath as
+        # `last_write_attempt_verdict`, so a prior invocation's port can
+        # never leak into this one's reporting. `cli_handlers.write` reads
+        # this (via `getattr(..., None)`, so an operator double that
+        # predates this attribute degrades to "no pin" rather than raising)
+        # to pin `--verify`'s own read-back connect to the SAME port the
+        # write itself just used -- the guard read, the write, and the
+        # read-back must never be allowed to silently land on three
+        # different boards.
+        self.last_write_port: str | None = None
         # 202-04 D-06/D-08: set by `_main_phase_read_data` the moment an
         # `abort_predicate` fires -- a monotonic timestamp, not a wall clock,
         # so the bounded acceptance window below is immune to a system clock
@@ -549,10 +563,23 @@ class EpromOperator:
         size: str | None = None,
         fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
         region_length: int | None = None,
+        preferred_port: str | None = None,
+        restrict_to_port: bool | None = None,
     ) -> Tuple[Dict | None, int]:  # noqa: UP006
         """
         Prepares for an EPROM operation: uses pre-fetched EPROM data, sets up command, and connects.
         Returns (eprom_data_for_command, buffer_size) or (None, 0) on failure.
+
+        ``preferred_port``/``restrict_to_port`` (203-CR-01): forwarded verbatim
+        to ``SerialCommunicator.find_and_connect``. Both default to ``None``,
+        which leaves ``find_and_connect``'s own config-driven inference
+        untouched -- every existing single-connect caller (read, erase, a
+        standalone verify/blank, ``dev *``) is byte-identical. A caller that
+        supplies ``preferred_port`` with ``restrict_to_port=True`` pins this
+        connect to exactly that port: `_list_potential_ports` then returns
+        only that one candidate, so a later connect that cannot reach it
+        fails closed (`ProgrammerNotFoundError`) instead of silently
+        discovering a different board.
         """  # noqa: E501
         operation = COMMAND_NAMES[cmd]  # Get command name
         logger.debug(f"Performing {operation} for {eprom_name.upper()}")
@@ -606,7 +633,9 @@ class EpromOperator:
             self.comm = SerialCommunicator.find_and_connect(
                 command_dict,
                 self.config,
+                preferred_port=preferred_port,
                 fault_inject_outgoing=fault_inject_outgoing,
+                restrict_to_port=restrict_to_port,
             )
             buffer_size = self._calculate_buffer_size()
             logger.debug(
@@ -629,6 +658,8 @@ class EpromOperator:
         size: str | None = None,
         fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
         region_length: int | None = None,
+        preferred_port: str | None = None,
+        restrict_to_port: bool | None = None,
     ):
         """A context manager to handle EPROM operation setup and teardown.
 
@@ -639,6 +670,9 @@ class EpromOperator:
         ``region_length`` (BLANK-01 / D-05) is forwarded to ``_setup_operation``
         by keyword, trailing the existing positional six -- it must not be
         inserted among them.
+
+        ``preferred_port``/``restrict_to_port`` (203-CR-01): forwarded
+        verbatim to ``_setup_operation``. See that method's docstring.
         """
         command_dict, buffer_size = self._setup_operation(
             eprom_name,
@@ -649,6 +683,8 @@ class EpromOperator:
             size,
             fault_inject_outgoing=fault_inject_outgoing,
             region_length=region_length,
+            preferred_port=preferred_port,
+            restrict_to_port=restrict_to_port,
         )
         if not command_dict or not self.comm:
             yield None, None, None  # Yield None to indicate setup failure
@@ -2124,7 +2160,7 @@ class EpromOperator:
         operation_flags: int,
         address_str: str | None,
         region_length: int,
-    ) -> int:
+    ) -> tuple[int, str | None]:
         """WRITE-01 (Phase 203): the pre-write blank-guard read, called from
         `write_eprom` between its pure pre-connect gates and its own
         `_operation_context` (D-08). Region-scoped on every guarded family
@@ -2148,9 +2184,18 @@ class EpromOperator:
         `consistency_check_eprom` precedent: swap `progress_callback` to a
         truthy no-op, restore it in a `finally`.
 
-        Returns 0 (blank, proceed), 1 (not blank, refused -- and logs the
-        one-line D-10 refusal at `logger.error`), or 2 (transport or setup
-        failure, including a falsy `cmd_data`).
+        Returns `(verdict, resolved_port)`. `verdict` is 0 (blank, proceed),
+        1 (not blank, refused -- and logs the one-line D-10 refusal at
+        `logger.error`), or 2 (transport or setup failure, including a
+        falsy `cmd_data`). `resolved_port` (203-CR-01) is the physical port
+        this connect actually reached -- captured from `self.comm.port_name`
+        INSIDE this method's own `with` block, before its `finally` tears
+        `self.comm` down -- or `None` when the connect never succeeded
+        (`cmd_data` falsy). The caller (`write_eprom`) uses a non-`None`
+        `resolved_port` to pin its own, separate COMMAND_WRITE connect to
+        this exact port, so the region this guard just proved blank and the
+        region the write actually touches can never silently diverge onto
+        two different boards.
         """
         prior_callback = self.progress_callback
         self.progress_callback = lambda *a, **kw: None
@@ -2164,8 +2209,9 @@ class EpromOperator:
                 str(region_length),
             ) as (cmd_data, _, op_name):
                 if not cmd_data:
-                    return 2
+                    return 2, None
 
+                resolved_port = self.comm.port_name if self.comm else None
                 region_start = cmd_data.get("address", 0)
                 captured: list[CompareResult] = []
 
@@ -2195,7 +2241,7 @@ class EpromOperator:
                         )
                     )
 
-                return verdict
+                return verdict, resolved_port
         finally:
             self.progress_callback = prior_callback
 
@@ -2232,6 +2278,11 @@ class EpromOperator:
         # leaves this call's verdict at `None` ("never attempted"), and a
         # prior invocation's verdict can never leak into this one.
         self.last_write_attempt_verdict = None
+        # 203-CR-01: reset the resolved-write-port record BEFORE any gate
+        # below can raise -- same rationale as `last_write_attempt_verdict`
+        # immediately above, so a prior invocation's port can never leak
+        # into this one's `--verify` read-back pin.
+        self.last_write_port = None
         # per-run pulse override, riding the existing
         # "pulse-delay" DB-dict key rather than adding a new wire field or
         # command. Four recorded points:
@@ -2303,12 +2354,21 @@ class EpromOperator:
         # this write's own "Write to X failed." line never runs, so the
         # guard's refusal is the only output (D-11, satisfied structurally
         # rather than by wording).
+        # 203-CR-01: the port the guard's own connect resolved, when the
+        # guard actually ran and connected. `None` on every path that never
+        # opens a guard connect at all (skip-blank-check, erase-exempt, no
+        # region) -- those write invocations open exactly one connect
+        # anyway, so there is nothing for that single connect to diverge
+        # from, and it keeps its pre-existing, config-inferred discovery
+        # behaviour unchanged (single-connect operations must not start
+        # pinning).
+        guard_port: str | None = None
         if not region_length:
             self.last_write_guard_verdict = None
         elif not requires_blank_check(eprom_data_dict, operation_flags):
             self.last_write_guard_verdict = None
         else:
-            guard_verdict = self._run_write_blank_guard(
+            guard_verdict, guard_port = self._run_write_blank_guard(
                 eprom_name,
                 eprom_data_dict,
                 operation_flags,
@@ -2319,6 +2379,25 @@ class EpromOperator:
             if guard_verdict != 0:
                 return False
 
+        # 203-CR-01: when the guard ran and its connect resolved a port,
+        # force this write's own connect onto that EXACT port
+        # (`restrict_to_port=True` makes it the only candidate
+        # `_list_potential_ports` returns). A change in port availability,
+        # enumeration order, or board identity between the guard's connect
+        # and this one then surfaces as a connect failure here (`cmd_data`
+        # falsy, verdict 2 below) -- never as a silent write to a board the
+        # guard never actually read. When `guard_port` is `None` (no guard
+        # ran), passing neither kwarg leaves `_setup_operation`/
+        # `find_and_connect`'s own config-inferred discovery untouched, so
+        # an operator-typed `-p` on an unguarded write still behaves exactly
+        # as it does today.
+        write_connect_kwargs: dict = {}
+        if guard_port:
+            write_connect_kwargs = {
+                "preferred_port": guard_port,
+                "restrict_to_port": True,
+            }
+
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
@@ -2326,6 +2405,7 @@ class EpromOperator:
             operation_flags,
             address_str,
             region_length=region_length,
+            **write_connect_kwargs,
         ) as (cmd_data, buf_size, op_name):
             if not cmd_data:
                 # WRITE-04/WRITE-05: classify the cause before returning.
@@ -2349,6 +2429,13 @@ class EpromOperator:
                         address_parse_failed = True
                 self.last_write_attempt_verdict = 1 if address_parse_failed else 2
                 return False
+
+            # 203-CR-01: record the port this write's connect actually
+            # reached -- captured here, inside this `with` block, before its
+            # `finally` disconnects and sets `self.comm` to `None`. This is
+            # what lets `cli_handlers.write`'s `--verify` branch pin the
+            # read-back's own connect to the SAME board the write just used.
+            self.last_write_port = self.comm.port_name if self.comm else None
 
             logger.info(f"Writing {input_file_path} to {eprom_name.upper()}")
             start_time = time.time()
@@ -2588,6 +2675,7 @@ class EpromOperator:
         full: bool = False,
         *,
         suppress_verdict_line: bool = False,
+        preferred_port: str | None = None,
     ) -> int:
         """Compare `input_file_path` against a fresh read of the chip.
 
@@ -2600,6 +2688,16 @@ class EpromOperator:
         untouched, because those are the report `write --verify` is
         supposed to produce on a mismatch. The default leaves every
         existing caller (`verify`, `blank`) byte-identical.
+
+        `preferred_port` (203-CR-01): keyword-only, default `None`. When
+        given, forces this call's own COMMAND_READ connect onto exactly
+        that port (`restrict_to_port=True`) -- `cli_handlers.write`'s
+        `--verify` branch passes `write_eprom`'s own `last_write_port` here,
+        so the read-back can never silently land on a different board than
+        the write it is meant to be checking. The default leaves every
+        existing caller (`verify`, `blank`, `dev test`) byte-identical --
+        none of them pass it, so their connect keeps its pre-existing,
+        config-inferred discovery behaviour unchanged.
 
         202-01 D-01/D-02/D-04/D-10: this reads the chip with COMMAND_READ and
         compares chunk by chunk on the host through `compare.py`'s streaming
@@ -2674,6 +2772,17 @@ class EpromOperator:
             else (str(file_length) if file_length is not None else None)
         )
 
+        # 203-CR-01: pin this connect to `preferred_port` when the caller
+        # supplied one (see this method's own docstring). Omitted entirely
+        # when absent, so `find_and_connect`'s own config-inferred discovery
+        # is untouched for every caller that does not pass it.
+        verify_connect_kwargs: dict = {}
+        if preferred_port:
+            verify_connect_kwargs = {
+                "preferred_port": preferred_port,
+                "restrict_to_port": True,
+            }
+
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
@@ -2681,6 +2790,7 @@ class EpromOperator:
             operation_flags,
             address_str,
             resolved_size_str,
+            **verify_connect_kwargs,
         ) as (cmd_data, _, op_name):
             if not cmd_data:
                 return 2

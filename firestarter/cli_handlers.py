@@ -897,6 +897,16 @@ def write(
         # region to the input file's own length, which is exactly the
         # region this write just touched -- D-16's region for free, without
         # computing it a second time here.
+        #
+        # 203-CR-01: pin the read-back's own connect to the exact port the
+        # write itself just used. `getattr(..., None)` rather than a plain
+        # attribute read -- an `EpromOperator` double (test or otherwise)
+        # that predates this attribute degrades to "no pin" instead of
+        # raising `AttributeError`. `write_eprom` resets
+        # `last_write_port` to `None` at its own entry and only ever sets it
+        # once its own COMMAND_WRITE connect actually succeeds, so a value
+        # read here can only be `None` (no pin: `verify_eprom` falls back to
+        # its own normal discovery) or the genuine port this write reached.
         verdict = app.eprom_operator.verify_eprom(
             eprom,
             eprom_data,
@@ -906,6 +916,7 @@ def write(
             operation_flags=_build_op_flags(force=force),
             full=full,
             suppress_verdict_line=True,
+            preferred_port=getattr(app.eprom_operator, "last_write_port", None),
         )
         verdict_line = {
             0: _WRITE_VERIFY_VERDICT_OK,
