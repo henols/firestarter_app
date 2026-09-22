@@ -183,6 +183,10 @@
   
     ``-s``/``--sector-address`` applies only to protocols that support a sector
     erase; a whole-device chip erase ignores any sector address given for it.
+    ``-s`` and ``-b`` cannot be combined: the post-erase check is whole-device
+    and cannot follow a sector erase, and the host has no sector-size knowledge
+    to scope it with. That combination is refused, exit 2, before the erase
+    runs.
   
     An unsupported erase exits 1 by default; ``--ignore-unsupported`` makes it
     exit 0 instead, for scripting, while still printing the same line.

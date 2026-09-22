@@ -1090,6 +1090,56 @@ def test_erase_has_no_full_option(runner: CliRunner) -> None:
     operator.erase_eprom.assert_not_called()
 
 
+# 205-01 / OQ-1: `erase -s <addr> -b` is refused before the erase runs.
+# Measured hazard (205-RESEARCH.md): on protocol 0x06, a non-zero
+# `handle->address` selects a SECTOR erase in `flash_nor_unlock_erase_execute`,
+# not the whole-device erase D-01's host-side check assumes. An unconditional
+# whole-device check after a sector erase would report the untouched
+# remainder as non-blank -- a reliable false negative -- so the combination
+# is refused in the CLI tier, before any port opens.
+
+
+def test_erase_sector_address_with_blank_check_is_refused_before_the_erase(
+    runner: CliRunner,
+) -> None:
+    """`erase -s 0x10000 -b` exits 2, prints exactly one line -- the full
+    refusal sentence, not a substring -- and never erases or opens a port."""
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+
+    with pytest.MonkeyPatch.context() as mp:
+        connect_spy = Mock()
+        mp.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect", connect_spy
+        )
+        result = runner.invoke(
+            cli, ["erase", "W27C512", "-s", "0x10000", "-b"], obj=app
+        )
+
+    assert result.exit_code == 2, result.output
+    expected = cli_handlers_mod._ERASE_SECTOR_BLANK_REFUSAL.format(eprom="W27C512")
+    assert result.output.strip() == expected
+    connect_spy.assert_not_called()
+    operator.erase_eprom.assert_not_called()
+    operator.check_eprom_blank.assert_not_called()
+
+
+def test_erase_sector_address_without_blank_check_still_runs(
+    runner: CliRunner,
+) -> None:
+    """`-s` alone (no `-b`) is unaffected by the OQ-1 refusal: the sector
+    erase still runs exactly as it does today, with the sector address
+    reaching `erase_eprom` unchanged."""
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = True
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512", "-s", "0x10000"], obj=app)
+    assert result.exit_code == 0
+    operator.erase_eprom.assert_called_once()
+    _, kwargs = operator.erase_eprom.call_args
+    assert kwargs["address_str"] == "0x10000"
+
+
 def test_id_happy_path(runner: CliRunner) -> None:
     """`firestarter id W27C512` exits 0 when check_eprom_id returns (True, _)."""
     operator = Mock(spec=EpromOperator)

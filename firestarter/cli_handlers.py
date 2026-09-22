@@ -1069,6 +1069,56 @@ def _region_refusal_exit_code(
     return None
 
 
+_ERASE_SECTOR_BLANK_REFUSAL = (
+    "{eprom}: refused -- ``-s``/``--sector-address`` cannot be combined "
+    "with ``-b``/``--blank-check``: the post-erase check is whole-device "
+    "and cannot follow a sector erase, and the host has no sector-size "
+    "knowledge to scope it with."
+)
+
+
+def _erase_sector_blank_refusal_exit_code(
+    *, eprom: str, sector_address: str | None, blank_check: bool
+) -> int | None:
+    """OQ-1's pre-wire refusal, sibling to `_region_refusal_exit_code` above
+    -- both decide before `EpromOperator` is reached and both return an
+    exit code rather than raising, because `_operation_context` is what
+    opens the serial port.
+
+    Measured hazard (205-RESEARCH.md § "Hazard: erase -s <sector> -b on
+    protocol 0x06"): on protocol ``0x06``, a non-zero ``handle->address``
+    selects a SECTOR erase in ``flash_nor_unlock_erase_execute``
+    (``flash_nor_unlock.cpp:118-126``), not the whole-device erase D-01's
+    post-erase check assumes. D-01's `erase -b` check is whole-device, and
+    the host is not told the sector size -- ``-s`` takes only an address,
+    with no sector-size field threaded to the CLI -- so an unconditional
+    whole-device check after a sector erase would report the untouched
+    remainder as non-blank and exit 1: a reliable false negative where
+    today the combination is a silent no-op (``0x06``'s erase-end
+    assignment has been commented out at ``flash_nor_unlock.cpp:41`` for
+    its whole life).
+
+    Two rejected alternatives, for the record: scoping the check to the
+    erased sector is blocked in practice, because the sector size is not
+    threaded to the CLI; silently skipping the check when ``-s`` is given
+    was rejected because it reproduces exactly the silently-passing defect
+    class Phase 201 exists to fix.
+
+    Decided before `resolve_chip` reaches any operator call -- it is a
+    pure argument-combination refusal over two CLI options, reading no
+    wire dict at all, so it is the cheapest correct place to stop and it
+    guarantees the erase does not run. Returns 2 -- the same class
+    `_region_refusal_exit_code` returns for both of its refusals, a usage
+    refusal decided before the wire; 1 stays reserved for "erased but not
+    blank" so D-02's three outcomes remain distinct -- or `None` when the
+    combination is acceptable and the caller should proceed to the erase.
+    """
+    if sector_address is not None and blank_check:
+        click.echo(_ERASE_SECTOR_BLANK_REFUSAL.format(eprom=eprom.upper()))
+        return 2
+    return None
+
+
 @cli.command(name="verify")
 @click.argument("eprom", shell_complete=_complete_eprom)
 @click.argument("input_file")
@@ -1248,11 +1298,20 @@ def erase(
 
     ``-s``/``--sector-address`` applies only to protocols that support a
     sector erase; a whole-device chip erase ignores any sector address
-    given for it.
+    given for it. ``-s`` and ``-b`` cannot be combined: the post-erase
+    check is whole-device and cannot follow a sector erase, and the host
+    has no sector-size knowledge to scope it with. That combination is
+    refused, exit 2, before the erase runs.
 
     An unsupported erase exits 1 by default; ``--ignore-unsupported`` makes it
     exit 0 instead, for scripting, while still printing the same line.
     """
+    sector_blank_refusal = _erase_sector_blank_refusal_exit_code(
+        eprom=eprom, sector_address=sector_address, blank_check=blank_check
+    )
+    if sector_blank_refusal is not None:
+        sys.exit(sector_blank_refusal)
+
     eprom_data = resolve_chip(eprom, db=app.db)
 
     if flash4_erase_gate.is_flash4(eprom_data):
