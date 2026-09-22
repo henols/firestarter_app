@@ -2959,8 +2959,13 @@ class EpromOperator:
             return is_ok
 
     # Protocol IDs whose firmware handler (configure_sram) leaves a NULL
-    # firestarter_operation_main for CMD_BLANK_CHECK, causing 0xA4
-    # MSG_ERR_EMPTY_INPUT. These are all SRAM families (host-side fix).
+    # firestarter_operation_main for the standalone blank-check command's
+    # wire ordinal. Before 3.1.0 that produced 0xA4 MSG_ERR_EMPTY_INPUT;
+    # after Phase 204 retired that ordinal, EVERY protocol handler leaves
+    # the pointer NULL for it, not only configure_sram -- this set stays
+    # SRAM-specific because these are the families with no factory-blank
+    # concept at all, which is what the short-circuit below exists for.
+    # These are all SRAM families (host-side fix).
     _SRAM_PROTO_IDS = frozenset({0x0E, 0x27, 0x28, 0x29})
 
     def check_eprom_blank(
@@ -2978,15 +2983,14 @@ class EpromOperator:
         This reads the chip with COMMAND_READ and compares it, chunk by
         chunk, against an all-0xFF expected side supplied by a D-04 pull
         callback (`_blank_expected_bytes` below) -- it no longer composes
-        COMMAND_BLANK_CHECK (COMMAND_BLANK_CHECK stays in constants.py;
-        nothing on this path sends it). Returns 0 on an all-blank chip, 1 on
-        at least one non-blank byte, 2 on a setup/transport failure or a
-        refusal.
+        the blank-check command's own wire ordinal, which Phase 204 retired
+        from both the host and firmware ladders entirely; nothing anywhere
+        composes it any more. Returns 0 on an all-blank chip, 1 on at least
+        one non-blank byte, 2 on a setup/transport failure or a refusal.
 
-        A part with no factory-blank state (SRAM/FRAM, or any protocol whose
-        firmware handler leaves CMD_BLANK_CHECK's main-op NULL) has no blank
-        verdict to report -- reporting it as "not blank" answers a question
-        the part does not have. D-12 keeps the pre-wire short-circuit
+        A part with no factory-blank state (SRAM/FRAM) has no blank verdict
+        to report -- reporting it as "not blank" answers a question the
+        part does not have. D-12 keeps the pre-wire short-circuit
         exactly where it was, before any command is composed, and changes
         only its return value: 2, an honest refusal, in place of the old
         false "not blank" verdict. `derive_plan` (chip_test.py) marks these
@@ -3001,8 +3005,10 @@ class EpromOperator:
         file-shorter-than-size refusal at all.
         """
         # SRAM/FRAM blank-check short-circuit — detect before issuing any
-        # firmware command.  configure_sram() leaves a NULL main-op for
-        # CMD_BLANK_CHECK, so the firmware emits 0xA4 MSG_ERR_EMPTY_INPUT.
+        # firmware command.  configure_sram() leaves a NULL main-op for the
+        # blank-check command's now-retired wire ordinal (as does every
+        # other protocol handler now, after Phase 204); on pre-3.1.0
+        # firmware this produced 0xA4 MSG_ERR_EMPTY_INPUT.
         # SRAM/FRAM are volatile or byte-rewritable; "blank" has no meaningful
         # concept for them.  Short-circuit with a clear message; do NOT touch the
         # wire protocol or firmware.

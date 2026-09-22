@@ -49,7 +49,18 @@ CMD_FRAME_MAX = 512
 COMMAND_READ = 1
 COMMAND_WRITE = 2
 COMMAND_ERASE = 3
-COMMAND_BLANK_CHECK = 4
+
+# Ordinal 4 -- the standalone blank-check command -- retired in 3.1.0
+# (Phase 204). The firmware side -- firestarter_fw/include/firestarter.h's
+# CMD ladder and its is_memory_cmd arm -- was retired in the same commit
+# pair. This ordinal must NEVER be reused for any new command, flag or
+# reserved meaning: an already-shipped host still composes it, and
+# reassigning the number would make a stale host silently drive a
+# different operation against firmware that has moved on. The region-scoped
+# blank-check machinery on the firmware side survives this retirement --
+# it is reached only from write-init and erase-end now, and leaves in
+# Phase 205.
+
 COMMAND_CHECK_CHIP_ID = 5
 
 # Ordinal 6 -- the verify command -- retired in 3.1.0 (Phase 204). The
@@ -97,7 +108,6 @@ COMMAND_NAMES = {
     COMMAND_READ: "READ",
     COMMAND_WRITE: "WRITE",
     COMMAND_ERASE: "ERASE",
-    COMMAND_BLANK_CHECK: "BLANK_CHECK",
     COMMAND_CHECK_CHIP_ID: "CHECK_CHIP_ID",
     COMMAND_DEV_ADDRESS: "DEV_ADDRESS",
     COMMAND_DEV_REGISTERS: "DEV_REGISTERS",

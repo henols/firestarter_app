@@ -1765,8 +1765,11 @@ class TestCheckEpromBlankHostSideRead:
     """CMP-02 / phase 202 success criterion 1, second command: `firestarter
     blank <chip>` completes against firmware that still carries the
     blank-check ordinal without ever composing a command dict whose `cmd`
-    is that ordinal (COMMAND_BLANK_CHECK, 4) -- it composes only
-    COMMAND_READ (1) and compares chunk by chunk on the host against a
+    is that ordinal (the blank-check command's own wire ordinal, 4 --
+    retired from constants.py in Phase 204 Plan 03; asserted below on the
+    integer literal, not the deleted symbol, per that same plan's own
+    precedent for its retired verify-ordinal sibling below) -- it composes
+    only COMMAND_READ (1) and compares chunk by chunk on the host against a
     constant blank byte (202-05 D-02/D-04/D-10).
     """
 
@@ -1774,9 +1777,9 @@ class TestCheckEpromBlankHostSideRead:
         self, make_comm, fake_serial
     ) -> None:
         """Collect EVERY composed `command_dict` via the `find_and_connect`
-        side-effect idiom -- no entry's `cmd` is COMMAND_BLANK_CHECK (4) and
-        at least one is COMMAND_READ (1)."""
-        from firestarter.constants import COMMAND_BLANK_CHECK, COMMAND_READ
+        side-effect idiom -- no entry's `cmd` is the retired blank-check
+        ordinal (4) and at least one is COMMAND_READ (1)."""
+        from firestarter.constants import COMMAND_READ
 
         payload = b"\xff" * 8
 
@@ -1801,7 +1804,7 @@ class TestCheckEpromBlankHostSideRead:
 
         assert verdict == 0
         assert command_dicts, "find_and_connect was never called"
-        assert all(cd["cmd"] != COMMAND_BLANK_CHECK for cd in command_dicts)
+        assert all(cd["cmd"] != 4 for cd in command_dicts)
         assert any(cd["cmd"] == COMMAND_READ for cd in command_dicts)
         # Sanity: the driven exchange actually wrote bytes on the wire (acks).
         assert written
@@ -1999,12 +2002,9 @@ class TestOrdinalsNeverSentByVerifyOrBlank:
     property this class protects is about what goes on the wire, not about
     a Python name, so it stays alive and meaningful independent of either
     symbol's lifecycle. COMMAND_VERIFY was retired from constants.py in
-    Phase 204 -- this test already asserted the literal is never sent, so
-    its removal changes nothing here. COMMAND_BLANK_CHECK is still defined
-    in `constants.py` and still dereferenced by `COMMAND_NAMES`; it is
-    retired in plan 03 of this same phase, so a future reader must not
-    mistake its continued presence there for an oversight and prune it
-    early.
+    Phase 204 Plan 01, and COMMAND_BLANK_CHECK in Phase 204 Plan 03 (this
+    same phase) -- this test already asserted both literals are never
+    sent, so neither removal changes anything here.
     """
 
     def test_no_run_composes_either_retired_ordinal(self, tmp_path) -> None:
@@ -2072,6 +2072,39 @@ class TestOrdinalsNeverSentByVerifyOrBlank:
         assert not any(
             b'"cmd": 4' in w or b'"cmd":4' in w or b'"cmd": 6' in w or b'"cmd":6' in w
             for w in written_frames
+        )
+
+    def test_neither_retired_ordinal_is_defined_or_named_on_the_host_ladder(
+        self,
+    ) -> None:
+        """FWCMD-03's host-side half: the constants module exposes neither
+        retired command name, its COMMAND_NAMES map carries neither retired
+        key, and the module's own source carries the reserved-ordinal
+        record naming both numbers. Lives in the host repository
+        deliberately -- no app test scans firmware source today, and this
+        phase does not start that."""
+        import firestarter.constants as constants_module
+
+        assert not hasattr(constants_module, "COMMAND_VERIFY"), (
+            "constants.py must not define COMMAND_VERIFY -- retired in "
+            "Phase 204 Plan 01"
+        )
+        assert not hasattr(constants_module, "COMMAND_BLANK_CHECK"), (
+            "constants.py must not define COMMAND_BLANK_CHECK -- retired "
+            "in Phase 204 Plan 03"
+        )
+        assert 4 not in constants_module.COMMAND_NAMES, (
+            "COMMAND_NAMES must not carry a key for the retired blank-check ordinal (4)"
+        )
+        assert 6 not in constants_module.COMMAND_NAMES, (
+            "COMMAND_NAMES must not carry a key for the retired verify ordinal (6)"
+        )
+        source = Path(constants_module.__file__).read_text()
+        marker = "retired in " + "3.1.0"
+        occurrences = source.count(marker)
+        assert occurrences >= 2, (
+            "constants.py must carry the reserved-ordinal marker at least "
+            f"twice (once per retired ordinal), found {occurrences}"
         )
 
 
