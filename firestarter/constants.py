@@ -51,7 +51,14 @@ COMMAND_WRITE = 2
 COMMAND_ERASE = 3
 COMMAND_BLANK_CHECK = 4
 COMMAND_CHECK_CHIP_ID = 5
-COMMAND_VERIFY = 6
+
+# Ordinal 6 -- the verify command -- retired in 3.1.0 (Phase 204). The
+# firmware side -- firestarter_fw/include/firestarter.h's CMD ladder and its
+# is_memory_cmd arm -- was retired in the same commit pair. This ordinal
+# must NEVER be reused for any new command, flag or reserved meaning: an
+# already-shipped host still composes it, and reassigning the number would
+# make a stale host silently drive a different operation against firmware
+# that has moved on.
 
 COMMAND_DEV_ADDRESS = 7
 COMMAND_DEV_REGISTERS = 8
@@ -59,14 +66,16 @@ COMMAND_DEV_REGISTERS = 8
 # Both SDP commands are unconditional in firmware (firestarter.h:61-62) — never
 # DEV_TOOLS-gated, because they are real user-facing operations in every build.
 # Their COMMAND_NAMES entries below are load-bearing, not cosmetic:
-# COMMAND_NAMES[cmd] is dereferenced by _setup_operation (eprom_operations.py:329)
-# and again by _operation_context (eprom_operations.py:405) — a missing entry
+# COMMAND_NAMES[cmd] is dereferenced by _setup_operation (eprom_operations.py:584)
+# and again by _operation_context (eprom_operations.py:693) — a missing entry
 # is a KeyError at operation setup, not a cosmetic display gap. Corrected
-# 2026-08-03: a prior milestone's insertion staled the
-# original 301/377 citation, which is why the corrected form names the
-# function first with the line number alongside, not the number alone. See
+# 2026-09-21 (Phase 204): the previous comment cited
 # test_command_names_dereferences_both_sdp_commands in
-# tests/test_revision_constants_parity.py, which pins both dereferences.
+# tests/test_revision_constants_parity.py, a test module that does not exist
+# anywhere under firestarter_app/tests/, and gave line numbers (329/405) that
+# no longer matched either dereference site. There is no dedicated test
+# pinning these two dereferences; the citation now names only the two real
+# call sites, by function name with the line number alongside.
 COMMAND_SDP_UNLOCK = 9
 COMMAND_SDP_LOCK = 10
 
@@ -90,7 +99,6 @@ COMMAND_NAMES = {
     COMMAND_ERASE: "ERASE",
     COMMAND_BLANK_CHECK: "BLANK_CHECK",
     COMMAND_CHECK_CHIP_ID: "CHECK_CHIP_ID",
-    COMMAND_VERIFY: "VERIFY",
     COMMAND_DEV_ADDRESS: "DEV_ADDRESS",
     COMMAND_DEV_REGISTERS: "DEV_REGISTERS",
     COMMAND_SDP_UNLOCK: "SDP_UNLOCK",

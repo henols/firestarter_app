@@ -442,8 +442,9 @@ def test_region_end_emitted_on_write(make_comm, fake_serial) -> None:
 
 
 def test_region_end_absent_for_read(make_comm, fake_serial) -> None:
-    """D-05: the emission is guarded on cmd being COMMAND_WRITE or
-    COMMAND_VERIFY -- COMMAND_READ never carries JSON_KEY_REGION_END, so
+    """D-05: the emission is guarded on cmd being COMMAND_WRITE (an
+    equality since Phase 204 retired COMMAND_VERIFY, the guard's other
+    former member) -- COMMAND_READ never carries JSON_KEY_REGION_END, so
     the read path's existing `memory-size` narrowing (`:495`) stays
     undisturbed. region_length is passed here too (not merely omitted) to
     prove the guard is on `cmd`, not on the caller happening not to supply
@@ -477,10 +478,14 @@ def test_region_end_absent_for_read(make_comm, fake_serial) -> None:
 
 class TestVerifyEpromHostSideRead:
     """CMP-01 / phase 202 success criterion 1: `firestarter verify <chip>
-    <file>` completes against firmware that still carries the verify
-    ordinal without ever composing a command dict whose `cmd` is the verify
-    ordinal (COMMAND_VERIFY, 6) -- it composes only COMMAND_READ (1) and
-    compares chunk by chunk on the host (202-01 D-01/D-02/D-10).
+    <file>` completes against firmware without ever composing a command
+    dict whose `cmd` is the retired verify ordinal (6, Phase 204) -- it
+    composes only COMMAND_READ (1) and compares chunk by chunk on the host
+    (202-01 D-01/D-02/D-10). The ordinal is asserted as the integer literal
+    6, not the constant: Phase 204 deleted COMMAND_VERIFY from
+    constants.py, and the property this class protects is about what goes
+    on the wire, not about a Python name -- asserting the literal keeps
+    this test alive and meaningful after the symbol is gone.
     """
 
     def test_no_composed_command_dict_carries_the_verify_ordinal(
@@ -488,9 +493,9 @@ class TestVerifyEpromHostSideRead:
     ) -> None:
         """Collect EVERY composed `command_dict` (not just the last) via the
         `find_and_connect` side-effect idiom, alongside `_capture_written_frames`
-        for the raw wire bytes -- no entry's `cmd` is COMMAND_VERIFY (6) and at
-        least one is COMMAND_READ (1)."""
-        from firestarter.constants import COMMAND_READ, COMMAND_VERIFY
+        for the raw wire bytes -- no entry's `cmd` is the retired verify
+        ordinal (integer literal 6) and at least one is COMMAND_READ (1)."""
+        from firestarter.constants import COMMAND_READ
 
         payload = b"\xde\xad\xbe\xef"
         input_file = tmp_path / "in.bin"
@@ -519,7 +524,9 @@ class TestVerifyEpromHostSideRead:
 
         assert verdict == 0
         assert command_dicts, "find_and_connect was never called"
-        assert all(cd["cmd"] != COMMAND_VERIFY for cd in command_dicts)
+        assert all(cd["cmd"] != 6 for cd in command_dicts), (
+            "a composed command dict carried the retired verify ordinal (6)"
+        )
         assert any(cd["cmd"] == COMMAND_READ for cd in command_dicts)
         # Sanity: the driven exchange actually wrote bytes on the wire (acks).
         assert written
@@ -1981,25 +1988,27 @@ def _run_and_capture(
 
 class TestOrdinalsNeverSentByVerifyOrBlank:
     """CMP-01, CMP-02, phase success criterion 1: neither `verify` nor
-    `blank` ever composes a command dict carrying COMMAND_BLANK_CHECK (4)
-    or COMMAND_VERIFY (6), against firmware that still implements both --
-    proven across four runs (a clean verify, a mismatching verify, a clean
-    blank, and a non-blank blank), collected into a list rather than a
-    single slot so the assertion reads "no call across all four runs used
-    either ordinal", not "the last call used the read ordinal".
+    `blank` ever composes a command dict carrying the blank-check ordinal
+    (4) or the verify ordinal (6) -- proven across four runs (a clean
+    verify, a mismatching verify, a clean blank, and a non-blank blank),
+    collected into a list rather than a single slot so the assertion reads
+    "no call across all four runs used either ordinal", not "the last call
+    used the read ordinal".
 
-    Both retired ordinals are still defined in `constants.py` and still
-    dereferenced by `COMMAND_NAMES` -- they are removed in phases 204 and
-    205, so a future reader must not mistake their continued presence there
-    for an oversight and prune them here.
+    Both ordinals are asserted as integer literals, not constants: the
+    property this class protects is about what goes on the wire, not about
+    a Python name, so it stays alive and meaningful independent of either
+    symbol's lifecycle. COMMAND_VERIFY was retired from constants.py in
+    Phase 204 -- this test already asserted the literal is never sent, so
+    its removal changes nothing here. COMMAND_BLANK_CHECK is still defined
+    in `constants.py` and still dereferenced by `COMMAND_NAMES`; it is
+    retired in plan 03 of this same phase, so a future reader must not
+    mistake its continued presence there for an oversight and prune it
+    early.
     """
 
     def test_no_run_composes_either_retired_ordinal(self, tmp_path) -> None:
-        from firestarter.constants import (
-            COMMAND_BLANK_CHECK,
-            COMMAND_READ,
-            COMMAND_VERIFY,
-        )
+        from firestarter.constants import COMMAND_READ
 
         command_dicts: list[dict] = []
         written_frames: list = []
@@ -2046,11 +2055,11 @@ class TestOrdinalsNeverSentByVerifyOrBlank:
         assert b_mismatch == 1
 
         assert command_dicts, "find_and_connect was never called across the four runs"
-        assert all(cd["cmd"] != COMMAND_BLANK_CHECK for cd in command_dicts), (
-            "a composed command dict carried the blank-check ordinal"
+        assert all(cd["cmd"] != 4 for cd in command_dicts), (
+            "a composed command dict carried the blank-check ordinal (4)"
         )
-        assert all(cd["cmd"] != COMMAND_VERIFY for cd in command_dicts), (
-            "a composed command dict carried the verify ordinal"
+        assert all(cd["cmd"] != 6 for cd in command_dicts), (
+            "a composed command dict carried the retired verify ordinal (6)"
         )
         assert all(cd["cmd"] == COMMAND_READ for cd in command_dicts), (
             "every composed command dict must carry the read ordinal"

@@ -42,7 +42,6 @@ from firestarter.constants import (
     COMMAND_READ,
     COMMAND_SDP_LOCK,
     COMMAND_SDP_UNLOCK,
-    COMMAND_VERIFY,
     COMMAND_WRITE,
     FLAG_FORCE,
     FLAG_SKIP_BLANK_CHECK,
@@ -616,17 +615,18 @@ class EpromOperator:
         # device. region_length is the payload size in bytes; the wire carries
         # an absolute EXCLUSIVE end address so the firmware never has to redo
         # this arithmetic against a scan cursor that moves across chunks (see
-        # RESEARCH.md C-3). One code path, no branch on address presence: the
-        # key is emitted on every write and verify, not only when --address is
-        # given. region_length greater than zero is deliberate: a zero-length
+        # RESEARCH.md C-3). Phase 204 retired COMMAND_VERIFY (ordinal 6) --
+        # nothing composes it any more, so the write path is now the ONLY
+        # composer of this key; the guard is an equality against COMMAND_WRITE
+        # rather than a one-member tuple, deliberately, so a later reader does
+        # not read a tuple of one as an invitation to "restore" a second
+        # member. region_length greater than zero is deliberate: a zero-length
         # payload at address 0 would compute an end of 0, which the firmware
         # reads as absent (whole device) -- emitting nothing reaches that same
-        # outcome explicitly instead of by numeric coincidence.
-        if (
-            region_length is not None
-            and region_length > 0
-            and cmd in (COMMAND_WRITE, COMMAND_VERIFY)
-        ):
+        # outcome explicitly instead of by numeric coincidence. This block's
+        # own premise expires in Phase 205, which removes the firmware-side
+        # write-init blank check this key exists to scope.
+        if region_length is not None and region_length > 0 and cmd == COMMAND_WRITE:
             command_dict[JSON_KEY_REGION_END] = addr + region_length
 
         try:
@@ -2702,9 +2702,11 @@ class EpromOperator:
         202-01 D-01/D-02/D-04/D-10: this reads the chip with COMMAND_READ and
         compares chunk by chunk on the host through `compare.py`'s streaming
         accumulator -- it no longer pushes the file to the firmware's own
-        verify ordinal (COMMAND_VERIFY stays in constants.py; nothing on this
-        path composes it). Returns 0 on a match, 1 on a mismatch, 2 on a
-        setup, transport, or I/O failure (D-10, confirmed).
+        verify ordinal. Phase 204 retired that ordinal (COMMAND_VERIFY) from
+        both the host and the firmware entirely; nothing on this path, or
+        anywhere else in this repository, composes it any more. Returns 0 on
+        a match, 1 on a mismatch, 2 on a setup, transport, or I/O failure
+        (D-10, confirmed).
 
         202-04 D-06/D-08/D-09: unless `full` is true, the drive passes
         `accumulator.has_mismatch` as `_main_phase_read_data`'s
@@ -2740,11 +2742,12 @@ class EpromOperator:
         # which is where that computation already lives on the write path.
         # This value is NOT forwarded to _operation_context as region_length
         # below: that kwarg only reaches the wire as JSON_KEY_REGION_END for
-        # cmd in (COMMAND_WRITE, COMMAND_VERIFY) (_setup_operation's guard),
-        # and this path composes COMMAND_READ, so passing it there would be
-        # silently discarded. It is used locally instead, for the resolved
-        # size string (below) and for `result.total` (D-10's incomplete-
-        # compare prohibition).
+        # cmd == COMMAND_WRITE (_setup_operation's guard, an equality since
+        # Phase 204 retired COMMAND_VERIFY -- the write path is now the only
+        # composer of that key), and this path composes COMMAND_READ, so
+        # passing it there would be silently discarded. It is used locally
+        # instead, for the resolved size string (below) and for
+        # `result.total` (D-10's incomplete-compare prohibition).
         try:
             file_length = os.path.getsize(input_file_path)
         except OSError:
