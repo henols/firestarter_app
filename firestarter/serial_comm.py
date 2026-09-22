@@ -29,7 +29,6 @@ from firestarter.constants import (
     FLAG_CHIP_ENABLE,
     FLAG_FORCE,
     FLAG_OUTPUT_ENABLE,
-    FLAG_SKIP_BLANK_CHECK,
     FLAG_SKIP_ERASE,
     FLAG_VPE_AS_VPP,
     REVISION_2_2,
@@ -636,8 +635,6 @@ class SerialCommunicator:
                     flag_details.append("CanErase")
                 if flags & FLAG_SKIP_ERASE:
                     flag_details.append("SkipErase")
-                if flags & FLAG_SKIP_BLANK_CHECK:
-                    flag_details.append("SkipBlankCheck")
                 if flags & FLAG_VPE_AS_VPP:
                     flag_details.append("VPEasVPP")
                 if flags & FLAG_CHIP_ENABLE:

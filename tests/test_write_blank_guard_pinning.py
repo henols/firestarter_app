@@ -29,11 +29,14 @@ Coverage:
      carries no newline, and none of a forbidden-substring list built for
      THIS sentence (not copied from `flash4_erase_gate`'s, which forbids the
      word "write" -- a word this sentence legitimately contains).
-  7. THE FLAG LEGS -- `requires_blank_check`/`is_erase_exempt` over
-     `FLAG_SKIP_BLANK_CHECK`, `FLAG_SKIP_ERASE` (D-03's re-arming), and
-     `FLAG_FORCE` (D-09's non-bypass), plus the `_build_op_flags` mapping
-     `-b`/`--skip-erase` actually produce, and the `dev test` UV
-     write-shortcut's `write_flags` expression fed straight into the guard.
+  7. THE FLAG LEGS -- `requires_blank_check`/`is_erase_exempt` over the
+     explicit `blank_check_requested` keyword (FWBLANK-04, Phase 205:
+     replaces the retired skip-blank-check wire bit, `0x08`),
+     `FLAG_SKIP_ERASE` (D-03's re-arming), and `FLAG_FORCE` (D-09's
+     non-bypass), plus the `_build_op_flags` mapping `--skip-erase`
+     actually produces (`blank_check` no longer composes any wire bit),
+     and the `dev test` UV write-shortcut's `blank_check_requested`
+     expression fed straight into the guard.
   8. THE ABSENT-EVIDENCE LEG -- `is_guarded_protocol` fails CLOSED on
      `None`/`{}`/`{"algorithm": None}`, and is False for a protocol id in
      NEITHER set (Fork A), derived as a value no shipped row carries rather
@@ -55,7 +58,6 @@ from firestarter.cli_handlers import _build_op_flags, cli
 from firestarter.constants import (
     FLAG_CAN_ERASE,
     FLAG_FORCE,
-    FLAG_SKIP_BLANK_CHECK,
     FLAG_SKIP_ERASE,
 )
 from firestarter.database import EpromDatabase
@@ -256,42 +258,48 @@ def test_refusal_text_message_shape_is_pinned_by_equality_and_carries_no_forbidd
 def test_requires_blank_check_flag_legs_for_a_flags_zero_guarded_part():
     guarded = {"algorithm": 7, "flags": 0}
     assert requires_blank_check(guarded, 0) is True
-    assert requires_blank_check(guarded, FLAG_SKIP_BLANK_CHECK) is False
+    assert requires_blank_check(guarded, 0, blank_check_requested=False) is False
     assert requires_blank_check(guarded, FLAG_FORCE) is True
 
 
-def test_build_op_flags_blank_check_false_sets_only_the_skip_blank_check_bit():
-    """`-b`/`--no-blank-check` maps to exactly one bit."""
+def test_build_op_flags_blank_check_false_sets_no_wire_bit():
+    """FWBLANK-04 (Phase 205): `-b`/`--no-blank-check` no longer composes
+    any wire bit at all -- the retired skip-blank-check flag (0x08) is
+    gone from the ladder. Its effect now travels to `write_eprom`'s
+    `blank_check_requested` keyword instead (see test_cli_handlers.py)."""
     flags = _build_op_flags(blank_check=False)
-    assert flags & FLAG_SKIP_BLANK_CHECK
-    assert not (flags & FLAG_SKIP_ERASE)
+    assert flags == 0
 
 
 def test_build_op_flags_skip_erase_sets_only_the_skip_erase_bit():
-    """`--skip-erase` maps to exactly one bit, the OTHER one."""
+    """`--skip-erase` maps to exactly one bit."""
     flags = _build_op_flags(skip_erase=True)
-    assert flags & FLAG_SKIP_ERASE
-    assert not (flags & FLAG_SKIP_BLANK_CHECK)
+    assert flags == FLAG_SKIP_ERASE
 
 
 def test_requires_blank_check_skip_erase_rearms_the_guard_on_an_erase_capable_part():
     """D-03: `--skip-erase` makes the exemption's premise -- "the erase
     immediately above the check already guarantees blank" -- false, so the
-    guard re-arms even though `FLAG_CAN_ERASE` is still set."""
+    guard re-arms even though `FLAG_CAN_ERASE` is still set. The explicit
+    `blank_check_requested=False` bypass still overrides the re-armed
+    guard (FWBLANK-04)."""
     erase_capable = {"algorithm": 7, "flags": FLAG_CAN_ERASE}
     assert requires_blank_check(erase_capable, 0) is False
     assert requires_blank_check(erase_capable, FLAG_SKIP_ERASE) is True
     assert (
-        requires_blank_check(erase_capable, FLAG_SKIP_ERASE | FLAG_SKIP_BLANK_CHECK)
+        requires_blank_check(
+            erase_capable, FLAG_SKIP_ERASE, blank_check_requested=False
+        )
         is False
     )
 
 
 def test_dev_test_uv_write_shortcut_keeps_working_and_the_unmasked_case_is_guarded():
     """D-07: `dev test`'s monotonic-masked UV write shortcut keeps working
-    unchanged (the same `write_flags` expression
+    unchanged (the same `blank_check_requested` expression
     `chip_test._dispatch_multi_run` actually uses, fed straight into the
-    guard), and a non-masked UV target -- `write_flags == 0` -- is now
+    guard -- FWBLANK-04, Phase 205, re-keyed off the retired
+    `write_flags`/wire-bit expression), and a non-masked UV target is now
     guarded by the host, which is the case where the firmware would have
     refused the identical write anyway (RESEARCH section 11.1)."""
     from firestarter.chip_test import (
@@ -327,20 +335,26 @@ def test_dev_test_uv_write_shortcut_keeps_working_and_the_unmasked_case_is_guard
         current_source="test fixture",
     )
 
-    # The exact expression chip_test.py:3219-3221 uses at its OP_WRITE /
-    # OP_WRITE_PARTIAL dispatch site.
-    masked_write_flags = (
-        FLAG_SKIP_BLANK_CHECK if _is_monotonic_masked_target(masked_target) else 0
-    )
-    unmasked_write_flags = (
-        FLAG_SKIP_BLANK_CHECK if _is_monotonic_masked_target(unmasked_target) else 0
-    )
+    # The exact expression chip_test.py's masked UV slot write uses at its
+    # OP_WRITE / OP_WRITE_PARTIAL dispatch site (FWBLANK-04, Phase 205).
+    masked_blank_check_requested = not _is_monotonic_masked_target(masked_target)
+    unmasked_blank_check_requested = not _is_monotonic_masked_target(unmasked_target)
 
-    assert masked_write_flags == FLAG_SKIP_BLANK_CHECK
-    assert unmasked_write_flags == 0
+    assert masked_blank_check_requested is False
+    assert unmasked_blank_check_requested is True
 
-    assert requires_blank_check(guarded, masked_write_flags) is False
-    assert requires_blank_check(guarded, unmasked_write_flags) is True
+    assert (
+        requires_blank_check(
+            guarded, 0, blank_check_requested=masked_blank_check_requested
+        )
+        is False
+    )
+    assert (
+        requires_blank_check(
+            guarded, 0, blank_check_requested=unmasked_blank_check_requested
+        )
+        is True
+    )
 
 
 # ---------------------------------------------------------------------------

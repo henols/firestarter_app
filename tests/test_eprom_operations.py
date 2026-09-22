@@ -191,13 +191,16 @@ def test_build_flags_force_sets_bit() -> None:
     assert build_flags(force=True) & FLAG_FORCE
 
 
-def test_build_flags_no_blank_check_sets_skip_bit() -> None:
-    """blank_check=False sets FLAG_SKIP_BLANK_CHECK."""
-    from firestarter.constants import FLAG_SKIP_BLANK_CHECK
+def test_build_flags_no_blank_check_sets_no_wire_bit() -> None:
+    """FWBLANK-04 (Phase 205): blank_check=False no longer composes any
+    wire bit at all -- the flag it used to set (0x08) is retired from the
+    ladder. The parameter's effect now travels only to write_eprom's
+    blank_check_requested keyword, threaded straight to the host-side
+    write guard."""
     from firestarter.eprom_operations import build_flags
 
-    flags = build_flags(blank_check=False)
-    assert flags & FLAG_SKIP_BLANK_CHECK
+    assert build_flags(blank_check=False) == 0
+    assert build_flags(blank_check=True) == 0
 
 
 def test_build_flags_vpe_as_vpp_and_verbose() -> None:
@@ -2106,6 +2109,51 @@ class TestOrdinalsNeverSentByVerifyOrBlank:
             "constants.py must carry the reserved-ordinal marker at least "
             f"twice (once per retired ordinal), found {occurrences}"
         )
+
+
+def test_the_retired_control_flag_is_absent_and_its_gap_is_recorded() -> None:
+    """FWBLANK-04's host-side ladder leg, following Phase 204's executed
+    shape above for the command ladder: the constants module exposes no
+    symbol for the retired skip-blank-check control flag, no production
+    module composes its retired value (0x08) into an operation-flags
+    value, and the reserved note is present in the constants module's own
+    source. Lives here rather than in write_blank_guard's own test module
+    because Phase 204's precedent for a ladder-retirement leg lives here
+    too."""
+    import firestarter.chip_test as chip_test_module
+    import firestarter.constants as constants_module
+    import firestarter.eprom_operations as eprom_operations_module
+    import firestarter.serial_comm as serial_comm_module
+    import firestarter.write_blank_guard as write_blank_guard_module
+
+    assert not hasattr(constants_module, "FLAG_SKIP_BLANK_CHECK"), (
+        "constants.py must not define FLAG_SKIP_BLANK_CHECK -- retired in "
+        "Phase 205 Plan 04 (FWBLANK-04)"
+    )
+
+    for module in (
+        chip_test_module,
+        eprom_operations_module,
+        serial_comm_module,
+        write_blank_guard_module,
+    ):
+        module_source = Path(module.__file__).read_text()
+        assert "FLAG_SKIP_BLANK_CHECK" not in module_source, (
+            f"{module.__name__} must not name the retired control flag's "
+            "identifier anywhere -- FWBLANK-04 retires it with no "
+            f"reference left in production source (found in {module.__file__})"
+        )
+
+    constants_source = Path(constants_module.__file__).read_text()
+    marker = "retired in " + "3.1.0"
+    assert constants_source.count(marker) >= 1, (
+        "constants.py must carry the reserved-flag marker at the 0x08 gap "
+        "in the flag block"
+    )
+    assert "0x08" in constants_source, (
+        "constants.py's flag block must record the retired flag's value "
+        "(0x08) at the gap"
+    )
 
 
 class TestSdpOperationsWireShape:

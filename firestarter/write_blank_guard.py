@@ -27,13 +27,15 @@ the same deviation `page_size_gate` and `jp5_gate` already make for their
 own cases: this gate FAILS CLOSED. `flash4_erase_gate` guards an
 *availability* property -- refusing an unclassifiable part there breaks
 `erase` for it, an availability regression, not a safety one. This guard is
-the whole safety net after Phase 205 removes the firmware's own write-init
-pre-flight, so guessing wrong here in the safe direction -- guarding a part
-this predicate cannot classify -- costs an unnecessary read and a refusal
-the operator clears with `-b`/`--no-blank-check`, the documented escape.
-Guessing wrong in the other direction risks an irreversible overwrite of a
-UV-EPROM part that can never be un-programmed. Absence of evidence is
-treated as "not provably safe", never as "probably fine".
+the whole safety net now that Phase 205 has removed the firmware's own
+write-init pre-flight (FWBLANK-01/02/03) and retired the wire bit that used
+to let a caller suppress it (FWBLANK-04), so guessing wrong here in the
+safe direction -- guarding a part this predicate cannot classify -- costs
+an unnecessary read and a refusal the operator clears with
+`-b`/`--no-blank-check`, the documented escape. Guessing wrong in the other
+direction risks an irreversible overwrite of a UV-EPROM part that can
+never be un-programmed. Absence of evidence is treated as "not provably
+safe", never as "probably fine".
 """
 
 from __future__ import annotations
@@ -43,7 +45,6 @@ from typing import Any, Mapping  # noqa: UP035
 from firestarter.address_parser import parse_address
 from firestarter.constants import (
     FLAG_CAN_ERASE,
-    FLAG_SKIP_BLANK_CHECK,
     FLAG_SKIP_ERASE,
 )
 from firestarter.exceptions import NegativeStartAddressError
@@ -55,11 +56,16 @@ from firestarter.sdp_capability import SDP_PROTOCOL_ID
 # make the host start refusing writes on protocol 0x05 and on every
 # SRAM/FRAM part, families the firmware has never blank-checked.
 GUARDED_PROTOCOL_IDS: frozenset[int] = frozenset({0x06, 0x07, 0x08, 0x0B, 0x10})
-"""The protocol ids whose firmware write-init path blank-checks today:
+"""The protocol ids whose firmware write-init path used to blank-check,
+before Phase 205 (FWBLANK-01/02/03) removed that pre-flight from the
+firmware entirely -- this guard is now their ONLY pre-write blank check:
 
-- `0x07` / `0x08` / `0x0B` -- UV-EPROM, region-scoped, `eprom.cpp:144-145`.
-- `0x06` -- NOR unlock, whole-device, after an erase, `flash_nor_unlock.cpp:104-105`.
-- `0x10` -- Intel flash, whole-device, after an erase, `flash_intel.cpp:94-95`.
+- `0x07` / `0x08` / `0x0B` -- UV-EPROM, region-scoped. Firmware's own
+  check lived in `eprom.cpp`'s write-init body; retired in 3.1.0.
+- `0x06` -- NOR unlock, whole-device, after an erase. Firmware's own
+  check lived in `flash_nor_unlock.cpp`'s write-init; retired in 3.1.0.
+- `0x10` -- Intel flash, whole-device, after an erase. Firmware's own
+  check lived in `flash_intel.cpp`'s write-init; retired in 3.1.0.
 
 A part whose erase actually ran (`is_erase_exempt` below) is exempt from
 this set's guard even though its protocol id is a member."""
@@ -83,7 +89,7 @@ named exemption. `0x05` (flash4) auto-erases per page, and its
 named here instead.
 
 `0x0D` (28C parallel / SDP, `SDP_PROTOCOL_ID`) also auto-erases per page
-(`eeprom_28c.cpp:379-384`) and never blank-checks at write-init. It carries
+(`eeprom_28c.cpp:378-384`) and never blank-checks at write-init. It carries
 84 shipped rows across 15 vendors -- the single largest exemption by row
 count, larger than every guarded protocol's own row count. D-01's prose
 names only SRAM/FRAM and flash4 by name; its own firmware table lists this
@@ -165,19 +171,27 @@ def is_erase_exempt(
 
 
 def requires_blank_check(
-    programmer_data: Mapping[str, Any] | None, operation_flags: int
+    programmer_data: Mapping[str, Any] | None,
+    operation_flags: int,
+    *,
+    blank_check_requested: bool = True,
 ) -> bool:
     """The top-level verdict: must this write's target region be proven
     blank before any programming command reaches the wire?
 
-    False when `FLAG_SKIP_BLANK_CHECK` is set in the effective flags
-    (WRITE-03 / D-09: the documented bypass is the blank-check flag,
-    `FLAG_FORCE` is deliberately not consulted here), False when
-    `is_erase_exempt`, False when not `is_guarded_protocol`, True
-    otherwise.
+    False when `blank_check_requested` is `False` (WRITE-03 / D-09: the
+    documented bypass; `FLAG_FORCE` is deliberately not consulted here),
+    False when `is_erase_exempt`, False when not `is_guarded_protocol`,
+    True otherwise.
+
+    `blank_check_requested` is keyword-only, default `True` -- FWBLANK-04
+    (Phase 205) re-keys this decision off an explicit caller signal instead
+    of the retired skip-blank-check wire bit (`0x08`), which no longer
+    exists on either ladder. `write_eprom`'s own keyword-only parameter of
+    the same name is what `write -b` and `dev test`'s masked UV slot write
+    thread through to reach this bypass.
     """
-    flags = effective_flags(programmer_data, operation_flags)
-    if flags & FLAG_SKIP_BLANK_CHECK:
+    if not blank_check_requested:
         return False
     if is_erase_exempt(programmer_data, operation_flags):
         return False

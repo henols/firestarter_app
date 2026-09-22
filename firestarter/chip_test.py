@@ -54,7 +54,6 @@ from firestarter.compare import (
 # unrequested test rewrite).
 from firestarter.constants import (
     FLAG_CAN_ERASE,  # 0x02 -- do NOT redefine; import
-    FLAG_SKIP_BLANK_CHECK,
     FLAG_SKIP_SDP_UNLOCK,  # 0x100 -- passed on OP_WRITE_INHIBITED ONLY.
     # Do NOT redefine; import.
 )
@@ -2290,8 +2289,10 @@ class WriteTarget:
 
     `current_is_probe_read` is `True` only when `current` was read off the
     DEVICE for the EXACT region being written; it is the monotonicity
-    witness the `FLAG_SKIP_BLANK_CHECK` pass is derived from. It exists as a
-    boolean rather than a `current_source` compare because the staged
+    witness the blank-check-skip signal is derived from (FWBLANK-04,
+    Phase 205: an explicit `blank_check_requested=False` keyword now,
+    rather than the retired skip-blank-check wire bit, `0x08`). It exists
+    as a boolean rather than a `current_source` compare because the staged
     tranche targets that actually reach `write_eprom` carry
     `"probe read (tranche 1/2)"`, so a string equality against `"probe
     read"` never matches on a real run.
@@ -2597,12 +2598,17 @@ def _dispatch_step(
         # (CONTEXT.md); this arm still folds 1 (not blank) and 2 (refusal)
         # into the same "not ok" branch exactly as the old False did.
         is_ok = operator.check_eprom_blank(name, eprom_data) == 0
-        # Debug session w27c512-devtest-all-bad: a failing blank-check now
-        # carries the firmware's own id and text. This is the step where it
-        # matters most -- mem_util_blank_check emits MSG_ERR_NOT_BLANK with
-        # the offending 3-byte ADDRESS and the byte VALUE it read, which is
-        # the single most useful datum in a `dev test` failure and was being
-        # dropped on the floor.
+        # Debug session w27c512-devtest-all-bad: a failing blank-check
+        # carries the firmware's own id and text when the failure is a
+        # genuine firmware refusal rather than a host-side compare
+        # mismatch -- pre-3.1.0 firmware's own write-init/erase-end
+        # blank-check pre-flight used to emit MSG_ERR_NOT_BLANK with the
+        # offending 3-byte ADDRESS and the byte VALUE it read, which is the
+        # single most useful datum in a `dev test` failure and was being
+        # dropped on the floor. That firmware-side emission left the
+        # firmware in 3.1.0 (FWBLANK-01/02/03, Phase 205); this extraction
+        # stays because a board still running pre-3.1.0 firmware can send
+        # it (D-08).
         code, message = (None, "") if is_ok else _firmware_error(operator)
         if is_ok:
             verdict = VERDICT_OK
@@ -3217,9 +3223,12 @@ def _dispatch_multi_run(
             tmp_fh.close()
         tmp_source_path = tmp_fh.name
 
-    write_flags = (
-        FLAG_SKIP_BLANK_CHECK if _is_monotonic_masked_target(resolved_target) else 0
-    )
+    # FWBLANK-04 (Phase 205): the retired skip-blank-check wire bit (0x08)
+    # no longer exists on either ladder. This is the one non-CLI producer
+    # of what used to be that bit; it now reaches write_eprom's own
+    # blank_check_requested keyword directly instead of composing a wire
+    # flag -- the same explicit route `write -b` uses.
+    blank_check_requested = not _is_monotonic_masked_target(resolved_target)
     try:
         for _ in range(runs):
             if op in (OP_WRITE, OP_WRITE_PARTIAL):
@@ -3229,8 +3238,9 @@ def _dispatch_multi_run(
                         name,
                         eprom_data,
                         tmp_source_path,
-                        write_flags,
+                        0,
                         address_str=_address_arg(region_start),
+                        blank_check_requested=blank_check_requested,
                     )
                 )
                 _sample(sampler, "after")

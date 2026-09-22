@@ -883,6 +883,10 @@ def write(
         # untouched byte-for-byte and the --verify path prints exactly one
         # combined line instead of two.
         suppress_verdict_line=verify,
+        # FWBLANK-04 (Phase 205): `-b`/`--no-blank-check` no longer travels
+        # as a wire bit at all -- it reaches the host-side write guard
+        # directly through this keyword.
+        blank_check_requested=blank_check,
     )
 
     if not verify:

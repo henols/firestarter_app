@@ -393,24 +393,21 @@ def test_write_no_blank_check_polarity(runner: CliRunner) -> None:
     """TRAP #3 / D-13.3: ``-b/--no-blank-check`` flips ``blank_check`` to False.
 
     Default (no flag): blank_check=True. With -b present: blank_check=False.
-    Verified by inspecting the FLAGS bit Click computes from --no-blank-check
-    and forwards to write_eprom via operation_flags. The FLAG_SKIP_BLANK_CHECK
-    bit (0x01) is set iff blank_check=False (matches build_flags in
-    eprom_operations.py:62).
+    FWBLANK-04 (Phase 205) retired the wire bit this used to travel as;
+    verified now by inspecting write_eprom's own `blank_check_requested`
+    keyword argument directly.
     """
-    from firestarter.constants import FLAG_SKIP_BLANK_CHECK
-
     operator = Mock(spec=EpromOperator)
     operator.write_eprom.return_value = True
 
-    # Default (no -b): blank_check should be True -> FLAG_SKIP_BLANK_CHECK NOT set.
+    # Default (no -b): blank_check should be True.
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["write", "W27C512", "in.bin"], obj=app)
     assert result.exit_code == 0
     _, kwargs = operator.write_eprom.call_args
-    assert not (kwargs["operation_flags"] & FLAG_SKIP_BLANK_CHECK)
+    assert kwargs["blank_check_requested"] is True
 
-    # With -b: blank_check should be False -> FLAG_SKIP_BLANK_CHECK set.
+    # With -b: blank_check should be False.
     operator.write_eprom.reset_mock()
     app2 = make_app_context(eprom_operator=operator)
     result2 = runner.invoke(
@@ -418,7 +415,7 @@ def test_write_no_blank_check_polarity(runner: CliRunner) -> None:
     )
     assert result2.exit_code == 0
     _, kwargs2 = operator.write_eprom.call_args
-    assert kwargs2["operation_flags"] & FLAG_SKIP_BLANK_CHECK
+    assert kwargs2["blank_check_requested"] is False
 
 
 def test_write_b_decouples_skip_erase_phase92(runner: CliRunner) -> None:
@@ -429,9 +426,11 @@ def test_write_b_decouples_skip_erase_phase92(runner: CliRunner) -> None:
     electrically-erasable chip silently skipped the required erase (leaving
     un-erasable 0->1 bits while the firmware reported "successful"). After the
     decouple, ``-b`` no longer sets FLAG_SKIP_ERASE; ``--skip-erase`` is the
-    explicit opt-in.
+    explicit opt-in. FWBLANK-04 (Phase 205) retired the wire bit ``-b`` used
+    to set; it now travels as write_eprom's `blank_check_requested` keyword
+    instead of an operation_flags bit.
     """
-    from firestarter.constants import FLAG_SKIP_BLANK_CHECK, FLAG_SKIP_ERASE
+    from firestarter.constants import FLAG_SKIP_ERASE
 
     operator = Mock(spec=EpromOperator)
     operator.write_eprom.return_value = True
@@ -440,9 +439,9 @@ def test_write_b_decouples_skip_erase_phase92(runner: CliRunner) -> None:
     app = make_app_context(eprom_operator=operator)
     r = runner.invoke(cli, ["write", "W27C512", "in.bin", "-b"], obj=app)
     assert r.exit_code == 0
-    f = operator.write_eprom.call_args.kwargs["operation_flags"]
-    assert f & FLAG_SKIP_BLANK_CHECK
-    assert not (f & FLAG_SKIP_ERASE)
+    kwargs = operator.write_eprom.call_args.kwargs
+    assert kwargs["blank_check_requested"] is False
+    assert not (kwargs["operation_flags"] & FLAG_SKIP_ERASE)
 
     # `write -b --skip-erase`: both skipped (explicit opt-in).
     operator.write_eprom.reset_mock()
@@ -451,18 +450,18 @@ def test_write_b_decouples_skip_erase_phase92(runner: CliRunner) -> None:
         cli, ["write", "W27C512", "in.bin", "-b", "--skip-erase"], obj=app2
     )
     assert r2.exit_code == 0
-    f2 = operator.write_eprom.call_args.kwargs["operation_flags"]
-    assert f2 & FLAG_SKIP_BLANK_CHECK
-    assert f2 & FLAG_SKIP_ERASE
+    kwargs2 = operator.write_eprom.call_args.kwargs
+    assert kwargs2["blank_check_requested"] is False
+    assert kwargs2["operation_flags"] & FLAG_SKIP_ERASE
 
     # plain `write`: neither skipped (erase runs, blank check runs).
     operator.write_eprom.reset_mock()
     app3 = make_app_context(eprom_operator=operator)
     r3 = runner.invoke(cli, ["write", "W27C512", "in.bin"], obj=app3)
     assert r3.exit_code == 0
-    f3 = operator.write_eprom.call_args.kwargs["operation_flags"]
-    assert not (f3 & FLAG_SKIP_BLANK_CHECK)
-    assert not (f3 & FLAG_SKIP_ERASE)
+    kwargs3 = operator.write_eprom.call_args.kwargs
+    assert kwargs3["blank_check_requested"] is True
+    assert not (kwargs3["operation_flags"] & FLAG_SKIP_ERASE)
 
 
 def test_verify_happy_path(runner: CliRunner) -> None:
@@ -918,29 +917,37 @@ def test_erase_happy_path(runner: CliRunner) -> None:
 
 
 def test_erase_blank_check_polarity(runner: CliRunner) -> None:
-    """TRAP #3 / D-13.3: erase ``-b/--blank-check`` polarity is the inverse of
-    write's ``--no-blank-check`` — both coexist verbatim.
+    """TRAP #3 / D-13.3 (historical): erase ``-b/--blank-check`` polarity is
+    the inverse of write's ``--no-blank-check`` — both coexist verbatim.
 
-    Default (no -b): blank_check=False -> FLAG_SKIP_BLANK_CHECK SET.
-    With -b: blank_check=True -> FLAG_SKIP_BLANK_CHECK NOT set.
+    FWBLANK-04 (Phase 205 Plan 04) retired the wire bit this test used to
+    observe on `operation_flags` -- `_build_op_flags` no longer composes
+    any such bit for either command, with `-b` present or absent.
+    `erase()`'s own post-erase check (D-01/D-02, Phase 205 Plan 01) is
+    driven entirely by the CLI's own `blank_check` local variable calling
+    `check_eprom_blank` directly, never through a flag on the erase
+    command's wire frame; that dispatch has its own coverage elsewhere.
+    This leg is re-anchored to assert the wire-composition invariant
+    directly: no flag distinguishes the two invocations any more.
     """
-    from firestarter.constants import FLAG_SKIP_BLANK_CHECK
-
     operator = Mock(spec=EpromOperator)
     operator.erase_eprom.return_value = True
 
-    # Default (no -b): blank_check=False -> SKIP set.
     app = make_app_context(eprom_operator=operator)
     runner.invoke(cli, ["erase", "W27C512"], obj=app)
     _, kwargs = operator.erase_eprom.call_args
-    assert kwargs["operation_flags"] & FLAG_SKIP_BLANK_CHECK
+    flags_without_b = kwargs["operation_flags"]
 
-    # With -b: blank_check=True -> SKIP not set.
     operator.erase_eprom.reset_mock()
     app2 = make_app_context(eprom_operator=operator)
     runner.invoke(cli, ["erase", "W27C512", "-b"], obj=app2)
     _, kwargs2 = operator.erase_eprom.call_args
-    assert not (kwargs2["operation_flags"] & FLAG_SKIP_BLANK_CHECK)
+    flags_with_b = kwargs2["operation_flags"]
+
+    assert flags_without_b == flags_with_b, (
+        "erase's operation_flags must be identical with and without -b -- "
+        "the retired skip-blank-check bit no longer distinguishes them"
+    )
 
 
 def test_erase_operator_returns_false(runner: CliRunner) -> None:

@@ -147,11 +147,14 @@ def test_requires_blank_check_true_for_guarded_non_exempt() -> None:
     assert requires_blank_check({"algorithm": 7, "flags": 0}, 0) is True
 
 
-def test_requires_blank_check_false_with_skip_blank_check_flag() -> None:
-    from firestarter.constants import FLAG_SKIP_BLANK_CHECK
-
+def test_requires_blank_check_false_with_blank_check_requested_false() -> None:
+    """FWBLANK-04 (Phase 205): the bypass is now the explicit keyword-only
+    `blank_check_requested=False` signal, not a wire bit -- the retired
+    flag (0x08) no longer exists on either ladder."""
     assert (
-        requires_blank_check({"algorithm": 7, "flags": 0}, FLAG_SKIP_BLANK_CHECK)
+        requires_blank_check(
+            {"algorithm": 7, "flags": 0}, 0, blank_check_requested=False
+        )
         is False
     )
 
@@ -283,6 +286,7 @@ def _drive_write_eprom(
     frame_scripts: list[list[bytes]],
     address_str: str | None = None,
     operation_flags: int = 0,
+    blank_check_requested: bool = True,
 ) -> tuple[bool, list[int]]:
     """Drive the genuine `EpromOperator.write_eprom` through `_FakeSerial`.
 
@@ -330,6 +334,7 @@ def _drive_write_eprom(
             str(input_file),
             operation_flags=operation_flags,
             address_str=address_str,
+            blank_check_requested=blank_check_requested,
         )
     return ok, opened
 
@@ -553,12 +558,11 @@ def test_write_with_incomplete_guard_read_is_refused_and_no_write_reaches_the_wi
     assert operator.last_write_guard_verdict == 1
 
 
-def test_write_with_skip_blank_check_flag_pays_no_guard_read(tmp_path) -> None:
-    """WRITE-03 / D-09: `FLAG_SKIP_BLANK_CHECK` bypasses the guard on an
-    otherwise-guarded, non-exempt M27C512 -- the captured sequence is
-    exactly [COMMAND_WRITE], no guard read paid."""
-    from firestarter.constants import FLAG_SKIP_BLANK_CHECK
-
+def test_write_with_blank_check_requested_false_pays_no_guard_read(tmp_path) -> None:
+    """WRITE-03 / D-09: `blank_check_requested=False` (FWBLANK-04's
+    explicit-keyword replacement for the retired skip-blank-check wire
+    bit) bypasses the guard on an otherwise-guarded, non-exempt M27C512 --
+    the captured sequence is exactly [COMMAND_WRITE], no guard read paid."""
     payload = b"\xaa" * 64
 
     ok, opened = _drive_write_eprom(
@@ -567,7 +571,7 @@ def test_write_with_skip_blank_check_flag_pays_no_guard_read(tmp_path) -> None:
         eprom_data=_m27c512_data(),
         payload=payload,
         frame_scripts=[_write_phase_frames()],
-        operation_flags=FLAG_SKIP_BLANK_CHECK,
+        blank_check_requested=False,
     )
 
     assert ok is True
@@ -612,11 +616,12 @@ def test_write_no_blank_check_via_build_op_flags_on_erase_capable_part_pays_no_g
     tmp_path,
 ) -> None:
     """The `-b` integration leg: drives `write_eprom` with the REAL
-    `_build_op_flags(blank_check=False)` output -- the exact value
-    `cli_handlers.write`'s `-b` option produces -- rather than the raw
-    `FLAG_SKIP_BLANK_CHECK` constant, proving the CLI-flag-to-guard plumbing
-    end to end on an erase-capable part. Captured sequence is exactly
-    `[COMMAND_WRITE]`, no read paid."""
+    `_build_op_flags(blank_check=False)` output for `operation_flags`
+    (which FWBLANK-04 makes a no-op wire-wise -- it composes no bit at all
+    now) PLUS `blank_check_requested=False`, the exact combination
+    `cli_handlers.write`'s `-b` option now produces, proving the
+    CLI-flag-to-guard plumbing end to end on an erase-capable part.
+    Captured sequence is exactly `[COMMAND_WRITE]`, no read paid."""
     from firestarter.cli_handlers import _build_op_flags
 
     payload = b"\xaa" * 64
@@ -628,6 +633,7 @@ def test_write_no_blank_check_via_build_op_flags_on_erase_capable_part_pays_no_g
         payload=payload,
         frame_scripts=[_write_phase_frames()],
         operation_flags=_build_op_flags(blank_check=False),
+        blank_check_requested=False,
     )
 
     assert ok is True

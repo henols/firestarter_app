@@ -126,7 +126,19 @@ COMMAND_NAMES = {
 FLAG_FORCE = 0x01
 FLAG_CAN_ERASE = 0x02
 FLAG_SKIP_ERASE = 0x04
-FLAG_SKIP_BLANK_CHECK = 0x08
+
+# The skip-blank-check control flag, 0x08 -- retired in 3.1.0 (Phase 205).
+# The firmware side -- firestarter_fw/include/firestarter.h's control-flag
+# ladder -- was retired in the same commit pair. This value must NEVER be
+# reused for any new control flag: an already-shipped host still composes
+# 0x08 on every `write -b` and on `dev test`'s masked UV slot writes, and
+# reassigning the bit would make that stale host silently turn on whatever
+# new behaviour took the number. While it existed, the flag selected
+# whether write-init's blank check ran; that check itself left the
+# firmware in the same phase (FWBLANK-01..03). `-b` now reaches the
+# host-side write guard (write_blank_guard.py) as an explicit keyword-only
+# signal instead of a wire bit.
+
 FLAG_VPE_AS_VPP = 0x10
 
 FLAG_OUTPUT_ENABLE = 0x20

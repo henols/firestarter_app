@@ -31,7 +31,6 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
 
-from firestarter.constants import FLAG_SKIP_BLANK_CHECK
 from firestarter.messages import MSG_ERR_NOT_BLANK
 
 
@@ -143,7 +142,14 @@ class FakeChip:
         operation_flags: int = 0,
         address_str: str | None = None,
         pulse_us: int = 0,
+        *,
+        blank_check_requested: bool = True,
     ) -> bool:
+        # FWBLANK-04 (Phase 205): accepted for signature compatibility with
+        # the real EpromOperator.write_eprom (chip_test.py's dispatch now
+        # always passes it) -- this base double models no blank-check
+        # pre-flight at all, so the value is accepted and otherwise unused.
+        del blank_check_requested
         self.calls.append(("write_eprom", {"address_str": address_str}))
         start = _parse_addr_or_size(address_str) or 0
         incoming = Path(input_file_path).read_bytes()
@@ -251,18 +257,34 @@ class FakeChip:
 
 
 class WriteInitPreflightChip(FakeChip):
-    """A `FakeChip` subclass modelling the firmware write-init blank-check
-    pre-flight (`firestarter/src/proms/eprom.cpp:143-145`), with the REAL
-    host contract: `EpromOperator.write_eprom` does NOT raise on a firmware
-    refusal -- `eprom_operations._run_state_machine` catches the
+    """A `FakeChip` subclass modelling PRE-3.1.0 FIRMWARE's write-init
+    blank-check pre-flight, with the REAL host contract:
+    `EpromOperator.write_eprom` does NOT raise on a firmware refusal --
+    `eprom_operations._run_state_machine` catches the
     `EpromOperationError` and returns `(False, str(e))`, stamping
     `last_firmware_error_code`/`last_firmware_error_message` on itself, and
     `chip_test._firmware_error` is what reads them back. A double that
     raises is NOT firmware-faithful and would exercise a code path real
     hardware never reaches.
 
+    FWBLANK-01/02/03 (Phase 205) deleted this pre-flight from the firmware
+    entirely -- `write-init` on every family now performs no blank check at
+    all, regardless of any signal. Retiring this model along with the real
+    code would lose the only bench-free harness for the pre-205-firmware
+    skew (D-04/D-07/D-08 of the 205 phase record: a post-205 host talking
+    to firmware still running pre-3.1.0 sees the SAME refusal this double
+    has always produced). So the model stays, renamed in spirit rather than
+    in identifier (see the class docstring above) to say plainly that it
+    models firmware as it behaved BEFORE that removal, keyed on an
+    explicit keyword rather than on the retired wire bit.
+
     `write_flags_seen` records every `operation_flags` value this instance
-    is handed, which is what the UV-03 legs assert on.
+    is handed (frozen at 0 for every production caller now that the
+    retired bit no longer travels through it). `blank_check_requested_seen`
+    records every `blank_check_requested` keyword value this instance is
+    handed -- the explicit signal that replaces the retired wire bit for
+    every UV-03 leg that used to assert on `write_flags_seen`'s non-zero
+    values.
 
     Phase 203 (WRITE-01/WRITE-06): this double models the FIRMWARE
     write-init pre-flight only -- it is a duck-typed replacement for the
@@ -283,6 +305,7 @@ class WriteInitPreflightChip(FakeChip):
         self.last_firmware_error_code: int | None = None
         self.last_firmware_error_message: str | None = None
         self.write_flags_seen: list[int] = []
+        self.blank_check_requested_seen: list[bool] = []
         setattr(self, "check_eprom_id", Mock(return_value=(True, self.id_value)))
 
     def _is_blank(self, start: int = 0, end: int | None = None) -> bool:
@@ -300,21 +323,28 @@ class WriteInitPreflightChip(FakeChip):
         operation_flags: int = 0,
         address_str: str | None = None,
         pulse_us: int = 0,
+        *,
+        blank_check_requested: bool = True,
     ) -> bool:
         self.last_firmware_error_code = None
         self.last_firmware_error_message = None
         self.write_flags_seen.append(operation_flags)
+        self.blank_check_requested_seen.append(blank_check_requested)
         # BLANK-01 / BLANK-03 / D-16.2: scope the pre-flight check to the
         # region this write actually touches -- the same start/end
         # arithmetic FakeChip.write_eprom already does above (start from the
         # address argument, end from the payload size) -- rather than the
         # whole buffer. Before this, a non-blank byte anywhere outside the
         # target region would refuse a write that real firmware now accepts.
+        #
+        # FWBLANK-04 (Phase 205): the decision keys on the explicit
+        # `blank_check_requested` keyword now, not on a wire bit -- the
+        # retired skip-blank-check flag (0x08) no longer exists on either
+        # ladder, so `operation_flags` carries no such signal for this
+        # class to read.
         start = _parse_addr_or_size(address_str) or 0
         end = start + os.path.getsize(input_file_path)
-        if not (operation_flags & FLAG_SKIP_BLANK_CHECK) and not self._is_blank(
-            start, end
-        ):
+        if blank_check_requested and not self._is_blank(start, end):
             self.last_firmware_error_code = MSG_ERR_NOT_BLANK
             self.last_firmware_error_message = (
                 "Error: EPROM not blank at address 0x000000, value 0xAB"

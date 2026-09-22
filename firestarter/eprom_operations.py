@@ -44,7 +44,6 @@ from firestarter.constants import (
     COMMAND_SDP_UNLOCK,
     COMMAND_WRITE,
     FLAG_FORCE,
-    FLAG_SKIP_BLANK_CHECK,
     FLAG_SKIP_ERASE,
     FLAG_SKIP_SDP_UNLOCK,
     FLAG_VERBOSE,
@@ -309,9 +308,15 @@ def build_flags(
     # tests/test_bug_characterization.py's BUG-1 contract pins this signature
     # shape (a PlainArgs bag with no __contains__ must not raise TypeError) —
     # it is re-run as named task work in this same plan, unmodified.
+    #
+    # FWBLANK-04 (Phase 205): `blank_check` no longer composes any wire bit
+    # at all -- the flag it used to set (0x08) is retired from both
+    # ladders. The parameter stays in its current position (both production
+    # callers pass it positionally, alongside `verbose`/`skip_erase`) but
+    # its value now travels only to `write_eprom`'s `blank_check_requested`
+    # keyword, which threads it to the host-side write guard
+    # (write_blank_guard.requires_blank_check) directly.
     flags = 0
-    if not blank_check:
-        flags |= FLAG_SKIP_BLANK_CHECK
     if skip_erase:
         flags |= FLAG_SKIP_ERASE
     if force:
@@ -452,7 +457,8 @@ class EpromOperator:
         # WRITE-01 (Phase 203): the pre-write blank guard's own verdict --
         # 0 blank/proceeded, 1 not blank/refused, 2 transport or setup
         # failure, None when the guard was skipped entirely (no region,
-        # `FLAG_SKIP_BLANK_CHECK`, erase-exempt, or an unguarded protocol).
+        # blank check not requested, erase-exempt, or an unguarded
+        # protocol).
         # Set by `write_eprom` on every call, so a stale value from an
         # earlier write can never leak into a later one's reporting.
         # Transient per-invocation operator state, in the same family as
@@ -2256,9 +2262,20 @@ class EpromOperator:
         pin1_hazard_acknowledged: bool = False,
         *,
         suppress_verdict_line: bool = False,
+        blank_check_requested: bool = True,
     ) -> bool:
         """Write `input_file_path` to `eprom_name`, running the WRITE-01
         pre-write blank guard first on every guarded family.
+
+        `blank_check_requested` (FWBLANK-04, Phase 205): keyword-only,
+        default `True`. Threaded straight to
+        `write_blank_guard.requires_blank_check` as its own keyword-only
+        signal -- this is the explicit, host-side replacement for the
+        retired skip-blank-check wire bit (`0x08`, gone from both
+        ladders). `False` is `write -b`'s and `dev test`'s masked UV slot
+        write's route to the same bypass the retired bit used to grant;
+        every other existing caller keeps the default and is
+        byte-identical.
 
         `suppress_verdict_line` (Phase 203, WRITE-05): keyword-only,
         default `False`. When `True`, skip this method's own trailing
@@ -2365,7 +2382,11 @@ class EpromOperator:
         guard_port: str | None = None
         if not region_length:
             self.last_write_guard_verdict = None
-        elif not requires_blank_check(eprom_data_dict, operation_flags):
+        elif not requires_blank_check(
+            eprom_data_dict,
+            operation_flags,
+            blank_check_requested=blank_check_requested,
+        ):
             self.last_write_guard_verdict = None
         else:
             guard_verdict, guard_port = self._run_write_blank_guard(
