@@ -1231,14 +1231,24 @@ def erase(
 ) -> None:
     """Erase an EPROM, if supported.
 
-    ``-b``/``--blank-check`` requests a blank check performed **after** the erase.
-    Note the inverted sense against ``write``, whose ``-b``/``--no-blank-check``
-    skips a check performed before it. On protocol ``0x0D`` the post-erase check is
-    not wired, so ``-b`` has no effect there.
+    ``-b``/``--blank-check`` requests a blank check performed **after** the
+    erase, through the same host-side engine ``blank`` uses. Note the
+    inverted sense against ``write``, whose ``-b``/``--no-blank-check`` skips
+    a check performed before it -- that inversion is unchanged.
 
-    ``-s``/``--sector-address`` applies to the ``0x06`` sector-erase protocol. The
-    ``0x0D`` software chip erase is device-global by construction and ignores any
-    sector address given for it.
+    Without ``-b``, ``erase`` exits 0 when the erase succeeds and 1 when it
+    does not. With ``-b``, the exit code widens to three outcomes: 0 erased
+    and blank, 1 erased but not blank, 2 when the check itself fails on
+    transport, hardware or setup. The three are distinct -- a transport
+    failure is never reported as a not-blank chip verdict. It works on
+    every part ``erase`` supports. The check reports the first non-blank
+    address only; for every coalesced mismatching range with a
+    classification bucket, run ``firestarter blank <chip> --full``
+    afterward.
+
+    ``-s``/``--sector-address`` applies only to protocols that support a
+    sector erase; a whole-device chip erase ignores any sector address
+    given for it.
 
     An unsupported erase exits 1 by default; ``--ignore-unsupported`` makes it
     exit 0 instead, for scripting, while still printing the same line.
@@ -1259,7 +1269,38 @@ def erase(
         address_str=sector_address,
         pin1_hazard_acknowledged=True,
     )
-    sys.exit(0 if ok else 1)
+    if not ok:
+        # Fork D: the check never runs when the erase itself failed -- a
+        # not-blank verdict for a part that was never erased would be a
+        # fabricated claim about silicon, the same shape D-02 exists to
+        # refuse for a transport failure. No second port is opened.
+        sys.exit(1)
+    if not blank_check:
+        sys.exit(0)
+
+    # D-01: the firmware's own post-erase check ran inside the erase's own
+    # port session, as `firestarter_operation_end`. FWBLANK-02 deletes that
+    # assignment, so this is the host re-implementing the same meaning one
+    # tier up, through Phase 202's `check_eprom_blank` -- the same engine
+    # `blank` uses. That makes this a SECOND port open, which resets an
+    # Uno-class board between the erase and the check; an electrically
+    # erased part stays blank across that reset, so the added cost is
+    # wall-clock only, not correctness. Collapsing the two opens into one
+    # session is Phase 206's SESS-01. `address_str`/`size_str` are passed
+    # explicitly as `None` -- the whole-device scope is D-01's decision,
+    # not an omission -- and `full=False` is D-03's terse, first-mismatch
+    # mode. `check_eprom_blank` already returns the 0/1/2 verdict this
+    # docstring promises, so there is no mapping layer: `sys.exit` on it
+    # directly, exactly as `blank` does.
+    verdict = app.eprom_operator.check_eprom_blank(
+        eprom,
+        eprom_data,
+        operation_flags=_build_op_flags(force=force),
+        address_str=None,
+        size_str=None,
+        full=False,
+    )
+    sys.exit(verdict)
 
 
 @cli.command(name="id")

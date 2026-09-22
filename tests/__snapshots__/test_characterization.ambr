@@ -168,13 +168,21 @@
     Erase an EPROM, if supported.
   
     ``-b``/``--blank-check`` requests a blank check performed **after** the
-    erase. Note the inverted sense against ``write``, whose ``-b``/``--no-blank-
-    check`` skips a check performed before it. On protocol ``0x0D`` the post-
-    erase check is not wired, so ``-b`` has no effect there.
+    erase, through the same host-side engine ``blank`` uses. Note the inverted
+    sense against ``write``, whose ``-b``/``--no-blank-check`` skips a check
+    performed before it -- that inversion is unchanged.
   
-    ``-s``/``--sector-address`` applies to the ``0x06`` sector-erase protocol.
-    The ``0x0D`` software chip erase is device-global by construction and
-    ignores any sector address given for it.
+    Without ``-b``, ``erase`` exits 0 when the erase succeeds and 1 when it does
+    not. With ``-b``, the exit code widens to three outcomes: 0 erased and
+    blank, 1 erased but not blank, 2 when the check itself fails on transport,
+    hardware or setup. The three are distinct -- a transport failure is never
+    reported as a not-blank chip verdict. It works on every part ``erase``
+    supports. The check reports the first non-blank address only; for every
+    coalesced mismatching range with a classification bucket, run ``firestarter
+    blank <chip> --full`` afterward.
+  
+    ``-s``/``--sector-address`` applies only to protocols that support a sector
+    erase; a whole-device chip erase ignores any sector address given for it.
   
     An unsupported erase exits 1 by default; ``--ignore-unsupported`` makes it
     exit 0 instead, for scripting, while still printing the same line.

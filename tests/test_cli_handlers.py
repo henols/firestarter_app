@@ -952,6 +952,144 @@ def test_erase_operator_returns_false(runner: CliRunner) -> None:
     assert result.exit_code == 1
 
 
+# 205-01 / D-01/D-02/D-03: `erase -b` gains a host-side post-erase blank
+# check through Phase 202's `check_eprom_blank`, with a 0/1/2 exit contract.
+# `check_eprom_blank` is the "fake operator" surface here, exactly like the
+# `blank` command's own tests above -- the CLI layer's job is only to call
+# it and `sys.exit` on its verdict with no mapping layer, so these legs pin
+# that wiring without exercising the real serial-I/O engine.
+
+
+def test_erase_blank_check_exits_zero_when_the_part_reads_blank(
+    runner: CliRunner,
+) -> None:
+    """`erase -b`, erase succeeds, `check_eprom_blank` returns 0 (all
+    blank): exits 0, and the check actually ran."""
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = True
+    operator.check_eprom_blank.return_value = 0
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512", "-b"], obj=app)
+    assert result.exit_code == 0
+    operator.check_eprom_blank.assert_called_once()
+
+
+def test_erase_blank_check_exits_one_when_the_part_is_not_blank(
+    runner: CliRunner,
+) -> None:
+    """`erase -b`, erase succeeds, `check_eprom_blank` returns 1 (at least
+    one non-blank byte): exits 1 -- distinct from a transport/setup
+    failure (exit 2, next leg)."""
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = True
+    operator.check_eprom_blank.return_value = 1
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512", "-b"], obj=app)
+    assert result.exit_code == 1
+
+
+def test_erase_blank_check_exits_two_when_the_check_itself_fails(
+    runner: CliRunner,
+) -> None:
+    """`erase -b`, erase succeeds, `check_eprom_blank` returns 2 (transport,
+    hardware or setup failure): exits 2. D-02: never folded into the 0/1
+    chip verdict -- the defect already filed against `dev test`'s blank
+    step this plan refuses to reproduce."""
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = True
+    operator.check_eprom_blank.return_value = 2
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512", "-b"], obj=app)
+    assert result.exit_code == 2
+
+
+def test_erase_blank_check_prints_exactly_one_line_on_a_failed_check(
+    runner: CliRunner, caplog: pytest.LogCaptureFixture
+) -> None:
+    """D-03: a failed post-erase check prints exactly one line -- asserted
+    by the caplog record count, not a substring, so a future regression
+    that stacks a second diagnostic line on top of `check_eprom_blank`'s
+    own is caught.
+
+    Per the measured fact documented on
+    `test_info_elevated_programming_vcc_warns` above, `result.output` is
+    always `''` for logging-based output under pytest (pytest's own root
+    handler suppresses the `logging.lastResort` stderr fallback `CliRunner`
+    would otherwise pick up), so this asserts against `caplog.records`,
+    the correct capture surface here. The mock's `side_effect` reproduces
+    exactly the one `logger.error(...)` call the real `check_eprom_blank`
+    makes on a non-blank verdict, so this leg proves the CLI layer adds no
+    second line of its own -- it does not re-prove `check_eprom_blank`'s
+    own message shape, which is already covered in
+    `tests/test_eprom_operations.py`.
+    """
+    op_logger = logging.getLogger("EpromOperator")
+
+    def _one_error_line_then_not_blank(*args: object, **kwargs: object) -> int:
+        op_logger.error("Blank check for W27C512 failed.")
+        return 1
+
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = True
+    operator.check_eprom_blank.side_effect = _one_error_line_then_not_blank
+    app = make_app_context(eprom_operator=operator)
+
+    with caplog.at_level(logging.ERROR, logger="EpromOperator"):
+        result = runner.invoke(cli, ["erase", "W27C512", "-b"], obj=app)
+
+    assert result.exit_code == 1
+    assert len(caplog.records) == 1, caplog.records
+
+
+def test_erase_without_blank_check_opens_no_second_port_and_keeps_zero_one(
+    runner: CliRunner,
+) -> None:
+    """Plain `erase` (no `-b`) is unchanged: exactly one port open (the
+    erase itself, via `erase_eprom`), no call into `check_eprom_blank`, and
+    the existing 0/1 exit codes for both the success and failure case."""
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = True
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512"], obj=app)
+    assert result.exit_code == 0
+    operator.erase_eprom.assert_called_once()
+    operator.check_eprom_blank.assert_not_called()
+
+    operator.erase_eprom.reset_mock()
+    operator.erase_eprom.return_value = False
+    result = runner.invoke(cli, ["erase", "W27C512"], obj=app)
+    assert result.exit_code == 1
+    operator.erase_eprom.assert_called_once()
+    operator.check_eprom_blank.assert_not_called()
+
+
+def test_erase_blank_check_does_not_run_when_the_erase_failed(
+    runner: CliRunner,
+) -> None:
+    """`erase -b` where `erase_eprom` returns False: exits 1 and the blank
+    check never runs, so no second port is opened (Fork D) -- a not-blank
+    verdict for a part that was never erased would be a fabricated claim
+    about silicon, the same shape D-02 exists to refuse."""
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = False
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512", "-b"], obj=app)
+    assert result.exit_code == 1
+    operator.check_eprom_blank.assert_not_called()
+
+
+def test_erase_has_no_full_option(runner: CliRunner) -> None:
+    """D-03: `erase` gains no `--full` option; the documented escape hatch
+    is `firestarter blank <chip> --full`. Click's own `UsageError` refuses
+    it before the operator is ever reached."""
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512", "--full"], obj=app)
+    assert result.exit_code == 2, result.output
+    assert "Usage:" in result.output
+    operator.erase_eprom.assert_not_called()
+
+
 def test_id_happy_path(runner: CliRunner) -> None:
     """`firestarter id W27C512` exits 0 when check_eprom_id returns (True, _)."""
     operator = Mock(spec=EpromOperator)
