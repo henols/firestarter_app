@@ -2379,6 +2379,24 @@ class EpromOperator:
         # from, and it keeps its pre-existing, config-inferred discovery
         # behaviour unchanged (single-connect operations must not start
         # pinning).
+        # 205-CR-01: resolve the write's own start address once, so the
+        # guard can tell a whole-chip erase (address 0) apart from a
+        # sector erase (any other address) on protocol 0x06. Three cases,
+        # all deliberately resolving to 0 rather than to a refusal here:
+        # an absent `-a` is address 0 by definition; an unparseable `-a`
+        # stays `_setup_operation`'s `parse_address`/`ValueError` job --
+        # opening a port to produce a verdict-2 transport failure in place
+        # of today's clean argument error would change an established
+        # error contract this module must not touch
+        # (`require_non_negative_address`'s own stated rule, above); and a
+        # negative `-a` is already refused above by
+        # `require_non_negative_address`, before this line is ever
+        # reached. Do not "harden" the `except` below into a refusal.
+        try:
+            guard_address = parse_address(address_str) or 0
+        except ValueError:
+            guard_address = 0
+
         guard_port: str | None = None
         if not region_length:
             self.last_write_guard_verdict = None
@@ -2386,6 +2404,7 @@ class EpromOperator:
             eprom_data_dict,
             operation_flags,
             blank_check_requested=blank_check_requested,
+            address=guard_address,
         ):
             self.last_write_guard_verdict = None
         else:

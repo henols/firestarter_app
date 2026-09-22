@@ -70,6 +70,21 @@ firmware entirely -- this guard is now their ONLY pre-write blank check:
 A part whose erase actually ran (`is_erase_exempt` below) is exempt from
 this set's guard even though its protocol id is a member."""
 
+NOR_UNLOCK_PROTOCOL_ID: int = 6
+"""205-CR-01. `flash_nor_unlock_erase_execute`
+(`firestarter_fw/src/proms/flash_nor_unlock.cpp:111-119`) performs a
+whole-chip `FLASH_ERASE` only when `handle->address == 0`, and a
+`flash_nor_unlock_sector_erase` at any other address. `handle->address` on
+that path is the write's own start address, sourced from `write`'s `-a`.
+This is the ONLY guarded protocol whose erase scope reads the address:
+`flash_intel_erase_execute` (`flash_intel.cpp:105-114`) writes its erase
+setup and confirm bytes to hard-coded address `0` regardless of
+`handle->address`, and `eprom_erase_execute` (`eprom.cpp:111-114`)
+delegates to `eprom_internal_erase`, which takes no address at all. Public,
+not underscore-prefixed, mirroring `FLASH4_PROTOCOL_ID`
+(`flash4_erase_gate.py:41`) and `SDP_PROTOCOL_ID` (`sdp_capability.py:31`),
+so callers and tests import the name rather than retyping the literal."""
+
 SRAM_PROTOCOL_IDS: frozenset[int] = frozenset({0x0E, 0x27, 0x28, 0x29})
 """SRAM/FRAM -- a NAMED exemption, not an accident of a flag test. These
 parts are volatile or byte-rewritable and have no factory-blank state at
@@ -154,10 +169,16 @@ def is_guarded_protocol(programmer_data: Mapping[str, Any] | None) -> bool:
 
 
 def is_erase_exempt(
-    programmer_data: Mapping[str, Any] | None, operation_flags: int
+    programmer_data: Mapping[str, Any] | None,
+    operation_flags: int,
+    *,
+    address: int = 0,
 ) -> bool:
     """True when this invocation's effective flags claim erase capability
-    that actually ran: `FLAG_CAN_ERASE` set and `FLAG_SKIP_ERASE` clear.
+    that actually ran -- `FLAG_CAN_ERASE` set and `FLAG_SKIP_ERASE` clear --
+    AND, for the one protocol whose erase SCOPE depends on it, the write's
+    own resolved start address is the one the firmware treats as a
+    whole-chip erase.
 
     This is the static, per-invocation form of D-01's "a part whose erase
     actually ran is exempt", derived from the firmware's own
@@ -165,9 +186,37 @@ def is_erase_exempt(
     (`flash_nor_unlock.cpp`, `flash_intel.cpp`). `dev write-cycle` reaches
     the same conclusion through this flag proxy rather than by observing
     the erase's own result.
+
+    `address` (205-CR-01): the write's own resolved start address,
+    keyword-only, default `0` -- `0` IS the whole-chip-erase case for every
+    guarded protocol, the one where the exemption is genuinely sound, so
+    every existing caller and every pre-205-CR-01 test keeps its current
+    verdict at the default. For `NOR_UNLOCK_PROTOCOL_ID` specifically, a
+    non-zero address means `flash_nor_unlock_erase_execute`
+    (`flash_nor_unlock.cpp:111-119`) ran a SECTOR erase, not a whole-chip
+    one, so the exemption is withdrawn and the caller falls back to the
+    ordinary region-scoped blank check `requires_blank_check` already
+    performs for every non-erase-exempt guarded part -- the `write`
+    analogue of `cli_handlers._erase_sector_blank_refusal_exit_code`'s own
+    sector-versus-whole-device distinction, except `write` CHECKS where
+    `erase -b` REFUSES: `write`'s guard is region-scoped (D-04) and reads
+    exactly the bytes about to be programmed, so it needs no sector-size
+    knowledge at all, unlike `erase -b`'s whole-device check. `0x10` (Intel
+    flash) and `0x07`/`0x08`/`0x0B` (UV-EPROM) are unaffected at any
+    address -- neither erase path reads `handle->address` at all (see
+    `NOR_UNLOCK_PROTOCOL_ID`'s own docstring).
     """
     flags = effective_flags(programmer_data, operation_flags)
-    return bool(flags & FLAG_CAN_ERASE) and not bool(flags & FLAG_SKIP_ERASE)
+    # 205-CR-01: the erase-claim test stays first and short-circuits before
+    # the protocol/address test is ever reached, so `--skip-erase` keeps
+    # re-arming the guard on every family regardless of address.
+    erase_claimed = bool(flags & FLAG_CAN_ERASE) and not bool(flags & FLAG_SKIP_ERASE)
+    if not erase_claimed:
+        return False
+    algorithm = (programmer_data or {}).get("algorithm")
+    if algorithm == NOR_UNLOCK_PROTOCOL_ID and address != 0:
+        return False
+    return True
 
 
 def requires_blank_check(
@@ -175,14 +224,17 @@ def requires_blank_check(
     operation_flags: int,
     *,
     blank_check_requested: bool = True,
+    address: int = 0,
 ) -> bool:
     """The top-level verdict: must this write's target region be proven
     blank before any programming command reaches the wire?
 
     False when `blank_check_requested` is `False` (WRITE-03 / D-09: the
-    documented bypass; `FLAG_FORCE` is deliberately not consulted here),
-    False when `is_erase_exempt`, False when not `is_guarded_protocol`,
-    True otherwise.
+    documented bypass; `FLAG_FORCE` is deliberately not consulted here --
+    this short-circuit stays FIRST, ahead of the exemption test, so `-b`
+    still bypasses even at a non-zero address), False when
+    `is_erase_exempt`, False when not `is_guarded_protocol`, True
+    otherwise.
 
     `blank_check_requested` is keyword-only, default `True` -- FWBLANK-04
     (Phase 205) re-keys this decision off an explicit caller signal instead
@@ -190,10 +242,13 @@ def requires_blank_check(
     exists on either ladder. `write_eprom`'s own keyword-only parameter of
     the same name is what `write -b` and `dev test`'s masked UV slot write
     thread through to reach this bypass.
+
+    `address` (205-CR-01): keyword-only, default `0`, forwarded verbatim to
+    `is_erase_exempt` -- see that function's docstring for what it decides.
     """
     if not blank_check_requested:
         return False
-    if is_erase_exempt(programmer_data, operation_flags):
+    if is_erase_exempt(programmer_data, operation_flags, address=address):
         return False
     return is_guarded_protocol(programmer_data)
 

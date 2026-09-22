@@ -44,6 +44,7 @@ from firestarter.messages import (
 from firestarter.write_blank_guard import (
     GUARDED_PROTOCOL_IDS,
     NAMED_EXEMPT_PROTOCOL_IDS,
+    NOR_UNLOCK_PROTOCOL_ID,
     SRAM_PROTOCOL_IDS,
     effective_flags,
     is_erase_exempt,
@@ -83,6 +84,15 @@ def _at28c256_data() -> dict:
     not in GUARDED_PROTOCOL_IDS, so unguarded per D-01/Fork A."""
     db = EpromDatabase(skip_local_override=True)
     return resolve_chip("at28c256", db=db)
+
+
+def _sst39sf020_data() -> dict:
+    """A real, resolved SST39SF020 wire dict -- protocol 0x06 / algorithm 6
+    (`NOR_UNLOCK_PROTOCOL_ID`), flags 2 (`FLAG_CAN_ERASE` set), a
+    262144-byte device: 205-CR-01's headline chip, the one validated
+    protocol-0x06 part (D-06)."""
+    db = EpromDatabase(skip_local_override=True)
+    return resolve_chip("sst39sf020", db=db)
 
 
 # ---------------------------------------------------------------------------
@@ -437,6 +447,37 @@ def test_write_on_erase_exempt_part_pays_no_guard_read(tmp_path) -> None:
 
     assert ok is True
     assert opened == [COMMAND_WRITE]
+
+
+def test_write_at_a_non_zero_address_on_an_erase_capable_nor_unlock_part_pays_a_guard_read(
+    tmp_path,
+) -> None:
+    """205-CR-01, the tracer's own proof. `sst39sf020` (protocol 0x06,
+    `FLAG_CAN_ERASE` set, `FLAG_SKIP_ERASE` clear) is erase-exempt at
+    address 0 -- `flash_nor_unlock_erase_execute`
+    (`firestarter_fw/src/proms/flash_nor_unlock.cpp:111-119`) erases the
+    WHOLE chip there. At a non-zero address that same firmware function
+    erases only a SECTOR, so the host's address-blind exemption was
+    covering a region the erase never touched. Before this task's fix, the
+    observed connect sequence here is [COMMAND_WRITE] -- no guard read paid
+    at all. After it, the guard pays a region-scoped read and the observed
+    sequence is [COMMAND_READ, COMMAND_WRITE]."""
+    payload = b"\xaa" * 64
+    region_payload = b"\xff" * 64  # blank across the whole target region
+    chip_data = _sst39sf020_data()
+    assert chip_data["algorithm"] == NOR_UNLOCK_PROTOCOL_ID
+
+    ok, opened = _drive_write_eprom(
+        tmp_path,
+        eprom_name="sst39sf020",
+        eprom_data=chip_data,
+        payload=payload,
+        frame_scripts=[_read_phase_frames(region_payload), _write_phase_frames()],
+        address_str="0x010000",
+    )
+
+    assert ok is True
+    assert opened == [COMMAND_READ, COMMAND_WRITE]
 
 
 def test_write_of_zero_byte_input_file_pays_no_guard_read(tmp_path) -> None:
