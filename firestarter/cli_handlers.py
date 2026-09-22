@@ -1099,8 +1099,8 @@ def _erase_sector_blank_refusal_exit_code(
     whole-device check after a sector erase would report the untouched
     remainder as non-blank and exit 1: a reliable false negative where
     today the combination is a silent no-op (``0x06``'s erase-end
-    assignment has been commented out at ``flash_nor_unlock.cpp:41`` for
-    its whole life).
+    assignment was commented-out dead code for its whole life, then
+    deleted outright by ``205-03``'s blank-check sweep).
 
     Two rejected alternatives, for the record: scoping the check to the
     erased sector is blocked in practice, because the sector size is not

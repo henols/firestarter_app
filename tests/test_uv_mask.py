@@ -198,8 +198,8 @@ def test_write_target_current_is_probe_read_defaults_to_false():
     """Additive field (Phase 179, UV-03): fail-closed in a stronger sense
     than `region_policy` above -- `_valid_target()` names no such field at
     all, and every direct `WriteTarget(...)` construction already in this
-    suite keeps working AND keeps `FLAG_SKIP_BLANK_CHECK` off, because the
-    monotonicity witness the flag is derived from defaults to absent."""
+    suite keeps working AND keeps `blank_check_requested` off, because the
+    monotonicity witness the signal is derived from defaults to absent."""
     target = _valid_target()
     assert target.current_is_probe_read is False
 

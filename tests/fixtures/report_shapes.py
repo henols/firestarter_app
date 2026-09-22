@@ -650,8 +650,9 @@ def _build_uv_slot_write_pass() -> DiagnosticReport:
     shape: `_build_real_path_report(chip="m27c512", write_scope="full",
     operator=<the seeded double>, runs=2)` so the frozen hash is a hash
     of what the engine actually produces -- the real witness, the real
-    positional `FLAG_SKIP_BLANK_CHECK`, the real firmware pre-flight
-    refusal it now clears, and the real adjudicated blank-check verdict.
+    explicit `blank_check_requested=False` keyword, the real firmware
+    pre-flight refusal it now clears, and the real adjudicated
+    blank-check verdict.
     """
     full = _REAL_DB.get_eprom("m27c512") or {}
     mem_size = int(full.get("memory-size", 0) or 0)
