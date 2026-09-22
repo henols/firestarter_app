@@ -95,6 +95,16 @@ def _sst39sf020_data() -> dict:
     return resolve_chip("sst39sf020", db=db)
 
 
+def _am28f256_data() -> dict:
+    """A real, resolved AM28F256 wire dict -- protocol 0x10 / algorithm 16
+    (Intel flash), flags 2 (`FLAG_CAN_ERASE` set), a 32768-byte device:
+    205-CR-01's control chip -- its erase scope does not read the address
+    (`flash_intel_erase_execute` writes to hard-coded address 0), so the
+    exemption must survive at every address."""
+    db = EpromDatabase(skip_local_override=True)
+    return resolve_chip("am28f256", db=db)
+
+
 # ---------------------------------------------------------------------------
 # Unit level: the three predicates + refusal_text (pure, no board)
 # ---------------------------------------------------------------------------
@@ -151,6 +161,85 @@ def test_is_erase_exempt_false_when_skip_erase_re_arms_the_guard() -> None:
 
 def test_is_erase_exempt_false_when_can_erase_not_set() -> None:
     assert is_erase_exempt({"flags": 0}, 0) is False
+
+
+# ---------------------------------------------------------------------------
+# Unit level: 205-CR-01, the address dimension (WR-02)
+# ---------------------------------------------------------------------------
+
+
+def test_is_erase_exempt_is_false_for_nor_unlock_at_a_non_zero_address() -> None:
+    """The gap's headline leg. `flash_nor_unlock_erase_execute`
+    (`firestarter_fw/src/proms/flash_nor_unlock.cpp:111-119`) takes its
+    `handle->address != 0` SECTOR-erase branch here, not the whole-chip
+    branch the address-blind exemption assumed -- so the exemption must not
+    hold."""
+    d = {"algorithm": NOR_UNLOCK_PROTOCOL_ID, "flags": 2}
+    assert is_erase_exempt(d, 0, address=0x10000) is False
+
+
+def test_is_erase_exempt_is_true_for_nor_unlock_at_address_zero() -> None:
+    """The companion the gap explicitly requires: at address 0,
+    `flash_nor_unlock_erase_execute` takes its whole-chip `FLASH_ERASE`
+    branch, so the exemption is still sound there."""
+    d = {"algorithm": NOR_UNLOCK_PROTOCOL_ID, "flags": 2}
+    assert is_erase_exempt(d, 0, address=0) is True
+
+
+def test_is_erase_exempt_is_true_for_intel_flash_at_every_address() -> None:
+    """`flash_intel_erase_execute` (`flash_intel.cpp:105-114`) writes its
+    erase setup and confirm bytes to hard-coded address `0` regardless of
+    `handle->address` -- the exemption is address-independent for algorithm
+    16 and must survive at both address 0 and a non-zero address."""
+    d = {"algorithm": 16, "flags": 2}
+    assert is_erase_exempt(d, 0, address=0) is True
+    assert is_erase_exempt(d, 0, address=0x10000) is True
+
+
+def test_is_erase_exempt_default_address_is_zero() -> None:
+    """Calling without the `address` keyword must give the identical
+    verdict to `address=0` for a protocol-0x06 dict -- this is what keeps
+    every pre-205-CR-01 caller and test unchanged."""
+    d = {"algorithm": NOR_UNLOCK_PROTOCOL_ID, "flags": 2}
+    assert is_erase_exempt(d, 0) == is_erase_exempt(d, 0, address=0) is True
+
+
+def test_is_erase_exempt_skip_erase_rearms_before_the_protocol_test_is_reached() -> (
+    None
+):
+    """`FLAG_SKIP_ERASE` set, algorithm 6, non-zero address: `False`,
+    reached through the erase-claim short-circuit (D-03's pre-existing
+    re-arming) rather than through the new protocol/address branch."""
+    d = {"algorithm": NOR_UNLOCK_PROTOCOL_ID, "flags": 2}
+    assert is_erase_exempt(d, FLAG_SKIP_ERASE, address=0x10000) is False
+
+
+def test_requires_blank_check_is_true_for_nor_unlock_at_a_non_zero_address() -> None:
+    """The caller-level pair, proving the withdrawn exemption propagates
+    through to the top-level verdict."""
+    d = {"algorithm": NOR_UNLOCK_PROTOCOL_ID, "flags": 2}
+    assert requires_blank_check(d, 0, address=0x10000) is True
+
+
+def test_requires_blank_check_blank_check_requested_false_still_bypasses_at_a_non_zero_nor_unlock_address() -> (
+    None
+):
+    """D-G2/D-09: `-b` still wins over the new address-aware narrowing --
+    `blank_check_requested` short-circuits before the exemption test is
+    ever reached."""
+    d = {"algorithm": NOR_UNLOCK_PROTOCOL_ID, "flags": 2}
+    assert (
+        requires_blank_check(d, 0, address=0x10000, blank_check_requested=False)
+        is False
+    )
+
+
+def test_nor_unlock_protocol_id_is_a_member_of_the_guarded_set() -> None:
+    """The cheap anti-drift link between the new constant and the
+    deliberately-literal `GUARDED_PROTOCOL_IDS` frozenset (D-01, Phase
+    203) -- this module does not modify that pin, only adds a sibling
+    constant naming one of its existing members."""
+    assert NOR_UNLOCK_PROTOCOL_ID in GUARDED_PROTOCOL_IDS
 
 
 def test_requires_blank_check_true_for_guarded_non_exempt() -> None:
@@ -890,3 +979,110 @@ def test_predicate_fires_against_real_resolve_chip_dicts() -> None:
 
     assert is_guarded_protocol(unguarded) is False
     assert requires_blank_check(unguarded, 0) is False
+
+
+def test_address_aware_exemption_fires_against_real_resolve_chip_dicts() -> None:
+    """205-CR-01's own form of the doctrine directly above: a predicate
+    whose unit tests pass against hand-built `{"algorithm": 6, ...}`
+    literals while a real resolved wire dict never reaches it is the exact
+    failure to guard against. `sst39sf020` (algorithm 6) requires a check
+    at a non-zero address and not at address 0; `am28f256` (algorithm 16)
+    requires no check at either."""
+    nor_unlock = _sst39sf020_data()
+    intel_flash = _am28f256_data()
+
+    assert requires_blank_check(nor_unlock, 0, address=0x10000) is True
+    assert requires_blank_check(nor_unlock, 0, address=0) is False
+    assert requires_blank_check(intel_flash, 0, address=0x10000) is False
+
+
+# ---------------------------------------------------------------------------
+# Integration level: 205-CR-01, the address dimension end to end (WR-02)
+# ---------------------------------------------------------------------------
+
+
+def test_write_at_address_zero_on_an_erase_capable_nor_unlock_part_still_pays_no_guard_read(
+    tmp_path,
+) -> None:
+    """The leg that proves the fix is a narrowing and not a blanket
+    withdrawal: at address 0, `flash_nor_unlock_erase_execute` erases the
+    WHOLE chip, so the exemption still holds and no guard read is paid --
+    the observed sequence is exactly [COMMAND_WRITE]."""
+    payload = b"\xaa" * 64
+
+    ok, opened = _drive_write_eprom(
+        tmp_path,
+        eprom_name="sst39sf020",
+        eprom_data=_sst39sf020_data(),
+        payload=payload,
+        frame_scripts=[_write_phase_frames()],
+    )
+
+    assert ok is True
+    assert opened == [COMMAND_WRITE]
+
+
+def test_write_at_a_non_zero_address_on_a_non_blank_nor_unlock_region_is_refused(
+    tmp_path, caplog
+) -> None:
+    """The restored safety property itself, end to end: at a non-zero
+    address, the withdrawn exemption routes to the ordinary region-scoped
+    guard read (D-G2), and a genuinely non-blank region is refused exactly
+    as `test_write_to_non_blank_region_of_guarded_part_is_refused` proves
+    for the pre-existing guarded families -- `write_eprom` returns `False`
+    and `COMMAND_WRITE` never reaches `find_and_connect`."""
+    payload = b"\xaa" * 64
+    region_payload = bytearray(b"\xff" * 64)
+    region_payload[10] = 0xAB  # the one non-blank byte inside the region
+    region_payload = bytes(region_payload)
+
+    with caplog.at_level("ERROR", logger="EpromOperator"):
+        ok, opened = _drive_write_eprom(
+            tmp_path,
+            eprom_name="sst39sf020",
+            eprom_data=_sst39sf020_data(),
+            payload=payload,
+            frame_scripts=[_read_phase_frames(region_payload)],
+            address_str="0x010000",
+        )
+
+    assert ok is False
+    assert opened == [COMMAND_READ]
+    assert COMMAND_WRITE not in opened
+
+
+def test_write_with_an_unparseable_address_keeps_its_existing_error_contract(
+    tmp_path,
+) -> None:
+    """D-G4: an unparseable `-a` must not be "hardened" into a guard
+    refusal. `write_eprom`'s own address resolution (this task's
+    `guard_address`) treats a `ValueError` as address 0, so the guard
+    itself pays no read (erase-exempt at address 0, same as
+    `test_write_at_address_zero...` above). The write's own connect then
+    fails the same way it does today: `_setup_operation` re-parses
+    `address_str`, raises `ValueError`, and returns `(None, 0)` BEFORE
+    `find_and_connect` is ever called -- no connection of any kind is
+    opened, and `write_eprom` returns `False` with
+    `last_write_attempt_verdict == 1` (the malformed-address cause,
+    distinct from a transport failure)."""
+    payload = b"\xaa" * 64
+
+    input_file = tmp_path / "wbg_unparseable_address.bin"
+    input_file.write_bytes(payload)
+
+    operator = EpromOperator(ConfigManager())
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=AssertionError(
+            "find_and_connect must not be called for an unparseable address"
+        ),
+    ):
+        ok = operator.write_eprom(
+            "sst39sf020",
+            _sst39sf020_data(),
+            str(input_file),
+            address_str="not-an-address",
+        )
+
+    assert ok is False
+    assert operator.last_write_attempt_verdict == 1

@@ -36,7 +36,12 @@ Coverage:
      non-bypass), plus the `_build_op_flags` mapping `--skip-erase`
      actually produces (`blank_check` no longer composes any wire bit),
      and the `dev test` UV write-shortcut's `blank_check_requested`
-     expression fed straight into the guard.
+     expression fed straight into the guard. Alongside the flag
+     dimension, 205-CR-01 adds the ADDRESS dimension: a live-database
+     census (below) pinning that every shipped protocol-0x06 row --
+     `NOR_UNLOCK_PROTOCOL_ID` -- resolves erase-capable, so the address-
+     aware narrowing's blast radius is a property of the whole family and
+     not a one-chip edge case.
   8. THE ABSENT-EVIDENCE LEG -- `is_guarded_protocol` fails CLOSED on
      `None`/`{}`/`{"algorithm": None}`, and is False for a protocol id in
      NEITHER set (Fork A), derived as a value no shipped row carries rather
@@ -67,6 +72,7 @@ from firestarter.sdp_capability import SDP_PROTOCOL_ID
 from firestarter.write_blank_guard import (
     GUARDED_PROTOCOL_IDS,
     NAMED_EXEMPT_PROTOCOL_IDS,
+    NOR_UNLOCK_PROTOCOL_ID,
     SRAM_PROTOCOL_IDS,
     is_guarded_protocol,
     refusal_text,
@@ -212,6 +218,54 @@ def test_guarded_row_count_equals_the_sum_of_the_five_guarded_algorithm_counts()
 
     assert summed_guarded_total > 0
     assert summed_guarded_total == directly_filtered_total
+
+
+# ---------------------------------------------------------------------------
+# Leg 5b: 205-CR-01 -- the affected surface is the WHOLE protocol-0x06
+# family, not a one-chip edge case (WR-02's census leg)
+# ---------------------------------------------------------------------------
+
+
+def test_every_shipped_nor_unlock_row_resolves_erase_capable():
+    """The blast radius of 205-CR-01, pinned as a live database property
+    rather than a literal count -- the database is generated and the row
+    count is expected to move; what must not silently change is that
+    EVERY shipped protocol-0x06 row resolves `FLAG_CAN_ERASE`, which is
+    exactly what makes 205-VERIFICATION.md's "190 of 190" finding a
+    property of the whole family and not an incidental fact about one
+    chip. Both sets are derived independently from the shipped database,
+    the same idiom `test_predicate_matches_real_database_guarded_rows_exactly`
+    uses for the full guarded set."""
+    db = EpromDatabase(skip_local_override=True)
+
+    nor_unlock_rows: set[str] = set()
+    all_part_numbers: set[str] = set()
+    for vendor_chips in db.proms.values():
+        for chip in vendor_chips:
+            part_number = chip.get("part_number", "")
+            if not part_number:
+                continue
+            all_part_numbers.add(part_number)
+            if chip.get("programming", {}).get("algorithm") == NOR_UNLOCK_PROTOCOL_ID:
+                nor_unlock_rows.add(part_number)
+
+    erase_capable_rows: set[str] = set()
+    for name in all_part_numbers:
+        if name not in nor_unlock_rows:
+            continue
+        try:
+            programmer_data = resolve_chip(name, db=db)
+        except (ChipNotFoundError, ChipNotImplementedError):
+            continue
+        if bool(programmer_data.get("flags", 0) & FLAG_CAN_ERASE):
+            erase_capable_rows.add(name)
+
+    assert nor_unlock_rows, "the protocol-0x06 census must be non-empty"
+    assert erase_capable_rows == nor_unlock_rows, (
+        f"{len(erase_capable_rows)} of {len(nor_unlock_rows)} shipped "
+        f"protocol-0x06 row(s) resolve erase-capable; symmetric "
+        f"difference: {sorted(nor_unlock_rows ^ erase_capable_rows)}"
+    )
 
 
 # ---------------------------------------------------------------------------
