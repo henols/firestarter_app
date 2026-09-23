@@ -2010,8 +2010,13 @@ def test_verify_verdict_2_stops_the_multi_run_loop_after_the_first_run():
     """WR-02 (206-REVIEW): a verdict-2 run leaves the link in a faulted
     state, so a second verify pass buys no additional information and
     costs a full read/compare's worth of device I/O. `side_effect=[2, 0]`
-    proves the break fires -- if run 2 were still issued it would return
-    0 (match) and `run_count` would read 2, not 1."""
+    proves the break fires: a second call would consume the `0`.
+
+    `run_count` still reports the nominal policy (2), not the executed
+    count: `repeat_policy_tag` keys on `run_count == 1`, and an early
+    break must not stamp the degraded `runs=1` tag onto a default run."""
+    from firestarter.chip_test import repeat_policy_tag
+
     operator = _mock_operator()
     operator.verify_eprom.side_effect = [2, 0]
     plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
@@ -2019,7 +2024,8 @@ def test_verify_verdict_2_stops_the_multi_run_loop_after_the_first_run():
 
     verify_result = _result(results, OP_VERIFY)
     assert operator.verify_eprom.call_count == 1
-    assert verify_result.run_count == 1
+    assert verify_result.run_count == 2
+    assert repeat_policy_tag(results) == ""
     assert verify_result.verdict == VERDICT_SKIPPED
     assert verify_result.status == STATUS_ERROR
 

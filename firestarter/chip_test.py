@@ -3415,10 +3415,8 @@ def _dispatch_multi_run(
     # blank_check_requested keyword directly instead of composing a wire
     # flag -- the same explicit route `write -b` uses.
     blank_check_requested = not _is_monotonic_masked_target(resolved_target)
-    runs_executed = 0
     try:
         for _ in range(runs):
-            runs_executed += 1
             if op in (OP_WRITE, OP_WRITE_PARTIAL):
                 _sample(sampler, "before")
                 outcomes.append(
@@ -3547,13 +3545,13 @@ def _dispatch_multi_run(
         verdict=verdict,
         reason=reason,
         error_code=None if verdict == VERDICT_OK else error_code,
-        # WR-02 (206-REVIEW): `runs_executed` rather than the nominal
-        # `runs` -- a verify step that broke early on a verdict-2 run
-        # invoked the operator fewer times than `runs` requested, and
-        # `run_count` is documented (and tested, e.g.
-        # `test_cycle_loop_reports_one_result_per_step_with_run_count_n`)
-        # to count actual operator calls, not the requested policy.
-        run_count=runs_executed,
+        # The nominal `runs`, even when a verify step broke early on a
+        # verdict-2 run (WR-02, 206-REVIEW) and called the operator fewer
+        # times. `repeat_policy_tag` keys on `run_count == 1` for every
+        # `_REPEAT_POLICY_OPS` step, so reporting the executed count would
+        # stamp the degraded `runs=1` tag into `dedup_fingerprint` and
+        # re-key a default-policy run's report into the `--fast` group.
+        run_count=runs,
         fingerprint=fingerprint,
         write_target=resolved_target if op in (OP_WRITE, OP_WRITE_PARTIAL) else None,
         status=status,
