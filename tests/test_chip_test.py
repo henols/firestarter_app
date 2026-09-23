@@ -1207,6 +1207,73 @@ def test_blank_check_carries_compare_evidence_without_a_fingerprint():
     }
 
 
+def test_blank_check_compare_evidence_takes_the_last_captured_result():
+    """WR-01 (206-REVIEW): `_drive_region_compare` fires `on_result` at
+    most once per `check_eprom_blank` call today, so this is not live --
+    but `compare_evidence` must be built from the LAST captured
+    `CompareResult`, matching the "most recent/finalised" convention
+    `_aggregate_cycle_results` already uses, not the first, so a future
+    callee that reports more than once per call degrades to the final
+    result instead of silently going stale."""
+    stale = CompareResult(
+        total=512,
+        compared=512,
+        compared_start=0,
+        compared_end=511,
+        bad=9,
+        ranges=[],
+        extra_ranges=0,
+        extra_bytes=0,
+        aborted=False,
+        fingerprint=Fingerprint(
+            total=512, bad=9, bad_pct=1.7578125, classification=FP_ADDRESS_LINE
+        ),
+        ff_count=1,
+        first_offset=1,
+        first_actual=0x01,
+    )
+    final = CompareResult(
+        total=512,
+        compared=512,
+        compared_start=0,
+        compared_end=511,
+        bad=3,
+        ranges=[],
+        extra_ranges=0,
+        extra_bytes=0,
+        aborted=False,
+        fingerprint=Fingerprint(
+            total=512, bad=3, bad_pct=0.5859375, classification=FP_ADDRESS_LINE
+        ),
+        ff_count=100,
+        first_offset=5,
+        first_actual=0x12,
+    )
+
+    def _fake_check_eprom_blank(name, eprom_data, on_result=None, **kwargs):
+        if on_result is not None:
+            on_result(stale)
+            on_result(final)
+        return 1
+
+    operator = _mock_operator()
+    operator.check_eprom_blank.side_effect = _fake_check_eprom_blank
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    assert blank_result.compare_evidence == {
+        "bad": 3,
+        "compared": 512,
+        "first_offset": 5,
+        "first_actual": 0x12,
+        "ff_count": 100,
+        "aborted": False,
+        "classification": FP_ADDRESS_LINE,
+    }
+
+
 def test_blank_check_compare_evidence_is_absent_when_the_step_never_ran():
     """The paired negative: an unsupported (never-dispatched) blank-check
     step never reaches `operator.check_eprom_blank`, so its `on_result`

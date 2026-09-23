@@ -2711,7 +2711,16 @@ def _dispatch_step(
         )
         compare_evidence: dict[str, Any] | None = None
         if captured_compare:
-            cr = captured_compare[0]
+            # WR-01 (206-REVIEW): the LAST entry, not the first --
+            # `_drive_region_compare` fires `on_result` at most once per
+            # `check_eprom_blank` call today, so `[0]` and `[-1]` currently
+            # coincide, but taking the last matches the "most recent/
+            # finalised" convention `_aggregate_cycle_results` already uses
+            # for `compare_evidence`/`compare_path`/`fingerprint`/
+            # `write_target`, so a future callee that reports more than
+            # once per call degrades to the final result instead of a
+            # silently stale one.
+            cr = captured_compare[-1]
             compare_evidence = {
                 "bad": cr.bad,
                 "compared": cr.compared,
