@@ -848,18 +848,24 @@ def write(
     if not jp5_gate.confirm_or_refuse(eprom, eprom_data.get("bus-config"), "write"):
         sys.exit(1)
     page_size_gate.require_page_size(eprom, eprom_data, "write")
+    # Folded todo `2026-09-16-reject-negative-write-start-address.md`, host
+    # half: called here, at the CLI tier, so a negative `-a` on `write`
+    # refuses before `app.eprom_operator.write_eprom` is ever invoked, on
+    # every write family (guarded or not). `write_eprom` also calls this
+    # gate itself (write_blank_guard.require_non_negative_address's own
+    # call site), which is what protects `dev test` and `dev write-cycle`
+    # -- callers that never go through this CLI handler at all. This call
+    # now runs between the page-size gate above and the page-alignment
+    # gate below, so a negative start address that is also misaligned, or
+    # paired with a misaligned length, gets this clearer refusal instead of
+    # the alignment gate's signed-hex wording (203-REVIEW IN-01, 207.1
+    # D-08). `require_non_negative_address` returns silently on an
+    # unparseable address, so the alignment gate below still owns the
+    # could-not-parse error.
+    write_blank_guard.require_non_negative_address(eprom, address)
     page_size_gate.require_page_alignment(
         eprom, eprom_data, "write", address, input_file
     )
-    # Folded todo `2026-09-16-reject-negative-write-start-address.md`, host
-    # half: mirrors the two page_size_gate calls above -- called here, at
-    # the CLI tier, so a negative `-a` on `write` refuses before
-    # `app.eprom_operator.write_eprom` is ever invoked, on every write
-    # family (guarded or not). `write_eprom` also calls this gate itself
-    # (write_blank_guard.require_non_negative_address's own call site),
-    # which is what protects `dev test` and `dev write-cycle` -- callers
-    # that never go through this CLI handler at all.
-    write_blank_guard.require_non_negative_address(eprom, address)
 
     ok = app.eprom_operator.write_eprom(
         eprom,

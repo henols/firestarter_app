@@ -2429,16 +2429,21 @@ class EpromOperator:
             pin1_hazard_acknowledged,
         )
         require_page_size(eprom_name, eprom_data_dict, "write")
-        require_page_alignment(
-            eprom_name, eprom_data_dict, "write", address_str, input_file_path
-        )
         # Folded todo `2026-09-16-reject-negative-write-start-address.md`,
         # host half: refuse a signed start address before it can reach
         # either this write's own region arithmetic or the guard's, on
-        # every write family -- guarded or not. Placed after the other pure
-        # pre-connect gates and before the `os.path.getsize` block below, so
-        # it fires ahead of both the region length and the guard.
+        # every write family -- guarded or not. This call now runs between
+        # the page-size gate above and the page-alignment gate below, so a
+        # negative start address that is also misaligned, or paired with a
+        # misaligned length, gets this clearer refusal instead of the
+        # alignment gate's signed-hex wording (203-REVIEW IN-01, 207.1
+        # D-08). `require_non_negative_address` returns silently on an
+        # unparseable address, so the alignment gate below still owns the
+        # could-not-parse error.
         require_non_negative_address(eprom_name, address_str)
+        require_page_alignment(
+            eprom_name, eprom_data_dict, "write", address_str, input_file_path
+        )
 
         # BLANK-01 / D-05: guarded so a missing file keeps surfacing exactly
         # where it does today (_main_phase_send_data, after connecting, for
