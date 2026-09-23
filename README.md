@@ -46,9 +46,10 @@ firestarter fw -i --pre
 `--pre` opts into pre-release versions on PyPI; plain `pip install firestarter` only ever
 installs the latest stable release.
 
-**The CLI and the firmware are upgraded together.** A mismatched pair fails with a timeout or a
-decode error — see
-[Breaking Changes](https://github.com/henols/firestarter/wiki/Breaking-Changes).
+**Upgrade the CLI first, then the firmware.** From 3.1.0b1, not every mismatched CLI and firmware
+pairing is refused — some mixed pairs keep working while others fail quietly. See
+[Breaking Changes](https://github.com/henols/firestarter/wiki/Breaking-Changes) for which
+pairings work.
 
 ## Usage
 
