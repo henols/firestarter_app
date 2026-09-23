@@ -60,6 +60,8 @@ def _probe_with_identity(identity):
         patch.object(SerialCommunicator, "firmware_identity", identity),
         patch.object(SerialCommunicator, "hw_revision", None),
         patch.object(SerialCommunicator, "port_name", "/dev/null", create=True),
+        # setup_command asserts the link is open (207.1 D-11)
+        patch.object(SerialCommunicator, "is_connected", return_value=True),
         patch.object(SerialCommunicator, "__init__", lambda self, port, **k: None),
     ):
         yield

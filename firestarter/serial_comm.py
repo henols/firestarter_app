@@ -831,17 +831,21 @@ class SerialCommunicator:
         the link and cold-connect next time" for a leased setup site), not
         something this shared setup-and-validate code decides for every
         caller. A genuine transport failure during the send/read (a raised
-        `SerialError`) propagates unchanged for the same reason -- this
-        includes a call on a link that is not connected: `send_bytes`
-        already raises `SerialError("Not connected.")` in that case
-        (unchanged, pre-existing behaviour), so this method does not
-        duplicate that check with a second, redundant guard. Both
-        production callers only ever invoke this on a link they have just
-        confirmed is open -- `_probe_port` on a communicator it just
-        constructed, and a lease's setup site on `self.comm` after its own
-        `is_connected()` check -- so "not connected" reaching here at all
-        is already a caller bug, not a state this method needs to
-        anticipate silently.
+        `SerialError`) propagates unchanged for the same reason.
+
+        A call on a link that is not connected is a caller bug, and this
+        method asserts that precondition as its first statement
+        (206-REVIEW IN-02, 207.1 D-11), so the failure names this frame
+        instead of surfacing later as `send_bytes`'s not-connected
+        `SerialError`. The assert raises `AssertionError`, not
+        `SerialError`, so inside `_probe_port` it lands in the `except
+        Exception` arm, which logs an "Unexpected error while probing"
+        line and returns `None` while the port walk continues; `python -O`
+        strips it. Both production callers only ever invoke this on a link
+        they have just confirmed is open -- `_probe_port` on a
+        communicator it just constructed, and a lease's setup site on
+        `self.comm` after its own `is_connected()` check -- so neither is
+        affected.
 
         ``allow_outdated_firmware`` waives the two firmware-*version*
         refusals below — the missing-identity refusal and the version floor
@@ -851,6 +855,7 @@ class SerialCommunicator:
         version gate for why the firmware-update read path needs it and why
         no chip operation can ever obtain it.
         """
+        assert self.is_connected(), "setup_command requires an open link"
         # Send the user's actual command straight away. The
         # dedicated CMD_FW_VERSION pre-probe this replaces cost a full
         # command exchange (2 acks) on every single connect; MSG_OK_READY
