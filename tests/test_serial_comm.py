@@ -504,6 +504,36 @@ def test_setup_command_refuses_when_the_firmware_gate_fails(
         comm.setup_command({"state": 13}, MagicMock(), allow_outdated_firmware=False)
 
 
+def test_setup_command_asserts_the_link_is_connected_before_sending(
+    make_comm, monkeypatch
+) -> None:
+    """206-REVIEW IN-02 / 207.1 D-11 -- a caller that skips the open-link
+    precondition must fail here, at `setup_command`'s own frame, before any
+    byte is sent."""
+    from unittest.mock import MagicMock
+
+    calls: list = []
+
+    def _fake_send_json_command(self, *args, **kwargs):
+        calls.append(args[0] if args else kwargs.get("command_to_send"))
+
+    def _fake_expect_ack(self, *args, **kwargs):
+        return (False, "stub: not ok")
+
+    monkeypatch.setattr(
+        SerialCommunicator, "send_json_command", _fake_send_json_command
+    )
+    monkeypatch.setattr(SerialCommunicator, "expect_ack", _fake_expect_ack)
+
+    comm = make_comm()
+    comm.connection = None
+
+    with pytest.raises(AssertionError):
+        comm.setup_command({"state": 13}, MagicMock())
+
+    assert calls == []
+
+
 def test_setup_command_recovers_past_a_spurious_decode_error_frame(
     make_comm, fake_serial
 ) -> None:
