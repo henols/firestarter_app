@@ -511,6 +511,43 @@ def test_write_eprom_negative_start_address_refuses_before_operation_context(
     assert "M27C512" in str(exc_info.value)
 
 
+def test_write_eprom_negative_misaligned_start_address_refuses_as_negative_first(
+    tmp_path,
+):
+    """203-REVIEW IN-01 / 207.1 D-08: `-1` is a NEGATIVE start address on
+    W29C020 (page size 128), and it is also MISALIGNED for that page size --
+    the CONTEXT premise that a negative address always gets the clearer
+    negative-address message is inverted (207.1-RESEARCH.md Sec D-08): today
+    a negative, page-ALIGNED address already gets it, but a negative address
+    that is also misaligned loses it to the page-alignment gate instead. The
+    negative gate must win over the alignment gate regardless of alignment,
+    so `write_eprom` must raise `NegativeStartAddressError`, not
+    `PageAlignmentError`, and must never enter `_operation_context`."""
+    from unittest.mock import patch
+
+    from firestarter.config import ConfigManager
+    from firestarter.eprom_operations import EpromOperator
+    from firestarter.exceptions import NegativeStartAddressError
+
+    from .test_page_size_alignment_refusal import _w29c020_data
+
+    eprom_data = _w29c020_data()
+    assert eprom_data.get("page-size") == 128
+
+    payload = tmp_path / "probe128.bin"
+    payload.write_bytes(b"\x55" * 128)
+
+    operator = EpromOperator(ConfigManager())
+    with patch.object(EpromOperator, "_operation_context") as ctx_mock:
+        with pytest.raises(NegativeStartAddressError) as exc_info:
+            operator.write_eprom(
+                "W29C020", eprom_data, str(payload), address_str="-1"
+            )
+        ctx_mock.assert_not_called()
+
+    assert "W29C020" in str(exc_info.value)
+
+
 def _assert_cli_negative_address_refusal(chip_name: str, address_arg: str) -> None:
     """The CLI-tier half: `CliRunner` + `Mock(spec=EpromOperator)`, proving
     the refusal fires -- and `write_eprom` is never reached -- before
@@ -555,6 +592,15 @@ def test_cli_write_negative_address_refuses_on_an_unguarded_family_too():
 
 def test_cli_write_negative_address_refuses_on_a_guarded_family_too():
     _assert_cli_negative_address_refusal("m27c512", "-256")
+
+
+def test_cli_write_negative_misaligned_address_on_a_page_write_part_gets_the_negative_message():
+    """203-REVIEW IN-01 / 207.1 D-08: the helper's 4-byte payload is ALSO
+    length-misaligned for W29C020's page size (128) -- that is the point.
+    Even with both the address and the length misaligned, the CLI-tier
+    refusal must still be the negative-address line, not the page-alignment
+    line."""
+    _assert_cli_negative_address_refusal("w29c020", "-1")
 
 
 # ---------------------------------------------------------------------------
