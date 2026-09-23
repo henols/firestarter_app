@@ -568,7 +568,7 @@ def read(
 
 
 # Phase 203 (D-13/D-14, `exit_code_contract_resolved` in 203-03-PLAN.md): the
-# four terminal lines `write --verify` can print. Module-level, format-
+# five terminal lines `write --verify` can print. Module-level, format-
 # constant style (mirrors `write_blank_guard._REFUSAL_FORMAT`), specifically
 # so a test can assert whole sentences AND assert the forbidden word's
 # absence over the constants themselves, not over one rendered run.
@@ -584,7 +584,12 @@ def read(
 # no-write arms: the underlying cause stays visible in the log
 # (`_run_state_machine` already emits its own communication-error or
 # programmer-error line), so nothing is asked of the operator that only the
-# exit code could answer.
+# exit code could answer. The one fifth constant that DOES exist is for a
+# different reason: it is a landed-write arm, not a no-write arm --
+# `write_eprom` records `last_write_attempt_verdict = 0` before the
+# `--skip-sdp-unlock` ack block flips `is_ok`, so the data reached the chip
+# and only the host's check of the opt-out acknowledgement failed
+# (203-REVIEW WR-01, 207.1 D-06).
 _WRITE_VERIFY_VERDICT_OK = "Write to {eprom}: verified -- the read-back matches."
 _WRITE_VERIFY_VERDICT_MISMATCH = (
     "Write to {eprom}: landed, but the read-back did not verify."
@@ -594,6 +599,10 @@ _WRITE_VERIFY_VERDICT_UNREADABLE = (
 )
 _WRITE_VERIFY_VERDICT_NO_WRITE = (
     "Write to {eprom}: did not complete -- nothing was verified."
+)
+_WRITE_VERIFY_VERDICT_LANDED_UNACKNOWLEDGED = (
+    "Write to {eprom}: landed, but the firmware did not acknowledge "
+    "--skip-sdp-unlock -- nothing was verified."
 )
 
 
@@ -963,6 +972,17 @@ def write(
         # longest, most hardware-stressed leg of the run).
         click.echo(_WRITE_VERIFY_VERDICT_NO_WRITE.format(eprom=eprom.upper()))
         sys.exit(2)
+    if attempt_verdict == 0:
+        # Arm 4b: reachable only through the `--skip-sdp-unlock` ack
+        # failure, because every other `False` return leaves the attempt
+        # verdict at `None`, 1, or 2. The write landed on the wire --
+        # `write_eprom` records verdict 0 before the ack block flips
+        # `is_ok` -- so the no-write line above would be false here
+        # (203-REVIEW WR-01, 207.1 D-06).
+        click.echo(
+            _WRITE_VERIFY_VERDICT_LANDED_UNACKNOWLEDGED.format(eprom=eprom.upper())
+        )
+        sys.exit(1)
     # Arm 4: the write failed for a reason the host or the firmware
     # decided (attempt_verdict == 1, or -- defensively -- any other value).
     click.echo(_WRITE_VERIFY_VERDICT_NO_WRITE.format(eprom=eprom.upper()))
