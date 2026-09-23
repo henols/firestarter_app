@@ -802,6 +802,159 @@ class SerialCommunicator:
             detected=detected,
         )
 
+    def setup_command(
+        self,
+        command_to_send: dict,
+        config_manager: ConfigManager,
+        *,
+        allow_outdated_firmware: bool = False,
+    ) -> bool:
+        """
+        Send a setup command on this (already-open) link and validate its ack.
+
+        This is the half of the cold probe (`_probe_port`) that can
+        legitimately run again on an already-open link: the setup-command
+        send, the ack read (including the spurious-decode-error recovery
+        window bounded by `SETUP_ACK_RECOVERY_TIMEOUT_S`), and both the
+        firmware-version and hardware-revision gates. Those two gates are
+        part of this method BY CONSTRUCTION, never an optional extra a
+        future caller can skip -- a caller that reused a link and skipped
+        them would be driving firmware whose wire contract it had not
+        checked, which is the one genuine security consequence of a reused
+        link.
+
+        Returns `False` -- never raises for a merely-failed setup -- when
+        the ack is not OK, or (absent the waiver) when the firmware-version
+        gate refuses. It does NOT disconnect on a `False` return: whether
+        to tear the link down on a failed setup is a caller policy (the
+        port walk's "try the next port" for `_probe_port`; a lease's "drop
+        the link and cold-connect next time" for a leased setup site), not
+        something this shared setup-and-validate code decides for every
+        caller. A genuine transport failure during the send/read (a raised
+        `SerialError`) propagates unchanged for the same reason -- this
+        includes a call on a link that is not connected: `send_bytes`
+        already raises `SerialError("Not connected.")` in that case
+        (unchanged, pre-existing behaviour), so this method does not
+        duplicate that check with a second, redundant guard. Both
+        production callers only ever invoke this on a link they have just
+        confirmed is open -- `_probe_port` on a communicator it just
+        constructed, and a lease's setup site on `self.comm` after its own
+        `is_connected()` check -- so "not connected" reaching here at all
+        is already a caller bug, not a state this method needs to
+        anticipate silently.
+
+        ``allow_outdated_firmware`` waives the two firmware-*version*
+        refusals below — the missing-identity refusal and the version floor
+        — and NOTHING else. It is an explicit caller opt-in, never inferred
+        from the command dict, so a chip operation cannot acquire it by
+        accident or by crafting a command. See the block comment at the
+        version gate for why the firmware-update read path needs it and why
+        no chip operation can ever obtain it.
+        """
+        # Send the user's actual command straight away. The
+        # dedicated CMD_FW_VERSION pre-probe this replaces cost a full
+        # command exchange (2 acks) on every single connect; MSG_OK_READY
+        # now carries the firmware identity AND the effective hardware
+        # revision, so both gates run off the ack this command was going to
+        # produce anyway.
+        #
+        # Validating after the command is on the wire is safe by
+        # construction, not by luck. init_programmer_framed does run
+        # configure_memory before emitting MSG_OK_READY, but every
+        # configure_* handler is pure — it assigns function pointers and
+        # pulse defaults, nothing else. The VPP regulator is not engaged
+        # until firestarter_operation_init, which blocks on
+        # op_wait_for_ack(). Raising below means that ack is never sent, so
+        # the operation never starts and the rail stays down.
+        self.send_json_command(command_to_send)
+        is_ok, msg = self.expect_ack()
+
+        if msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
+            logger.debug(
+                f"Port {self.port_name}: setup ack was a spurious "
+                f"{GENERIC_FRAME_DECODE_ERROR_TEXT!r} frame — Uno-class "
+                f"boards can emit one around a DTR reset. Reading past it "
+                f"for up to {SETUP_ACK_RECOVERY_TIMEOUT_S}s for the real ack."
+            )
+            setup_ack_deadline = time.time() + SETUP_ACK_RECOVERY_TIMEOUT_S
+            while msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
+                remaining = setup_ack_deadline - time.time()
+                if remaining <= 0:
+                    break
+                is_ok, msg = self.expect_ack(timeout=remaining)
+
+        if not is_ok:
+            logger.debug(f"Port {self.port_name} responded but not with OK: {msg}")
+            return False
+
+        # Version gate. The POLICY is untouched — only its
+        # source moved, from the retired probe's "OK: FW: <ver>" text line
+        # to the identity field of the ack. Same [\d.x]+ extraction as the
+        # old regex performed, so _validate_firmware_version still receives
+        # "3.0.0" rather than the full "3.0.0:uno" identity (feeding it the
+        # board suffix would make int() choke and reject every board).
+        identity = self.firmware_identity
+        version_match = re.match(r"[\d.x]+", identity) if identity else None
+        #
+        # allow_outdated_firmware — the firmware-update read path's waiver.
+        #
+        # The version gate exists so this host never DRIVES firmware whose
+        # wire contract it does not share. Reading the version of firmware
+        # in order to replace it is not driving it: the only caller that
+        # sets this flag is FirmwareManager.check_current_firmware, whose
+        # command is {"state": COMMAND_FW_VERSION} — it engages no bus
+        # line and no VPP/VPE rail, reads one text ack and disconnects.
+        #
+        # Without the waiver the gate is a deadlock: firmware that predates
+        # the identity tail (every stable release, and every beta up
+        # to 3.0.0b1x) sends a bare 2-byte MSG_OK_READY, so `fw`,
+        # `fw --install` and `fw --force` all abort here — the one command
+        # whose job is to replace that firmware is blocked by its
+        # outdatedness, and the refusal text points the operator at
+        # `fw --install`, which hits this same line. The version IS
+        # obtainable: it arrives in the very next ack as
+        # "FW: <version>:<board>", which check_current_firmware already
+        # parses.
+        #
+        # The waiver is an explicit caller opt-in, never inferred from the
+        # command dict, so a chip operation cannot acquire it by accident
+        # or by crafting a command. It does NOT touch the shield-revision
+        # gate below, which still refuses (None is a reject there).
+        if version_match is None:
+            if not allow_outdated_firmware:
+                raise FirmwareOutdatedError(
+                    "Programmer did not report a firmware version in its "
+                    "operation-setup ack. This host requires firmware that "
+                    "carries the version and hardware revision in that ack. "
+                    "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
+                )
+            logger.debug(
+                f"{self.port_name}: ack carries no firmware identity "
+                f"(pre-CAP-02 firmware); proceeding because this is the "
+                f"firmware-update read path."
+            )
+        elif not allow_outdated_firmware:
+            # Refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
+            # to major=3 later. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
+            # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
+            SerialCommunicator._validate_firmware_version(
+                version_match.group(0),
+                allow_pre_v12=os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12") == "1",
+            )
+
+        # Shield-revision gate — ordered after the version check because
+        # firmware old enough to fail that check cannot be trusted to have
+        # reported a revision at all, and before the caller is handed a
+        # connection it would immediately start driving.
+        SerialCommunicator._validate_hardware_revision(
+            command_to_send, self.hw_revision
+        )
+
+        self.programmer_info = msg
+        logger.debug(f"Programmer setup complete on {self.port_name}: {msg}")
+        config_manager.remember_port(self.port_name)  # never promotes a typed --port
+        return True
+
     @staticmethod
     def _probe_port(
         port_name: str,
@@ -831,110 +984,25 @@ class SerialCommunicator:
                 communicator._fault_inject_outgoing = fault_inject_outgoing
             communicator.consume_remaining_input()
 
-            # Send the user's actual command straight away. The
-            # dedicated CMD_FW_VERSION pre-probe this replaces cost a full
-            # command exchange (2 acks) on every single connect; MSG_OK_READY
-            # now carries the firmware identity AND the effective hardware
-            # revision, so both gates run off the ack this command was going to
-            # produce anyway.
-            #
-            # Validating after the command is on the wire is safe by
-            # construction, not by luck. init_programmer_framed does run
-            # configure_memory before emitting MSG_OK_READY, but every
-            # configure_* handler is pure — it assigns function pointers and
-            # pulse defaults, nothing else. The VPP regulator is not engaged
-            # until firestarter_operation_init, which blocks on
-            # op_wait_for_ack(). Raising below means that ack is never sent, so
-            # the operation never starts and the rail stays down.
-            communicator.send_json_command(command_to_send)
-            is_ok, msg = communicator.expect_ack()
-
-            if msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
-                logger.debug(
-                    f"Port {port_name}: setup ack was a spurious "
-                    f"{GENERIC_FRAME_DECODE_ERROR_TEXT!r} frame — Uno-class "
-                    f"boards can emit one around a DTR reset. Reading past it "
-                    f"for up to {SETUP_ACK_RECOVERY_TIMEOUT_S}s for the real ack."
-                )
-                setup_ack_deadline = time.time() + SETUP_ACK_RECOVERY_TIMEOUT_S
-                while msg == GENERIC_FRAME_DECODE_ERROR_TEXT:
-                    remaining = setup_ack_deadline - time.time()
-                    if remaining <= 0:
-                        break
-                    is_ok, msg = communicator.expect_ack(timeout=remaining)
-
-            if not is_ok:
-                logger.debug(f"Port {port_name} responded but not with OK: {msg}")
+            # setup_command carries the send, the ack read (including the
+            # spurious-decode-error recovery window), and both validation
+            # gates. A falsy result here is a port-walk decision, not a
+            # setup decision: this probe disconnects and tries the next
+            # candidate port. setup_command itself never disconnects on a
+            # falsy result, precisely so a lease's second-and-later setup
+            # (which shares this method but is not a port walk) can decide
+            # its own policy instead.
+            if not communicator.setup_command(
+                command_to_send,
+                config_manager,
+                allow_outdated_firmware=allow_outdated_firmware,
+            ):
                 communicator.disconnect()
                 return None
 
-            # Version gate. The POLICY is untouched — only its
-            # source moved, from the retired probe's "OK: FW: <ver>" text line
-            # to the identity field of the ack. Same [\d.x]+ extraction as the
-            # old regex performed, so _validate_firmware_version still receives
-            # "3.0.0" rather than the full "3.0.0:uno" identity (feeding it the
-            # board suffix would make int() choke and reject every board).
-            identity = communicator.firmware_identity
-            version_match = re.match(r"[\d.x]+", identity) if identity else None
-            #
-            # allow_outdated_firmware — the firmware-update read path's waiver.
-            #
-            # The version gate exists so this host never DRIVES firmware whose
-            # wire contract it does not share. Reading the version of firmware
-            # in order to replace it is not driving it: the only caller that
-            # sets this flag is FirmwareManager.check_current_firmware, whose
-            # command is {"state": COMMAND_FW_VERSION} — it engages no bus
-            # line and no VPP/VPE rail, reads one text ack and disconnects.
-            #
-            # Without the waiver the gate is a deadlock: firmware that predates
-            # the identity tail (every stable release, and every beta up
-            # to 3.0.0b1x) sends a bare 2-byte MSG_OK_READY, so `fw`,
-            # `fw --install` and `fw --force` all abort here — the one command
-            # whose job is to replace that firmware is blocked by its
-            # outdatedness, and the refusal text points the operator at
-            # `fw --install`, which hits this same line. The version IS
-            # obtainable: it arrives in the very next ack as
-            # "FW: <version>:<board>", which check_current_firmware already
-            # parses.
-            #
-            # The waiver is an explicit caller opt-in, never inferred from the
-            # command dict, so a chip operation cannot acquire it by accident
-            # or by crafting a command. It does NOT touch the shield-revision
-            # gate below, which still refuses (None is a reject there).
-            if version_match is None:
-                if not allow_outdated_firmware:
-                    raise FirmwareOutdatedError(
-                        "Programmer did not report a firmware version in its "
-                        "operation-setup ack. This host requires firmware that "
-                        "carries the version and hardware revision in that ack. "
-                        "Please upgrade the firmware using 'firestarter fw --install'."  # noqa: E501
-                    )
-                logger.debug(
-                    f"{port_name}: ack carries no firmware identity "
-                    f"(pre-CAP-02 firmware); proceeding because this is the "
-                    f"firmware-update read path."
-                )
-            elif not allow_outdated_firmware:
-                # Refuse pre-v1.2 firmware. The firmware bumped  # noqa: E501
-                # to major=3 later. Set FIRESTARTER_DEV_ALLOW_PRE_V12=1 to bypass when  # noqa: E501
-                # bench-testing a current host against a historical (v2.x) firmware build.  # noqa: E501
-                SerialCommunicator._validate_firmware_version(
-                    version_match.group(0),
-                    allow_pre_v12=os.environ.get("FIRESTARTER_DEV_ALLOW_PRE_V12")
-                    == "1",
-                )
-
-            # Shield-revision gate — ordered after the version check because
-            # firmware old enough to fail that check cannot be trusted to have
-            # reported a revision at all, and before the caller is handed a
-            # connection it would immediately start driving.
-            SerialCommunicator._validate_hardware_revision(
-                command_to_send, communicator.hw_revision
+            logger.debug(
+                f"Programmer found on {port_name}: {communicator.programmer_info}"
             )
-
-            communicator.programmer_info = msg
-            logger.debug(f"Programmer found on {port_name}: {msg}")
-            config_manager.remember_port(port_name)  # never promotes a typed --port
             return communicator
 
         except HardwareRevisionUnsupportedError:

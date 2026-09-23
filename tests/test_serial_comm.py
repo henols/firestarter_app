@@ -418,6 +418,116 @@ def test_find_and_connect_default_no_fault_inject(monkeypatch) -> None:
     assert captured["fault_inject_outgoing"] is None
 
 
+def test_setup_command_is_the_path_the_cold_probe_takes(monkeypatch) -> None:
+    """`_probe_port`'s success path is a thin port-walk wrapper: it constructs
+    the communicator, drains, and delegates the send/ack/gate work to
+    `setup_command` -- proven here by intercepting the delegated call rather
+    than by re-deriving the same wire bytes twice (206-03 Task 1)."""
+    from unittest.mock import MagicMock
+
+    from .conftest import _FakeSerial
+
+    fake_ser = _FakeSerial()
+
+    def _init(self, port=None, baud_rate=None, **kwargs):
+        self.connection = fake_ser
+        self.port_name = port or "/dev/fake"
+        self.baud_rate = baud_rate or 250000
+        self.timeout = 0.1
+        self.programmer_info = None
+        self._fault_inject_outgoing = None
+        self.firmware_buffer_size = None
+        self.firmware_max_chunk = None
+        self.firmware_identity = None
+        self.hw_revision = None
+        self.write_block_budget_s = None
+        self.seen_message_ids = set()
+
+    calls: list = []
+
+    def _fake_setup_command(
+        self, command_to_send, config_manager, *, allow_outdated_firmware=False
+    ):
+        calls.append((command_to_send, allow_outdated_firmware))
+        self.programmer_info = "Ready (faked)"
+        return True
+
+    monkeypatch.setattr(SerialCommunicator, "__init__", _init)
+    monkeypatch.setattr(
+        SerialCommunicator, "consume_remaining_input", lambda self: None
+    )
+    monkeypatch.setattr(SerialCommunicator, "setup_command", _fake_setup_command)
+
+    comm = SerialCommunicator._probe_port(
+        port_name="/dev/fake",
+        baud_rate=250000,
+        command_to_send={"state": 13},
+        config_manager=MagicMock(),
+        allow_outdated_firmware=True,
+    )
+
+    assert comm is not None, "a truthy setup_command result must yield a communicator"
+    assert comm.programmer_info == "Ready (faked)", (
+        "_probe_port must not re-derive programmer_info itself -- it is "
+        "setup_command's job"
+    )
+    assert calls == [({"state": 13}, True)], (
+        "_probe_port must delegate the exact command dict and the "
+        "allow_outdated_firmware waiver to setup_command, unchanged"
+    )
+
+
+def test_setup_command_refuses_when_the_firmware_gate_fails(
+    make_comm, fake_serial
+) -> None:
+    """A leased or cold setup whose ack carries a below-floor firmware
+    version must still hit the version gate -- proving the gate is part of
+    `setup_command` itself, not something only `_probe_port` enforces around
+    it (206-03 Task 1)."""
+    from unittest.mock import MagicMock
+
+    from firestarter.messages import MSG_OK_READY
+
+    from .conftest import build_frame
+
+    # params: [buffer_size u16][hw_revision u8][ver_len u8][version bytes].
+    # hw_revision=0 and no "vpp-pin": 11 in the command dict, so the
+    # hardware-revision gate trivially passes -- this ack must be refused by
+    # the FIRMWARE gate specifically, before the hardware gate is ever
+    # reached ("1.0.0" fails the major<3 pre-v1.2 refusal).
+    version = b"1.0.0"
+    params = b"\x02\x00" + bytes([0]) + bytes([len(version)]) + version
+    fake_serial.feed(build_frame(MSG_OK_READY, params))
+
+    comm = make_comm()
+    with pytest.raises(FirmwareOutdatedError):
+        comm.setup_command({"state": 13}, MagicMock(), allow_outdated_firmware=False)
+
+
+def test_setup_command_recovers_past_a_spurious_decode_error_frame(
+    make_comm, fake_serial
+) -> None:
+    """The GENERIC_FRAME_DECODE_ERROR_TEXT recovery window moved into
+    `setup_command` along with the send/ack it protects -- a spurious decode
+    error ahead of the real ack must not sink a leased or cold setup
+    (206-03 Task 1; mirrors test_probe_spurious_setup_ack.py at the
+    `_probe_port` level)."""
+    from unittest.mock import MagicMock
+
+    from firestarter.messages import MSG_ERR_EMPTY_INPUT, MSG_OK_READY
+
+    from .conftest import build_frame
+
+    fake_serial.feed(build_frame(MSG_ERR_EMPTY_INPUT, b""))
+    fake_serial.feed(build_frame(MSG_OK_READY, b""))
+
+    comm = make_comm()
+    ok = comm.setup_command({"state": 13}, MagicMock(), allow_outdated_firmware=True)
+
+    assert ok is True
+    assert comm.programmer_info == "Ready"
+
+
 def test_read_and_parse_lines_ringfence_unchanged() -> None:
     """Ring-fence compliance: _read_and_parse_lines body source is byte-identical
     to the GATE-1.8d pinned snapshot.

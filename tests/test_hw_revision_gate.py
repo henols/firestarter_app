@@ -365,7 +365,11 @@ def _probe(command, revision):
         patch.object(SerialCommunicator, "disconnect", return_value=None),
         patch.object(SerialCommunicator, "firmware_identity", "3.0.0:uno"),
         patch.object(SerialCommunicator, "hw_revision", revision),
-        patch.object(SerialCommunicator, "__init__", lambda self, port, **k: None),
+        patch.object(
+            SerialCommunicator,
+            "__init__",
+            lambda self, port, **k: setattr(self, "port_name", port),
+        ),
     ):
         return SerialCommunicator._probe_port(
             port_name="/dev/null",
