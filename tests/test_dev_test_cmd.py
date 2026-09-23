@@ -1483,6 +1483,25 @@ class TestExitCodeMapping:
         assert "write-partial" in steps
 
 
+def test_a_transport_failed_cycle_block_step_exits_2_not_0(runner: CliRunner) -> None:
+    """Phase 206 Task 1 end-to-end (T-206-06, DEVTEST-03): a transport fault
+    raised by the cycle-block WRITE step -- a half-seated cable, not a
+    firmware-reported disagreement -- on exactly one of the default three
+    cycles must exit 2, the status-axis floor (`_dev_test_exit_code`'s
+    `run_status_error` term), never 0. Today this exits 0: two of the three
+    cycles report `VERDICT_OK`, so the folded verdict wins the exit-code
+    race before the dropped `STATUS_ERROR` ever gets a vote."""
+    operator = make_clean_operator()
+    operator.write_eprom.side_effect = [True, SerialError("half-seated cable"), True]
+    app = make_app_context(
+        eprom_operator=operator, hardware_manager=make_hardware_manager()
+    )
+    result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+    assert result.exit_code == 2, result.output
+    data = _load_report(_CHIP_NO_ID)
+    assert data["run_status"] == "ERROR", data
+
+
 class TestExitPrecedenceLeg06:
     """Before D-14, `dev test`'s exit computation was a bare numeric maximum
     over each step's exit-code contribution. Because `_VERDICT_EXIT_CODES`

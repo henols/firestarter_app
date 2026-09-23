@@ -557,3 +557,63 @@ def test_uv_plan_blank_check_sits_outside_the_cycle_block(chip: str) -> None:
     assert bounds is not None
     block_start, _block_stop = bounds
     assert blank_check_index < block_start
+
+
+def test_a_transport_failed_cycle_keeps_the_run_status_error() -> None:
+    """Phase 206 Task 1 (T-206-06): `_aggregate_cycle_results`'s terminal
+    `StepResult` passes none of its nine keywords named `status=`, so the
+    dataclass default `STATUS_COMPLETE` silently wins even when one cycle
+    transport-failed. Three cycles -- two `VERDICT_OK`/`STATUS_COMPLETE`
+    and one `VERDICT_SKIPPED`/`STATUS_ERROR` (the exact shape
+    `_run_step_untimed`'s `(SerialError, HardwareOperationError)` arm
+    produces) -- fold to a `VERDICT_OK` verdict (2-of-3 `ran` majority,
+    unaffected by this task) but MUST fold to `STATUS_ERROR`: the
+    transport-failed cycle is not in `ran` (`VERDICT_SKIPPED` is excluded
+    from `_RAN_VERDICTS`), so the fold has to scan the full `results` list
+    or it silently drops the one cycle it exists to catch."""
+    results = [
+        ct.StepResult(op=ct.OP_WRITE, verdict=ct.VERDICT_OK, run_count=1),
+        ct.StepResult(
+            op=ct.OP_WRITE,
+            verdict=ct.VERDICT_SKIPPED,
+            status=ct.STATUS_ERROR,
+            reason="half-seated cable",
+            run_count=1,
+        ),
+        ct.StepResult(op=ct.OP_WRITE, verdict=ct.VERDICT_OK, run_count=1),
+    ]
+
+    folded = ct._aggregate_cycle_results(results, ct.OP_WRITE)
+
+    assert folded.verdict == ct.VERDICT_OK
+    assert folded.status == ct.STATUS_ERROR
+
+
+def test_fast_and_default_runs_agree_on_a_transport_failed_step_status() -> None:
+    """The one-cycle (`--fast`) path takes `_aggregate_cycle_results`'s
+    `len(results) == 1` early return, which has ALWAYS preserved a lone
+    `STATUS_ERROR` result untouched -- that path is not this task's
+    defect. The three-cycle default run must agree with it: today it does
+    not, because the fold silently discards `STATUS_ERROR` the instant two
+    OTHER cycles are `OK`. Pinning the two paths equal keeps that asymmetry
+    from coming back once the fold learns to read `status` (RESEARCH
+    Pitfall 5)."""
+    transport_failed = ct.StepResult(
+        op=ct.OP_WRITE,
+        verdict=ct.VERDICT_SKIPPED,
+        status=ct.STATUS_ERROR,
+        reason="half-seated cable",
+        run_count=1,
+    )
+    one_cycle = [transport_failed]
+    three_cycle = [
+        ct.StepResult(op=ct.OP_WRITE, verdict=ct.VERDICT_OK, run_count=1),
+        transport_failed,
+        ct.StepResult(op=ct.OP_WRITE, verdict=ct.VERDICT_OK, run_count=1),
+    ]
+
+    fast = ct._aggregate_cycle_results(one_cycle, ct.OP_WRITE)
+    default = ct._aggregate_cycle_results(three_cycle, ct.OP_WRITE)
+
+    assert fast.status == ct.STATUS_ERROR
+    assert default.status == fast.status

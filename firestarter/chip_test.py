@@ -1270,6 +1270,14 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
       two cycles measure the same quantity.
     * `error_code`/`reason` -- the FIRST non-empty, so the earliest failure
       explains the row rather than being overwritten by a later cycle.
+    * `status` -- the run-validity axis, held separately from `verdict`
+      above and folded with the OPPOSITE polarity: any cycle carrying an
+      error status wins, rather than disagreement producing a marginal
+      middle ground. Folded over the FULL `results` list, never the `ran`
+      subset -- a transport-failed cycle reports the SKIPPED verdict,
+      which `_RAN_VERDICTS` excludes from `ran`, so a fold over `ran` would
+      silently drop the one cycle this field exists to surface (RESEARCH
+      Pitfall 2).
     """
     if not results:
         # Unreachable via `_run_cycle_block` (it appends either a pre-computed
@@ -1294,6 +1302,8 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
         reason = next((r.reason for r in ran if r.reason), "")
 
     durations = [r.duration_s for r in ran if r.duration_s is not None]
+    folded_status_error = any(r.status == STATUS_ERROR for r in results)
+    folded_status = STATUS_ERROR if folded_status_error else STATUS_COMPLETE
     return StepResult(
         op=op,
         verdict=verdict,
@@ -1308,6 +1318,7 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
         write_target=next(
             (r.write_target for r in reversed(ran) if r.write_target is not None), None
         ),
+        status=folded_status,
     )
 
 
