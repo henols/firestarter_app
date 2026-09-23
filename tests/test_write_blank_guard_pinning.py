@@ -540,9 +540,7 @@ def test_write_eprom_negative_misaligned_start_address_refuses_as_negative_first
     operator = EpromOperator(ConfigManager())
     with patch.object(EpromOperator, "_operation_context") as ctx_mock:
         with pytest.raises(NegativeStartAddressError) as exc_info:
-            operator.write_eprom(
-                "W29C020", eprom_data, str(payload), address_str="-1"
-            )
+            operator.write_eprom("W29C020", eprom_data, str(payload), address_str="-1")
         ctx_mock.assert_not_called()
 
     assert "W29C020" in str(exc_info.value)
