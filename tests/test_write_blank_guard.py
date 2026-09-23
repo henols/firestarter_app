@@ -271,6 +271,31 @@ def test_refusal_text_carries_no_remedy_clause() -> None:
         assert forbidden not in text.lower(), (forbidden, text)
 
 
+def test_incomplete_refusal_text_is_exactly_one_line_with_the_coverage() -> None:
+    """203-REVIEW WR-02 / 207.1 D-07: an incomplete guard read (`bad == 0`,
+    `compared < total`) names no fabricated address or value -- it states
+    the coverage instead."""
+    from firestarter.write_blank_guard import incomplete_refusal_text
+
+    text = incomplete_refusal_text("m27c512", 32, 64)
+    assert text == (
+        "Refusing write to M27C512: the blank check read only 32 of 64 "
+        "bytes; every byte it read was blank, but the region is not proven "
+        "blank."
+    )
+    assert "\n" not in text
+
+
+def test_incomplete_refusal_text_carries_no_remedy_clause() -> None:
+    """D-10's no-remedy property, carried over to the incomplete-read
+    refusal (207.1 D-07)."""
+    from firestarter.write_blank_guard import incomplete_refusal_text
+
+    text = incomplete_refusal_text("m27c512", 32, 64)
+    for forbidden in ("-b", "--no-blank-check", "bypass", "skip"):
+        assert forbidden not in text.lower(), (forbidden, text)
+
+
 def test_predicate_module_reads_only_algorithm_and_flags_keys() -> None:
     """The module must read ONLY the `algorithm` and `flags` keys of the
     wire dict -- never `electrical-type`, never `protocol-id` (the keys
@@ -652,13 +677,16 @@ def test_write_with_incomplete_guard_read_is_refused_and_no_write_reaches_the_wi
     assert opened == [COMMAND_READ]
     assert COMMAND_WRITE not in opened
 
-    # Advisory WR-02 pinning (known-imperfect diagnostic, do NOT fix): with
-    # no observed divergent byte, `first_offset`/`first_actual` are both
-    # `None`, so `_run_write_blank_guard` substitutes 0 for each -- the
-    # refusal line therefore carries the SYNTHESIZED region_start/0x00
-    # pair, not an observed byte.
+    # 203-REVIEW WR-02, fixed by 207.1 D-07: with no observed divergent
+    # byte, `first_offset` and `first_actual` are both `None`, so the
+    # refusal states the compare's COVERAGE instead of inventing an
+    # address and a value.
     error_lines = [rec.message for rec in caplog.records if rec.levelname == "ERROR"]
-    assert error_lines == ["Refusing write to M27C512: not blank at 0x000000, v: 0x00."]
+    assert error_lines == [
+        "Refusing write to M27C512: the blank check read only 32 of 64 "
+        "bytes; every byte it read was blank, but the region is not proven "
+        "blank."
+    ]
 
     # Safety property 3: this is a host-decided refusal (verdict 1), not a
     # transport failure (verdict 2) -- the read itself completed cleanly at
