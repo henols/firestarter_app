@@ -27,6 +27,7 @@ Two properties this double gets right that a plain `Mock` cannot:
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -272,6 +273,23 @@ class FakeChip:
     ) -> bool:
         self.calls.append(("sdp_unlock", {}))
         return self.sdp_unlock_ok
+
+    @contextmanager
+    def lease(self):
+        """No-op stand-in for `EpromOperator.lease()` (206-03, SESS-01).
+
+        `FakeChip` duck-types the whole `EpromOperator` surface -- it models
+        chip content and physics, not connection lifecycle, so it has no
+        `SerialCommunicator` to hold open. `cli_handlers.dev_test` now
+        wraps its `run_plan(...)` call in `with app.eprom_operator.lease():`
+        unconditionally, so every double standing in for the operator needs
+        SOME `lease()` -- this one is a pure pass-through: no state, no call
+        recorded, nothing for a test to observe. Real lease behaviour
+        (connect counts, drain ordering, the failure policy) is covered
+        against the genuine `EpromOperator` in `test_session_lease.py`,
+        never against this double.
+        """
+        yield
 
 
 class WriteInitPreflightChip(FakeChip):

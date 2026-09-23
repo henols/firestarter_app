@@ -31,6 +31,7 @@ Coverage (post-121-09):
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -151,6 +152,14 @@ def make_clean_operator() -> Mock:
         return True
 
     operator = Mock(spec=EpromOperator)
+    # 206-03 SESS-01: dev_test now wraps run_plan in
+    # `with app.eprom_operator.lease():`. Mock(spec=EpromOperator)'s
+    # auto-created `.lease` attribute is a plain Mock (not MagicMock), so
+    # it does not support the context-manager protocol by default --
+    # nullcontext() makes `operator.lease()` a real, reusable no-op
+    # `with` block. No test in this module observes lease internals;
+    # that is test_session_lease.py's job.
+    operator.lease.return_value = contextlib.nullcontext()
     operator.check_eprom_id.return_value = (True, None)
     operator.read_eprom.side_effect = _clean_read
     # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
@@ -227,6 +236,14 @@ def make_leaked_lock_operator(
         return True
 
     operator = Mock(spec=EpromOperator)
+    # 206-03 SESS-01: dev_test now wraps run_plan in
+    # `with app.eprom_operator.lease():`. Mock(spec=EpromOperator)'s
+    # auto-created `.lease` attribute is a plain Mock (not MagicMock), so
+    # it does not support the context-manager protocol by default --
+    # nullcontext() makes `operator.lease()` a real, reusable no-op
+    # `with` block. No test in this module observes lease internals;
+    # that is test_session_lease.py's job.
+    operator.lease.return_value = contextlib.nullcontext()
     operator.check_eprom_id.return_value = (True, None)
     # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
     operator.check_eprom_blank.return_value = 0
@@ -291,6 +308,14 @@ def make_held_lock_operator(
         return True
 
     operator = Mock(spec=EpromOperator)
+    # 206-03 SESS-01: dev_test now wraps run_plan in
+    # `with app.eprom_operator.lease():`. Mock(spec=EpromOperator)'s
+    # auto-created `.lease` attribute is a plain Mock (not MagicMock), so
+    # it does not support the context-manager protocol by default --
+    # nullcontext() makes `operator.lease()` a real, reusable no-op
+    # `with` block. No test in this module observes lease internals;
+    # that is test_session_lease.py's job.
+    operator.lease.return_value = contextlib.nullcontext()
     operator.check_eprom_id.return_value = (True, None)
     # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
     operator.check_eprom_blank.return_value = 0
@@ -329,6 +354,14 @@ def make_clean_notrun_operator() -> Mock:
     (neither dispatches through `write_eprom`) stay `OK`.
     """
     operator = Mock(spec=EpromOperator)
+    # 206-03 SESS-01: dev_test now wraps run_plan in
+    # `with app.eprom_operator.lease():`. Mock(spec=EpromOperator)'s
+    # auto-created `.lease` attribute is a plain Mock (not MagicMock), so
+    # it does not support the context-manager protocol by default --
+    # nullcontext() makes `operator.lease()` a real, reusable no-op
+    # `with` block. No test in this module observes lease internals;
+    # that is test_session_lease.py's job.
+    operator.lease.return_value = contextlib.nullcontext()
     operator.check_eprom_id.return_value = (True, None)
     # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
     operator.check_eprom_blank.return_value = 0
@@ -391,6 +424,14 @@ def make_restore_failed_operator() -> Mock:
         return True
 
     operator = Mock(spec=EpromOperator)
+    # 206-03 SESS-01: dev_test now wraps run_plan in
+    # `with app.eprom_operator.lease():`. Mock(spec=EpromOperator)'s
+    # auto-created `.lease` attribute is a plain Mock (not MagicMock), so
+    # it does not support the context-manager protocol by default --
+    # nullcontext() makes `operator.lease()` a real, reusable no-op
+    # `with` block. No test in this module observes lease internals;
+    # that is test_session_lease.py's job.
+    operator.lease.return_value = contextlib.nullcontext()
     operator.check_eprom_id.return_value = (True, None)
     # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
     operator.check_eprom_blank.return_value = 0
@@ -1731,6 +1772,9 @@ class TestExitFloorD15:
             return True
 
         operator = Mock(spec=EpromOperator)
+        # 206-03 SESS-01: see the module-level comment on the other
+        # Mock(spec=EpromOperator) builders above for why this line exists.
+        operator.lease.return_value = contextlib.nullcontext()
         operator.check_eprom_id.return_value = (True, None)
         # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
         operator.check_eprom_blank.return_value = 0

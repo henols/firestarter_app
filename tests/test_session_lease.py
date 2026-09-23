@@ -181,7 +181,9 @@ def test_the_cold_path_is_byte_identical_when_the_lease_is_never_acquired(
     kinds = [ev[1] for ev in events]
     assert kinds.count("connect") == 3
     assert kinds.count("disconnect") == 3
-    assert kinds.count("drain") == 0, "the cold path never drains -- only a reused link needs it"
+    assert kinds.count("drain") == 0, (
+        "the cold path never drains -- only a reused link needs it"
+    )
     assert kinds.count("setup") == 0, "the cold path never calls setup_command directly"
 
 

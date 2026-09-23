@@ -558,13 +558,18 @@ def test_last_write_attempt_verdict_zero_when_skip_sdp_unlock_ack_check_fails(
 
 def test_setup_operation_has_exactly_three_none_zero_returns() -> None:
     """The write-side cause classification (`if not cmd_data:` block inside
-    `write_eprom`) depends on `_setup_operation` carrying EXACTLY three
+    `write_eprom`) depends on `_setup_operation` carrying EXACTLY four
     `(None, 0)` return sites: the `parse_address` ValueError arm, the
     `parse_size` arm (gated on `cmd == COMMAND_READ`, unreachable for a
-    write), and the connect-failure arm. A fourth arm added later would be
-    silently classified as a connection failure without this pin."""
+    write), the cold connect-failure arm, and (206-03 SESS-01) the leased
+    setup's own rejected-ack arm -- a leased setup whose ack was refused
+    is deliberately classified exactly like a cold connect failure, since
+    the caller cannot and need not tell the two apart. A fifth arm added
+    later would be silently classified as a connection failure without
+    this pin. (Test name kept for git-blame continuity; the count moved
+    from three to four in 206-03.)"""
     source = inspect.getsource(EpromOperator._setup_operation)
-    assert source.count("return None, 0") == 3
+    assert source.count("return None, 0") == 4
 
 
 def test_write_eprom_verdict_assignment_precedes_skip_sdp_unlock_ack_block() -> None:
