@@ -1104,6 +1104,56 @@ def test_blank_check_step_records_bad_verdict_when_operator_returns_one():
     assert _result(results, OP_BLANK_CHECK).verdict == VERDICT_BAD
 
 
+def test_blank_check_verdict_2_is_skipped_with_status_error():
+    """Phase 206 Task 2 (D-01): a transport/hardware refusal reported
+    through `check_eprom_blank`'s own int contract -- verdict 2, distinct
+    from a raised `SerialError`/`HardwareOperationError` -- must land on
+    `VERDICT_SKIPPED` + `STATUS_ERROR`, the same two-axis vocabulary
+    `_run_step_untimed`'s transport arm already uses. Never `VERDICT_BAD`,
+    which would misreport a rig fault as a chip finding."""
+    operator = _mock_operator(check_eprom_blank=2)
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    assert blank_result.verdict == VERDICT_SKIPPED
+    assert blank_result.status == STATUS_ERROR
+
+
+def test_blank_check_verdict_1_stays_bad():
+    """The paired negative, pinned on BOTH axes: a non-UV step reading
+    verdict 1 (genuinely not blank) still reports `VERDICT_BAD`, and now
+    explicitly `STATUS_COMPLETE` -- this run executed validly, the chip
+    just was not blank."""
+    operator = _mock_operator(check_eprom_blank=1)
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    assert blank_result.verdict == VERDICT_BAD
+    assert blank_result.status == STATUS_COMPLETE
+
+
+def test_blank_check_verdict_1_on_a_uv_prewrite_stays_skipped_complete():
+    """A UV part's pre-write blank check reading verdict 1 is an expected,
+    operator-actionable finding about a used part -- unchanged by this
+    task -- and must be told apart from a genuine verdict-2 transport fault
+    by the status axis alone: both read `VERDICT_SKIPPED`, but this one is
+    `STATUS_COMPLETE`."""
+    operator = _mock_operator(check_eprom_blank=1)
+    plan = _plan_with_steps(
+        Step(op=OP_BLANK_CHECK, supported=True, reason="", uv_prewrite=True)
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    assert blank_result.verdict == VERDICT_SKIPPED
+    assert blank_result.status == STATUS_COMPLETE
+
+
 """The two-axis status vocabulary (178-CONTEXT.md D-01/D-02/D-12, 178-02):
 the measured non-changes -- the destructive-write gate, the `_skip_result`
 bypass, and the run-level fold -- plus the transport-fault arm's own
@@ -1800,6 +1850,51 @@ def test_marginal_on_disagreeing_verify_runs():
 
     verify_result = _result(results, OP_VERIFY)
     assert verify_result.verdict == VERDICT_MARGINAL
+
+
+def test_verify_verdict_2_is_skipped_with_status_error():
+    """The paired D-01 case on the verify dispatch arm: `verify_eprom`
+    returning 2 on any run must land the step on `VERDICT_SKIPPED` +
+    `STATUS_ERROR`, selected BEFORE the `diverged` (marginal) test -- a rig
+    that could not complete the compare has not produced a disagreement
+    worth naming `marginal`."""
+    operator = _mock_operator()
+    operator.verify_eprom.return_value = 2
+    plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    verify_result = _result(results, OP_VERIFY)
+    assert verify_result.verdict == VERDICT_SKIPPED
+    assert verify_result.status == STATUS_ERROR
+
+
+def test_verify_verdict_1_stays_bad():
+    """The paired negative on BOTH axes: a mismatch (verdict 1 on every
+    run) still reports `VERDICT_BAD`, now explicitly `STATUS_COMPLETE` --
+    the compare completed validly and found a real mismatch."""
+    operator = _mock_operator()
+    operator.verify_eprom.return_value = 1
+    plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    verify_result = _result(results, OP_VERIFY)
+    assert verify_result.verdict == VERDICT_BAD
+    assert verify_result.status == STATUS_COMPLETE
+
+
+def test_verify_verdict_2_performs_no_fingerprint_read_back():
+    """D-04's floor, pinned directly: a verdict-2 verify performs NO
+    fingerprint read-back -- the same link that just failed cannot produce
+    one -- and the attached fingerprint is `None`, the same value a
+    best-effort `_read_region` failure already produces today."""
+    operator = _mock_operator()
+    operator.verify_eprom.return_value = 2
+    plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    verify_result = _result(results, OP_VERIFY)
+    assert operator.read_eprom.call_count == 0
+    assert verify_result.fingerprint is None
 
 
 # Fail-closed dispatch on an unmapped op (T-121-05/06/07, 121-02 Task 1)

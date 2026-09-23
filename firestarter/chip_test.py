@@ -2601,14 +2601,18 @@ def _dispatch_step(
     if step.op == OP_ID:
         return _dispatch_id(name, eprom_data, operator)
     if step.op == OP_BLANK_CHECK:
-        # 202-05 D-10: check_eprom_blank now returns an int (0 == blank,
-        # mirroring verify_eprom's own 202-01 migration) rather than a bare
-        # bool -- compare against 0 so this dispatch's existing bool-based
-        # verdict semantics survive the return-type change unchanged. The
-        # real migration to the 3-way (0/1/2) verdict is phase 206's job
-        # (CONTEXT.md); this arm still folds 1 (not blank) and 2 (refusal)
-        # into the same "not ok" branch exactly as the old False did.
-        is_ok = operator.check_eprom_blank(name, eprom_data) == 0
+        # D-01 (Phase 206): `check_eprom_blank` returns a three-way int --
+        # 0 == blank, 1 == not blank, 2 == the check itself did not
+        # complete (a setup, transport or hardware failure). Verdict 2
+        # lands on the same two-axis SKIPPED + STATUS_ERROR vocabulary the
+        # transport arm of `_run_step_untimed` already uses -- the pairing
+        # is mandatory because `VERDICT_SKIPPED` alone contributes exit 0.
+        # Checked BEFORE `step.uv_prewrite` so a transport fault on a UV
+        # part is never absorbed into the expected-not-blank branch. The
+        # honest cost: a transport-failed run's per-step `dedup_fingerprint`
+        # triple moves off its pre-206 `blank-check=BAD:` key (206-01
+        # SUMMARY).
+        blank_verdict = operator.check_eprom_blank(name, eprom_data)
         # Debug session w27c512-devtest-all-bad: a failing blank-check
         # carries the firmware's own id and text when the failure is a
         # genuine firmware refusal rather than a host-side compare
@@ -2620,19 +2624,34 @@ def _dispatch_step(
         # firmware in 3.1.0 (FWBLANK-01/02/03, Phase 205); this extraction
         # stays because a board still running pre-3.1.0 firmware can send
         # it (D-08).
-        code, message = (None, "") if is_ok else _firmware_error(operator)
-        if is_ok:
+        code, message = (None, "") if blank_verdict == 0 else _firmware_error(operator)
+        if blank_verdict == 0:
             verdict = VERDICT_OK
+            status = STATUS_COMPLETE
+        elif blank_verdict == 2:
+            verdict = VERDICT_SKIPPED
+            status = STATUS_ERROR
+            # The part's blankness is unknown -- the check itself never
+            # completed -- never "not blank", which is what a triager
+            # would read verdict 2's old BAD-branch wording as.
+            message = (
+                "blank check did not complete (setup, transport or "
+                "hardware failure) -- blankness unknown"
+                + (f": {message}" if message else "")
+            )
         elif step.uv_prewrite:
             verdict = VERDICT_SKIPPED
+            status = STATUS_COMPLETE
         else:
             verdict = VERDICT_BAD
+            status = STATUS_COMPLETE
         return StepResult(
             op=step.op,
             verdict=verdict,
             reason=message,
             error_code=code,
             run_count=1,
+            status=status,
         )
     if step.op == OP_READ:
         return _dispatch_read(name, eprom_data, operator, runs=runs)
@@ -3088,8 +3107,16 @@ def _dispatch_multi_run(
     """Run a destructive/verify op `runs` times; `marginal` on disagreement.
 
     Collects a per-run bool outcome (the operator method's own return value)
-    for write/write-partial/erase; write/write-partial/verify ALSO attaches a
-    `Fingerprint` (addr_base-aware). A verify's per-run outcomes already
+    for write/write-partial/erase, unchanged by this decision; write and
+    write-partial ALSO attach a `Fingerprint` (addr_base-aware), likewise
+    unchanged. Verify additionally carries its raw int verdict in
+    `verify_verdicts`, alongside the bool `outcomes` list rather than
+    replacing it, so a run returning 2 (D-01, Phase 206: the compare itself
+    did not complete -- a setup, transport or hardware failure) can reach
+    the `status` axis: any such run yields `VERDICT_SKIPPED` +
+    `STATUS_ERROR`, selected before the `diverged`/`marginal` test, and
+    skips the fingerprint read-back below -- the same link that just failed
+    cannot produce one. A verify's per-run outcomes already
     decide pass/fail; the fingerprint's job is to DIAGNOSE, not to decide, so
     it is only worth its device I/O when something in this cycle block needs
     diagnosing. When THIS step's own runs all agreed AND no earlier cycle in
@@ -3158,6 +3185,13 @@ def _dispatch_multi_run(
         )
 
     outcomes: list[bool] = []
+    # D-01 (Phase 206): verify's own int verdict, carried ALONGSIDE
+    # `outcomes` rather than replacing it -- `outcomes` stays a plain bool
+    # list because `all()`/`set()`-uniqueness below and roughly forty
+    # bool-valued test doubles depend on its shape. Only OP_VERIFY appends
+    # here; write/write-partial/erase still collect nothing but the
+    # operator's own bool return value.
+    verify_verdicts: list[int] = []
     fingerprint: Fingerprint | None = None
     tmp_source_path: str | None = None
     resolved_target: WriteTarget | None = None
@@ -3256,19 +3290,21 @@ def _dispatch_multi_run(
                 )
                 _sample(sampler, "after")
             elif op == OP_VERIFY:
-                # 202-01 D-10: verify_eprom now returns an int (0 == match),
-                # not a bool. The == 0 adapter here is what keeps `outcomes`
-                # a list of bools, so all() / set()-uniqueness below stay
-                # unchanged; the real migration is phase 206's job.
-                outcomes.append(
-                    operator.verify_eprom(
-                        name,
-                        eprom_data,
-                        tmp_source_path,
-                        address_str=_address_arg(region_start),
-                    )
-                    == 0
+                # 202-01 D-10: verify_eprom returns an int -- 0 == match,
+                # 1 == mismatch, 2 == the compare itself did not complete
+                # (setup, transport or hardware failure). The == 0 adapter
+                # keeps `outcomes` a list of bools, so all()/set()-
+                # uniqueness below stay unchanged; `verify_verdicts` (D-01,
+                # Phase 206) carries the raw int alongside it so a 2 can
+                # reach the status axis below.
+                verify_verdict = operator.verify_eprom(
+                    name,
+                    eprom_data,
+                    tmp_source_path,
+                    address_str=_address_arg(region_start),
                 )
+                verify_verdicts.append(verify_verdict)
+                outcomes.append(verify_verdict == 0)
             elif op == OP_ERASE:
                 outcomes.append(operator.erase_eprom(name, eprom_data))
             else:
@@ -3282,7 +3318,17 @@ def _dispatch_multi_run(
                     f"unreachable: op {op!r} passed the _MULTI_RUN_OPS guard"
                 )
 
-        if collect_fingerprint and op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY):
+        # D-01 (Phase 206): a verify run that returned 2 means the compare
+        # never completed -- the same link that just failed cannot produce
+        # a read-back either, `_read_region` is already best-effort and
+        # would return falsy, so skipping it removes a pointless
+        # whole-region read attempt without removing any information.
+        verify_transport_failed = any(v == 2 for v in verify_verdicts)
+        if (
+            collect_fingerprint
+            and op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY)
+            and not verify_transport_failed
+        ):
             step_failed = prior_cycles_failed or (
                 not all(outcomes) if outcomes else False
             )
@@ -3315,11 +3361,24 @@ def _dispatch_multi_run(
     # arm can use it -- a `marginal` step has at least one failed run and its
     # error code is just as diagnostic as a BAD one's.
     error_code, error_message = _firmware_error(operator)
-    if diverged:
+    if verify_transport_failed:
+        # D-01 (Phase 206): selected BEFORE the `diverged` test -- a rig
+        # that could not complete the compare has not produced a
+        # disagreement worth naming `marginal`. Same two-axis vocabulary
+        # `_run_step_untimed`'s transport arm already uses.
+        verdict = VERDICT_SKIPPED
+        status = STATUS_ERROR
+        reason = error_message or (
+            f"{runs} verify run(s) did not complete "
+            "(setup, transport or hardware failure)"
+        )
+    elif diverged:
         verdict = VERDICT_MARGINAL
+        status = STATUS_COMPLETE
         reason = f"{runs} runs disagreed on outcome"
     else:
         verdict = VERDICT_OK if outcomes and outcomes[0] else VERDICT_BAD
+        status = STATUS_COMPLETE
         # The firmware's text becomes the step's reason ONLY on a non-OK
         # verdict, and only when the marginal wording has not already
         # claimed the field -- that wording states a policy decision this
@@ -3336,6 +3395,7 @@ def _dispatch_multi_run(
         run_count=runs,
         fingerprint=fingerprint,
         write_target=resolved_target if op in (OP_WRITE, OP_WRITE_PARTIAL) else None,
+        status=status,
     )
 
 
