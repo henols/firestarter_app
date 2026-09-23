@@ -119,6 +119,12 @@ _REFUSAL_FORMAT = (
     "Refusing write to {chip_name}: not blank at 0x{address:06X}, v: 0x{value:02X}."
 )
 
+_INCOMPLETE_REFUSAL_FORMAT = (
+    "Refusing write to {chip_name}: the blank check read only {compared} of "
+    "{total} bytes; every byte it read was blank, but the region is not "
+    "proven blank."
+)
+
 
 def effective_flags(
     programmer_data: Mapping[str, Any] | None, operation_flags: int
@@ -279,6 +285,23 @@ def refusal_text(chip_name: str, address: int, value: int) -> str:
     """
     return _REFUSAL_FORMAT.format(
         chip_name=chip_name.upper(), address=address, value=value
+    )
+
+
+def incomplete_refusal_text(chip_name: str, compared: int, total: int) -> str:
+    """The refusal for a compare that ended before covering the region, with
+    no mismatching byte observed (`bad == 0`, `compared < total`) --
+    203-REVIEW WR-02, 207.1 D-07.
+
+    Keeps D-10's host voice (it starts with `Refusing write to`) and its
+    no-remedy property. It deliberately carries no address and no value:
+    none was observed, so `refusal_text`'s address/value pair would be
+    fabricated evidence here. States the compare's coverage instead --
+    how many bytes were read of how many, and that every byte read was
+    blank.
+    """
+    return _INCOMPLETE_REFUSAL_FORMAT.format(
+        chip_name=chip_name.upper(), compared=compared, total=total
     )
 
 

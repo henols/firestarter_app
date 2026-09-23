@@ -77,6 +77,7 @@ from firestarter.serial_comm import (
 )
 from firestarter.utils import extract_hex_to_decimal
 from firestarter.write_blank_guard import (
+    incomplete_refusal_text,
     refusal_text,
     require_non_negative_address,
     requires_blank_check,
@@ -2332,17 +2333,25 @@ class EpromOperator:
 
                 if verdict == 1 and captured:
                     result = captured[0]
-                    first_offset = (
-                        result.first_offset if result.first_offset is not None else 0
-                    )
-                    first_actual = (
-                        result.first_actual if result.first_actual is not None else 0
-                    )
-                    logger.error(
-                        refusal_text(
-                            eprom_name, region_start + first_offset, first_actual
+                    # 203-REVIEW WR-02, 207.1 D-07: `first_offset` is `None`
+                    # exactly when `bad == 0` (compare.py's own contract for
+                    # `CompareResult`). An incomplete read that never saw a
+                    # mismatch falls in that branch -- state the compare's
+                    # coverage instead of fabricating an address and a value.
+                    if result.first_offset is None:
+                        logger.error(
+                            incomplete_refusal_text(
+                                eprom_name, result.compared, result.total
+                            )
                         )
-                    )
+                    else:
+                        logger.error(
+                            refusal_text(
+                                eprom_name,
+                                region_start + result.first_offset,
+                                result.first_actual,
+                            )
+                        )
 
                 return verdict, resolved_port
         finally:
