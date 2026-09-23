@@ -567,11 +567,12 @@ def read(
     sys.exit(0 if ok else 1)
 
 
-# Phase 203 (D-13/D-14, `exit_code_contract_resolved` in 203-03-PLAN.md): the
-# five terminal lines `write --verify` can print. Module-level, format-
-# constant style (mirrors `write_blank_guard._REFUSAL_FORMAT`), specifically
-# so a test can assert whole sentences AND assert the forbidden word's
-# absence over the constants themselves, not over one rendered run.
+# Phase 203 (D-13/D-14, `exit_code_contract_resolved` in 203-03-PLAN.md):
+# the five terminal lines `write --verify` can print -- see the five
+# constants below. Module-level, format-constant style (mirrors
+# `write_blank_guard._REFUSAL_FORMAT`), specifically so a test can assert
+# whole sentences AND assert the forbidden word's absence over the
+# constants themselves, not over one rendered run.
 #
 # The rule that makes the branch below readable: the LINE is chosen by what
 # happened to the chip, the EXIT CODE by why the invocation ended. That is
@@ -580,16 +581,17 @@ def read(
 # firmware-decided write failure) all share one line and differ only in
 # exit code -- and why the could-not-verify line is reserved for the single
 # arm where a write genuinely landed and only the read-back failed. No
-# fifth constant is minted for the exit-2-vs-exit-1 split among the
+# separate constant distinguishes the exit-2-vs-exit-1 split among the
 # no-write arms: the underlying cause stays visible in the log
 # (`_run_state_machine` already emits its own communication-error or
 # programmer-error line), so nothing is asked of the operator that only the
-# exit code could answer. The one fifth constant that DOES exist is for a
-# different reason: it is a landed-write arm, not a no-write arm --
-# `write_eprom` records `last_write_attempt_verdict = 0` before the
-# `--skip-sdp-unlock` ack block flips `is_ok`, so the data reached the chip
-# and only the host's check of the opt-out acknowledgement failed
-# (203-REVIEW WR-01, 207.1 D-06).
+# exit code could answer.
+#
+# The one constant beyond those four exists for a different reason: it is a
+# LANDED-write arm, not a no-write arm -- `write_eprom` records
+# `last_write_attempt_verdict = 0` before the `--skip-sdp-unlock` ack block
+# flips `is_ok`, so the data reached the chip and only the host's check of
+# the opt-out acknowledgement failed (203-REVIEW WR-01, 207.1 D-06).
 _WRITE_VERIFY_VERDICT_OK = "Write to {eprom}: verified -- the read-back matches."
 _WRITE_VERIFY_VERDICT_MISMATCH = (
     "Write to {eprom}: landed, but the read-back did not verify."
