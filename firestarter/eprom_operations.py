@@ -351,6 +351,27 @@ def _blank_expected_bytes(_offset: int, length: int) -> bytes:
     return b"\xff" * length
 
 
+def _write_blank_guard_refusal_message(
+    eprom_name: str, region_start: int, result: CompareResult
+) -> str:
+    """Selects the D-07/D-10 refusal text for one write-guard `CompareResult`.
+
+    `result.first_offset` is `None` exactly when `result.bad == 0`
+    (`compare.py`'s own contract for `CompareResult`) -- an incomplete read
+    that never observed a mismatching byte falls in that branch, so the
+    coverage-stating `incomplete_refusal_text` (203-REVIEW WR-02, 207.1
+    D-07) is used instead of fabricating an address and a value with
+    `refusal_text`. Module-level, not a nested closure, so the two-way
+    selection is directly unit-testable and keeps `_run_write_blank_guard`'s
+    own call site within `ruff format`'s line-length rule.
+    """
+    if result.first_offset is None:
+        return incomplete_refusal_text(eprom_name, result.compared, result.total)
+    return refusal_text(
+        eprom_name, region_start + result.first_offset, result.first_actual
+    )
+
+
 def hexdump(address, data, width=16):
     """
     Prints a hexdump similar to xxd.
@@ -2338,20 +2359,11 @@ class EpromOperator:
                     # `CompareResult`). An incomplete read that never saw a
                     # mismatch falls in that branch -- state the compare's
                     # coverage instead of fabricating an address and a value.
-                    if result.first_offset is None:
-                        logger.error(
-                            incomplete_refusal_text(
-                                eprom_name, result.compared, result.total
-                            )
+                    logger.error(
+                        _write_blank_guard_refusal_message(
+                            eprom_name, region_start, result
                         )
-                    else:
-                        logger.error(
-                            refusal_text(
-                                eprom_name,
-                                region_start + result.first_offset,
-                                result.first_actual,
-                            )
-                        )
+                    )
 
                 return verdict, resolved_port
         finally:
