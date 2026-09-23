@@ -64,6 +64,7 @@ import pytest
 
 import firestarter
 from firestarter.chip_test import (
+    COMPARE_PATH_HOST,  # test-internal: 206-02 compare-path discriminator
     FP_ADDRESS_LINE,
     FP_BLANK_CONTACT,
     FP_INDETERMINATE,
@@ -1915,11 +1916,17 @@ def test_every_step_element_carries_an_identical_fingerprint_sibling_key_set():
 
 
 def test_step_dict_emits_compare_evidence_and_compare_path_keys():
-    """Phase 206 Task 1 (compare_evidence half; the compare_path half is
-    added in Task 3): `_step_dict` emits the new `compare_evidence` key
-    unconditionally, beside the existing `fingerprint_*` siblings --
-    additive, and outside `dedup_fingerprint`'s five-entry allow-list."""
-    report = _minimal_report(step_specs=[("blank-check", VERDICT_OK, None, "")])
+    """Phase 206 Task 1 (compare_evidence half) and Task 3 (compare_path
+    half): `_step_dict` emits both new keys unconditionally, beside the
+    existing `fingerprint_*` siblings -- additive, and outside
+    `dedup_fingerprint`'s five-entry allow-list (the append happens only
+    through `compare_path_tag`'s own deliberate, non-reflective read)."""
+    report = _minimal_report(
+        step_specs=[
+            ("blank-check", VERDICT_OK, None, ""),
+            ("verify", VERDICT_OK, None, ""),
+        ]
+    )
     evidence = {
         "bad": 0,
         "compared": 512,
@@ -1930,10 +1937,33 @@ def test_step_dict_emits_compare_evidence_and_compare_path_keys():
         "classification": FP_MATCH,
     }
     report.results[0].compare_evidence = evidence
+    report.results[1].compare_path = COMPARE_PATH_HOST
 
-    step_row = report.to_dict()["steps"][0]
+    steps = report.to_dict()["steps"]
 
-    assert step_row["compare_evidence"] == evidence
+    assert steps[0]["compare_evidence"] == evidence
+    assert steps[0]["compare_path"] == ""
+    assert steps[1]["compare_path"] == COMPARE_PATH_HOST
+
+
+def test_compare_path_tag_is_appended_after_the_coverage_tag():
+    """Phase 206 Task 3 (DEVTEST-02): `dedup_fingerprint` appends the
+    compare-path tag after the coverage append and before the join --
+    proved by index comparison over the function's own source, not by
+    eyeball, so a future reordering of the pre-image is a test failure
+    rather than a silent re-key (mirrors
+    `test_status_axis_does_not_reorder_the_fingerprint_pre_image`'s
+    structural-proof idiom above)."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    source = inspect.getsource(dedup_fingerprint)
+    coverage_idx = source.index("coverage_tag(report.results)")
+    compare_idx = source.index("compare_path_tag(report.results)")
+    join_idx = source.index('canonical = "|".join(parts)')
+    assert coverage_idx < compare_idx < join_idx, (
+        "compare_path_tag's append is not between the coverage append and "
+        "the join -- expected order: coverage, then compare_path, then join"
+    )
 
 
 def test_divergence_is_present_on_every_step_and_carries_the_engine_value():
@@ -2148,10 +2178,11 @@ def test_status_axis_does_not_reorder_the_fingerprint_pre_image():
     sequence, leaves the hash invariant across all three permutations.
 
     `inspect.getsource` then proves the structural half of D-08 directly:
-    the function still contains exactly three `parts.append` call sites
-    and the substring `status` never appears in its body -- so a future
-    append for the status axis would fail this even where some shape
-    happens to collide on the hash value alone."""
+    the function still contains exactly four `parts.append` call sites (the
+    per-step loop, `repeat_policy_tag`, `coverage_tag` and, since Phase 206
+    Task 3, `compare_path_tag`) and the substring `status` never appears in
+    its body -- so a future append for the status axis would fail this
+    even where some shape happens to collide on the hash value alone."""
     from firestarter.diagnostic_report import dedup_fingerprint
 
     step_specs = [
@@ -2169,7 +2200,7 @@ def test_status_axis_does_not_reorder_the_fingerprint_pre_image():
         assert dedup_fingerprint(permuted) == base_hash
 
     source = inspect.getsource(dedup_fingerprint)
-    assert source.count("parts.append") == 3
+    assert source.count("parts.append") == 4
     assert "status" not in source
 
 

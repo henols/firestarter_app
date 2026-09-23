@@ -620,16 +620,17 @@ def test_fast_and_default_runs_agree_on_a_transport_failed_step_status() -> None
 
 
 def test_cycle_fold_propagates_compare_path_and_compare_evidence() -> None:
-    """Phase 206 Task 1 (compare_evidence half; the compare_path half is
-    added in Task 3): `_aggregate_cycle_results`'s terminal `StepResult`
-    must propagate `compare_evidence` through the fold using the same
-    `next(...)` reversed-scan idiom `fingerprint` and `write_target`
-    already use -- the LAST cycle that produced one, because the device's
-    final state is the one a reader can still verify. Without this
-    propagation the blank-check step's evidence would be erased for every
-    erasable part (a `--fast` single-cycle run bypasses the fold entirely
-    via the `len(results) == 1` early return, so this three-cycle case is
-    the one that actually exercises the fold)."""
+    """Phase 206 Task 1 (compare_evidence half) and Task 3 (compare_path
+    half): `_aggregate_cycle_results`'s terminal `StepResult` must
+    propagate BOTH fields through the fold using the same `next(...)`
+    reversed-scan idiom `fingerprint` and `write_target` already use -- the
+    LAST cycle that produced one, because the device's final state is the
+    one a reader can still verify. Without this propagation the
+    blank-check step's evidence, and the verify step's host-path marker,
+    would be erased for every erasable part (a `--fast` single-cycle run
+    bypasses the fold entirely via the `len(results) == 1` early return,
+    so this three-cycle case is the one that actually exercises the
+    fold)."""
     first_evidence = {
         "bad": 1,
         "compared": 512,
@@ -661,9 +662,26 @@ def test_cycle_fold_propagates_compare_path_and_compare_evidence() -> None:
             verdict=ct.VERDICT_OK,
             run_count=1,
             compare_evidence=last_evidence,
+            compare_path=ct.COMPARE_PATH_HOST,
         ),
     ]
 
     folded = ct._aggregate_cycle_results(results, ct.OP_BLANK_CHECK)
 
     assert folded.compare_evidence == last_evidence
+    assert folded.compare_path == ct.COMPARE_PATH_HOST
+
+    # The specific case the acceptance criteria name: a three-cycle verify
+    # step whose cycles ALL recorded the host path folds to a result that
+    # still records it.
+    all_host_path = [
+        ct.StepResult(
+            op=ct.OP_VERIFY,
+            verdict=ct.VERDICT_OK,
+            run_count=1,
+            compare_path=ct.COMPARE_PATH_HOST,
+        )
+        for _ in range(3)
+    ]
+    folded_verify = ct._aggregate_cycle_results(all_host_path, ct.OP_VERIFY)
+    assert folded_verify.compare_path == ct.COMPARE_PATH_HOST

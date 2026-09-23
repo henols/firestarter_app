@@ -870,24 +870,32 @@ def _call_sites_for(func, target_name: str) -> list[ast.Call]:
     return calls
 
 
-def test_verify_never_passes_on_result() -> None:
-    """`verify_eprom` must still take the default `on_result=None` path --
-    its own call site never passes the `on_result` keyword to
-    `_drive_region_compare`. An AST walk proves this at the source level
-    rather than relying on behaviour alone.
+def test_verify_eprom_forwards_on_result_structurally() -> None:
+    """Phase 206 Task 3 (DEVTEST-02): `verify_eprom` forwards its own
+    `on_result` parameter straight through to `_drive_region_compare` --
+    structurally, not merely by observed behaviour -- the identical
+    treatment `check_eprom_blank` gained in Task 1 (see
+    `test_check_eprom_blank_forwards_on_result_structurally` below).
 
-    Phase 206 Task 1 (DEVTEST-01) split this test in two:
-    `check_eprom_blank` now DOES forward its own `on_result` parameter (see
-    `test_check_eprom_blank_forwards_on_result_structurally` below) --
-    `verify_eprom` is untouched by that task and keeps the original
-    invariant this test pinned before the split."""
+    Superseded invariant, recorded rather than silently dropped: before
+    this task, `verify_eprom`'s own call site never passed `on_result` to
+    `_drive_region_compare`, and this test (then named
+    `test_verify_never_passes_on_result`) pinned that. Task 3 needs the
+    same seam Task 1 used for the blank-check step so `chip_test.py` can
+    detect, structurally, whether a verify step's comparison actually
+    reached the host compare engine (`compare_path`, DEVTEST-02) --
+    the ONLY way a mocked/synthetic test double's `verify_eprom` (which
+    accepts `on_result` for signature parity but never invokes it, same
+    treatment `FakeChip.check_eprom_blank` got in Task 1) can be
+    distinguished from a real device-driving call without re-keying the 19
+    frozen `dedup_fingerprint` literals built through `derive_plan` ->
+    `run_plan` against a mocked operator. `on_result` does NOT become this
+    step's `Fingerprint` source (F1: unchanged, still `_read_region`)."""
     calls = _call_sites_for(EpromOperator.verify_eprom, "_drive_region_compare")
     assert calls, "verify_eprom no longer calls _drive_region_compare"
-    for call in calls:
-        keyword_names = {kw.arg for kw in call.keywords}
-        assert "on_result" not in keyword_names, (
-            "verify_eprom passes on_result to _drive_region_compare"
-        )
+    assert any("on_result" in {kw.arg for kw in call.keywords} for call in calls), (
+        "verify_eprom no longer forwards on_result to _drive_region_compare"
+    )
 
 
 def test_check_eprom_blank_forwards_on_result_structurally() -> None:

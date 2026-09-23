@@ -1023,6 +1023,16 @@ class StepResult:
     # additive and outside `dedup_fingerprint`'s five-entry allow-list, same
     # discipline as `duration_s`/`write_target`/`chip_id_detected` above.
     compare_evidence: dict[str, Any] | None = None
+    # The compare STEP's own execution path (Phase 206 Task 3, DEVTEST-02)
+    # -- `COMPARE_PATH_HOST` when the blank-check or verify step's compare
+    # actually ran through the host `_drive_region_compare` engine
+    # (Phase 202); `""` by default. Falsy default is load-bearing, same
+    # discipline as `repeat_policy_tag`/`coverage_tag`: a `StepResult`
+    # reconstructed from a pre-206 JSON artifact, or hand-built in
+    # `tests/fixtures/report_shapes.py`, takes the untagged branch
+    # automatically -- see `compare_path_tag`'s own docstring for why the
+    # direction is fixed by history, not a free choice.
+    compare_path: str = ""
 
 
 def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> StepResult:
@@ -1092,6 +1102,50 @@ def coverage_tag(results: list[StepResult]) -> str:
             if result.write_target.region_policy == REGION_POLICY_FULL_DEVICE:
                 return COVERAGE_TAG_FULL_DEVICE
             return ""
+    return ""
+
+
+# The compare-path discriminator (Phase 206 Task 3, DEVTEST-02). Spelled as
+# the `StepResult.compare_path` value it describes, not a bare string
+# repeated at call sites -- same discipline as `REPEAT_POLICY_DEGRADED_TAG`
+# and `COVERAGE_TAG_FULL_DEVICE` above.
+COMPARE_PATH_HOST = "host"
+COMPARE_PATH_HOST_TAG = "cmp=host"
+
+
+def compare_path_tag(results: list[StepResult]) -> str:
+    """`""` when no step's comparison ran on the host engine; `"cmp=host"`
+    on the first step (in report order) whose `compare_path` records that
+    it did.
+
+    Why it exists: Phase 202 moved comparison onto the host (`compare.py`'s
+    streaming accumulator), but every already-filed
+    `henols/firestarter_prom` report was produced BEFORE that migration --
+    by the firmware comparison path. A host-path report and a firmware-path
+    report of the same chip are mechanically different measurements and
+    must never silently merge into one `count_agreeing` group.
+
+    Returning `""` for the default is load-bearing, for the same reason as
+    `repeat_policy_tag` and `coverage_tag` above: `dedup_fingerprint`
+    appends this tag only when non-empty, so every already-filed report's
+    fingerprint stays byte-identical and no historical grouping is
+    re-keyed. The direction is fixed, not a free choice: every already-filed
+    report was produced by the firmware path, so firmware/unknown/legacy
+    stays untagged and only the newer host-path shape gets tagged -- from
+    the first post-206 filing through `dev test --submit`, host-path
+    reports form their own `count_agreeing` groups and that population's
+    promotion ladder restarts (the 43 measured ALLOW chips; confirmed by a
+    human at this plan's `checkpoint:decision`, answer `land-as-specified`,
+    before this landed).
+
+    Locates the host-path step STRUCTURALLY, via `result.compare_path ==
+    COMPARE_PATH_HOST` -- set only on a step whose comparison actually ran
+    through the host engine. This function must never compare `result.op`
+    against an op-name constant.
+    """
+    for result in results:
+        if result.compare_path == COMPARE_PATH_HOST:
+            return COMPARE_PATH_HOST_TAG
     return ""
 
 
@@ -1273,9 +1327,12 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
     * `run_count` -- how many cycles actually REACHED the operator (a
       SKIPPED cycle did not), so `run_count` keeps meaning "operator calls",
       which is the claim every disclosure surface makes about it.
-    * `fingerprint`/`write_target`/`compare_evidence` -- from the LAST cycle
-      that produced one: the device's final state is the one a reader can
-      still verify.
+    * `fingerprint`/`write_target`/`compare_evidence`/`compare_path` -- from
+      the LAST cycle that produced one: the device's final state is the one
+      a reader can still verify. Without propagating `compare_path` the
+      erasable recipe's verify step would lose its host-path marker inside
+      the fold, and `compare_path_tag` would silently return `""` for a
+      run whose comparison genuinely ran on the host engine.
     * `duration_s` -- the MEAN over the cycles that reached the operator,
       taken over the same `ran` population `run_count` reports, so the two
       can never disagree about which cycles are being described. Cycle 1 and
@@ -1337,6 +1394,9 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
         ),
         compare_evidence=next(
             (r.compare_evidence for r in reversed(ran) if r.compare_evidence), None
+        ),
+        compare_path=next(
+            (r.compare_path for r in reversed(ran) if r.compare_path), ""
         ),
         status=folded_status,
     )
@@ -2703,6 +2763,13 @@ def _dispatch_step(
             run_count=1,
             status=status,
             compare_evidence=compare_evidence,
+            # Phase 206 Task 3 (DEVTEST-02): the step "reached the device"
+            # -- and therefore the host compare engine -- exactly when the
+            # `on_result` callback fired, i.e. `captured_compare` is
+            # non-empty. `""` (the default) on the SRAM/FRAM pre-wire
+            # short-circuit and on any other path that returns before
+            # `_drive_region_compare` runs.
+            compare_path=COMPARE_PATH_HOST if captured_compare else "",
         )
     if step.op == OP_READ:
         return _dispatch_read(name, eprom_data, operator, runs=runs)
@@ -3243,6 +3310,20 @@ def _dispatch_multi_run(
     # here; write/write-partial/erase still collect nothing but the
     # operator's own bool return value.
     verify_verdicts: list[int] = []
+    # Phase 206 Task 3 (DEVTEST-02): captured via the same `on_result` seam
+    # `check_eprom_blank` uses (Task 1) -- non-empty exactly when a verify
+    # call's comparison actually reached `_drive_region_compare`. A test
+    # double's `verify_eprom` that accepts `on_result` for signature parity
+    # but never invokes it (the same treatment `FakeChip.check_eprom_blank`
+    # got) correctly leaves this empty, so a mocked/synthetic run never
+    # picks up the host-path tag.
+    captured_compare_verify: list[CompareResult] = []
+
+    def _capture_compare_result_verify(
+        result: CompareResult, _captured=captured_compare_verify
+    ) -> None:
+        _captured.append(result)
+
     fingerprint: Fingerprint | None = None
     tmp_source_path: str | None = None
     resolved_target: WriteTarget | None = None
@@ -3353,6 +3434,7 @@ def _dispatch_multi_run(
                     eprom_data,
                     tmp_source_path,
                     address_str=_address_arg(region_start),
+                    on_result=_capture_compare_result_verify,
                 )
                 verify_verdicts.append(verify_verdict)
                 outcomes.append(verify_verdict == 0)
@@ -3447,6 +3529,16 @@ def _dispatch_multi_run(
         fingerprint=fingerprint,
         write_target=resolved_target if op in (OP_WRITE, OP_WRITE_PARTIAL) else None,
         status=status,
+        # Phase 206 Task 3 (DEVTEST-02): the verify step "reached the
+        # device" -- and therefore the host compare engine -- exactly when
+        # `on_result` fired at least once, i.e. `captured_compare_verify` is
+        # non-empty (the same `on_result`-seam discipline the blank-check
+        # arm uses). Write/erase never set this: their fingerprint comes
+        # from a separate `_read_region` + `classify_fingerprint` pass, not
+        # from `_drive_region_compare`.
+        compare_path=(
+            COMPARE_PATH_HOST if (op == OP_VERIFY and captured_compare_verify) else ""
+        ),
     )
 
 

@@ -172,9 +172,17 @@ class FakeChip:
         operation_flags: int = 0,
         address_str: str | None = None,
         full: bool = False,
+        *,
+        on_result: Any = None,
     ) -> int:
         # 202-01 D-10: int, 0 == match, 1 == mismatch (matches the real
         # EpromOperator.verify_eprom contract).
+        #
+        # `on_result` (Phase 206 Task 3, DEVTEST-02): accepted for signature
+        # parity with the real `EpromOperator.verify_eprom`, never invoked --
+        # same treatment `check_eprom_blank` got in Task 1. This double
+        # compares its own in-memory `data` buffer directly; it has no
+        # `CompareResult` to hand the callback, faithful or otherwise.
         self.calls.append(("verify_eprom", {"address_str": address_str}))
         start = _parse_addr_or_size(address_str) or 0
         expected = Path(input_file_path).read_bytes()

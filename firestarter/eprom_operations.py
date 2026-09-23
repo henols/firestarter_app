@@ -2716,8 +2716,21 @@ class EpromOperator:
         *,
         suppress_verdict_line: bool = False,
         preferred_port: str | None = None,
+        on_result: Callable[[CompareResult], None] | None = None,
     ) -> int:
         """Compare `input_file_path` against a fresh read of the chip.
+
+        `on_result` (Phase 206 Task 3, DEVTEST-02): keyword-only, default
+        `None`, forwarded straight through to `_drive_region_compare`'s own
+        parameter of the same name -- the identical treatment
+        `check_eprom_blank` gained in Task 1. When `None`, behaviour is
+        byte-identical to before this parameter existed. `chip_test.py`'s
+        `dev test` dispatch uses it ONLY to detect, structurally, whether
+        this call's comparison actually reached the host compare engine --
+        it does not change what `verify_eprom` returns, and it does not
+        become this step's `Fingerprint` source (F1: that stays the
+        separate `_read_region` read-back on a failing verify, unchanged by
+        this parameter).
 
         `suppress_verdict_line` (Phase 203, WRITE-05): keyword-only, default
         `False`, the same treatment `write_eprom` gets -- when `True`, skip
@@ -2855,6 +2868,7 @@ class EpromOperator:
                         _expected,
                         full=full,
                         region_length=region_length,
+                        on_result=on_result,
                     )
             except IOError as e:  # noqa: UP024
                 logger.error(f"File I/O error with {input_file_path}: {e}")
