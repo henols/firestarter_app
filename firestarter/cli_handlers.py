@@ -2937,14 +2937,25 @@ def dev_test(app: "AppContext", chip: str, fast: bool, submit: bool) -> None:
     # passes `runs=1` alone still fails the whole plan, so the weaker policy
     # can only ever be reached on purpose. The default path passes neither
     # and is byte-for-byte the pre-existing call.
-    results = run_plan(
-        plan,
-        app.eprom_operator,
-        app.db,
-        runs=1 if fast else _DEFAULT_RUNS,
-        allow_single_run=fast,
-        sampler=sampler,
-    )
+    #
+    # `dev_test` is the ONLY caller anywhere in this tree that acquires a
+    # lease (206-03, SESS-01): every other command's connect behaviour is
+    # byte-for-byte unchanged. The pre-plan `read_programmer_identity` call
+    # above and the sampler's own connects both go through `HardwareManager`,
+    # a separate class this lease does not reach (D-05) -- they remain
+    # outside it and therefore cap the measurable saving. The whole feature
+    # is one commit; its sha is recorded in the phase record as the SESS-02
+    # revert target, because SESS-02's bench measurement may require
+    # reverting it whole.
+    with app.eprom_operator.lease():
+        results = run_plan(
+            plan,
+            app.eprom_operator,
+            app.db,
+            runs=1 if fast else _DEFAULT_RUNS,
+            allow_single_run=fast,
+            sampler=sampler,
+        )
     report.results = results
     report.banner = count_applicable(plan, results)
     transport_snapshot: dict[str, int] = transport_counters.snapshot()

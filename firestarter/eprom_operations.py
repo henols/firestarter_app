@@ -518,6 +518,16 @@ class EpromOperator:
         # `--full` run, which never sets an abort_predicate, can never be
         # mistaken for this host's own doing.
         self._read_abort_intended: bool = False
+        # SESS-01 (Phase 206): whether this operator is currently holding one
+        # validated link open across multiple calls instead of connecting
+        # and tearing down per call. Default off -- joins the transient
+        # per-invocation attributes above, but is NOT reset per-invocation:
+        # it is set/cleared only by `lease()` itself, spanning every call
+        # made inside a `with operator.lease():` block. `_setup_operation`
+        # reads it to decide whether to reuse `self.comm` or cold-connect;
+        # `_operation_context`'s `finally` reads it to decide whether to
+        # tear `self.comm` down after each call.
+        self._leased: bool = False
 
     def _calculate_buffer_size(self) -> int:
         # firmware_max_chunk is populated by the
@@ -635,6 +645,46 @@ class EpromOperator:
         if region_length is not None and region_length > 0 and cmd == COMMAND_WRITE:
             command_dict[JSON_KEY_REGION_END] = addr + region_length
 
+        # SESS-01 (Phase 206): the lease's second-and-later setup. Taken only
+        # when a lease is active AND the held link is still connected --
+        # every other case (no lease, or a lease whose link died) falls
+        # through to the cold `find_and_connect` below, byte-identical to
+        # today. Deliberately OUTSIDE the cold path's own try/except: a
+        # SerialError here must propagate to `run_plan`'s per-step handling
+        # unchanged (D-06), not be swallowed into a `(None, 0)` return the
+        # way a cold connect failure is -- see `lease()`'s docstring for the
+        # full failure-policy rationale.
+        if self._leased and self.comm is not None and self.comm.is_connected():
+            # The drain is not optional. `disconnect()` is the only caller
+            # of `consume_remaining_input()` today, and a lease skips
+            # `disconnect()` -- so without this explicit call, a straggler
+            # frame from the PREVIOUS step would be parsed as THIS step's
+            # setup ack.
+            self.comm.consume_remaining_input()
+            try:
+                setup_ok = self.comm.setup_command(command_dict, self.config)
+            except SerialError:
+                # D-06: drop the lease's held link so the NEXT operation
+                # cold-connects, but leave `_leased` set -- the block is
+                # still a lease, only its link died -- and re-raise
+                # unchanged. `_run_step_untimed` already maps a raised
+                # SerialError to its own two-axis transport outcome; a
+                # second mapping here would put that adjudication in two
+                # places.
+                self._disconnect_programmer()
+                raise
+            if not setup_ok:
+                # A leased setup whose ack was rejected (not a raised
+                # error) is a failed setup, treated identically to a cold
+                # connect failure: the caller's existing not-`command_dict`
+                # guard in `_operation_context` handles it unchanged.
+                return None, 0
+            buffer_size = self._calculate_buffer_size()
+            logger.debug(
+                f"Operation {operation} setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s, leased). Buffer size: {buffer_size}"  # noqa: E501
+            )
+            return command_dict, buffer_size
+
         try:
             self.comm = SerialCommunicator.find_and_connect(
                 command_dict,
@@ -701,13 +751,60 @@ class EpromOperator:
             # Yield the necessary data to the 'with' block
             yield command_dict, buffer_size, operation_name
         finally:
-            # This block ensures disconnection happens even if errors occur
-            self._disconnect_programmer()
+            # SESS-01: under a lease, the link outlives this single call --
+            # `lease()`'s own `finally` is what tears it down, once, when
+            # the `with operator.lease():` block itself exits. Tearing down
+            # here too would defeat the whole point (every call would still
+            # pay the connect cost the lease exists to remove). Unleased,
+            # this is the pre-existing unconditional teardown, unchanged.
+            if not self._leased:
+                self._disconnect_programmer()
 
     def _disconnect_programmer(self):
         if self.comm:
             self.comm.disconnect()
             self.comm = None
+
+    @contextmanager
+    def lease(self):
+        """Hold one validated serial link open across every `EpromOperator`
+        call made inside this block (SESS-01), instead of connecting and
+        tearing down per call.
+
+        Default off, acquired at exactly ONE call site
+        (`cli_handlers.dev_test`'s `run_plan(...)` call) so that removing
+        the feature is a `git revert` of one commit rather than an unpick
+        -- SESS-02's bench measurement may require exactly that. Every
+        code path that never enters this context manager is byte-for-byte
+        unchanged, mirroring the already-shipped opt-in seam
+        `_drive_region_compare`'s `on_result` parameter documents for
+        itself: default off, behaviour identical until a caller opts in.
+
+        Failure policy (D-06): a `SerialError` raised while a leased
+        setup is in flight drops the held link -- `_setup_operation`
+        disconnects -- but leaves the lease itself active, so the NEXT
+        operation cold-connects instead of the whole block failing. The
+        exception still propagates to the caller unchanged. The
+        alternative -- failing the whole plan -- would make a performance
+        optimisation weaken `run_plan`'s own invariant that one step's
+        failure never aborts the rest, which is not a trade worth making
+        for a connect-time saving.
+
+        What a lease removes that is not only time: closing the port
+        de-asserts DTR and resets the attached Leonardo. A lease holding
+        one link across roughly thirty calls removes roughly thirty board
+        resets. A step that passes today partly because the PREVIOUS
+        step's teardown reset the board would behave differently under a
+        lease -- that is the fidelity risk SESS-02's bench leg exists to
+        measure, and it belongs here, at the seam, where the next reader
+        will see it.
+        """
+        self._leased = True
+        try:
+            yield
+        finally:
+            self._leased = False
+            self._disconnect_programmer()
 
     # --- Unified State Machine ---
 
