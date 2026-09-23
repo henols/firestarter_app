@@ -857,6 +857,15 @@ class DiagnosticReport:
         ratio, a flag, a first offset and one clustering score per
         candidate high address bit, never a list of offsets.
 
+        `compare_evidence` (Phase 206 Task 1, DEVTEST-01) is read straight
+        off `StepResult.compare_evidence` -- the blank-check step's own
+        `bad`/`compared`/`first_offset`/`first_actual`/`ff_count`/`aborted`/
+        classification mapping, captured through `_drive_region_compare`'s
+        `on_result` seam. It is additive for the same reason the four
+        `fingerprint_*` siblings are: `dedup_fingerprint` reads only
+        `fingerprint.classification`, never this field, so emitting it
+        cannot re-key a filed report.
+
         `divergence` (RPT-A3) carries the read step's own mapping straight
         off `StepResult.divergence` -- the engine is its single source, this
         method never derives it. It is a mapping whenever a comparison was
@@ -936,6 +945,12 @@ class DiagnosticReport:
             ),
             "divergence": result.divergence,
             "chip_id_detected": result.chip_id_detected,
+            # Additive (Phase 206 Task 1, DEVTEST-01): the blank-check
+            # step's own compare evidence, unconditionally emitted, `None`
+            # where the step never reached the operator. Outside
+            # `dedup_fingerprint`'s five-entry allow-list -- see
+            # `StepResult.compare_evidence`'s own field comment.
+            "compare_evidence": result.compare_evidence,
             # Schema 1.5: wall-clock seconds for the step, or `None` when it
             # did not run. Additive -- every pre-1.5 consumer ignores it.
             "duration_s": result.duration_s,

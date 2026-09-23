@@ -870,19 +870,37 @@ def _call_sites_for(func, target_name: str) -> list[ast.Call]:
     return calls
 
 
-def test_verify_and_blank_never_pass_on_result() -> None:
-    """`verify_eprom` and `check_eprom_blank` must take the default
-    `on_result=None` path -- neither call site passes the `on_result`
-    keyword to `_drive_region_compare`. An AST walk proves this at the
-    source level rather than relying on behaviour alone."""
-    for func in (EpromOperator.verify_eprom, EpromOperator.check_eprom_blank):
-        calls = _call_sites_for(func, "_drive_region_compare")
-        assert calls, f"{func.__name__} no longer calls _drive_region_compare"
-        for call in calls:
-            keyword_names = {kw.arg for kw in call.keywords}
-            assert "on_result" not in keyword_names, (
-                f"{func.__name__} passes on_result to _drive_region_compare"
-            )
+def test_verify_never_passes_on_result() -> None:
+    """`verify_eprom` must still take the default `on_result=None` path --
+    its own call site never passes the `on_result` keyword to
+    `_drive_region_compare`. An AST walk proves this at the source level
+    rather than relying on behaviour alone.
+
+    Phase 206 Task 1 (DEVTEST-01) split this test in two:
+    `check_eprom_blank` now DOES forward its own `on_result` parameter (see
+    `test_check_eprom_blank_forwards_on_result_structurally` below) --
+    `verify_eprom` is untouched by that task and keeps the original
+    invariant this test pinned before the split."""
+    calls = _call_sites_for(EpromOperator.verify_eprom, "_drive_region_compare")
+    assert calls, "verify_eprom no longer calls _drive_region_compare"
+    for call in calls:
+        keyword_names = {kw.arg for kw in call.keywords}
+        assert "on_result" not in keyword_names, (
+            "verify_eprom passes on_result to _drive_region_compare"
+        )
+
+
+def test_check_eprom_blank_forwards_on_result_structurally() -> None:
+    """Phase 206 Task 1 (DEVTEST-01): `check_eprom_blank` forwards its own
+    `on_result` parameter straight through to `_drive_region_compare` --
+    structurally, not merely by observed behaviour, so a future edit that
+    silently drops the forward is caught here regardless of whether any
+    other test happens to exercise a populated `on_result` value."""
+    calls = _call_sites_for(EpromOperator.check_eprom_blank, "_drive_region_compare")
+    assert calls, "check_eprom_blank no longer calls _drive_region_compare"
+    assert any("on_result" in {kw.arg for kw in call.keywords} for call in calls), (
+        "check_eprom_blank no longer forwards on_result to _drive_region_compare"
+    )
 
 
 def test_blank_run_on_non_blank_chip_still_emits_mismatch_line(

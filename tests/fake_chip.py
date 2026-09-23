@@ -213,12 +213,22 @@ class FakeChip:
         return True
 
     def check_eprom_blank(
-        self, name: str, eprom_data: dict[str, Any], operation_flags: int = 0
+        self,
+        name: str,
+        eprom_data: dict[str, Any],
+        operation_flags: int = 0,
+        *,
+        on_result: Any = None,
     ) -> int:
         """Returns an int (202-05 D-10, mirroring `verify_eprom`'s own
         202-01 migration): 0 == blank, 1 == not blank. `blank_override`
         stays bool internally (the caller-facing verdict, not the wire
-        contract) -- only this method's own return value changed shape."""
+        contract) -- only this method's own return value changed shape.
+
+        `on_result` (Phase 206, DEVTEST-01): accepted for signature parity
+        with the real `EpromOperator.check_eprom_blank`, never invoked --
+        this double models the firmware's own verdict, not a host-side
+        `CompareResult`, so it has nothing faithful to hand the callback."""
         self.calls.append(("check_eprom_blank", {}))
         if self.blank_override is not None:
             is_blank = self.blank_override
@@ -360,9 +370,16 @@ class WriteInitPreflightChip(FakeChip):
         )
 
     def check_eprom_blank(
-        self, name: str, eprom_data: dict[str, Any], operation_flags: int = 0
+        self,
+        name: str,
+        eprom_data: dict[str, Any],
+        operation_flags: int = 0,
+        *,
+        on_result: Any = None,
     ) -> int:
-        """Returns an int (202-05 D-10) -- see `FakeChip.check_eprom_blank`."""
+        """Returns an int (202-05 D-10) -- see `FakeChip.check_eprom_blank`.
+        `on_result` (Phase 206, DEVTEST-01): accepted, never invoked -- same
+        rationale as the parent method."""
         self.last_firmware_error_code = None
         self.last_firmware_error_message = None
         verdict = super().check_eprom_blank(name, eprom_data, operation_flags)

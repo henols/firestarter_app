@@ -38,6 +38,7 @@ from firestarter.compare import (
     FP_MATCH,
     FP_TRANSPORT,  # noqa: F401 -- re-exported; see comment below
     CompareAccumulator,
+    CompareResult,
     Fingerprint,
     classify_streamed,
     diff_summary,
@@ -1007,6 +1008,21 @@ class StepResult:
     # reads the context, it does not set this field on itself).
     write_target: WriteTarget | None = None
     status: str = STATUS_COMPLETE
+    # The blank-check step's own compare evidence (Phase 206 Task 1,
+    # DEVTEST-01) -- `bad`, `compared`, `first_offset`, `first_actual`,
+    # `ff_count`, `aborted` and the classification string, captured off the
+    # finalised `CompareResult` through `_drive_region_compare`'s existing
+    # `on_result` seam (Phase 203, WRITE-01). Additive, `None` when the step
+    # never reached the operator (a plan-level skip, an unsupported step, an
+    # NA step). Deliberately NOT the `fingerprint` field above:
+    # `dedup_fingerprint` hashes `fingerprint.classification` as part of
+    # every step's triple, and a blank check that PASSES reads an all-0xFF
+    # device -- `ff_ratio` of 1.0 -- which `classify_streamed` checks first
+    # and buckets as `blank/contact`, never `match`. Populating `fingerprint`
+    # here would therefore re-key every already-filed report; this field is
+    # additive and outside `dedup_fingerprint`'s five-entry allow-list, same
+    # discipline as `duration_s`/`write_target`/`chip_id_detected` above.
+    compare_evidence: dict[str, Any] | None = None
 
 
 def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> StepResult:
@@ -1257,8 +1273,9 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
     * `run_count` -- how many cycles actually REACHED the operator (a
       SKIPPED cycle did not), so `run_count` keeps meaning "operator calls",
       which is the claim every disclosure surface makes about it.
-    * `fingerprint`/`write_target` -- from the LAST cycle that produced one:
-      the device's final state is the one a reader can still verify.
+    * `fingerprint`/`write_target`/`compare_evidence` -- from the LAST cycle
+      that produced one: the device's final state is the one a reader can
+      still verify.
     * `duration_s` -- the MEAN over the cycles that reached the operator,
       taken over the same `ran` population `run_count` reports, so the two
       can never disagree about which cycles are being described. Cycle 1 and
@@ -1317,6 +1334,9 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
         duration_s=round(sum(durations) / len(durations), 3) if durations else None,
         write_target=next(
             (r.write_target for r in reversed(ran) if r.write_target is not None), None
+        ),
+        compare_evidence=next(
+            (r.compare_evidence for r in reversed(ran) if r.compare_evidence), None
         ),
         status=folded_status,
     )
@@ -2612,7 +2632,37 @@ def _dispatch_step(
         # honest cost: a transport-failed run's per-step `dedup_fingerprint`
         # triple moves off its pre-206 `blank-check=BAD:` key (206-01
         # SUMMARY).
-        blank_verdict = operator.check_eprom_blank(name, eprom_data)
+        # DEVTEST-01 (Phase 206 Task 1): capture the finalised CompareResult
+        # through the already-shipped `on_result` seam
+        # (`_drive_region_compare`, Phase 203/WRITE-01) instead of letting
+        # `check_eprom_blank` render and discard it. `captured` stays empty
+        # when the step never reaches the device (SRAM/FRAM pre-wire
+        # short-circuit, a falsy `cmd_data`), which is exactly when
+        # `compare_evidence` below must stay `None`.
+        captured_compare: list[CompareResult] = []
+
+        def _capture_compare_result(
+            result: CompareResult, _captured=captured_compare
+        ) -> None:
+            _captured.append(result)
+
+        blank_verdict = operator.check_eprom_blank(
+            name, eprom_data, on_result=_capture_compare_result
+        )
+        compare_evidence: dict[str, Any] | None = None
+        if captured_compare:
+            cr = captured_compare[0]
+            compare_evidence = {
+                "bad": cr.bad,
+                "compared": cr.compared,
+                "first_offset": cr.first_offset,
+                "first_actual": cr.first_actual,
+                "ff_count": cr.ff_count,
+                "aborted": cr.aborted,
+                "classification": (
+                    cr.fingerprint.classification if cr.fingerprint else None
+                ),
+            }
         # Debug session w27c512-devtest-all-bad: a failing blank-check
         # carries the firmware's own id and text when the failure is a
         # genuine firmware refusal rather than a host-side compare
@@ -2652,6 +2702,7 @@ def _dispatch_step(
             error_code=code,
             run_count=1,
             status=status,
+            compare_evidence=compare_evidence,
         )
     if step.op == OP_READ:
         return _dispatch_read(name, eprom_data, operator, runs=runs)

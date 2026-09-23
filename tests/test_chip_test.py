@@ -56,6 +56,7 @@ from firestarter.chip_test import (
     _PROTOCOL_FLASH4,  # test-internal: reused protocol id constant
     _SDP_LEG_STEP_ORDER,
     _UV_WRITE_REGION_LENGTH,
+    FP_ADDRESS_LINE,  # test-internal: 206-02 compare-evidence classification
     OP_BLANK_CHECK,
     OP_ERASE,
     OP_ID,
@@ -97,7 +98,7 @@ from firestarter.chip_test import (
     run_plan,
     run_status,
 )
-from firestarter.compare import diff_summary
+from firestarter.compare import CompareResult, Fingerprint, diff_summary
 from firestarter.database import EpromDatabase
 from firestarter.exceptions import (
     ChipNotFoundError,
@@ -1152,6 +1153,76 @@ def test_blank_check_verdict_1_on_a_uv_prewrite_stays_skipped_complete():
     blank_result = _result(results, OP_BLANK_CHECK)
     assert blank_result.verdict == VERDICT_SKIPPED
     assert blank_result.status == STATUS_COMPLETE
+
+
+def test_blank_check_carries_compare_evidence_without_a_fingerprint():
+    """Phase 206 Task 1 (DEVTEST-01): the blank-check step's `on_result`
+    callback captures the finalised `CompareResult` produced by
+    `_drive_region_compare` (Phase 203's already-shipped seam) into a NEW
+    additive `StepResult.compare_evidence` field carrying seven values --
+    `bad`, `compared`, `first_offset`, `first_actual`, `ff_count`,
+    `aborted` and the classification string. `StepResult.fingerprint`
+    stays `None` on this step: `dedup_fingerprint` hashes
+    `fingerprint.classification`, and a populated fingerprint here would
+    re-key every already-filed report (D-02)."""
+    compare_result = CompareResult(
+        total=512,
+        compared=512,
+        compared_start=0,
+        compared_end=511,
+        bad=3,
+        ranges=[],
+        extra_ranges=0,
+        extra_bytes=0,
+        aborted=False,
+        fingerprint=Fingerprint(
+            total=512, bad=3, bad_pct=0.5859375, classification=FP_ADDRESS_LINE
+        ),
+        ff_count=100,
+        first_offset=5,
+        first_actual=0x12,
+    )
+
+    def _fake_check_eprom_blank(name, eprom_data, on_result=None, **kwargs):
+        if on_result is not None:
+            on_result(compare_result)
+        return 1
+
+    operator = _mock_operator()
+    operator.check_eprom_blank.side_effect = _fake_check_eprom_blank
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    assert blank_result.fingerprint is None
+    assert blank_result.compare_evidence == {
+        "bad": 3,
+        "compared": 512,
+        "first_offset": 5,
+        "first_actual": 0x12,
+        "ff_count": 100,
+        "aborted": False,
+        "classification": FP_ADDRESS_LINE,
+    }
+
+
+def test_blank_check_compare_evidence_is_absent_when_the_step_never_ran():
+    """The paired negative: an unsupported (never-dispatched) blank-check
+    step never reaches `operator.check_eprom_blank`, so its `on_result`
+    callback never fires and `compare_evidence` stays at its `None`
+    default -- the same non-dispatch already pinned for `verdict`/`reason`
+    by `test_run_plan_verdict_vocabulary_and_na_not_executed` above."""
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_BLANK_CHECK, supported=False, reason="not applicable")
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    operator.check_eprom_blank.assert_not_called()
+    assert blank_result.compare_evidence is None
 
 
 """The two-axis status vocabulary (178-CONTEXT.md D-01/D-02/D-12, 178-02):

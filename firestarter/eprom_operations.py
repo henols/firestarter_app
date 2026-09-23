@@ -3016,6 +3016,8 @@ class EpromOperator:
         address_str: str | None = None,
         size_str: str | None = None,
         full: bool = False,
+        *,
+        on_result: Callable[[CompareResult], None] | None = None,
     ) -> int:
         """Compare the chip against a constant blank byte through the same
         engine `verify_eprom` uses (202-05 D-02/D-04/D-10/D-12).
@@ -3043,6 +3045,17 @@ class EpromOperator:
         fired before this method -- and before the serial port -- is ever
         reached; blank has no input file, so it carries no
         file-shorter-than-size refusal at all.
+
+        `on_result` (Phase 206, DEVTEST-01): keyword-only, default `None`,
+        forwarded straight through to `_drive_region_compare`'s own
+        parameter of the same name. When `None`, behaviour is byte-identical
+        to before this parameter existed. When supplied, it is called with
+        the finalised `CompareResult` INSTEAD of `_drive_region_compare`
+        rendering it -- `chip_test.py`'s `dev test` dispatch uses this to
+        recover the address-and-value evidence a blank-check failure used
+        to throw away, at zero extra device I/O. The SRAM/FRAM pre-wire
+        short-circuit above returns before `_drive_region_compare` is ever
+        called, so `on_result` is never invoked for that population either.
         """
         # SRAM/FRAM blank-check short-circuit — detect before issuing any
         # firmware command.  configure_sram() leaves a NULL main-op for the
@@ -3089,6 +3102,7 @@ class EpromOperator:
                 _blank_expected_bytes,
                 full=full,
                 region_length=region_length,
+                on_result=on_result,
             )
             if verdict == 0:
                 logger.info(

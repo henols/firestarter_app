@@ -617,3 +617,53 @@ def test_fast_and_default_runs_agree_on_a_transport_failed_step_status() -> None
 
     assert fast.status == ct.STATUS_ERROR
     assert default.status == fast.status
+
+
+def test_cycle_fold_propagates_compare_path_and_compare_evidence() -> None:
+    """Phase 206 Task 1 (compare_evidence half; the compare_path half is
+    added in Task 3): `_aggregate_cycle_results`'s terminal `StepResult`
+    must propagate `compare_evidence` through the fold using the same
+    `next(...)` reversed-scan idiom `fingerprint` and `write_target`
+    already use -- the LAST cycle that produced one, because the device's
+    final state is the one a reader can still verify. Without this
+    propagation the blank-check step's evidence would be erased for every
+    erasable part (a `--fast` single-cycle run bypasses the fold entirely
+    via the `len(results) == 1` early return, so this three-cycle case is
+    the one that actually exercises the fold)."""
+    first_evidence = {
+        "bad": 1,
+        "compared": 512,
+        "first_offset": 3,
+        "first_actual": 0x01,
+        "ff_count": 500,
+        "aborted": False,
+        "classification": ct.FP_ADDRESS_LINE,
+    }
+    last_evidence = {
+        "bad": 0,
+        "compared": 512,
+        "first_offset": None,
+        "first_actual": None,
+        "ff_count": 512,
+        "aborted": False,
+        "classification": ct.FP_MATCH,
+    }
+    results = [
+        ct.StepResult(
+            op=ct.OP_BLANK_CHECK,
+            verdict=ct.VERDICT_OK,
+            run_count=1,
+            compare_evidence=first_evidence,
+        ),
+        ct.StepResult(op=ct.OP_BLANK_CHECK, verdict=ct.VERDICT_OK, run_count=1),
+        ct.StepResult(
+            op=ct.OP_BLANK_CHECK,
+            verdict=ct.VERDICT_OK,
+            run_count=1,
+            compare_evidence=last_evidence,
+        ),
+    ]
+
+    folded = ct._aggregate_cycle_results(results, ct.OP_BLANK_CHECK)
+
+    assert folded.compare_evidence == last_evidence

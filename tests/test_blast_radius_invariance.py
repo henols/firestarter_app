@@ -200,20 +200,23 @@ _DB_DIFF_KEYS = [
     "proposed_disposition",
 ]
 
-"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits twenty-one keys per
+"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits twenty-two keys per
 step, UNCONDITIONALLY (Phase 178 plan 01 adds `status`, schema 1.8; Phase
 181 plan 07 adds the four `fingerprint_*` siblings (RPT-A2) and `divergence`
 (RPT-A3); Phase 181 plan 08 adds `chip_id_detected` (RPT-A5); quick task
 260916-nb9 adds `error_name` (schema 2.1), the catalog-resolved name beside
-the existing `error_code` integer) -- taken from `sst27sf512-six-step`'s
-first (`id`) step, whose five `write_*` fields, four `fingerprint_*`
-siblings and `divergence` all stay `None` because `id` carries no write
-target, no fingerprint and no read-step comparison, but `chip_id_detected`
-IS populated on this step (it is the id step), and all twenty-one KEYS are
+the existing `error_code` integer; Phase 206 Task 1 adds `compare_evidence`,
+the blank-check step's own compare evidence, DEVTEST-01) -- taken from
+`sst27sf512-six-step`'s first (`id`) step, whose five `write_*` fields, four
+`fingerprint_*` siblings, `divergence` and `compare_evidence` all stay
+`None` because `id` carries no write target, no fingerprint, no read-step
+comparison and no compare-drive of its own, but `chip_id_detected` IS
+populated on this step (it is the id step), and all twenty-two KEYS are
 present regardless. The pin is over the key SET, not over which values are
 non-`None`."""
 _STEPS_ELEMENT_0_KEYS = [
     "chip_id_detected",
+    "compare_evidence",
     "divergence",
     "duration_s",
     "error_code",
@@ -345,6 +348,45 @@ def test_schema_bump_rekeys_no_frozen_hash() -> None:
             "allow-list grew a reflective read of to_dict() -- review the "
             "re-key as a commit separate from the schema bump."
         )
+
+
+def test_compare_evidence_does_not_move_any_frozen_hash() -> None:
+    """DEVTEST-01/T-206-08: the blank-check step's new additive
+    `compare_evidence` field is outside `dedup_fingerprint`'s five-entry
+    allow-list. Pins `len(FROZEN_HASHES) == 19` and asserts the tracer
+    shape's hash is unmoved when its blank-check step carries populated
+    evidence -- against the frozen literal, never a second computed
+    value, so a future allow-list widening that DID reach this field would
+    show up here rather than silently forking every filed report."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    assert len(FROZEN_HASHES) == 19
+    report = build_shape(_TRACER_SHAPE_ID)
+    blank_result = next(r for r in report.results if r.op == "blank-check")
+    idx = report.results.index(blank_result)
+    # `_dataclass_replace` reconstructs through `StepResult.__init__`, so
+    # this raises TypeError (unknown keyword) on unmodified source rather
+    # than silently succeeding via a bare attribute assignment that a
+    # slots-less dataclass would accept whether or not the field is
+    # declared -- the RED must fail because the field does not exist yet.
+    report.results[idx] = _dataclass_replace(
+        blank_result,
+        compare_evidence={
+            "bad": 3,
+            "compared": 512,
+            "first_offset": 5,
+            "first_actual": 0x12,
+            "ff_count": 100,
+            "aborted": False,
+            "classification": "address-line",
+        },
+    )
+
+    assert dedup_fingerprint(report) == FROZEN_HASHES[_TRACER_SHAPE_ID], (
+        f"{_TRACER_SHAPE_ID} re-keyed by a populated compare_evidence: "
+        "dedup_fingerprint's allow-list reached the new field -- review "
+        "the re-key as a commit separate from any behaviour change."
+    )
 
 
 def test_frozen_hashes_are_twelve_lowercase_hex_chars() -> None:

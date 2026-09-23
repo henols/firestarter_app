@@ -67,6 +67,7 @@ from firestarter.chip_test import (
     FP_ADDRESS_LINE,
     FP_BLANK_CONTACT,
     FP_INDETERMINATE,
+    FP_MATCH,  # test-internal: 206-02 compare-evidence classification
     REGION_POLICY_FIXED,  # test-internal: coverage-tag dedup wiring
     REGION_POLICY_FULL_DEVICE,  # test-internal: coverage-tag dedup wiring
     REGION_POLICY_UV_SLOT,  # test-internal: coverage-tag dedup wiring
@@ -1911,6 +1912,28 @@ def test_every_step_element_carries_an_identical_fingerprint_sibling_key_set():
     assert "fingerprint_bad" in steps[0]
     assert "fingerprint_bad_pct" in steps[0]
     assert "fingerprint_evidence" in steps[0]
+
+
+def test_step_dict_emits_compare_evidence_and_compare_path_keys():
+    """Phase 206 Task 1 (compare_evidence half; the compare_path half is
+    added in Task 3): `_step_dict` emits the new `compare_evidence` key
+    unconditionally, beside the existing `fingerprint_*` siblings --
+    additive, and outside `dedup_fingerprint`'s five-entry allow-list."""
+    report = _minimal_report(step_specs=[("blank-check", VERDICT_OK, None, "")])
+    evidence = {
+        "bad": 0,
+        "compared": 512,
+        "first_offset": None,
+        "first_actual": None,
+        "ff_count": 512,
+        "aborted": False,
+        "classification": FP_MATCH,
+    }
+    report.results[0].compare_evidence = evidence
+
+    step_row = report.to_dict()["steps"][0]
+
+    assert step_row["compare_evidence"] == evidence
 
 
 def test_divergence_is_present_on_every_step_and_carries_the_engine_value():

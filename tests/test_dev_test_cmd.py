@@ -2190,8 +2190,12 @@ class TestBlankCheckAfterEraseKaq:
         verdicts OK; the whole run exits 0."""
         operator = make_clean_operator()
 
-        def _blank_only_after_erase(name: str, eprom_data: dict) -> int:
+        def _blank_only_after_erase(name: str, eprom_data: dict, **kwargs) -> int:
             # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+            # **kwargs (Phase 206 Task 1, DEVTEST-01): absorbs the new
+            # keyword-only `on_result` the real dispatch now always passes;
+            # this double never invokes it, matching a blank-check whose
+            # `CompareResult` this test has no need to fabricate.
             return 0 if operator.erase_eprom.called else 1
 
         operator.check_eprom_blank.side_effect = _blank_only_after_erase
