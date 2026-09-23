@@ -3406,8 +3406,10 @@ def _dispatch_multi_run(
     # blank_check_requested keyword directly instead of composing a wire
     # flag -- the same explicit route `write -b` uses.
     blank_check_requested = not _is_monotonic_masked_target(resolved_target)
+    runs_executed = 0
     try:
         for _ in range(runs):
+            runs_executed += 1
             if op in (OP_WRITE, OP_WRITE_PARTIAL):
                 _sample(sampler, "before")
                 outcomes.append(
@@ -3438,6 +3440,17 @@ def _dispatch_multi_run(
                 )
                 verify_verdicts.append(verify_verdict)
                 outcomes.append(verify_verdict == 0)
+                if verify_verdict == 2:
+                    # WR-02 (206-REVIEW): a verify run that could not
+                    # complete leaves the link in the same faulted state a
+                    # raised SerialError would -- issuing another verify
+                    # pass against it buys no additional information (the
+                    # verdict is already pinned to VERDICT_SKIPPED by
+                    # `verify_transport_failed` below) and pays a second
+                    # full read/compare's worth of device I/O. Break the
+                    # same way the exception path already terminates the
+                    # step early, rather than exhausting `runs`.
+                    break
             elif op == OP_ERASE:
                 outcomes.append(operator.erase_eprom(name, eprom_data))
             else:
@@ -3525,7 +3538,13 @@ def _dispatch_multi_run(
         verdict=verdict,
         reason=reason,
         error_code=None if verdict == VERDICT_OK else error_code,
-        run_count=runs,
+        # WR-02 (206-REVIEW): `runs_executed` rather than the nominal
+        # `runs` -- a verify step that broke early on a verdict-2 run
+        # invoked the operator fewer times than `runs` requested, and
+        # `run_count` is documented (and tested, e.g.
+        # `test_cycle_loop_reports_one_result_per_step_with_run_count_n`)
+        # to count actual operator calls, not the requested policy.
+        run_count=runs_executed,
         fingerprint=fingerprint,
         write_target=resolved_target if op in (OP_WRITE, OP_WRITE_PARTIAL) else None,
         status=status,

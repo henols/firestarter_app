@@ -1939,6 +1939,24 @@ def test_verify_verdict_2_is_skipped_with_status_error():
     assert verify_result.status == STATUS_ERROR
 
 
+def test_verify_verdict_2_stops_the_multi_run_loop_after_the_first_run():
+    """WR-02 (206-REVIEW): a verdict-2 run leaves the link in a faulted
+    state, so a second verify pass buys no additional information and
+    costs a full read/compare's worth of device I/O. `side_effect=[2, 0]`
+    proves the break fires -- if run 2 were still issued it would return
+    0 (match) and `run_count` would read 2, not 1."""
+    operator = _mock_operator()
+    operator.verify_eprom.side_effect = [2, 0]
+    plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    verify_result = _result(results, OP_VERIFY)
+    assert operator.verify_eprom.call_count == 1
+    assert verify_result.run_count == 1
+    assert verify_result.verdict == VERDICT_SKIPPED
+    assert verify_result.status == STATUS_ERROR
+
+
 def test_verify_verdict_1_stays_bad():
     """The paired negative on BOTH axes: a mismatch (verdict 1 on every
     run) still reports `VERDICT_BAD`, now explicitly `STATUS_COMPLETE` --
