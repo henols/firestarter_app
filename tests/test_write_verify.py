@@ -747,6 +747,46 @@ def test_write_verify_arm4_host_or_firmware_decided_failure_exits_1(
     assert expected in result.output
 
 
+def test_write_verify_arm4b_landed_but_sdp_skip_unacknowledged_exits_1(
+    runner: CliRunner,
+) -> None:
+    """Arm 4b: the write landed on the wire and `write_eprom` recorded
+    verdict 0 before the `--skip-sdp-unlock` ack check flipped `is_ok` to
+    False (`last_write_attempt_verdict == 0`). Exit 1 (host-decided) --
+    but the line must say the data LANDED, not that the write "did not
+    complete": today's no-write line is false here (203-REVIEW WR-01,
+    207.1 D-06)."""
+    operator = Mock(spec=EpromOperator)
+    operator.write_eprom.return_value = False
+    operator.last_write_guard_verdict = None
+    operator.last_write_attempt_verdict = 0
+    result = _run_write(runner, operator, extra_args=["--verify"])
+
+    assert result.exit_code == 1
+    assert operator.verify_eprom.call_count == 0
+
+    from firestarter.cli_handlers import (
+        _WRITE_VERIFY_VERDICT_NO_WRITE,
+        _WRITE_VERIFY_VERDICT_UNREADABLE,
+    )
+
+    expected = (
+        "Write to W27C512: landed, but the firmware did not acknowledge "
+        "--skip-sdp-unlock -- nothing was verified."
+    )
+    assert expected in result.output
+    no_write = _WRITE_VERIFY_VERDICT_NO_WRITE.format(eprom="W27C512")
+    assert no_write not in result.output
+    unreadable = _WRITE_VERIFY_VERDICT_UNREADABLE.format(eprom="W27C512")
+    assert unreadable not in result.output
+
+    from firestarter.cli_handlers import _WRITE_VERIFY_VERDICT_LANDED_UNACKNOWLEDGED
+
+    assert _WRITE_VERIFY_VERDICT_LANDED_UNACKNOWLEDGED.format(eprom="W27C512") == (
+        expected
+    )
+
+
 def test_write_verify_arm5_readback_transport_failure_exits_2_unreadable_line(
     runner: CliRunner,
 ) -> None:
@@ -883,9 +923,10 @@ def test_could_not_verify_line_absent_from_the_other_six_arms(
 
 
 def test_verdict_constants_never_contain_the_forbidden_word() -> None:
-    """WRITE-05's structural guarantee, asserted over the four constants
+    """WRITE-05's structural guarantee, asserted over the five constants
     themselves -- not over one rendered run."""
     from firestarter.cli_handlers import (
+        _WRITE_VERIFY_VERDICT_LANDED_UNACKNOWLEDGED,
         _WRITE_VERIFY_VERDICT_MISMATCH,
         _WRITE_VERIFY_VERDICT_NO_WRITE,
         _WRITE_VERIFY_VERDICT_OK,
@@ -897,6 +938,7 @@ def test_verdict_constants_never_contain_the_forbidden_word() -> None:
         _WRITE_VERIFY_VERDICT_MISMATCH,
         _WRITE_VERIFY_VERDICT_UNREADABLE,
         _WRITE_VERIFY_VERDICT_NO_WRITE,
+        _WRITE_VERIFY_VERDICT_LANDED_UNACKNOWLEDGED,
     ):
         assert "successful" not in constant.lower()
 
