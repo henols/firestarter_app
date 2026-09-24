@@ -1421,10 +1421,10 @@ if _DEV_TOOLS_ENABLED:
         is_flag=True,
         help=(
             "Using Firestarter register definition.\n"
-            "By using the firestarter argumet,\n"
-            "the control register will be remaped to match\n"
-            "the hardware revision of the RURP sheild.\n"
-            "See constants.RURP_CONTROL_REGISTER_BITS (mirror of rurp_pinout.h).\n"
+            "By using the firestarter argument,\n"
+            "the control register will be remapped to match\n"
+            "the hardware revision of the RURP shield.\n"
+            "See the CTRL_* constants in constants.py (mirror of rurp_pinout.h).\n"
             "0x100 - CTRL_VPP_VPE_DROP_ENABLE\n"
             "0x080 - CTRL_VPP_REGULATOR_ENABLE\n"
             "0x040 - CTRL_READ_WRITE\n"
