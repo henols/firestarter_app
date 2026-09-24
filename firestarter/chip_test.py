@@ -2633,9 +2633,12 @@ def _run_step_untimed(
             # step. On the cycle-block path, `_run_cycle_block`
             # already calls `_run_step(..., runs=1)` per cycle, so
             # this `1` equals the `runs` value passed in; the tag
-            # comes instead from the `hardware_refused` break after
-            # one cycle and `_aggregate_cycle_results` returning that
-            # single result. Every filed report 207.1 D-04 counted
+            # comes instead from `_aggregate_cycle_results`
+            # (`run_count=len(ran)`, SKIPPED excluded from `ran`) --
+            # either the `hardware_refused` break leaving one cycle, or
+            # a cycle that raised here (SKIPPED, no error_code, no
+            # break) dropping out of `ran` while the other cycle ran.
+            # Every filed report 207.1 D-04 counted
             # (7 issues, 9 reports) is the cycle-block shape, so
             # reverting this branch alone would re-key none of them.
             run_count=1,
