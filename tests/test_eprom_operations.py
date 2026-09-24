@@ -855,6 +855,118 @@ class TestVerifyEpromReadAbort:
 
         assert verdict == 2
 
+    def test_timeout_just_inside_the_acceptance_window_is_the_intended_abort(
+        self, make_comm, fake_serial, tmp_path, monkeypatch
+    ) -> None:
+        """207.1 D-05 (202-REVIEW WR-01) -- the deliberate stop's
+        MSG_ERR_TIMEOUT arrives inside the acceptance window, so the run
+        resolves to the abort's own verdict, exit 1 for a mismatch, not
+        exit 2; this leg pins the window boundary and makes no abort claim
+        of its own, so the class docstring's ack/feed-count rule does not
+        apply to it; `time.monotonic` is faked for the same two calls as
+        the beyond-window leg."""
+        import firestarter.eprom_operations as eprom_ops_mod
+
+        payload = b"\x01\x02\x03\x04"
+        corrupted = bytearray(payload)
+        corrupted[0] ^= 0xFF
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        class _FakeTime:
+            """Wraps the real `time` module, overriding only `monotonic()`
+            -- `time.time()` (used elsewhere in this call for duration
+            logging) still delegates to the real module."""
+
+            def __init__(self, values):
+                self._it = iter(values)
+
+            def monotonic(self):
+                return next(self._it)
+
+            def __getattr__(self, name):
+                import time as real_time
+
+                return getattr(real_time, name)
+
+        stop_time = 1_000.0
+        check_time = stop_time + eprom_ops_mod.READ_ABORT_ACCEPTANCE_WINDOW_S - 0.001
+        monkeypatch.setattr(eprom_ops_mod, "time", _FakeTime([stop_time, check_time]))
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+
+    def test_timeout_exactly_at_the_acceptance_window_is_the_intended_abort(
+        self, make_comm, fake_serial, tmp_path, monkeypatch
+    ) -> None:
+        """207.1 D-05 (202-REVIEW WR-01) -- the deliberate stop's
+        MSG_ERR_TIMEOUT arrives inside the acceptance window, so the run
+        resolves to the abort's own verdict, exit 1 for a mismatch, not
+        exit 2; this leg pins the window boundary and makes no abort claim
+        of its own, so the class docstring's ack/feed-count rule does not
+        apply to it; `time.monotonic` is faked for the same two calls as
+        the beyond-window leg."""
+        import firestarter.eprom_operations as eprom_ops_mod
+
+        payload = b"\x01\x02\x03\x04"
+        corrupted = bytearray(payload)
+        corrupted[0] ^= 0xFF
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        class _FakeTime:
+            """Wraps the real `time` module, overriding only `monotonic()`
+            -- `time.time()` (used elsewhere in this call for duration
+            logging) still delegates to the real module."""
+
+            def __init__(self, values):
+                self._it = iter(values)
+
+            def monotonic(self):
+                return next(self._it)
+
+            def __getattr__(self, name):
+                import time as real_time
+
+                return getattr(real_time, name)
+
+        stop_time = 1_000.0
+        check_time = stop_time + eprom_ops_mod.READ_ABORT_ACCEPTANCE_WINDOW_S
+        monkeypatch.setattr(eprom_ops_mod, "time", _FakeTime([stop_time, check_time]))
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+
     def test_first_byte_mismatch_aborts_after_one_chunk_and_reports_a_range(
         self, make_comm, fake_serial, tmp_path, caplog
     ) -> None:

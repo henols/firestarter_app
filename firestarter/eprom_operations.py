@@ -109,6 +109,17 @@ CONNECT_COST_STRUCTURAL_FLOOR_S = (
 # far below any plausible gap between two unrelated operations, so a genuine
 # timeout that arrives outside this window is never mistaken for this host's
 # own deliberate stop.
+# 207.1 D-05 (202-REVIEW WR-01): the window is derived, not measured under
+# host scheduling or USB latency, and it stays 3.0 s and non-configurable.
+# Its one consumer is `_drive_region_compare`, so it governs every caller:
+# verify, blank, the write blank guard and write --verify. A deliberate stop
+# whose frame arrives later than this -- extreme host load, a stalled USB
+# stack -- is reported as exit 2, a hardware or transport failure, instead of
+# the abort's own verdict. That false exit 2 is a known, accepted outcome:
+# for a report of "verify says hardware error but the chip only mismatches",
+# check host load before suspecting the hardware. On the write-guard path a
+# false 2 refuses the write as a guard-read failure, which is fail-closed.
+# `TestVerifyEpromReadAbort` pins both sides of the boundary.
 READ_ABORT_ACCEPTANCE_WINDOW_S = 3.0
 
 
@@ -813,13 +824,19 @@ class EpromOperator:
         for a connect-time saving.
 
         What a lease removes that is not only time: closing the port
-        de-asserts DTR and resets the attached Leonardo. A lease holding
-        one link across roughly thirty calls removes roughly thirty board
-        resets. A step that passes today partly because the PREVIOUS
-        step's teardown reset the board would behave differently under a
-        lease -- that is the fidelity risk SESS-02's bench leg exists to
-        measure, and it belongs here, at the seam, where the next reader
-        will see it.
+        de-asserts DTR and resets the attached Leonardo. A lease removes
+        the board reset for every `EpromOperator` call inside the block --
+        on the order of twenty in a default `dev test` plan, a derived
+        count and not a measured one (206-SESSION-COST.md § 3: at most
+        about 17-20 of a plan's roughly 30 connects are `EpromOperator`'s
+        own; `HardwareManager`'s connects stay outside the lease, 206
+        D-05); the measured wall-clock saving is 15.1% (40.709 s of a
+        268.992 s cold-arm median, N=3 per arm, W27C512 on a Leonardo;
+        206-SESSION-COST.md § 5). A step that passes today partly because
+        the PREVIOUS step's teardown reset the board would behave
+        differently under a lease -- that is the fidelity risk SESS-02's
+        bench leg exists to measure, and it belongs here, at the seam,
+        where the next reader will see it.
         """
         self._leased = True
         try:
