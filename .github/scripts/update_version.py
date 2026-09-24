@@ -5,19 +5,24 @@ import re
 import subprocess
 
 version_file = "firestarter/__init__.py"
-BETA_VERSION_RE = re.compile(r'^[0-9]+\.[0-9]+\.[0-9]+(b|rc)[0-9]+$')
+BETA_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(b|rc)[0-9]+$")
 
 
 def get_version():
 
-    rxs = r'^__version__ =(.\")(?P<major>[0-9]+)\.(?P<minor>[0-9]+)\.(?P<patch>[0-9]+)(?P<pre>(b|rc)[0-9]+)?'
+    rxs = r"^__version__ =(.\")(?P<major>[0-9]+)\.(?P<minor>[0-9]+)\.(?P<patch>[0-9]+)(?P<pre>(b|rc)[0-9]+)?"
 
     txt = [line for line in open(version_file)]
 
     for line in txt:
         m = re.match(rxs, line)
         if m:
-            return (m.group("major"), m.group("minor"), m.group("patch"), m.group("pre"))
+            return (
+                m.group("major"),
+                m.group("minor"),
+                m.group("patch"),
+                m.group("pre"),
+            )
 
 
 def update_version(major, minor, patch, *, version_string=None):
@@ -35,7 +40,7 @@ def update_version(major, minor, patch, *, version_string=None):
         m = re.match(rxs, line)
         if m:
             written = version_string if version_string else f"{major}.{minor}.{patch}"
-            line = m.groups(0)[0] + f"\"{written}\"\n"
+            line = m.groups(0)[0] + f'"{written}"\n'
             fout.write(line)
         else:
             fout.write(line)
@@ -63,12 +68,14 @@ def _git_tag_scan_fallback(base: str) -> str:
     try:
         result = subprocess.run(
             ["git", "tag", "--list", f"{base}b*"],
-            capture_output=True, text=True, check=True
+            capture_output=True,
+            text=True,
+            check=True,
         )
         tags = result.stdout.strip().splitlines()
     except (subprocess.CalledProcessError, FileNotFoundError):
         tags = []
-    n_re = re.compile(rf'^{re.escape(base)}b([0-9]+)$')
+    n_re = re.compile(rf"^{re.escape(base)}b([0-9]+)$")
     nums = []
     for t in tags:
         m = n_re.match(t)
@@ -155,7 +162,7 @@ def calculate_version(args=None):
             print(f"DRY_RUN: {version_string}")
         else:
             # Parse the version_string to extract major/minor/patch/pre for GITHUB_OUTPUT.
-            parts = re.match(r'^(\d+)\.(\d+)\.(\d+)(b\d+|rc\d+)$', version_string)
+            parts = re.match(r"^(\d+)\.(\d+)\.(\d+)(b\d+|rc\d+)$", version_string)
             b_major = parts.group(1)
             b_minor = parts.group(2)
             b_patch = parts.group(3)
@@ -196,5 +203,6 @@ def calculate_version(args=None):
 
 if __name__ == "__main__":
     import sys
+
     args = parse_args(sys.argv[1:])
     calculate_version(args)
