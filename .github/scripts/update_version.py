@@ -54,7 +54,7 @@ def update_version(major, minor, patch, *, version_string=None):
 
 def is_beta_mode(args) -> bool:
     """Return True when script is invoked in a beta-branch context."""
-    if args.beta:
+    if args.beta or args.set_version:
         return True
     if os.environ.get("GITHUB_REF") == "refs/heads/beta":
         return True
