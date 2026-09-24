@@ -692,9 +692,15 @@ class EpromOperator:
             # of `consume_remaining_input()` today, and a lease skips
             # `disconnect()` -- so without this explicit call, a straggler
             # frame from the PREVIOUS step would be parsed as THIS step's
-            # setup ack.
-            self.comm.consume_remaining_input()
+            # setup ack. It runs INSIDE this `try` (207.1-REVIEW WR-02):
+            # `consume_remaining_input` reaches `_read_and_parse_lines`,
+            # which raises `SerialError` on a transport failure exactly
+            # like `setup_command` does, so a drain failure must drop the
+            # held link the same way -- outside the `try`, that raise
+            # escaped with the link still marked connected, stranding
+            # every later leased step on the same dead port.
             try:
+                self.comm.consume_remaining_input()
                 setup_ok = self.comm.setup_command(command_dict, self.config)
             except SerialError:
                 # D-06: drop the lease's held link so the NEXT operation

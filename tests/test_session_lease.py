@@ -56,12 +56,14 @@ class _FakeComm:
         *,
         fail_setup_on_call: int | None = None,
         fail_with: type[SerialError] = FirmwareOutdatedError,
+        fail_drain: bool = False,
     ) -> None:
         self._events = events
         self._name = name
         self._open = True
         self._fail_setup_on_call = fail_setup_on_call
         self._fail_with = fail_with
+        self._fail_drain = fail_drain
         self._setup_calls = 0
 
     def is_connected(self) -> bool:
@@ -69,6 +71,8 @@ class _FakeComm:
 
     def consume_remaining_input(self) -> None:
         self._events.append((self._name, "drain"))
+        if self._fail_drain:
+            raise SerialError(f"simulated: {self._name} drain failed")
 
     def setup_command(self, command_to_send, config_manager, **kwargs) -> bool:
         self._setup_calls += 1
@@ -338,6 +342,61 @@ def test_a_mid_plan_serial_error_drops_the_lease_and_the_plan_continues(
     assert connects == [("comm1", "connect"), ("comm2", "connect")], (
         "exactly two connects: the initial lease connect, and the recovery "
         "connect after the dropped link -- never a connect per call"
+    )
+
+
+def test_a_drain_failure_drops_the_lease_and_the_plan_continues(
+    monkeypatch,
+) -> None:
+    """WR-02 (207.1-REVIEW): the drain now runs INSIDE the same `try` as
+    `setup_command`, so a `SerialError` raised by `consume_remaining_input`
+    on the SECOND call of a held link must drop the link exactly like a
+    `setup_command` failure does (D-06) -- not escape with the link still
+    marked connected, which would strand every later leased step on the
+    same dead port. Cold-path arm: the bracketing first and third calls are
+    the ordinary, unchanged cold-connect-then-teardown cycle."""
+    events: list[tuple[str, str]] = []
+    comm1 = _FakeComm(events, "comm1", fail_drain=True)
+    comm2 = _FakeComm(events, "comm2")
+    monkeypatch.setattr(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        _make_find_and_connect(events, [comm1, comm2]),
+    )
+
+    operator = EpromOperator(ConfigManager())
+    with operator.lease():
+        # 1st call: an ordinary cold connect (comm1) -- the cold-path arm.
+        # Nothing to drain yet, so comm1's drain failure has not fired.
+        with operator._operation_context("chip", _CMD_DATA, COMMAND_WRITE) as (
+            cmd,
+            _buf,
+            _name,
+        ):
+            assert cmd is not None
+        assert operator.comm is comm1
+
+        # 2nd call: the leased setup drains the held link first; comm1's
+        # drain raises a genuine transport SerialError.
+        with pytest.raises(SerialError):
+            with operator._operation_context("chip", _CMD_DATA, COMMAND_WRITE):
+                pass
+        assert operator.comm is None, "the dead link must be dropped"
+        assert operator._leased is True, "the lease itself survives the failure"
+
+        # 3rd call: the held link is gone, so this cold-connects again --
+        # proving the plan continues rather than the whole block failing.
+        with operator._operation_context("chip", _CMD_DATA, COMMAND_WRITE) as (
+            cmd,
+            _buf,
+            _name,
+        ):
+            assert cmd is not None
+        assert operator.comm is comm2
+
+    connects = [ev for ev in events if ev[1] == "connect"]
+    assert connects == [("comm1", "connect"), ("comm2", "connect")], (
+        "exactly two connects: the initial lease connect, and the recovery "
+        "connect after the drain-dropped link -- never a connect per call"
     )
 
 
