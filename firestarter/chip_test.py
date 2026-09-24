@@ -2615,6 +2615,29 @@ def _run_step_untimed(
             verdict=VERDICT_SKIPPED,
             status=STATUS_ERROR,
             reason=str(exc),
+            # Kept at 1 by decision (206-REVIEW-FIX WR-02 observation;
+            # 207.1 D-03), not reverted to the nominal `runs`.
+            # `repeat_policy_tag` keys on `run_count == 1` for every
+            # `_REPEAT_POLICY_OPS` step, so a default-policy run whose
+            # per-step-path step raises here stamps the degraded
+            # `runs=1` tag into `dedup_fingerprint` and is re-keyed
+            # into the `--fast` dedup group. Changing it to the
+            # nominal `runs` would re-key reports already filed on
+            # the public issue tracker; the harm is limited to dedup
+            # grouping of reports that are already ERROR or BAD, so
+            # the trade is accepted.
+            #
+            # The mechanism, stated precisely: this `1` is the cause
+            # only on the per-step path -- `run_plan` calling
+            # `_run_step(..., runs=runs)`, which today means the read
+            # step. On the cycle-block path, `_run_cycle_block`
+            # already calls `_run_step(..., runs=1)` per cycle, so
+            # this `1` equals the `runs` value passed in; the tag
+            # comes instead from the `hardware_refused` break after
+            # one cycle and `_aggregate_cycle_results` returning that
+            # single result. Every filed report 207.1 D-04 counted
+            # (7 issues, 9 reports) is the cycle-block shape, so
+            # reverting this branch alone would re-key none of them.
             run_count=1,
         )
     except EpromOperationError as exc:
@@ -2623,6 +2646,7 @@ def _run_step_untimed(
             verdict=VERDICT_BAD,
             reason=str(exc),
             error_code=exc.error_code,
+            # Same trade-off as the branch above; kept at 1 (207.1 D-03).
             run_count=1,
         )
     except (ChipNotImplementedError, ChipNotFoundError) as exc:

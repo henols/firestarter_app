@@ -249,6 +249,17 @@ class CompareAccumulator:
         # saved, and both shapes are already far under the peak-allocation
         # ceiling (see tests/test_compare.py's PEAK_ALLOCATION_CEILING_BYTES).
         offs = [o for o in range(chunk_len) if expected[o] != actual[o]]
+        # Tier 4: this branch is defensive, not dead (202-REVIEW IN-01,
+        # 207.1 D-09). With the equal-length contract in this method's
+        # docstring held, Tier 2 has already returned for every chunk
+        # with no differing offset, so `offs` is never empty here. It is
+        # reachable only when a caller passes an `expected` longer than
+        # `actual` and equal over `actual`'s length -- Tier 2's
+        # `expected == actual` is then False, yet no offset differs -- while
+        # a shorter `expected` raises `IndexError` in the comprehension
+        # above first. It is kept so a contract violation of that shape
+        # closes the open range and returns here, instead of indexing
+        # `offs[0]` on an empty list below.
         if not offs:
             self._close_open_range()
             return
