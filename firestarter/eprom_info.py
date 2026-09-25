@@ -377,15 +377,8 @@ class EpromConsolePresenter:
         for key, block in chip_data.get("jumpers", {}).items():
             logger.info("")
             logger.info(f"Jumper config (Rev {key}):")
-            for jp, data in block["jumpers"].items():
-                if data["display"]:
-                    logger.info(
-                        f"  {jp.upper()}: {data['display']} ({data['choices']} = {data['selected_label']})"  # noqa: E501
-                    )
-                else:
-                    logger.info(
-                        f"  {jp.upper()}: {data['selected_label']} ({data['choices']})"
-                    )
+            for line in block["drawing"]:
+                logger.info(line)
             for note in block["notes"]:
                 logger.info(f"  Note: {note}")
         if chip_data.get("jumper_note"):

@@ -481,15 +481,24 @@
           -----------
   
   Jumper config (Rev 0 & 1):
-    JP1:  ●(● ●) (5V, A13 = A13)
-    JP2: (● ●)●  (5V, A17 = 5V)
-    JP3:  ● ● ●  (28pin, 32pin = no jumper)
+        JP2                 JP1                 JP3
+      5V ■                5V ■                 D ●
+         ║
+       A ●                 B ●               VPP ●
+                             ║
+     A17 ●               A13 ●                 C ●
+    Bridge A to 5V.     Bridge B to A13.    No jumper.
   
   Jumper config (Rev 2.0 & 2.1):
-    JP4:  ● ●    ("Only for ROMs with VPP on P1" = Open)
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ●  ■   No jumper (Open).
   
   Jumper config (Rev 2.2 & 2.3):
-    JP4: no jumper ("Only for ROMs with VPP on P1")
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ■  ●  24-pin pole, toward the board edge
+  
+         ●     28-pin pole, toward the ZIF socket
+    No jumper.
   
   Protocol: EEPROM - 5V parallel, SDP + DQ7 poll (ID: 0x0D)
     - Programming protocol for large EEPROMs
@@ -537,15 +546,24 @@
           -----------
   
   Jumper config (Rev 0 & 1):
-    JP1:  ●(● ●) (5V, A13 = A13)
-    JP2: (● ●)●  (5V, A17 = 5V)
-    JP3:  ● ● ●  (28pin, 32pin = no jumper)
+        JP2                 JP1                 JP3
+      5V ■                5V ■                 D ●
+         ║
+       A ●                 B ●               VPP ●
+                             ║
+     A17 ●               A13 ●                 C ●
+    Bridge A to 5V.     Bridge B to A13.    No jumper.
   
   Jumper config (Rev 2.0 & 2.1):
-    JP4:  ● ●    ("Only for ROMs with VPP on P1" = Open)
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ●  ■   No jumper (Open).
   
   Jumper config (Rev 2.2 & 2.3):
-    JP4: no jumper ("Only for ROMs with VPP on P1")
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ■  ●  24-pin pole, toward the board edge
+  
+         ●     28-pin pole, toward the ZIF socket
+    No jumper.
   
   Protocol: EPROM - 28-pin UV/EE, 13V VPP (ID: 0x07)
     - JEDEC 28-pin EPROM algorithm (also covers compatible 28C parts)
@@ -599,15 +617,24 @@
           -----------
   
   Jumper config (Rev 0 & 1):
-    JP1:  ●(● ●) (5V, A13 = A13)
-    JP2:  ●(● ●) (5V, A17 = A17)
-    JP3:  ●(● ●) (28pin, 32pin = 32pin)
+        JP2                 JP1                 JP3
+      5V ■                5V ■                 D ●
+                                                 ║
+       A ●                 B ●               VPP ●
+         ║                   ║
+     A17 ●               A13 ●                 C ●
+    Bridge A to A17.    Bridge B to A13.    Bridge VPP to D.
   
   Jumper config (Rev 2.0 & 2.1):
-    JP4:  ● ●    ("Only for ROMs with VPP on P1" = Open)
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ●  ■   No jumper (Open).
   
   Jumper config (Rev 2.2 & 2.3):
-    JP4: no jumper ("Only for ROMs with VPP on P1")
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ■  ●  24-pin pole, toward the board edge
+  
+         ●     28-pin pole, toward the ZIF socket
+    No jumper.
   
   Protocol: EPROM - 32-pin UV/EE, 13V VPP (ID: 0x08)
     - High-voltage EPROM algorithm for 32-pin devices
@@ -660,15 +687,24 @@
           -----------
   
   Jumper config (Rev 0 & 1):
-    JP1:  ●(● ●) (5V, A13 = A13)
-    JP2:  ●(● ●) (5V, A17 = A17)
-    JP3:  ●(● ●) (28pin, 32pin = 32pin)
+        JP2                 JP1                 JP3
+      5V ■                5V ■                 D ●
+                                                 ║
+       A ●                 B ●               VPP ●
+         ║                   ║
+     A17 ●               A13 ●                 C ●
+    Bridge A to A17.    Bridge B to A13.    Bridge VPP to D.
   
   Jumper config (Rev 2.0 & 2.1):
-    JP4:  ● ●    ("Only for ROMs with VPP on P1" = Open)
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ●  ■   No jumper (Open).
   
   Jumper config (Rev 2.2 & 2.3):
-    JP4: no jumper ("Only for ROMs with VPP on P1")
+    JP4 silkscreen: "Only for ROMs with VPP on P1"
+    JP4  ■  ●  24-pin pole, toward the board edge
+  
+         ●     28-pin pole, toward the ZIF socket
+    No jumper.
   
   Protocol: EPROM - 32-pin UV/EE, 13V VPP (ID: 0x08)
     - High-voltage EPROM algorithm for 32-pin devices

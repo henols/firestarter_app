@@ -298,8 +298,9 @@ def test_the_jumper_blocks_are_rev_0_1_rev_2_0_2_1_and_rev_2_2_2_3(
     assert set(jumpers["2.2 & 2.3"]["jumpers"]) == {"jp4"}
     for block in jumpers.values():
         assert "jp5" not in block["jumpers"]
+        assert block["drawing"]
         for jumper in block["jumpers"].values():
-            assert set(jumper) == {"display", "choices", "selected_label"}
+            assert set(jumper) == {"choices", "selected_label", "instruction"}
 
     def _no_jp5_or_22(node: object) -> None:
         if isinstance(node, dict):

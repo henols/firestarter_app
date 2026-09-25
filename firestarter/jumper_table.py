@@ -424,52 +424,134 @@ def lookup(pin_map_key: str | None) -> JumperEntry | None:
 # Rendering to display data
 # ---------------------------------------------------------------------------
 
-_THREE_PIN_OFF = " ● ● ● "
-_THREE_PIN_LEFT = "(● ●)● "
-_THREE_PIN_RIGHT = " ●(● ●)"
-_TWO_PIN_OPEN = " ● ●   "
-_TWO_PIN_CLOSED = "(● ●)  "
+# The drawings show each header the way it sits on the board, with its silkscreen pin names:
+#
+# - Rev 0/1: JP2, JP1 and JP3 stand in a row, each as a column of three pins with 5V (JP3: D) at the
+#   top. JP1 and JP2 have a square pad at the top. Source: the silkscreen legend of the Rev 0 board
+#   in the Phase 182 photo `shield-rev0-modified-jp1-jp2-jp3.jpg`. A is the socket pin 30 net, B is
+#   the socket pin 28 net, C is socket pin 3 and D is socket pin 1.
+# - Rev 2.0/2.1: two pads side by side, the square pad on the right (`shield-rev2-jp4-jp5.jpg`).
+# - Rev 2.2/2.3: the square common pad is at the corner. As seen with the silkscreen text upright,
+#   the pole to its right points toward the board edge (24-pin pole) and the pole below it points
+#   toward the ZIF socket (28-pin pole) (`shield-rev2.2-jp4-jp5-jp6-jp9.jpg` and 182-06).
+#
+# A jumper is drawn (═ or ║) only where the chip needs one.
 
-# Each Rev 0/1 jumper is a three-pin header. The left label is the left pin pair, the right label
-# is the right pin pair.
-_REV01_LAYOUT: dict[str, tuple[str, str]] = {
-    "jp1": (Jp1.VCC.value, Jp1.A13.value),
-    "jp2": (Jp2.VCC.value, Jp2.A17.value),
-    "jp3": (Jp3.PIN28.value, Jp3.PIN32.value),
-}
+_PIN = "●"
+_SQUARE_PAD = "■"
+_BRIDGE_ACROSS = "══"
+_BRIDGE_DOWN = "║"
+_INDENT = "  "
+_REV01_COLUMN_WIDTH = 20
+
+JP4_SILKSCREEN_LINE = f"JP4 silkscreen: {JP4_SILKSCREEN_RULE}"
+
+NO_JUMPER_TEXT = "No jumper."
+DOES_NOT_MATTER_TEXT = "Does not matter."
+BRIDGE_FORMAT = "Bridge {common} to {pin}."
+REV20_CLOSED_TEXT = "Fit the jumper (Closed)."
+REV20_OPEN_TEXT = "No jumper (Open)."
+POLE_28_TEXT = "Fit the jumper on the 28-pin pole."
+POLE_24_TEXT = "Fit the jumper on the 24-pin pole."
+POLE_24_LABEL = "24-pin pole, toward the board edge"
+POLE_28_LABEL = "28-pin pole, toward the ZIF socket"
 
 
-def _three_pin_display(setting: Enum, left: str, right: str) -> str:
-    if setting.value == left:
-        return _THREE_PIN_LEFT
-    if setting.value == right:
-        return _THREE_PIN_RIGHT
-    return _THREE_PIN_OFF
+@dataclass(frozen=True)
+class _ThreePinHeader:
+    """A Rev 0/1 three-pin header: silkscreen names from top to bottom, and the top pad shape."""
+
+    name: str
+    top: str
+    common: str
+    bottom: str
+    top_pad: str
+    top_setting: Enum
+    bottom_setting: Enum
 
 
-def _rev01_jumper(name: str, setting: Enum) -> dict[str, str]:
-    left, right = _REV01_LAYOUT[name]
+_REV01_HEADERS = (
+    _ThreePinHeader("JP2", "5V", "A", "A17", _SQUARE_PAD, Jp2.VCC, Jp2.A17),
+    _ThreePinHeader("JP1", "5V", "B", "A13", _SQUARE_PAD, Jp1.VCC, Jp1.A13),
+    _ThreePinHeader("JP3", "D", "VPP", "C", _PIN, Jp3.PIN32, Jp3.PIN28),
+)
+
+
+def _rev01_instruction(header: _ThreePinHeader, setting: Enum) -> str:
+    if setting is header.top_setting:
+        return BRIDGE_FORMAT.format(common=header.common, pin=header.top)
+    if setting is header.bottom_setting:
+        return BRIDGE_FORMAT.format(common=header.common, pin=header.bottom)
+    if setting in (Jp2.DOES_NOT_MATTER, Jp3.DOES_NOT_MATTER):
+        return DOES_NOT_MATTER_TEXT
+    return NO_JUMPER_TEXT
+
+
+def _rev01_column(header: _ThreePinHeader, setting: Enum) -> list[str]:
+    up = _BRIDGE_DOWN if setting is header.top_setting else " "
+    down = _BRIDGE_DOWN if setting is header.bottom_setting else " "
+    return [
+        f"{'':4}{header.name}",
+        f"{header.top:>4} {header.top_pad}",
+        f"{'':5}{up}",
+        f"{header.common:>4} {_PIN}",
+        f"{'':5}{down}",
+        f"{header.bottom:>4} {_PIN}",
+        _rev01_instruction(header, setting),
+    ]
+
+
+def _rev01_drawing(settings: tuple[Enum, ...]) -> list[str]:
+    columns = [_rev01_column(h, st) for h, st in zip(_REV01_HEADERS, settings)]
+    return [
+        (
+            _INDENT + "".join(col[row].ljust(_REV01_COLUMN_WIDTH) for col in columns)
+        ).rstrip()
+        for row in range(len(columns[0]))
+    ]
+
+
+def _rev20_instruction(setting: Jp4Rev20) -> str:
+    if setting is Jp4Rev20.CLOSED:
+        return REV20_CLOSED_TEXT
+    if setting is Jp4Rev20.OPEN:
+        return REV20_OPEN_TEXT
+    return DOES_NOT_MATTER_TEXT
+
+
+def _rev20_drawing(setting: Jp4Rev20) -> list[str]:
+    bridge = _BRIDGE_ACROSS if setting is Jp4Rev20.CLOSED else "  "
+    return [
+        _INDENT + JP4_SILKSCREEN_LINE,
+        f"{_INDENT}JP4  {_PIN}{bridge}{_SQUARE_PAD}   {_rev20_instruction(setting)}",
+    ]
+
+
+def _rev22_instruction(setting: Jp4Rev22) -> str:
+    if setting is Jp4Rev22.POLE_28:
+        return POLE_28_TEXT
+    if setting is Jp4Rev22.POLE_24:
+        return POLE_24_TEXT
+    return NO_JUMPER_TEXT
+
+
+def _rev22_drawing(setting: Jp4Rev22) -> list[str]:
+    across = _BRIDGE_ACROSS if setting is Jp4Rev22.POLE_24 else "  "
+    down = _BRIDGE_DOWN if setting is Jp4Rev22.POLE_28 else " "
+    return [
+        _INDENT + JP4_SILKSCREEN_LINE,
+        f"{_INDENT}JP4  {_SQUARE_PAD}{across}{_PIN}  {POLE_24_LABEL}",
+        f"{_INDENT}     {down}".rstrip(),
+        f"{_INDENT}     {_PIN}     {POLE_28_LABEL}",
+        _INDENT + _rev22_instruction(setting),
+    ]
+
+
+def _jumper(choices: str, setting: Enum, instruction: str) -> dict[str, str]:
     return {
-        "display": _three_pin_display(setting, left, right),
-        "choices": f"{left}, {right}",
+        "choices": choices,
         "selected_label": setting.value,
-    }
-
-
-def _rev20_jp4(setting: Jp4Rev20) -> dict[str, str]:
-    display = _TWO_PIN_CLOSED if setting is Jp4Rev20.CLOSED else _TWO_PIN_OPEN
-    return {
-        "display": display,
-        "choices": JP4_SILKSCREEN_RULE,
-        "selected_label": setting.value,
-    }
-
-
-def _rev22_jp4(setting: Jp4Rev22) -> dict[str, str]:
-    return {
-        "display": "",
-        "choices": JP4_SILKSCREEN_RULE,
-        "selected_label": setting.value,
+        "instruction": instruction,
     }
 
 
@@ -480,26 +562,46 @@ def _notes(notes: tuple[Note, ...]) -> list[str]:
 def render_blocks(entry: JumperEntry) -> dict[str, dict[str, Any]]:
     """Return the three revision blocks of one entry as display data.
 
-    Each block is `{"jumpers": {name: {display, choices, selected_label}}, "notes": [text]}`.
+    Each block is `{"jumpers": {name: {choices, selected_label, instruction}}, "drawing": [line],
+    "notes": [text]}`. The drawing shows the header pins and, where the chip needs a jumper, the
+    jumper.
     """
+    rev01 = (entry.jp2, entry.jp1, entry.jp3)
+    rev01_jumpers = {
+        h.name.lower(): _jumper(
+            f"{h.common} to {h.top} or {h.bottom}", st, _rev01_instruction(h, st)
+        )
+        for h, st in sorted(zip(_REV01_HEADERS, rev01), key=lambda pair: pair[0].name)
+    }
     rev20_notes = list(_notes(entry.rev20_notes))
     if entry.probe_pending:
         rev20_notes.append(PROBE_PENDING_TEXT)
     return {
         REV01_KEY: {
-            "jumpers": {
-                "jp1": _rev01_jumper("jp1", entry.jp1),
-                "jp2": _rev01_jumper("jp2", entry.jp2),
-                "jp3": _rev01_jumper("jp3", entry.jp3),
-            },
+            "jumpers": rev01_jumpers,
+            "drawing": _rev01_drawing(rev01),
             "notes": _notes(entry.rev01_notes),
         },
         REV20_KEY: {
-            "jumpers": {"jp4": _rev20_jp4(entry.rev20_jp4)},
+            "jumpers": {
+                "jp4": _jumper(
+                    JP4_SILKSCREEN_RULE,
+                    entry.rev20_jp4,
+                    _rev20_instruction(entry.rev20_jp4),
+                )
+            },
+            "drawing": _rev20_drawing(entry.rev20_jp4),
             "notes": rev20_notes,
         },
         REV22_KEY: {
-            "jumpers": {"jp4": _rev22_jp4(entry.rev22_jp4)},
+            "jumpers": {
+                "jp4": _jumper(
+                    JP4_SILKSCREEN_RULE,
+                    entry.rev22_jp4,
+                    _rev22_instruction(entry.rev22_jp4),
+                )
+            },
+            "drawing": _rev22_drawing(entry.rev22_jp4),
             "notes": _notes(entry.rev22_notes),
         },
     }

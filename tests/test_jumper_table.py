@@ -68,7 +68,7 @@ def _pin_count(pin_map_key: str) -> int:
 
 
 def _block_text(block: dict[str, Any]) -> list[str]:
-    text = list(block["notes"])
+    text = list(block["notes"]) + list(block["drawing"])
     for jumper in block["jumpers"].values():
         text.extend(jumper.values())
     return text
@@ -352,3 +352,80 @@ def test_jp5_note_only_where_pin_1_carries_a19() -> None:
     }
     assert with_note == {k for k, e in JUMPER_TABLE.items() if e.pin1_signal == "A19"}
     assert with_note == {"DIP32_27C801"}
+
+
+# --- The drawings show the pins, and a jumper only where one is needed ---------------------------
+
+BRIDGE_ACROSS = "══"
+BRIDGE_DOWN = "║"
+
+
+def _count(lines: list[str], glyph: str) -> int:
+    return sum(line.count(glyph) for line in lines)
+
+
+def test_rev01_drawing_bridges_exactly_the_jumpers_the_chip_needs() -> None:
+    for key, entry in JUMPER_TABLE.items():
+        drawing = jumper_table.render_blocks(entry)[REV01_KEY]["drawing"]
+        needed = (
+            1  # JP1 always selects 5V or A13
+            + (entry.jp2 is not Jp2.DOES_NOT_MATTER)
+            + (entry.jp3 in (Jp3.PIN28, Jp3.PIN32))
+        )
+        assert _count(drawing, BRIDGE_DOWN) == needed, key
+        assert _count(drawing, BRIDGE_ACROSS) == 0, key
+
+
+@pytest.mark.parametrize(
+    ("jp3", "bridged_row"),
+    [(Jp3.PIN32, 2), (Jp3.PIN28, 4)],
+)
+def test_rev01_jp3_bridge_goes_to_d_for_32pin_and_c_for_28pin(
+    jp3: Jp3, bridged_row: int
+) -> None:
+    entry = JUMPER_TABLE["DIP32_STD" if jp3 is Jp3.PIN32 else "DIP28_2764"]
+    drawing = jumper_table.render_blocks(entry)[REV01_KEY]["drawing"]
+    jp3_column = drawing[0].index("JP3") + 1
+    assert drawing[bridged_row][jp3_column] == BRIDGE_DOWN
+    other_row = 4 if bridged_row == 2 else 2
+    assert (
+        len(drawing[other_row]) <= jp3_column or drawing[other_row][jp3_column] == " "
+    )
+
+
+def test_rev20_drawing_bridges_only_when_closed() -> None:
+    for key, entry in JUMPER_TABLE.items():
+        drawing = jumper_table.render_blocks(entry)[REV20_KEY]["drawing"]
+        closed = entry.rev20_jp4 is Jp4Rev20.CLOSED
+        assert (_count(drawing, BRIDGE_ACROSS) == 1) is closed, key
+        assert _count(drawing, BRIDGE_DOWN) == 0, key
+
+
+def test_rev22_drawing_bridges_only_the_selected_pole() -> None:
+    for key, entry in JUMPER_TABLE.items():
+        drawing = jumper_table.render_blocks(entry)[REV22_KEY]["drawing"]
+        assert _count(drawing, BRIDGE_ACROSS) == (
+            entry.rev22_jp4 is Jp4Rev22.POLE_24
+        ), key
+        assert _count(drawing, BRIDGE_DOWN) == (entry.rev22_jp4 is Jp4Rev22.POLE_28), (
+            key
+        )
+
+
+def test_drawings_show_the_silkscreen_pin_names_and_have_no_trailing_space() -> None:
+    blocks = jumper_table.render_blocks(JUMPER_TABLE["DIP32_STD"])
+    rev01 = "\n".join(blocks[REV01_KEY]["drawing"])
+    for name in ("JP1", "JP2", "JP3", "5V", "A17", "A13", "VPP"):
+        assert name in rev01
+    for block in blocks.values():
+        assert _silkscreen_line(block) in (
+            None,
+            jumper_table.JP4_SILKSCREEN_LINE,
+        )
+        for line in block["drawing"]:
+            assert line == line.rstrip()
+
+
+def _silkscreen_line(block: dict[str, Any]) -> str | None:
+    lines = [ln.strip() for ln in block["drawing"] if "silkscreen" in ln]
+    return lines[0] if lines else None
