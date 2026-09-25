@@ -79,14 +79,8 @@ COMMAND_DEV_REGISTERS = 8
 # Their COMMAND_NAMES entries below are load-bearing, not cosmetic:
 # COMMAND_NAMES[cmd] is dereferenced by _setup_operation (eprom_operations.py:584)
 # and again by _operation_context (eprom_operations.py:693) — a missing entry
-# is a KeyError at operation setup, not a cosmetic display gap. Corrected
-# 2026-09-21 (Phase 204): the previous comment cited
-# test_command_names_dereferences_both_sdp_commands in
-# tests/test_revision_constants_parity.py, a test module that does not exist
-# anywhere under firestarter_app/tests/, and gave line numbers (329/405) that
-# no longer matched either dereference site. There is no dedicated test
-# pinning these two dereferences; the citation now names only the two real
-# call sites, by function name with the line number alongside.
+# is a KeyError at operation setup, not a cosmetic display gap. No test pins
+# these two dereferences.
 COMMAND_SDP_UNLOCK = 9
 COMMAND_SDP_LOCK = 10
 
@@ -99,9 +93,8 @@ COMMAND_HW_VERSION = 15
 # Protection-status read. A memory command on the
 # firmware side (is_memory_cmd()'s ninth arm, firestarter.h) because the
 # read is issued through firestarter_get_data, set only by
-# configure_memory() — no exemption needed in
-# test_revision_constants_parity.py's four-entry map; it maps to
-# COMMAND_LOCK_STATUS by the default CMD_X -> COMMAND_X rule.
+# configure_memory(). It maps to COMMAND_LOCK_STATUS by the default
+# CMD_X -> COMMAND_X naming rule.
 COMMAND_LOCK_STATUS = 16
 
 COMMAND_NAMES = {

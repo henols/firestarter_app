@@ -24,8 +24,7 @@ Two independent mechanisms, for two independent reasons:
   `_PY32_ENABLED` in `cli_handlers.py` are computed once at import time
   (127-RESEARCH.md Q4), so an in-process poke after this test process has
   already imported `cli_handlers` proves nothing about a *fresh* process's
-  import graph -- see `tests/test_skip_census.py`'s module docstring for
-  the same argument applied to a sibling frozen-at-import binding.
+  import graph.
 
 C-4 (`127-RESEARCH.md`, MEASURED): the message this module asserts on says
 `pip install 'firestarter[py32]'`, `libusb` and `WinUSB` -- the
@@ -123,8 +122,7 @@ for _name in [m for m in list(sys.modules) if m == "usb" or m.startswith("usb.")
     del sys.modules[_name]
 
 # Prove the blocker actually blocks BEFORE the CLI is imported -- a broken
-# blocker must surface as a child failure, never as a silently passing test
-# (the "prove the argument took effect" pattern from test_skip_census.py).
+# blocker must surface as a child failure, never as a silently passing test.
 try:
     import usb  # noqa: F401
 
@@ -190,8 +188,7 @@ def _run_blocked_cli(argv: tuple[str, ...]) -> _BlockedCliResult:
     test process has already imported `cli_handlers` would prove nothing about
     a fresh process's import graph.
 
-    Cached per `argv` (not per-module like `test_skip_census.py`'s single
-    cached run) because each invocation here is cheap and independent -- no
+    Cached per `argv` because each invocation here is cheap and independent -- no
     two tests need the identical argv's result composed differently.
     """
     program = _CHILD_PROGRAM_TEMPLATE.replace("__ARGV_JSON__", json.dumps(list(argv)))

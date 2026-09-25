@@ -35,8 +35,7 @@ structural fact.
 
 **Determinism.** Every assertion below holds identically whether or not
 `pyusb` is importable in this interpreter -- none of this module's assertions
-reach the network or an attached device. No skip marker of any kind; no
-`ALLOWED_SKIP_REASONS` entry needed (`tests/test_skip_census.py` covers that).
+reach the network or an attached device. No skip marker of any kind.
 """
 
 from __future__ import annotations

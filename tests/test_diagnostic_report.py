@@ -829,8 +829,7 @@ def test_a_planted_na_as_refusal_disqualifier_reddens_the_na_case_claim(monkeypa
     NA as a refusal must NOT be what `build_db_diff` uses -- if it were, an
     unsupported-write part's disposition would silently change, which this
     phase was not asked to do. Anchors the real predicate's False-for-NA
-    behaviour BEFORE mutating, per this project's anti-vacuity house style
-    (test_readback_inventory.py's assert-the-anchor-first triad).
+    behaviour BEFORE mutating, per this project's anti-vacuity house style.
     Static/in-process only -- monkeypatches one module attribute for the
     duration of this test; no bench run is implied."""
     import firestarter.diagnostic_report as dr
@@ -904,8 +903,7 @@ def test_a_planted_missing_write_ran_condition_reddens_the_refused_slots_claim()
 def test_comparing_a_real_disposition_against_an_empty_expected_set_fails_rather_than_passes_vacuously():
     """The standalone vacuity leg, explicitly separate from the two planted
     legs above: an empty expected-disposition set must fail against a real
-    disposition rather than passing vacuously (the same house standard
-    test_readback_inventory.py's third anti-vacuity leg establishes)."""
+    disposition rather than passing vacuously."""
     from firestarter.diagnostic_report import build_db_diff
 
     db = _mock_db()
@@ -1035,9 +1033,7 @@ def test_voltage_split_fields_serialize():
     """(RPT-B1, plan 181-09) The standalone half of this test's original
     claim had no subject after RPT-B1: `vpp_mv`/`vpe_mv` are deleted from
     the dataclass, from `_voltage_dict()` and from the schema, because no
-    code path had ever assigned them (proven by
-    `tests/test_voltage_field_census.py`'s attribute-scoped AST census, not
-    merely asserted here). The surviving half -- the destructive
+    code path had ever assigned them. The surviving half -- the destructive
     before/after pairing -- is untouched; only its own two now-dead
     assertions (`vpp_mv`/`vpe_mv` reading `NOT_MEASURED`) are replaced by a
     four-key mapping assertion naming neither deleted key."""

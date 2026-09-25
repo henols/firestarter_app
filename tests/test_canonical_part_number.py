@@ -17,8 +17,8 @@ writing a second normalization, so the two agree by construction rather
 than by coincidence -- `test_the_selector_agrees_with_the_database_lookup_
 for_every_alias` below is what makes that checkable rather than assumed.
 
-Anti-vacuity discipline (this project's house standard, see
-`test_readback_inventory.py`): every sweep asserts its own subject is real
+Anti-vacuity discipline (this project's house standard): every sweep
+asserts its own subject is real
 (non-empty) BEFORE asserting anything about it, and
 `test_an_empty_expected_alias_set_fails_rather_than_passing_vacuously`
 proves the sweep's own guard is load-bearing, not decorative.

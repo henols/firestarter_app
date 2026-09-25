@@ -35,16 +35,12 @@ body in place -- rather than in a fresh process -- re-evaluates every
 scratch, but `cli.py`'s `@cli.group()` / `add_command()` wiring still holds
 references to the *old* command objects. A test built on a module-reload
 approach would silently assert against a stale command object while
-believing it exercises the live one. `tests/test_skip_census.py`'s module
-docstring documents the identical frozen-at-import property for its own
-subject (`tests/fw_presence.py`'s `FW_REPO_PRESENT` / `FW_ABSENT_REASON`
-bindings) and reaches the same conclusion: an in-process re-run cannot see a
+believing it exercises the live one. An in-process re-run cannot see a
 different environment than the one that was live when the process started.
 
 **Determinism.** Every assertion below holds identically whether or not
 `pyusb` is importable in this interpreter -- none reaches the network or an
-attached device. This module carries no skip marker of any kind and adds no
-`ALLOWED_SKIP_REASONS` entry (`tests/test_skip_census.py` covers that).
+attached device. This module carries no skip marker of any kind.
 """
 
 from __future__ import annotations

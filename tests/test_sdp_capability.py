@@ -24,11 +24,9 @@ Coverage:
      predicate and the totality helper, proving this gate is capable of
      failing rather than a vacuous always-pass check.
 
-This module intentionally carries NO skip marker of any kind (FW_ABSENT or
-otherwise): it reads only the packaged chip_database.json, which is always
-present in host-only CI. A skip marker here would silently make HOST-04's
-partition gate vacuous, exactly the failure mode test_sdp_db_invariant.py's
-own module docstring warns against.
+This module intentionally carries NO skip marker of any kind: it reads only
+the packaged chip_database.json, which is always present in host-only CI. A
+skip marker here would silently make HOST-04's partition gate vacuous.
 
 The expected partition below is TRANSCRIBED from
 120-sdp-partition.json (itself derived from infoic.xml flags bit 15 --

@@ -53,8 +53,8 @@ class _FakeUsbDevice:
     real pyusb 1.3.1 (5th param renamed ``data_or_wLength``, trailing
     ``timeout`` added). All production call-sites in ``py32_dfu.py`` pass
     every argument positionally, which is why the pre-alignment drift never
-    surfaced as a test failure -- see ``tests/test_pyusb_gating.py``'s ast
-    scan and ``tests/test_pyusb_api_surface.py``'s fake-vs-real comparison.
+    surfaced as a test failure -- see ``tests/test_pyusb_api_surface.py``'s
+    fake-vs-real comparison.
     """
 
     def __init__(
