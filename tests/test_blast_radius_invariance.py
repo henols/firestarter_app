@@ -200,20 +200,26 @@ _DB_DIFF_KEYS = [
     "proposed_disposition",
 ]
 
-"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits twenty-one keys per
-step, UNCONDITIONALLY (Phase 178 plan 01 adds `status`, schema 1.8; Phase
-181 plan 07 adds the four `fingerprint_*` siblings (RPT-A2) and `divergence`
-(RPT-A3); Phase 181 plan 08 adds `chip_id_detected` (RPT-A5); quick task
-260916-nb9 adds `error_name` (schema 2.1), the catalog-resolved name beside
-the existing `error_code` integer) -- taken from `sst27sf512-six-step`'s
-first (`id`) step, whose five `write_*` fields, four `fingerprint_*`
-siblings and `divergence` all stay `None` because `id` carries no write
-target, no fingerprint and no read-step comparison, but `chip_id_detected`
-IS populated on this step (it is the id step), and all twenty-one KEYS are
-present regardless. The pin is over the key SET, not over which values are
-non-`None`."""
+"""D-07's seventh pin: `_step_dict()` (`:667-729`) emits twenty-three keys
+per step, UNCONDITIONALLY (Phase 178 plan 01 adds `status`, schema 1.8;
+Phase 181 plan 07 adds the four `fingerprint_*` siblings (RPT-A2) and
+`divergence` (RPT-A3); Phase 181 plan 08 adds `chip_id_detected` (RPT-A5);
+quick task 260916-nb9 adds `error_name` (schema 2.1), the catalog-resolved
+name beside the existing `error_code` integer; Phase 206 Task 1 adds
+`compare_evidence`, the blank-check step's own compare evidence
+(DEVTEST-01); Phase 206 Task 3 adds `compare_path`, which comparison engine
+the step's compare ran through (DEVTEST-02)) -- taken from
+`sst27sf512-six-step`'s first (`id`) step, whose five `write_*` fields, four
+`fingerprint_*` siblings, `divergence` and `compare_evidence` all stay
+`None`, and whose `compare_path` stays `""`, because `id` carries no write
+target, no fingerprint, no read-step comparison and no compare-drive of its
+own, but `chip_id_detected` IS populated on this step (it is the id step),
+and all twenty-three KEYS are present regardless. The pin is over the key
+SET, not over which values are non-`None`."""
 _STEPS_ELEMENT_0_KEYS = [
     "chip_id_detected",
+    "compare_evidence",
+    "compare_path",
     "divergence",
     "duration_s",
     "error_code",
@@ -345,6 +351,156 @@ def test_schema_bump_rekeys_no_frozen_hash() -> None:
             "allow-list grew a reflective read of to_dict() -- review the "
             "re-key as a commit separate from the schema bump."
         )
+
+
+def test_compare_evidence_does_not_move_any_frozen_hash() -> None:
+    """DEVTEST-01/T-206-08: the blank-check step's new additive
+    `compare_evidence` field is outside `dedup_fingerprint`'s five-entry
+    allow-list. Pins `len(FROZEN_HASHES) == 19` and asserts the tracer
+    shape's hash is unmoved when its blank-check step carries populated
+    evidence -- against the frozen literal, never a second computed
+    value, so a future allow-list widening that DID reach this field would
+    show up here rather than silently forking every filed report."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    assert len(FROZEN_HASHES) == 19
+    report = build_shape(_TRACER_SHAPE_ID)
+    blank_result = next(r for r in report.results if r.op == "blank-check")
+    idx = report.results.index(blank_result)
+    # `_dataclass_replace` reconstructs through `StepResult.__init__`, so
+    # this raises TypeError (unknown keyword) on unmodified source rather
+    # than silently succeeding via a bare attribute assignment that a
+    # slots-less dataclass would accept whether or not the field is
+    # declared -- the RED must fail because the field does not exist yet.
+    report.results[idx] = _dataclass_replace(
+        blank_result,
+        compare_evidence={
+            "bad": 3,
+            "compared": 512,
+            "first_offset": 5,
+            "first_actual": 0x12,
+            "ff_count": 100,
+            "aborted": False,
+            "classification": "address-line",
+        },
+    )
+
+    assert dedup_fingerprint(report) == FROZEN_HASHES[_TRACER_SHAPE_ID], (
+        f"{_TRACER_SHAPE_ID} re-keyed by a populated compare_evidence: "
+        "dedup_fingerprint's allow-list reached the new field -- review "
+        "the re-key as a commit separate from any behaviour change."
+    )
+
+
+def test_default_step_result_is_untagged_by_compare_path_tag() -> None:
+    """DEVTEST-02 empty case 1: a `StepResult` at the field's default
+    (`compare_path=""`) takes the untagged branch -- the property that
+    makes every hand-built `StepResult` in the frozen corpus, and every
+    pre-206 JSON-reconstructed one, provably immobile rather than hopefully
+    immobile."""
+    from firestarter.chip_test import StepResult, compare_path_tag
+
+    results = [StepResult(op="verify", verdict="OK")]
+    assert compare_path_tag(results) == ""
+
+
+def test_empty_results_list_is_untagged_by_compare_path_tag() -> None:
+    """DEVTEST-02 empty case 2: an empty results list takes the untagged
+    branch -- pins `synthetic-arm4-empty-results`'s own zero-results shape
+    at the discriminator-function level, not only at the frozen-hash
+    level."""
+    from firestarter.chip_test import compare_path_tag
+
+    assert compare_path_tag([]) == ""
+
+
+def test_planted_compare_path_host_reddens_the_gate() -> None:
+    """Leg 3 of the anti-vacuity contract, matching the two shipped
+    planted-mutation legs above: setting the tracer shape's compare step's
+    `compare_path` to the host value must move `dedup_fingerprint` away
+    from the frozen literal. Asserts inequality against the frozen literal,
+    never against a second computed value -- without this leg the tag
+    could be inert (present in the pre-image code but never actually
+    appended) and the frozen-hash gate would still read green."""
+    from firestarter.chip_test import COMPARE_PATH_HOST
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    report = build_shape(_TRACER_SHAPE_ID)
+    verify_result = next(r for r in report.results if r.op == "verify")
+    idx = report.results.index(verify_result)
+    report.results[idx] = _dataclass_replace(
+        verify_result, compare_path=COMPARE_PATH_HOST
+    )
+    assert dedup_fingerprint(report) != FROZEN_HASHES[_TRACER_SHAPE_ID], (
+        f"{_TRACER_SHAPE_ID} unmoved by a host-path compare_path -- "
+        "compare_path_tag appears inert: it is not actually reaching "
+        "dedup_fingerprint's pre-image"
+    )
+
+
+def test_two_runs_differing_only_in_compare_path_do_not_merge() -> None:
+    """DEVTEST-02 adjacency, direction 1: two reports identical in every
+    hashed component EXCEPT that one carries a host-path compare step must
+    NOT dedup to the same fingerprint -- a firmware-path report and a
+    host-path report of the same chip are mechanically different
+    measurements (Phase 202) and must never silently merge into one
+    `count_agreeing` group."""
+    from firestarter.chip_test import COMPARE_PATH_HOST
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    step_specs = [
+        ("id", "OK", None, ""),
+        ("verify", "OK", "match", ""),
+    ]
+    firmware_path = build_shape_from_step_specs(
+        chip="SST27SF512", protocol="7", step_specs=step_specs
+    )
+    host_path = build_shape_from_step_specs(
+        chip="SST27SF512", protocol="7", step_specs=step_specs
+    )
+    verify_result = next(r for r in host_path.results if r.op == "verify")
+    verify_result.compare_path = COMPARE_PATH_HOST
+
+    assert dedup_fingerprint(firmware_path) != dedup_fingerprint(host_path), (
+        "a report differing ONLY in compare_path merged with its "
+        "firmware-path counterpart"
+    )
+
+
+def test_two_runs_identical_in_every_hashed_component_do_not_separate() -> None:
+    """DEVTEST-02 adjacency, direction 2: two reports identical in every
+    HASHED component, but differing in a non-hashed field
+    (`compare_evidence`, a volatile field `dedup_fingerprint` never reads),
+    must still dedup to the SAME fingerprint -- the tag must not
+    over-separate reports that are, for dedup purposes, the same run."""
+    from firestarter.diagnostic_report import dedup_fingerprint
+
+    step_specs = [
+        ("id", "OK", None, ""),
+        ("blank-check", "OK", None, ""),
+    ]
+    plain = build_shape_from_step_specs(
+        chip="SST27SF512", protocol="7", step_specs=step_specs
+    )
+    with_evidence = build_shape_from_step_specs(
+        chip="SST27SF512", protocol="7", step_specs=step_specs
+    )
+    blank_result = next(r for r in with_evidence.results if r.op == "blank-check")
+    blank_result.compare_evidence = {
+        "bad": 0,
+        "compared": 512,
+        "first_offset": None,
+        "first_actual": None,
+        "ff_count": 512,
+        "aborted": False,
+        "classification": "match",
+    }
+
+    assert dedup_fingerprint(plain) == dedup_fingerprint(with_evidence), (
+        "two reports identical in every hashed component separated over a "
+        "non-hashed field -- compare_evidence must never reach the "
+        "dedup_fingerprint pre-image"
+    )
 
 
 def test_frozen_hashes_are_twelve_lowercase_hex_chars() -> None:

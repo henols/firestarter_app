@@ -23,6 +23,7 @@ from unittest.mock import Mock
 import pytest
 from click.testing import CliRunner
 
+import firestarter.cli_handlers as cli_handlers_mod
 from firestarter.cli_handlers import AppContext, cli
 from firestarter.config import ConfigManager
 from firestarter.database import EpromDatabase
@@ -30,6 +31,14 @@ from firestarter.eprom_info import EpromConsolePresenter
 from firestarter.eprom_operations import EpromOperator
 from firestarter.firmware import FirmwareManager
 from firestarter.hardware import HardwareManager
+from firestarter.messages import (
+    MSG_DATA_CHUNK,
+    MSG_END_DONE,
+    MSG_INIT_DONE,
+    MSG_MAIN_DONE,
+)
+
+from .conftest import build_frame
 
 
 @pytest.fixture
@@ -384,24 +393,21 @@ def test_write_no_blank_check_polarity(runner: CliRunner) -> None:
     """TRAP #3 / D-13.3: ``-b/--no-blank-check`` flips ``blank_check`` to False.
 
     Default (no flag): blank_check=True. With -b present: blank_check=False.
-    Verified by inspecting the FLAGS bit Click computes from --no-blank-check
-    and forwards to write_eprom via operation_flags. The FLAG_SKIP_BLANK_CHECK
-    bit (0x01) is set iff blank_check=False (matches build_flags in
-    eprom_operations.py:62).
+    FWBLANK-04 (Phase 205) retired the wire bit this used to travel as;
+    verified now by inspecting write_eprom's own `blank_check_requested`
+    keyword argument directly.
     """
-    from firestarter.constants import FLAG_SKIP_BLANK_CHECK
-
     operator = Mock(spec=EpromOperator)
     operator.write_eprom.return_value = True
 
-    # Default (no -b): blank_check should be True -> FLAG_SKIP_BLANK_CHECK NOT set.
+    # Default (no -b): blank_check should be True.
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["write", "W27C512", "in.bin"], obj=app)
     assert result.exit_code == 0
     _, kwargs = operator.write_eprom.call_args
-    assert not (kwargs["operation_flags"] & FLAG_SKIP_BLANK_CHECK)
+    assert kwargs["blank_check_requested"] is True
 
-    # With -b: blank_check should be False -> FLAG_SKIP_BLANK_CHECK set.
+    # With -b: blank_check should be False.
     operator.write_eprom.reset_mock()
     app2 = make_app_context(eprom_operator=operator)
     result2 = runner.invoke(
@@ -409,7 +415,7 @@ def test_write_no_blank_check_polarity(runner: CliRunner) -> None:
     )
     assert result2.exit_code == 0
     _, kwargs2 = operator.write_eprom.call_args
-    assert kwargs2["operation_flags"] & FLAG_SKIP_BLANK_CHECK
+    assert kwargs2["blank_check_requested"] is False
 
 
 def test_write_b_decouples_skip_erase_phase92(runner: CliRunner) -> None:
@@ -420,9 +426,11 @@ def test_write_b_decouples_skip_erase_phase92(runner: CliRunner) -> None:
     electrically-erasable chip silently skipped the required erase (leaving
     un-erasable 0->1 bits while the firmware reported "successful"). After the
     decouple, ``-b`` no longer sets FLAG_SKIP_ERASE; ``--skip-erase`` is the
-    explicit opt-in.
+    explicit opt-in. FWBLANK-04 (Phase 205) retired the wire bit ``-b`` used
+    to set; it now travels as write_eprom's `blank_check_requested` keyword
+    instead of an operation_flags bit.
     """
-    from firestarter.constants import FLAG_SKIP_BLANK_CHECK, FLAG_SKIP_ERASE
+    from firestarter.constants import FLAG_SKIP_ERASE
 
     operator = Mock(spec=EpromOperator)
     operator.write_eprom.return_value = True
@@ -431,9 +439,9 @@ def test_write_b_decouples_skip_erase_phase92(runner: CliRunner) -> None:
     app = make_app_context(eprom_operator=operator)
     r = runner.invoke(cli, ["write", "W27C512", "in.bin", "-b"], obj=app)
     assert r.exit_code == 0
-    f = operator.write_eprom.call_args.kwargs["operation_flags"]
-    assert f & FLAG_SKIP_BLANK_CHECK
-    assert not (f & FLAG_SKIP_ERASE)
+    kwargs = operator.write_eprom.call_args.kwargs
+    assert kwargs["blank_check_requested"] is False
+    assert not (kwargs["operation_flags"] & FLAG_SKIP_ERASE)
 
     # `write -b --skip-erase`: both skipped (explicit opt-in).
     operator.write_eprom.reset_mock()
@@ -442,54 +450,461 @@ def test_write_b_decouples_skip_erase_phase92(runner: CliRunner) -> None:
         cli, ["write", "W27C512", "in.bin", "-b", "--skip-erase"], obj=app2
     )
     assert r2.exit_code == 0
-    f2 = operator.write_eprom.call_args.kwargs["operation_flags"]
-    assert f2 & FLAG_SKIP_BLANK_CHECK
-    assert f2 & FLAG_SKIP_ERASE
+    kwargs2 = operator.write_eprom.call_args.kwargs
+    assert kwargs2["blank_check_requested"] is False
+    assert kwargs2["operation_flags"] & FLAG_SKIP_ERASE
 
     # plain `write`: neither skipped (erase runs, blank check runs).
     operator.write_eprom.reset_mock()
     app3 = make_app_context(eprom_operator=operator)
     r3 = runner.invoke(cli, ["write", "W27C512", "in.bin"], obj=app3)
     assert r3.exit_code == 0
-    f3 = operator.write_eprom.call_args.kwargs["operation_flags"]
-    assert not (f3 & FLAG_SKIP_BLANK_CHECK)
-    assert not (f3 & FLAG_SKIP_ERASE)
+    kwargs3 = operator.write_eprom.call_args.kwargs
+    assert kwargs3["blank_check_requested"] is True
+    assert not (kwargs3["operation_flags"] & FLAG_SKIP_ERASE)
 
 
 def test_verify_happy_path(runner: CliRunner) -> None:
-    """`firestarter verify W27C512 in.bin` exits 0 when verify_eprom returns True."""
+    """`firestarter verify W27C512 in.bin` exits 0 when verify_eprom returns 0.
+
+    202-01 D-10: verify_eprom returns an int (0 match / 1 mismatch /
+    2 transport-hardware-or-refusal); cli_handlers.verify now `sys.exit`s
+    directly on that int.
+    """
     operator = Mock(spec=EpromOperator)
-    operator.verify_eprom.return_value = True
+    operator.verify_eprom.return_value = 0
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["verify", "W27C512", "in.bin"], obj=app)
     assert result.exit_code == 0
 
 
-def test_verify_operator_returns_false(runner: CliRunner) -> None:
-    """`firestarter verify W27C512 in.bin` exits 1 when verify returns False."""
+def test_verify_operator_returns_mismatch(runner: CliRunner) -> None:
+    """`firestarter verify W27C512 in.bin` exits 1 when verify_eprom returns 1."""
     operator = Mock(spec=EpromOperator)
-    operator.verify_eprom.return_value = False
+    operator.verify_eprom.return_value = 1
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["verify", "W27C512", "in.bin"], obj=app)
     assert result.exit_code == 1
+
+
+def test_verify_operator_returns_setup_failure(runner: CliRunner) -> None:
+    """`firestarter verify W27C512 in.bin` exits 2 when verify_eprom returns 2
+    (D-10: transport, hardware, or a pre-wire region refusal)."""
+    operator = Mock(spec=EpromOperator)
+    operator.verify_eprom.return_value = 2
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["verify", "W27C512", "in.bin"], obj=app)
+    assert result.exit_code == 2
+
+
+def test_verify_cli_prints_range_line_and_bucket_summary_line(
+    runner: CliRunner,
+    make_comm,
+    fake_serial,
+    tmp_path,
+    monkeypatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Task 3 acceptance criterion: a `CliRunner` invocation of `verify`
+    against a mismatching fake chip produces output containing both a
+    range line (D-13) and the bucket summary line
+    `CompareAccumulator.finalise()` now populates via `classify_streamed`
+    (D-14, 202-03).
+
+    Drives the REAL `EpromOperator.verify_eprom` (not a `Mock`) through the
+    fake-serial harness `tests/test_eprom_operations.py`'s
+    `TestVerifyEpromHostSideRead` uses, so the range/bucket lines
+    `eprom_operations.verify_eprom` logs are genuinely produced by
+    production code -- not read off a mock's return value. `resolve_chip`
+    is patched to a minimal chip dict (mirroring
+    `tests/test_eprom_operations.py::_MINIMAL_EPROM_DATA`) so this test
+    does not also need a real chip's full bus-config from the shipped DB.
+
+    Asserts against `caplog.text`, not `result.output`, for the measured
+    reason `test_info_elevated_programming_vcc_warns` documents above: this
+    test passes a pre-built `obj=app`, so `cli()`'s test-mode short-circuit
+    skips `_setup_logging` entirely, and under pytest `result.output` is
+    always empty regardless of what was logged -- asserting against it
+    would pass vacuously. `caplog.at_level(logging.INFO, ...)` is the
+    correct capture surface inside pytest for `logger.info` output, and it
+    is still a genuine `CliRunner` invocation of production code end to end.
+    """
+    monkeypatch.setattr(
+        cli_handlers_mod,
+        "resolve_chip",
+        lambda name, db=None: {"memory-size": 300, "flags": 0, "cmd": 1},
+    )
+
+    length = 300  # > 256 so the bucket line's clustering path is exercised
+    expected_bytes = bytes(length)
+    input_file = tmp_path / "in.bin"
+    input_file.write_bytes(expected_bytes)
+
+    actual_bytes = bytearray(expected_bytes)
+    actual_bytes[5] = 0x01  # one mismatch: a range line + a bucket line
+
+    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+    fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(actual_bytes)))
+    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        return make_comm()
+
+    monkeypatch.setattr(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        _fake_find_and_connect,
+    )
+
+    operator = EpromOperator(ConfigManager())
+    app = make_app_context(eprom_operator=operator)
+
+    with caplog.at_level(logging.INFO, logger="EpromOperator"):
+        result = runner.invoke(cli, ["verify", "W27C512", str(input_file)], obj=app)
+
+    assert result.exit_code == 1
+    assert "Mismatch 0x" in caplog.text
+    assert " bad of " in caplog.text
+    assert " compared of " in caplog.text
 
 
 def test_blank_happy_path(runner: CliRunner) -> None:
-    """`firestarter blank W27C512` exits 0 when check_eprom_blank returns True."""
+    """`firestarter blank W27C512` exits 0 when check_eprom_blank returns 0.
+
+    202-05 D-10: check_eprom_blank returns an int (0 blank / 1 not blank /
+    2 transport-hardware-or-refusal); cli_handlers.blank now `sys.exit`s
+    directly on that int, the same shape 202-01 gave `verify`.
+    """
     operator = Mock(spec=EpromOperator)
-    operator.check_eprom_blank.return_value = True
+    operator.check_eprom_blank.return_value = 0
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["blank", "W27C512"], obj=app)
     assert result.exit_code == 0
 
 
-def test_blank_operator_returns_false(runner: CliRunner) -> None:
-    """`firestarter blank W27C512` exits 1 when check_eprom_blank returns False."""
+def test_blank_operator_returns_mismatch(runner: CliRunner) -> None:
+    """`firestarter blank W27C512` exits 1 when check_eprom_blank returns 1."""
     operator = Mock(spec=EpromOperator)
-    operator.check_eprom_blank.return_value = False
+    operator.check_eprom_blank.return_value = 1
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["blank", "W27C512"], obj=app)
     assert result.exit_code == 1
+
+
+def test_blank_operator_returns_setup_failure(runner: CliRunner) -> None:
+    """`firestarter blank W27C512` exits 2 when check_eprom_blank returns 2
+    (D-10: transport, hardware, or a pre-wire region refusal)."""
+    operator = Mock(spec=EpromOperator)
+    operator.check_eprom_blank.return_value = 2
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["blank", "W27C512"], obj=app)
+    assert result.exit_code == 2
+
+
+# CMP-08 / D-17: region options and the two pre-wire refusals, shared by
+# `verify` and `blank`.
+
+
+def test_verify_refuses_size_larger_than_input_file_before_opening_the_port(
+    runner: CliRunner, tmp_path
+) -> None:
+    """An explicit `--size` longer than the input file must be refused with
+    exit 2, naming both the file's actual length and the requested size --
+    and it must never open the serial connection."""
+    input_file = tmp_path / "in.bin"
+    input_file.write_bytes(b"\x01\x02\x03\x04")  # 4 bytes
+
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+
+    with pytest.MonkeyPatch.context() as mp:
+        connect_spy = Mock()
+        mp.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect", connect_spy
+        )
+        result = runner.invoke(
+            cli, ["verify", "W27C512", str(input_file), "-s", "64"], obj=app
+        )
+
+    assert result.exit_code == 2, result.output
+    assert "4" in result.output
+    assert "64" in result.output
+    connect_spy.assert_not_called()
+    operator.verify_eprom.assert_not_called()
+
+
+@pytest.mark.parametrize("command", ["verify", "blank"])
+def test_region_past_chip_end_is_refused_before_opening_the_port(
+    runner: CliRunner, tmp_path, command: str
+) -> None:
+    """A start address + size (or, for `blank`, size alone) whose sum
+    exceeds the chip's declared size must be refused with exit 2, naming
+    the chip's declared size -- and must never open the serial connection.
+    `-a 0x10000 -s 1` against W27C512 (a 65536-byte / 0x10000 chip) starts
+    exactly at the chip's end, so even one byte overruns it.
+    """
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+
+    args = [command, "W27C512"]
+    if command == "verify":
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(b"\x01")
+        args.append(str(input_file))
+    args += ["-a", "0x10000", "-s", "1"]
+
+    with pytest.MonkeyPatch.context() as mp:
+        connect_spy = Mock()
+        mp.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect", connect_spy
+        )
+        result = runner.invoke(cli, args, obj=app)
+
+    assert result.exit_code == 2, result.output
+    assert "10000" in result.output.upper() or "65536" in result.output
+    connect_spy.assert_not_called()
+    operator.verify_eprom.assert_not_called()
+    operator.check_eprom_blank.assert_not_called()
+
+
+# CR-01 (202-05 code review): `-a` alone (no `--size`) against `blank` used to
+# skip the past-chip-end check entirely -- `_region_refusal_exit_code` left
+# `length` as `None` whenever both `--size` and `input_file` were absent, on
+# the reasoning that blank's whole-chip default has "nothing to bound". That
+# reasoning only holds when `start == 0`; with `-a` given and no `-s`, the
+# declared region is "the rest of the chip from `addr` onward", a real,
+# boundable length. These legs are the mirror image of
+# `test_region_past_chip_end_is_refused_before_opening_the_port` above,
+# which only ever supplied `-a` AND `-s` together and so never exercised
+# this path.
+
+
+@pytest.mark.parametrize("command", ["verify", "blank"])
+def test_address_alone_past_chip_end_is_refused_before_opening_the_port(
+    runner: CliRunner, tmp_path, command: str
+) -> None:
+    """`-a <past-end-address>` with NO `--size` must still be refused with
+    exit 2 and must never open the serial connection -- CR-01's exact
+    repro, generalised to both commands. W27C512 is 65536 (0x10000) bytes;
+    `-a 0x10001` is one byte past its end."""
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+
+    args = [command, "W27C512"]
+    if command == "verify":
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(b"\x01")
+        args.append(str(input_file))
+    args += ["-a", "0x10001"]
+
+    with pytest.MonkeyPatch.context() as mp:
+        connect_spy = Mock()
+        mp.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect", connect_spy
+        )
+        result = runner.invoke(cli, args, obj=app)
+
+    assert result.exit_code == 2, result.output
+    assert "10001" in result.output.upper() or "65536" in result.output
+    connect_spy.assert_not_called()
+    operator.verify_eprom.assert_not_called()
+    operator.check_eprom_blank.assert_not_called()
+
+
+@pytest.mark.parametrize("command", ["verify", "blank"])
+def test_address_alone_exactly_at_chip_end_is_refused(
+    runner: CliRunner, tmp_path, command: str
+) -> None:
+    """`-a <memory-size>` exactly, with no `--size`, is past the last
+    addressable byte (valid addresses are `[0, memory-size)`) and must be
+    refused -- the explicit boundary decision CR-01 records. W27C512 is
+    65536 (0x10000) bytes, so `-a 0x10000` starts exactly at its end."""
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+
+    args = [command, "W27C512"]
+    if command == "verify":
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(b"\x01")
+        args.append(str(input_file))
+    args += ["-a", "0x10000"]
+
+    with pytest.MonkeyPatch.context() as mp:
+        connect_spy = Mock()
+        mp.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect", connect_spy
+        )
+        result = runner.invoke(cli, args, obj=app)
+
+    assert result.exit_code == 2, result.output
+    connect_spy.assert_not_called()
+    operator.verify_eprom.assert_not_called()
+    operator.check_eprom_blank.assert_not_called()
+
+
+def test_blank_address_alone_at_last_valid_byte_is_not_refused(
+    runner: CliRunner,
+) -> None:
+    """The negative control CR-01 requires: `-a <memory-size - 1>` with no
+    `--size` is the LAST valid byte (one-byte region ending exactly at the
+    chip's declared size) and must NOT be refused -- proving the new guard
+    doesn't satisfy itself by refusing everything. W27C512 is 65536
+    (0x10000) bytes, so `-a 0xFFFF` is its last valid address."""
+    operator = Mock(spec=EpromOperator)
+    operator.check_eprom_blank.return_value = 0
+    app = make_app_context(eprom_operator=operator)
+
+    result = runner.invoke(cli, ["blank", "W27C512", "-a", "0xFFFF"], obj=app)
+
+    assert result.exit_code == 0, result.output
+    operator.check_eprom_blank.assert_called_once()
+
+
+def test_region_scoped_verify_composes_a_command_dict_bounding_exact_region(
+    runner: CliRunner, make_comm, fake_serial, tmp_path, monkeypatch
+) -> None:
+    """A region-scoped `verify` run composes a command dict whose start
+    address and end address (`address` + `memory-size`) bound exactly the
+    requested region -- proof that `-a`/`-s` genuinely reach the wire."""
+    monkeypatch.setattr(
+        cli_handlers_mod,
+        "resolve_chip",
+        lambda name, db=None: {"memory-size": 4096, "flags": 0, "cmd": 1},
+    )
+
+    payload = b"\xaa\xbb\xcc\xdd"
+    input_file = tmp_path / "in.bin"
+    input_file.write_bytes(payload)
+
+    command_dicts: list[dict] = []
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        command_dicts.append(dict(command_dict))
+        return make_comm()
+
+    fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+    fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+    fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+    fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+    monkeypatch.setattr(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        _fake_find_and_connect,
+    )
+
+    operator = EpromOperator(ConfigManager())
+    app = make_app_context(eprom_operator=operator)
+
+    result = runner.invoke(
+        cli,
+        ["verify", "W27C512", str(input_file), "-a", "0x100", "-s", "4"],
+        obj=app,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert command_dicts, "find_and_connect was never called"
+    cd = command_dicts[0]
+    assert cd["address"] == 0x100
+    assert cd["memory-size"] == 0x100 + 4
+
+
+def test_map_typed_errors_never_exits_the_process_directly() -> None:
+    """D-11's scope bound, proven structurally: `map_typed_errors`'s own
+    source contains no direct process exit and no assignment overriding a
+    Click exception's exit code, so every path through it still exits 1."""
+    import inspect
+
+    source = inspect.getsource(cli_handlers_mod.map_typed_errors)
+    assert "sys.exit" not in source
+    assert "os._exit" not in source
+    assert "exit_code" not in source
+
+
+def test_verify_and_blank_docstrings_name_all_three_exit_codes() -> None:
+    """Both command docstrings must state the three exit codes -- this is
+    what `--help` prints, so an operator reading it sees the contract.
+    `.help` (not `.__doc__`, which reads Click's `Command` class docstring
+    on the wrapped `click.Command` object) is Click's own parsed rendering
+    of the function's docstring."""
+    for cmd in (cli_handlers_mod.verify, cli_handlers_mod.blank):
+        doc = cmd.help or ""
+        assert "0" in doc
+        assert "1" in doc
+        assert "2" in doc
+
+
+# Task 3: the exit-code matrix, with two distinct routes to 2 per command,
+# each distinguished from a Click usage error (which also exits 2, D-10's
+# accepted cost) by the message it prints.
+
+
+def test_map_typed_errors_still_exits_one_for_a_third_command(
+    runner: CliRunner,
+) -> None:
+    """D-11's scope bound, proven behaviourally (not just by source
+    inspection): `map_typed_errors` must still map a typed error to exit 1
+    for a command other than `verify`/`blank`, proving the decorator was
+    not widened to exit 2 for chip-op commands generally."""
+    from firestarter.exceptions import EpromOperationError
+
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.side_effect = EpromOperationError("simulated hardware fault")
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512"], obj=app)
+    assert result.exit_code == 1, result.output
+
+
+@pytest.mark.parametrize("command", ["verify", "blank"])
+def test_service_setup_failure_route_to_exit_2_names_its_own_message(
+    runner: CliRunner, tmp_path, caplog: pytest.LogCaptureFixture, command: str
+) -> None:
+    """The FIRST route to exit 2: a real `EpromOperator` setup failure
+    (a transport error before any command reaches the wire). Its own
+    logged message is what distinguishes it from a Click usage error, which
+    never reaches `EpromOperator`'s logger at all. Drives a REAL operator
+    (not a `Mock`) so the message asserted is genuinely service-emitted,
+    not read off a mock's configured return value.
+    """
+    from firestarter.exceptions import SerialError
+
+    args = [command, "W27C512"]
+    if command == "verify":
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(b"\x01\x02\x03\x04")
+        args.append(str(input_file))
+
+    operator = EpromOperator(ConfigManager())
+    app = make_app_context(eprom_operator=operator)
+
+    with (
+        caplog.at_level(logging.ERROR, logger="EpromOperator"),
+        pytest.MonkeyPatch.context() as mp,
+    ):
+        mp.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            Mock(side_effect=SerialError("no board attached")),
+        )
+        result = runner.invoke(cli, args, obj=app)
+
+    assert result.exit_code == 2, result.output
+    assert "Usage:" not in result.output
+    assert "Failed to setup operation" in caplog.text
+
+
+@pytest.mark.parametrize("command", ["verify", "blank"])
+def test_usage_error_also_exits_2_but_never_reaches_the_operator(
+    runner: CliRunner, command: str
+) -> None:
+    """Click's own `UsageError` also exits 2 (D-10's accepted cost) -- but
+    it prints a "Usage:" banner and never reaches the operator at all, so
+    it is never confused with a genuine transport/hardware/region verdict."""
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, [command, "--not-a-real-flag"], obj=app)
+    assert result.exit_code == 2, result.output
+    assert "Usage:" in result.output
+    operator.verify_eprom.assert_not_called()
+    operator.check_eprom_blank.assert_not_called()
 
 
 def test_erase_happy_path(runner: CliRunner) -> None:
@@ -502,29 +917,37 @@ def test_erase_happy_path(runner: CliRunner) -> None:
 
 
 def test_erase_blank_check_polarity(runner: CliRunner) -> None:
-    """TRAP #3 / D-13.3: erase ``-b/--blank-check`` polarity is the inverse of
-    write's ``--no-blank-check`` — both coexist verbatim.
+    """TRAP #3 / D-13.3 (historical): erase ``-b/--blank-check`` polarity is
+    the inverse of write's ``--no-blank-check`` — both coexist verbatim.
 
-    Default (no -b): blank_check=False -> FLAG_SKIP_BLANK_CHECK SET.
-    With -b: blank_check=True -> FLAG_SKIP_BLANK_CHECK NOT set.
+    FWBLANK-04 (Phase 205 Plan 04) retired the wire bit this test used to
+    observe on `operation_flags` -- `_build_op_flags` no longer composes
+    any such bit for either command, with `-b` present or absent.
+    `erase()`'s own post-erase check (D-01/D-02, Phase 205 Plan 01) is
+    driven entirely by the CLI's own `blank_check` local variable calling
+    `check_eprom_blank` directly, never through a flag on the erase
+    command's wire frame; that dispatch has its own coverage elsewhere.
+    This leg is re-anchored to assert the wire-composition invariant
+    directly: no flag distinguishes the two invocations any more.
     """
-    from firestarter.constants import FLAG_SKIP_BLANK_CHECK
-
     operator = Mock(spec=EpromOperator)
     operator.erase_eprom.return_value = True
 
-    # Default (no -b): blank_check=False -> SKIP set.
     app = make_app_context(eprom_operator=operator)
     runner.invoke(cli, ["erase", "W27C512"], obj=app)
     _, kwargs = operator.erase_eprom.call_args
-    assert kwargs["operation_flags"] & FLAG_SKIP_BLANK_CHECK
+    flags_without_b = kwargs["operation_flags"]
 
-    # With -b: blank_check=True -> SKIP not set.
     operator.erase_eprom.reset_mock()
     app2 = make_app_context(eprom_operator=operator)
     runner.invoke(cli, ["erase", "W27C512", "-b"], obj=app2)
     _, kwargs2 = operator.erase_eprom.call_args
-    assert not (kwargs2["operation_flags"] & FLAG_SKIP_BLANK_CHECK)
+    flags_with_b = kwargs2["operation_flags"]
+
+    assert flags_without_b == flags_with_b, (
+        "erase's operation_flags must be identical with and without -b -- "
+        "the retired skip-blank-check bit no longer distinguishes them"
+    )
 
 
 def test_erase_operator_returns_false(runner: CliRunner) -> None:
@@ -534,6 +957,194 @@ def test_erase_operator_returns_false(runner: CliRunner) -> None:
     app = make_app_context(eprom_operator=operator)
     result = runner.invoke(cli, ["erase", "W27C512"], obj=app)
     assert result.exit_code == 1
+
+
+# 205-01 / D-01/D-02/D-03: `erase -b` gains a host-side post-erase blank
+# check through Phase 202's `check_eprom_blank`, with a 0/1/2 exit contract.
+# `check_eprom_blank` is the "fake operator" surface here, exactly like the
+# `blank` command's own tests above -- the CLI layer's job is only to call
+# it and `sys.exit` on its verdict with no mapping layer, so these legs pin
+# that wiring without exercising the real serial-I/O engine.
+
+
+def test_erase_blank_check_exits_zero_when_the_part_reads_blank(
+    runner: CliRunner,
+) -> None:
+    """`erase -b`, erase succeeds, `check_eprom_blank` returns 0 (all
+    blank): exits 0, and the check actually ran."""
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = True
+    operator.check_eprom_blank.return_value = 0
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512", "-b"], obj=app)
+    assert result.exit_code == 0
+    operator.check_eprom_blank.assert_called_once()
+
+
+def test_erase_blank_check_exits_one_when_the_part_is_not_blank(
+    runner: CliRunner,
+) -> None:
+    """`erase -b`, erase succeeds, `check_eprom_blank` returns 1 (at least
+    one non-blank byte): exits 1 -- distinct from a transport/setup
+    failure (exit 2, next leg)."""
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = True
+    operator.check_eprom_blank.return_value = 1
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512", "-b"], obj=app)
+    assert result.exit_code == 1
+
+
+def test_erase_blank_check_exits_two_when_the_check_itself_fails(
+    runner: CliRunner,
+) -> None:
+    """`erase -b`, erase succeeds, `check_eprom_blank` returns 2 (transport,
+    hardware or setup failure): exits 2. D-02: never folded into the 0/1
+    chip verdict -- the defect already filed against `dev test`'s blank
+    step this plan refuses to reproduce."""
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = True
+    operator.check_eprom_blank.return_value = 2
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512", "-b"], obj=app)
+    assert result.exit_code == 2
+
+
+def test_erase_blank_check_prints_exactly_one_line_on_a_failed_check(
+    runner: CliRunner, caplog: pytest.LogCaptureFixture
+) -> None:
+    """D-03: a failed post-erase check prints exactly one line -- asserted
+    by the caplog record count, not a substring, so a future regression
+    that stacks a second diagnostic line on top of `check_eprom_blank`'s
+    own is caught.
+
+    Per the measured fact documented on
+    `test_info_elevated_programming_vcc_warns` above, `result.output` is
+    always `''` for logging-based output under pytest (pytest's own root
+    handler suppresses the `logging.lastResort` stderr fallback `CliRunner`
+    would otherwise pick up), so this asserts against `caplog.records`,
+    the correct capture surface here. The mock's `side_effect` reproduces
+    exactly the one `logger.error(...)` call the real `check_eprom_blank`
+    makes on a non-blank verdict, so this leg proves the CLI layer adds no
+    second line of its own -- it does not re-prove `check_eprom_blank`'s
+    own message shape, which is already covered in
+    `tests/test_eprom_operations.py`.
+    """
+    op_logger = logging.getLogger("EpromOperator")
+
+    def _one_error_line_then_not_blank(*args: object, **kwargs: object) -> int:
+        op_logger.error("Blank check for W27C512 failed.")
+        return 1
+
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = True
+    operator.check_eprom_blank.side_effect = _one_error_line_then_not_blank
+    app = make_app_context(eprom_operator=operator)
+
+    with caplog.at_level(logging.ERROR, logger="EpromOperator"):
+        result = runner.invoke(cli, ["erase", "W27C512", "-b"], obj=app)
+
+    assert result.exit_code == 1
+    assert len(caplog.records) == 1, caplog.records
+
+
+def test_erase_without_blank_check_opens_no_second_port_and_keeps_zero_one(
+    runner: CliRunner,
+) -> None:
+    """Plain `erase` (no `-b`) is unchanged: exactly one port open (the
+    erase itself, via `erase_eprom`), no call into `check_eprom_blank`, and
+    the existing 0/1 exit codes for both the success and failure case."""
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = True
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512"], obj=app)
+    assert result.exit_code == 0
+    operator.erase_eprom.assert_called_once()
+    operator.check_eprom_blank.assert_not_called()
+
+    operator.erase_eprom.reset_mock()
+    operator.erase_eprom.return_value = False
+    result = runner.invoke(cli, ["erase", "W27C512"], obj=app)
+    assert result.exit_code == 1
+    operator.erase_eprom.assert_called_once()
+    operator.check_eprom_blank.assert_not_called()
+
+
+def test_erase_blank_check_does_not_run_when_the_erase_failed(
+    runner: CliRunner,
+) -> None:
+    """`erase -b` where `erase_eprom` returns False: exits 1 and the blank
+    check never runs, so no second port is opened (Fork D) -- a not-blank
+    verdict for a part that was never erased would be a fabricated claim
+    about silicon, the same shape D-02 exists to refuse."""
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = False
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512", "-b"], obj=app)
+    assert result.exit_code == 1
+    operator.check_eprom_blank.assert_not_called()
+
+
+def test_erase_has_no_full_option(runner: CliRunner) -> None:
+    """D-03: `erase` gains no `--full` option; the documented escape hatch
+    is `firestarter blank <chip> --full`. Click's own `UsageError` refuses
+    it before the operator is ever reached."""
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512", "--full"], obj=app)
+    assert result.exit_code == 2, result.output
+    assert "Usage:" in result.output
+    operator.erase_eprom.assert_not_called()
+
+
+# 205-01 / OQ-1: `erase -s <addr> -b` is refused before the erase runs.
+# Measured hazard (205-RESEARCH.md): on protocol 0x06, a non-zero
+# `handle->address` selects a SECTOR erase in `flash_nor_unlock_erase_execute`,
+# not the whole-device erase D-01's host-side check assumes. An unconditional
+# whole-device check after a sector erase would report the untouched
+# remainder as non-blank -- a reliable false negative -- so the combination
+# is refused in the CLI tier, before any port opens.
+
+
+def test_erase_sector_address_with_blank_check_is_refused_before_the_erase(
+    runner: CliRunner,
+) -> None:
+    """`erase -s 0x10000 -b` exits 2, prints exactly one line -- the full
+    refusal sentence, not a substring -- and never erases or opens a port."""
+    operator = Mock(spec=EpromOperator)
+    app = make_app_context(eprom_operator=operator)
+
+    with pytest.MonkeyPatch.context() as mp:
+        connect_spy = Mock()
+        mp.setattr(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect", connect_spy
+        )
+        result = runner.invoke(
+            cli, ["erase", "W27C512", "-s", "0x10000", "-b"], obj=app
+        )
+
+    assert result.exit_code == 2, result.output
+    expected = cli_handlers_mod._ERASE_SECTOR_BLANK_REFUSAL.format(eprom="W27C512")
+    assert result.output.strip() == expected
+    connect_spy.assert_not_called()
+    operator.erase_eprom.assert_not_called()
+    operator.check_eprom_blank.assert_not_called()
+
+
+def test_erase_sector_address_without_blank_check_still_runs(
+    runner: CliRunner,
+) -> None:
+    """`-s` alone (no `-b`) is unaffected by the OQ-1 refusal: the sector
+    erase still runs exactly as it does today, with the sector address
+    reaching `erase_eprom` unchanged."""
+    operator = Mock(spec=EpromOperator)
+    operator.erase_eprom.return_value = True
+    app = make_app_context(eprom_operator=operator)
+    result = runner.invoke(cli, ["erase", "W27C512", "-s", "0x10000"], obj=app)
+    assert result.exit_code == 0
+    operator.erase_eprom.assert_called_once()
+    _, kwargs = operator.erase_eprom.call_args
+    assert kwargs["address_str"] == "0x10000"
 
 
 def test_id_happy_path(runner: CliRunner) -> None:

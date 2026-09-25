@@ -7,7 +7,10 @@ Debug session w27c512-devtest-all-bad (henols/firestarter_prom#41).
 `response.id` as `error_code` -- and returns `(False, str(e))`.
 `write_eprom` and `verify_eprom` then throw the string away
 (`is_ok, _ = ...`); `erase_eprom` and `check_eprom_blank` keep it but only
-log it on SUCCESS. All four return a bare bool. So
+log it on SUCCESS. All four returned a bare bool at the time this session's
+bug was fixed. `verify_eprom` (202-01) and `check_eprom_blank` (202-05) have
+since migrated to the 0/1/2 int convention D-10 introduced; `write_eprom`
+and `erase_eprom` still return a bare bool. So
 `chip_test._run_step`'s `except EpromOperationError: ... error_code=
 exc.error_code` handler is STRUCTURALLY UNREACHABLE for those four ops, and
 every failing write/verify/erase/blank-check step in a `dev test` report
@@ -96,8 +99,12 @@ def _failing_operator(*, failing: str, code: int = MSG_ERR_NOT_BLANK, text: str)
     operator = Mock()
     operator.check_eprom_id.return_value = (True, 0xDA08)
     operator.read_eprom.return_value = True
-    for method in ("check_eprom_blank", "write_eprom", "verify_eprom", "erase_eprom"):
+    for method in ("write_eprom", "verify_eprom", "erase_eprom"):
         getattr(operator, method).return_value = method != failing
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank, the
+    # same convention verify_eprom adopted in 202-01) -- 1, not False, is
+    # this double's failing verdict.
+    operator.check_eprom_blank.return_value = 1 if failing == "check_eprom_blank" else 0
     operator.last_firmware_error_code = code
     operator.last_firmware_error_message = text
     return operator

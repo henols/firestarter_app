@@ -31,6 +31,7 @@ Coverage (post-121-09):
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -151,11 +152,21 @@ def make_clean_operator() -> Mock:
         return True
 
     operator = Mock(spec=EpromOperator)
+    # 206-03 SESS-01: dev_test now wraps run_plan in
+    # `with app.eprom_operator.lease():`. Mock(spec=EpromOperator)'s
+    # auto-created `.lease` attribute is a plain Mock (not MagicMock), so
+    # it does not support the context-manager protocol by default --
+    # nullcontext() makes `operator.lease()` a real, reusable no-op
+    # `with` block. No test in this module observes lease internals;
+    # that is test_session_lease.py's job.
+    operator.lease.return_value = contextlib.nullcontext()
     operator.check_eprom_id.return_value = (True, None)
     operator.read_eprom.side_effect = _clean_read
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     operator.write_eprom.return_value = True
-    operator.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
     return operator
 
@@ -225,9 +236,19 @@ def make_leaked_lock_operator(
         return True
 
     operator = Mock(spec=EpromOperator)
+    # 206-03 SESS-01: dev_test now wraps run_plan in
+    # `with app.eprom_operator.lease():`. Mock(spec=EpromOperator)'s
+    # auto-created `.lease` attribute is a plain Mock (not MagicMock), so
+    # it does not support the context-manager protocol by default --
+    # nullcontext() makes `operator.lease()` a real, reusable no-op
+    # `with` block. No test in this module observes lease internals;
+    # that is test_session_lease.py's job.
+    operator.lease.return_value = contextlib.nullcontext()
     operator.check_eprom_id.return_value = (True, None)
-    operator.check_eprom_blank.return_value = True
-    operator.verify_eprom.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
     operator.write_eprom.side_effect = _write
     operator.read_eprom.side_effect = _read
@@ -287,9 +308,19 @@ def make_held_lock_operator(
         return True
 
     operator = Mock(spec=EpromOperator)
+    # 206-03 SESS-01: dev_test now wraps run_plan in
+    # `with app.eprom_operator.lease():`. Mock(spec=EpromOperator)'s
+    # auto-created `.lease` attribute is a plain Mock (not MagicMock), so
+    # it does not support the context-manager protocol by default --
+    # nullcontext() makes `operator.lease()` a real, reusable no-op
+    # `with` block. No test in this module observes lease internals;
+    # that is test_session_lease.py's job.
+    operator.lease.return_value = contextlib.nullcontext()
     operator.check_eprom_id.return_value = (True, None)
-    operator.check_eprom_blank.return_value = True
-    operator.verify_eprom.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
     operator.write_eprom.side_effect = _write
     operator.read_eprom.side_effect = _read
@@ -323,12 +354,22 @@ def make_clean_notrun_operator() -> Mock:
     (neither dispatches through `write_eprom`) stay `OK`.
     """
     operator = Mock(spec=EpromOperator)
+    # 206-03 SESS-01: dev_test now wraps run_plan in
+    # `with app.eprom_operator.lease():`. Mock(spec=EpromOperator)'s
+    # auto-created `.lease` attribute is a plain Mock (not MagicMock), so
+    # it does not support the context-manager protocol by default --
+    # nullcontext() makes `operator.lease()` a real, reusable no-op
+    # `with` block. No test in this module observes lease internals;
+    # that is test_session_lease.py's job.
+    operator.lease.return_value = contextlib.nullcontext()
     operator.check_eprom_id.return_value = (True, None)
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     operator.write_eprom.side_effect = ChipNotFoundError(
         "simulated: operation not implemented on this host build (test fixture)"
     )
-    operator.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
     operator.read_eprom.return_value = True
     return operator
@@ -383,9 +424,19 @@ def make_restore_failed_operator() -> Mock:
         return True
 
     operator = Mock(spec=EpromOperator)
+    # 206-03 SESS-01: dev_test now wraps run_plan in
+    # `with app.eprom_operator.lease():`. Mock(spec=EpromOperator)'s
+    # auto-created `.lease` attribute is a plain Mock (not MagicMock), so
+    # it does not support the context-manager protocol by default --
+    # nullcontext() makes `operator.lease()` a real, reusable no-op
+    # `with` block. No test in this module observes lease internals;
+    # that is test_session_lease.py's job.
+    operator.lease.return_value = contextlib.nullcontext()
     operator.check_eprom_id.return_value = (True, None)
-    operator.check_eprom_blank.return_value = True
-    operator.verify_eprom.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    operator.verify_eprom.return_value = 0
     operator.erase_eprom.return_value = True
     operator.write_eprom.side_effect = _write
     operator.read_eprom.side_effect = _read
@@ -1034,7 +1085,8 @@ class TestReportDestination:
         from firestarter.messages import MSG_ERR_NOT_BLANK
 
         operator = make_clean_operator()
-        operator.check_eprom_blank.return_value = False
+        # 202-05 D-10: check_eprom_blank's "not blank" verdict is now 1.
+        operator.check_eprom_blank.return_value = 1
         operator.last_firmware_error_code = MSG_ERR_NOT_BLANK
         operator.last_firmware_error_message = "not blank"
         app = make_app_context(
@@ -1472,6 +1524,25 @@ class TestExitCodeMapping:
         assert "write-partial" in steps
 
 
+def test_a_transport_failed_cycle_block_step_exits_2_not_0(runner: CliRunner) -> None:
+    """Phase 206 Task 1 end-to-end (T-206-06, DEVTEST-03): a transport fault
+    raised by the cycle-block WRITE step -- a half-seated cable, not a
+    firmware-reported disagreement -- on exactly one of the default three
+    cycles must exit 2, the status-axis floor (`_dev_test_exit_code`'s
+    `run_status_error` term), never 0. Today this exits 0: two of the three
+    cycles report `VERDICT_OK`, so the folded verdict wins the exit-code
+    race before the dropped `STATUS_ERROR` ever gets a vote."""
+    operator = make_clean_operator()
+    operator.write_eprom.side_effect = [True, SerialError("half-seated cable"), True]
+    app = make_app_context(
+        eprom_operator=operator, hardware_manager=make_hardware_manager()
+    )
+    result = runner.invoke(cli, ["dev", "test", _CHIP_NO_ID], obj=app)
+    assert result.exit_code == 2, result.output
+    data = _load_report(_CHIP_NO_ID)
+    assert data["run_status"] == "ERROR", data
+
+
 class TestExitPrecedenceLeg06:
     """Before D-14, `dev test`'s exit computation was a bare numeric maximum
     over each step's exit-code contribution. Because `_VERDICT_EXIT_CODES`
@@ -1701,10 +1772,15 @@ class TestExitFloorD15:
             return True
 
         operator = Mock(spec=EpromOperator)
+        # 206-03 SESS-01: see the module-level comment on the other
+        # Mock(spec=EpromOperator) builders above for why this line exists.
+        operator.lease.return_value = contextlib.nullcontext()
         operator.check_eprom_id.return_value = (True, None)
-        operator.check_eprom_blank.return_value = True
+        # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+        operator.check_eprom_blank.return_value = 0
         operator.write_eprom.return_value = True
-        operator.verify_eprom.return_value = True
+        # 202-01 D-10: verify_eprom now returns an int (0 == match).
+        operator.verify_eprom.return_value = 0
         operator.erase_eprom.return_value = True
         operator.read_eprom.side_effect = _all_zero_read
         app = make_app_context(
@@ -2152,13 +2228,19 @@ class TestBlankCheckAfterEraseKaq:
     ) -> None:
         """M8720 (an executable-erase chip): an honest simulation of a used
         device that only becomes blank once erase has actually run --
-        `check_eprom_blank`'s closure returns `operator.erase_eprom.called`.
-        With blank-check now positioned AFTER erase, the closure observes
-        True and the step verdicts OK; the whole run exits 0."""
+        `check_eprom_blank`'s closure returns 0 once
+        `operator.erase_eprom.called` is true. With blank-check now
+        positioned AFTER erase, the closure observes that and the step
+        verdicts OK; the whole run exits 0."""
         operator = make_clean_operator()
 
-        def _blank_only_after_erase(name: str, eprom_data: dict) -> bool:
-            return bool(operator.erase_eprom.called)
+        def _blank_only_after_erase(name: str, eprom_data: dict, **kwargs) -> int:
+            # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+            # **kwargs (Phase 206 Task 1, DEVTEST-01): absorbs the new
+            # keyword-only `on_result` the real dispatch now always passes;
+            # this double never invokes it, matching a blank-check whose
+            # `CompareResult` this test has no need to fabricate.
+            return 0 if operator.erase_eprom.called else 1
 
         operator.check_eprom_blank.side_effect = _blank_only_after_erase
         app = make_app_context(
@@ -2177,8 +2259,8 @@ class TestBlankCheckAfterEraseKaq:
         ever leave the device blank (each page write auto-erases
         internally), so blank-check is emitted NA -- `run_plan` skips an
         unsupported step WITHOUT any operator call. A non-blank device
-        (`check_eprom_blank.return_value = False`) must not matter at all:
-        the run still exits 0 and the operator method is never dispatched.
+        (`check_eprom_blank.return_value = 1`) must not matter at all: the
+        run still exits 0 and the operator method is never dispatched.
 
         AT28C256 is also one of the 43 SDP-ALLOW chips, so its plan carries
         the six-step SDP leg -- `make_held_lock_operator()` (this suite's
@@ -2188,7 +2270,8 @@ class TestBlankCheckAfterEraseKaq:
         genuinely succeed and do not confound this test's own exit-0
         assertion with an unrelated SDP-leg BAD/NOT-HELD."""
         operator = make_held_lock_operator()
-        operator.check_eprom_blank.return_value = False
+        # 202-05 D-10: check_eprom_blank's "not blank" verdict is now 1.
+        operator.check_eprom_blank.return_value = 1
         app = make_app_context(
             eprom_operator=operator, hardware_manager=make_hardware_manager()
         )

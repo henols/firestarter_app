@@ -100,9 +100,20 @@
   
     Checks if an EPROM is blank.
   
+    Exits 0 when blank, 1 when at least one byte is not blank, 2 on a transport,
+    hardware, setup, or region failure. The three are distinct: a transport
+    failure is not reported as a not-blank verdict, and a region refusal -- a
+    region running past the chip's end -- is reported before the serial port
+    ever opens.
+  
+    Without --size, the checked region is the whole chip; with it, --size wins.
+  
   Options:
-    -f, --force  Force, even if the VPP or chip id doesn't match.
-    --help       Show this message and exit.
+    -a, --address TEXT  Blank check start address in dec/hex
+    -s, --size TEXT     Size of the data to blank check in dec/hex
+    -f, --force         Force, even if the VPP or chip id doesn't match.
+    --full              Report every non-blank range, not just the first.
+    --help              Show this message and exit.
   
   '''
 # ---
@@ -157,13 +168,25 @@
     Erase an EPROM, if supported.
   
     ``-b``/``--blank-check`` requests a blank check performed **after** the
-    erase. Note the inverted sense against ``write``, whose ``-b``/``--no-blank-
-    check`` skips a check performed before it. On protocol ``0x0D`` the post-
-    erase check is not wired, so ``-b`` has no effect there.
+    erase, through the same host-side engine ``blank`` uses. Note the inverted
+    sense against ``write``, whose ``-b``/``--no-blank-check`` skips a check
+    performed before it -- that inversion is unchanged.
   
-    ``-s``/``--sector-address`` applies to the ``0x06`` sector-erase protocol.
-    The ``0x0D`` software chip erase is device-global by construction and
-    ignores any sector address given for it.
+    Without ``-b``, ``erase`` exits 0 when the erase succeeds and 1 when it does
+    not. With ``-b``, the exit code widens to three outcomes: 0 erased and
+    blank, 1 erased but not blank, 2 when the check itself fails on transport,
+    hardware or setup. The three are distinct -- a transport failure is never
+    reported as a not-blank chip verdict. It works on every part ``erase``
+    supports. The check reports the first non-blank address only; for every
+    coalesced mismatching range with a classification bucket, run ``firestarter
+    blank <chip> --full`` afterward.
+  
+    ``-s``/``--sector-address`` applies only to protocols that support a sector
+    erase; a whole-device chip erase ignores any sector address given for it.
+    ``-s`` and ``-b`` cannot be combined: the post-erase check is whole-device
+    and cannot follow a sector erase, and the host has no sector-size knowledge
+    to scope it with. That combination is refused, exit 2, before the erase
+    runs.
   
     An unsupported erase exits 1 by default; ``--ignore-unsupported`` makes it
     exit 0 instead, for scripting, while still printing the same line.
@@ -331,9 +354,20 @@
   
     Verifies the content of an EPROM.
   
+    Exits 0 on a match, 1 on a mismatch, 2 on a transport, hardware, setup, or
+    region failure. The three are distinct: a transport failure is not reported
+    as a mismatch, and a region refusal -- an explicit --size longer than the
+    input file, or a region running past the chip's end -- is reported before
+    the serial port ever opens.
+  
+    Without --size, the compared region is the input file's own length; with it,
+    --size wins.
+  
   Options:
     -a, --address TEXT  Verify start address in dec/hex
+    -s, --size TEXT     Size of the data to verify in dec/hex
     -f, --force         Force, even if the VPP or chip id doesn't match.
+    --full              Report every mismatching range, not just the first.
     --help              Show this message and exit.
   
   '''
@@ -349,9 +383,12 @@
                             still runs on electrically-erasable chips
       --skip-erase          skip the pre-write erase as well
   
-    On protocols 0x0D and 0x05 the write path performs no pre-write blank check
-    at all, so -b is a no-op on those families and is not needed to write a non-
-    blank part. It remains effective on every other protocol.
+    Before the write reaches the port, the host -- not the firmware -- checks
+    that the target region is blank. Four protocol families never receive that
+    check: 0x0D (28C parallel) and 0x05 (flash4) auto-erase per page immediately
+    before each write, and the SRAM and FRAM families have no blank state to
+    check at all. -b has nothing to skip on those four families; on every
+    protocol outside this list, it is still the way to skip the check.
   
     --skip-sdp-unlock applies to protocol-0x0D chips, where the firmware unlocks
     software data protection during write init. On any other protocol it has no
@@ -365,6 +402,10 @@
     0x0B before any high voltage is enabled. Using the flag always reports both
     the database pulse and the override, so a log captured without its command
     line still records which pulse was used.
+  
+    --verify changes THIS INVOCATION's exit-code contract to 0/1/2 (see
+    --verify's own --help text for the full three-way split); plain write,
+    without the flag, keeps its existing 0/1 contract unchanged.
   
   Options:
     -b, --no-blank-check      Skip the blank check before write (erase still
@@ -388,6 +429,23 @@
                               is actually enabled, the write will then fail. Has
                               NO EFFECT on any other protocol — the host warns
                               and proceeds.
+    --verify                  After a successful write, read the written region
+                              back and compare it through the same engine
+                              `verify` uses. Changes THIS INVOCATION's exit-code
+                              contract: 0 the write landed and the read-back
+                              matched, 1 the invocation ended for a reason the
+                              host or the firmware decided (a blank-guard
+                              refusal, a firmware error during the write, a
+                              malformed address, or a read-back that completed
+                              and disagreed), 2 the transport or the hardware
+                              failed in ANY phase of the run -- the guard read,
+                              the write itself, or the read-back. Without
+                              --verify, write exits 0 on success and 1 on any
+                              failure, exactly as before.
+    --full                    With --verify, report every coalesced mismatching
+                              range in the read-back comparison, not just the
+                              first. Has no meaning and is refused without
+                              --verify.
     --help                    Show this message and exit.
   
   '''
@@ -1380,9 +1438,12 @@
                             still runs on electrically-erasable chips
       --skip-erase          skip the pre-write erase as well
   
-    On protocols 0x0D and 0x05 the write path performs no pre-write blank check
-    at all, so -b is a no-op on those families and is not needed to write a non-
-    blank part. It remains effective on every other protocol.
+    Before the write reaches the port, the host -- not the firmware -- checks
+    that the target region is blank. Four protocol families never receive that
+    check: 0x0D (28C parallel) and 0x05 (flash4) auto-erase per page immediately
+    before each write, and the SRAM and FRAM families have no blank state to
+    check at all. -b has nothing to skip on those four families; on every
+    protocol outside this list, it is still the way to skip the check.
   
     --skip-sdp-unlock applies to protocol-0x0D chips, where the firmware unlocks
     software data protection during write init. On any other protocol it has no
@@ -1396,6 +1457,10 @@
     0x0B before any high voltage is enabled. Using the flag always reports both
     the database pulse and the override, so a log captured without its command
     line still records which pulse was used.
+  
+    --verify changes THIS INVOCATION's exit-code contract to 0/1/2 (see
+    --verify's own --help text for the full three-way split); plain write,
+    without the flag, keeps its existing 0/1 contract unchanged.
   
   Options:
     -b, --no-blank-check      Skip the blank check before write (erase still
@@ -1419,6 +1484,23 @@
                               is actually enabled, the write will then fail. Has
                               NO EFFECT on any other protocol — the host warns
                               and proceeds.
+    --verify                  After a successful write, read the written region
+                              back and compare it through the same engine
+                              `verify` uses. Changes THIS INVOCATION's exit-code
+                              contract: 0 the write landed and the read-back
+                              matched, 1 the invocation ended for a reason the
+                              host or the firmware decided (a blank-guard
+                              refusal, a firmware error during the write, a
+                              malformed address, or a read-back that completed
+                              and disagreed), 2 the transport or the hardware
+                              failed in ANY phase of the run -- the guard read,
+                              the write itself, or the read-back. Without
+                              --verify, write exits 0 on success and 1 on any
+                              failure, exactly as before.
+    --full                    With --verify, report every coalesced mismatching
+                              range in the read-back comparison, not just the
+                              first. Has no meaning and is refused without
+                              --verify.
     --help                    Show this message and exit.
   
   '''

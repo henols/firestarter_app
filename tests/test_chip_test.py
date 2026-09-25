@@ -20,9 +20,9 @@ Test taxonomy:
     test_generate_pattern_high_base_differs   -> no full-chip assumption
     test_prepass_images                       -> (0x00*n, 0xFF*n)
 
-  Shared byte-diff-offset helper (D-04 reuse target)
-    test_diff_offsets_equal_arrays            -> zero diffs, 0.0 pct
-    test_diff_offsets_known_positions         -> offsets [2, 5], pct
+  Shared byte-diff-offset helper (D-04 reuse target; retired 202-03 D-02 --
+  the primitive now lives in `firestarter.compare.diff_summary`, exercised
+  directly in `tests/test_compare.py`)
     test_diff_offsets_unequal_length          -> cmp_len = min(len_a, len_b)
 
   Fingerprint classifier (PATT-02)
@@ -56,6 +56,7 @@ from firestarter.chip_test import (
     _PROTOCOL_FLASH4,  # test-internal: reused protocol id constant
     _SDP_LEG_STEP_ORDER,
     _UV_WRITE_REGION_LENGTH,
+    FP_ADDRESS_LINE,  # test-internal: 206-02 compare-evidence classification
     OP_BLANK_CHECK,
     OP_ERASE,
     OP_ID,
@@ -79,7 +80,6 @@ from firestarter.chip_test import (
     StepResult,
     WriteTarget,
     _aggregate_cycle_results,
-    _diff_offsets,
     _dispatch_id,
     _dispatch_multi_run,  # test-internal: fail-closed dispatch proof (121-02)
     _dispatch_read,
@@ -98,6 +98,7 @@ from firestarter.chip_test import (
     run_plan,
     run_status,
 )
+from firestarter.compare import CompareResult, Fingerprint, diff_summary
 from firestarter.database import EpromDatabase
 from firestarter.exceptions import (
     ChipNotFoundError,
@@ -138,36 +139,22 @@ def test_prepass_images():
     assert ffs == b"\xff" * n
 
 
-def test_diff_offsets_equal_arrays():
-    a = bytes([1, 2, 3, 4])
-    b = bytes([1, 2, 3, 4])
-    cmp_len, diff_offsets, pct, first = _diff_offsets(a, b)
-    assert cmp_len == 4
-    assert diff_offsets == []
-    assert pct == 0.0
-    assert first is None
-
-
-def test_diff_offsets_known_positions():
-    a = bytes([0, 0, 0, 0, 0, 0, 0, 0])
-    b = bytearray(a)
-    b[2] = 0xFF
-    b[5] = 0xFF
-    cmp_len, diff_offsets, pct, first = _diff_offsets(a, bytes(b))
-    assert cmp_len == 8
-    assert diff_offsets == [2, 5]
-    assert first == 2
-    assert pct == 100.0 * 2 / 8
-
-
 def test_diff_offsets_unequal_length():
+    # `_diff_offsets` retired 202-03 (D-02); the primitive is now
+    # `compare.diff_summary`. `test_diff_offsets_equal_arrays` and
+    # `test_diff_offsets_known_positions` (the two siblings this test used
+    # to sit beside) are retired outright rather than re-pointed -- their
+    # coverage is superseded by the direct `diff_summary` unit tests in
+    # `tests/test_compare.py`. This one survives because it is also the
+    # in-module proof, through `chip_test`'s own import surface, that
+    # unequal-length inputs compare over the common prefix and never raise.
     a = bytes([1, 2, 3, 4, 5])
     b = bytes([1, 2, 9])
     # Only compares min(len_a, len_b) == 3, and does not raise.
-    cmp_len, diff_offsets, pct, first = _diff_offsets(a, b)
-    assert cmp_len == 3
-    assert diff_offsets == [2]
-    assert first == 2
+    summary = diff_summary(a, b)
+    assert summary.cmp_len == 3
+    assert summary.bad == 1
+    assert summary.first_offset == 2
 
 
 def test_fp_blank_near_all_ff():
@@ -793,9 +780,13 @@ def _mock_operator(**returns):
     op = Mock(spec=_OPERATOR_METHODS)
     op.check_eprom_id.return_value = (True, 0x1234)
     op.read_eprom.return_value = True
-    op.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank), the
+    # same convention verify_eprom adopted in 202-01.
+    op.check_eprom_blank.return_value = 0
     op.write_eprom.return_value = True
-    op.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match); the
+    # multi-run dispatch's `== 0` adapter reads this as success only at 0.
+    op.verify_eprom.return_value = 0
     op.erase_eprom.return_value = True
     op.sdp_lock.return_value = True
     op.sdp_unlock.return_value = True
@@ -834,7 +825,8 @@ def _sdp_leg_readback_operator():
 
     op = Mock(spec=_OPERATOR_METHODS)
     op.check_eprom_id.return_value = (True, 0x1234)
-    op.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    op.check_eprom_blank.return_value = 0
     op.erase_eprom.return_value = True
 
     def _write_eprom(name, eprom_data, source_path, flags=0, address_str=None, **_kw):
@@ -854,8 +846,9 @@ def _sdp_leg_readback_operator():
         return True
 
     def _verify_eprom(name, eprom_data, source_path, *_args, **_kwargs):
+        # 202-01 D-10: int, 0 == match -- see the return_value comment above.
         expected = Path(source_path).read_bytes()
-        return expected == state["image"]
+        return 0 if expected == state["image"] else 1
 
     def _sdp_lock(name, eprom_data):
         state["locked"] = True
@@ -1086,6 +1079,217 @@ def test_id_mismatch_does_not_gate_non_destructive_steps():
     assert _result(results, OP_BLANK_CHECK).verdict == VERDICT_OK
     operator.read_eprom.assert_called()
     operator.check_eprom_blank.assert_called_once()
+
+
+def test_blank_check_step_records_pass_verdict_when_operator_returns_zero():
+    """202-05 D-10: `check_eprom_blank` now returns an int (0 == blank, the
+    same convention `verify_eprom` adopted in 202-01). A mocked operator
+    returning 0 must record the passing OK verdict through the dispatch's
+    `== 0` adapter."""
+    operator = _mock_operator(check_eprom_blank=0)
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    assert _result(results, OP_BLANK_CHECK).verdict == VERDICT_OK
+
+
+def test_blank_check_step_records_bad_verdict_when_operator_returns_one():
+    """The paired negative: an operator returning 1 (not blank) must not be
+    read as success through the same `== 0` adapter."""
+    operator = _mock_operator(check_eprom_blank=1)
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    assert _result(results, OP_BLANK_CHECK).verdict == VERDICT_BAD
+
+
+def test_blank_check_verdict_2_is_skipped_with_status_error():
+    """Phase 206 Task 2 (D-01): a transport/hardware refusal reported
+    through `check_eprom_blank`'s own int contract -- verdict 2, distinct
+    from a raised `SerialError`/`HardwareOperationError` -- must land on
+    `VERDICT_SKIPPED` + `STATUS_ERROR`, the same two-axis vocabulary
+    `_run_step_untimed`'s transport arm already uses. Never `VERDICT_BAD`,
+    which would misreport a rig fault as a chip finding."""
+    operator = _mock_operator(check_eprom_blank=2)
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    assert blank_result.verdict == VERDICT_SKIPPED
+    assert blank_result.status == STATUS_ERROR
+
+
+def test_blank_check_verdict_1_stays_bad():
+    """The paired negative, pinned on BOTH axes: a non-UV step reading
+    verdict 1 (genuinely not blank) still reports `VERDICT_BAD`, and now
+    explicitly `STATUS_COMPLETE` -- this run executed validly, the chip
+    just was not blank."""
+    operator = _mock_operator(check_eprom_blank=1)
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    assert blank_result.verdict == VERDICT_BAD
+    assert blank_result.status == STATUS_COMPLETE
+
+
+def test_blank_check_verdict_1_on_a_uv_prewrite_stays_skipped_complete():
+    """A UV part's pre-write blank check reading verdict 1 is an expected,
+    operator-actionable finding about a used part -- unchanged by this
+    task -- and must be told apart from a genuine verdict-2 transport fault
+    by the status axis alone: both read `VERDICT_SKIPPED`, but this one is
+    `STATUS_COMPLETE`."""
+    operator = _mock_operator(check_eprom_blank=1)
+    plan = _plan_with_steps(
+        Step(op=OP_BLANK_CHECK, supported=True, reason="", uv_prewrite=True)
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    assert blank_result.verdict == VERDICT_SKIPPED
+    assert blank_result.status == STATUS_COMPLETE
+
+
+def test_blank_check_carries_compare_evidence_without_a_fingerprint():
+    """Phase 206 Task 1 (DEVTEST-01): the blank-check step's `on_result`
+    callback captures the finalised `CompareResult` produced by
+    `_drive_region_compare` (Phase 203's already-shipped seam) into a NEW
+    additive `StepResult.compare_evidence` field carrying seven values --
+    `bad`, `compared`, `first_offset`, `first_actual`, `ff_count`,
+    `aborted` and the classification string. `StepResult.fingerprint`
+    stays `None` on this step: `dedup_fingerprint` hashes
+    `fingerprint.classification`, and a populated fingerprint here would
+    re-key every already-filed report (D-02)."""
+    compare_result = CompareResult(
+        total=512,
+        compared=512,
+        compared_start=0,
+        compared_end=511,
+        bad=3,
+        ranges=[],
+        extra_ranges=0,
+        extra_bytes=0,
+        aborted=False,
+        fingerprint=Fingerprint(
+            total=512, bad=3, bad_pct=0.5859375, classification=FP_ADDRESS_LINE
+        ),
+        ff_count=100,
+        first_offset=5,
+        first_actual=0x12,
+    )
+
+    def _fake_check_eprom_blank(name, eprom_data, on_result=None, **kwargs):
+        if on_result is not None:
+            on_result(compare_result)
+        return 1
+
+    operator = _mock_operator()
+    operator.check_eprom_blank.side_effect = _fake_check_eprom_blank
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    assert blank_result.fingerprint is None
+    assert blank_result.compare_evidence == {
+        "bad": 3,
+        "compared": 512,
+        "first_offset": 5,
+        "first_actual": 0x12,
+        "ff_count": 100,
+        "aborted": False,
+        "classification": FP_ADDRESS_LINE,
+    }
+
+
+def test_blank_check_compare_evidence_takes_the_last_captured_result():
+    """WR-01 (206-REVIEW): `_drive_region_compare` fires `on_result` at
+    most once per `check_eprom_blank` call today, so this is not live --
+    but `compare_evidence` must be built from the LAST captured
+    `CompareResult`, matching the "most recent/finalised" convention
+    `_aggregate_cycle_results` already uses, not the first, so a future
+    callee that reports more than once per call degrades to the final
+    result instead of silently going stale."""
+    stale = CompareResult(
+        total=512,
+        compared=512,
+        compared_start=0,
+        compared_end=511,
+        bad=9,
+        ranges=[],
+        extra_ranges=0,
+        extra_bytes=0,
+        aborted=False,
+        fingerprint=Fingerprint(
+            total=512, bad=9, bad_pct=1.7578125, classification=FP_ADDRESS_LINE
+        ),
+        ff_count=1,
+        first_offset=1,
+        first_actual=0x01,
+    )
+    final = CompareResult(
+        total=512,
+        compared=512,
+        compared_start=0,
+        compared_end=511,
+        bad=3,
+        ranges=[],
+        extra_ranges=0,
+        extra_bytes=0,
+        aborted=False,
+        fingerprint=Fingerprint(
+            total=512, bad=3, bad_pct=0.5859375, classification=FP_ADDRESS_LINE
+        ),
+        ff_count=100,
+        first_offset=5,
+        first_actual=0x12,
+    )
+
+    def _fake_check_eprom_blank(name, eprom_data, on_result=None, **kwargs):
+        if on_result is not None:
+            on_result(stale)
+            on_result(final)
+        return 1
+
+    operator = _mock_operator()
+    operator.check_eprom_blank.side_effect = _fake_check_eprom_blank
+    plan = _plan_with_steps(Step(op=OP_BLANK_CHECK, supported=True, reason=""))
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    assert blank_result.compare_evidence == {
+        "bad": 3,
+        "compared": 512,
+        "first_offset": 5,
+        "first_actual": 0x12,
+        "ff_count": 100,
+        "aborted": False,
+        "classification": FP_ADDRESS_LINE,
+    }
+
+
+def test_blank_check_compare_evidence_is_absent_when_the_step_never_ran():
+    """The paired negative: an unsupported (never-dispatched) blank-check
+    step never reaches `operator.check_eprom_blank`, so its `on_result`
+    callback never fires and `compare_evidence` stays at its `None`
+    default -- the same non-dispatch already pinned for `verdict`/`reason`
+    by `test_run_plan_verdict_vocabulary_and_na_not_executed` above."""
+    operator = _mock_operator()
+    plan = _plan_with_steps(
+        Step(op=OP_BLANK_CHECK, supported=False, reason="not applicable")
+    )
+
+    results = run_plan(plan, operator, _REAL_DB)
+
+    blank_result = _result(results, OP_BLANK_CHECK)
+    operator.check_eprom_blank.assert_not_called()
+    assert blank_result.compare_evidence is None
 
 
 """The two-axis status vocabulary (178-CONTEXT.md D-01/D-02/D-12, 178-02):
@@ -1419,7 +1623,8 @@ def test_a_bad_blank_check_does_not_force_a_read_back_on_a_passing_write():
     """The gate is PER STEP, not per run: a `blank-check` step reporting BAD
     must not force a fingerprint read-back on an unrelated passing `write`
     step in the same plan."""
-    operator = _mock_operator(check_eprom_blank=False)
+    # 202-05 D-10: 1 (not 0) is now check_eprom_blank's "not blank" verdict.
+    operator = _mock_operator(check_eprom_blank=1)
     plan = _plan_with_steps(
         Step(op=OP_BLANK_CHECK, supported=True, reason=""),
         Step(op=OP_WRITE, supported=True, reason="", destructive=True),
@@ -1776,12 +1981,82 @@ def test_agreeing_destructive_runs_report_confident_bad():
 
 def test_marginal_on_disagreeing_verify_runs():
     operator = _mock_operator()
-    operator.verify_eprom.side_effect = [True, False]
+    # 202-01 D-10: int, 0 == match, 1 == mismatch.
+    operator.verify_eprom.side_effect = [0, 1]
     plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
     results = run_plan(plan, operator, _REAL_DB, runs=2)
 
     verify_result = _result(results, OP_VERIFY)
     assert verify_result.verdict == VERDICT_MARGINAL
+
+
+def test_verify_verdict_2_is_skipped_with_status_error():
+    """The paired D-01 case on the verify dispatch arm: `verify_eprom`
+    returning 2 on any run must land the step on `VERDICT_SKIPPED` +
+    `STATUS_ERROR`, selected BEFORE the `diverged` (marginal) test -- a rig
+    that could not complete the compare has not produced a disagreement
+    worth naming `marginal`."""
+    operator = _mock_operator()
+    operator.verify_eprom.return_value = 2
+    plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    verify_result = _result(results, OP_VERIFY)
+    assert verify_result.verdict == VERDICT_SKIPPED
+    assert verify_result.status == STATUS_ERROR
+
+
+def test_verify_verdict_2_stops_the_multi_run_loop_after_the_first_run():
+    """WR-02 (206-REVIEW): a verdict-2 run leaves the link in a faulted
+    state, so a second verify pass buys no additional information and
+    costs a full read/compare's worth of device I/O. `side_effect=[2, 0]`
+    proves the break fires: a second call would consume the `0`.
+
+    `run_count` still reports the nominal policy (2), not the executed
+    count: `repeat_policy_tag` keys on `run_count == 1`, and an early
+    break must not stamp the degraded `runs=1` tag onto a default run."""
+    from firestarter.chip_test import repeat_policy_tag
+
+    operator = _mock_operator()
+    operator.verify_eprom.side_effect = [2, 0]
+    plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    verify_result = _result(results, OP_VERIFY)
+    assert operator.verify_eprom.call_count == 1
+    assert verify_result.run_count == 2
+    assert repeat_policy_tag(results) == ""
+    assert verify_result.verdict == VERDICT_SKIPPED
+    assert verify_result.status == STATUS_ERROR
+
+
+def test_verify_verdict_1_stays_bad():
+    """The paired negative on BOTH axes: a mismatch (verdict 1 on every
+    run) still reports `VERDICT_BAD`, now explicitly `STATUS_COMPLETE` --
+    the compare completed validly and found a real mismatch."""
+    operator = _mock_operator()
+    operator.verify_eprom.return_value = 1
+    plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    verify_result = _result(results, OP_VERIFY)
+    assert verify_result.verdict == VERDICT_BAD
+    assert verify_result.status == STATUS_COMPLETE
+
+
+def test_verify_verdict_2_performs_no_fingerprint_read_back():
+    """D-04's floor, pinned directly: a verdict-2 verify performs NO
+    fingerprint read-back -- the same link that just failed cannot produce
+    one -- and the attached fingerprint is `None`, the same value a
+    best-effort `_read_region` failure already produces today."""
+    operator = _mock_operator()
+    operator.verify_eprom.return_value = 2
+    plan = _plan_with_steps(Step(op=OP_VERIFY, supported=True, reason=""))
+    results = run_plan(plan, operator, _REAL_DB, runs=2)
+
+    verify_result = _result(results, OP_VERIFY)
+    assert operator.read_eprom.call_count == 0
+    assert verify_result.fingerprint is None
 
 
 # Fail-closed dispatch on an unmapped op (T-121-05/06/07, 121-02 Task 1)
@@ -2059,7 +2334,8 @@ def test_the_agreeing_branch_never_calls_the_per_byte_diff_primitive(monkeypatch
     """The cheapest honest proof of the non-call (D-11's own justification):
     the sha equality already proves zero mismatches, so the agreeing branch
     must derive its five values without walking the whole compared region
-    through `_diff_offsets`."""
+    through `compare.diff_summary` (the primitive `_diff_offsets` retired
+    into, 202-03 D-02)."""
     from firestarter import chip_test as ct
 
     def _boom(*_args, **_kwargs):
@@ -2067,7 +2343,7 @@ def test_the_agreeing_branch_never_calls_the_per_byte_diff_primitive(monkeypatch
             "the per-byte diff primitive was called on an agreeing read"
         )
 
-    monkeypatch.setattr(ct, "_diff_offsets", _boom)
+    monkeypatch.setattr(ct, "diff_summary", _boom)
 
     operator = _mock_operator()
     operator.read_eprom.side_effect = _writes_bytes_to_output_file(b"\x5a" * 128)
@@ -2292,9 +2568,20 @@ def test_dispatch_multi_run_uses_selector_for_uv_chip():
 
 
 def test_generate_pattern_and_classify_fingerprint_source_unchanged():
+    """202-03 (D-02): `classify_fingerprint` is now a thin delegating
+    wrapper around `compare.classify_streamed` -- the logic this guard
+    originally protected (that the two region-scoping constants never leak
+    into the pattern generator or the classifier) moved with it, to
+    `classify_streamed` and `CompareAccumulator.feed`. A guard that kept
+    inspecting only `classify_fingerprint`'s own handful of delegating
+    lines would still pass, but vacuously: it would no longer be looking at
+    the code that could actually leak those constants. A green test
+    guarding nothing is worse than either fixing it or deleting it --
+    fixed here by following the logic to where it now lives."""
     import inspect
 
     import firestarter.chip_test as chip_test_mod
+    import firestarter.compare as compare_mod
 
     gen_src = inspect.getsource(chip_test_mod.generate_pattern)
     assert "_WRITE_REGION_START" not in gen_src
@@ -2303,6 +2590,14 @@ def test_generate_pattern_and_classify_fingerprint_source_unchanged():
     classify_src = inspect.getsource(chip_test_mod.classify_fingerprint)
     assert "_WRITE_REGION_START" not in classify_src
     assert "_UV_WRITE_REGION_LENGTH" not in classify_src
+
+    streamed_src = inspect.getsource(compare_mod.classify_streamed)
+    assert "_WRITE_REGION_START" not in streamed_src
+    assert "_UV_WRITE_REGION_LENGTH" not in streamed_src
+
+    feed_src = inspect.getsource(compare_mod.CompareAccumulator.feed)
+    assert "_WRITE_REGION_START" not in feed_src
+    assert "_UV_WRITE_REGION_LENGTH" not in feed_src
 
 
 def _capturing_write(captured: dict):
@@ -2361,7 +2656,8 @@ def test_write_region_via_run_plan_uv_part_full_scope_uses_the_top_slot():
     operator.check_eprom_id.return_value = (True, expected_id)
     # Blank -- the state that used to trigger the full-device branch. It no
     # longer changes the region at all, which is the point of this test.
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     captured: dict = {}
     operator.write_eprom.side_effect = _capturing_write(captured)
     operator.read_eprom.side_effect = _writes_fill_at_requested_region(0xFF)
@@ -2812,9 +3108,11 @@ def _gated_allow_operator():
     a = generate_pattern(*region)
     operator = Mock(spec=_OPERATOR_METHODS)
     operator.check_eprom_id.return_value = (True, None)
-    operator.check_eprom_blank.return_value = True
+    # 202-05 D-10: check_eprom_blank now returns an int (0 == blank).
+    operator.check_eprom_blank.return_value = 0
     operator.erase_eprom.return_value = True
-    operator.verify_eprom.return_value = True
+    # 202-01 D-10: verify_eprom now returns an int (0 == match).
+    operator.verify_eprom.return_value = 0
     operator.write_eprom.return_value = True
 
     def _read_eprom(name, eprom_data, output_file=None, **kwargs):
@@ -3139,7 +3437,8 @@ def test_every_slot_saturated_write_is_skipped_never_ok():
     name = "M27C512"
     plan = derive_plan(name, _REAL_DB, write_scope="full")
     chip = FakeChip.uv_all_saturated(65536, 256)
-    assert chip.check_eprom_blank(name, {}) is False  # sanity: not the D-C path
+    # 202-05 D-10: FakeChip.check_eprom_blank now returns an int (0 == blank).
+    assert chip.check_eprom_blank(name, {}) == 1  # sanity: not the D-C path
 
     results = run_plan(plan, chip, _REAL_DB)
 

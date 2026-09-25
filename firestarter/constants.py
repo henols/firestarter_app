@@ -49,9 +49,27 @@ CMD_FRAME_MAX = 512
 COMMAND_READ = 1
 COMMAND_WRITE = 2
 COMMAND_ERASE = 3
-COMMAND_BLANK_CHECK = 4
+
+# Ordinal 4 -- the standalone blank-check command -- retired in 3.1.0
+# (Phase 204). The firmware side -- firestarter_fw/include/firestarter.h's
+# CMD ladder and its is_memory_cmd arm -- was retired in the same commit
+# pair. This ordinal must NEVER be reused for any new command, flag or
+# reserved meaning: an already-shipped host still composes it, and
+# reassigning the number would make a stale host silently drive a
+# different operation against firmware that has moved on. The region-scoped
+# blank-check machinery on the firmware side survives this retirement --
+# it is reached only from write-init and erase-end now, and leaves in
+# Phase 205.
+
 COMMAND_CHECK_CHIP_ID = 5
-COMMAND_VERIFY = 6
+
+# Ordinal 6 -- the verify command -- retired in 3.1.0 (Phase 204). The
+# firmware side -- firestarter_fw/include/firestarter.h's CMD ladder and its
+# is_memory_cmd arm -- was retired in the same commit pair. This ordinal
+# must NEVER be reused for any new command, flag or reserved meaning: an
+# already-shipped host still composes it, and reassigning the number would
+# make a stale host silently drive a different operation against firmware
+# that has moved on.
 
 COMMAND_DEV_ADDRESS = 7
 COMMAND_DEV_REGISTERS = 8
@@ -59,14 +77,16 @@ COMMAND_DEV_REGISTERS = 8
 # Both SDP commands are unconditional in firmware (firestarter.h:61-62) — never
 # DEV_TOOLS-gated, because they are real user-facing operations in every build.
 # Their COMMAND_NAMES entries below are load-bearing, not cosmetic:
-# COMMAND_NAMES[cmd] is dereferenced by _setup_operation (eprom_operations.py:329)
-# and again by _operation_context (eprom_operations.py:405) — a missing entry
+# COMMAND_NAMES[cmd] is dereferenced by _setup_operation (eprom_operations.py:584)
+# and again by _operation_context (eprom_operations.py:693) — a missing entry
 # is a KeyError at operation setup, not a cosmetic display gap. Corrected
-# 2026-08-03: a prior milestone's insertion staled the
-# original 301/377 citation, which is why the corrected form names the
-# function first with the line number alongside, not the number alone. See
+# 2026-09-21 (Phase 204): the previous comment cited
 # test_command_names_dereferences_both_sdp_commands in
-# tests/test_revision_constants_parity.py, which pins both dereferences.
+# tests/test_revision_constants_parity.py, a test module that does not exist
+# anywhere under firestarter_app/tests/, and gave line numbers (329/405) that
+# no longer matched either dereference site. There is no dedicated test
+# pinning these two dereferences; the citation now names only the two real
+# call sites, by function name with the line number alongside.
 COMMAND_SDP_UNLOCK = 9
 COMMAND_SDP_LOCK = 10
 
@@ -88,9 +108,7 @@ COMMAND_NAMES = {
     COMMAND_READ: "READ",
     COMMAND_WRITE: "WRITE",
     COMMAND_ERASE: "ERASE",
-    COMMAND_BLANK_CHECK: "BLANK_CHECK",
     COMMAND_CHECK_CHIP_ID: "CHECK_CHIP_ID",
-    COMMAND_VERIFY: "VERIFY",
     COMMAND_DEV_ADDRESS: "DEV_ADDRESS",
     COMMAND_DEV_REGISTERS: "DEV_REGISTERS",
     COMMAND_SDP_UNLOCK: "SDP_UNLOCK",
@@ -108,7 +126,19 @@ COMMAND_NAMES = {
 FLAG_FORCE = 0x01
 FLAG_CAN_ERASE = 0x02
 FLAG_SKIP_ERASE = 0x04
-FLAG_SKIP_BLANK_CHECK = 0x08
+
+# The skip-blank-check control flag, 0x08 -- retired in 3.1.0 (Phase 205).
+# The firmware side -- firestarter_fw/include/firestarter.h's control-flag
+# ladder -- was retired in the same commit pair. This value must NEVER be
+# reused for any new control flag: an already-shipped host still composes
+# 0x08 on every `write -b` and on `dev test`'s masked UV slot writes, and
+# reassigning the bit would make that stale host silently turn on whatever
+# new behaviour took the number. While it existed, the flag selected
+# whether write-init's blank check ran; that check itself left the
+# firmware in the same phase (FWBLANK-01..03). `-b` now reaches the
+# host-side write guard (write_blank_guard.py) as an explicit keyword-only
+# signal instead of a wire bit.
+
 FLAG_VPE_AS_VPP = 0x10
 
 FLAG_OUTPUT_ENABLE = 0x20

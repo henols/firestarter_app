@@ -4,12 +4,16 @@ Copyright (c) 2024 Henrik Olsson
 
 Permission is hereby granted under MIT license.
 
-Criterion-4 regression for Phase 179 (UV Slot Writes -- FLAG_SKIP_BLANK_CHECK,
-hardware-gated).
+Criterion-4 regression for Phase 179 (UV Slot Writes -- the skip-blank-check
+signal, hardware-gated). FWBLANK-04 (Phase 205) retired the wire bit
+(`0x08`) this signal used to travel as; it now reaches `write_eprom` as an
+explicit `blank_check_requested` keyword instead, derived from the same
+monotonicity witness described below.
 
-This module proves the HOST path: that the engine composes
-`FLAG_SKIP_BLANK_CHECK` from the monotonicity witness, passes it positionally,
-and adjudicates the UV pre-write blank-check so the run folds to `PASS`. It
+This module proves the HOST path: that the engine derives the
+blank-check-skip signal from the monotonicity witness, passes it to
+`write_eprom` explicitly, and adjudicates the UV pre-write blank-check so
+the run folds to `PASS`. It
 does NOT prove the hardware claim -- that a physical UV EPROM in a physical
 socket accepts the write -- which is `D-179-1`'s bench half and lands as
 `179-MEASUREMENT.md`. Naming that boundary here is the point: the failure
@@ -74,7 +78,6 @@ from unittest.mock import Mock
 
 from firestarter import chip_test as ct
 from firestarter import submit as sub
-from firestarter.constants import FLAG_SKIP_BLANK_CHECK
 from firestarter.database import EpromDatabase
 from firestarter.diagnostic_report import AutoCapture, DiagnosticReport, TransportHealth
 
@@ -115,20 +118,23 @@ def _seeded_m27c512_double() -> tuple[WriteInitPreflightChip, dict]:
 
 
 def test_the_double_refuses_a_non_blank_write_without_the_flag() -> None:
-    """Mirrors `firestarter/src/proms/eprom.cpp:143-145`: `write_eprom`
+    """Mirrors PRE-3.1.0 firmware's write-init blank-check pre-flight
+    (deleted from the real firmware in Phase 205, FWBLANK-01/02/03; this
+    double still models it, per its own class docstring): `write_eprom`
     RETURNS `False` and stamps `last_firmware_error_code` when the target
-    region is not blank and `FLAG_SKIP_BLANK_CHECK` is absent -- it never
-    raises, matching the REAL `EpromOperator.write_eprom` contract, where
-    `eprom_operations._run_state_machine` catches the `EpromOperationError`
-    and returns `(False, str(e))` (`eprom_operations.py:597-609`). Without
-    this leg, every downstream leg asserting `verdict == OK` would be
-    theatre: a double that refuses nothing makes any PASS meaningless.
+    region is not blank and `blank_check_requested` is left at its default
+    `True` -- it never raises, matching the REAL `EpromOperator.write_eprom`
+    contract, where `eprom_operations._run_state_machine` catches the
+    `EpromOperationError` and returns `(False, str(e))`
+    (`eprom_operations.py:597-609`). Without this leg, every downstream leg
+    asserting `verdict == OK` would be theatre: a double that refuses
+    nothing makes any PASS meaningless.
 
     Phase 201 (BLANK-01) scoped the real write-init blank check -- and this
     fake, in lockstep -- to the write's OWN target region rather than the
     whole device. `_seeded_m27c512_double`'s non-blank content sits
     OUTSIDE the target slot deliberately (legs 3-6 below need exactly that
-    shape to exercise the witness/FLAG_SKIP_BLANK_CHECK policy), so it no
+    shape to exercise the witness/blank-check-skip policy), so it no
     longer makes a region-scoped double refuse anything -- reusing it here
     would make this leg theatre again, the opposite of its own purpose.
     This leg therefore seeds its own double with the non-blank byte INSIDE
@@ -152,9 +158,11 @@ def test_the_double_refuses_a_non_blank_write_without_the_flag() -> None:
 
 def test_the_double_accepts_a_non_blank_write_with_the_flag() -> None:
     """The converse of the leg above, on the SAME seeded double: with
-    `FLAG_SKIP_BLANK_CHECK` set, `write_eprom` returns `True` and leaves
-    `last_firmware_error_code` at `None` -- the firmware pre-flight is
-    genuinely bypassed, not merely reported as bypassed."""
+    `blank_check_requested=False` (FWBLANK-04's explicit-keyword
+    replacement for the retired skip-blank-check wire bit), `write_eprom`
+    returns `True` and leaves `last_firmware_error_code` at `None` -- the
+    modelled pre-3.1.0 firmware pre-flight is genuinely bypassed, not
+    merely reported as bypassed."""
     chip, _full = _seeded_m27c512_double()
     ed = ct.resolve_chip("m27c512", db=_REAL_DB)
     fh = tempfile.NamedTemporaryFile(prefix="p179_", suffix=".bin", delete=False)
@@ -162,7 +170,12 @@ def test_the_double_accepts_a_non_blank_write_with_the_flag() -> None:
     fh.close()
     try:
         outcome = chip.write_eprom(
-            "m27c512", ed, fh.name, FLAG_SKIP_BLANK_CHECK, address_str="0xff00"
+            "m27c512",
+            ed,
+            fh.name,
+            0,
+            address_str="0xff00",
+            blank_check_requested=False,
         )
     finally:
         Path(fh.name).unlink()
@@ -204,21 +217,25 @@ def test_uv_slot_write_on_a_non_blank_part_reaches_pass_with_run_count_two() -> 
 
 
 def test_the_flag_reaches_the_wire_on_every_cycle() -> None:
-    """`chip.write_flags_seen == [8, 8]` after a two-cycle run -- the flag is
-    on the wire for cycle 1 AND cycle 2. The second entry is the interesting
-    one: the staged tranche targets are the only ones that reach
-    `write_eprom`, so a witness that were not carried through
-    `_uv_cycle_targets` would give `[8, 0]` -- or, one iteration earlier in
-    this design's history, `[0, 0]` from a `current_source == "probe read"`
+    """`chip.blank_check_requested_seen == [False, False]` after a
+    two-cycle run -- the skip signal reaches `write_eprom` for cycle 1 AND
+    cycle 2 (FWBLANK-04, Phase 205: re-keyed from the retired
+    `write_flags_seen == [8, 8]` wire-bit assertion onto the explicit
+    keyword that replaced it). The second entry is the interesting one:
+    the staged tranche targets are the only ones that reach `write_eprom`,
+    so a witness that were not carried through `_uv_cycle_targets` would
+    give `[False, True]` -- or, one iteration earlier in this design's
+    history, `[True, True]` from a `current_source == "probe read"`
     equality that never matches (see the anti-vacuity leg below)."""
     chip, _full = _seeded_m27c512_double()
     plan = ct.derive_plan("m27c512", _REAL_DB, write_scope="full")
     ct.run_plan(plan, chip, _REAL_DB, runs=2)
-    assert chip.write_flags_seen == [8, 8]
+    assert chip.blank_check_requested_seen == [False, False]
+    assert chip.write_flags_seen == [0, 0]
 
 
 def test_the_blank_check_adjudication_is_what_lifts_the_run_to_pass() -> None:
-    """UV-02's own text: `FLAG_SKIP_BLANK_CHECK` fixes the firmware
+    """UV-02's own text: the skip-blank-check signal fixes the firmware
     write-init pre-flight ONLY; the standalone `blank-check` step is a
     second, independent defect, and "the write step going OK" is explicitly
     not the criterion. Deep-copying the same results and forcing only the
@@ -345,7 +362,8 @@ def test_fixed_policy_with_the_witness_sets_the_flag() -> None:
         step=step,
         write_context=write_context,
     )
-    assert chip.write_flags_seen == [8]
+    assert chip.blank_check_requested_seen == [False]
+    assert chip.write_flags_seen == [0]
     assert sum(1 for call in chip.calls if call[0] == "read_eprom") == 0
 
 
@@ -442,7 +460,8 @@ def test_a_non_uv_blank_check_failure_is_still_bad() -> None:
     chip state is needed, and `spec=` keeps a typo'd operator method an
     `AttributeError` rather than a silently-truthy `Mock`."""
     operator = Mock(spec=_OPERATOR_METHODS)
-    operator.check_eprom_blank.return_value = False
+    # 202-05 D-10: check_eprom_blank's "not blank" verdict is now 1.
+    operator.check_eprom_blank.return_value = 1
     step = ct.Step(op=ct.OP_BLANK_CHECK, supported=True, reason="")
     ed = ct.resolve_chip("m27c512", db=_REAL_DB)
     result = ct._dispatch_step("m27c512", step, ed, operator, runs=1)

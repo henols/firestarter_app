@@ -40,6 +40,7 @@ from firestarter.chip_test import (
     Step,
     StepResult,
     _write_step_was_refused,
+    compare_path_tag,
     coverage_tag,
     repeat_policy_tag,
     resolve_error_name,
@@ -274,7 +275,8 @@ def dedup_fingerprint(report: DiagnosticReport) -> str:
     """Deterministic 12-char hex short-hash keying report dedup.
 
     Hashes chip name, plus each step's op / verdict / fingerprint
-    classification, plus `repeat_policy_tag` and `coverage_tag` when non-empty.
+    classification, plus `repeat_policy_tag`, `coverage_tag` and
+    `compare_path_tag` when non-empty.
 
     It deliberately EXCLUDES every volatile field -- timestamps, host version,
     measured millivolts, error_code and the free-text `reason` -- so a clean
@@ -293,6 +295,13 @@ def dedup_fingerprint(report: DiagnosticReport) -> str:
     coverage. `coverage_tag` supplies the missing discriminator, appended only
     when the policy is full-device -- so every already-filed fingerprint stays
     byte-identical and no historical group is re-keyed.
+
+    A host-path comparison (Phase 202) and a firmware-path comparison of the
+    same chip are likewise mechanically different measurements.
+    `compare_path_tag` supplies that discriminator, appended only when a
+    step's compare ran on the host engine -- every already-filed report was
+    produced by the firmware path, so that side stays untagged and no
+    already-filed fingerprint moves.
     """
     ac = report.auto_capture
     parts = [ac.chip or "", str(ac.protocol or "")]
@@ -323,6 +332,25 @@ def dedup_fingerprint(report: DiagnosticReport) -> str:
     coverage = coverage_tag(report.results)
     if coverage:
         parts.append(coverage)
+    # Compare-path discriminator (Phase 206 Task 3, DEVTEST-02) -- wired
+    # exactly as `repeat_policy_tag`/`coverage_tag` above: computed, and
+    # appended to `parts` ONLY when non-empty.
+    #
+    # Contrast with the SDP leg's accepted full re-key recorded above (six
+    # new steps necessarily re-keying every one of the 43 measured ALLOW
+    # chips): that disposition was ACCEPTED and recorded. This one is the
+    # OPPOSITE disposition, on purpose: every already-filed report was
+    # produced by the firmware comparison path, so firmware/unknown/legacy
+    # stays untagged and no already-filed group is re-keyed. Only the
+    # newer, mechanically different host-path shape gets tagged. The cost
+    # is recorded here, not absorbed: from the first post-206 filing
+    # through `dev test --submit`, host-path reports form their own
+    # `count_agreeing` groups and that population's promotion ladder
+    # restarts -- confirmed by a human at this plan's `checkpoint:decision`
+    # (answer `land-as-specified`) before this landed.
+    compare = compare_path_tag(report.results)
+    if compare:
+        parts.append(compare)
     canonical = "|".join(parts)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:12]
 
@@ -857,6 +885,25 @@ class DiagnosticReport:
         ratio, a flag, a first offset and one clustering score per
         candidate high address bit, never a list of offsets.
 
+        `compare_evidence` (Phase 206 Task 1, DEVTEST-01) is read straight
+        off `StepResult.compare_evidence` -- the blank-check step's own
+        `bad`/`compared`/`first_offset`/`first_actual`/`ff_count`/`aborted`/
+        classification mapping, captured through `_drive_region_compare`'s
+        `on_result` seam. It is additive for the same reason the four
+        `fingerprint_*` siblings are: `dedup_fingerprint` reads only
+        `fingerprint.classification`, never this field, so emitting it
+        cannot re-key a filed report.
+
+        `compare_path` (Phase 206 Task 3, DEVTEST-02) is read straight off
+        `StepResult.compare_path` -- `"host"` when the blank-check or
+        verify step's comparison actually ran through the host engine,
+        `""` otherwise. Emitted unconditionally, alongside
+        `compare_evidence` above. `dedup_fingerprint` reads it only through
+        `compare_path_tag`'s empty-default append, never by reflecting over
+        this dict, so emitting it here changes nothing about report
+        identity beyond what that deliberate, separately-committed append
+        already does.
+
         `divergence` (RPT-A3) carries the read step's own mapping straight
         off `StepResult.divergence` -- the engine is its single source, this
         method never derives it. It is a mapping whenever a comparison was
@@ -936,6 +983,18 @@ class DiagnosticReport:
             ),
             "divergence": result.divergence,
             "chip_id_detected": result.chip_id_detected,
+            # Additive (Phase 206 Task 1, DEVTEST-01): the blank-check
+            # step's own compare evidence, unconditionally emitted, `None`
+            # where the step never reached the operator. Outside
+            # `dedup_fingerprint`'s five-entry allow-list -- see
+            # `StepResult.compare_evidence`'s own field comment.
+            "compare_evidence": result.compare_evidence,
+            # Additive (Phase 206 Task 3, DEVTEST-02): which comparison
+            # engine the step's compare ran through, `""` where the step
+            # never reached it. `dedup_fingerprint` reads this only via
+            # `compare_path_tag`'s deliberate empty-default append -- see
+            # `StepResult.compare_path`'s own field comment.
+            "compare_path": result.compare_path,
             # Schema 1.5: wall-clock seconds for the step, or `None` when it
             # did not run. Additive -- every pre-1.5 consumer ignores it.
             "duration_s": result.duration_s,

@@ -1,52 +1,56 @@
 # CLAUDE.md — Firestarter App
 
-Python host CLI for the Firestarter EPROM programmer. It talks to the Arduino firmware over serial
-at 250000 baud.
+This repository holds the Python host CLI for the Firestarter EPROM programmer. The CLI talks to the
+Arduino firmware over serial at 250000 baud.
 
 ## Development Commands
 
 ```bash
-pip install -e '.[test]'            # install in dev mode; the [test] extra is what CI installs
-firestarter --help                  # verify install
-./firestarter_test.sh [EPROM]       # hardware integration test
-python tools/build_db.py            # regenerate chip database from infoic.xml
+pip install -e '.[test]'            # install in dev mode. CI installs the [test] extra.
+firestarter --help                  # check the install
+./firestarter_test.sh [EPROM]       # run the hardware integration test
+python tools/build_db.py            # generate the chip database from infoic.xml
 ```
 
-**CI runs Python 3.11.** The devcontainer runs a later Python. A later interpreter turns some
-snapshot failures into collection errors, so a green local run does not prove a green CI run. Run
-the suite on 3.11 before you trust it.
+**CI runs Python 3.11.** The devcontainer runs a later Python. A later interpreter can change some
+snapshot failures into collection errors. A green local run therefore does not prove a green CI
+run. Run the suite on Python 3.11 before you trust the result.
 
 ## What CI runs
 
-`.github/workflows/ci.yml` has two jobs. The main job pins Python 3.11, installs `.[test]`, and
-runs these steps in order:
+`.github/workflows/ci.yml` has two jobs. The main job uses Python 3.11, installs `.[test]`, and runs
+these steps in this order:
 
 1. `ruff check firestarter/ tests/`
 2. `ruff format --check firestarter/ tests/`
 3. `pytest tests/ --cov=firestarter --cov-report=term-missing --cov-fail-under=70`
-4. A smoke test: `pip install -e .` then `firestarter --help`.
+4. A smoke test: `pip install -e .`, then `firestarter --help`.
 
-The second job installs `.[test,py32]`, proves `pyusb` imports and records its resolved version,
-then runs `pytest tests/test_pyusb_api_surface.py -q`.
+The second job installs `.[test,py32]`. It imports `pyusb` and records the installed version. Then
+it runs `pytest tests/test_pyusb_api_surface.py -q`.
 
-**A push to `beta` publishes this package.** `beta-release.yml` fires on every push to `beta`. Its
-`github` job cuts a GitHub pre-release. Its `pypi` job then calls `publish.yml` directly, with
-`secrets: inherit`, and **uploads to PyPI**. It calls the workflow rather than waiting on the
-`release: published` trigger, because a release created by a bot cannot cascade on the default
-token. **There is no path filter**, so a documentation-only push publishes a new version too. A
-PyPI version can never be reused.
+**A push to `beta` publishes this package.** `beta-release.yml` runs on each push to `beta`:
 
-**`mypy` is not a CI gate.** It runs only in the local `pre-commit` config, which runs
+1. Its `github` job creates a GitHub pre-release.
+2. Its `pypi` job calls `publish.yml` directly, with `secrets: inherit`, and **uploads to PyPI**.
+
+The `pypi` job calls `publish.yml` directly for this reason: the `github` job creates the release
+with `PERSONAL_ACCESS_TOKEN`. That token does not have the `workflow` scope, so GitHub does not send
+the `release: published` event. **The workflow has no path filter.** A documentation-only push
+therefore publishes a new version too. PyPI never accepts the same version two times.
+
+**`mypy` is not a CI gate.** Only the local `pre-commit` config runs it. That config runs
 `ruff-check`, then `ruff-format`, then `mypy`.
 
-**`ruff` lints only `firestarter/` and `tests/`.** `tools/` is outside every CI gate. The `ruff`
-rule selection is `E`, `F`, `I` and `UP`, with `E501` ignored. A `# noqa` code outside that
-selection is inert.
+**`ruff` checks only `firestarter/` and `tests/`.** No CI step lints, formats, type-checks or
+measures coverage of `tools/`. The tests do run `tools/build_db.py` and its JSON inputs. The `ruff`
+rule selection is `E`, `F`, `I` and `UP`, and the config ignores `E501`. A `# noqa` code outside that
+selection has no effect.
 
-**`mypy` is strict on ten modules**, through a `disallow_untyped_defs` and `check_untyped_defs`
-override in `pyproject.toml`: `main`, `cli_handlers`, `chip_resolver`, `frame_parser`, `codec`,
-`address_parser`, `exceptions`, `serial_comm`, `sdp_honesty` and `log_capture`. Read the override
-list in `pyproject.toml` rather than trusting this sentence after a refactor.
+**`mypy` is strict on eleven modules.** An override in `pyproject.toml` sets
+`disallow_untyped_defs` and `check_untyped_defs` for `main`, `cli_handlers`, `chip_resolver`,
+`frame_parser`, `codec`, `address_parser`, `exceptions`, `serial_comm`, `sdp_honesty`, `log_capture`
+and `compare`. After a refactor, read the override list in `pyproject.toml`. Do not trust this list.
 
 ## Architecture
 
@@ -57,54 +61,68 @@ infoic.xml → build_db.py → chip_database.json
                                         ↓
 firestarter <chip> write/read/erase
      ↓
-EpromDatabase.get_eprom(name)       # look up chip
+EpromDatabase.get_eprom(name)       # find the chip
      ↓
-database._map_data()                # extract algorithm, vpp_mv, pinout
+database._map_data()                # get algorithm, vpp_mv, pinout
      ↓
-database.convert_to_programmer()    # translate DIP pins to bus config
+database.convert_to_programmer()    # change DIP pins to bus config
      ↓
-eprom_operations.py                 # build JSON command
+eprom_operations.py                 # make the JSON command
      ↓
-serial_comm.py                      # send over serial, handle response
+serial_comm.py                      # send it over serial, read the response
 ```
 
 ### Key Files
 
-- `firestarter/data/chip_database.json` — the generated chip database. **Do not edit it by hand.**
-- `firestarter/data/pinouts.json` — physical DIP pin to RURP bus line mappings. It holds 16 entries,
-  one per pinout key the database uses.
-- `firestarter/database.py` — `EpromDatabase`. Lookup, pin translation and command building. It
-  carries the `skip_local_override` seam.
-- `firestarter/eprom_operations.py` — high-level operations: read, write, erase, verify, blank check.
+- `firestarter/data/chip_database.json` — the generated chip database. **Do not edit it.**
+- `firestarter/data/pinouts.json` — maps physical DIP pins to RURP bus lines. It has one entry for
+  each pinout key that the database uses.
+- `firestarter/database.py` — `EpromDatabase`. It finds chips, changes pins and makes commands. It
+  has the `skip_local_override` seam.
+- `firestarter/eprom_operations.py` — the high-level operations: read, write, erase, verify and
+  blank check.
+- `firestarter/compare.py` — the one host-side comparison engine. `verify_eprom`, `chip_test` and
+  the write guard all use it.
 - `firestarter/serial_comm.py` — the serial protocol, as an INIT/MAIN/END state machine.
-- `firestarter/frame_parser.py` — CRC8, `_decode_param`, `_decode_id_frame`, and the `Response` and
-  `LogMessage` structured types. Testable without serial I/O.
-- `firestarter/codec.py` — `format_message` and revision-silkscreen rendering.
-- `firestarter/address_parser.py` — hex and decimal address parsing, plus size parsing.
+- `firestarter/frame_parser.py` — CRC8, `cobs_encode`, `cobs_decode`, `_decode_param`,
+  `MAGIC_PREAMBLE`, and the `Response` and `LogMessage` types. You can test it without serial I/O.
+- `firestarter/codec.py` — `format_message`, `decode_id_frame` and the revision-silkscreen text.
+- `firestarter/address_parser.py` — parses hex and decimal addresses and sizes.
 - `firestarter/chip_resolver.py` — `resolve_chip(name, db) -> programmer_config`.
-- `firestarter/cli_handlers.py` — the Click command handlers. It defines 14 `@cli.command()`
-  functions and a `dev` group with 9 sub-commands, plus the `@map_typed_errors` decorator and the
-  `AppContext` dataclass.
+- `firestarter/cli_handlers.py` — the Click command handlers, the `dev` command group, the
+  `@map_typed_errors` decorator and the `AppContext` dataclass.
 - `firestarter/py32_dfu.py` — the USB DFU firmware-install backend for the `py32f071` board. It
-  covers DfuSe and plain DFU 1.1, loads Intel-HEX and raw binaries, and uses `pyusb` through the
-  optional `[py32]` extra. `firmware.py::flash_method()` routes that board here instead of to
-  avrdude. **Unverified against silicon.** No PY32F071 board exists yet.
-- `firestarter/channel.py` — the release-channel gate. `is_prerelease_build()` reports whether the
-  build is a PEP 440 pre-release, which means it was built off `beta`. `BETA_ONLY_BOARDS` lists the
-  gated boards. Two places enforce the gate: `cli_handlers.py` builds `_BOARD_CHOICES` at import, so
-  `fw --help` never advertises a beta-only board on stable, and `firmware.py` refuses in
-  `_install_with_dfu()` and `probe_dfu()` for library callers. **Never gate on an environment
-  variable. It fails open.** Graduate a board by deleting it from `BETA_ONLY_BOARDS`.
-- `firestarter/exceptions.py` — the typed-exception hierarchy: `ChipNotFoundError`,
-  `FirmwareOutdatedError`, `SerialError`, `SerialTimeoutError`, `EpromOperationError` and
-  `HardwareOperationError`.
-- `firestarter/main.py` — the Click CLI entry point.
-- `tools/build_db.py` — the database pipeline. It fetches the upstream `infoic.xml` and writes JSON.
+  supports DfuSe and plain DFU 1.1. It loads Intel-HEX and raw binary files. It uses `pyusb` through
+  the optional `[py32]` extra. `firmware.py::flash_method()` sends that board here, not to avrdude.
+  **No test on real silicon covers it.**
+- `firestarter/channel.py` — the release-channel gate. Refer to the next section.
+- `firestarter/exceptions.py` — the typed exceptions. The root classes are `SerialError`,
+  `EpromOperationError`, `HardwareOperationError`, `FirmwareOperationError` and
+  `ChipNotFoundError`. Read the file for the subclasses.
+- `firestarter/main.py` — the CLI entry point. It exports `cli` from `cli_handlers`.
+- `tools/build_db.py` — the database pipeline. It downloads the upstream `infoic.xml` and writes
+  JSON.
+
+### Release-Channel Gate
+
+`channel.py` decides what a build shows. `is_prerelease_build()` returns true for a PEP 440
+pre-release, which is a build from `beta`. Two lists control the gate:
+
+- `BETA_ONLY_BOARDS` — boards that only a pre-release build shows. Two places enforce it.
+  `cli_handlers.py` makes `_BOARD_CHOICES` at import, so `fw --help` on a stable build never shows a
+  beta-only board. `firmware.py` refuses in `_install_with_dfu()` and `probe_dfu()` for library
+  callers. To release a board to stable, delete it from `BETA_ONLY_BOARDS`.
+- `BETA_ONLY_DEV_COMMANDS` — `dev` subcommands that a stable build does not register.
+
+**Do not add an environment-variable gate. An environment variable fails open.** The one exception
+is `FIRESTARTER_DEV_TOOLS`. It enables the gated `dev` subcommands only when its value is exactly
+`1`, so it fails closed.
 
 ### Wire Protocol
 
-The host sends JSON commands to the firmware at 250000 baud. The `algorithm` field carries the
-upstream `protocol_id` integer. It is the primary firmware dispatch key.
+The host sends each command as COBS-framed JSON with a CRC8, at 250000 baud
+(`serial_comm.py::send_json_command`). The `algorithm` field holds the upstream `protocol_id`
+integer. The firmware dispatches on it.
 
 Example write command:
 
@@ -117,82 +135,87 @@ Example write command:
   "pulse-delay": 0,
   "pin-count": 28,
   "chip-id": 42495,
-  "flags": 10,
+  "flags": 2,
   "bus-config": { ... }
 }
 ```
 
-Firmware responses are prefix-tagged lines: `OK:`, `DATA:`, `MAIN:`, `END:`, `ERROR:`.
+The firmware sends INIT, MAIN, END and status messages as catalog message ID frames. It still sends
+`OK` and `DATA` as text lines. The host parser accepts the text prefixes `OK`, `DATA`, `ERROR`,
+`WARN`, `INFO` and `DEBUG` (`serial_comm.py::EXPECTED_PREFIXES`).
+
+The host reads the firmware buffer size from the `MSG_OK_READY` ack, and sizes its data chunks from
+that value. If the ack has no size, the host uses 512.
 
 ### Database Pipeline
 
-`tools/build_db.py` **fetches** `infoic.xml`, the minipro chip database XML, over the network.
-`MINIPRO_XML_URL` pins the fetch to minipro commit `a8efaedc`, which keeps the build reproducible.
-This repository vendors no copy of the XML. The script writes `firestarter/data/chip_database.json`.
+`tools/build_db.py` **downloads** `infoic.xml`, the minipro chip database XML. `MINIPRO_XML_URL`
+pins the download to minipro commit `a8efaedc`, so the build is reproducible. This repository has
+no copy of the XML. The script writes `firestarter/data/chip_database.json`.
 
-It then merges `tools/extra_chips.json`. That file is the one sanctioned place for a physically real
-chip that `infoic.xml` does not list. Do not add a field to a generated row anywhere else.
+Two files add to the generated data. Do not change a generated row in any other place:
+
+- `tools/extra_chips.json` — adds a real chip that `infoic.xml` does not list.
+- `tools/datasheet_overrides.json` — changes a generated field value. Each entry records the old
+  value, the new value and a datasheet citation.
 
 Key fields per chip entry:
 
-- `algorithm` — the upstream `protocol_id` integer, and the primary dispatch key.
-- `vpp_mv` — VPP voltage in millivolts, decoded from the `voltages` field.
+- `algorithm` — the upstream `protocol_id` integer. The firmware dispatches on it.
+- `vpp_mv` — the VPP voltage in millivolts, decoded from the `voltages` field.
 - `pinout` — the DIP pinout key. The shipped database uses 16 keys: `DIP24_2532`, `DIP24_2716`,
   `DIP24_2732`, `DIP24_2816`, `DIP24_6116`, `DIP28_27256`, `DIP28_27512`, `DIP28_2764`,
   `DIP28_28C64`, `DIP28_28C256`, `DIP28_JEDEC_SRAM_8K`, `DIP32_27C020`, `DIP32_27C801`,
   `DIP32_28C512_EEPROM`, `DIP32_SST39SF040` and `DIP32_STD`.
 
-`part_number` can hold several names in one comma-joined string, such as `W27C512,W27E512`. An
-exact-string match on a single part number therefore misses rows. Split the field before you match
-it.
+`part_number` can hold more than one name in one comma-separated string, for example
+`W27C512,W27E512`. An exact-string match on one part number therefore misses rows. Split the field
+before you compare it.
 
-The pipeline skips a chip whose `protocol_id` it does not know, and warns. The known set is `0x05`,
-`0x06`, `0x07`, `0x08`, `0x0B`, `0x0D`, `0x0E`, `0x10`, `0x27`, `0x28`, `0x29`, `0x35` and `0x39`.
+The pipeline skips a chip that has an unknown `protocol_id`, and shows a warning. `KNOWN_PROTOCOLS`
+in `build_db.py` holds `0x05`, `0x06`, `0x07`, `0x08`, `0x0B`, `0x0D`, `0x0E`, `0x10`, `0x27`,
+`0x28`, `0x29` and `0x34`. The pipeline writes the `0x34` chip as protocol-not-implemented.
 
 ### 5V-EEPROM promotion to `0x0D`
 
-`classify()` in `tools/build_db.py` promotes 5V-EEPROM pinout clusters to `algorithm 0x0D`. Firmware
-dispatch then reaches `configure_eeprom28c`, which is pure 5V VCC with no VPP regulator, instead of
-`configure_eprom`. Two arms do the promotion:
+`classify()` in `tools/build_db.py` promotes 5V-EEPROM pinout clusters to `algorithm 0x0D`. The
+firmware then sends them to `configure_eeprom28c`, which uses 5V VCC and no VPP regulator. Without
+the promotion they go to `configure_eprom`. Two arms promote:
 
-1. `pinout_key` is `DIP24_2816`. Promote for any protocol.
-2. `proto_id` is `0x07`, `0x08` or `0x0B`, **and** either `pinout_key` is `DIP28_28C64` or
-   `DIP28_28C256`, or `pinout_key` is `DIP28_2764` with `flags & 0x10` set.
+1. `pinout_key` is `DIP24_2816`. Promote for all protocols.
+2. `proto_id` is `0x07`, `0x08` or `0x0B`, **and** one of these is true:
+   - `pinout_key` is `DIP28_28C64` or `DIP28_28C256`.
+   - `pinout_key` is `DIP28_2764` and `flags & 0x10` is set.
 
-Genuine 5V flash on the same DIP28 layout keeps its flash algorithm. A later arm handles it.
-**Do not broaden either arm.**
+A real 5V flash chip on the same DIP28 layout keeps its flash algorithm. A later arm handles it.
+**Do not make either arm wider.**
 
-**Why the promotion exists.** On the `DIP28_2764` pinout, socket pin 1 maps to the VPP regulator
-output line. `configure_eprom` asserts `P1_VPP_ENABLE` at 12V on every write pulse. On the affected
-28C-family 5V EEPROMs, physical pin 1 is the A14 address line, not VPP. 12V on pin 1 damages the
-part.
+**Why the promotion exists.** On the `DIP28_2764` pinout, socket pin 1 connects to the VPP
+regulator output. `configure_eprom` sets `CTRL_VPP_P1_ENABLE` at 12V on each write pulse. On the
+affected 28C-family 5V EEPROMs, physical pin 1 is the A14 address line, not VPP. 12V on pin 1
+damages the part.
 
-**Measured scope, against the shipped `chip_database.json`.** 84 rows carry `algorithm 13`, across
-15 vendors: AMD, ATMEL, CATALYST(CSI), CYPRESS, EXEL, FUJITSU, HITACHI, MAXWELL, MICROCHIP memory,
-NEC, SAMSUNG, SGS-THOMSON, ST, WED and XICOR. Those rows sit on four pinouts: `DIP24_2816` at 19
-rows, `DIP28_28C64` at 35, `DIP28_28C256` at 12, and `DIP32_28C512_EEPROM` at 18.
+Rows on `DIP32_28C512_EEPROM` have the upstream `protocol_id` `0x0D`. `classify()` keeps that
+value, so these rows need no promotion.
 
-Seven chips stay on the `0x07` and `configure_eprom` path and still need 12V VPP: W27C512,
-SST27SF512, SST27VF512, W27C257, W27E257, SST27SF256 and SST27VF256. They are electrically-erasable
-EEPROMs, so `electrical.type` reads `EEPROM` and `flags & 0x10` is set. They are not UV-EPROMs. See
-commit `cca7d62`. They sit on `DIP28_27512` or `DIP28_27256`. Both pinouts have a real VPP pin, so
-12V on that pin is correct.
+Seven chips stay on `0x07` and `configure_eprom`, and need 12V VPP: W27C512, SST27SF512,
+SST27VF512, W27C257, W27E257, SST27SF256 and SST27VF256. They are electrically-erasable EEPROMs, not
+UV-EPROMs. Their `electrical.type` is `EEPROM` and `flags & 0x10` is set. Refer to commit
+`cca7d62`. They use `DIP28_27512` or `DIP28_27256`. Both pinouts have a real VPP pin, so 12V on
+that pin is correct.
 
 ### Constants
 
-`firestarter/constants.py` must stay in sync with three firmware headers. Change both sides
-together.
+`firestarter/constants.py` duplicates values from the firmware. Change both sides together.
 
-| Block in `constants.py` | Firmware source of truth | Keep in sync |
+| Block in `constants.py` | Firmware source of truth | Keep the same |
 |---|---|---|
-| flag bits and command codes | `firestarter_fw/include/firestarter.h` | values |
-| `RURP_CONTROL_REGISTER_BITS` (`CTRL_*`) | `firestarter_fw/include/rurp_pinout.h` | names and hex values |
-| `RURP_HARDWARE_REVISIONS` (`REVISION_*`) | `firestarter_fw/include/rurp_shield.h` | names and byte values |
+| Command codes, control flags, `CMD_FRAME_MAX` | `firestarter_fw/include/firestarter.h` | values |
+| `CTRL_*` control-register bits | `firestarter_fw/include/rurp_pinout.h` | names and hex values |
+| `REVISION_*` hardware revisions | `firestarter_fw/include/rurp_shield.h` | names and byte values |
+| `JSON_KEY_*` command keys | `firestarter_fw/src/json_parser.c` | key strings |
 
-Two revision bytes are reserved. `0xFF` marks an absent EEPROM override. `0xFE`
-(`REVISION_UNKNOWN`) marks the ADC band-gap fall-through.
+The project reserves two revision bytes. `0xFF` shows that no EEPROM override is present. `0xFE`
+(`REVISION_UNKNOWN`) shows that the ADC band-gap check found no band.
 
-The `Shield Revisions` wiki page is a subset clone of a meta-repository investigation document. It
-carries four sections: the inventory, the per-revision capability matrix, the silkscreen-to-code
-alias table, and the per-revision ADC band table. **If any of those four sections changes in the
-meta repository, update the wiki page in the same change.** Nothing enforces this mechanically.
+The project reserves control flag `0x08`. Never reuse it. Shipped hosts still send it.

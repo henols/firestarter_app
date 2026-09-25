@@ -30,9 +30,31 @@ from typing import Any
 
 from firestarter import messages
 from firestarter.chip_resolver import resolve_chip
+from firestarter.compare import (
+    _FF_RATIO_THRESHOLD,  # noqa: F401 -- re-exported; see comment below
+    FP_ADDRESS_LINE,  # noqa: F401 -- re-exported; see comment below
+    FP_BLANK_CONTACT,  # noqa: F401 -- re-exported; see comment below
+    FP_INDETERMINATE,  # noqa: F401 -- re-exported; see comment below
+    FP_MATCH,
+    FP_TRANSPORT,  # noqa: F401 -- re-exported; see comment below
+    CompareAccumulator,
+    CompareResult,
+    Fingerprint,
+    classify_streamed,
+    diff_summary,
+)
+
+# 202-03 (D-02): `classify_fingerprint`'s body no longer references
+# `FP_ADDRESS_LINE`, `FP_BLANK_CONTACT`, `FP_INDETERMINATE`, `FP_TRANSPORT`
+# or `_FF_RATIO_THRESHOLD` directly -- it delegates to `classify_streamed`,
+# which owns that logic now. They stay imported here anyway: several test
+# modules (`tests/test_chip_test_sdp_leg.py`, `tests/test_diagnostic_report.py`)
+# import them FROM `firestarter.chip_test`, not `firestarter.compare` --
+# the same re-export contract 202-01 established for `Fingerprint`/`FP_MATCH`
+# (kept test churn at zero then; breaking it now would be an unrelated,
+# unrequested test rewrite).
 from firestarter.constants import (
     FLAG_CAN_ERASE,  # 0x02 -- do NOT redefine; import
-    FLAG_SKIP_BLANK_CHECK,
     FLAG_SKIP_SDP_UNLOCK,  # 0x100 -- passed on OP_WRITE_INHIBITED ONLY.
     # Do NOT redefine; import.
 )
@@ -105,62 +127,20 @@ def prepass_images(length: int) -> tuple[bytes, bytes]:
 
 
 # ---------------------------------------------------------------------------
-# Shared byte-diff-offset helper -- reused, not reimplemented
-# ---------------------------------------------------------------------------
-#
-# Mirrors the exact divergence math in `consistency_check_eprom`
-# (eprom_operations.py:842-863): cmp_len / diff_offsets / pct / first
-# divergence offset. This is the ONE divergence primitive `classify_fingerprint`
-# consumes -- do NOT add a second parallel divergence implementation
-# elsewhere in this codebase. The math is small enough to
-# copy rather than import, keeping this module import-light (no dependency
-# on eprom_operations.py).
-
-
-def _diff_offsets(
-    expected: bytes, actual: bytes
-) -> tuple[int, list[int], float, int | None]:
-    """Return (cmp_len, diff_offsets, pct, first) for two byte arrays.
-
-    `cmp_len` is `min(len(expected), len(actual))` -- unequal-length inputs
-    are compared only over their common prefix and never raise.
-    """
-    cmp_len = min(len(expected), len(actual))
-    diff_offsets = [o for o in range(cmp_len) if expected[o] != actual[o]]
-    pct = 100.0 * len(diff_offsets) / cmp_len if cmp_len else 0.0
-    first = diff_offsets[0] if diff_offsets else None
-    return cmp_len, diff_offsets, pct, first
-
-
-# ---------------------------------------------------------------------------
 # Four-bucket byte-mismatch fingerprint classifier
 # ---------------------------------------------------------------------------
-
-# The four locked outcome labels -- never coerce an ambiguous
-# distribution into one of the first three; fall back to indeterminate.
-FP_BLANK_CONTACT = "blank/contact"
-FP_ADDRESS_LINE = "address-line"
-FP_TRANSPORT = "transport"
-FP_INDETERMINATE = "indeterminate"
-FP_MATCH = "match"
-
-# Candidate thresholds (Claude's discretion) -- direction is
-# HIGH-confidence, exact numbers are tunable/bench-informed later. A wrong
-# number only produces more `indeterminate`, never a false confident label.
-_FF_RATIO_THRESHOLD = 0.98  # blank/contact: >= this fraction of actual == 0xFF
-_BIT_CLUSTER_THRESHOLD = 0.9  # address-line: >= this fraction of mismatches
-# share one polarity of one high address bit
-
-
-@dataclass
-class Fingerprint:
-    """Verdict + raw evidence for a single expected-vs-actual byte compare."""
-
-    total: int
-    bad: int
-    bad_pct: float
-    classification: str
-    evidence: dict = field(default_factory=dict)
+#
+# FP_BLANK_CONTACT, FP_ADDRESS_LINE, FP_TRANSPORT, FP_INDETERMINATE, FP_MATCH,
+# the two thresholds and the Fingerprint dataclass all moved to
+# firestarter.compare (202-01 D-01) -- imported above and re-exported at this
+# module's top level, so every existing importer of chip_test.Fingerprint /
+# chip_test.FP_* keeps resolving them unchanged.
+#
+# `_diff_offsets` -- the module-local divergence primitive this classifier
+# used to consume directly -- retired in 202-03 (D-02). The math it copied
+# now lives once, in `firestarter.compare.diff_summary` / `classify_streamed`,
+# and this function delegates to it rather than reimplementing the
+# math a second time.
 
 
 def classify_fingerprint(
@@ -172,12 +152,14 @@ def classify_fingerprint(
 ) -> Fingerprint:
     """Classify a byte-mismatch pattern into one of five honest buckets.
 
-    Consumes the shared `_diff_offsets` divergence primitive (the
-    same math `consistency_check_eprom` uses for run1-vs-run2 divergence,
-    here applied to expected-pattern-vs-read-back). Never writes a second
-    divergence implementation.
+    202-03 (D-02): delegates to `compare.classify_streamed` via a single
+    `CompareAccumulator` fed over the common prefix -- this function is a
+    thin wrapper, not a second implementation of the divergence math.
+    `classify_streamed`'s docstring and the D-03 corpus in
+    `tests/test_compare.py` are what actually prove this produces the same
+    `Fingerprint` the batch implementation used to compute directly.
 
-    Classification order is LOCKED:
+    Classification order is LOCKED (enforced in `compare.classify_streamed`):
       1. blank/contact  -- cheapest, most common false-PASS source
       2. address-line   -- power-of-two high-bit clustering (needs addr_base
                             to map offsets to ABSOLUTE addresses, Pitfall 3)
@@ -188,92 +170,11 @@ def classify_fingerprint(
       5. indeterminate   -- fallback; NEVER coerce an ambiguous distribution
                             into a confident label.
     """
-    cmp_len, diff_offsets, bad_pct, first_offset = _diff_offsets(expected, actual)
-    bad = len(diff_offsets)
-
-    ff_count = sum(1 for b in actual[:cmp_len] if b == 0xFF)
-    ff_ratio = (ff_count / cmp_len) if cmp_len else 0.0
-
-    evidence: dict = {
-        "ff_ratio": ff_ratio,
-        "repeat_divergent": repeat_divergent,
-        "first_offset": first_offset,
-        "bit_clustering": {},
-    }
-
-    # 1. blank/contact: read-back is near-all 0xFF (un-driven bus / contact
-    # fault). Checked first regardless of whether there are zero mismatches
-    # (a perfect verify) or the pattern never matched at all.
-    if ff_ratio >= _FF_RATIO_THRESHOLD:
-        return Fingerprint(
-            total=cmp_len,
-            bad=bad,
-            bad_pct=bad_pct,
-            classification=FP_BLANK_CONTACT,
-            evidence=evidence,
-        )
-
-    # 2. address-line: mismatches concentrate on one polarity of a single
-    # high address bit (A8+). Map each mismatch offset to its ABSOLUTE
-    # address (addr_base + offset) before clustering (Pitfall 3) -- else
-    # the signal is computed against the wrong bits. Candidate bits are
-    # restricted to those that can actually vary within [0, cmp_len), i.e.
-    # 8 <= k < ceil(log2(cmp_len)); bits at or above that never toggle
-    # within the compared region and would spuriously "cluster" at 100%.
-    suspected_line = None
-    best_score = 0.0
-    if bad and cmp_len > (1 << 8):
-        max_bit = (cmp_len - 1).bit_length()
-        for k in range(8, max_bit):
-            mask = 1 << k
-            set_count = sum(1 for o in diff_offsets if (addr_base + o) & mask)
-            clear_count = bad - set_count
-            score = max(set_count, clear_count) / bad
-            evidence["bit_clustering"][k] = score
-            if score > best_score:
-                best_score = score
-                suspected_line = k
-
-    if suspected_line is not None and best_score >= _BIT_CLUSTER_THRESHOLD:
-        evidence["suspected_line"] = suspected_line
-        evidence["cluster_score"] = best_score
-        return Fingerprint(
-            total=cmp_len,
-            bad=bad,
-            bad_pct=bad_pct,
-            classification=FP_ADDRESS_LINE,
-            evidence=evidence,
-        )
-
-    if bad == 0:
-        return Fingerprint(
-            total=cmp_len,
-            bad=bad,
-            bad_pct=bad_pct,
-            classification=FP_MATCH,
-            evidence=evidence,
-        )
-
-    # 3. transport: scattered (no dominant high bit, checked above) AND
-    # non-repeatable across the N>=2 runs (caller-supplied signal from
-    # run1-vs-run2 divergence -- the uno328pb signature).
-    if repeat_divergent is True:
-        return Fingerprint(
-            total=cmp_len,
-            bad=bad,
-            bad_pct=bad_pct,
-            classification=FP_TRANSPORT,
-            evidence=evidence,
-        )
-
-    # 4. indeterminate: never coerce an ambiguous distribution.
-    return Fingerprint(
-        total=cmp_len,
-        bad=bad,
-        bad_pct=bad_pct,
-        classification=FP_INDETERMINATE,
-        evidence=evidence,
-    )
+    cmp_len = min(len(expected), len(actual))
+    acc = CompareAccumulator(addr_base=addr_base)
+    acc.feed(addr_base, expected[:cmp_len], actual[:cmp_len])
+    result = acc.finalise()
+    return classify_streamed(result, repeat_divergent=repeat_divergent)
 
 
 def _synthesized_match_fingerprint(region_length: int) -> Fingerprint:
@@ -1107,6 +1008,31 @@ class StepResult:
     # reads the context, it does not set this field on itself).
     write_target: WriteTarget | None = None
     status: str = STATUS_COMPLETE
+    # The blank-check step's own compare evidence (Phase 206 Task 1,
+    # DEVTEST-01) -- `bad`, `compared`, `first_offset`, `first_actual`,
+    # `ff_count`, `aborted` and the classification string, captured off the
+    # finalised `CompareResult` through `_drive_region_compare`'s existing
+    # `on_result` seam (Phase 203, WRITE-01). Additive, `None` when the step
+    # never reached the operator (a plan-level skip, an unsupported step, an
+    # NA step). Deliberately NOT the `fingerprint` field above:
+    # `dedup_fingerprint` hashes `fingerprint.classification` as part of
+    # every step's triple, and a blank check that PASSES reads an all-0xFF
+    # device -- `ff_ratio` of 1.0 -- which `classify_streamed` checks first
+    # and buckets as `blank/contact`, never `match`. Populating `fingerprint`
+    # here would therefore re-key every already-filed report; this field is
+    # additive and outside `dedup_fingerprint`'s five-entry allow-list, same
+    # discipline as `duration_s`/`write_target`/`chip_id_detected` above.
+    compare_evidence: dict[str, Any] | None = None
+    # The compare STEP's own execution path (Phase 206 Task 3, DEVTEST-02)
+    # -- `COMPARE_PATH_HOST` when the blank-check or verify step's compare
+    # actually ran through the host `_drive_region_compare` engine
+    # (Phase 202); `""` by default. Falsy default is load-bearing, same
+    # discipline as `repeat_policy_tag`/`coverage_tag`: a `StepResult`
+    # reconstructed from a pre-206 JSON artifact, or hand-built in
+    # `tests/fixtures/report_shapes.py`, takes the untagged branch
+    # automatically -- see `compare_path_tag`'s own docstring for why the
+    # direction is fixed by history, not a free choice.
+    compare_path: str = ""
 
 
 def _skip_result(op: str, reason: str, *, verdict: str = VERDICT_SKIPPED) -> StepResult:
@@ -1176,6 +1102,50 @@ def coverage_tag(results: list[StepResult]) -> str:
             if result.write_target.region_policy == REGION_POLICY_FULL_DEVICE:
                 return COVERAGE_TAG_FULL_DEVICE
             return ""
+    return ""
+
+
+# The compare-path discriminator (Phase 206 Task 3, DEVTEST-02). Spelled as
+# the `StepResult.compare_path` value it describes, not a bare string
+# repeated at call sites -- same discipline as `REPEAT_POLICY_DEGRADED_TAG`
+# and `COVERAGE_TAG_FULL_DEVICE` above.
+COMPARE_PATH_HOST = "host"
+COMPARE_PATH_HOST_TAG = "cmp=host"
+
+
+def compare_path_tag(results: list[StepResult]) -> str:
+    """`""` when no step's comparison ran on the host engine; `"cmp=host"`
+    on the first step (in report order) whose `compare_path` records that
+    it did.
+
+    Why it exists: Phase 202 moved comparison onto the host (`compare.py`'s
+    streaming accumulator), but every already-filed
+    `henols/firestarter_prom` report was produced BEFORE that migration --
+    by the firmware comparison path. A host-path report and a firmware-path
+    report of the same chip are mechanically different measurements and
+    must never silently merge into one `count_agreeing` group.
+
+    Returning `""` for the default is load-bearing, for the same reason as
+    `repeat_policy_tag` and `coverage_tag` above: `dedup_fingerprint`
+    appends this tag only when non-empty, so every already-filed report's
+    fingerprint stays byte-identical and no historical grouping is
+    re-keyed. The direction is fixed, not a free choice: every already-filed
+    report was produced by the firmware path, so firmware/unknown/legacy
+    stays untagged and only the newer host-path shape gets tagged -- from
+    the first post-206 filing through `dev test --submit`, host-path
+    reports form their own `count_agreeing` groups and that population's
+    promotion ladder restarts (the 43 measured ALLOW chips; confirmed by a
+    human at this plan's `checkpoint:decision`, answer `land-as-specified`,
+    before this landed).
+
+    Locates the host-path step STRUCTURALLY, via `result.compare_path ==
+    COMPARE_PATH_HOST` -- set only on a step whose comparison actually ran
+    through the host engine. This function must never compare `result.op`
+    against an op-name constant.
+    """
+    for result in results:
+        if result.compare_path == COMPARE_PATH_HOST:
+            return COMPARE_PATH_HOST_TAG
     return ""
 
 
@@ -1357,8 +1327,12 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
     * `run_count` -- how many cycles actually REACHED the operator (a
       SKIPPED cycle did not), so `run_count` keeps meaning "operator calls",
       which is the claim every disclosure surface makes about it.
-    * `fingerprint`/`write_target` -- from the LAST cycle that produced one:
-      the device's final state is the one a reader can still verify.
+    * `fingerprint`/`write_target`/`compare_evidence`/`compare_path` -- from
+      the LAST cycle that produced one: the device's final state is the one
+      a reader can still verify. Without propagating `compare_path` the
+      erasable recipe's verify step would lose its host-path marker inside
+      the fold, and `compare_path_tag` would silently return `""` for a
+      run whose comparison genuinely ran on the host engine.
     * `duration_s` -- the MEAN over the cycles that reached the operator,
       taken over the same `ran` population `run_count` reports, so the two
       can never disagree about which cycles are being described. Cycle 1 and
@@ -1370,6 +1344,14 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
       two cycles measure the same quantity.
     * `error_code`/`reason` -- the FIRST non-empty, so the earliest failure
       explains the row rather than being overwritten by a later cycle.
+    * `status` -- the run-validity axis, held separately from `verdict`
+      above and folded with the OPPOSITE polarity: any cycle carrying an
+      error status wins, rather than disagreement producing a marginal
+      middle ground. Folded over the FULL `results` list, never the `ran`
+      subset -- a transport-failed cycle reports the SKIPPED verdict,
+      which `_RAN_VERDICTS` excludes from `ran`, so a fold over `ran` would
+      silently drop the one cycle this field exists to surface (RESEARCH
+      Pitfall 2).
     """
     if not results:
         # Unreachable via `_run_cycle_block` (it appends either a pre-computed
@@ -1394,6 +1376,8 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
         reason = next((r.reason for r in ran if r.reason), "")
 
     durations = [r.duration_s for r in ran if r.duration_s is not None]
+    folded_status_error = any(r.status == STATUS_ERROR for r in results)
+    folded_status = STATUS_ERROR if folded_status_error else STATUS_COMPLETE
     return StepResult(
         op=op,
         verdict=verdict,
@@ -1408,6 +1392,13 @@ def _aggregate_cycle_results(results: list[StepResult], op: str) -> StepResult:
         write_target=next(
             (r.write_target for r in reversed(ran) if r.write_target is not None), None
         ),
+        compare_evidence=next(
+            (r.compare_evidence for r in reversed(ran) if r.compare_evidence), None
+        ),
+        compare_path=next(
+            (r.compare_path for r in reversed(ran) if r.compare_path), ""
+        ),
+        status=folded_status,
     )
 
 
@@ -2184,8 +2175,8 @@ _UV_PROBE_BLOCK_LENGTH = 4096
 # A MIRROR of `eprom_operations._BOOT_BLOCK_SIZE` (16 KiB, W29C040 datasheet
 # section 6.6's two irreversible boot blocks, first and last). Mirrored
 # rather than imported: `chip_test.py` deliberately keeps no dependency on
-# `eprom_operations.py` (the same reasoning `_diff_offsets`'s own comment,
-# above, already records for the divergence primitive). `_PROTOCOL_FLASH4`
+# `eprom_operations.py` (the same reasoning `compare.diff_summary`'s own
+# comment records for the divergence primitive it owns). `_PROTOCOL_FLASH4`
 # (defined earlier in this module) is reused as the protocol id rather than
 # adding a second constant for it.
 _FLASH4_BOOT_BLOCK_LENGTH = 0x4000
@@ -2389,8 +2380,10 @@ class WriteTarget:
 
     `current_is_probe_read` is `True` only when `current` was read off the
     DEVICE for the EXACT region being written; it is the monotonicity
-    witness the `FLAG_SKIP_BLANK_CHECK` pass is derived from. It exists as a
-    boolean rather than a `current_source` compare because the staged
+    witness the blank-check-skip signal is derived from (FWBLANK-04,
+    Phase 205: an explicit `blank_check_requested=False` keyword now,
+    rather than the retired skip-blank-check wire bit, `0x08`). It exists
+    as a boolean rather than a `current_source` compare because the staged
     tranche targets that actually reach `write_eprom` carry
     `"probe read (tranche 1/2)"`, so a string equality against `"probe
     read"` never matches on a real run.
@@ -2622,6 +2615,32 @@ def _run_step_untimed(
             verdict=VERDICT_SKIPPED,
             status=STATUS_ERROR,
             reason=str(exc),
+            # Kept at 1 by decision (206-REVIEW-FIX WR-02 observation;
+            # 207.1 D-03), not reverted to the nominal `runs`.
+            # `repeat_policy_tag` keys on `run_count == 1` for every
+            # `_REPEAT_POLICY_OPS` step, so a default-policy run whose
+            # per-step-path step raises here stamps the degraded
+            # `runs=1` tag into `dedup_fingerprint` and is re-keyed
+            # into the `--fast` dedup group. Changing it to the
+            # nominal `runs` would re-key reports already filed on
+            # the public issue tracker; the harm is limited to dedup
+            # grouping of reports that are already ERROR or BAD, so
+            # the trade is accepted.
+            #
+            # The mechanism, stated precisely: this `1` is the cause
+            # only on the per-step path -- `run_plan` calling
+            # `_run_step(..., runs=runs)`, which today means the read
+            # step. On the cycle-block path, `_run_cycle_block`
+            # already calls `_run_step(..., runs=1)` per cycle, so
+            # this `1` equals the `runs` value passed in; the tag
+            # comes instead from `_aggregate_cycle_results`
+            # (`run_count=len(ran)`, SKIPPED excluded from `ran`) --
+            # either the `hardware_refused` break leaving one cycle, or
+            # a cycle that raised here (SKIPPED, no error_code, no
+            # break) dropping out of `ran` while the other cycle ran.
+            # Every filed report 207.1 D-04 counted
+            # (7 issues, 9 reports) is the cycle-block shape, so
+            # reverting this branch alone would re-key none of them.
             run_count=1,
         )
     except EpromOperationError as exc:
@@ -2630,6 +2649,7 @@ def _run_step_untimed(
             verdict=VERDICT_BAD,
             reason=str(exc),
             error_code=exc.error_code,
+            # Same trade-off as the branch above; kept at 1 (207.1 D-03).
             run_count=1,
         )
     except (ChipNotImplementedError, ChipNotFoundError) as exc:
@@ -2688,26 +2708,104 @@ def _dispatch_step(
     if step.op == OP_ID:
         return _dispatch_id(name, eprom_data, operator)
     if step.op == OP_BLANK_CHECK:
-        is_ok = operator.check_eprom_blank(name, eprom_data)
-        # Debug session w27c512-devtest-all-bad: a failing blank-check now
-        # carries the firmware's own id and text. This is the step where it
-        # matters most -- mem_util_blank_check emits MSG_ERR_NOT_BLANK with
-        # the offending 3-byte ADDRESS and the byte VALUE it read, which is
-        # the single most useful datum in a `dev test` failure and was being
-        # dropped on the floor.
-        code, message = (None, "") if is_ok else _firmware_error(operator)
-        if is_ok:
+        # D-01 (Phase 206): `check_eprom_blank` returns a three-way int --
+        # 0 == blank, 1 == not blank, 2 == the check itself did not
+        # complete (a setup, transport or hardware failure). Verdict 2
+        # lands on the same two-axis SKIPPED + STATUS_ERROR vocabulary the
+        # transport arm of `_run_step_untimed` already uses -- the pairing
+        # is mandatory because `VERDICT_SKIPPED` alone contributes exit 0.
+        # Checked BEFORE `step.uv_prewrite` so a transport fault on a UV
+        # part is never absorbed into the expected-not-blank branch. The
+        # honest cost: a transport-failed run's per-step `dedup_fingerprint`
+        # triple moves off its pre-206 `blank-check=BAD:` key (206-01
+        # SUMMARY).
+        # DEVTEST-01 (Phase 206 Task 1): capture the finalised CompareResult
+        # through the already-shipped `on_result` seam
+        # (`_drive_region_compare`, Phase 203/WRITE-01) instead of letting
+        # `check_eprom_blank` render and discard it. `captured` stays empty
+        # when the step never reaches the device (SRAM/FRAM pre-wire
+        # short-circuit, a falsy `cmd_data`), which is exactly when
+        # `compare_evidence` below must stay `None`.
+        captured_compare: list[CompareResult] = []
+
+        def _capture_compare_result(
+            result: CompareResult, _captured=captured_compare
+        ) -> None:
+            _captured.append(result)
+
+        blank_verdict = operator.check_eprom_blank(
+            name, eprom_data, on_result=_capture_compare_result
+        )
+        compare_evidence: dict[str, Any] | None = None
+        if captured_compare:
+            # WR-01 (206-REVIEW): the LAST entry, not the first --
+            # `_drive_region_compare` fires `on_result` at most once per
+            # `check_eprom_blank` call today, so `[0]` and `[-1]` currently
+            # coincide, but taking the last matches the "most recent/
+            # finalised" convention `_aggregate_cycle_results` already uses
+            # for `compare_evidence`/`compare_path`/`fingerprint`/
+            # `write_target`, so a future callee that reports more than
+            # once per call degrades to the final result instead of a
+            # silently stale one.
+            cr = captured_compare[-1]
+            compare_evidence = {
+                "bad": cr.bad,
+                "compared": cr.compared,
+                "first_offset": cr.first_offset,
+                "first_actual": cr.first_actual,
+                "ff_count": cr.ff_count,
+                "aborted": cr.aborted,
+                "classification": (
+                    cr.fingerprint.classification if cr.fingerprint else None
+                ),
+            }
+        # Debug session w27c512-devtest-all-bad: a failing blank-check
+        # carries the firmware's own id and text when the failure is a
+        # genuine firmware refusal rather than a host-side compare
+        # mismatch -- pre-3.1.0 firmware's own write-init/erase-end
+        # blank-check pre-flight used to emit MSG_ERR_NOT_BLANK with the
+        # offending 3-byte ADDRESS and the byte VALUE it read, which is the
+        # single most useful datum in a `dev test` failure and was being
+        # dropped on the floor. That firmware-side emission left the
+        # firmware in 3.1.0 (FWBLANK-01/02/03, Phase 205); this extraction
+        # stays because a board still running pre-3.1.0 firmware can send
+        # it (D-08).
+        code, message = (None, "") if blank_verdict == 0 else _firmware_error(operator)
+        if blank_verdict == 0:
             verdict = VERDICT_OK
+            status = STATUS_COMPLETE
+        elif blank_verdict == 2:
+            verdict = VERDICT_SKIPPED
+            status = STATUS_ERROR
+            # The part's blankness is unknown -- the check itself never
+            # completed -- never "not blank", which is what a triager
+            # would read verdict 2's old BAD-branch wording as.
+            message = (
+                "blank check did not complete (setup, transport or "
+                "hardware failure) -- blankness unknown"
+                + (f": {message}" if message else "")
+            )
         elif step.uv_prewrite:
             verdict = VERDICT_SKIPPED
+            status = STATUS_COMPLETE
         else:
             verdict = VERDICT_BAD
+            status = STATUS_COMPLETE
         return StepResult(
             op=step.op,
             verdict=verdict,
             reason=message,
             error_code=code,
             run_count=1,
+            status=status,
+            compare_evidence=compare_evidence,
+            # Phase 206 Task 3 (DEVTEST-02): the step "reached the device"
+            # -- and therefore the host compare engine -- exactly when the
+            # `on_result` callback fired, i.e. `captured_compare` is
+            # non-empty. `""` (the default) on the SRAM/FRAM pre-wire
+            # short-circuit and on any other path that returns before
+            # `_drive_region_compare` runs.
+            compare_path=COMPARE_PATH_HOST if captured_compare else "",
         )
     if step.op == OP_READ:
         return _dispatch_read(name, eprom_data, operator, runs=runs)
@@ -2816,10 +2914,10 @@ def _dispatch_read(
     absent; it stays `None` only when no comparison was possible (a
     single-run `--fast` read, or a read whose runs all produced empty
     bytes). The agreeing branch derives its five values directly rather
-    than calling `_diff_offsets`: the sha equality already proves zero
-    mismatches, and that primitive walks the whole compared range in a
-    Python-level comprehension, so calling it on the common path would add
-    a full-image compare for information already known. Both outcomes
+    than calling `compare.diff_summary`: the sha equality already proves
+    zero mismatches, and that primitive walks the whole compared range
+    through a `CompareAccumulator`, so calling it on the common path would
+    add a full-image compare for information already known. Both outcomes
     carry the SAME five keys, so no consumer sees a ragged shape.
     """
     last_ok = True
@@ -2839,15 +2937,13 @@ def _dispatch_read(
         shas = [hashlib.sha256(b).hexdigest() for b in run_bytes]
         diverged = len(set(shas)) != 1
         if diverged:
-            cmp_len, diff_offsets, pct, first = _diff_offsets(
-                run_bytes[0], run_bytes[1]
-            )
+            summary = diff_summary(run_bytes[0], run_bytes[1])
             divergence = {
                 "repeat_divergent": True,
-                "cmp_len": cmp_len,
-                "bad": len(diff_offsets),
-                "pct": pct,
-                "first_offset": first,
+                "cmp_len": summary.cmp_len,
+                "bad": summary.bad,
+                "pct": summary.pct,
+                "first_offset": summary.first_offset,
             }
         else:
             divergence = {
@@ -3094,13 +3190,18 @@ def _firmware_error(operator: Any) -> tuple[int | None, str]:
     """The firmware's own id + text for the operation that just failed.
 
     Debug session w27c512-devtest-all-bad. `write_eprom`/`verify_eprom`/
-    `erase_eprom`/`check_eprom_blank` all return a bare bool, and
-    `eprom_operations._run_state_machine` catches the `EpromOperationError`
+    `erase_eprom`/`check_eprom_blank` all returned a bare bool at the time,
+    and `eprom_operations._run_state_machine` catches the `EpromOperationError`
     that carried the firmware's `response.id` -- so `_run_step`'s
     `except EpromOperationError` handler can never fire for those four ops
     and every BAD step in a report came out with `error_code: null` and
     `reason: ""`. `EpromOperator` now records the pair on itself (see its
     `__init__`); this reads it back.
+
+    `verify_eprom` returns an int, not a bare bool, since 202-01 D-10 --
+    the multi-run dispatch site (`outcomes.append(... == 0)`) is what adapts
+    that int back to this function's bool contract, so the description above
+    still holds for every caller here.
 
     `getattr` with defaults, not attribute access: every test double in this
     suite is a hand-rolled stand-in for `EpromOperator`, none of them carry
@@ -3160,8 +3261,16 @@ def _dispatch_multi_run(
     """Run a destructive/verify op `runs` times; `marginal` on disagreement.
 
     Collects a per-run bool outcome (the operator method's own return value)
-    for write/write-partial/erase; write/write-partial/verify ALSO attaches a
-    `Fingerprint` (addr_base-aware). A verify's per-run outcomes already
+    for write/write-partial/erase, unchanged by this decision; write and
+    write-partial ALSO attach a `Fingerprint` (addr_base-aware), likewise
+    unchanged. Verify additionally carries its raw int verdict in
+    `verify_verdicts`, alongside the bool `outcomes` list rather than
+    replacing it, so a run returning 2 (D-01, Phase 206: the compare itself
+    did not complete -- a setup, transport or hardware failure) can reach
+    the `status` axis: any such run yields `VERDICT_SKIPPED` +
+    `STATUS_ERROR`, selected before the `diverged`/`marginal` test, and
+    skips the fingerprint read-back below -- the same link that just failed
+    cannot produce one. A verify's per-run outcomes already
     decide pass/fail; the fingerprint's job is to DIAGNOSE, not to decide, so
     it is only worth its device I/O when something in this cycle block needs
     diagnosing. When THIS step's own runs all agreed AND no earlier cycle in
@@ -3230,6 +3339,27 @@ def _dispatch_multi_run(
         )
 
     outcomes: list[bool] = []
+    # D-01 (Phase 206): verify's own int verdict, carried ALONGSIDE
+    # `outcomes` rather than replacing it -- `outcomes` stays a plain bool
+    # list because `all()`/`set()`-uniqueness below and roughly forty
+    # bool-valued test doubles depend on its shape. Only OP_VERIFY appends
+    # here; write/write-partial/erase still collect nothing but the
+    # operator's own bool return value.
+    verify_verdicts: list[int] = []
+    # Phase 206 Task 3 (DEVTEST-02): captured via the same `on_result` seam
+    # `check_eprom_blank` uses (Task 1) -- non-empty exactly when a verify
+    # call's comparison actually reached `_drive_region_compare`. A test
+    # double's `verify_eprom` that accepts `on_result` for signature parity
+    # but never invokes it (the same treatment `FakeChip.check_eprom_blank`
+    # got) correctly leaves this empty, so a mocked/synthetic run never
+    # picks up the host-path tag.
+    captured_compare_verify: list[CompareResult] = []
+
+    def _capture_compare_result_verify(
+        result: CompareResult, _captured=captured_compare_verify
+    ) -> None:
+        _captured.append(result)
+
     fingerprint: Fingerprint | None = None
     tmp_source_path: str | None = None
     resolved_target: WriteTarget | None = None
@@ -3306,9 +3436,12 @@ def _dispatch_multi_run(
             tmp_fh.close()
         tmp_source_path = tmp_fh.name
 
-    write_flags = (
-        FLAG_SKIP_BLANK_CHECK if _is_monotonic_masked_target(resolved_target) else 0
-    )
+    # FWBLANK-04 (Phase 205): the retired skip-blank-check wire bit (0x08)
+    # no longer exists on either ladder. This is the one non-CLI producer
+    # of what used to be that bit; it now reaches write_eprom's own
+    # blank_check_requested keyword directly instead of composing a wire
+    # flag -- the same explicit route `write -b` uses.
+    blank_check_requested = not _is_monotonic_masked_target(resolved_target)
     try:
         for _ in range(runs):
             if op in (OP_WRITE, OP_WRITE_PARTIAL):
@@ -3318,20 +3451,40 @@ def _dispatch_multi_run(
                         name,
                         eprom_data,
                         tmp_source_path,
-                        write_flags,
+                        0,
                         address_str=_address_arg(region_start),
+                        blank_check_requested=blank_check_requested,
                     )
                 )
                 _sample(sampler, "after")
             elif op == OP_VERIFY:
-                outcomes.append(
-                    operator.verify_eprom(
-                        name,
-                        eprom_data,
-                        tmp_source_path,
-                        address_str=_address_arg(region_start),
-                    )
+                # 202-01 D-10: verify_eprom returns an int -- 0 == match,
+                # 1 == mismatch, 2 == the compare itself did not complete
+                # (setup, transport or hardware failure). The == 0 adapter
+                # keeps `outcomes` a list of bools, so all()/set()-
+                # uniqueness below stay unchanged; `verify_verdicts` (D-01,
+                # Phase 206) carries the raw int alongside it so a 2 can
+                # reach the status axis below.
+                verify_verdict = operator.verify_eprom(
+                    name,
+                    eprom_data,
+                    tmp_source_path,
+                    address_str=_address_arg(region_start),
+                    on_result=_capture_compare_result_verify,
                 )
+                verify_verdicts.append(verify_verdict)
+                outcomes.append(verify_verdict == 0)
+                if verify_verdict == 2:
+                    # WR-02 (206-REVIEW): a verify run that could not
+                    # complete leaves the link in the same faulted state a
+                    # raised SerialError would -- issuing another verify
+                    # pass against it buys no additional information (the
+                    # verdict is already pinned to VERDICT_SKIPPED by
+                    # `verify_transport_failed` below) and pays a second
+                    # full read/compare's worth of device I/O. Break the
+                    # same way the exception path already terminates the
+                    # step early, rather than exhausting `runs`.
+                    break
             elif op == OP_ERASE:
                 outcomes.append(operator.erase_eprom(name, eprom_data))
             else:
@@ -3345,7 +3498,17 @@ def _dispatch_multi_run(
                     f"unreachable: op {op!r} passed the _MULTI_RUN_OPS guard"
                 )
 
-        if collect_fingerprint and op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY):
+        # D-01 (Phase 206): a verify run that returned 2 means the compare
+        # never completed -- the same link that just failed cannot produce
+        # a read-back either, `_read_region` is already best-effort and
+        # would return falsy, so skipping it removes a pointless
+        # whole-region read attempt without removing any information.
+        verify_transport_failed = any(v == 2 for v in verify_verdicts)
+        if (
+            collect_fingerprint
+            and op in (OP_WRITE, OP_WRITE_PARTIAL, OP_VERIFY)
+            and not verify_transport_failed
+        ):
             step_failed = prior_cycles_failed or (
                 not all(outcomes) if outcomes else False
             )
@@ -3378,11 +3541,24 @@ def _dispatch_multi_run(
     # arm can use it -- a `marginal` step has at least one failed run and its
     # error code is just as diagnostic as a BAD one's.
     error_code, error_message = _firmware_error(operator)
-    if diverged:
+    if verify_transport_failed:
+        # D-01 (Phase 206): selected BEFORE the `diverged` test -- a rig
+        # that could not complete the compare has not produced a
+        # disagreement worth naming `marginal`. Same two-axis vocabulary
+        # `_run_step_untimed`'s transport arm already uses.
+        verdict = VERDICT_SKIPPED
+        status = STATUS_ERROR
+        reason = error_message or (
+            f"{runs} verify run(s) did not complete "
+            "(setup, transport or hardware failure)"
+        )
+    elif diverged:
         verdict = VERDICT_MARGINAL
+        status = STATUS_COMPLETE
         reason = f"{runs} runs disagreed on outcome"
     else:
         verdict = VERDICT_OK if outcomes and outcomes[0] else VERDICT_BAD
+        status = STATUS_COMPLETE
         # The firmware's text becomes the step's reason ONLY on a non-OK
         # verdict, and only when the marginal wording has not already
         # claimed the field -- that wording states a policy decision this
@@ -3396,9 +3572,26 @@ def _dispatch_multi_run(
         verdict=verdict,
         reason=reason,
         error_code=None if verdict == VERDICT_OK else error_code,
+        # The nominal `runs`, even when a verify step broke early on a
+        # verdict-2 run (WR-02, 206-REVIEW) and called the operator fewer
+        # times. `repeat_policy_tag` keys on `run_count == 1` for every
+        # `_REPEAT_POLICY_OPS` step, so reporting the executed count would
+        # stamp the degraded `runs=1` tag into `dedup_fingerprint` and
+        # re-key a default-policy run's report into the `--fast` group.
         run_count=runs,
         fingerprint=fingerprint,
         write_target=resolved_target if op in (OP_WRITE, OP_WRITE_PARTIAL) else None,
+        status=status,
+        # Phase 206 Task 3 (DEVTEST-02): the verify step "reached the
+        # device" -- and therefore the host compare engine -- exactly when
+        # `on_result` fired at least once, i.e. `captured_compare_verify` is
+        # non-empty (the same `on_result`-seam discipline the blank-check
+        # arm uses). Write/erase never set this: their fingerprint comes
+        # from a separate `_read_region` + `classify_fingerprint` pass, not
+        # from `_drive_region_compare`.
+        compare_path=(
+            COMPARE_PATH_HOST if (op == OP_VERIFY and captured_compare_verify) else ""
+        ),
     )
 
 
@@ -3591,10 +3784,10 @@ def _dispatch_sdp_leg(
 
     # a. LENGTH gate FIRST (P-02). Measured:
     # `classify_fingerprint(A, b"")` returns `total=0, bad=0` -- an empty
-    # read-back reads as PERFECT equality, and `_diff_offsets` silently
-    # truncates to the common prefix and never raises. This gate runs
-    # before any `_diff_offsets`/`classify_fingerprint` call so that trap
-    # cannot fire.
+    # read-back reads as PERFECT equality, and the underlying
+    # `CompareAccumulator`/`diff_summary` primitive silently truncates to
+    # the common prefix and never raises. This gate runs before any
+    # `classify_fingerprint` call so that trap cannot fire.
     if len(actual) != region_length:
         return StepResult(
             op=op,

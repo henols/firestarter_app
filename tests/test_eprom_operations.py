@@ -22,16 +22,19 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
+from firestarter.compare import CompareAccumulator
 from firestarter.config import ConfigManager
 from firestarter.eprom_operations import EpromOperator
 from firestarter.messages import (
+    MSG_DATA_CHUNK,
     MSG_END_DONE,
     MSG_ERR_NOT_BLANK,
+    MSG_ERR_TIMEOUT,
     MSG_INIT_DONE,
     MSG_MAIN_DONE,
 )
 
-from .conftest import build_frame
+from .conftest import _FakeSerial, build_frame
 from .fake_chip import WriteInitPreflightChip
 
 
@@ -188,13 +191,16 @@ def test_build_flags_force_sets_bit() -> None:
     assert build_flags(force=True) & FLAG_FORCE
 
 
-def test_build_flags_no_blank_check_sets_skip_bit() -> None:
-    """blank_check=False sets FLAG_SKIP_BLANK_CHECK."""
-    from firestarter.constants import FLAG_SKIP_BLANK_CHECK
+def test_build_flags_no_blank_check_sets_no_wire_bit() -> None:
+    """FWBLANK-04 (Phase 205): blank_check=False no longer composes any
+    wire bit at all -- the flag it used to set (0x08) is retired from the
+    ladder. The parameter's effect now travels only to write_eprom's
+    blank_check_requested keyword, threaded straight to the host-side
+    write guard."""
     from firestarter.eprom_operations import build_flags
 
-    flags = build_flags(blank_check=False)
-    assert flags & FLAG_SKIP_BLANK_CHECK
+    assert build_flags(blank_check=False) == 0
+    assert build_flags(blank_check=True) == 0
 
 
 def test_build_flags_vpe_as_vpp_and_verbose() -> None:
@@ -421,40 +427,27 @@ def test_region_end_emitted_on_write(make_comm, fake_serial) -> None:
     assert captured["command_dict"][JSON_KEY_REGION_END] == 0x1000 + 256
 
 
-def test_region_end_emitted_on_verify(make_comm, fake_serial) -> None:
-    """D-05 / D-07: the same emission, for COMMAND_VERIFY -- write and
-    verify share one dict-construction path through _operation_context to
-    _setup_operation, so one change (and one test each) serves both.
-
-    Selected by `pytest -k region_end`.
-    """
-    from firestarter.constants import COMMAND_VERIFY, JSON_KEY_REGION_END
-
-    captured: dict = {}
-
-    def _fake_find_and_connect(command_dict, config, **kwargs):
-        captured["command_dict"] = command_dict
-        return make_comm()
-
-    operator = EpromOperator(ConfigManager())
-    with patch(
-        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
-        side_effect=_fake_find_and_connect,
-    ):
-        operator._setup_operation(
-            "W27C512",
-            dict(_MINIMAL_EPROM_DATA),
-            COMMAND_VERIFY,
-            address="0x2000",
-            region_length=512,
-        )
-
-    assert captured["command_dict"][JSON_KEY_REGION_END] == 0x2000 + 512
+# RETIRED 202-01 (D-01/D-02/D-10): `test_region_end_emitted_on_verify` used to
+# live here. It drove `_setup_operation` directly with an explicit
+# COMMAND_VERIFY to prove `_setup_operation` emits JSON_KEY_REGION_END for
+# that ordinal -- true of the function in isolation, but `verify_eprom` no
+# longer composes COMMAND_VERIFY at all (it drives COMMAND_READ; see
+# `TestVerifyEpromHostSideRead` above), so the test passed while proving
+# nothing about shipped `verify` behaviour, and its docstring's claim that
+# "write and verify share one dict-construction path" was no longer true.
+# Retired rather than "fixed", because there is no real call site left for
+# it to pin: COMMAND_VERIFY's `_setup_operation` branch is now genuinely
+# dead in production, kept alive only by the constant staying in
+# `constants.py` pending phase 204's removal. `test_region_end_absent_for_read`
+# immediately below is what actually covers verify's wire shape now (it
+# proves COMMAND_READ never carries JSON_KEY_REGION_END); no replacement
+# test is needed here for verify specifically.
 
 
 def test_region_end_absent_for_read(make_comm, fake_serial) -> None:
-    """D-05: the emission is guarded on cmd being COMMAND_WRITE or
-    COMMAND_VERIFY -- COMMAND_READ never carries JSON_KEY_REGION_END, so
+    """D-05: the emission is guarded on cmd being COMMAND_WRITE (an
+    equality since Phase 204 retired COMMAND_VERIFY, the guard's other
+    former member) -- COMMAND_READ never carries JSON_KEY_REGION_END, so
     the read path's existing `memory-size` narrowing (`:495`) stays
     undisturbed. region_length is passed here too (not merely omitted) to
     prove the guard is on `cmd`, not on the caller happening not to supply
@@ -484,6 +477,728 @@ def test_region_end_absent_for_read(make_comm, fake_serial) -> None:
         )
 
     assert JSON_KEY_REGION_END not in captured["command_dict"]
+
+
+class TestVerifyEpromHostSideRead:
+    """CMP-01 / phase 202 success criterion 1: `firestarter verify <chip>
+    <file>` completes against firmware without ever composing a command
+    dict whose `cmd` is the retired verify ordinal (6, Phase 204) -- it
+    composes only COMMAND_READ (1) and compares chunk by chunk on the host
+    (202-01 D-01/D-02/D-10). The ordinal is asserted as the integer literal
+    6, not the constant: Phase 204 deleted COMMAND_VERIFY from
+    constants.py, and the property this class protects is about what goes
+    on the wire, not about a Python name -- asserting the literal keeps
+    this test alive and meaningful after the symbol is gone.
+    """
+
+    def test_no_composed_command_dict_carries_the_verify_ordinal(
+        self, make_comm, fake_serial, tmp_path
+    ) -> None:
+        """Collect EVERY composed `command_dict` (not just the last) via the
+        `find_and_connect` side-effect idiom, alongside `_capture_written_frames`
+        for the raw wire bytes -- no entry's `cmd` is the retired verify
+        ordinal (integer literal 6) and at least one is COMMAND_READ (1)."""
+        from firestarter.constants import COMMAND_READ
+
+        payload = b"\xde\xad\xbe\xef"
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        command_dicts: list[dict] = []
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            command_dicts.append(dict(command_dict))
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+        written = _capture_written_frames(fake_serial)
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 0
+        assert command_dicts, "find_and_connect was never called"
+        assert all(cd["cmd"] != 6 for cd in command_dicts), (
+            "a composed command dict carried the retired verify ordinal (6)"
+        )
+        assert any(cd["cmd"] == COMMAND_READ for cd in command_dicts)
+        # Sanity: the driven exchange actually wrote bytes on the wire (acks).
+        assert written
+
+    def test_byte_identical_readback_returns_zero(
+        self, make_comm, fake_serial, tmp_path
+    ) -> None:
+        payload = b"\x01\x02\x03\x04"
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 0
+
+    def test_one_flipped_byte_returns_one(
+        self, make_comm, fake_serial, tmp_path
+    ) -> None:
+        payload = b"\x01\x02\x03\x04"
+        corrupted = bytearray(payload)
+        corrupted[2] ^= 0xFF
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+
+    def test_incomplete_compare_never_reports_a_match(
+        self, make_comm, fake_serial, tmp_path
+    ) -> None:
+        """Standing prohibition this plan carries: a compare that covered
+        fewer bytes than the declared region must never report a clean
+        match, even when every byte it DID compare was equal. Simulates a
+        device that ends MAIN early (after 4 of 8 declared bytes) -- every
+        compared byte matches, but `compared (4) != total (8)`, so the
+        verdict must be 1, not 0."""
+        payload = b"\x01\x02\x03\x04\x05\x06\x07\x08"
+        short_chunk = payload[:4]
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, short_chunk))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+
+    def test_setup_failure_returns_two(self) -> None:
+        """The entry guard returns 2 (matching `consistency_check_eprom`'s
+        own setup-failure convention), not the old bare `False`."""
+        from firestarter.exceptions import SerialError
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=SerialError("no board attached"),
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), "does-not-matter.bin"
+            )
+
+        assert verdict == 2
+
+
+class TestVerifyEpromReadAbort:
+    """202-04: the default (non-`--full`) compare stops the programmer at
+    the first mismatching byte instead of draining it (CMP-04, D-06), never
+    mistakes the deliberate stop for a fault (D-08), and reports the
+    compared prefix honestly (D-09).
+
+    The only in-repo way to observe "stopped acking" is the captured write
+    frames (`_capture_written_frames`) -- the returned verdict alone cannot
+    distinguish "aborted" from "drained, then reported" (measured project
+    fact). Every test here that claims an abort happened proves it either
+    by the ack-write count or by the chunk-callback call count, never by
+    the verdict alone.
+    """
+
+    @staticmethod
+    def _install_feed_counter(monkeypatch):
+        """Monkeypatch CompareAccumulator.feed to record every call it
+        receives while still doing the real work -- the only way to observe
+        "the chunk callback fired N times" without a hook the production
+        code otherwise exposes."""
+        calls: list = []
+        original_feed = CompareAccumulator.feed
+
+        def _counting_feed(self, address, expected, actual):
+            calls.append((address, actual))
+            return original_feed(self, address, expected, actual)
+
+        monkeypatch.setattr(CompareAccumulator, "feed", _counting_feed)
+        return calls
+
+    def test_default_abort_stops_acking_after_the_mismatching_chunk(
+        self, make_comm, fake_serial, tmp_path, monkeypatch
+    ) -> None:
+        """Four chunks (2 bytes each) are staged; the second differs. The
+        host must ack chunk 1, feed the chunk callback exactly twice, and
+        never ack again -- chunks 3 and 4 are never sent because the
+        firmware's op_wait_for_ack times out first (simulated here by an
+        ERROR frame carrying MSG_ERR_TIMEOUT immediately after the
+        mismatching chunk). Also proves the port teardown completed: a
+        second operation on the SAME operator succeeds afterward."""
+        payload = b"\x01\x02\x03\x04\x05\x06\x07\x08"
+        corrupted_chunk2 = bytes(b ^ 0xFF for b in payload[2:4])
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        feed_calls = self._install_feed_counter(monkeypatch)
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload[0:2]))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, corrupted_chunk2))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+        written = _capture_written_frames(fake_serial)
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+        assert len(feed_calls) == 2, feed_calls
+
+        ack_writes = [w for w in written if w == b"OK"]
+        # The first two "OK" writes are the state machine's own
+        # phase-transition signals (INIT-phase start, MAIN-phase start),
+        # both pre-existing and orthogonal to this feature. The third is
+        # the per-chunk ack for the FIRST (matching) chunk. No fourth "OK"
+        # is ever written: the mismatching second chunk's ack is withheld
+        # -- that withholding IS the abort.
+        assert len(ack_writes) == 3, ack_writes
+
+        # Port teardown completed cleanly on the error path: a second,
+        # unrelated operation on the same operator succeeds without raising.
+        # `_FakeSerial.close()` (called by `disconnect()`'s teardown) flips
+        # `is_open` False on the shared fixture instance -- a real second
+        # `find_and_connect` would open a fresh port, so the fake needs an
+        # explicit reopen here to model that, not because production code
+        # has an equivalent step.
+        fake_serial.is_open = True
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            second_verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+        assert second_verdict == 0
+
+    def test_non_timeout_error_after_intended_abort_returns_two(
+        self, make_comm, fake_serial, tmp_path
+    ) -> None:
+        """D-08 negative 1: a terminating error frame carrying an id OTHER
+        than the timeout id is a real fault wearing the abort's clothes --
+        it must take the exit-2 path even though the default path DID
+        request a stop and DID record one."""
+        payload = b"\x01\x02\x03\x04"
+        corrupted = bytearray(payload)
+        corrupted[0] ^= 0xFF
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(
+            build_frame(MSG_ERR_NOT_BLANK, bytes([0x00, 0x00, 0x00, 0xAB]))
+        )
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 2
+
+    def test_timeout_on_full_path_with_no_abort_requested_returns_two(
+        self, make_comm, fake_serial, tmp_path
+    ) -> None:
+        """D-08 negative 2: `--full` never sets an abort_predicate, so
+        `_read_abort_intended` is False and `_read_abort_stopped_at` stays
+        `None` for the whole run. A genuine firmware timeout on that path
+        must never be attributed to a stop nobody requested."""
+        payload = b"\x01\x02\x03\x04"
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file), full=True
+            )
+
+        assert verdict == 2
+        assert operator._read_abort_stopped_at is None
+
+    def test_timeout_outside_the_acceptance_window_returns_two(
+        self, make_comm, fake_serial, tmp_path, monkeypatch
+    ) -> None:
+        """D-08 negative 3: even with the default path's intent flag set
+        and a stop genuinely recorded, a timeout arriving long after that
+        stop is not this stop's consequence -- simulated by moving the
+        recorded stop timestamp back beyond
+        READ_ABORT_ACCEPTANCE_WINDOW_S. Real wall-clock waiting in a test
+        is neither necessary nor safe, so `time.monotonic` is faked for
+        just the two calls this path makes (the stop, then the check)."""
+        import firestarter.eprom_operations as eprom_ops_mod
+
+        payload = b"\x01\x02\x03\x04"
+        corrupted = bytearray(payload)
+        corrupted[0] ^= 0xFF
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        class _FakeTime:
+            """Wraps the real `time` module, overriding only `monotonic()`
+            -- `time.time()` (used elsewhere in this call for duration
+            logging) still delegates to the real module."""
+
+            def __init__(self, values):
+                self._it = iter(values)
+
+            def monotonic(self):
+                return next(self._it)
+
+            def __getattr__(self, name):
+                import time as real_time
+
+                return getattr(real_time, name)
+
+        stop_time = 1_000.0
+        check_time = stop_time + eprom_ops_mod.READ_ABORT_ACCEPTANCE_WINDOW_S + 1.0
+        monkeypatch.setattr(eprom_ops_mod, "time", _FakeTime([stop_time, check_time]))
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 2
+
+    def test_timeout_just_inside_the_acceptance_window_is_the_intended_abort(
+        self, make_comm, fake_serial, tmp_path, monkeypatch
+    ) -> None:
+        """207.1 D-05 (202-REVIEW WR-01) -- the deliberate stop's
+        MSG_ERR_TIMEOUT arrives inside the acceptance window, so the run
+        resolves to the abort's own verdict, exit 1 for a mismatch, not
+        exit 2; this leg pins the window boundary and makes no abort claim
+        of its own, so the class docstring's ack/feed-count rule does not
+        apply to it; `time.monotonic` is faked for the same two calls as
+        the beyond-window leg."""
+        import firestarter.eprom_operations as eprom_ops_mod
+
+        payload = b"\x01\x02\x03\x04"
+        corrupted = bytearray(payload)
+        corrupted[0] ^= 0xFF
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        class _FakeTime:
+            """Wraps the real `time` module, overriding only `monotonic()`
+            -- `time.time()` (used elsewhere in this call for duration
+            logging) still delegates to the real module."""
+
+            def __init__(self, values):
+                self._it = iter(values)
+
+            def monotonic(self):
+                return next(self._it)
+
+            def __getattr__(self, name):
+                import time as real_time
+
+                return getattr(real_time, name)
+
+        stop_time = 1_000.0
+        check_time = stop_time + eprom_ops_mod.READ_ABORT_ACCEPTANCE_WINDOW_S - 0.001
+        monkeypatch.setattr(eprom_ops_mod, "time", _FakeTime([stop_time, check_time]))
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+
+    def test_timeout_exactly_at_the_acceptance_window_is_the_intended_abort(
+        self, make_comm, fake_serial, tmp_path, monkeypatch
+    ) -> None:
+        """207.1 D-05 (202-REVIEW WR-01) -- the deliberate stop's
+        MSG_ERR_TIMEOUT arrives inside the acceptance window, so the run
+        resolves to the abort's own verdict, exit 1 for a mismatch, not
+        exit 2; this leg pins the window boundary and makes no abort claim
+        of its own, so the class docstring's ack/feed-count rule does not
+        apply to it; `time.monotonic` is faked for the same two calls as
+        the beyond-window leg."""
+        import firestarter.eprom_operations as eprom_ops_mod
+
+        payload = b"\x01\x02\x03\x04"
+        corrupted = bytearray(payload)
+        corrupted[0] ^= 0xFF
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        class _FakeTime:
+            """Wraps the real `time` module, overriding only `monotonic()`
+            -- `time.time()` (used elsewhere in this call for duration
+            logging) still delegates to the real module."""
+
+            def __init__(self, values):
+                self._it = iter(values)
+
+            def monotonic(self):
+                return next(self._it)
+
+            def __getattr__(self, name):
+                import time as real_time
+
+                return getattr(real_time, name)
+
+        stop_time = 1_000.0
+        check_time = stop_time + eprom_ops_mod.READ_ABORT_ACCEPTANCE_WINDOW_S
+        monkeypatch.setattr(eprom_ops_mod, "time", _FakeTime([stop_time, check_time]))
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+
+    def test_first_byte_mismatch_aborts_after_one_chunk_and_reports_a_range(
+        self, make_comm, fake_serial, tmp_path, caplog
+    ) -> None:
+        """CMP-04 boundary: a mismatch AT the first byte of the region is
+        still reported as a range and still exits 1 -- the abort fires
+        after the very first chunk, so the second (never-sent) chunk's
+        bytes are never part of the compared prefix."""
+        payload = b"\x01\x02\x03\x04"
+        corrupted_chunk1 = bytes([0x01 ^ 0xFF, 0x02])  # byte 0 mismatched
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, corrupted_chunk1))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with (
+            caplog.at_level(logging.INFO, logger="EpromOperator"),
+            patch(
+                "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+                side_effect=_fake_find_and_connect,
+            ),
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+        messages = [rec.message for rec in caplog.records]
+        assert any("Mismatch 0x000000-0x000000 (1 bytes)" in m for m in messages)
+
+    def test_last_byte_mismatch_completes_normally_not_as_an_abort(
+        self, make_comm, fake_serial, tmp_path, caplog
+    ) -> None:
+        """CMP-04 boundary, other end: a mismatch AT the last byte of the
+        region still reports a range and exits 1, but the firmware
+        completes the read (MAIN arrives) before its ack wait would have
+        expired -- a COMPLETE compare, not an abort: compared == total,
+        aborted is False."""
+        payload = b"\x01\x02\x03\x04"
+        corrupted_chunk2 = bytes([0x03, 0x04 ^ 0xFF])  # byte 3 (last) mismatched
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload[0:2]))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, corrupted_chunk2))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with (
+            caplog.at_level(logging.INFO, logger="EpromOperator"),
+            patch(
+                "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+                side_effect=_fake_find_and_connect,
+            ),
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+        messages = [rec.message for rec in caplog.records]
+        assert any("Mismatch 0x000003-0x000003 (1 bytes)" in m for m in messages)
+        # compared == total (4): the last chunk was fully fed before the
+        # predicate ever fired, so this is not a truncated/aborted prefix.
+        assert any("1 bad of 4 compared of 4" in m for m in messages)
+
+    def test_sixteen_consecutive_differences_report_one_range(
+        self, make_comm, fake_serial, tmp_path, caplog
+    ) -> None:
+        """CMP-04 adjacency: a run of 16 consecutive differing bytes inside
+        ONE chunk is one coalesced range with byte count 16, not 16 ranges."""
+        payload = bytes(range(16))
+        corrupted = bytes(b ^ 0xFF for b in payload)  # every byte differs
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, corrupted))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with (
+            caplog.at_level(logging.INFO, logger="EpromOperator"),
+            patch(
+                "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+                side_effect=_fake_find_and_connect,
+            ),
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+        range_lines = [
+            rec.message for rec in caplog.records if rec.message.startswith("Mismatch ")
+        ]
+        assert len(range_lines) == 1, range_lines
+        assert "(16 bytes)" in range_lines[0]
+
+    def test_zero_length_region_never_reports_a_clean_pass(
+        self, make_comm, fake_serial, tmp_path
+    ) -> None:
+        """CMP-04 empty: a zero-length read-back compares as PERFECT
+        equality byte-for-byte -- only an explicit length check
+        distinguishes "nothing was compared" from a genuine match. No
+        predicate ever fires (there is nothing to feed) and the verdict
+        must never be 0."""
+        input_file = tmp_path / "empty.bin"
+        input_file.write_bytes(b"")
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict != 0, "an empty region must never read as a clean pass"
+        assert operator._read_abort_stopped_at is None
+
+    def test_two_mismatches_in_one_chunk_report_the_lower_addressed_range(
+        self, make_comm, fake_serial, tmp_path, caplog
+    ) -> None:
+        """CMP-04 ordering: with mismatches at two separate addresses
+        inside ONE chunk, the single default-path range (max_ranges=1) is
+        the LOWER-addressed one -- the accumulator retains ranges in feed
+        order, and the lower address is coalesced first."""
+        payload = b"\x01\x02\x03\x04\x05\x06"
+        corrupted = bytearray(payload)
+        corrupted[1] ^= 0xFF  # address 1
+        corrupted[4] ^= 0xFF  # address 4
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(corrupted)))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with (
+            caplog.at_level(logging.INFO, logger="EpromOperator"),
+            patch(
+                "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+                side_effect=_fake_find_and_connect,
+            ),
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+        range_lines = [
+            rec.message for rec in caplog.records if rec.message.startswith("Mismatch ")
+        ]
+        assert len(range_lines) == 1, range_lines
+        assert "0x000001-0x000001" in range_lines[0]
+
+    def test_aborted_run_counts_are_exact_integers_matching_pre_stop_bytes(
+        self, make_comm, fake_serial, tmp_path, monkeypatch
+    ) -> None:
+        """CMP-04 precision: on an aborted run, the bad count, the compared
+        count, and every retained range's byte count are exact `int`
+        instances -- never derived from a list length or a float -- and
+        the compared count is strictly less than the region total and
+        equals the sum of the chunk lengths fed before the stop."""
+        payload = b"\x01\x02\x03\x04\x05\x06\x07\x08"
+        corrupted_chunk2 = bytes(b ^ 0xFF for b in payload[2:4])
+        input_file = tmp_path / "in.bin"
+        input_file.write_bytes(payload)
+
+        captured_results: list = []
+        original_finalise = CompareAccumulator.finalise
+
+        def _capturing_finalise(self, **kwargs):
+            result = original_finalise(self, **kwargs)
+            captured_results.append(result)
+            return result
+
+        monkeypatch.setattr(CompareAccumulator, "finalise", _capturing_finalise)
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload[0:2]))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, corrupted_chunk2))
+        fake_serial.feed(build_frame(MSG_ERR_TIMEOUT, b""))
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(input_file)
+            )
+
+        assert verdict == 1
+        assert len(captured_results) == 1
+        result = captured_results[0]
+        assert result.aborted is True
+        assert isinstance(result.bad, int)
+        assert isinstance(result.compared, int)
+        for r in result.ranges:
+            assert isinstance(r.count, int)
+        assert result.compared == 4  # 2 chunks x 2 bytes, before the stop
+        assert result.compared < result.total
 
 
 def test_read_timing_settling_emitted_in_command() -> None:
@@ -1097,9 +1812,11 @@ class TestSramBlankCheckShortCircuit:
     def test_sram_blank_check_short_circuits_before_setup(self, monkeypatch) -> None:
         """FM1608-class SRAM chip: check_eprom_blank must NOT call _setup_operation.
 
-        The host short-circuit should fire immediately, returning False (not
-        applicable) without reaching the firmware command layer.  This test
-        MUST FAIL until Task 2 implements the short-circuit (RED gate).
+        The host short-circuit should fire immediately, returning 2 (D-12:
+        a refusal, not a "not blank" verdict -- a part with no factory-blank
+        state has no blank verdict to report) without reaching the firmware
+        command layer.  This test MUST FAIL until Task 2 implements the
+        short-circuit (RED gate).
         """
         setup_called = []
 
@@ -1117,8 +1834,9 @@ class TestSramBlankCheckShortCircuit:
             "SRAM blank-check must short-circuit BEFORE _setup_operation; "
             f"_setup_operation was called with: {setup_called}"
         )
-        # Result must be False (blank-check not applicable to SRAM/FRAM).
-        assert result is False
+        # 202-05 D-12: the result must be 2, an honest refusal -- not a
+        # "not blank" verdict, and not the old bare False.
+        assert result == 2
 
     def test_eeprom_blank_check_still_reaches_setup(self, monkeypatch) -> None:
         """Negative control: W27C512 (EEPROM, 0x07) must still reach _setup_operation.
@@ -1144,6 +1862,150 @@ class TestSramBlankCheckShortCircuit:
             f"call list: {setup_called}"
         )
         assert setup_called[0][0] == "W27C512"
+
+
+# Minimal eprom_data_dict for the blank-check host-side-read tests below --
+# a small `memory-size` so a single fed MSG_DATA_CHUNK covers the whole
+# declared region without needing an explicit --size (that CLI option lands
+# in Task 2; `check_eprom_blank`'s own region-length computation from
+# cmd_data's address/memory-size pair does not need it to be exercised).
+_BLANK_EPROM_DATA: dict = {
+    "memory-size": 8,
+    "flags": 0,
+    "cmd": 1,
+}
+
+
+class TestCheckEpromBlankHostSideRead:
+    """CMP-02 / phase 202 success criterion 1, second command: `firestarter
+    blank <chip>` completes against firmware that still carries the
+    blank-check ordinal without ever composing a command dict whose `cmd`
+    is that ordinal (the blank-check command's own wire ordinal, 4 --
+    retired from constants.py in Phase 204 Plan 03; asserted below on the
+    integer literal, not the deleted symbol, per that same plan's own
+    precedent for its retired verify-ordinal sibling below) -- it composes
+    only COMMAND_READ (1) and compares chunk by chunk on the host against a
+    constant blank byte (202-05 D-02/D-04/D-10).
+    """
+
+    def test_no_composed_command_dict_carries_the_blank_check_ordinal(
+        self, make_comm, fake_serial
+    ) -> None:
+        """Collect EVERY composed `command_dict` via the `find_and_connect`
+        side-effect idiom -- no entry's `cmd` is the retired blank-check
+        ordinal (4) and at least one is COMMAND_READ (1)."""
+        from firestarter.constants import COMMAND_READ
+
+        payload = b"\xff" * 8
+
+        command_dicts: list[dict] = []
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            command_dicts.append(dict(command_dict))
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+        written = _capture_written_frames(fake_serial)
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA))
+
+        assert verdict == 0
+        assert command_dicts, "find_and_connect was never called"
+        assert all(cd["cmd"] != 4 for cd in command_dicts)
+        assert any(cd["cmd"] == COMMAND_READ for cd in command_dicts)
+        # Sanity: the driven exchange actually wrote bytes on the wire (acks).
+        assert written
+
+    def test_all_blank_chip_returns_zero(self, make_comm, fake_serial) -> None:
+        payload = b"\xff" * 8
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA))
+
+        assert verdict == 0
+
+    def test_one_non_blank_byte_returns_one(self, make_comm, fake_serial) -> None:
+        payload = bytearray(b"\xff" * 8)
+        payload[3] = 0x00
+
+        def _fake_find_and_connect(command_dict, config, **kwargs):
+            return make_comm()
+
+        fake_serial.feed(build_frame(MSG_INIT_DONE, b""))
+        fake_serial.feed(build_frame(MSG_DATA_CHUNK, bytes(payload)))
+        fake_serial.feed(build_frame(MSG_MAIN_DONE, b""))
+        fake_serial.feed(build_frame(MSG_END_DONE, b""))
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=_fake_find_and_connect,
+        ):
+            verdict = operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA))
+
+        assert verdict == 1
+
+    def test_setup_failure_returns_two(self) -> None:
+        """The entry guard returns 2, matching `verify_eprom`'s own
+        setup-failure convention."""
+        from firestarter.exceptions import SerialError
+
+        operator = EpromOperator(ConfigManager())
+        with patch(
+            "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+            side_effect=SerialError("no board attached"),
+        ):
+            verdict = operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA))
+
+        assert verdict == 2
+
+
+class TestCheckEpromBlankSharesTheOneCompareDrive:
+    """D-02: `verify_eprom` and `check_eprom_blank` must not carry two
+    copies of the accumulator loop -- both call the SAME shared private
+    drive helper rather than each rolling their own."""
+
+    def test_both_methods_call_the_shared_drive_helper(self) -> None:
+        import inspect
+
+        verify_src = inspect.getsource(EpromOperator.verify_eprom)
+        blank_src = inspect.getsource(EpromOperator.check_eprom_blank)
+        assert "_drive_region_compare" in verify_src
+        assert "_drive_region_compare" in blank_src
+
+
+class TestBlankExpectedBytesPullCallback:
+    """D-04: `check_eprom_blank`'s pull callback allocates at most the
+    requested chunk length per call -- never a device-sized buffer, no
+    matter how large a single requested length is."""
+
+    def test_allocates_exactly_the_requested_length(self) -> None:
+        from firestarter.eprom_operations import _blank_expected_bytes
+
+        for length in (1, 512, 4096, 524288):  # up to 512 KiB in one call
+            result = _blank_expected_bytes(1234, length)
+            assert len(result) == length
+            assert result == b"\xff" * length
 
 
 # pin the SDP payload-free wire shape + the emitted
@@ -1177,6 +2039,233 @@ def _capture_written_frames(fake_serial):
 
     fake_serial.write = _wrapped
     return written
+
+
+def _fresh_comm_pair():
+    """A fresh, independent `(fake_serial, comm_factory)` pair -- mirrors
+    `conftest.py`'s `fake_serial`/`make_comm` fixtures exactly (same
+    attribute set `SerialCommunicator.__new__` needs to bypass `__init__`).
+    Needed here because a single test drives FOUR separate operations: a
+    completed drive closes its `SerialCommunicator`'s fake serial port
+    (`_FakeSerial.close()` sets `is_open = False`), so each of the four
+    runs needs its own instance rather than reusing one across drives.
+    """
+    from firestarter.serial_comm import SerialCommunicator
+
+    serial = _FakeSerial()
+
+    def _factory():
+        instance = SerialCommunicator.__new__(SerialCommunicator)
+        instance.connection = serial
+        instance.port_name = "/dev/null"
+        instance.baud_rate = 250000
+        instance.timeout = 0.1
+        instance.programmer_info = None
+        instance._fault_inject_outgoing = None
+        instance.firmware_buffer_size = None
+        instance.firmware_max_chunk = None
+        instance.firmware_identity = None
+        instance.hw_revision = None
+        instance.write_block_budget_s = None
+        instance.seen_message_ids = set()
+        return instance
+
+    return serial, _factory
+
+
+def _run_and_capture(
+    method_callable, command_dicts: list[dict], written_frames: list, *, payload: bytes
+):
+    """Drive one `verify_eprom`/`check_eprom_blank` call end to end against
+    a fresh fake serial port, appending the composed `command_dict` (via
+    the `find_and_connect` capture idiom) and every frame the host wrote
+    (via `_capture_written_frames`) to the caller's shared lists. Feeds
+    exactly `MSG_INIT_DONE`, `MSG_DATA_CHUNK` (`payload`), `MSG_MAIN_DONE`,
+    `MSG_END_DONE`. Returns the call's own verdict.
+    """
+    serial, comm_factory = _fresh_comm_pair()
+
+    def _fake_find_and_connect(command_dict, config, **kwargs):
+        command_dicts.append(dict(command_dict))
+        return comm_factory()
+
+    serial.feed(build_frame(MSG_INIT_DONE, b""))
+    serial.feed(build_frame(MSG_DATA_CHUNK, payload))
+    serial.feed(build_frame(MSG_MAIN_DONE, b""))
+    serial.feed(build_frame(MSG_END_DONE, b""))
+    written = _capture_written_frames(serial)
+
+    with patch(
+        "firestarter.serial_comm.SerialCommunicator.find_and_connect",
+        side_effect=_fake_find_and_connect,
+    ):
+        verdict = method_callable()
+    written_frames.extend(written)
+    return verdict
+
+
+class TestOrdinalsNeverSentByVerifyOrBlank:
+    """CMP-01, CMP-02, phase success criterion 1: neither `verify` nor
+    `blank` ever composes a command dict carrying the blank-check ordinal
+    (4) or the verify ordinal (6) -- proven across four runs (a clean
+    verify, a mismatching verify, a clean blank, and a non-blank blank),
+    collected into a list rather than a single slot so the assertion reads
+    "no call across all four runs used either ordinal", not "the last call
+    used the read ordinal".
+
+    Both ordinals are asserted as integer literals, not constants: the
+    property this class protects is about what goes on the wire, not about
+    a Python name, so it stays alive and meaningful independent of either
+    symbol's lifecycle. COMMAND_VERIFY was retired from constants.py in
+    Phase 204 Plan 01, and COMMAND_BLANK_CHECK in Phase 204 Plan 03 (this
+    same phase) -- this test already asserted both literals are never
+    sent, so neither removal changes anything here.
+    """
+
+    def test_no_run_composes_either_retired_ordinal(self, tmp_path) -> None:
+        from firestarter.constants import COMMAND_READ
+
+        command_dicts: list[dict] = []
+        written_frames: list = []
+
+        operator = EpromOperator(ConfigManager())
+
+        clean_file = tmp_path / "clean.bin"
+        clean_file.write_bytes(b"\x01\x02\x03\x04")
+        mismatch_file = tmp_path / "mismatch.bin"
+        mismatch_file.write_bytes(b"\x01\x02\x03\x04")
+
+        v_match = _run_and_capture(
+            lambda: operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(clean_file)
+            ),
+            command_dicts,
+            written_frames,
+            payload=b"\x01\x02\x03\x04",
+        )
+        v_mismatch = _run_and_capture(
+            lambda: operator.verify_eprom(
+                "W27C512", dict(_MINIMAL_EPROM_DATA), str(mismatch_file)
+            ),
+            command_dicts,
+            written_frames,
+            payload=b"\xff\x02\x03\x04",
+        )
+        b_match = _run_and_capture(
+            lambda: operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA)),
+            command_dicts,
+            written_frames,
+            payload=b"\xff" * 8,
+        )
+        b_mismatch = _run_and_capture(
+            lambda: operator.check_eprom_blank("W27C512", dict(_BLANK_EPROM_DATA)),
+            command_dicts,
+            written_frames,
+            payload=b"\x00" + b"\xff" * 7,
+        )
+
+        assert v_match == 0
+        assert v_mismatch == 1
+        assert b_match == 0
+        assert b_mismatch == 1
+
+        assert command_dicts, "find_and_connect was never called across the four runs"
+        assert all(cd["cmd"] != 4 for cd in command_dicts), (
+            "a composed command dict carried the blank-check ordinal (4)"
+        )
+        assert all(cd["cmd"] != 6 for cd in command_dicts), (
+            "a composed command dict carried the retired verify ordinal (6)"
+        )
+        assert all(cd["cmd"] == COMMAND_READ for cd in command_dicts), (
+            "every composed command dict must carry the read ordinal"
+        )
+
+        # Alongside the command-dict proof: no raw frame the host WROTE to
+        # the wire carries either retired ordinal's JSON encoding either --
+        # a second, independent line of evidence at the byte level.
+        assert written_frames, "no bytes were ever written to the wire"
+        assert not any(
+            b'"cmd": 4' in w or b'"cmd":4' in w or b'"cmd": 6' in w or b'"cmd":6' in w
+            for w in written_frames
+        )
+
+    def test_neither_retired_ordinal_is_defined_or_named_on_the_host_ladder(
+        self,
+    ) -> None:
+        """FWCMD-03's host-side half: the constants module exposes neither
+        retired command name, its COMMAND_NAMES map carries neither retired
+        key, and the module's own source carries the reserved-ordinal
+        record naming both numbers. Lives in the host repository
+        deliberately -- no app test scans firmware source today, and this
+        phase does not start that."""
+        import firestarter.constants as constants_module
+
+        assert not hasattr(constants_module, "COMMAND_VERIFY"), (
+            "constants.py must not define COMMAND_VERIFY -- retired in "
+            "Phase 204 Plan 01"
+        )
+        assert not hasattr(constants_module, "COMMAND_BLANK_CHECK"), (
+            "constants.py must not define COMMAND_BLANK_CHECK -- retired "
+            "in Phase 204 Plan 03"
+        )
+        assert 4 not in constants_module.COMMAND_NAMES, (
+            "COMMAND_NAMES must not carry a key for the retired blank-check ordinal (4)"
+        )
+        assert 6 not in constants_module.COMMAND_NAMES, (
+            "COMMAND_NAMES must not carry a key for the retired verify ordinal (6)"
+        )
+        source = Path(constants_module.__file__).read_text()
+        marker = "retired in " + "3.1.0"
+        occurrences = source.count(marker)
+        assert occurrences >= 2, (
+            "constants.py must carry the reserved-ordinal marker at least "
+            f"twice (once per retired ordinal), found {occurrences}"
+        )
+
+
+def test_the_retired_control_flag_is_absent_and_its_gap_is_recorded() -> None:
+    """FWBLANK-04's host-side ladder leg, following Phase 204's executed
+    shape above for the command ladder: the constants module exposes no
+    symbol for the retired skip-blank-check control flag, no production
+    module composes its retired value (0x08) into an operation-flags
+    value, and the reserved note is present in the constants module's own
+    source. Lives here rather than in write_blank_guard's own test module
+    because Phase 204's precedent for a ladder-retirement leg lives here
+    too."""
+    import firestarter.chip_test as chip_test_module
+    import firestarter.constants as constants_module
+    import firestarter.eprom_operations as eprom_operations_module
+    import firestarter.serial_comm as serial_comm_module
+    import firestarter.write_blank_guard as write_blank_guard_module
+
+    assert not hasattr(constants_module, "FLAG_SKIP_BLANK_CHECK"), (
+        "constants.py must not define FLAG_SKIP_BLANK_CHECK -- retired in "
+        "Phase 205 Plan 04 (FWBLANK-04)"
+    )
+
+    for module in (
+        chip_test_module,
+        eprom_operations_module,
+        serial_comm_module,
+        write_blank_guard_module,
+    ):
+        module_source = Path(module.__file__).read_text()
+        assert "FLAG_SKIP_BLANK_CHECK" not in module_source, (
+            f"{module.__name__} must not name the retired control flag's "
+            "identifier anywhere -- FWBLANK-04 retires it with no "
+            f"reference left in production source (found in {module.__file__})"
+        )
+
+    constants_source = Path(constants_module.__file__).read_text()
+    marker = "retired in " + "3.1.0"
+    assert constants_source.count(marker) >= 1, (
+        "constants.py must carry the reserved-flag marker at the 0x08 gap "
+        "in the flag block"
+    )
+    assert "0x08" in constants_source, (
+        "constants.py's flag block must record the retired flag's value "
+        "(0x08) at the gap"
+    )
 
 
 class TestSdpOperationsWireShape:

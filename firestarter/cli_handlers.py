@@ -9,6 +9,7 @@ import functools
 import hashlib
 import json
 import logging
+import os
 import sys
 import time
 from dataclasses import dataclass
@@ -28,7 +29,9 @@ from firestarter import (
     page_size_gate,
     sdp_honesty,  # unreadable_state_caveat(), called not re-authored
     transport_counters,
+    write_blank_guard,
 )
+from firestarter.address_parser import parse_address, parse_size
 from firestarter.channel import (
     BETA_ONLY_DEV_COMMANDS,
     available_boards,
@@ -76,6 +79,7 @@ from firestarter.exceptions import (
     FirmwareOperationError,
     FirmwareOutdatedError,
     HardwareOperationError,
+    NegativeStartAddressError,
     PageAlignmentError,
     PageSizeUnavailableError,
     Pin1HazardRefusedError,
@@ -220,6 +224,12 @@ def map_typed_errors(f: Callable[..., Any]) -> Callable[..., Any]:
         except PageSizeUnavailableError as e:
             raise click.ClickException(str(e)) from e
         except PageAlignmentError as e:
+            raise click.ClickException(str(e)) from e
+        except NegativeStartAddressError as e:
+            # Rendered verbatim, above the generic EpromOperationError arm
+            # below -- that arm prefixes "Programmer error: ", which would
+            # make this host-voiced refusal (write_blank_guard.py) read as a
+            # hardware fault instead of an input-validation refusal.
             raise click.ClickException(str(e)) from e
         except EpromOperationError as e:
             raise click.ClickException(f"Programmer error: {e}") from e
@@ -557,6 +567,47 @@ def read(
     sys.exit(0 if ok else 1)
 
 
+# Phase 203 (D-13/D-14, `exit_code_contract_resolved` in 203-03-PLAN.md):
+# the five terminal lines `write --verify` can print -- see the five
+# constants below. Module-level, format-constant style (mirrors
+# `write_blank_guard._REFUSAL_FORMAT`), specifically so a test can assert
+# whole sentences AND assert the forbidden word's absence over the
+# constants themselves, not over one rendered run.
+#
+# The rule that makes the branch below readable: the LINE is chosen by what
+# happened to the chip, the EXIT CODE by why the invocation ended. That is
+# why the three no-write arms (a guard-read transport failure, a
+# transport/connection failure during the write itself, and a host- or
+# firmware-decided write failure) all share one line and differ only in
+# exit code -- and why the could-not-verify line is reserved for the single
+# arm where a write genuinely landed and only the read-back failed. No
+# separate constant distinguishes the exit-2-vs-exit-1 split among the
+# no-write arms: the underlying cause stays visible in the log
+# (`_run_state_machine` already emits its own communication-error or
+# programmer-error line), so nothing is asked of the operator that only the
+# exit code could answer.
+#
+# The one constant beyond those four exists for a different reason: it is a
+# LANDED-write arm, not a no-write arm -- `write_eprom` records
+# `last_write_attempt_verdict = 0` before the `--skip-sdp-unlock` ack block
+# flips `is_ok`, so the data reached the chip and only the host's check of
+# the opt-out acknowledgement failed (203-REVIEW WR-01, 207.1 D-06).
+_WRITE_VERIFY_VERDICT_OK = "Write to {eprom}: verified -- the read-back matches."
+_WRITE_VERIFY_VERDICT_MISMATCH = (
+    "Write to {eprom}: landed, but the read-back did not verify."
+)
+_WRITE_VERIFY_VERDICT_UNREADABLE = (
+    "Write to {eprom}: landed, but could not be verified -- the read-back failed."
+)
+_WRITE_VERIFY_VERDICT_NO_WRITE = (
+    "Write to {eprom}: did not complete -- nothing was verified."
+)
+_WRITE_VERIFY_VERDICT_LANDED_UNACKNOWLEDGED = (
+    "Write to {eprom}: landed, but the firmware did not acknowledge "
+    "--skip-sdp-unlock -- nothing was verified."
+)
+
+
 @cli.command(name="write")
 @click.argument("eprom", shell_complete=_complete_eprom)
 @click.argument("input_file")
@@ -620,6 +671,32 @@ def read(
     "actually enabled, the write will then fail. Has NO EFFECT on any other "
     "protocol — the host warns and proceeds.",
 )
+# Phase 203 (D-13, the phase's one-way door -- confirmed at 203-03-PLAN.md's
+# Task 1 checkpoint, see 203-03-SUMMARY.md's "Checkpoint Decision" section):
+# --verify changes THIS INVOCATION's exit-code contract; plain `write`
+# (without this flag) is completely unchanged.
+@click.option(
+    "--verify",
+    "verify",
+    is_flag=True,
+    help="After a successful write, read the written region back and compare it "
+    "through the same engine `verify` uses. Changes THIS INVOCATION's exit-code "
+    "contract: 0 the write landed and the read-back matched, 1 the invocation "
+    "ended for a reason the host or the firmware decided (a blank-guard "
+    "refusal, a firmware error during the write, a malformed address, or a "
+    "read-back that completed and disagreed), 2 the transport or the hardware "
+    "failed in ANY phase of the run -- the guard read, the write itself, or "
+    "the read-back. Without --verify, write exits 0 on success and 1 on any "
+    "failure, exactly as before.",
+)
+@click.option(
+    "--full",
+    "full",
+    is_flag=True,
+    help="With --verify, report every coalesced mismatching range in the "
+    "read-back comparison, not just the first. Has no meaning and is refused "
+    "without --verify.",
+)
 @click.pass_obj
 @map_typed_errors
 def write(
@@ -633,6 +710,8 @@ def write(
     vpe_as_vpp: bool,
     pulse_us: int | None,
     skip_sdp_unlock: bool,
+    verify: bool,
+    full: bool,
 ) -> None:
     """Writes a binary file to an EPROM.
 
@@ -642,9 +721,13 @@ def write(
                             still runs on electrically-erasable chips
       --skip-erase          skip the pre-write erase as well
 
-    On protocols 0x0D and 0x05 the write path performs no pre-write blank
-    check at all, so -b is a no-op on those families and is not needed to
-    write a non-blank part. It remains effective on every other protocol.
+    Before the write reaches the port, the host -- not the firmware --
+    checks that the target region is blank. Four protocol families never
+    receive that check: 0x0D (28C parallel) and 0x05 (flash4) auto-erase
+    per page immediately before each write, and the SRAM and FRAM
+    families have no blank state to check at all. -b has nothing to skip
+    on those four families; on every protocol outside this list, it is
+    still the way to skip the check.
 
     --skip-sdp-unlock applies to protocol-0x0D chips, where the firmware
     unlocks software data protection during write init. On any other protocol
@@ -658,7 +741,17 @@ def write(
     protocol 0x0B before any high voltage is enabled. Using the flag always
     reports both the database pulse and the override, so a log captured
     without its command line still records which pulse was used.
+
+    --verify changes THIS INVOCATION's exit-code contract to 0/1/2 (see
+    --verify's own --help text for the full three-way split); plain write,
+    without the flag, keeps its existing 0/1 contract unchanged.
     """
+    if full and not verify:
+        raise click.UsageError(
+            "--full has no meaning without --verify: there is no read-back "
+            "comparison for it to apply to."
+        )
+
     eprom_data = resolve_chip(eprom, db=app.db)
 
     # A SEPARATE, sibling `if` -- never an
@@ -766,6 +859,21 @@ def write(
     if not jp5_gate.confirm_or_refuse(eprom, eprom_data.get("bus-config"), "write"):
         sys.exit(1)
     page_size_gate.require_page_size(eprom, eprom_data, "write")
+    # Folded todo `2026-09-16-reject-negative-write-start-address.md`, host
+    # half: called here, at the CLI tier, so a negative `-a` on `write`
+    # refuses before `app.eprom_operator.write_eprom` is ever invoked, on
+    # every write family (guarded or not). `write_eprom` also calls this
+    # gate itself (write_blank_guard.require_non_negative_address's own
+    # call site), which is what protects `dev test` and `dev write-cycle`
+    # -- callers that never go through this CLI handler at all. This call
+    # now runs between the page-size gate above and the page-alignment
+    # gate below, so a negative start address that is also misaligned, or
+    # paired with a misaligned length, gets this clearer refusal instead of
+    # the alignment gate's signed-hex wording (203-REVIEW IN-01, 207.1
+    # D-08). `require_non_negative_address` returns silently on an
+    # unparseable address, so the alignment gate below still owns the
+    # could-not-parse error.
+    write_blank_guard.require_non_negative_address(eprom, address)
     page_size_gate.require_page_alignment(
         eprom, eprom_data, "write", address, input_file
     )
@@ -787,8 +895,260 @@ def write(
         # value" -- see that function's docstring).
         pulse_us=pulse_us or 0,
         pin1_hazard_acknowledged=True,
+        # Phase 203 (D-14): suppress write_eprom's own verdict line exactly
+        # when --verify is set, so the plain path (verify=False) is
+        # untouched byte-for-byte and the --verify path prints exactly one
+        # combined line instead of two.
+        suppress_verdict_line=verify,
+        # FWBLANK-04 (Phase 205): `-b`/`--no-blank-check` no longer travels
+        # as a wire bit at all -- it reaches the host-side write guard
+        # directly through this keyword.
+        blank_check_requested=blank_check,
     )
-    sys.exit(0 if ok else 1)
+
+    if not verify:
+        # The plain, unchanged 0/1 contract. Neither verdict attribute is
+        # ever read on this path -- D-13's widened contract applies to the
+        # --verify invocation only.
+        sys.exit(0 if ok else 1)
+
+    if ok:
+        # Phase 203 (D-13/D-16): the write landed -- read the same region
+        # back through Phase 202's engine. size_str=None resolves the
+        # region to the input file's own length, which is exactly the
+        # region this write just touched -- D-16's region for free, without
+        # computing it a second time here.
+        #
+        # 203-CR-01: pin the read-back's own connect to the exact port the
+        # write itself just used. `getattr(..., None)` rather than a plain
+        # attribute read -- an `EpromOperator` double (test or otherwise)
+        # that predates this attribute degrades to "no pin" instead of
+        # raising `AttributeError`. `write_eprom` resets
+        # `last_write_port` to `None` at its own entry and only ever sets it
+        # once its own COMMAND_WRITE connect actually succeeds, so a value
+        # read here can only be `None` (no pin: `verify_eprom` falls back to
+        # its own normal discovery) or the genuine port this write reached.
+        verdict = app.eprom_operator.verify_eprom(
+            eprom,
+            eprom_data,
+            input_file,
+            address_str=address,
+            size_str=None,
+            operation_flags=_build_op_flags(force=force),
+            full=full,
+            suppress_verdict_line=True,
+            preferred_port=getattr(app.eprom_operator, "last_write_port", None),
+        )
+        verdict_line = {
+            0: _WRITE_VERIFY_VERDICT_OK,
+            1: _WRITE_VERIFY_VERDICT_MISMATCH,
+            2: _WRITE_VERIFY_VERDICT_UNREADABLE,
+        }[verdict]
+        click.echo(verdict_line.format(eprom=eprom.upper()))
+        sys.exit(verdict)
+
+    # ok is False: the write itself never completed. Read both cause
+    # channels -- every phase of a --verify invocation has one, so no arm
+    # of this branch has to guess (exit_code_contract_resolved's seven-arm
+    # table, arms 1-4). The LINE is chosen by what happened to the chip;
+    # the EXIT CODE by why the invocation ended.
+    guard_verdict = app.eprom_operator.last_write_guard_verdict
+    attempt_verdict = app.eprom_operator.last_write_attempt_verdict
+    if guard_verdict == 1:
+        # Arm 1: the guard refused. It already printed its own one line
+        # (D-11) -- print nothing more, because D-11's one-line property
+        # outranks D-14's verdict line for a refusal that never became a
+        # write.
+        sys.exit(1)
+    if guard_verdict == 2:
+        # Arm 2: the guard read itself failed for a transport or hardware
+        # reason. The write never ran -- the no-write line, not
+        # could-not-verify: nothing landed, and a line that says otherwise
+        # is the class of claim WRITE-05 exists to prevent.
+        click.echo(_WRITE_VERIFY_VERDICT_NO_WRITE.format(eprom=eprom.upper()))
+        sys.exit(2)
+    if attempt_verdict == 2:
+        # Arm 3: the write was attempted and the transport or the hardware
+        # failed under it -- the arm a plan review found missing, and the
+        # likeliest transport failure of the three (the write is the
+        # longest, most hardware-stressed leg of the run).
+        click.echo(_WRITE_VERIFY_VERDICT_NO_WRITE.format(eprom=eprom.upper()))
+        sys.exit(2)
+    if attempt_verdict == 0:
+        # Arm 4b: reachable only through the `--skip-sdp-unlock` ack
+        # failure, because every other `False` return leaves the attempt
+        # verdict at `None`, 1, or 2. The write landed on the wire --
+        # `write_eprom` records verdict 0 before the ack block flips
+        # `is_ok` -- so the no-write line above would be false here
+        # (203-REVIEW WR-01, 207.1 D-06).
+        click.echo(
+            _WRITE_VERIFY_VERDICT_LANDED_UNACKNOWLEDGED.format(eprom=eprom.upper())
+        )
+        sys.exit(1)
+    # Arm 4: the write failed for a reason the host or the firmware
+    # decided (attempt_verdict == 1, or -- defensively -- any other value).
+    click.echo(_WRITE_VERIFY_VERDICT_NO_WRITE.format(eprom=eprom.upper()))
+    sys.exit(1)
+
+
+def _region_refusal_exit_code(
+    *,
+    eprom: str,
+    eprom_data: dict,
+    address: str | None,
+    size: str | None,
+    input_file: str | None = None,
+) -> int | None:
+    """D-17 region resolution and its two pre-wire refusals, shared by
+    `verify` and `blank`.
+
+    An explicit `--size` wins when given. Without one, the declared region
+    length is `input_file`'s own length (`verify`) or the rest of the chip
+    from `--address` onward (`input_file=None`, `blank`'s default) -- the
+    whole chip only when `--address` is also absent. `blank -a <addr>` with
+    no `--size` still declares a real, boundable region ("from `addr` to
+    the chip's end"), not "nothing to bound" -- CR-01 (202-05 code review):
+    an earlier version of this function left `length` as `None` whenever
+    both `--size` and `input_file` were absent, which skipped the
+    past-chip-end check entirely for exactly this case and let a malformed
+    `--address` reach the wire.
+
+    Both refusals are decided HERE, in the CLI tier, before either command
+    ever calls into `EpromOperator` -- `_operation_context` is what opens
+    the serial port, and D-17 requires both refusals to fire before that
+    happens. Returns an exit code (always 2) to refuse with, or `None` when
+    the region is acceptable and the caller should proceed to the real
+    operation.
+
+    Boundary, stated explicitly (CR-01): a start address exactly equal to
+    `memory-size` is past the last addressable byte (valid addresses are
+    `[0, memory-size)`) and is refused, with no region left to declare from
+    it; `start == memory-size - 1` with no `--size` is the last valid byte
+    and declares a 1-byte region, which is accepted.
+
+    A malformed `--address`/`--size` string is deliberately NOT this
+    function's job: `_setup_operation`'s own `parse_address`/`parse_size`
+    `ValueError` handling already refuses that -- also before the wire,
+    also exit 2, via the existing setup-failure path. Returning `None` here
+    lets that path run rather than parsing the string a second time with
+    different error handling.
+    """
+    try:
+        start = parse_address(address) if address is not None else 0
+    except ValueError:
+        return None
+    start = start or 0
+
+    explicit_size: int | None = None
+    if size is not None:
+        try:
+            explicit_size = parse_size(size)
+        except ValueError:
+            return None
+
+    if explicit_size is not None and input_file is not None:
+        try:
+            file_length: int | None = os.path.getsize(input_file)
+        except OSError:
+            file_length = None
+        if file_length is not None and file_length < explicit_size:
+            click.echo(
+                f"{eprom.upper()}: refused -- the input file is {file_length} "
+                f"bytes, shorter than the requested --size of {explicit_size} "
+                "bytes. Comparing only the overlap would silently under-check "
+                "the file."
+            )
+            return 2
+
+    mem_size = eprom_data.get("memory-size")
+
+    # CR-01: a start address at or past the chip's declared size is refused
+    # unconditionally, before any length is even resolved -- there is no
+    # addressable byte left to declare a region from, regardless of whether
+    # --size was given. Checked first so the length-based check below never
+    # has to reason about a negative or zero "rest of chip" length.
+    if mem_size is not None and start >= mem_size:
+        click.echo(
+            f"{eprom.upper()}: refused -- the start address 0x{start:X} is "
+            f"at or past this chip's declared size (0x{mem_size:X})."
+        )
+        return 2
+
+    if explicit_size is not None:
+        length: int | None = explicit_size
+    elif input_file is not None:
+        try:
+            length = os.path.getsize(input_file)
+        except OSError:
+            length = None
+    elif mem_size is not None:
+        # blank's default (no --size): the declared region is the rest of
+        # the chip from `start` onward, not "nothing to bound" -- the
+        # `start >= mem_size` guard above already ruled out a non-positive
+        # length here, so this is always a real, positive length.
+        length = mem_size - start
+    else:
+        length = None
+
+    if length is not None and mem_size is not None and start + length > mem_size:
+        click.echo(
+            f"{eprom.upper()}: refused -- the region 0x{start:X}-"
+            f"0x{start + length:X} runs past this chip's declared size "
+            f"(0x{mem_size:X})."
+        )
+        return 2
+
+    return None
+
+
+_ERASE_SECTOR_BLANK_REFUSAL = (
+    "{eprom}: refused -- ``-s``/``--sector-address`` cannot be combined "
+    "with ``-b``/``--blank-check``: the post-erase check is whole-device "
+    "and cannot follow a sector erase, and the host has no sector-size "
+    "knowledge to scope it with."
+)
+
+
+def _erase_sector_blank_refusal_exit_code(
+    *, eprom: str, sector_address: str | None, blank_check: bool
+) -> int | None:
+    """OQ-1's pre-wire refusal, sibling to `_region_refusal_exit_code` above
+    -- both decide before `EpromOperator` is reached and both return an
+    exit code rather than raising, because `_operation_context` is what
+    opens the serial port.
+
+    Measured hazard (205-RESEARCH.md § "Hazard: erase -s <sector> -b on
+    protocol 0x06"): on protocol ``0x06``, a non-zero ``handle->address``
+    selects a SECTOR erase in ``flash_nor_unlock_erase_execute``
+    (``flash_nor_unlock.cpp:118-126``), not the whole-device erase D-01's
+    post-erase check assumes. D-01's `erase -b` check is whole-device, and
+    the host is not told the sector size -- ``-s`` takes only an address,
+    with no sector-size field threaded to the CLI -- so an unconditional
+    whole-device check after a sector erase would report the untouched
+    remainder as non-blank and exit 1: a reliable false negative where
+    today the combination is a silent no-op (``0x06``'s erase-end
+    assignment was commented-out dead code for its whole life, then
+    deleted outright by ``205-03``'s blank-check sweep).
+
+    Two rejected alternatives, for the record: scoping the check to the
+    erased sector is blocked in practice, because the sector size is not
+    threaded to the CLI; silently skipping the check when ``-s`` is given
+    was rejected because it reproduces exactly the silently-passing defect
+    class Phase 201 exists to fix.
+
+    Decided before `resolve_chip` reaches any operator call -- it is a
+    pure argument-combination refusal over two CLI options, reading no
+    wire dict at all, so it is the cheapest correct place to stop and it
+    guarantees the erase does not run. Returns 2 -- the same class
+    `_region_refusal_exit_code` returns for both of its refusals, a usage
+    refusal decided before the wire; 1 stays reserved for "erased but not
+    blank" so D-02's three outcomes remain distinct -- or `None` when the
+    combination is acceptable and the caller should proceed to the erase.
+    """
+    if sector_address is not None and blank_check:
+        click.echo(_ERASE_SECTOR_BLANK_REFUSAL.format(eprom=eprom.upper()))
+        return 2
+    return None
 
 
 @cli.command(name="verify")
@@ -796,10 +1156,18 @@ def write(
 @click.argument("input_file")
 @click.option("-a", "--address", default=None, help="Verify start address in dec/hex")
 @click.option(
+    "-s", "--size", default=None, help="Size of the data to verify in dec/hex"
+)
+@click.option(
     "-f",
     "--force",
     is_flag=True,
     help="Force, even if the VPP or chip id doesn't match.",
+)
+@click.option(
+    "--full",
+    is_flag=True,
+    help="Report every mismatching range, not just the first.",
 )
 @click.pass_obj
 @map_typed_errors
@@ -808,37 +1176,98 @@ def verify(
     eprom: str,
     input_file: str,
     address: str | None,
+    size: str | None,
     force: bool,
+    full: bool,
 ) -> None:
-    """Verifies the content of an EPROM."""
+    """Verifies the content of an EPROM.
+
+    Exits 0 on a match, 1 on a mismatch, 2 on a transport, hardware, setup,
+    or region failure. The three are distinct: a transport failure is not
+    reported as a mismatch, and a region refusal -- an explicit --size
+    longer than the input file, or a region running past the chip's end --
+    is reported before the serial port ever opens.
+
+    Without --size, the compared region is the input file's own length;
+    with it, --size wins.
+    """
     eprom_data = resolve_chip(eprom, db=app.db)
-    ok = app.eprom_operator.verify_eprom(
+    refusal = _region_refusal_exit_code(
+        eprom=eprom,
+        eprom_data=eprom_data,
+        address=address,
+        size=size,
+        input_file=input_file,
+    )
+    if refusal is not None:
+        sys.exit(refusal)
+    verdict = app.eprom_operator.verify_eprom(
         eprom,
         eprom_data,
         input_file,
         address_str=address,
+        size_str=size,
         operation_flags=_build_op_flags(force=force),
+        full=full,
     )
-    sys.exit(0 if ok else 1)
+    sys.exit(verdict)
 
 
 @cli.command(name="blank")
 @click.argument("eprom", shell_complete=_complete_eprom)
+@click.option(
+    "-a", "--address", default=None, help="Blank check start address in dec/hex"
+)
+@click.option(
+    "-s", "--size", default=None, help="Size of the data to blank check in dec/hex"
+)
 @click.option(
     "-f",
     "--force",
     is_flag=True,
     help="Force, even if the VPP or chip id doesn't match.",
 )
+@click.option(
+    "--full",
+    is_flag=True,
+    help="Report every non-blank range, not just the first.",
+)
 @click.pass_obj
 @map_typed_errors
-def blank(app: AppContext, eprom: str, force: bool) -> None:
-    """Checks if an EPROM is blank."""
+def blank(
+    app: AppContext,
+    eprom: str,
+    address: str | None,
+    size: str | None,
+    force: bool,
+    full: bool,
+) -> None:
+    """Checks if an EPROM is blank.
+
+    Exits 0 when blank, 1 when at least one byte is not blank, 2 on a
+    transport, hardware, setup, or region failure. The three are distinct:
+    a transport failure is not reported as a not-blank verdict, and a
+    region refusal -- a region running past the chip's end -- is reported
+    before the serial port ever opens.
+
+    Without --size, the checked region is the whole chip; with it, --size
+    wins.
+    """
     eprom_data = resolve_chip(eprom, db=app.db)
-    ok = app.eprom_operator.check_eprom_blank(
-        eprom, eprom_data, operation_flags=_build_op_flags(force=force)
+    refusal = _region_refusal_exit_code(
+        eprom=eprom, eprom_data=eprom_data, address=address, size=size
     )
-    sys.exit(0 if ok else 1)
+    if refusal is not None:
+        sys.exit(refusal)
+    verdict = app.eprom_operator.check_eprom_blank(
+        eprom,
+        eprom_data,
+        operation_flags=_build_op_flags(force=force),
+        address_str=address,
+        size_str=size,
+        full=full,
+    )
+    sys.exit(verdict)
 
 
 @cli.command(name="erase")
@@ -884,18 +1313,37 @@ def erase(
 ) -> None:
     """Erase an EPROM, if supported.
 
-    ``-b``/``--blank-check`` requests a blank check performed **after** the erase.
-    Note the inverted sense against ``write``, whose ``-b``/``--no-blank-check``
-    skips a check performed before it. On protocol ``0x0D`` the post-erase check is
-    not wired, so ``-b`` has no effect there.
+    ``-b``/``--blank-check`` requests a blank check performed **after** the
+    erase, through the same host-side engine ``blank`` uses. Note the
+    inverted sense against ``write``, whose ``-b``/``--no-blank-check`` skips
+    a check performed before it -- that inversion is unchanged.
 
-    ``-s``/``--sector-address`` applies to the ``0x06`` sector-erase protocol. The
-    ``0x0D`` software chip erase is device-global by construction and ignores any
-    sector address given for it.
+    Without ``-b``, ``erase`` exits 0 when the erase succeeds and 1 when it
+    does not. With ``-b``, the exit code widens to three outcomes: 0 erased
+    and blank, 1 erased but not blank, 2 when the check itself fails on
+    transport, hardware or setup. The three are distinct -- a transport
+    failure is never reported as a not-blank chip verdict. It works on
+    every part ``erase`` supports. The check reports the first non-blank
+    address only; for every coalesced mismatching range with a
+    classification bucket, run ``firestarter blank <chip> --full``
+    afterward.
+
+    ``-s``/``--sector-address`` applies only to protocols that support a
+    sector erase; a whole-device chip erase ignores any sector address
+    given for it. ``-s`` and ``-b`` cannot be combined: the post-erase
+    check is whole-device and cannot follow a sector erase, and the host
+    has no sector-size knowledge to scope it with. That combination is
+    refused, exit 2, before the erase runs.
 
     An unsupported erase exits 1 by default; ``--ignore-unsupported`` makes it
     exit 0 instead, for scripting, while still printing the same line.
     """
+    sector_blank_refusal = _erase_sector_blank_refusal_exit_code(
+        eprom=eprom, sector_address=sector_address, blank_check=blank_check
+    )
+    if sector_blank_refusal is not None:
+        sys.exit(sector_blank_refusal)
+
     eprom_data = resolve_chip(eprom, db=app.db)
 
     if flash4_erase_gate.is_flash4(eprom_data):
@@ -912,7 +1360,38 @@ def erase(
         address_str=sector_address,
         pin1_hazard_acknowledged=True,
     )
-    sys.exit(0 if ok else 1)
+    if not ok:
+        # Fork D: the check never runs when the erase itself failed -- a
+        # not-blank verdict for a part that was never erased would be a
+        # fabricated claim about silicon, the same shape D-02 exists to
+        # refuse for a transport failure. No second port is opened.
+        sys.exit(1)
+    if not blank_check:
+        sys.exit(0)
+
+    # D-01: the firmware's own post-erase check ran inside the erase's own
+    # port session, as `firestarter_operation_end`. FWBLANK-02 deletes that
+    # assignment, so this is the host re-implementing the same meaning one
+    # tier up, through Phase 202's `check_eprom_blank` -- the same engine
+    # `blank` uses. That makes this a SECOND port open, which resets an
+    # Uno-class board between the erase and the check; an electrically
+    # erased part stays blank across that reset, so the added cost is
+    # wall-clock only, not correctness. Collapsing the two opens into one
+    # session is Phase 206's SESS-01. `address_str`/`size_str` are passed
+    # explicitly as `None` -- the whole-device scope is D-01's decision,
+    # not an omission -- and `full=False` is D-03's terse, first-mismatch
+    # mode. `check_eprom_blank` already returns the 0/1/2 verdict this
+    # docstring promises, so there is no mapping layer: `sys.exit` on it
+    # directly, exactly as `blank` does.
+    verdict = app.eprom_operator.check_eprom_blank(
+        eprom,
+        eprom_data,
+        operation_flags=_build_op_flags(force=force),
+        address_str=None,
+        size_str=None,
+        full=False,
+    )
+    sys.exit(verdict)
 
 
 @cli.command(name="id")
@@ -2486,14 +2965,25 @@ def dev_test(app: "AppContext", chip: str, fast: bool, submit: bool) -> None:
     # passes `runs=1` alone still fails the whole plan, so the weaker policy
     # can only ever be reached on purpose. The default path passes neither
     # and is byte-for-byte the pre-existing call.
-    results = run_plan(
-        plan,
-        app.eprom_operator,
-        app.db,
-        runs=1 if fast else _DEFAULT_RUNS,
-        allow_single_run=fast,
-        sampler=sampler,
-    )
+    #
+    # `dev_test` is the ONLY caller anywhere in this tree that acquires a
+    # lease (206-03, SESS-01): every other command's connect behaviour is
+    # byte-for-byte unchanged. The pre-plan `read_programmer_identity` call
+    # above and the sampler's own connects both go through `HardwareManager`,
+    # a separate class this lease does not reach (D-05) -- they remain
+    # outside it and therefore cap the measurable saving. The whole feature
+    # is one commit; its sha is recorded in the phase record as the SESS-02
+    # revert target, because SESS-02's bench measurement may require
+    # reverting it whole.
+    with app.eprom_operator.lease():
+        results = run_plan(
+            plan,
+            app.eprom_operator,
+            app.db,
+            runs=1 if fast else _DEFAULT_RUNS,
+            allow_single_run=fast,
+            sampler=sampler,
+        )
     report.results = results
     report.banner = count_applicable(plan, results)
     transport_snapshot: dict[str, int] = transport_counters.snapshot()

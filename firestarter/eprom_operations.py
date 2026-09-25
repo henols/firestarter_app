@@ -24,9 +24,14 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 
 from firestarter import transport_counters
 from firestarter.address_parser import parse_address, parse_size
+from firestarter.compare import (
+    MAX_RETAINED_RANGES,
+    CompareAccumulator,
+    CompareResult,
+    render_compare_lines,
+)
 from firestarter.config import ConfigManager
 from firestarter.constants import (
-    COMMAND_BLANK_CHECK,
     COMMAND_CHECK_CHIP_ID,
     COMMAND_DEV_ADDRESS,
     COMMAND_DEV_REGISTERS,
@@ -37,10 +42,8 @@ from firestarter.constants import (
     COMMAND_READ,
     COMMAND_SDP_LOCK,
     COMMAND_SDP_UNLOCK,
-    COMMAND_VERIFY,
     COMMAND_WRITE,
     FLAG_FORCE,
-    FLAG_SKIP_BLANK_CHECK,
     FLAG_SKIP_ERASE,
     FLAG_SKIP_SDP_UNLOCK,
     FLAG_VERBOSE,
@@ -59,7 +62,11 @@ from firestarter.exceptions import (
 )
 from firestarter.frame_parser import _crc8_ccitt, cobs_encode
 from firestarter.jp5_gate import require_acknowledged
-from firestarter.messages import MSG_DATA_PROTECTION_STATUS, MSG_WARN_SDP_UNLOCK_SKIPPED
+from firestarter.messages import (
+    MSG_DATA_PROTECTION_STATUS,
+    MSG_ERR_TIMEOUT,
+    MSG_WARN_SDP_UNLOCK_SKIPPED,
+)
 from firestarter.page_size_gate import require_page_alignment, require_page_size
 from firestarter.sdp_capability import SDP_PROTOCOL_ID
 from firestarter.serial_comm import (
@@ -69,6 +76,12 @@ from firestarter.serial_comm import (
     SerialCommunicator,
 )
 from firestarter.utils import extract_hex_to_decimal
+from firestarter.write_blank_guard import (
+    incomplete_refusal_text,
+    refusal_text,
+    require_non_negative_address,
+    requires_blank_check,
+)
 
 logger = logging.getLogger("EpromOperator")
 
@@ -86,6 +99,28 @@ _CONSUME_REMAINING_INPUT_WINDOW_S = 0.5
 CONNECT_COST_STRUCTURAL_FLOOR_S = (
     CONNECTION_STABILIZE_DELAY + _CONSUME_REMAINING_INPUT_WINDOW_S
 )
+
+# 202-04 D-08: bounded acceptance window for the read-abort discrimination in
+# `verify_eprom`. Derived, not picked: the firmware's own ack wait
+# (`op_wait_for_ack`, firestarter_fw/src/operation_utils.cpp:94-108) times out
+# after 1 s, polled at 10 ms, and the resulting MSG_ERR_TIMEOUT frame then has
+# to traverse the link at 250000 baud -- a few milliseconds at most for a
+# single short frame. 3.0 s is roughly three times that worst-case latency and
+# far below any plausible gap between two unrelated operations, so a genuine
+# timeout that arrives outside this window is never mistaken for this host's
+# own deliberate stop.
+# 207.1 D-05 (202-REVIEW WR-01): the window is derived, not measured under
+# host scheduling or USB latency, and it stays 3.0 s and non-configurable.
+# Its one consumer is `_drive_region_compare`, so it governs every caller:
+# verify, blank, the write blank guard and write --verify. A deliberate stop
+# whose frame arrives later than this -- extreme host load, a stalled USB
+# stack -- is reported as exit 2, a hardware or transport failure, instead of
+# the abort's own verdict. That false exit 2 is a known, accepted outcome:
+# for a report of "verify says hardware error but the chip only mismatches",
+# check host load before suspecting the hardware. On the write-guard path a
+# false 2 refuses the write as a guard-read failure, which is fail-closed.
+# `TestVerifyEpromReadAbort` pins both sides of the boundary.
+READ_ABORT_ACCEPTANCE_WINDOW_S = 3.0
 
 
 def _raise_for_error_response(response, message: str) -> None:
@@ -285,9 +320,15 @@ def build_flags(
     # tests/test_bug_characterization.py's BUG-1 contract pins this signature
     # shape (a PlainArgs bag with no __contains__ must not raise TypeError) —
     # it is re-run as named task work in this same plan, unmodified.
+    #
+    # FWBLANK-04 (Phase 205): `blank_check` no longer composes any wire bit
+    # at all -- the flag it used to set (0x08) is retired from both
+    # ladders. The parameter stays in its current position (both production
+    # callers pass it positionally, alongside `verbose`/`skip_erase`) but
+    # its value now travels only to `write_eprom`'s `blank_check_requested`
+    # keyword, which threads it to the host-side write guard
+    # (write_blank_guard.requires_blank_check) directly.
     flags = 0
-    if not blank_check:
-        flags |= FLAG_SKIP_BLANK_CHECK
     if skip_erase:
         flags |= FLAG_SKIP_ERASE
     if force:
@@ -308,6 +349,38 @@ def build_flags(
         flags |= FLAG_SKIP_SDP_UNLOCK
 
     return flags
+
+
+def _blank_expected_bytes(_offset: int, length: int) -> bytes:
+    """`check_eprom_blank`'s D-04 pull callback: the constant blank byte,
+    exactly `length` bytes -- never a device-sized buffer, no matter how
+    large a single chunk's `length` is. `_offset` is unused; the blank
+    constant does not depend on address. Module-level (not a closure inside
+    `check_eprom_blank`) so it is directly unit-testable without driving a
+    whole compare.
+    """
+    return b"\xff" * length
+
+
+def _write_blank_guard_refusal_message(
+    eprom_name: str, region_start: int, result: CompareResult
+) -> str:
+    """Selects the D-07/D-10 refusal text for one write-guard `CompareResult`.
+
+    `result.first_offset` is `None` exactly when `result.bad == 0`
+    (`compare.py`'s own contract for `CompareResult`) -- an incomplete read
+    that never observed a mismatching byte falls in that branch, so the
+    coverage-stating `incomplete_refusal_text` (203-REVIEW WR-02, 207.1
+    D-07) is used instead of fabricating an address and a value with
+    `refusal_text`. Module-level, not a nested closure, so the two-way
+    selection is directly unit-testable and keeps `_run_write_blank_guard`'s
+    own call site within `ruff format`'s line-length rule.
+    """
+    if result.first_offset is None:
+        return incomplete_refusal_text(eprom_name, result.compared, result.total)
+    return refusal_text(
+        eprom_name, region_start + result.first_offset, result.first_actual
+    )
 
 
 def hexdump(address, data, width=16):
@@ -414,6 +487,80 @@ class EpromOperator:
         # host device path and it has no firmware message id to report.
         self.last_firmware_error_code: int | None = None
         self.last_firmware_error_message: str | None = None
+        # WRITE-01 (Phase 203): the pre-write blank guard's own verdict --
+        # 0 blank/proceeded, 1 not blank/refused, 2 transport or setup
+        # failure, None when the guard was skipped entirely (no region,
+        # blank check not requested, erase-exempt, or an unguarded
+        # protocol).
+        # Set by `write_eprom` on every call, so a stale value from an
+        # earlier write can never leak into a later one's reporting.
+        # Transient per-invocation operator state, in the same family as
+        # `last_firmware_error_code` above -- the CLI tier MUST read this
+        # immediately after the `write_eprom` call returns (WRITE-04/
+        # WRITE-05, `cli_handlers.write`'s `--verify` exit-code branch),
+        # because it is what lets `write_eprom` keep returning a plain
+        # `bool` instead of forcing a bool-to-int migration across the
+        # roughly forty bool-valued test sites and `chip_test.py`'s
+        # documented PRECONDITION contract.
+        self.last_write_guard_verdict: int | None = None
+        # WRITE-04/WRITE-05 (Phase 203): the write phase's OWN cause channel,
+        # sibling of `last_write_guard_verdict` above -- the guard read has
+        # its cause channel, the read-back returns its cause as an int
+        # (`verify_eprom`), and this is the write phase's. States: `0` the
+        # write completed on the wire, `1` the write failed for a reason the
+        # host or the firmware decided (a firmware ERROR frame, or a
+        # malformed `-a` that never reached the wire), `2` the write failed
+        # for a transport, connection, or setup reason, `None` when the
+        # write phase was never attempted at all -- a pure gate raised, a
+        # guard refusal, or a guard-read failure. Reset to `None` at the very
+        # top of `write_eprom`, before any gate can raise, so a prior
+        # invocation's verdict can never leak into this one. The CLI tier
+        # reads this immediately after the `write_eprom` call, in the same
+        # breath as `last_write_guard_verdict` -- together the pair is what
+        # lets `write_eprom` keep its `-> bool` return type instead of
+        # forcing a bool-to-int migration across the roughly forty
+        # bool-valued test sites and `chip_test.py`'s documented
+        # PRECONDITION contract.
+        self.last_write_attempt_verdict: int | None = None
+        # 203-CR-01: the physical port `write_eprom`'s own COMMAND_WRITE
+        # connect actually reached, captured inside that connect's own
+        # `_operation_context` block (before its `finally` tears `self.comm`
+        # down). `None` until a write's own connect succeeds; reset to
+        # `None` at the very top of `write_eprom`, in the same breath as
+        # `last_write_attempt_verdict`, so a prior invocation's port can
+        # never leak into this one's reporting. `cli_handlers.write` reads
+        # this (via `getattr(..., None)`, so an operator double that
+        # predates this attribute degrades to "no pin" rather than raising)
+        # to pin `--verify`'s own read-back connect to the SAME port the
+        # write itself just used -- the guard read, the write, and the
+        # read-back must never be allowed to silently land on three
+        # different boards.
+        self.last_write_port: str | None = None
+        # 202-04 D-06/D-08: set by `_main_phase_read_data` the moment an
+        # `abort_predicate` fires -- a monotonic timestamp, not a wall clock,
+        # so the bounded acceptance window below is immune to a system clock
+        # step. `None` before any run, and reset to `None` at the top of
+        # `_run_state_machine` alongside the firmware-error fields above, so
+        # a stale value from a previous operation can never leak into a
+        # later one's discrimination test.
+        self._read_abort_stopped_at: float | None = None
+        # 202-04 D-08: whether THIS call's caller actually requested the
+        # abort mechanism (the default, non-`--full` verify path). Set
+        # explicitly (True or False) by `verify_eprom` before every drive --
+        # never left to a prior call's value -- so a genuine timeout on a
+        # `--full` run, which never sets an abort_predicate, can never be
+        # mistaken for this host's own doing.
+        self._read_abort_intended: bool = False
+        # SESS-01 (Phase 206): whether this operator is currently holding one
+        # validated link open across multiple calls instead of connecting
+        # and tearing down per call. Default off -- joins the transient
+        # per-invocation attributes above, but is NOT reset per-invocation:
+        # it is set/cleared only by `lease()` itself, spanning every call
+        # made inside a `with operator.lease():` block. `_setup_operation`
+        # reads it to decide whether to reuse `self.comm` or cold-connect;
+        # `_operation_context`'s `finally` reads it to decide whether to
+        # tear `self.comm` down after each call.
+        self._leased: bool = False
 
     def _calculate_buffer_size(self) -> int:
         # firmware_max_chunk is populated by the
@@ -464,10 +611,23 @@ class EpromOperator:
         size: str | None = None,
         fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
         region_length: int | None = None,
+        preferred_port: str | None = None,
+        restrict_to_port: bool | None = None,
     ) -> Tuple[Dict | None, int]:  # noqa: UP006
         """
         Prepares for an EPROM operation: uses pre-fetched EPROM data, sets up command, and connects.
         Returns (eprom_data_for_command, buffer_size) or (None, 0) on failure.
+
+        ``preferred_port``/``restrict_to_port`` (203-CR-01): forwarded verbatim
+        to ``SerialCommunicator.find_and_connect``. Both default to ``None``,
+        which leaves ``find_and_connect``'s own config-driven inference
+        untouched -- every existing single-connect caller (read, erase, a
+        standalone verify/blank, ``dev *``) is byte-identical. A caller that
+        supplies ``preferred_port`` with ``restrict_to_port=True`` pins this
+        connect to exactly that port: `_list_potential_ports` then returns
+        only that one candidate, so a later connect that cannot reach it
+        fails closed (`ProgrammerNotFoundError`) instead of silently
+        discovering a different board.
         """  # noqa: E501
         operation = COMMAND_NAMES[cmd]  # Get command name
         logger.debug(f"Performing {operation} for {eprom_name.upper()}")
@@ -504,24 +664,73 @@ class EpromOperator:
         # device. region_length is the payload size in bytes; the wire carries
         # an absolute EXCLUSIVE end address so the firmware never has to redo
         # this arithmetic against a scan cursor that moves across chunks (see
-        # RESEARCH.md C-3). One code path, no branch on address presence: the
-        # key is emitted on every write and verify, not only when --address is
-        # given. region_length greater than zero is deliberate: a zero-length
+        # RESEARCH.md C-3). Phase 204 retired COMMAND_VERIFY (ordinal 6) --
+        # nothing composes it any more, so the write path is now the ONLY
+        # composer of this key; the guard is an equality against COMMAND_WRITE
+        # rather than a one-member tuple, deliberately, so a later reader does
+        # not read a tuple of one as an invitation to "restore" a second
+        # member. region_length greater than zero is deliberate: a zero-length
         # payload at address 0 would compute an end of 0, which the firmware
         # reads as absent (whole device) -- emitting nothing reaches that same
-        # outcome explicitly instead of by numeric coincidence.
-        if (
-            region_length is not None
-            and region_length > 0
-            and cmd in (COMMAND_WRITE, COMMAND_VERIFY)
-        ):
+        # outcome explicitly instead of by numeric coincidence. This block's
+        # own premise expires in Phase 205, which removes the firmware-side
+        # write-init blank check this key exists to scope.
+        if region_length is not None and region_length > 0 and cmd == COMMAND_WRITE:
             command_dict[JSON_KEY_REGION_END] = addr + region_length
+
+        # SESS-01 (Phase 206): the lease's second-and-later setup. Taken only
+        # when a lease is active AND the held link is still connected --
+        # every other case (no lease, or a lease whose link died) falls
+        # through to the cold `find_and_connect` below, byte-identical to
+        # today. Deliberately OUTSIDE the cold path's own try/except: a
+        # SerialError here must propagate to `run_plan`'s per-step handling
+        # unchanged (D-06), not be swallowed into a `(None, 0)` return the
+        # way a cold connect failure is -- see `lease()`'s docstring for the
+        # full failure-policy rationale.
+        if self._leased and self.comm is not None and self.comm.is_connected():
+            # The drain is not optional. `disconnect()` is the only caller
+            # of `consume_remaining_input()` today, and a lease skips
+            # `disconnect()` -- so without this explicit call, a straggler
+            # frame from the PREVIOUS step would be parsed as THIS step's
+            # setup ack. It runs INSIDE this `try` (207.1-REVIEW WR-02):
+            # `consume_remaining_input` reaches `_read_and_parse_lines`,
+            # which raises `SerialError` on a transport failure exactly
+            # like `setup_command` does, so a drain failure must drop the
+            # held link the same way -- outside the `try`, that raise
+            # escaped with the link still marked connected, stranding
+            # every later leased step on the same dead port.
+            try:
+                self.comm.consume_remaining_input()
+                setup_ok = self.comm.setup_command(command_dict, self.config)
+            except SerialError:
+                # D-06: drop the lease's held link so the NEXT operation
+                # cold-connects, but leave `_leased` set -- the block is
+                # still a lease, only its link died -- and re-raise
+                # unchanged. `_run_step_untimed` already maps a raised
+                # SerialError to its own two-axis transport outcome; a
+                # second mapping here would put that adjudication in two
+                # places.
+                self._disconnect_programmer()
+                raise
+            if not setup_ok:
+                # A leased setup whose ack was rejected (not a raised
+                # error) is a failed setup, treated identically to a cold
+                # connect failure: the caller's existing not-`command_dict`
+                # guard in `_operation_context` handles it unchanged.
+                return None, 0
+            buffer_size = self._calculate_buffer_size()
+            logger.debug(
+                f"Operation {operation} setup for {eprom_name} (state {cmd}) complete ({time.time() - start_time:.2f}s, leased). Buffer size: {buffer_size}"  # noqa: E501
+            )
+            return command_dict, buffer_size
 
         try:
             self.comm = SerialCommunicator.find_and_connect(
                 command_dict,
                 self.config,
+                preferred_port=preferred_port,
                 fault_inject_outgoing=fault_inject_outgoing,
+                restrict_to_port=restrict_to_port,
             )
             buffer_size = self._calculate_buffer_size()
             logger.debug(
@@ -544,6 +753,8 @@ class EpromOperator:
         size: str | None = None,
         fault_inject_outgoing: Callable[[bytes], bytes] | None = None,
         region_length: int | None = None,
+        preferred_port: str | None = None,
+        restrict_to_port: bool | None = None,
     ):
         """A context manager to handle EPROM operation setup and teardown.
 
@@ -554,6 +765,9 @@ class EpromOperator:
         ``region_length`` (BLANK-01 / D-05) is forwarded to ``_setup_operation``
         by keyword, trailing the existing positional six -- it must not be
         inserted among them.
+
+        ``preferred_port``/``restrict_to_port`` (203-CR-01): forwarded
+        verbatim to ``_setup_operation``. See that method's docstring.
         """
         command_dict, buffer_size = self._setup_operation(
             eprom_name,
@@ -564,6 +778,8 @@ class EpromOperator:
             size,
             fault_inject_outgoing=fault_inject_outgoing,
             region_length=region_length,
+            preferred_port=preferred_port,
+            restrict_to_port=restrict_to_port,
         )
         if not command_dict or not self.comm:
             yield None, None, None  # Yield None to indicate setup failure
@@ -574,13 +790,66 @@ class EpromOperator:
             # Yield the necessary data to the 'with' block
             yield command_dict, buffer_size, operation_name
         finally:
-            # This block ensures disconnection happens even if errors occur
-            self._disconnect_programmer()
+            # SESS-01: under a lease, the link outlives this single call --
+            # `lease()`'s own `finally` is what tears it down, once, when
+            # the `with operator.lease():` block itself exits. Tearing down
+            # here too would defeat the whole point (every call would still
+            # pay the connect cost the lease exists to remove). Unleased,
+            # this is the pre-existing unconditional teardown, unchanged.
+            if not self._leased:
+                self._disconnect_programmer()
 
     def _disconnect_programmer(self):
         if self.comm:
             self.comm.disconnect()
             self.comm = None
+
+    @contextmanager
+    def lease(self):
+        """Hold one validated serial link open across every `EpromOperator`
+        call made inside this block (SESS-01), instead of connecting and
+        tearing down per call.
+
+        Default off, acquired at exactly ONE call site
+        (`cli_handlers.dev_test`'s `run_plan(...)` call) so that removing
+        the feature is a `git revert` of one commit rather than an unpick
+        -- SESS-02's bench measurement may require exactly that. Every
+        code path that never enters this context manager is byte-for-byte
+        unchanged, mirroring the already-shipped opt-in seam
+        `_drive_region_compare`'s `on_result` parameter documents for
+        itself: default off, behaviour identical until a caller opts in.
+
+        Failure policy (D-06): a `SerialError` raised while a leased
+        setup is in flight drops the held link -- `_setup_operation`
+        disconnects -- but leaves the lease itself active, so the NEXT
+        operation cold-connects instead of the whole block failing. The
+        exception still propagates to the caller unchanged. The
+        alternative -- failing the whole plan -- would make a performance
+        optimisation weaken `run_plan`'s own invariant that one step's
+        failure never aborts the rest, which is not a trade worth making
+        for a connect-time saving.
+
+        What a lease removes that is not only time: closing the port
+        de-asserts DTR and resets the attached Leonardo. A lease removes
+        the board reset for every `EpromOperator` call inside the block --
+        on the order of twenty in a default `dev test` plan, a derived
+        count and not a measured one (206-SESSION-COST.md § 3: at most
+        about 17-20 of a plan's roughly 30 connects are `EpromOperator`'s
+        own; `HardwareManager`'s connects stay outside the lease, 206
+        D-05); the measured wall-clock saving is 15.1% (40.709 s of a
+        268.992 s cold-arm median, N=3 per arm, W27C512 on a Leonardo;
+        206-SESSION-COST.md § 5). A step that passes today partly because
+        the PREVIOUS step's teardown reset the board would behave
+        differently under a lease -- that is the fidelity risk SESS-02's
+        bench leg exists to measure, and it belongs here, at the seam,
+        where the next reader will see it.
+        """
+        self._leased = True
+        try:
+            yield
+        finally:
+            self._leased = False
+            self._disconnect_programmer()
 
     # --- Unified State Machine ---
 
@@ -601,6 +870,7 @@ class EpromOperator:
         # operation's failure.
         self.last_firmware_error_code = None
         self.last_firmware_error_message = None
+        self._read_abort_stopped_at = None
         try:
             with logging_redirect_tqdm():
                 # --- INIT Phase ---
@@ -872,6 +1142,7 @@ class EpromOperator:
         start_addr: int,
         end_addr: int,
         process_data_chunk_callback: Callable,
+        abort_predicate: Callable[[], bool] | None = None,
     ):
         """Main phase handler for reading data.
 
@@ -881,6 +1152,26 @@ class EpromOperator:
           - DATA response with payload set → MSG_DATA_CHUNK; extract raw bytes.
           - DATA response with no payload  → MSG_DATA_SENDING (zero-param batch
             starter, which arrives before the chunk frame); skip and continue.
+
+        202-04 D-06: `abort_predicate`, when given, is consulted after each
+        delivered chunk has been fed to the callback and the address/progress
+        advanced. Defaulted to `None` so the four pre-existing callers
+        (`read_eprom`, both `consistency_check_eprom` drives, and the hexdump
+        drive) are byte-for-byte unchanged -- none of them pass it, and the
+        chunk callback's return value stays ignored exactly as before.
+
+        Once the predicate returns true, the loop stops acking -- it does
+        NOT raise and does NOT break. Raising here would unwind the loop
+        without consuming the ERROR frame the firmware's own ack-wait
+        timeout produces, leaving unread bytes on the port, which is the
+        opposite of what D-06 buys: the firmware's `op_wait_for_ack`
+        (1 s, polled at 10 ms) times out, emits MSG_ERR_TIMEOUT, and the
+        dispatch loop's `command_done()` still runs on that error path to
+        leave the port clean (D-06/D-07). After the stop, no further chunk
+        is fed to the callback, acked, or counted toward progress -- this is
+        what keeps `compared` a well-defined quantity for D-09's honest
+        span reporting: a payload the firmware sent after the host chose to
+        stop must never silently widen what "compared" means.
         """
         from firestarter.messages import (
             MSG_DATA_CHUNK,  # local import avoids circular  # noqa: F401
@@ -890,6 +1181,7 @@ class EpromOperator:
         if data_size > 0:
             progress.start(data_size)
 
+        stopped = False
         while True:
             response = self.comm.get_response()
             if response.type == "MAIN":
@@ -906,9 +1198,23 @@ class EpromOperator:
                     if not payload:
                         logger.warning("Received MSG_DATA_CHUNK with empty payload.")
                         continue
+                    if stopped:
+                        # Draining post-stop: keep consuming responses (so the
+                        # port empties and the terminating MAIN/ERROR frame is
+                        # read) without touching the callback, the ack, or the
+                        # progress bar again. See docstring above.
+                        continue
                     process_data_chunk_callback(start_addr, payload)
                     start_addr += len(payload)
                     progress.update(len(payload))
+                    if abort_predicate is not None and abort_predicate():
+                        stopped = True
+                        self._read_abort_stopped_at = time.monotonic()
+                        logger.info(
+                            f"Read stopped in flight at 0x{start_addr:06x} "
+                            "(abort predicate fired)."
+                        )
+                        continue
                     self.comm.send_ack()
                 else:
                     # MSG_DATA_SENDING (zero-param batch-start ack): no data yet;
@@ -990,10 +1296,14 @@ class EpromOperator:
             1 -- one or more reads diverge (FAIL -- bug detected)
             2 -- hardware / serial / timeout error (could not complete N reads)
 
-        This is the ONLY EpromOperator method that returns int rather than bool;
-        the 3-way verdict (PASS / FAIL / hardware-error) cannot fit in a bool.
-        Same exit-code convention as grep(1). Precedent for non-bool return:
-        check_eprom_id() returns Tuple[bool, Optional[int]] above.
+        This method pioneered the int-rather-than-bool return on
+        `EpromOperator` for this reason -- a 3-way verdict cannot fit in a
+        bool. `verify_eprom` (202-01) and `check_eprom_blank` (202-05) now
+        share the identical 0/1/2 convention under D-10, for the identical
+        reason: a match/mismatch/transport-failure verdict cannot fit in a
+        bool either. Same exit-code convention as grep(1). Earlier precedent
+        for non-bool return: check_eprom_id() returns Tuple[bool,
+        Optional[int]] above.
 
         Reuses _run_state_machine + _main_phase_read_data verbatim, so the
         diagnostic exercises the same code path the read bug lives in. Do NOT
@@ -1991,6 +2301,97 @@ class EpromOperator:
         finally:
             self._disconnect_programmer()
 
+    def _run_write_blank_guard(
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        operation_flags: int,
+        address_str: str | None,
+        region_length: int,
+    ) -> tuple[int, str | None]:
+        """WRITE-01 (Phase 203): the pre-write blank-guard read, called from
+        `write_eprom` between its pure pre-connect gates and its own
+        `_operation_context` (D-08). Region-scoped on every guarded family
+        (D-04): `address` .. `address + region_length`, computed by the
+        caller from the same `region_length` the write itself uses --
+        deliberately diverging from `flash_nor_unlock.cpp` /
+        `flash_intel.cpp`, which blank-check the whole device today.
+
+        Opens its OWN `_operation_context` with COMMAND_READ, the same
+        `operation_flags` (so `--force` still forces past the read's own
+        chip-ID check) and `str(region_length)` as the size -- mirroring
+        `verify_eprom`'s call shape, because `_drive_region_compare` reads
+        `cmd_data["memory-size"]` as the read's end address and
+        `_setup_operation` only narrows it for a `COMMAND_READ` with a size.
+
+        Fork D: the guard read shows no progress bar. It is not an
+        operation the operator asked for, and a bar that stops part-way and
+        is then followed by a refusal reads as a failure of the read rather
+        than a refusal of the write -- `--verify`'s own read (which the
+        operator DID ask for) keeps its bar. Suppressed with the
+        `consistency_check_eprom` precedent: swap `progress_callback` to a
+        truthy no-op, restore it in a `finally`.
+
+        Returns `(verdict, resolved_port)`. `verdict` is 0 (blank, proceed),
+        1 (not blank, refused -- and logs the one-line D-10 refusal at
+        `logger.error`), or 2 (transport or setup failure, including a
+        falsy `cmd_data`). `resolved_port` (203-CR-01) is the physical port
+        this connect actually reached -- captured from `self.comm.port_name`
+        INSIDE this method's own `with` block, before its `finally` tears
+        `self.comm` down -- or `None` when the connect never succeeded
+        (`cmd_data` falsy). The caller (`write_eprom`) uses a non-`None`
+        `resolved_port` to pin its own, separate COMMAND_WRITE connect to
+        this exact port, so the region this guard just proved blank and the
+        region the write actually touches can never silently diverge onto
+        two different boards.
+        """
+        prior_callback = self.progress_callback
+        self.progress_callback = lambda *a, **kw: None
+        try:
+            with self._operation_context(
+                eprom_name,
+                eprom_data_dict,
+                COMMAND_READ,
+                operation_flags,
+                address_str,
+                str(region_length),
+            ) as (cmd_data, _, op_name):
+                if not cmd_data:
+                    return 2, None
+
+                resolved_port = self.comm.port_name if self.comm else None
+                region_start = cmd_data.get("address", 0)
+                captured: list[CompareResult] = []
+
+                def _on_result(result: CompareResult, _captured=captured) -> None:
+                    _captured.append(result)
+
+                verdict = self._drive_region_compare(
+                    cmd_data,
+                    op_name,
+                    _blank_expected_bytes,
+                    full=False,
+                    region_length=region_length,
+                    on_result=_on_result,
+                )
+
+                if verdict == 1 and captured:
+                    result = captured[0]
+                    # 203-REVIEW WR-02, 207.1 D-07: `first_offset` is `None`
+                    # exactly when `bad == 0` (compare.py's own contract for
+                    # `CompareResult`). An incomplete read that never saw a
+                    # mismatch falls in that branch -- state the compare's
+                    # coverage instead of fabricating an address and a value.
+                    logger.error(
+                        _write_blank_guard_refusal_message(
+                            eprom_name, region_start, result
+                        )
+                    )
+
+                return verdict, resolved_port
+        finally:
+            self.progress_callback = prior_callback
+
     def write_eprom(
         self,
         eprom_name: str,
@@ -2000,7 +2401,46 @@ class EpromOperator:
         address_str: str | None = None,
         pulse_us: int = 0,  # per-run pulse-width override (us; 0=not supplied, use the database value)
         pin1_hazard_acknowledged: bool = False,
+        *,
+        suppress_verdict_line: bool = False,
+        blank_check_requested: bool = True,
     ) -> bool:
+        """Write `input_file_path` to `eprom_name`, running the WRITE-01
+        pre-write blank guard first on every guarded family.
+
+        `blank_check_requested` (FWBLANK-04, Phase 205): keyword-only,
+        default `True`. Threaded straight to
+        `write_blank_guard.requires_blank_check` as its own keyword-only
+        signal -- this is the explicit, host-side replacement for the
+        retired skip-blank-check wire bit (`0x08`, gone from both
+        ladders). `False` is `write -b`'s and `dev test`'s masked UV slot
+        write's route to the same bypass the retired bit used to grant;
+        every other existing caller keeps the default and is
+        byte-identical.
+
+        `suppress_verdict_line` (Phase 203, WRITE-05): keyword-only,
+        default `False`. When `True`, skip this method's own trailing
+        `Write to X successful (t).` / `Write to X failed.` log line
+        entirely -- both branches, not just a reworded one. The default
+        leaves every existing caller byte-identical. This exists so
+        `write --verify` can print ONE combined verdict line for the whole
+        invocation instead of this method's line followed by a second one
+        from the read-back -- and so the word D-14 forbids from a
+        `--verify` run is absent from this path *structurally*: because the
+        line is never emitted here at all, a later edit to one of the
+        CLI's own verdict lines cannot reintroduce it by drifting this
+        one's wording back in.
+        """
+        # WRITE-04/WRITE-05 (Phase 203): reset the write phase's own cause
+        # channel BEFORE any gate below can raise -- a gate that raises
+        # leaves this call's verdict at `None` ("never attempted"), and a
+        # prior invocation's verdict can never leak into this one.
+        self.last_write_attempt_verdict = None
+        # 203-CR-01: reset the resolved-write-port record BEFORE any gate
+        # below can raise -- same rationale as `last_write_attempt_verdict`
+        # immediately above, so a prior invocation's port can never leak
+        # into this one's `--verify` read-back pin.
+        self.last_write_port = None
         # per-run pulse override, riding the existing
         # "pulse-delay" DB-dict key rather than adding a new wire field or
         # command. Four recorded points:
@@ -2033,6 +2473,18 @@ class EpromOperator:
             pin1_hazard_acknowledged,
         )
         require_page_size(eprom_name, eprom_data_dict, "write")
+        # Folded todo `2026-09-16-reject-negative-write-start-address.md`,
+        # host half: refuse a signed start address before it can reach
+        # either this write's own region arithmetic or the guard's, on
+        # every write family -- guarded or not. This call now runs between
+        # the page-size gate above and the page-alignment gate below, so a
+        # negative start address that is also misaligned, or paired with a
+        # misaligned length, gets this clearer refusal instead of the
+        # alignment gate's signed-hex wording (203-REVIEW IN-01, 207.1
+        # D-08). `require_non_negative_address` returns silently on an
+        # unparseable address, so the alignment gate below still owns the
+        # could-not-parse error.
+        require_non_negative_address(eprom_name, address_str)
         require_page_alignment(
             eprom_name, eprom_data_dict, "write", address_str, input_file_path
         )
@@ -2047,6 +2499,91 @@ class EpromOperator:
         except OSError:
             region_length = None
 
+        # WRITE-01 / D-04 / D-07 / D-08 / D-11 (Phase 203): the host
+        # pre-write blank guard, region-scoped on every guarded family
+        # (D-04) -- deliberately diverging from `flash_nor_unlock.cpp` /
+        # `flash_intel.cpp`, which blank-check the whole device today. Runs
+        # here: after every pure pre-connect gate above (D-08), so a part
+        # refused on a pure ground is never read first, and before this
+        # write's own `_operation_context`, so it is a serial operation in
+        # its own right rather than one that could join the pure gates.
+        # Skipped (verdict recorded as `None`) when `region_length` is
+        # `None` or 0 -- a missing input file (`OSError` above) keeps
+        # surfacing exactly where it does today, at `_main_phase_send_data`
+        # once connected, and an empty input file is not refused by a
+        # zero-length compare (`_drive_region_compare` returns 1 for a
+        # zero-length region, which would otherwise refuse every empty
+        # write). The `return False` below sits BEFORE the `with` block --
+        # this write's own "Write to X failed." line never runs, so the
+        # guard's refusal is the only output (D-11, satisfied structurally
+        # rather than by wording).
+        # 203-CR-01: the port the guard's own connect resolved, when the
+        # guard actually ran and connected. `None` on every path that never
+        # opens a guard connect at all (skip-blank-check, erase-exempt, no
+        # region) -- those write invocations open exactly one connect
+        # anyway, so there is nothing for that single connect to diverge
+        # from, and it keeps its pre-existing, config-inferred discovery
+        # behaviour unchanged (single-connect operations must not start
+        # pinning).
+        # 205-CR-01: resolve the write's own start address once, so the
+        # guard can tell a whole-chip erase (address 0) apart from a
+        # sector erase (any other address) on protocol 0x06. Three cases,
+        # all deliberately resolving to 0 rather than to a refusal here:
+        # an absent `-a` is address 0 by definition; an unparseable `-a`
+        # stays `_setup_operation`'s `parse_address`/`ValueError` job --
+        # opening a port to produce a verdict-2 transport failure in place
+        # of today's clean argument error would change an established
+        # error contract this module must not touch
+        # (`require_non_negative_address`'s own stated rule, above); and a
+        # negative `-a` is already refused above by
+        # `require_non_negative_address`, before this line is ever
+        # reached. Do not "harden" the `except` below into a refusal.
+        try:
+            guard_address = parse_address(address_str) or 0
+        except ValueError:
+            guard_address = 0
+
+        guard_port: str | None = None
+        if not region_length:
+            self.last_write_guard_verdict = None
+        elif not requires_blank_check(
+            eprom_data_dict,
+            operation_flags,
+            blank_check_requested=blank_check_requested,
+            address=guard_address,
+        ):
+            self.last_write_guard_verdict = None
+        else:
+            guard_verdict, guard_port = self._run_write_blank_guard(
+                eprom_name,
+                eprom_data_dict,
+                operation_flags,
+                address_str,
+                region_length,
+            )
+            self.last_write_guard_verdict = guard_verdict
+            if guard_verdict != 0:
+                return False
+
+        # 203-CR-01: when the guard ran and its connect resolved a port,
+        # force this write's own connect onto that EXACT port
+        # (`restrict_to_port=True` makes it the only candidate
+        # `_list_potential_ports` returns). A change in port availability,
+        # enumeration order, or board identity between the guard's connect
+        # and this one then surfaces as a connect failure here (`cmd_data`
+        # falsy, verdict 2 below) -- never as a silent write to a board the
+        # guard never actually read. When `guard_port` is `None` (no guard
+        # ran), passing neither kwarg leaves `_setup_operation`/
+        # `find_and_connect`'s own config-inferred discovery untouched, so
+        # an operator-typed `-p` on an unguarded write still behaves exactly
+        # as it does today.
+        write_connect_kwargs: dict = {}
+        if guard_port:
+            write_connect_kwargs = {
+                "preferred_port": guard_port,
+                "restrict_to_port": True,
+            }
+
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
@@ -2054,9 +2591,37 @@ class EpromOperator:
             operation_flags,
             address_str,
             region_length=region_length,
+            **write_connect_kwargs,
         ) as (cmd_data, buf_size, op_name):
             if not cmd_data:
+                # WRITE-04/WRITE-05: classify the cause before returning.
+                # `_setup_operation`'s `(None, 0)` return is reachable here,
+                # for COMMAND_WRITE, exactly two ways (pinned by
+                # test_setup_operation_has_exactly_three_none_zero_returns,
+                # tests/test_write_verify.py): `parse_address(address_str)`
+                # raising ValueError (reachable only when `address_str` is
+                # truthy -- the operator's own input was the cause), or
+                # `find_and_connect` failing (a transport or setup cause).
+                # The `parse_size` arm is gated on `cmd == COMMAND_READ` and
+                # is not reachable here at all. Re-parse purely to read the
+                # cause -- `_setup_operation` itself is not touched, its log
+                # line is not duplicated, and its return value and ordering
+                # are unchanged.
+                address_parse_failed = False
+                if address_str:
+                    try:
+                        parse_address(address_str)
+                    except ValueError:
+                        address_parse_failed = True
+                self.last_write_attempt_verdict = 1 if address_parse_failed else 2
                 return False
+
+            # 203-CR-01: record the port this write's connect actually
+            # reached -- captured here, inside this `with` block, before its
+            # `finally` disconnects and sets `self.comm` to `None`. This is
+            # what lets `cli_handlers.write`'s `--verify` branch pin the
+            # read-back's own connect to the SAME board the write just used.
+            self.last_write_port = self.comm.port_name if self.comm else None
 
             logger.info(f"Writing {input_file_path} to {eprom_name.upper()}")
             start_time = time.time()
@@ -2077,6 +2642,26 @@ class EpromOperator:
                 eprom_data_dict=cmd_data,  # FIX-01b: boot-block hint context
                 response_timeout=self._write_block_timeout(),
             )
+
+            # WRITE-04/WRITE-05 (Phase 203): record the write phase's own
+            # cause HERE -- before the --skip-sdp-unlock ack block below,
+            # which flips `is_ok` to `False` AFTER a run that already
+            # succeeded on the wire. Recording first means that ack failure
+            # surfaces as exit 1 (host-decided), not exit 2: nothing on the
+            # wire actually failed, so calling it a transport failure would
+            # be wrong. `_run_state_machine` clears `last_firmware_error_code`
+            # on entry and sets it ONLY on its `EpromOperationError` arm (a
+            # real firmware ERROR frame); its `(SerialError,
+            # SerialTimeoutError)` arm deliberately leaves it `None` --
+            # `__init__`'s own comment on that field states this scoping,
+            # and this reads that existing, already-narrow contract rather
+            # than inventing or widening one.
+            if is_ok:
+                self.last_write_attempt_verdict = 0
+            else:
+                self.last_write_attempt_verdict = (
+                    2 if self.last_firmware_error_code is None else 1
+                )
 
             # When --skip-sdp-unlock was set,
             # require firmware's MSG_WARN_SDP_UNLOCK_SKIPPED (0x86) ack that it
@@ -2133,13 +2718,137 @@ class EpromOperator:
                     )
                     is_ok = False
 
-            if is_ok:
-                logger.info(
-                    f"Write to {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
-                )
-            else:
-                logger.error(f"Write to {eprom_name.upper()} failed.")
+            if not suppress_verdict_line:
+                if is_ok:
+                    logger.info(
+                        f"Write to {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
+                    )
+                else:
+                    logger.error(f"Write to {eprom_name.upper()} failed.")
             return is_ok
+
+    def _drive_region_compare(
+        self,
+        cmd_data: dict,
+        op_name: str,
+        expected: Callable[[int, int], bytes],
+        *,
+        full: bool,
+        region_length: int | None,
+        on_result: Callable[[CompareResult], None] | None = None,
+    ) -> int:
+        """The one host-side compare drive `verify_eprom` and
+        `check_eprom_blank` share (202-05 D-02): both callers open a
+        COMMAND_READ and feed `_main_phase_read_data`'s delivered payload
+        into one `CompareAccumulator` through their own D-04 pull callback
+        (`verify_eprom` seeks its input file; `check_eprom_blank` returns a
+        constant blank-byte string) -- everything past that point (the
+        abort predicate, the D-08 abort-vs-fault discrimination, the D-13/
+        D-14 rendering, and the D-10 int verdict) is identical for both, and
+        used to be two copies of the same logic before this plan.
+
+        Returns 0 on a match, 1 on a mismatch, 2 on a transport/hardware
+        failure. Deliberately does not log a caller-specific success/failure
+        line -- `verify_eprom` and `check_eprom_blank` each already have
+        their own elapsed-time wording, and duplicating it here would be a
+        second place that wording could drift.
+
+        `on_result` (Phase 203, WRITE-01): keyword-only, default `None`.
+        When `None`, behaviour is byte-identical to before this parameter
+        existed -- the finalised `CompareResult` is rendered via
+        `render_compare_lines` exactly as today. When supplied, it is
+        called with the finalised `CompareResult` INSTEAD of rendering --
+        the caller has taken responsibility for its own output. This is
+        what the write guard (`_run_write_blank_guard`) uses: the guard
+        aborts at the first non-blank byte, so a rendered range would
+        always be one byte and the bucket would be classified from a
+        one-byte sample, exactly the confident-verdict-from-a-short-prefix
+        trap Phase 202's D-09 already named (D-11). `verify_eprom` and
+        `check_eprom_blank` pass nothing and stay byte-identical.
+        """
+        region_start = cmd_data.get("address", 0)
+        max_ranges = MAX_RETAINED_RANGES if full else 1
+        accumulator = CompareAccumulator(addr_base=region_start, max_ranges=max_ranges)
+
+        def _process_chunk(address: int, payload: bytes) -> None:
+            accumulator.feed(address, expected(address, len(payload)), payload)
+
+        # 202-04 D-06: the default (non-`--full`) path passes
+        # `accumulator.has_mismatch` as the abort predicate, so the read
+        # stops acking the instant the first mismatch is fed. `--full`
+        # passes no predicate at all -- D-16's cap already bounds `--full`'s
+        # output, so its complete scan is a separate code path only in what
+        # it passes here, not a second accumulator or a second cap.
+        # `has_mismatch` is a property, not a method -- wrap it so
+        # `_main_phase_read_data` gets a zero-arg callable per its
+        # `abort_predicate` contract.
+        abort_kwargs: dict = {}
+        if not full:
+            abort_kwargs["abort_predicate"] = lambda: accumulator.has_mismatch
+
+        # D-08: record intent BEFORE the drive, always (True or False) --
+        # never left over from a previous call -- so a genuine timeout on a
+        # `--full` run (which never sets an abort_predicate) can never be
+        # attributed to a stop that was never requested.
+        self._read_abort_intended = not full
+
+        is_ok, _ = self._run_state_machine(
+            op_name,
+            main_phase_handler=self._main_phase_read_data,
+            start_addr=cmd_data.get("address", 0),
+            end_addr=cmd_data.get("memory-size", 0),
+            process_data_chunk_callback=_process_chunk,
+            **abort_kwargs,
+        )
+
+        aborted = False
+        if not is_ok:
+            # D-08: the deliberate stop and a genuine timeout both surface
+            # here as `_run_state_machine` returning `(False, ...)` with
+            # `last_firmware_error_code == MSG_ERR_TIMEOUT` -- the two are
+            # wire-identical. Accept the error as this host's own doing ONLY
+            # when all four hold: the default path actually asked for a stop
+            # (`_read_abort_intended`), the read loop actually recorded one
+            # (`stopped_at` is not `None`), the firmware's own error id is
+            # exactly the timeout id (not some other fault wearing its
+            # clothes), and the stop happened recently enough that this
+            # error frame could plausibly be its consequence (the bounded
+            # window). Any single condition failing means a real fault: take
+            # the exit-2 path exactly as before -- a mismatching chip whose
+            # read failed for an unrelated reason must never be reported as
+            # a mismatch, and this host's own deliberate abort must never be
+            # reported as hardware trouble.
+            stopped_at = self._read_abort_stopped_at
+            aborted = (
+                self._read_abort_intended
+                and stopped_at is not None
+                and self.last_firmware_error_code == MSG_ERR_TIMEOUT
+                and (time.monotonic() - stopped_at) <= READ_ABORT_ACCEPTANCE_WINDOW_S
+            )
+            if not aborted:
+                return 2
+
+        result = accumulator.finalise(aborted=aborted)
+        if region_length is not None:
+            result.total = region_length
+        if on_result is not None:
+            on_result(result)
+        else:
+            for line in render_compare_lines(result):
+                logger.info(line)
+
+        # Standing prohibition this plan carries: a compare that did not
+        # cover the whole declared region is never reported as a match.
+        # CMP-04 "empty" edge (202-04): a zero-length region is a degenerate
+        # case of the same trap, not a separate one -- a zero-length
+        # read-back compares byte-for-byte as PERFECT equality (`compared`
+        # trivially equals `total` at 0), so without this explicit
+        # `result.total > 0` guard an empty input file (or a `--size 0`
+        # region) would silently report a clean pass despite nothing having
+        # actually been compared.
+        if result.total > 0 and result.bad == 0 and result.compared == result.total:
+            return 0
+        return 1
 
     def verify_eprom(
         self,
@@ -2148,45 +2857,177 @@ class EpromOperator:
         input_file_path: str,
         operation_flags: int = 0,
         address_str: str | None = None,
-    ) -> bool:
-        # BLANK-01 / D-07: verify shares one dict-construction path with
-        # write (_operation_context -> _setup_operation), so it must supply
-        # region_length itself -- unlike write_eprom it does not call
-        # require_page_alignment, which is where that computation already
-        # lives on the write path.
+        size_str: str | None = None,
+        full: bool = False,
+        *,
+        suppress_verdict_line: bool = False,
+        preferred_port: str | None = None,
+        on_result: Callable[[CompareResult], None] | None = None,
+    ) -> int:
+        """Compare `input_file_path` against a fresh read of the chip.
+
+        `on_result` (Phase 206 Task 3, DEVTEST-02): keyword-only, default
+        `None`, forwarded straight through to `_drive_region_compare`'s own
+        parameter of the same name -- the identical treatment
+        `check_eprom_blank` gained in Task 1. When `None`, behaviour is
+        byte-identical to before this parameter existed. `chip_test.py`'s
+        `dev test` dispatch uses it ONLY to detect, structurally, whether
+        this call's comparison actually reached the host compare engine --
+        it does not change what `verify_eprom` returns, and it does not
+        become this step's `Fingerprint` source (F1: that stays the
+        separate `_read_region` read-back on a failing verify, unchanged by
+        this parameter).
+
+        `suppress_verdict_line` (Phase 203, WRITE-05): keyword-only, default
+        `False`, the same treatment `write_eprom` gets -- when `True`, skip
+        ONLY this method's own trailing `Verify for X successful (t).` /
+        `Verify for X failed.` line; the compare range lines rendered
+        through `_drive_region_compare` (a `Mismatch 0xSTART-0xEND (N
+        bytes)` line per retained range, plus the bucket summary) are
+        untouched, because those are the report `write --verify` is
+        supposed to produce on a mismatch. The default leaves every
+        existing caller (`verify`, `blank`) byte-identical.
+
+        `preferred_port` (203-CR-01): keyword-only, default `None`. When
+        given, forces this call's own COMMAND_READ connect onto exactly
+        that port (`restrict_to_port=True`) -- `cli_handlers.write`'s
+        `--verify` branch passes `write_eprom`'s own `last_write_port` here,
+        so the read-back can never silently land on a different board than
+        the write it is meant to be checking. The default leaves every
+        existing caller (`verify`, `blank`, `dev test`) byte-identical --
+        none of them pass it, so their connect keeps its pre-existing,
+        config-inferred discovery behaviour unchanged.
+
+        202-01 D-01/D-02/D-04/D-10: this reads the chip with COMMAND_READ and
+        compares chunk by chunk on the host through `compare.py`'s streaming
+        accumulator -- it no longer pushes the file to the firmware's own
+        verify ordinal. Phase 204 retired that ordinal (COMMAND_VERIFY) from
+        both the host and the firmware entirely; nothing on this path, or
+        anywhere else in this repository, composes it any more. Returns 0 on
+        a match, 1 on a mismatch, 2 on a setup, transport, or I/O failure
+        (D-10, confirmed).
+
+        202-04 D-06/D-08/D-09: unless `full` is true, the drive passes
+        `accumulator.has_mismatch` as `_main_phase_read_data`'s
+        `abort_predicate`, so the read stops acking the moment the first
+        mismatching byte is fed -- the host breaks the read in flight rather
+        than draining the rest of the chip. `full=True` passes no predicate,
+        so a full scan always reads (and reports) the whole region. The
+        deliberate stop yields a `MSG_ERR_TIMEOUT` frame wire-identical to a
+        genuine timeout; the four-condition discrimination in
+        `_drive_region_compare` is what keeps that abort from ever being
+        reported as exit-2 hardware trouble, and keeps a genuine fault from
+        ever being reported as a clean-looking abort. Progress-bar choice
+        (left to discretion by CONTEXT.md): on an abort the bar simply stops
+        advancing at the compared byte count (the loop in
+        `_main_phase_read_data` stops calling `progress.update()` once
+        stopped) and is closed there by `_run_state_machine`'s `finally` --
+        it is never advanced to the region total, since a bar that completes
+        after a stop would claim progress the compare did not make (the same
+        dishonesty D-09 guards against at the summary line).
+
+        202-05 D-02: the compare drive itself (accumulator, abort predicate,
+        D-08 discrimination, rendering, D-10 verdict) lives in
+        `_drive_region_compare`, shared verbatim with `check_eprom_blank`.
+
+        202-05 D-17: `size_str`, when given, wins over the input file's own
+        length as the declared region. The two region refusals (an explicit
+        size shorter than the file; a region running past the chip's end)
+        are the CLI tier's job (`cli_handlers.verify`), fired before this
+        method -- and before the serial port -- are ever reached.
+        """
+        # 202-01 D-01/D-02: unlike write_eprom, verify_eprom computes its own
+        # region_length here -- it does not call require_page_alignment,
+        # which is where that computation already lives on the write path.
+        # This value is NOT forwarded to _operation_context as region_length
+        # below: that kwarg only reaches the wire as JSON_KEY_REGION_END for
+        # cmd == COMMAND_WRITE (_setup_operation's guard, an equality since
+        # Phase 204 retired COMMAND_VERIFY -- the write path is now the only
+        # composer of that key), and this path composes COMMAND_READ, so
+        # passing it there would be silently discarded. It is used locally
+        # instead, for the resolved size string (below) and for
+        # `result.total` (D-10's incomplete-compare prohibition).
         try:
-            region_length = os.path.getsize(input_file_path)
+            file_length = os.path.getsize(input_file_path)
         except OSError:
-            region_length = None
+            file_length = None
+
+        # 202-05 D-17: an explicit --size wins when given; without one,
+        # verify's region is the input file's length, as before. The
+        # CLI tier (cli_handlers.verify) has already refused, before this
+        # call and before the port opens, an explicit --size shorter than
+        # the file or a region running past the chip's end -- this method
+        # trusts that and simply resolves the region it was asked for. A
+        # malformed --size string is not this method's job either: the
+        # existing `_setup_operation`/`parse_size` ValueError handling
+        # below still refuses it (cmd_data comes back falsy, exit 2).
+        if size_str is not None:
+            try:
+                region_length = parse_size(size_str)
+            except ValueError:
+                region_length = None
+        else:
+            region_length = file_length
+        resolved_size_str = (
+            size_str
+            if size_str is not None
+            else (str(file_length) if file_length is not None else None)
+        )
+
+        # 203-CR-01: pin this connect to `preferred_port` when the caller
+        # supplied one (see this method's own docstring). Omitted entirely
+        # when absent, so `find_and_connect`'s own config-inferred discovery
+        # is untouched for every caller that does not pass it.
+        verify_connect_kwargs: dict = {}
+        if preferred_port:
+            verify_connect_kwargs = {
+                "preferred_port": preferred_port,
+                "restrict_to_port": True,
+            }
 
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
-            COMMAND_VERIFY,
+            COMMAND_READ,
             operation_flags,
             address_str,
-            region_length=region_length,
-        ) as (cmd_data, buf_size, op_name):
+            resolved_size_str,
+            **verify_connect_kwargs,
+        ) as (cmd_data, _, op_name):
             if not cmd_data:
-                return False
+                return 2
 
             logger.info(f"Verifying {input_file_path} against {eprom_name.upper()}")
             start_time = time.time()
+            region_start = cmd_data.get("address", 0)
 
-            is_ok, _ = self._run_state_machine(
-                op_name,
-                main_phase_handler=self._main_phase_send_data,
-                input_file_path=input_file_path,
-                buffer_size=buf_size,
-            )
+            try:
+                with open(input_file_path, "rb") as file_handle:
 
-            if is_ok:
-                logger.info(
-                    f"Verify for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
-                )
-            else:
-                logger.error(f"Verify for {eprom_name.upper()} failed.")
-            return is_ok
+                    def _expected(offset: int, length: int) -> bytes:
+                        file_handle.seek(offset - region_start)
+                        return file_handle.read(length)
+
+                    verdict = self._drive_region_compare(
+                        cmd_data,
+                        op_name,
+                        _expected,
+                        full=full,
+                        region_length=region_length,
+                        on_result=on_result,
+                    )
+            except IOError as e:  # noqa: UP024
+                logger.error(f"File I/O error with {input_file_path}: {e}")
+                return 2
+
+            if not suppress_verdict_line:
+                if verdict == 0:
+                    logger.info(
+                        f"Verify for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
+                    )
+                else:
+                    logger.error(f"Verify for {eprom_name.upper()} failed.")
+            return verdict
 
     def erase_eprom(
         self,
@@ -2318,16 +3159,69 @@ class EpromOperator:
             return is_ok
 
     # Protocol IDs whose firmware handler (configure_sram) leaves a NULL
-    # firestarter_operation_main for CMD_BLANK_CHECK, causing 0xA4
-    # MSG_ERR_EMPTY_INPUT. These are all SRAM families (host-side fix).
+    # firestarter_operation_main for the standalone blank-check command's
+    # wire ordinal. Before 3.1.0 that produced 0xA4 MSG_ERR_EMPTY_INPUT;
+    # after Phase 204 retired that ordinal, EVERY protocol handler leaves
+    # the pointer NULL for it, not only configure_sram -- this set stays
+    # SRAM-specific because these are the families with no factory-blank
+    # concept at all, which is what the short-circuit below exists for.
+    # These are all SRAM families (host-side fix).
     _SRAM_PROTO_IDS = frozenset({0x0E, 0x27, 0x28, 0x29})
 
     def check_eprom_blank(
-        self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
-    ) -> bool:
+        self,
+        eprom_name: str,
+        eprom_data_dict: dict,
+        operation_flags: int = 0,
+        address_str: str | None = None,
+        size_str: str | None = None,
+        full: bool = False,
+        *,
+        on_result: Callable[[CompareResult], None] | None = None,
+    ) -> int:
+        """Compare the chip against a constant blank byte through the same
+        engine `verify_eprom` uses (202-05 D-02/D-04/D-10/D-12).
+
+        This reads the chip with COMMAND_READ and compares it, chunk by
+        chunk, against an all-0xFF expected side supplied by a D-04 pull
+        callback (`_blank_expected_bytes` below) -- it no longer composes
+        the blank-check command's own wire ordinal, which Phase 204 retired
+        from both the host and firmware ladders entirely; nothing anywhere
+        composes it any more. Returns 0 on an all-blank chip, 1 on at least
+        one non-blank byte, 2 on a setup/transport failure or a refusal.
+
+        A part with no factory-blank state (SRAM/FRAM) has no blank verdict
+        to report -- reporting it as "not blank" answers a question the
+        part does not have. D-12 keeps the pre-wire short-circuit
+        exactly where it was, before any command is composed, and changes
+        only its return value: 2, an honest refusal, in place of the old
+        false "not blank" verdict. `derive_plan` (chip_test.py) marks these
+        parts' blank-check step unsupported up front and never dispatches to
+        this method for them, so `dev test` is unaffected by this change.
+
+        202-05 D-17: `size_str`, when given, wins over the whole-chip
+        default the same way it does for `verify_eprom`. The region-past-
+        the-chip's-end refusal is the CLI tier's job (`cli_handlers.blank`),
+        fired before this method -- and before the serial port -- is ever
+        reached; blank has no input file, so it carries no
+        file-shorter-than-size refusal at all.
+
+        `on_result` (Phase 206, DEVTEST-01): keyword-only, default `None`,
+        forwarded straight through to `_drive_region_compare`'s own
+        parameter of the same name. When `None`, behaviour is byte-identical
+        to before this parameter existed. When supplied, it is called with
+        the finalised `CompareResult` INSTEAD of `_drive_region_compare`
+        rendering it -- `chip_test.py`'s `dev test` dispatch uses this to
+        recover the address-and-value evidence a blank-check failure used
+        to throw away, at zero extra device I/O. The SRAM/FRAM pre-wire
+        short-circuit above returns before `_drive_region_compare` is ever
+        called, so `on_result` is never invoked for that population either.
+        """
         # SRAM/FRAM blank-check short-circuit — detect before issuing any
-        # firmware command.  configure_sram() leaves a NULL main-op for
-        # CMD_BLANK_CHECK, so the firmware emits 0xA4 MSG_ERR_EMPTY_INPUT.
+        # firmware command.  configure_sram() leaves a NULL main-op for the
+        # blank-check command's now-retired wire ordinal (as does every
+        # other protocol handler now, after Phase 204); on pre-3.1.0
+        # firmware this produced 0xA4 MSG_ERR_EMPTY_INPUT.
         # SRAM/FRAM are volatile or byte-rewritable; "blank" has no meaningful
         # concept for them.  Short-circuit with a clear message; do NOT touch the
         # wire protocol or firmware.
@@ -2340,24 +3234,43 @@ class EpromOperator:
                 "SRAM/FRAM are volatile or byte-rewritable — they have no "
                 "factory-blank state and the firmware has no blank-check op for them."
             )
-            return False
+            return 2
 
         with self._operation_context(
             eprom_name,
             eprom_data_dict,
-            COMMAND_BLANK_CHECK,
+            COMMAND_READ,
             operation_flags,
+            address_str,
+            size_str,
         ) as (cmd_data, _, op_name):
             if not cmd_data:
-                return False
+                return 2
+
             logger.info(f"Blank checking EPROM {eprom_name.upper()}")
             start_time = time.time()
-            is_ok, final_msg = self._run_state_machine(op_name)
-            if is_ok:
+            # The declared region length: whichever of address/size resolved
+            # onto cmd_data's own address/memory-size pair -- mirrors
+            # verify_eprom's `os.path.getsize`-derived region_length, just
+            # sourced from the wire dict instead of a file, since blank has
+            # no input file of its own.
+            region_length = cmd_data.get("memory-size", 0) - cmd_data.get("address", 0)
+
+            verdict = self._drive_region_compare(
+                cmd_data,
+                op_name,
+                _blank_expected_bytes,
+                full=full,
+                region_length=region_length,
+                on_result=on_result,
+            )
+            if verdict == 0:
                 logger.info(
-                    f"Blank check for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s). {final_msg or ''}"  # noqa: E501
+                    f"Blank check for {eprom_name.upper()} successful ({time.time() - start_time:.2f}s)."  # noqa: E501
                 )
-            return is_ok
+            else:
+                logger.error(f"Blank check for {eprom_name.upper()} failed.")
+            return verdict
 
     def check_eprom_id(
         self, eprom_name: str, eprom_data_dict: dict, operation_flags: int = 0
