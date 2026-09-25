@@ -378,14 +378,12 @@ class EpromConsolePresenter:
             logger.info("")
             logger.info(f"Jumper config (Rev {key}):")
             for jp, data in block["jumpers"].items():
-                if data["display"]:
-                    logger.info(
-                        f"  {jp.upper()}: {data['display']} ({data['choices']} = {data['selected_label']})"  # noqa: E501
-                    )
-                else:
-                    logger.info(
-                        f"  {jp.upper()}: {data['selected_label']} ({data['choices']})"
-                    )
+                prefix = f"  {jp.upper()}: "
+                logger.info(
+                    f"{prefix}{data['display']} ({data['choices']} = {data['selected_label']})"  # noqa: E501
+                )
+                if data.get("display_below"):
+                    logger.info(" " * len(prefix) + data["display_below"])
             for note in block["notes"]:
                 logger.info(f"  Note: {note}")
         if chip_data.get("jumper_note"):

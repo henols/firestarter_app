@@ -352,3 +352,84 @@ def test_jp5_note_only_where_pin_1_carries_a19() -> None:
     }
     assert with_note == {k for k, e in JUMPER_TABLE.items() if e.pin1_signal == "A19"}
     assert with_note == {"DIP32_27C801"}
+
+
+# --- Rev 2.2/2.3 JP4 glyph --------------------------------------------------------------------
+#
+# The three pads make an L (shield-rev2.2-jp4-jp5-jp6-jp9.jpg, with the board title upright): the
+# square common pad at the corner, the 28-pin pole to its left and the 24-pin pole below it. "( )" is
+# a horizontal cap and the box is a vertical cap.
+
+_CAP_CHARS = set("()┌┐└┘")
+
+
+def _rev22_lines(setting: Jp4Rev22) -> tuple[str, str]:
+    jp4 = jumper_table._rev22_jp4(setting)
+    return jp4["display"], jp4["display_below"]
+
+
+def _bridged_pads(top: str, below: str) -> set[str]:
+    """Read the drawing back: return the pads that sit inside a cap."""
+    corner = top.index("■")
+    left = top.index("●")
+    lower = below.index("●")
+    assert top.count("●") == 1 and below.count("●") == 1
+    assert left < corner
+    assert lower == corner, "the 24-pin pad must sit under the common pad"
+    bridged = set()
+    if top[left - 1] == "(" and top[corner + 1] == ")":
+        bridged |= {"corner", "left"}
+    if (top[corner - 1], top[corner + 1]) == ("┌", "┐") and (
+        below[lower - 1],
+        below[lower + 1],
+    ) == ("└", "┘"):
+        bridged |= {"corner", "lower"}
+    return bridged
+
+
+@pytest.mark.parametrize(
+    ("setting", "expected"),
+    [
+        (Jp4Rev22.NO_JUMPER, set()),
+        (Jp4Rev22.POLE_28, {"corner", "left"}),
+        (Jp4Rev22.POLE_24, {"corner", "lower"}),
+    ],
+)
+def test_rev22_jp4_glyph_caps_exactly_the_selected_pads(
+    setting: Jp4Rev22, expected: set[str]
+) -> None:
+    top, below = _rev22_lines(setting)
+    assert _bridged_pads(top, below) == expected
+    if not expected:
+        assert not _CAP_CHARS & set(top + below)
+
+
+def test_rev22_jp4_glyph_has_the_width_of_the_other_glyphs() -> None:
+    for setting in Jp4Rev22:
+        top, below = _rev22_lines(setting)
+        assert len(top) == len(jumper_table._THREE_PIN_OFF), setting
+        assert below == below.rstrip(), setting
+
+
+def test_rev22_jp4_prints_the_second_line_under_the_first(
+    db: EpromDatabase,
+    spec_builder: EpromSpecBuilder,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from firestarter.eprom_info import EpromConsolePresenter
+
+    eprom = db.get_eprom("AM27C256")
+    assert eprom is not None
+    spec = spec_builder.build_specifications(
+        eprom, electrical_type=eprom.get("electrical-type")
+    )
+    assert spec is not None
+    with caplog.at_level("INFO", logger="EpromConsolePresenter"):
+        EpromConsolePresenter(db).present_eprom_details({"jumpers": spec["jumpers"]})
+    lines = [r.getMessage() for r in caplog.records]
+    start = lines.index("Jumper config (Rev 2.2 & 2.3):")
+    top, below = lines[start + 1], lines[start + 2]
+    assert top.startswith("  JP4: (● ■)")
+    assert f"= {Jp4Rev22.POLE_28.value})" in top
+    assert below == "          ●"
+    assert below.index("●") == top.index("■")

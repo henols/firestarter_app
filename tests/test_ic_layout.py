@@ -298,8 +298,13 @@ def test_the_jumper_blocks_are_rev_0_1_rev_2_0_2_1_and_rev_2_2_2_3(
     assert set(jumpers["2.2 & 2.3"]["jumpers"]) == {"jp4"}
     for block in jumpers.values():
         assert "jp5" not in block["jumpers"]
+    for key, block in jumpers.items():
+        # Only the Rev 2.2/2.3 JP4 glyph takes a second line.
+        expected = {"display", "choices", "selected_label"}
+        if key == "2.2 & 2.3":
+            expected |= {"display_below"}
         for jumper in block["jumpers"].values():
-            assert set(jumper) == {"display", "choices", "selected_label"}
+            assert set(jumper) == expected
 
     def _no_jp5_or_22(node: object) -> None:
         if isinstance(node, dict):

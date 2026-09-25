@@ -165,8 +165,8 @@ class Jp4Rev22(Enum):
     """
 
     NO_JUMPER = "no jumper"
-    POLE_28 = "28-pin pole, toward the ZIF socket"
-    POLE_24 = "24-pin pole, toward the board edge"
+    POLE_28 = "28-pin pole"
+    POLE_24 = "24-pin pole"
 
 
 class Note(Enum):
@@ -430,6 +430,16 @@ _THREE_PIN_RIGHT = " ●(● ●)"
 _TWO_PIN_OPEN = " ● ●   "
 _TWO_PIN_CLOSED = "(● ●)  "
 
+# The Rev 2.2/2.3 JP4 pads make an L, as seen with the board title upright
+# (`shield-rev2.2-jp4-jp5-jp6-jp9.jpg` turned a quarter turn clockwise). The square common pad is
+# at the corner. The 28-pin pole is to its left and the 24-pin pole is below it.
+# "( )" is a horizontal cap and the box is a vertical cap. The second string is the line below.
+_REV22_JP4_DISPLAY: dict[Jp4Rev22, tuple[str, str]] = {
+    Jp4Rev22.NO_JUMPER: (" ● ■   ", "   ●"),
+    Jp4Rev22.POLE_28: ("(● ■)  ", "   ●"),
+    Jp4Rev22.POLE_24: (" ●┌■┐  ", "  └●┘"),
+}
+
 # Each Rev 0/1 jumper is a three-pin header. The left label is the left pin pair, the right label
 # is the right pin pair.
 _REV01_LAYOUT: dict[str, tuple[str, str]] = {
@@ -466,8 +476,10 @@ def _rev20_jp4(setting: Jp4Rev20) -> dict[str, str]:
 
 
 def _rev22_jp4(setting: Jp4Rev22) -> dict[str, str]:
+    display, display_below = _REV22_JP4_DISPLAY[setting]
     return {
-        "display": "",
+        "display": display,
+        "display_below": display_below,
         "choices": JP4_SILKSCREEN_RULE,
         "selected_label": setting.value,
     }
@@ -480,7 +492,8 @@ def _notes(notes: tuple[Note, ...]) -> list[str]:
 def render_blocks(entry: JumperEntry) -> dict[str, dict[str, Any]]:
     """Return the three revision blocks of one entry as display data.
 
-    Each block is `{"jumpers": {name: {display, choices, selected_label}}, "notes": [text]}`.
+    Each block is `{"jumpers": {name: {display, choices, selected_label}}, "notes": [text]}`. A
+    jumper that takes two lines also has `display_below`, the line under `display`.
     """
     rev20_notes = list(_notes(entry.rev20_notes))
     if entry.probe_pending:
