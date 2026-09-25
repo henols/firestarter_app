@@ -1,3 +1,4 @@
+include CHANGELOG.md
 include firestarter/data/chip_database.json
 include firestarter/data/pinouts.json
 include firestarter/data/database_overrides.json

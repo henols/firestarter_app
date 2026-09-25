@@ -167,6 +167,27 @@ class FirmwareOperationError(Exception):
     pass
 
 
+class FirmwareReleaseRefusedError(FirmwareOperationError):
+    """Raised when this CLI refuses to flash a firmware release it cannot drive.
+
+    Fired by fw_release_gate.require_installable_release. On the
+    `--firmware-version` path it fires in cli_handlers.fw before any port opens
+    and before any HTTP request. On every other path it fires in
+    FirmwareManager.manage_firmware_update, after the release metadata fetch and
+    before the download -- no byte reaches avrdude or the DFU backend.
+
+    Raised when the release's feature version (major, minor) is above this
+    CLI's, or when either version cannot be read. `--allow-newer-firmware`
+    waives it; `--force` does not, because `--force` means "reinstall the same
+    version" and is also a wire flag (FLAG_FORCE).
+
+    A FirmwareOperationError, so cli_handlers.map_typed_errors renders it
+    verbatim through the existing FirmwareOperationError arm. No new arm.
+    """
+
+    pass
+
+
 class ChipNotFoundError(Exception):
     """Raised when a chip name cannot be resolved in the database.
 

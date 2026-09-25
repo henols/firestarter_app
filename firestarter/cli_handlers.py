@@ -88,6 +88,7 @@ from firestarter.exceptions import (
     SerialTimeoutError,
 )
 from firestarter.firmware import FIRMWARE_VERSION_RE, FirmwareManager
+from firestarter.fw_release_gate import require_installable_release
 from firestarter.hardware import HardwareManager
 from firestarter.lock_status import (
     classify_protection_response,
@@ -318,6 +319,13 @@ def _maybe_auto_route_to_pre(args: object) -> None:
                     "Use --firmware-version X.Y.Z to pin a stable version."
                 )
         except InvalidVersion:
+            # Deliberate fail-OPEN, and deliberately the opposite polarity to
+            # fw_release_gate, which fails CLOSED on the same unreadable input.
+            # The asymmetry is intended: the worst case here is that the wrong
+            # channel is picked, which the gate then judges on its merits; the
+            # worst case there is a board flashed with firmware this host cannot
+            # drive, recoverable only through the bootloader. Do not "align"
+            # these two without re-reading both worst cases.
             pass
     except ImportError:
         pass
@@ -1625,6 +1633,12 @@ def _maybe_auto_route_to_pre_click(
     help="Will install firmware even if the version is the same.",
 )
 @click.option(
+    "--allow-newer-firmware",
+    "allow_newer_firmware",
+    is_flag=True,
+    help="Install firmware that is newer than this CLI. The pairing is not tested.",
+)
+@click.option(
     "--json",
     "json_output",
     is_flag=True,
@@ -1645,6 +1659,7 @@ def fw(
     avrdude_path: str | None,
     avrdude_config_path: str | None,
     force: bool,
+    allow_newer_firmware: bool,
     json_output: bool,
 ) -> None:
     """Firmware version.
@@ -1731,6 +1746,24 @@ def fw(
                 print(f"No releases found for board {board}.")
         sys.exit(0)
 
+    # A pinned target is known from the command line, so it can be judged with
+    # no port open and no HTTP request. The authoritative call is in
+    # manage_firmware_update; this one only avoids paying for a refusal.
+    #
+    # Placed after the --list exit on purpose: --list is the operator's
+    # read-only way to discover which releases exist, and it must keep working
+    # while an install is refused. Placed before _maybe_auto_route_to_pre_click
+    # is safe because that helper returns early when firmware_version is set,
+    # so the pinned path never reaches it.
+    if firmware_version:
+        import firestarter as _pkg
+
+        require_installable_release(
+            _pkg.__version__,
+            firmware_version,
+            allow_newer=allow_newer_firmware,
+        )
+
     # SimpleNamespace adapter for the magic-default helper (zero churn).
     pre = _maybe_auto_route_to_pre_click(install, pre, firmware_version, stable)
 
@@ -1767,6 +1800,7 @@ def fw(
         pinned_version=firmware_version,
         usb_id=usb_id,
         board_explicit=board_explicit,
+        allow_newer_firmware=allow_newer_firmware,
     )
     sys.exit(0 if ok else 1)
 

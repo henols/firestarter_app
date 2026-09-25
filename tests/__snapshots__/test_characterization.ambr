@@ -235,6 +235,8 @@
                                     if avrdude version is 6.3 or not found.
     -f, --force                     Will install firmware even if the version is
                                     the same.
+    --allow-newer-firmware          Install firmware that is newer than this
+                                    CLI. The pairing is not tested.
     --json                          Output --list results as JSON array (only
                                     with --list).
     --help                          Show this message and exit.
@@ -269,6 +271,8 @@
                                     if avrdude version is 6.3 or not found.
     -f, --force                     Will install firmware even if the version is
                                     the same.
+    --allow-newer-firmware          Install firmware that is newer than this
+                                    CLI. The pairing is not tested.
     --json                          Output --list results as JSON array (only
                                     with --list).
     --help                          Show this message and exit.
